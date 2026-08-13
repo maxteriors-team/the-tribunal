@@ -56,7 +56,6 @@ def _make_agent(**overrides: Any) -> Agent:
         "temperature": 0.7,
         "text_response_delay_ms": 30_000,
         "text_max_context_messages": 20,
-        "calcom_event_type_id": None,
         "enabled_tools": ["twilio-sms"],
         "tool_settings": {"twilio-sms": ["send_application_link"]},
         "is_active": True,

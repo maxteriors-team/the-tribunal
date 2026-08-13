@@ -251,6 +251,25 @@ def pipeline_owner_scope(role: str, user_id: int) -> int | None:
     return None
 
 
+def appointment_owner_scope(role: str, user_id: int) -> int | None:
+    """Return the user id appointment reads are restricted to, or ``None``.
+
+    Higher operational tiers (owner, admin, manager, dispatcher) hold
+    ``jobs:write`` and can supervise every rep's calendar. Sales and lower tiers
+    see only appointments assigned to their own login-backed staff row.
+    Unknown roles fail closed through the field tier.
+    """
+    normalized_role = "sales_rep" if role == "sales" else role
+    if normalized_role in {
+        WorkspaceRole.OWNER.value,
+        WorkspaceRole.ADMIN.value,
+        WorkspaceRole.MANAGER.value,
+        WorkspaceRole.DISPATCHER.value,
+    }:
+        return None
+    return user_id
+
+
 def upsell_job_scope_required(role: str) -> bool:
     """Return True when ``role`` may only upsell on jobs assigned to the caller.
 

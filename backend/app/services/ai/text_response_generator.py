@@ -275,16 +275,16 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
             contact=lead_contact,
         )
 
-    # Booking tools are server-gated while website-lead qualification is pending.
+    # Build system instructions - booking tools are server-gated while qualification is pending.
     booking_configured = bool(
         agent.calcom_event_type_id
         and settings.calcom_api_key
         and "book_appointment" in (agent.enabled_tools or [])
     )
-    has_booking_tools = booking_configured and not qualification_pending
 
     booking_instructions = ""
     extracted_email = None
+    has_booking_tools = booking_configured and not qualification_pending
     if has_booking_tools:
         # Extract email from conversation history
         extracted_email = extract_email_from_messages(messages)
@@ -308,6 +308,7 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
         workspace_id=conversation.workspace_id,
         agent_id=agent.id,
     )
+
     # Expose the on-demand knowledge tool when the operator enabled it or the
     # agent has an ingested knowledge base to search.
     knowledge_tool_enabled = "search_knowledge" in (agent.enabled_tools or []) or (
@@ -463,7 +464,7 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
             )
             api_messages.extend(tool_results)
 
-            # A successful local qualification immediately unlocks normal booking tools.
+            # Make follow-up call to get final response
             qualification_just_persisted = bool(
                 qualification_pending and lead_contact and lead_contact.is_qualified
             )
@@ -489,6 +490,9 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
             final_message = follow_up_response.choices[0].message
             final_text: str | None = final_message.content
 
+            # A successful local qualification immediately unlocks normal booking
+            # schemas. If the model uses one during the transition, execute that
+            # second tool round and then request one final customer-facing reply.
             if qualification_just_persisted and booking_configured and final_message.tool_calls:
                 api_messages.append(
                     {

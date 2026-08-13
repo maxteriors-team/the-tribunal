@@ -39,7 +39,8 @@ Settings contains these route-addressable tabs:
 - **Estimate Follow-up**: `/settings?tab=estimate-followup` — configure quote follow-up rules.
 - **Quote Revival**: `/settings?tab=quote-revival` — configure old-quote revival behavior.
 - **Neighbors**: `/settings?tab=neighbors` — configure neighbor outreach.
-- **Integrations**: `/settings?tab=integrations` — connect and configure supported providers and phone resources.
+- **My Calendar**: `/settings?tab=calendar` — connect your own Google account so the AI checks your busy times and creates your assigned appointments there.
+- **Integrations**: `/settings?tab=integrations` — connect and configure workspace-wide providers and phone resources.
 - **Billing**: `/settings?tab=billing` — view workspace billing settings.
 - **Team**: `/settings?tab=team` — invite members and manage roles.
 - **Locations**: `/settings?tab=locations` — manage operating locations.
@@ -47,7 +48,14 @@ Settings contains these route-addressable tabs:
 
 Select the visible tab by its UI label. Saving a setting affects future behavior unless the page explicitly says it backfills existing records.
 
-## Connect an integration
+## Connect your Google Calendar
+
+1. Open **Settings → My Calendar** at `/settings?tab=calendar`.
+2. Select **Connect Google Calendar** and authorize the Google account where your own meetings belong.
+3. Each sales rep repeats this with their own login; never share one Google refresh token across the team.
+4. Owners, admins, managers, and dispatchers can view all rep appointments on the CRM calendar; lower roles see only their assigned appointments.
+
+## Connect a workspace integration
 
 1. Open **Settings → Integrations** at `/settings?tab=integrations`.
 2. Find the provider and select **Connect** or **Configure**.

@@ -2,8 +2,8 @@
 
 This module extracts tool execution logic from voice_bridge.py into a
 standalone, testable service. Handles execution of:
-- check_availability: Query Cal.com for available slots
-- book_appointment: Create appointment on Cal.com
+- check_availability: Query calendar availability for available slots
+- book_appointment: Create appointment on the assigned Google Calendar
 - send_dtmf: Send touch-tone digits for IVR navigation
 - send_application_link: Send the fixed Prestyj application URL by SMS
 
@@ -124,11 +124,11 @@ async def _delayed_hangup(
 class VoiceToolExecutor(BaseToolExecutor):
     """Executes voice agent tool calls.
 
-    Handles Cal.com booking operations, DTMF sending, and other
+    Handles Google Calendar booking operations, DTMF sending, and other
     tool calls from voice agents.
 
     Attributes:
-        agent: Agent model with Cal.com configuration
+        agent: Agent model with calendar configuration
         contact_info: Contact information for personalization
         timezone: Timezone for date handling
         call_control_id: Telnyx call control ID for DTMF
@@ -170,6 +170,7 @@ class VoiceToolExecutor(BaseToolExecutor):
                 start_date_str=arguments.get("start_date", ""),
                 end_date_str=arguments.get("end_date"),
                 required_skill=arguments.get("skill"),
+                duration_minutes=arguments.get("duration_minutes", 30),
             )
 
         if function_name == "book_appointment":
@@ -180,6 +181,7 @@ class VoiceToolExecutor(BaseToolExecutor):
                 duration_minutes=arguments.get("duration_minutes", 30),
                 notes=arguments.get("notes"),
                 required_skill=arguments.get("skill"),
+                service_type=arguments.get("call_type"),
             )
 
             # Persist booking outcome to message record
@@ -313,16 +315,24 @@ class VoiceToolExecutor(BaseToolExecutor):
         display_time = _format_time_12h(time_str)
         staff_name = (self.assigned_staff or {}).get("name")
         with_staff = f" with {staff_name}" if staff_name else ""
+        appointment = self._booked_appointment
+        synced = bool(appointment and appointment.sync_status == "synced")
         return {
             "success": True,
-            "booking_id": result.booking_uid,
-            "booking_uid": result.booking_uid,
-            "calcom_id": result.booking_id,
             "assigned_staff": self.assigned_staff,
+            "invitation_sent": synced,
+            "meeting_url": appointment.meeting_url if appointment else None,
             "message": (
                 f"Appointment booked for {contact_name}{with_staff} on {date_str} "
                 f"at {display_time}. "
-                f"Confirmation email sent to {email}."
+                + (
+                    f"The calendar invitation was sent to {email}."
+                    if synced
+                    else (
+                        "The CRM booking is saved, but the calendar invitation "
+                        "needs team follow-up."
+                    )
+                )
             ),
         }
 
@@ -429,14 +439,12 @@ class VoiceToolExecutor(BaseToolExecutor):
                     message_id=message.id,
                     notes=notes,
                     assigned_staff_id=self.assigned_staff_id(),
-                    calcom_booking_uid=result.booking_uid,
-                    calcom_booking_id=result.booking_id,
                 )
+                self._booked_appointment = appointment
                 self.log.info(
                     "appointment_created_from_voice",
                     appointment_id=appointment.id,
                     appointment_message_id=str(message.id),
-                    booking_uid=result.booking_uid,
                 )
             except Exception as e:
                 await db.rollback()
@@ -2035,7 +2043,7 @@ def create_tool_callback(
     capturing all the context needed for tool execution.
 
     Args:
-        agent: Agent model with Cal.com config
+        agent: Agent model with calendar configuration
         contact_info: Contact information
         timezone: Workspace timezone
         call_control_id: Telnyx call control ID

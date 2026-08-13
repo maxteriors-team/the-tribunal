@@ -55,7 +55,8 @@ export const PRICING_TIERS: PricingTier[] = [
   {
     id: "elevenlabs",
     name: "ElevenLabs",
-    description: "Grok AI + ElevenLabs TTS (v2.5 low-latency or v3 most expressive) with 100+ voices",
+    description:
+      "Grok AI + ElevenLabs TTS (v2.5 low-latency or v3 most expressive) with 100+ voices",
     costPerHour: 2.5,
     costPerMinute: 0.042,
     features: [
@@ -63,7 +64,7 @@ export const PRICING_TIERS: PricingTier[] = [
       "ElevenLabs premium TTS",
       "100+ expressive voices",
       "Built-in X/web search",
-      "Cal.com booking support",
+      "Google Calendar booking support",
     ],
     config: {
       llmProvider: "grok",
@@ -256,7 +257,7 @@ export function calculateMonthlyCost(
   tier: PricingTier,
   callsPerMonth: number,
   avgDurationMinutes: number,
-  inboundPercentage: number = 50
+  inboundPercentage: number = 50,
 ): {
   totalMinutes: number;
   aiCost: number;

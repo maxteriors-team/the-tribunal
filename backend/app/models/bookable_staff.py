@@ -1,10 +1,10 @@
 """Bookable staff / resource model.
 
 A pool of bookable staff members (or resources) that the AI booking tool can
-assign appointments to instead of always binding to a single Cal.com event type
-per agent. Each staff member carries:
+assign appointments to. Login-backed staff use that user's connected Google
+Calendar for conflict checks and confirmed events. Each staff member carries:
 
-- their own Cal.com event type / schedule (``calcom_event_type_id``)
+- an optional ``user_id`` linking the staff row to a login/calendar
 - a set of ``skills`` used for skill-based routing
 - round-robin distribution counters (``assignment_count`` / ``last_assigned_at``)
 
@@ -53,10 +53,6 @@ class BookableStaff(Base):
             "agent_id",
             "is_active",
         ),
-        Index(
-            "ix_bookable_staff_calcom_event_type_id",
-            "calcom_event_type_id",
-        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -90,9 +86,6 @@ class BookableStaff(Base):
         nullable=True,
         index=True,
     )
-
-    # Each staff member books against their own Cal.com event type / schedule.
-    calcom_event_type_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Skill tags used for skill-based routing (case-insensitive matching).
     skills: Mapped[list[str]] = mapped_column(ARRAY(PG_TEXT), default=list, nullable=False)

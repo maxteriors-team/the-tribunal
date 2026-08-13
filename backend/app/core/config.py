@@ -127,9 +127,11 @@ class Settings(BaseSettings):
     # presents its own token.
     mac_relay_allow_legacy_global_token: bool = False
 
-    # Cal.com
-    calcom_api_key: str = ""
-    calcom_webhook_secret: str = ""
+    # Google Calendar OAuth. Credentials identify this application; every user
+    # authorizes and stores their own encrypted refresh token.
+    google_calendar_client_id: str = ""
+    google_calendar_client_secret: SecretStr = SecretStr("")
+    google_calendar_oauth_redirect_uri: str = ""
 
     # Jobber (field-service sync). The access token is a short-lived OAuth2
     # token; the CLI also accepts it via --token / JOBBER_ACCESS_TOKEN so the

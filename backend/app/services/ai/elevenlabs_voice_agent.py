@@ -1,7 +1,7 @@
 """ElevenLabs Voice Agent - Hybrid architecture using Grok STT+LLM with ElevenLabs TTS.
 
 This composite session provides:
-- Grok Realtime API for Speech-to-Text and LLM (with tool calling for Cal.com)
+- Grok Realtime API for Speech-to-Text and LLM (with tool calling for calendar scheduling)
 - ElevenLabs for Text-to-Speech (expressive, high-quality voice output)
 
 Architecture:
@@ -39,7 +39,7 @@ class ElevenLabsVoiceAgentSession(VoiceAgentBase):
     - Returns ElevenLabs audio (ulaw_8000, ready for Telnyx)
 
     Key benefits:
-    - Tool calling preserved (Cal.com booking, web search, X search)
+    - Tool calling preserved (Google Calendar booking, web search, X search)
     - ElevenLabs outputs ulaw_8000 directly (no conversion needed)
     - Access to 100+ ElevenLabs voices with rich expressiveness
 
@@ -64,7 +64,7 @@ class ElevenLabsVoiceAgentSession(VoiceAgentBase):
             xai_api_key: xAI (Grok) API key for STT+LLM
             elevenlabs_api_key: ElevenLabs API key for TTS
             agent: Optional Agent model for configuration
-            enable_tools: Enable Cal.com booking tools
+            enable_tools: Enable Google Calendar booking tools
             timezone: Timezone for date context (default: America/New_York)
         """
         super().__init__(agent, timezone)
@@ -378,7 +378,7 @@ class ElevenLabsVoiceAgentSession(VoiceAgentBase):
             tools.append(GROK_BUILTIN_TOOLS["x_search"])
             self.logger.info("grok_x_search_enabled")
 
-        # Add Cal.com booking tools if enabled and configured
+        # Add Google Calendar booking tools if enabled and configured
         if self._enable_tools:
             tools.extend(VOICE_BOOKING_TOOLS)
             self.logger.info("booking_tools_enabled", tool_count=len(VOICE_BOOKING_TOOLS))

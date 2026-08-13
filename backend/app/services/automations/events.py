@@ -42,11 +42,12 @@ EVENT_MISSED_CALL = "missed_call"
 EVENT_ROLEPLAY_COMPLETED = "roleplay_completed"
 EVENT_KNOWLEDGE_DOCUMENT_UPLOADED = "knowledge_document_uploaded"
 
-# Lead-capture trigger. Emitted by the public lead-form ingestion path
-# (``app.api.v1.lead_form.submit_lead``) when a brand-new contact is created
-# from a lead source. Automations can narrow it to specific sources via
-# ``trigger_config`` (see :func:`lead_created_event_matches`).
+# Lead funnel lifecycle triggers. ``lead_created`` can be source-scoped; the
+# later transitions are emitted only after evidence-backed qualification and a
+# durable CRM booking respectively.
 EVENT_LEAD_CREATED = "lead_created"
+EVENT_LEAD_QUALIFIED = "lead_qualified"
+EVENT_APPOINTMENT_BOOKED = "appointment_booked"
 
 # Billing & field-service lifecycle triggers. Each is emitted by exactly one
 # transition in its service (quotes/invoices/jobs) inside the producer's
@@ -73,6 +74,8 @@ AUTOMATION_EVENT_TRIGGERS: frozenset[str] = frozenset(
         EVENT_ROLEPLAY_COMPLETED,
         EVENT_KNOWLEDGE_DOCUMENT_UPLOADED,
         EVENT_LEAD_CREATED,
+        EVENT_LEAD_QUALIFIED,
+        EVENT_APPOINTMENT_BOOKED,
         EVENT_QUOTE_SENT,
         EVENT_QUOTE_APPROVED,
         EVENT_QUOTE_DECLINED,

@@ -8,11 +8,9 @@ three shipped features read the *contact* fields this writes.
 - The ``no_show`` automation trigger matches the same tag.
 - ``contacts.noshow_count`` feeds nudges and lead scoring.
 
-Cal.com's ``meeting_ended`` webhook used to be the only writer, so an in-app
-"mark no-show" button that only set ``appointments.status`` would produce a
-no-show invisible to all three. This module is the single place those effects
-live, called from both the webhook (``app.api.webhooks.calcom_handlers``) and
-``AppointmentService.update_appointment``.
+This module is the single place those effects live, called by
+``AppointmentService.update_appointment`` whenever an operator records the
+outcome in the CRM calendar.
 
 Idempotent by design: ``noshow_count`` is incremented only on the *transition*
 into ``no_show``, so re-marking an already-absent appointment (a replayed

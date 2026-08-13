@@ -29,7 +29,7 @@ class WebhookEventDTO(Protocol):
 
     @property
     def provider(self) -> str:
-        """Webhook provider name, e.g. ``resend`` or ``calcom``."""
+        """Webhook provider name, e.g. ``resend`` or ``telnyx``."""
 
     @property
     def event_type(self) -> str:

@@ -211,7 +211,7 @@ class WorkspaceIntegration(Base):
     )
     integration_type: Mapped[str] = mapped_column(
         String(50), nullable=False
-    )  # calcom, telnyx, openai, elevenlabs
+    )  # telnyx, openai, resend, companycam, lead-source integrations
     encrypted_credentials: Mapped[str] = mapped_column(
         "credentials", Text, nullable=False
     )  # Fernet-encrypted JSON

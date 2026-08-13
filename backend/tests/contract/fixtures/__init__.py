@@ -1,6 +1,6 @@
 """Real-world, sanitized webhook payload fixtures used by contract tests.
 
-Each JSON file in ``telnyx/``, ``calcom/``, and ``resend/`` matches the
+Each JSON file in ``telnyx/`` and ``resend/`` matches the
 exact HTTP body the provider delivers to the corresponding webhook
 endpoint. Payloads are kept as data files (not Python literals) so the
 same bytes can be replayed manually with curl while debugging webhook
@@ -20,11 +20,7 @@ FIXTURES_DIR = Path(__file__).parent
 
 
 def load_fixture(provider: str, filename: str) -> dict[str, Any]:
-    """Load a JSON fixture for *provider* (``"telnyx"``/``"calcom"``/``"resend"``).
-
-    Example:
-        ``load_fixture("calcom", "booking_created.json")``
-    """
+    """Load a JSON fixture for *provider* (``"telnyx"`` or ``"resend"``)."""
     path = FIXTURES_DIR / provider / filename
     with path.open(encoding="utf-8") as fh:
         loaded = json.load(fh)

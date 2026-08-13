@@ -1,8 +1,7 @@
 """Text agent tool execution service.
 
-This module handles tool execution for text/SMS conversations, providing
-Cal.com booking integration similar to VoiceToolExecutor but optimized
-for the text channel's database-centric workflow.
+This module handles tool execution for text/SMS conversations, including CRM
+booking and assigned-rep Google Calendar synchronization.
 
 Key differences from VoiceToolExecutor:
 - Uses Conversation and AsyncSession for state management
@@ -22,9 +21,7 @@ Usage:
 import json
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import quote
 
-import httpx
 import structlog
 from openai.types.chat import ChatCompletionMessageToolCall
 from sqlalchemy import select
@@ -33,12 +30,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation
-from app.models.workspace import WorkspaceIntegration
 from app.services.ai.base_tool_executor import BaseToolExecutor
 from app.services.ai.website_lead_qualification import WebsiteLeadQualificationPolicy
 from app.services.appointments.booking_finalizer import finalize_booking, format_contact_address
 from app.services.appointments.cancellation import cancel_upcoming_appointments
 from app.services.approval.approval_gate_service import approval_gate_service
+from app.services.leads.funnel_transitions import mark_contact_qualified
 
 logger = structlog.get_logger()
 
@@ -57,11 +54,11 @@ GATE_EXEMPT_TOOLS: frozenset[str] = frozenset(
 class TextToolExecutor(BaseToolExecutor):
     """Executes tool calls for text/SMS conversations.
 
-    Handles Cal.com booking operations with database persistence,
+    Handles Google Calendar booking operations with database persistence,
     contact email updates, and appointment record creation.
 
     Attributes:
-        agent: Agent model with Cal.com configuration
+        agent: Agent model with calendar configuration
         conversation: Conversation model for context
         db: Async database session
         timezone: Timezone for date handling
@@ -199,6 +196,7 @@ class TextToolExecutor(BaseToolExecutor):
                 duration_minutes=arguments.get("duration_minutes", 30),
                 notes=arguments.get("notes"),
                 required_skill=arguments.get("skill"),
+                call_type=arguments.get("call_type"),
             )
         if function_name == "check_availability":
             try:
@@ -206,6 +204,7 @@ class TextToolExecutor(BaseToolExecutor):
                     start_date_str=arguments.get("start_date", ""),
                     end_date_str=arguments.get("end_date"),
                     required_skill=arguments.get("skill"),
+                    duration_minutes=arguments.get("duration_minutes", 30),
                 )
             except Exception as e:
                 self.log.exception("availability_check_failed", error=str(e))
@@ -273,11 +272,15 @@ class TextToolExecutor(BaseToolExecutor):
         if not isinstance(summary, str) or not summary.strip():
             return {"success": False, "error": "Qualification summary is required."}
 
+        if contact.status in {"converted", "lost"}:
+            return {
+                "success": False,
+                "blocked": True,
+                "error": f"Contact is terminal ({contact.status}); qualification was not changed.",
+            }
+
         now = datetime.now(UTC)
-        contact.is_qualified = True
-        contact.status = "qualified"
         contact.lead_score = min(score, 100)
-        contact.qualified_at = now
         contact.qualification_signals = {
             "source": "website_lead_live_ai",
             "score": min(score, 100),
@@ -288,7 +291,7 @@ class TextToolExecutor(BaseToolExecutor):
             "summary": summary.strip()[:500],
             "last_analyzed_at": now.isoformat(),
         }
-        await self.db.flush()
+        opportunity = await mark_contact_qualified(self.db, contact)
         self._contact = contact
         self.log.info(
             "website_lead_qualified",
@@ -300,6 +303,7 @@ class TextToolExecutor(BaseToolExecutor):
             "success": True,
             "qualified": True,
             "score": min(score, 100),
+            "opportunity_id": str(opportunity.id) if opportunity is not None else None,
             "message": (
                 f"Lead qualification persisted. Transition now to offering the "
                 f"{policy.booking_label}; do not ask another qualification question."
@@ -410,8 +414,16 @@ class TextToolExecutor(BaseToolExecutor):
         duration_minutes: int = 30,
         notes: str | None = None,
         required_skill: str | None = None,
+        call_type: str | None = None,
     ) -> dict[str, Any]:
-        """Resolve contact, validate datetime, then delegate to base booking."""
+        """Resolve contact, call type, and datetime, then delegate to base booking."""
+        if call_type not in {"phone_call", "video_call"}:
+            return {
+                "success": False,
+                "error": "Call type is required",
+                "message": "Ask whether the lead prefers a phone call or video call.",
+            }
+
         # Get contact info
         contact = await self._get_contact()
         if not contact:
@@ -424,19 +436,16 @@ class TextToolExecutor(BaseToolExecutor):
         # Use provided email or fall back to contact's existing email
         booking_email = email or contact.email
 
-        # If email was provided and contact doesn't have one, update the contact
-        if email and not contact.email:
-            contact.email = email
-            await self.db.flush()
-            self.log.info("contact_email_updated", contact_id=contact.id, email=email)
+        # Persist the email only after the appointment finalizer succeeds; a failed
+        # slot/calendar attempt must not partially mutate the CRM contact.
+        should_persist_email = bool(email and not contact.email)
 
         if not booking_email:
-            self.log.info(
-                "contact_email_missing_building_link",
-                contact_id=contact.id,
-                contact_name=contact.full_name,
-            )
-            return await self._build_booking_link(contact)
+            return {
+                "success": False,
+                "error": "Email address is required for booking",
+                "message": "Please ask the customer for their email address",
+            }
 
         # Parse date and time for the Appointment record
         try:
@@ -451,19 +460,26 @@ class TextToolExecutor(BaseToolExecutor):
                 "error": f"Invalid date/time format: {e}",
             }
 
-        # Store duration/notes for post_booking_success hook
+        # Store selected call type for finalization and truthful response copy.
         self._pending_duration = duration_minutes
         self._pending_notes = notes
+        self._pending_call_type = call_type
 
         try:
-            return await self.execute_book_appointment(
+            result = await self.execute_book_appointment(
                 date_str=date_str,
                 time_str=time_str,
                 email=booking_email,
                 duration_minutes=duration_minutes,
                 notes=notes,
                 required_skill=required_skill,
+                service_type=call_type,
             )
+            if result.get("success") and should_persist_email and email:
+                contact.email = email
+                await self.db.flush()
+                self.log.info("contact_email_updated", contact_id=contact.id)
+            return result
         except Exception as e:
             self.log.exception("booking_failed", error=str(e))
             return {
@@ -540,22 +556,38 @@ class TextToolExecutor(BaseToolExecutor):
         duration_minutes: int,
     ) -> dict[str, Any]:
         formatted_time = self._appointment_datetime.strftime("%A, %B %d at %I:%M %p")
+        call_type = getattr(self, "_pending_call_type", None)
+        call_label = "video call" if call_type == "video_call" else "phone call"
+        appointment = getattr(self, "_booked_appointment", None)
         return {
             "success": True,
-            "booking_uid": result.booking_uid,
             "scheduled_at": self._appointment_datetime.isoformat(),
             "duration_minutes": duration_minutes,
             "booking_email": email,
-            # The locally-generated attendee invite is queued after the appointment
-            # commit. This tells the model what the booking path actually attempted;
-            # provider rejection is logged separately and must never undo the booking.
-            "invitation_sent": True,
-            "message": (
-                f"Appointment booked for {formatted_time}. "
-                f"Calendar invitation queued for {email}. "
-                "Send one concise confirmation and no separate reminder."
-            ),
+            "call_type": call_type,
+            "invitation_sent": bool(appointment and appointment.sync_status == "synced"),
+            "meeting_url": appointment.meeting_url if appointment else None,
+            "message": self._booking_confirmation_message(call_label, formatted_time, email),
         }
+
+    def _booking_confirmation_message(
+        self, call_label: str, formatted_time: str, email: str
+    ) -> str:
+        appointment = getattr(self, "_booked_appointment", None)
+        if appointment and appointment.sync_status == "synced":
+            link_copy = (
+                f" The Google Meet link is {appointment.meeting_url}."
+                if appointment.meeting_url
+                else ""
+            )
+            return (
+                f"{call_label.title()} booked for {formatted_time}. "
+                f"A calendar invitation was sent to {email}.{link_copy}"
+            )
+        return (
+            f"{call_label.title()} is saved in the CRM for {formatted_time}, but the "
+            "calendar invitation needs team follow-up. Do not promise a meeting link."
+        )
 
     async def post_booking_success(
         self,
@@ -567,21 +599,12 @@ class TextToolExecutor(BaseToolExecutor):
         notes: str | None,
     ) -> None:
         """Create the Appointment record and fire its downstream notifications."""
-        self.log.info(
-            "booking_created",
-            booking_uid=result.booking_uid,
-            booking_id=result.booking_id,
-        )
+        self.log.info("booking_created")
 
         contact = self._contact
         assert contact is not None
 
         assigned_staff_id = self.assigned_staff_id()
-        resolved_event_type_id = self.agent.calcom_event_type_id
-        if self.assigned_staff:
-            resolved_event_type_id = (
-                self.assigned_staff.get("calcom_event_type_id") or resolved_event_type_id
-            )
 
         appointment = await finalize_booking(
             self.db,
@@ -592,157 +615,15 @@ class TextToolExecutor(BaseToolExecutor):
             duration_minutes=duration_minutes,
             campaign_id=getattr(self.conversation, "campaign_id", None),
             notes=notes,
-            service_type="video_call",
+            service_type=getattr(self, "_pending_call_type", "phone_call"),
             assigned_staff_id=assigned_staff_id,
-            calcom_booking_uid=result.booking_uid,
-            calcom_booking_id=result.booking_id,
-            calcom_event_type_id=resolved_event_type_id,
             # The assistant's reply confirms the booking in this same SMS turn.
             # Suppress the generic lifecycle confirmation to avoid double-texting.
             send_customer_sms=False,
         )
 
+        self._booked_appointment = appointment
         self.log.info("appointment_created", appointment_id=appointment.id)
-
-    # ── Text-only helpers ───────────────────────────────────────────
-
-    async def _get_calcom_api_key(self) -> str | None:
-        """Return the Cal.com API key for this workspace, or None if not found.
-
-        Checks the workspace's WorkspaceIntegration record (type "calcom").
-        Falls back to the global ``settings.calcom_api_key`` if set.
-        """
-        from app.core.config import settings
-        from app.core.encryption import decrypt_json
-
-        workspace_id = self.conversation.workspace_id
-        result = await self.db.execute(
-            select(WorkspaceIntegration).where(
-                WorkspaceIntegration.workspace_id == workspace_id,
-                WorkspaceIntegration.integration_type == "calcom",
-                WorkspaceIntegration.is_active.is_(True),
-            )
-        )
-        integration = result.scalar_one_or_none()
-        if integration is not None:
-            try:
-                creds = decrypt_json(integration.encrypted_credentials)
-                key = creds.get("api_key")
-                if key:
-                    return str(key)
-            except Exception:
-                self.log.warning("calcom_credential_decrypt_failed")
-
-        # Fall back to global key
-        global_key = settings.calcom_api_key
-        return global_key if global_key else None
-
-    async def _build_booking_link(self, contact: Contact) -> dict[str, Any]:
-        """Build a Cal.com booking URL for a contact who has no email address.
-
-        Fetches the Cal.com username via the v1 ``/me`` endpoint and the event
-        slug via the v1 ``/event-types/{id}`` endpoint, then assembles a
-        pre-filled booking URL and returns an action dict the AI should use to
-        send the link via SMS.
-        """
-        username, slug, err = await self._resolve_calcom_identity()
-        if err:
-            return {"success": False, "error": err}
-
-        # Build the pre-filled URL
-        name_param = quote(contact.full_name or "", safe="")
-        phone_param = quote(contact.phone_number or "", safe="")
-        booking_url = f"https://cal.com/{username}/{slug}?name={name_param}&phone={phone_param}"
-
-        self.log.info(
-            "booking_link_built",
-            contact_id=contact.id,
-            booking_url=booking_url,
-        )
-
-        return {
-            "success": True,
-            "action": "send_booking_link",
-            "booking_url": booking_url,
-            "message": (
-                f"I'd love to set something up! Here's my booking link where you can "
-                f"pick a time that works for you: {booking_url}"
-            ),
-        }
-
-    async def _resolve_calcom_identity(
-        self,
-    ) -> "tuple[str, str, None] | tuple[None, None, str]":
-        """Fetch the Cal.com username and event slug for the current agent.
-
-        Returns ``(username, slug, None)`` on success or
-        ``(None, None, error_message)`` on failure.
-        """
-        event_type_id = self.agent.calcom_event_type_id
-        if not event_type_id:
-            return None, None, "Cal.com not configured for this agent"
-
-        api_key = await self._get_calcom_api_key()
-        if not api_key:
-            return None, None, "Cal.com API key not available — cannot generate booking link"
-
-        calcom_v1 = "https://api.cal.com/v1"
-
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                username = await self._fetch_calcom_username(client, calcom_v1, api_key)
-                if username is None:
-                    return None, None, "Cal.com username not found — cannot generate booking link"
-
-                slug = await self._fetch_event_slug(client, calcom_v1, api_key, event_type_id)
-                if slug is None:
-                    return None, None, "Cal.com event slug not found — cannot generate booking link"
-
-        except httpx.HTTPError as exc:
-            self.log.exception("calcom_booking_link_http_error", error=str(exc))
-            return None, None, f"Network error building booking link: {exc!s}"
-
-        return username, slug, None
-
-    async def _fetch_calcom_username(
-        self,
-        client: httpx.AsyncClient,
-        base_url: str,
-        api_key: str,
-    ) -> str | None:
-        """Call Cal.com v1 /me and return the username, or None on failure."""
-        resp = await client.get(f"{base_url}/me", params={"apiKey": api_key})
-        if resp.status_code != 200:
-            self.log.error("calcom_me_failed", status=resp.status_code, body=resp.text[:200])
-            return None
-        data = resp.json()
-        return data.get("user", {}).get("username") or data.get("username") or None
-
-    async def _fetch_event_slug(
-        self,
-        client: httpx.AsyncClient,
-        base_url: str,
-        api_key: str,
-        event_type_id: int,
-    ) -> str | None:
-        """Call Cal.com v1 /event-types/{id} and return the slug, or None on failure."""
-        resp = await client.get(
-            f"{base_url}/event-types/{event_type_id}",
-            params={"apiKey": api_key},
-        )
-        if resp.status_code != 200:
-            self.log.error(
-                "calcom_event_type_failed",
-                status=resp.status_code,
-                event_type_id=event_type_id,
-                body=resp.text[:200],
-            )
-            return None
-        data = resp.json()
-        event_type = data.get("event_type") or data.get("eventType") or data
-        if not isinstance(event_type, dict):
-            return None
-        return event_type.get("slug") or None
 
     async def _get_contact(self) -> Contact | None:
         """Get contact for this conversation."""
@@ -769,7 +650,7 @@ class TextToolExecutor(BaseToolExecutor):
         return contact
 
     def _clean_phone_number(self, phone: str | None) -> str | None:
-        """Clean phone number to E.164 format for Cal.com."""
+        """Clean phone number to E.164 format for calendar scheduling."""
         if not phone:
             return None
 

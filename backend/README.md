@@ -1,13 +1,13 @@
 # AI CRM Backend
 
-AI-powered CRM backend with voice agents, SMS campaigns, and Cal.com integration.
+AI-powered CRM backend with voice agents, SMS campaigns, and Google Calendar integration.
 
 ## Features
 
 - Multi-tenant workspace architecture
 - AI voice agents via OpenAI Realtime
 - SMS campaigns with AI takeover
-- Cal.com appointment booking
+- Per-user Google Calendar OAuth and sales-team appointment routing
 - Telnyx telephony integration
 
 ## Setup
@@ -141,7 +141,7 @@ Startup order matches `WORKER_SPECS` in `app/workers/__init__.py`. Each
 | `NoShowReengagementWorker` | `noshow_reengagement_worker` | **3600s** (hourly) | Postgres, text provider | Multi-day drip for missed appointments — Day 3 and Day 7 templates, progress tracked via `noshow-day3-sent` / `noshow-day7-sent` / `reengaged-booked` tags. |
 | `NeverBookedWorker` | `never_booked_worker` | **3600s** (hourly) | Postgres, text provider | Sends one re-engagement SMS to contacts who replied but never booked (≥1 inbound message, no `appointment-scheduled` tag, last activity older than `agent.never_booked_delay_days`); tags `never-booked-reengaged` to prevent re-fire. |
 | `NudgeWorker` | `nudge_worker` | **3600s** (hourly) | Postgres, Telnyx SMS, Expo push | For each workspace with nudge settings enabled: `NudgeGeneratorService` creates `HumanNudge` rows from upcoming dates, `NudgeDeliveryService` ships them via SMS/push to workspace members. |
-| `ApprovalWorker` | `approval_worker` | **30s** | Postgres, text provider, Expo push, Cal.com | Drives HITL `PendingAction` lifecycle: notifies approvers of new actions, executes approved ones (book appointment, send SMS, …), auto-approves past timeout, expires stale rows. |
+| `ApprovalWorker` | `approval_worker` | **30s** | Postgres, text provider, Expo push, Google Calendar | Drives HITL `PendingAction` lifecycle: notifies approvers of new actions, executes approved ones (book appointment, send SMS, …), auto-approves past timeout, expires stale rows. |
 | `DripCampaignWorker` | `drip_campaign_worker` | **900s** (15m) | Postgres, text provider | Advances enrollments across active drip campaigns via `process_active_drip_campaigns()`. Single conceptual job per cycle (`MAX_CONCURRENCY = 1`). |
 | `TranscriptAnalysisWorker` | `transcript_analysis_worker` | **30s** | Postgres, OpenAI | Picks voice-call `Message` rows with a transcript but no sentiment, runs `analyze_transcript`, merges results into the linked `CallOutcome.signals`. Batches of 10. |
 | `AuthRateLimitCleanupWorker` | `auth_rate_limit_cleanup` | **3600s** (hourly) | Postgres | Deletes `auth_rate_limits` rows older than 24h so the append-only table doesn't bloat the hot windowed-count queries that gate every auth request. |
@@ -232,7 +232,7 @@ instrumentation so local dev and tests don't try to reach a non-existent
 collector. When the endpoint is set the following spans flow automatically:
 
 - FastAPI server requests (HTTP method, route, status)
-- Outbound `httpx` calls (OpenAI, Telnyx, Cal.com, ElevenLabs, SendGrid)
+- Outbound `httpx` calls (OpenAI, Telnyx, Google Calendar, ElevenLabs, Resend)
 - SQLAlchemy queries against Postgres
 - Redis commands (cache + worker queues)
 

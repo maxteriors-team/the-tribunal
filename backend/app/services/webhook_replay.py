@@ -3,12 +3,9 @@
 Why this exists
 ---------------
 
-An HMAC-over-body signature (Cal.com's ``x-cal-signature-256``) proves the
-*payload* came from the provider. It says nothing about *when*, and it never
-expires: a captured ``(body, x-cal-signature-256)`` pair verifies forever.
-Cal.com does not sign a timestamp, so no header-based freshness check can close
-that window — an attacker replaying a capture simply omits any header we made
-optional, and cannot be forced to send one we made mandatory.
+An HMAC-over-body signature proves the *payload* came from a provider. It says
+nothing about *when*, and it never expires: a captured ``(body, signature)`` pair
+can verify forever when the provider does not sign a timestamp.
 
 The only defense that does not rely on attacker-supplied input is remembering
 what we have already accepted. :func:`claim_webhook_signature` does that in
@@ -91,7 +88,7 @@ async def claim_webhook_signature(
     """Record ``signature`` for ``provider``, reporting whether it was new.
 
     Args:
-        provider: Short provider slug, e.g. ``"calcom"``.
+        provider: Short provider slug, e.g. ``"resend"``.
         signature: The verbatim signature header value. Callers MUST have
             verified it cryptographically first.
         log: Bound structlog logger.

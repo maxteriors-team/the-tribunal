@@ -108,7 +108,6 @@ def _make_agent(
     agent.turn_detection_threshold = 0.5
     agent.silence_duration_ms = 700
     agent.initial_greeting = initial_greeting
-    agent.calcom_event_type_id = None
     agent.enable_ivr_navigation = enable_ivr
     agent.ivr_navigation_goal = None
     agent.ivr_loop_threshold = 2

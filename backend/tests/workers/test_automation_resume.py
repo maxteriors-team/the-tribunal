@@ -45,6 +45,7 @@ def _automation(actions: list[dict]) -> MagicMock:
     automation.actions = actions
     automation.is_active = True
     automation.last_triggered_at = None
+    automation.trigger_config = {}
     return automation
 
 
@@ -55,6 +56,7 @@ def _contact() -> MagicMock:
     contact.last_name = "Lovelace"
     contact.email = "ada@example.com"
     contact.phone_number = "+15551230000"
+    contact.last_appointment_status = None
     return contact
 
 
@@ -145,9 +147,7 @@ class TestWaitParksTheRun:
         delay = execution.scheduled_for - before
         assert timedelta(days=3) - timedelta(minutes=1) < delay < timedelta(days=3, minutes=1)
 
-    async def test_zero_wait_does_not_park_the_run(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_zero_wait_does_not_park_the_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
         worker = _worker(monkeypatch)
         sms = AsyncMock()
         monkeypatch.setattr(worker, "_action_send_sms", sms)
@@ -192,9 +192,7 @@ class TestResumingFromTheCursor:
         assert sms.await_args.args[2] == {"message": "second"}
         assert execution.status == "completed"
 
-    async def test_trigger_payload_survives_the_wait(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_trigger_payload_survives_the_wait(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Tokens like {rating} must not render blank after a resume."""
         worker = _worker(monkeypatch)
         sms = AsyncMock()
@@ -235,6 +233,47 @@ class TestResumingFromTheCursor:
 
 
 class TestResumeGuards:
+    async def test_booked_acquisition_funnel_completes_without_resuming(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        worker = _worker(monkeypatch)
+        automation = _automation([{"type": "send_sms"}])
+        automation.trigger_config = {"funnel_id": "website-leads"}
+        contact = _contact()
+        contact.last_appointment_status = "scheduled"
+        db = AsyncMock()
+        db.get = AsyncMock(side_effect=[automation, contact])
+        execution = _execution(status="scheduled")
+        run = AsyncMock()
+        monkeypatch.setattr(worker, "_run_actions", run)
+
+        await worker._resume_execution(execution, db)
+
+        assert execution.status == "completed"
+        assert execution.scheduled_for is None
+        run.assert_not_awaited()
+
+    async def test_unrelated_automation_is_not_stopped_after_booking(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        worker = _worker(monkeypatch)
+        automation = _automation([{"type": "send_sms"}])
+        contact = _contact()
+        contact.last_appointment_status = "scheduled"
+        db = AsyncMock()
+        db.get = AsyncMock(side_effect=[automation, contact])
+        execution = _execution(status="scheduled")
+        run = AsyncMock()
+        monkeypatch.setattr(worker, "_run_actions", run)
+        monkeypatch.setattr(
+            "app.workers.automation_worker.automation_suppressed",
+            AsyncMock(return_value=False),
+        )
+
+        await worker._resume_execution(execution, db)
+
+        run.assert_awaited_once()
+
     async def test_paused_automation_abandons_the_parked_run(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

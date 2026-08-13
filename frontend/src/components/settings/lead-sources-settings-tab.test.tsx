@@ -3,7 +3,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LeadSourcesSettingsTab } from "@/components/settings/lead-sources-settings-tab";
+import {
+  getCallBookingReadiness,
+  LeadSourcesSettingsTab,
+} from "@/components/settings/lead-sources-settings-tab";
 import type { LeadSource } from "@/lib/api/lead-sources";
 
 const { listMock, createMock, updateMock, deleteMock, useWorkspaceIdMock } =
@@ -65,6 +68,41 @@ function renderTab() {
 beforeEach(() => {
   vi.clearAllMocks();
   useWorkspaceIdMock.mockReturnValue("ws-1");
+});
+
+describe("call-booking readiness", () => {
+  it("reports actual qualification, policy, rep, and video blockers", () => {
+    const result = getCallBookingReadiness({
+      qualificationEnabled: false,
+      bookingEnabled: true,
+      bookingPolicy: "ask",
+      bookableRep: false,
+      videoCalendarReady: false,
+    });
+
+    expect(result.callBookingReady).toBe(false);
+    expect(result.blockers).toEqual([
+      "AI qualification is not enabled",
+      "booking policy is not auto-approved",
+      "no active bookable rep is assigned",
+      "Google Calendar is not connected for video calls",
+    ]);
+  });
+
+  it("allows phone call readiness while reporting video calendar separately", () => {
+    const result = getCallBookingReadiness({
+      qualificationEnabled: true,
+      bookingEnabled: true,
+      bookingPolicy: "auto",
+      bookableRep: true,
+      videoCalendarReady: false,
+    });
+
+    expect(result.callBookingReady).toBe(true);
+    expect(result.blockers).toEqual([
+      "Google Calendar is not connected for video calls",
+    ]);
+  });
 });
 
 describe("LeadSourcesSettingsTab", () => {

@@ -10,7 +10,7 @@ little context on the other upsells (AI voice receptionists, AI sales teams,
 AI marketing teams), and books a call with Nolan / sends the calendar link.
 
 What this script does (idempotent):
-  1. Loads Jess to copy voice, tool, and Cal.com settings + derive the workspace.
+  1. Loads Jess to copy voice/tool settings and derive the workspace.
   2. Creates or updates the "Remi" agent in that same workspace.
   3. Re-points the +1 248-530-9314 phone number's default agent to Remi so new
      INBOUND calls/texts hit the receptionist instead of the outbound script.
@@ -45,7 +45,7 @@ def _bootstrap_app_path() -> None:
             break
 
 
-# We copy voice/tool/Cal.com settings from the live "Jess" agent. Jess is
+# We copy voice/tool settings from the live "Jess" agent. Jess is
 # resolved by NAME within the PRESTYJ workspace rather than a hardcoded UUID:
 # the old JESS_AGENT_ID (5bba3103-...) was renamed to "Nolan" in production, so
 # an ID lookup would copy the wrong agent.
@@ -283,7 +283,7 @@ async def _create_or_update_remi(db, jess):
     remi.initial_greeting = REMI_GREETING
     remi.is_active = True
 
-    # Copy voice + booking plumbing from Jess so she "still sends the link and shit"
+    # Copy voice and tool configuration from Jess.
     remi.voice_provider = jess.voice_provider
     remi.voice_id = jess.voice_id
     remi.language = jess.language
@@ -294,7 +294,6 @@ async def _create_or_update_remi(db, jess):
     remi.max_tokens = jess.max_tokens
     remi.text_response_delay_ms = jess.text_response_delay_ms
     remi.text_max_context_messages = jess.text_max_context_messages
-    remi.calcom_event_type_id = jess.calcom_event_type_id
     remi.enabled_tools = list(jess.enabled_tools or [])
     remi.tool_settings = dict(jess.tool_settings or {})
     remi.enable_recording = jess.enable_recording
@@ -359,7 +358,6 @@ async def apply() -> None:
         print(f"  Workspace:      {remi.workspace_id}")
         print(f"  Channel Mode:   {remi.channel_mode}")
         print(f"  Voice:          {remi.voice_provider}/{remi.voice_id}")
-        print(f"  Cal.com Event:  {remi.calcom_event_type_id}")
         print(f"  Tools:          {remi.enabled_tools}")
         print(f"  Prompt Length:  {len(remi.system_prompt)} chars")
         if phone is not None:

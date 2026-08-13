@@ -50,15 +50,21 @@ _MAX_QUALIFICATION_BOOKING_LABEL_CHARS = 100
 
 
 def _validate_reminder_channels(value: object) -> object:
-    """Reject unknown reminder channels without silently dropping operator choices."""
+    """Reject unknown reminder channels.
+
+    Unlike the other enum-ish fields this raises instead of coercing: silently
+    dropping a channel the operator selected would look like a saved setting
+    that never sends.
+    """
     if value is None or not isinstance(value, list):
         return value
-    unknown = [channel for channel in value if channel not in _VALID_REMINDER_CHANNELS]
+    unknown = [c for c in value if c not in _VALID_REMINDER_CHANNELS]
     if unknown:
         raise ValueError(
             f"Unsupported reminder channel(s): {', '.join(map(str, unknown))}. "
             f"Supported: {', '.join(_VALID_REMINDER_CHANNELS)}."
         )
+    # Preserve order while removing duplicates so a channel cannot fire twice.
     return list(dict.fromkeys(value))
 
 
@@ -187,17 +193,17 @@ class AgentCreate(BaseModel):
     noshow_day3_template: str | None = None
     noshow_day7_template: str | None = None
 
-    @field_validator("tool_settings", mode="before")
-    @classmethod
-    def validate_tool_settings(cls, value: object) -> object:
-        """Validate live qualification policy while preserving integration settings."""
-        return _validate_tool_settings(value)
-
     @field_validator("text_response_delay_ms", mode="before")
     @classmethod
     def clamp_text_response_delay(cls, value: object) -> object:
         """Accept legacy fast delays and clamp them to the supported range."""
         return _clamp_text_response_delay_value(value)
+
+    @field_validator("tool_settings", mode="before")
+    @classmethod
+    def validate_tool_settings(cls, value: object) -> object:
+        """Validate live qualification policy while preserving integration settings."""
+        return _validate_tool_settings(value)
 
     @field_validator("transfer_mode", mode="before")
     @classmethod
@@ -284,17 +290,17 @@ class AgentUpdate(BaseModel):
     noshow_day3_template: str | None = None
     noshow_day7_template: str | None = None
 
-    @field_validator("tool_settings", mode="before")
-    @classmethod
-    def validate_tool_settings(cls, value: object) -> object:
-        """Validate live qualification policy while preserving integration settings."""
-        return _validate_tool_settings(value)
-
     @field_validator("text_response_delay_ms", mode="before")
     @classmethod
     def clamp_text_response_delay(cls, value: object) -> object:
         """Accept legacy fast delays and clamp them to the supported range."""
         return _clamp_text_response_delay_value(value)
+
+    @field_validator("tool_settings", mode="before")
+    @classmethod
+    def validate_tool_settings(cls, value: object) -> object:
+        """Validate live qualification policy while preserving integration settings."""
+        return _validate_tool_settings(value)
 
     @field_validator("transfer_mode", mode="before")
     @classmethod

@@ -629,9 +629,8 @@ class AppointmentFactory(BaseFactory):
     service_type = None
     notes = None
 
-    calcom_booking_uid = None
-    calcom_booking_id = None
-    calcom_event_type_id = None
+    google_calendar_event_id = None
+    google_calendar_event_url = None
     sync_status = "pending"
     last_synced_at = None
     sync_error = None

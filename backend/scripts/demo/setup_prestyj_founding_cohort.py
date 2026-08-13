@@ -38,7 +38,6 @@ DEFAULT_WORKSPACE_ID = uuid.UUID(
     os.environ.get("DEFAULT_WORKSPACE_ID", "ba0e0e99-c7c9-45ec-9625-567d54d6e9c2")
 )
 NOLAN_AGENT_TEMPLATE_NAME = "Nolan"
-NOLAN_PATTERN_CALCOM_EVENT_TYPE_ID = 4453549
 NOLAN_PATTERN_ENABLED_TOOLS = [
     "web_search",
     "x_search",
@@ -47,11 +46,9 @@ NOLAN_PATTERN_ENABLED_TOOLS = [
     "crm",
     "bookings",
     "twilio-sms",
-    "cal-com",
 ]
 NOLAN_PATTERN_TOOL_SETTINGS = {
     "crm": ["search_customer", "create_contact"],
-    "cal-com": ["calcom_get_availability", "calcom_create_booking"],
     "bookings": [
         "check_availability",
         "book_appointment",
@@ -147,8 +144,6 @@ class AgentSpec:
     system_prompt: str
     initial_greeting: str | None = None
     settings_template_name: str | None = None
-    mirror_calcom_event_type: bool = False
-    calcom_event_type_id: int | None = None
     enabled_tools: list[str] | None = None
     tool_settings: dict[str, list[str]] | None = None
 
@@ -657,15 +652,6 @@ async def get_agent_template(
     return result.scalar_one_or_none()
 
 
-def _resolve_calcom_event_type_id(template: Agent | None, spec: AgentSpec) -> int | None:
-    """Return the Cal.com event type to store for a seeded agent."""
-    if spec.calcom_event_type_id is not None:
-        return spec.calcom_event_type_id
-    if spec.mirror_calcom_event_type:
-        return template.calcom_event_type_id if template else NOLAN_PATTERN_CALCOM_EVENT_TYPE_ID
-    return None
-
-
 def _resolve_enabled_tools(template: Agent | None, spec: AgentSpec) -> list[str]:
     """Return the exact tool list to store for a seeded agent."""
     if spec.enabled_tools is not None:
@@ -709,7 +695,6 @@ async def upsert_agent(db: AsyncSession, workspace_id: uuid.UUID, spec: AgentSpe
         "initial_greeting": spec.initial_greeting,
         "text_response_delay_ms": template.text_response_delay_ms if template else 30_000,
         "text_max_context_messages": template.text_max_context_messages if template else 24,
-        "calcom_event_type_id": _resolve_calcom_event_type_id(template, spec),
         "enabled_tools": _resolve_enabled_tools(template, spec),
         "tool_settings": _resolve_tool_settings(template, spec),
         "enable_recording": template.enable_recording if template else True,

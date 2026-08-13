@@ -37,30 +37,34 @@ def _stub_openai_client() -> Iterator[MagicMock]:
 
 def _make_start_event(stream_id: str = "test-stream") -> str:
     """Create a Telnyx start event JSON string."""
-    return json.dumps({
-        "event": "start",
-        "stream_id": stream_id,
-        "start": {
-            "call_control_id": "test-call-id",
-            "media_format": {
-                "encoding": "audio/x-mulaw",
-                "sample_rate": 8000,
-                "channels": 1,
+    return json.dumps(
+        {
+            "event": "start",
+            "stream_id": stream_id,
+            "start": {
+                "call_control_id": "test-call-id",
+                "media_format": {
+                    "encoding": "audio/x-mulaw",
+                    "sample_rate": 8000,
+                    "channels": 1,
+                },
             },
-        },
-    })
+        }
+    )
 
 
 def _make_media_event(audio_bytes: bytes) -> str:
     """Create a Telnyx media event JSON string."""
-    return json.dumps({
-        "event": "media",
-        "media": {
-            "payload": base64.b64encode(audio_bytes).decode("utf-8"),
-            "timestamp": "0",
-            "chunk": "1",
-        },
-    })
+    return json.dumps(
+        {
+            "event": "media",
+            "media": {
+                "payload": base64.b64encode(audio_bytes).decode("utf-8"),
+                "timestamp": "0",
+                "chunk": "1",
+            },
+        }
+    )
 
 
 def _make_stop_event() -> str:
@@ -84,11 +88,13 @@ class TestGateOutcomes:
         audio = _make_silence(FIRST_BUFFER_SECONDS)
 
         ws = AsyncMock()
-        ws.receive_text = AsyncMock(side_effect=[
-            _make_start_event(),
-            _make_media_event(audio),
-            # After processing, gate will try to read more - we'll timeout
-        ])
+        ws.receive_text = AsyncMock(
+            side_effect=[
+                _make_start_event(),
+                _make_media_event(audio),
+                # After processing, gate will try to read more - we'll timeout
+            ]
+        )
         ws.send_text = AsyncMock()
 
         with (
@@ -98,7 +104,8 @@ class TestGateOutcomes:
                 return_value="Hello, how can I help you?",
             ),
             patch.object(
-                gate._classifier, "classify",
+                gate._classifier,
+                "classify",
                 return_value=(IVRMode.CONVERSATION, 0.9),
             ),
         ):
@@ -115,18 +122,25 @@ class TestGateOutcomes:
         audio = _make_silence(FIRST_BUFFER_SECONDS)
 
         ws = AsyncMock()
-        ws.receive_text = AsyncMock(side_effect=[
-            _make_start_event(),
-            _make_media_event(audio),
-        ])
+        ws.receive_text = AsyncMock(
+            side_effect=[
+                _make_start_event(),
+                _make_media_event(audio),
+            ]
+        )
         ws.send_text = AsyncMock()
 
-        with patch.object(
-            gate._transcriber, "transcribe",
-            return_value="Please leave a message after the beep.",
-        ), patch.object(
-            gate._classifier, "classify",
-            return_value=(IVRMode.VOICEMAIL, 0.85),
+        with (
+            patch.object(
+                gate._transcriber,
+                "transcribe",
+                return_value="Please leave a message after the beep.",
+            ),
+            patch.object(
+                gate._classifier,
+                "classify",
+                return_value=(IVRMode.VOICEMAIL, 0.85),
+            ),
         ):
             result = await gate.run(ws)
 
@@ -138,10 +152,12 @@ class TestGateOutcomes:
         gate = IVRGate(call_control_id="test-call")
 
         ws = AsyncMock()
-        ws.receive_text = AsyncMock(side_effect=[
-            _make_start_event(),
-            _make_stop_event(),
-        ])
+        ws.receive_text = AsyncMock(
+            side_effect=[
+                _make_start_event(),
+                _make_stop_event(),
+            ]
+        )
         ws.send_text = AsyncMock()
 
         result = await gate.run(ws)
@@ -175,22 +191,28 @@ class TestGateOutcomes:
         ws.receive_text = AsyncMock(side_effect=mock_receive)
         ws.send_text = AsyncMock()
 
-        transcribe_results = iter([
-            "Press 1 for sales. Press 2 for support.",
-            "Hello, this is the sales team.",
-        ])
-        classify_results = iter([
-            (IVRMode.IVR, 0.9),
-            (IVRMode.CONVERSATION, 0.85),
-        ])
+        transcribe_results = iter(
+            [
+                "Press 1 for sales. Press 2 for support.",
+                "Hello, this is the sales team.",
+            ]
+        )
+        classify_results = iter(
+            [
+                (IVRMode.IVR, 0.9),
+                (IVRMode.CONVERSATION, 0.85),
+            ]
+        )
 
         with (
             patch.object(
-                gate._transcriber, "transcribe",
+                gate._transcriber,
+                "transcribe",
                 side_effect=lambda _: next(transcribe_results),
             ),
             patch.object(
-                gate._classifier, "classify",
+                gate._classifier,
+                "classify",
                 side_effect=lambda _: next(classify_results),
             ),
             patch.object(gate, "_send_dtmf", new_callable=AsyncMock) as mock_dtmf,
@@ -231,11 +253,13 @@ class TestGateOutcomes:
 
         with (
             patch.object(
-                gate._transcriber, "transcribe",
+                gate._transcriber,
+                "transcribe",
                 side_effect=lambda _: next(transcribe_results),
             ),
             patch.object(
-                gate._classifier, "classify",
+                gate._classifier,
+                "classify",
                 side_effect=lambda _: next(classify_results),
             ),
         ):
@@ -256,10 +280,12 @@ class TestGateOutcomes:
 
         ws = AsyncMock()
         # Keep sending IVR audio
-        ws.receive_text = AsyncMock(side_effect=[
-            _make_start_event(),
-            _make_media_event(audio),
-        ])
+        ws.receive_text = AsyncMock(
+            side_effect=[
+                _make_start_event(),
+                _make_media_event(audio),
+            ]
+        )
         ws.send_text = AsyncMock()
 
         with (

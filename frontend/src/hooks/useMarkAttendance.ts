@@ -33,10 +33,9 @@ function isPaginated(value: AppointmentCache): value is { items: Appointment[] }
 /**
  * Mark an appointment attended or absent.
  *
- * Until this shipped, `completed` / `no_show` were written by exactly one
- * thing — the Cal.com `meeting_ended` webhook — so a workspace booking by phone
- * had no way to record attendance and its show-up rate could only ever render
- * a dash. The backend applies the same contact-side effects for both writers
+ * This gives operators an explicit way to record `completed` / `no_show` for
+ * every CRM appointment, including phone bookings. The backend applies the same
+ * contact-side effects for every writer
  * (`app/services/appointments/attendance.py`), so an in-app no-show reaches the
  * `no_show` automation trigger and the re-engagement worker.
  *
@@ -44,10 +43,7 @@ function isPaginated(value: AppointmentCache): value is { items: Appointment[] }
  * workspace and rolls the exact previous snapshots back if the request fails,
  * so a failed marking never leaves a wrong status on screen.
  */
-export function useMarkAttendance({
-  workspaceId,
-  onSuccess,
-}: UseMarkAttendanceOptions) {
+export function useMarkAttendance({ workspaceId, onSuccess }: UseMarkAttendanceOptions) {
   const queryClient = useQueryClient();
 
   return useMutation({

@@ -7,7 +7,7 @@ knowledge preamble from the live text pipeline.
 
 Side-effect free: unlike the production text path, this never creates
 conversations/messages, never sends SMS, and never executes booking tools (no
-real Cal.com calls). "Did it attempt a booking?" is judged from the transcript
+real Google Calendar calls). "Did it attempt a booking?" is judged from the transcript
 by the report scorer instead.
 """
 

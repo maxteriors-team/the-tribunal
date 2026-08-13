@@ -3,7 +3,7 @@
 Exercises ``VoiceToolExecutor.execute("book_appointment", ...)`` for a
 round-robin agent and asserts the booking is created against the *selected
 staff member* (surfaced in the tool result and ``assigned_staff``). Booking is
-local — availability/booking come from the CRM, not an external event type.
+local, then synchronized to the selected rep's Google Calendar.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ class _FakeStaff:
     def __init__(self, name: str, count: int = 0) -> None:
         self.id = uuid.uuid4()
         self.name = name
-        self.calcom_event_type_id = None
+        self.user_id = 1
         self.skills: list[str] = []
         self.is_active = True
         self.priority = 0
@@ -81,8 +81,6 @@ class _FakeBookingService:
     async def book_appointment(self, **_kwargs: Any) -> SimpleNamespace:
         return SimpleNamespace(
             success=True,
-            booking_uid=None,
-            booking_id=None,
             error=None,
             alternative_slots=[],
         )
@@ -96,7 +94,6 @@ def _agent(strategy: str = "round_robin") -> Any:
         id=uuid.uuid4(),
         workspace_id=uuid.uuid4(),
         assignment_strategy=strategy,
-        calcom_event_type_id=None,
     )
 
 
@@ -115,6 +112,10 @@ async def test_book_appointment_routes_to_selected_staff() -> None:
     with (
         patch.object(db_session_module, "AsyncSessionLocal", return_value=_FakeSession(pool)),
         patch.object(base_tool_executor, "BookingService", _FakeBookingService),
+        patch(
+            "app.services.google_calendar.is_time_available",
+            return_value=True,
+        ),
     ):
         result = await executor.execute(
             "book_appointment",
@@ -143,6 +144,10 @@ async def test_default_agent_routes_to_team_enabled_staff() -> None:
     with (
         patch.object(db_session_module, "AsyncSessionLocal", return_value=_FakeSession([staff])),
         patch.object(base_tool_executor, "BookingService", _FakeBookingService),
+        patch(
+            "app.services.google_calendar.is_time_available",
+            return_value=True,
+        ),
     ):
         result = await executor.execute(
             "book_appointment",

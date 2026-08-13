@@ -1,7 +1,7 @@
 """Regression tests for the approved ``book_appointment`` handler.
 
-Since the Cal.com sync was removed, ``BookingService`` only validates a slot —
-the ``appointments`` row *is* the booking. The live tool executors write that row
+``BookingService`` validates a slot while ``finalize_booking`` creates the CRM
+appointment and mirrors it to Google. The live tool executors invoke that finalizer
 in their ``post_booking_success`` hook, which the approval path never runs, so
 an approved booking used to report success and land on no calendar.
 

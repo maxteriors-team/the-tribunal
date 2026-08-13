@@ -2,7 +2,7 @@
 
 Polls for PENDING review requests whose per-workspace send delay has elapsed and
 dispatches the review-request SMS via the shared :class:`ReviewService`. Keeping
-the actual send out of the Cal.com webhook means a happy customer is asked for a
+the actual send out of appointment outcome handling means a happy customer is asked for a
 review a sensible interval after the job (configurable per workspace) rather than
 the instant the meeting ends.
 """

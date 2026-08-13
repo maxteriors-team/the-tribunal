@@ -86,22 +86,6 @@ ai_text_response_failures_total = Counter(
 
 
 # --------------------------------------------------------------------------- #
-# Cal.com webhooks
-# --------------------------------------------------------------------------- #
-
-calcom_webhook_received_total = Counter(
-    "calcom_webhook_received_total",
-    "Cal.com webhooks received (post-signature-validation), labelled by trigger.",
-    labelnames=("trigger",),
-)
-
-calcom_webhook_signature_invalid_total = Counter(
-    "calcom_webhook_signature_invalid_total",
-    "Cal.com webhook requests rejected due to invalid/missing signature or timestamp.",
-)
-
-
-# --------------------------------------------------------------------------- #
 # Telnyx webhooks
 # --------------------------------------------------------------------------- #
 
@@ -254,16 +238,6 @@ def observe_ai_text_response_failure(
         workspace_id=_ws_label(workspace_id),
         reason=reason or "unknown",
     ).inc()
-
-
-def observe_calcom_webhook(trigger: str) -> None:
-    """Record a successfully verified Cal.com webhook."""
-    calcom_webhook_received_total.labels(trigger=trigger or "unknown").inc()
-
-
-def observe_calcom_signature_invalid() -> None:
-    """Record a Cal.com webhook rejected for signature/timestamp issues."""
-    calcom_webhook_signature_invalid_total.inc()
 
 
 def observe_telnyx_webhook(event_type: str) -> None:

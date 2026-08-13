@@ -1,9 +1,9 @@
 """Local availability slot engine.
 
 Computes free appointment start-times from a workspace's weekly business
-hours minus its existing CRM appointments. This is the self-contained
-replacement for the external Cal.com availability API — the CRM is the single
-source of truth for scheduling.
+hours minus its existing CRM appointments. Callers then subtract the assigned
+rep's Google Calendar busy periods; the CRM remains the scheduling source of
+truth.
 
 Pure and side-effect free: callers load the weekly schedule + busy intervals
 (existing ``scheduled`` appointments) from the database and pass them in, which
@@ -146,6 +146,7 @@ def compute_available_slots(
     slot_minutes: int = 30,
     now: datetime | None = None,
     max_slots: int = 15,
+    meeting_minutes: int | None = None,
 ) -> list[Slot]:
     """Return open start-times between ``start_date`` and ``end_date`` inclusive.
 
@@ -157,6 +158,7 @@ def compute_available_slots(
         return []
 
     step = timedelta(minutes=slot_minutes)
+    meeting_length = timedelta(minutes=meeting_minutes or slot_minutes)
     current = now.astimezone(tz) if now is not None else datetime.now(tz)
 
     slots: list[Slot] = []
@@ -170,7 +172,7 @@ def compute_available_slots(
         cursor = datetime.combine(day, hours.open, tzinfo=tz)
         day_close = datetime.combine(day, hours.close, tzinfo=tz)
         while cursor + step <= day_close:
-            slot_end = cursor + step
+            slot_end = cursor + meeting_length
             if cursor >= current and not _overlaps_busy(cursor, slot_end, busy):
                 slots.append(
                     Slot(

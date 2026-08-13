@@ -239,40 +239,6 @@ export const AVAILABLE_INTEGRATIONS: Integration[] = [
       },
     ],
   },
-  {
-    id: "cal-com",
-    name: "Cal.com",
-    slug: "cal-com",
-    description: "Open-source scheduling platform with direct booking support",
-    category: "calendar",
-    authType: "api_key",
-    icon: "https://cdn.simpleicons.org/caldotcom",
-    enabled: true,
-    isPopular: true,
-    tools: [
-      {
-        id: "calcom_get_availability",
-        name: "Get Availability",
-        description: "Get available time slots for booking",
-        riskLevel: "safe",
-        defaultEnabled: true,
-      },
-      {
-        id: "calcom_create_booking",
-        name: "Create Booking",
-        description: "Create a booking/appointment directly",
-        riskLevel: "moderate",
-        defaultEnabled: true,
-      },
-      {
-        id: "calcom_cancel_booking",
-        name: "Cancel Booking",
-        description: "Cancel a booking/appointment",
-        riskLevel: "high",
-        defaultEnabled: false,
-      },
-    ],
-  },
 
   // Communication
   {

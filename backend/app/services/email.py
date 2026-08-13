@@ -1,14 +1,35 @@
-"""Email service for sending transactional emails via Resend."""
+"""Email service for sending transactional emails via Resend.
 
+Markup lives in :mod:`app.services.email_layout`, which renders every message
+into one branded shell and decides — from the required ``category`` argument —
+whether a footer carries an unsubscribe link. Senders here choose the category,
+assemble content blocks, and talk to the provider.
+"""
+
+import re
 import uuid
 from datetime import UTC, datetime
 from html import escape as html_escape
 from typing import TYPE_CHECKING, Any, Protocol, cast
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 
 from app.core.config import settings
+from app.services.email_layout import (
+    Block,
+    Brand,
+    Details,
+    EmailCategory,
+    Paragraph,
+    list_unsubscribe_headers,
+    render_email,
+)
+from app.services.email_templates import render_template
+
+if TYPE_CHECKING:
+    from app.models.email_template import EmailTemplate
 
 try:
     import resend
@@ -40,6 +61,36 @@ def _from_address() -> str:
     name = settings.resend_from_name or "Maxteriors"
     email = settings.resend_from_email or "noreply@example.com"
     return f"{name} <{email}>"
+
+
+def _safe_logo_url(logo_url: str | None) -> str | None:
+    """Return an absolute HTTPS logo URL that an inbox can actually fetch.
+
+    A relative path or localhost renders as a broken-image icon in a real inbox,
+    so reject it and let the email shell fall back to the business-name wordmark.
+    """
+    if not logo_url:
+        return None
+    parsed = urlparse(logo_url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        return None
+    if parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
+        return None
+    return logo_url
+
+
+def _brand(business_name: str | None = None, logo_url: str | None = None) -> Brand:
+    """Brand identity for outbound mail.
+
+    Branding is supplied by the caller because this backend is multi-tenant: a
+    process-global Maxteriors logo would leak one workspace's identity into every
+    other workspace's customer email. Without a logo the renderer uses a readable
+    text wordmark.
+    """
+    return Brand(
+        business_name=business_name or settings.resend_from_name or "Maxteriors",
+        logo_url=_safe_logo_url(logo_url),
+    )
 
 
 DEFAULT_DISPLAY_TIMEZONE = "America/New_York"
@@ -89,27 +140,44 @@ async def _send(
     return dict(response) if response else {}
 
 
-def _text_to_html(body: str) -> str:
-    """Wrap plain automation copy in a minimal, safe HTML email shell.
+# Bare URLs in operator-authored copy. Matched on the raw text (so a query
+# string's ``&`` stays part of the URL), then every piece is escaped on the way
+# out. The character class excludes whitespace and the quote/angle characters
+# that could otherwise end the href attribute early.
+_BARE_URL_RE = re.compile(r"https?://[^\s<>\"'`]+")
+_URL_TRAILING_PUNCT = ".,;:!?)]}'\""
 
-    The body is operator-authored template output; escape it so it cannot
-    inject markup, then preserve line breaks as paragraph spacing.
+
+def _escape_and_linkify(text: str) -> str:
+    """HTML-escape plain copy and turn bare URLs into clickable anchors.
+
+    Automation and campaign bodies are plain text, and mail clients do *not*
+    reliably auto-link a bare URL inside an HTML part — Gmail renders it as dead
+    text. A resource link the customer cannot tap reads exactly like a broken
+    send, so link it here rather than asking every operator to remember.
+
+    Every segment (URL and non-URL alike) is escaped, so operator text can never
+    inject markup and a URL's ``&`` becomes ``&amp;`` inside the href — valid
+    HTML that the browser decodes back to a single ``&``.
     """
-    body_style = (
-        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
-        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
-    )
-    safe_body = html_escape(body).replace("\n", "<br>")
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="{body_style}">
-    <p>{safe_body}</p>
-</body>
-</html>"""
+    parts: list[str] = []
+    cursor = 0
+    for match in _BARE_URL_RE.finditer(text):
+        parts.append(html_escape(text[cursor : match.start()]))
+        url = match.group(0)
+        trailing = ""
+        # "see https://x.com/g." ends a sentence — the period is punctuation,
+        # not part of the link.
+        while url and url[-1] in _URL_TRAILING_PUNCT:
+            trailing = url[-1] + trailing
+            url = url[:-1]
+        if url:
+            safe_url = html_escape(url, quote=True)
+            parts.append(f'<a href="{safe_url}" style="color: #1a1a1a;">{safe_url}</a>')
+        parts.append(html_escape(trailing))
+        cursor = match.end()
+    parts.append(html_escape(text[cursor:]))
+    return "".join(parts)
 
 
 async def send_event_notification_email(
@@ -128,50 +196,23 @@ async def send_event_notification_email(
     operator/contact-derived free text and are HTML-escaped here so they can
     never inject markup. Returns True only when the provider accepted the send.
     """
-    body_style = (
-        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
-        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
-    )
-    label_style = "color: #666; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;"
-    value_style = "font-size: 16px; font-weight: 600; color: #1a1a1a; margin: 2px 0 16px 0;"
-
-    detail_rows = ""
+    blocks: list[Block] = [Paragraph(intro)]
     if details:
-        rows = []
-        for label, value in details.items():
-            rows.append(
-                f'<p style="{label_style}">{html_escape(label)}</p>'
-                f'<p style="{value_style}">{html_escape(value)}</p>'
-            )
-        detail_rows = (
-            '<div style="background-color: #f8f9fa; padding: 20px; '
-            'border-radius: 8px; margin: 24px 0;">' + "".join(rows) + "</div>"
-        )
+        blocks.append(Details(details))
 
-    html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="{body_style}">
-    <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #1a1a1a; margin-bottom: 5px;">{html_escape(heading)}</h1>
-    </div>
-    <p>{html_escape(intro)}</p>
-    {detail_rows}
-    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-    <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent by Maxteriors
-    </p>
-</body>
-</html>"""
+    rendered = render_email(
+        category=EmailCategory.TRANSACTIONAL,
+        heading=heading,
+        blocks=blocks,
+        brand=_brand(),
+    )
 
     params: dict[str, Any] = {
         "from": _from_address(),
         "to": [to_email],
         "subject": subject,
-        "html": html_content,
+        "html": rendered.html,
+        "text": rendered.text,
     }
 
     response = await _send(params, idempotency_key=idempotency_key)
@@ -192,18 +233,63 @@ async def send_automation_email(
     subject: str,
     body: str,
     idempotency_key: uuid.UUID | None = None,
+    *,
+    unsubscribe_url: str | None = None,
+    category: EmailCategory = EmailCategory.MARKETING,
+    business_name: str | None = None,
+    logo_url: str | None = None,
+    heading: str | None = None,
 ) -> bool:
-    """Send an automation-triggered email to a contact via Resend.
+    """Send a workflow-triggered email to a contact via Resend.
 
     ``body`` is rendered template text (placeholders already substituted by the
     automation worker). Returns True only when the provider accepted the send.
+
+    ``category`` defaults to :attr:`EmailCategory.MARKETING` because that is
+    what a workflow send almost always is in substance — a nurture or
+    reactivation sequence the business chose to send — and the safe default for
+    a mistake is "carries an opt-out", not "does not". A workflow step that is
+    genuinely transactional (a booking confirmation the customer's own action
+    produced) must say so explicitly.
+
+    Marketing sends **fail rather than send** without a working
+    ``unsubscribe_url``: :func:`render_email` raises, which is caught here and
+    reported as a failed send. Silently dropping the footer would put
+    non-compliant mail in a customer's inbox, which is strictly worse than a
+    visible failure the operator can fix.
     """
+    headers: dict[str, str] = {}
+    if unsubscribe_url:
+        # One-click unsubscribe, honoured by Gmail/Yahoo bulk-sender rules and
+        # a meaningful deliverability signal on top of the visible footer.
+        headers = list_unsubscribe_headers(unsubscribe_url)
+
+    try:
+        rendered = render_email(
+            category=category,
+            heading=heading or subject,
+            blocks=[Paragraph(body)],
+            brand=_brand(business_name, logo_url),
+            unsubscribe_url=unsubscribe_url,
+        )
+    except ValueError as exc:
+        logger.error(
+            "automation_email_blocked",
+            reason=str(exc),
+            to_email=to_email,
+            detail="commercial email requires a working unsubscribe link",
+        )
+        return False
+
     params: dict[str, Any] = {
         "from": _from_address(),
         "to": [to_email],
         "subject": subject,
-        "html": _text_to_html(body),
+        "html": rendered.html,
+        "text": rendered.text,
     }
+    if headers:
+        params["headers"] = headers
 
     response = await _send(params, idempotency_key=idempotency_key)
     if response is None:
@@ -212,6 +298,7 @@ async def send_automation_email(
     logger.info(
         "automation_email_sent",
         to_email=to_email,
+        category=category.value,
         email_id=response.get("id"),
     )
     return True
@@ -229,7 +316,7 @@ def _campaign_html(body: str, unsubscribe_url: str | None) -> str:
         "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
         "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
     )
-    safe_body = html_escape(body).replace("\n", "<br>")
+    safe_body = _escape_and_linkify(body).replace("\n", "<br>")
     footer = ""
     if unsubscribe_url:
         safe_url = html_escape(unsubscribe_url, quote=True)
@@ -1129,6 +1216,72 @@ async def send_appointment_reminder_email(
         "appointment_reminder_email_sent",
         to_email=to_email,
         contact_name=contact_name,
+        email_id=response.get("id"),
+    )
+    return True
+
+
+async def send_template_email(
+    to_email: str,
+    subject: str,
+    template: "EmailTemplate",
+    values: dict[str, str],
+    idempotency_key: uuid.UUID | None = None,
+    *,
+    unsubscribe_url: str | None = None,
+    business_name: str | None = None,
+) -> bool:
+    """Send a saved :class:`EmailTemplate`, rendered into the branded shell.
+
+    ``subject`` arrives already token-substituted by the caller (the worker
+    renders it with the same contact tokens it uses everywhere else); the body
+    blocks are substituted here with ``values``.
+
+    Like every commercial send, a marketing template without a working
+    unsubscribe link fails rather than shipping a footer-less email.
+    """
+    headers = list_unsubscribe_headers(unsubscribe_url) if unsubscribe_url else {}
+
+    try:
+        _rendered_subject, rendered = render_template(
+            subject=subject,
+            heading=template.heading,
+            preheader=template.preheader,
+            blocks=template.blocks,
+            category=template.category,
+            values=values,
+            brand=_brand(business_name),
+            unsubscribe_url=unsubscribe_url,
+        )
+    except ValueError as exc:
+        logger.error(
+            "template_email_blocked",
+            reason=str(exc),
+            to_email=to_email,
+            template_id=str(template.id),
+            detail="commercial email requires a working unsubscribe link",
+        )
+        return False
+
+    params: dict[str, Any] = {
+        "from": _from_address(),
+        "to": [to_email],
+        "subject": subject,
+        "html": rendered.html,
+        "text": rendered.text,
+    }
+    if headers:
+        params["headers"] = headers
+
+    response = await _send(params, idempotency_key=idempotency_key)
+    if response is None:
+        return False
+
+    logger.info(
+        "template_email_sent",
+        to_email=to_email,
+        template_id=str(template.id),
+        category=template.category,
         email_id=response.get("id"),
     )
     return True

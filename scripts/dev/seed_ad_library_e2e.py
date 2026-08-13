@@ -95,8 +95,14 @@ def make_creative(
 
 
 def example_creative_blob(
-    *, adv_key: str, n: int, body: str, link_caption: str, link_host: str,
-    media: str, running_days: int,
+    *,
+    adv_key: str,
+    n: int,
+    body: str,
+    link_caption: str,
+    link_host: str,
+    media: str,
+    running_days: int,
 ) -> dict:
     snippet = body[:160] + ("…" if len(body) > 160 else "")
     return {
@@ -122,20 +128,20 @@ async def seed(workspace_id: uuid.UUID) -> None:
             "e2e-seed-viral-ugc-labs",
         ]
         existing = (
-            await db.execute(
-                select(AdAdvertiser.id).where(
-                    AdAdvertiser.workspace_id == workspace_id,
-                    AdAdvertiser.advertiser_key.in_(seed_keys),
+            (
+                await db.execute(
+                    select(AdAdvertiser.id).where(
+                        AdAdvertiser.workspace_id == workspace_id,
+                        AdAdvertiser.advertiser_key.in_(seed_keys),
+                    )
                 )
             )
-        ).scalars().all()
-        if existing:
-            await db.execute(
-                delete(AdAdvertiser).where(AdAdvertiser.id.in_(existing))
-            )
-        await db.execute(
-            delete(LeadProspect).where(LeadProspect.id == prospect_id())
+            .scalars()
+            .all()
         )
+        if existing:
+            await db.execute(delete(AdAdvertiser).where(AdAdvertiser.id.in_(existing)))
+        await db.execute(delete(LeadProspect).where(LeadProspect.id == prospect_id()))
         await db.flush()
 
         # --- Linked prospect for advertiser #1 (contact_traced) -------------
@@ -206,7 +212,10 @@ async def seed(workspace_id: uuid.UUID) -> None:
             ],
             signals={"recommendation": "ideal_consistent_non_tester"},
             example_creative=example_creative_blob(
-                adv_key=a1_key, n=1, media="image", running_days=280,
+                adv_key=a1_key,
+                n=1,
+                media="image",
+                running_days=280,
                 link_caption="evergreenroofingco.com",
                 link_host="evergreenroofingco.com",
                 body="Free roof inspection this spring — trusted by 2,000+ Austin homeowners since 2009.",
@@ -214,49 +223,103 @@ async def seed(workspace_id: uuid.UUID) -> None:
             contact_traced=True,
         )
         a1.creatives = [
-            make_creative(workspace_id=workspace_id, advertiser_id=a1.id, adv_key=a1_key, n=1,
-                          body="Free roof inspection this spring — trusted by 2,000+ Austin homeowners since 2009.",
-                          title="Free Roof Inspection", link_caption="evergreenroofingco.com",
-                          link_host="evergreenroofingco.com", media=AdMediaType.IMAGE, running_days=280),
-            make_creative(workspace_id=workspace_id, advertiser_id=a1.id, adv_key=a1_key, n=2,
-                          body="Storm damage? We handle the insurance paperwork for you.",
-                          title="Storm Damage Repair", link_caption="evergreenroofingco.com",
-                          link_host="evergreenroofingco.com", media=AdMediaType.VIDEO, running_days=190),
-            make_creative(workspace_id=workspace_id, advertiser_id=a1.id, adv_key=a1_key, n=3,
-                          body="Metal roofs that last 50 years. Financing available.",
-                          title="Metal Roofing", link_caption="evergreenroofingco.com",
-                          link_host="evergreenroofingco.com", media=AdMediaType.IMAGE, running_days=120),
+            make_creative(
+                workspace_id=workspace_id,
+                advertiser_id=a1.id,
+                adv_key=a1_key,
+                n=1,
+                body="Free roof inspection this spring — trusted by 2,000+ Austin homeowners since 2009.",
+                title="Free Roof Inspection",
+                link_caption="evergreenroofingco.com",
+                link_host="evergreenroofingco.com",
+                media=AdMediaType.IMAGE,
+                running_days=280,
+            ),
+            make_creative(
+                workspace_id=workspace_id,
+                advertiser_id=a1.id,
+                adv_key=a1_key,
+                n=2,
+                body="Storm damage? We handle the insurance paperwork for you.",
+                title="Storm Damage Repair",
+                link_caption="evergreenroofingco.com",
+                link_host="evergreenroofingco.com",
+                media=AdMediaType.VIDEO,
+                running_days=190,
+            ),
+            make_creative(
+                workspace_id=workspace_id,
+                advertiser_id=a1.id,
+                adv_key=a1_key,
+                n=3,
+                body="Metal roofs that last 50 years. Financing available.",
+                title="Metal Roofing",
+                link_caption="evergreenroofingco.com",
+                link_host="evergreenroofingco.com",
+                media=AdMediaType.IMAGE,
+                running_days=120,
+            ),
         ]
         advertisers.append(a1)
 
         # 2) Qualified, no trace ---------------------------------------------
         a2_key = "e2e-seed-lakeside-dental"
         a2 = AdAdvertiser(
-            id=adv_id(a2_key), workspace_id=workspace_id, platform=AdPlatform.META,
-            advertiser_key=a2_key, page_id="100000000000002",
+            id=adv_id(a2_key),
+            workspace_id=workspace_id,
+            platform=AdPlatform.META,
+            advertiser_key=a2_key,
+            page_id="100000000000002",
             advertiser_name="Lakeside Family Dental",
             page_url="https://www.facebook.com/lakesidefamilydental",
-            website_url="https://lakesidefamilydental.com", website_host="lakesidefamilydental.com",
-            country_code="US", first_seen_at=_started(160), last_seen_at=NOW, last_scanned_at=NOW,
-            is_active=True, signal_window_days=365, total_ad_count=5, active_ad_count=4,
-            distinct_creative_count=5, active_creative_count=5, longest_running_active_days=140,
-            creative_refresh_rate=0.8, continuity_score=0.82, opportunity_score=78,
-            platform_spread=["facebook", "instagram"], media_mix={"image": 4, "video": 1},
-            reasons=["longest-run 140d", "5 distinct creatives — light iteration", "continuity 0.82"],
+            website_url="https://lakesidefamilydental.com",
+            website_host="lakesidefamilydental.com",
+            country_code="US",
+            first_seen_at=_started(160),
+            last_seen_at=NOW,
+            last_scanned_at=NOW,
+            is_active=True,
+            signal_window_days=365,
+            total_ad_count=5,
+            active_ad_count=4,
+            distinct_creative_count=5,
+            active_creative_count=5,
+            longest_running_active_days=140,
+            creative_refresh_rate=0.8,
+            continuity_score=0.82,
+            opportunity_score=78,
+            platform_spread=["facebook", "instagram"],
+            media_mix={"image": 4, "video": 1},
+            reasons=[
+                "longest-run 140d",
+                "5 distinct creatives — light iteration",
+                "continuity 0.82",
+            ],
             signals={"recommendation": "consistent_non_tester"},
             example_creative=example_creative_blob(
-                adv_key=a2_key, n=1, media="image", running_days=140,
-                link_caption="lakesidefamilydental.com", link_host="lakesidefamilydental.com",
+                adv_key=a2_key,
+                n=1,
+                media="image",
+                running_days=140,
+                link_caption="lakesidefamilydental.com",
+                link_host="lakesidefamilydental.com",
                 body="New patient special: $99 cleaning, exam & X-rays. Accepting new families.",
             ),
             contact_traced=False,
         )
         a2.creatives = [
-            make_creative(workspace_id=workspace_id, advertiser_id=a2.id, adv_key=a2_key, n=i,
-                          body=f"New patient special #{i}: $99 cleaning, exam & X-rays.",
-                          title="New Patient Special", link_caption="lakesidefamilydental.com",
-                          link_host="lakesidefamilydental.com", media=AdMediaType.IMAGE,
-                          running_days=140 - i * 12)
+            make_creative(
+                workspace_id=workspace_id,
+                advertiser_id=a2.id,
+                adv_key=a2_key,
+                n=i,
+                body=f"New patient special #{i}: $99 cleaning, exam & X-rays.",
+                title="New Patient Special",
+                link_caption="lakesidefamilydental.com",
+                link_host="lakesidefamilydental.com",
+                media=AdMediaType.IMAGE,
+                running_days=140 - i * 12,
+            )
             for i in range(1, 6)
         ]
         advertisers.append(a2)
@@ -264,31 +327,58 @@ async def seed(workspace_id: uuid.UUID) -> None:
         # 3) Qualified, near the floors --------------------------------------
         a3_key = "e2e-seed-summit-hvac"
         a3 = AdAdvertiser(
-            id=adv_id(a3_key), workspace_id=workspace_id, platform=AdPlatform.META,
-            advertiser_key=a3_key, page_id="100000000000003",
+            id=adv_id(a3_key),
+            workspace_id=workspace_id,
+            platform=AdPlatform.META,
+            advertiser_key=a3_key,
+            page_id="100000000000003",
             advertiser_name="Summit Air & Heating",
             page_url="https://www.facebook.com/summitairheating",
-            website_url="https://summitairheating.com", website_host="summitairheating.com",
-            country_code="US", first_seen_at=_started(110), last_seen_at=NOW, last_scanned_at=NOW,
-            is_active=True, signal_window_days=365, total_ad_count=6, active_ad_count=2,
-            distinct_creative_count=6, active_creative_count=6, longest_running_active_days=95,
-            creative_refresh_rate=1.2, continuity_score=0.61, opportunity_score=64,
-            platform_spread=["facebook"], media_mix={"image": 5, "video": 1},
+            website_url="https://summitairheating.com",
+            website_host="summitairheating.com",
+            country_code="US",
+            first_seen_at=_started(110),
+            last_seen_at=NOW,
+            last_scanned_at=NOW,
+            is_active=True,
+            signal_window_days=365,
+            total_ad_count=6,
+            active_ad_count=2,
+            distinct_creative_count=6,
+            active_creative_count=6,
+            longest_running_active_days=95,
+            creative_refresh_rate=1.2,
+            continuity_score=0.61,
+            opportunity_score=64,
+            platform_spread=["facebook"],
+            media_mix={"image": 5, "video": 1},
             reasons=["longest-run 95d", "continuity 0.61 — meets floor", "6 distinct creatives"],
             signals={"recommendation": "consistent_non_tester"},
             example_creative=example_creative_blob(
-                adv_key=a3_key, n=1, media="image", running_days=95,
-                link_caption="summitairheating.com", link_host="summitairheating.com",
+                adv_key=a3_key,
+                n=1,
+                media="image",
+                running_days=95,
+                link_caption="summitairheating.com",
+                link_host="summitairheating.com",
                 body="AC tune-up $79. Beat the summer rush — book your maintenance today.",
             ),
             contact_traced=False,
         )
         a3.creatives = [
-            make_creative(workspace_id=workspace_id, advertiser_id=a3.id, adv_key=a3_key, n=i,
-                          body=f"AC tune-up offer #{i}. Beat the summer rush.",
-                          title="AC Tune-Up", link_caption="summitairheating.com",
-                          link_host="summitairheating.com", media=AdMediaType.IMAGE,
-                          running_days=95 - i * 10, is_active=i <= 2)
+            make_creative(
+                workspace_id=workspace_id,
+                advertiser_id=a3.id,
+                adv_key=a3_key,
+                n=i,
+                body=f"AC tune-up offer #{i}. Beat the summer rush.",
+                title="AC Tune-Up",
+                link_caption="summitairheating.com",
+                link_host="summitairheating.com",
+                media=AdMediaType.IMAGE,
+                running_days=95 - i * 10,
+                is_active=i <= 2,
+            )
             for i in range(1, 7)
         ]
         advertisers.append(a3)
@@ -296,31 +386,58 @@ async def seed(workspace_id: uuid.UUID) -> None:
         # 4) NOT qualified — opportunity_score below the 50 floor -------------
         a4_key = "e2e-seed-bargain-bin"
         a4 = AdAdvertiser(
-            id=adv_id(a4_key), workspace_id=workspace_id, platform=AdPlatform.META,
-            advertiser_key=a4_key, page_id="100000000000004",
+            id=adv_id(a4_key),
+            workspace_id=workspace_id,
+            platform=AdPlatform.META,
+            advertiser_key=a4_key,
+            page_id="100000000000004",
             advertiser_name="Bargain Bin Outlet",
             page_url="https://www.facebook.com/bargainbinoutlet",
-            website_url="https://bargainbinoutlet.com", website_host="bargainbinoutlet.com",
-            country_code="US", first_seen_at=_started(80), last_seen_at=NOW, last_scanned_at=NOW,
-            is_active=True, signal_window_days=365, total_ad_count=4, active_ad_count=1,
-            distinct_creative_count=4, active_creative_count=2, longest_running_active_days=70,
-            creative_refresh_rate=1.0, continuity_score=0.55, opportunity_score=41,
-            platform_spread=["facebook"], media_mix={"image": 4},
+            website_url="https://bargainbinoutlet.com",
+            website_host="bargainbinoutlet.com",
+            country_code="US",
+            first_seen_at=_started(80),
+            last_seen_at=NOW,
+            last_scanned_at=NOW,
+            is_active=True,
+            signal_window_days=365,
+            total_ad_count=4,
+            active_ad_count=1,
+            distinct_creative_count=4,
+            active_creative_count=2,
+            longest_running_active_days=70,
+            creative_refresh_rate=1.0,
+            continuity_score=0.55,
+            opportunity_score=41,
+            platform_spread=["facebook"],
+            media_mix={"image": 4},
             reasons=["score 41 (< 50) — weak overall fit", "intermittent delivery"],
             signals={"recommendation": "below_threshold"},
             example_creative=example_creative_blob(
-                adv_key=a4_key, n=1, media="image", running_days=70,
-                link_caption="bargainbinoutlet.com", link_host="bargainbinoutlet.com",
+                adv_key=a4_key,
+                n=1,
+                media="image",
+                running_days=70,
+                link_caption="bargainbinoutlet.com",
+                link_host="bargainbinoutlet.com",
                 body="Clearance blowout — up to 70% off everything in store.",
             ),
             contact_traced=False,
         )
         a4.creatives = [
-            make_creative(workspace_id=workspace_id, advertiser_id=a4.id, adv_key=a4_key, n=i,
-                          body=f"Clearance blowout #{i} — up to 70% off.",
-                          title="Clearance", link_caption="bargainbinoutlet.com",
-                          link_host="bargainbinoutlet.com", media=AdMediaType.IMAGE,
-                          running_days=70 - i * 12, is_active=i == 1)
+            make_creative(
+                workspace_id=workspace_id,
+                advertiser_id=a4.id,
+                adv_key=a4_key,
+                n=i,
+                body=f"Clearance blowout #{i} — up to 70% off.",
+                title="Clearance",
+                link_caption="bargainbinoutlet.com",
+                link_host="bargainbinoutlet.com",
+                media=AdMediaType.IMAGE,
+                running_days=70 - i * 12,
+                is_active=i == 1,
+            )
             for i in range(1, 5)
         ]
         advertisers.append(a4)
@@ -328,15 +445,29 @@ async def seed(workspace_id: uuid.UUID) -> None:
         # 5) Prolific tester — 40 distinct creatives (ICP excludes) ----------
         a5_key = "e2e-seed-viral-ugc-labs"
         a5 = AdAdvertiser(
-            id=adv_id(a5_key), workspace_id=workspace_id, platform=AdPlatform.META,
-            advertiser_key=a5_key, page_id="100000000000005",
+            id=adv_id(a5_key),
+            workspace_id=workspace_id,
+            platform=AdPlatform.META,
+            advertiser_key=a5_key,
+            page_id="100000000000005",
             advertiser_name="Viral UGC Labs",
             page_url="https://www.facebook.com/viralugclabs",
-            website_url="https://viralugclabs.com", website_host="viralugclabs.com",
-            country_code="US", first_seen_at=_started(200), last_seen_at=NOW, last_scanned_at=NOW,
-            is_active=True, signal_window_days=365, total_ad_count=40, active_ad_count=38,
-            distinct_creative_count=40, active_creative_count=38, longest_running_active_days=120,
-            creative_refresh_rate=9.5, continuity_score=0.94, opportunity_score=71,
+            website_url="https://viralugclabs.com",
+            website_host="viralugclabs.com",
+            country_code="US",
+            first_seen_at=_started(200),
+            last_seen_at=NOW,
+            last_scanned_at=NOW,
+            is_active=True,
+            signal_window_days=365,
+            total_ad_count=40,
+            active_ad_count=38,
+            distinct_creative_count=40,
+            active_creative_count=38,
+            longest_running_active_days=120,
+            creative_refresh_rate=9.5,
+            continuity_score=0.94,
+            opportunity_score=71,
             platform_spread=["facebook", "instagram", "tiktok"],
             media_mix={"video": 34, "image": 6},
             reasons=[
@@ -346,18 +477,30 @@ async def seed(workspace_id: uuid.UUID) -> None:
             ],
             signals={"recommendation": "prolific_tester_excluded"},
             example_creative=example_creative_blob(
-                adv_key=a5_key, n=1, media="video", running_days=120,
-                link_caption="viralugclabs.com", link_host="viralugclabs.com",
+                adv_key=a5_key,
+                n=1,
+                media="video",
+                running_days=120,
+                link_caption="viralugclabs.com",
+                link_host="viralugclabs.com",
                 body="POV: you found the supplement everyone's talking about. New UGC drop daily.",
             ),
             contact_traced=False,
         )
         a5.creatives = [
-            make_creative(workspace_id=workspace_id, advertiser_id=a5.id, adv_key=a5_key, n=i,
-                          body=f"UGC variation #{i}: POV testimonial hook.",
-                          title=f"UGC Hook {i}", link_caption="viralugclabs.com",
-                          link_host="viralugclabs.com", media=AdMediaType.VIDEO,
-                          running_days=max(3, 120 - i * 3), is_active=i <= 38)
+            make_creative(
+                workspace_id=workspace_id,
+                advertiser_id=a5.id,
+                adv_key=a5_key,
+                n=i,
+                body=f"UGC variation #{i}: POV testimonial hook.",
+                title=f"UGC Hook {i}",
+                link_caption="viralugclabs.com",
+                link_host="viralugclabs.com",
+                media=AdMediaType.VIDEO,
+                running_days=max(3, 120 - i * 3),
+                is_active=i <= 38,
+            )
             for i in range(1, 41)
         ]
         advertisers.append(a5)

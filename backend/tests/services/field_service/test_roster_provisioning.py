@@ -189,9 +189,7 @@ async def test_removed_member_is_retired_but_history_survives() -> None:
     linked = _technician(user_id=7)
     db = _session([linked])
 
-    retired = await retire_member_from_roster(
-        cast(AsyncSession, db), workspace_id=WS_ID, user_id=7
-    )
+    retired = await retire_member_from_roster(cast(AsyncSession, db), workspace_id=WS_ID, user_id=7)
 
     assert retired == 1
     # Unlinked + deactivated, never deleted: the jobs they worked keep their
@@ -204,7 +202,7 @@ async def test_removed_member_is_retired_but_history_survives() -> None:
 async def test_retiring_a_member_who_never_worked_jobs_is_a_no_op() -> None:
     db = _session([])
 
-    assert await retire_member_from_roster(
-        cast(AsyncSession, db), workspace_id=WS_ID, user_id=7
-    ) == 0
+    assert (
+        await retire_member_from_roster(cast(AsyncSession, db), workspace_id=WS_ID, user_id=7) == 0
+    )
     assert db.flushes == 0

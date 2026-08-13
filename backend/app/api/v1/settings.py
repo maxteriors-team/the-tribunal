@@ -8,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
+from app.models.bookable_staff import BookableStaff
+from app.models.google_calendar_connection import GoogleCalendarConnection
 from app.models.message_template import MessageTemplate
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceIntegration, WorkspaceMembership
@@ -139,11 +141,6 @@ def _notification_settings(user: object) -> NotificationSettings:
 
 # Known integration types with display names and descriptions
 KNOWN_INTEGRATIONS = [
-    {
-        "integration_type": "calcom",
-        "display_name": "Cal.com",
-        "description": "Appointment scheduling",
-    },
     {
         "integration_type": "telnyx",
         "display_name": "Telnyx",
@@ -285,6 +282,27 @@ async def get_team_members(
         )
     )
     memberships = result.scalars().all()
+    user_ids = [membership.user_id for membership in memberships]
+    bookable_user_ids: set[int] = set()
+    calendar_connections: dict[int, str] = {}
+    if user_ids:
+        bookable_result = await db.execute(
+            select(BookableStaff.user_id).where(
+                BookableStaff.workspace_id == workspace.id,
+                BookableStaff.user_id.in_(user_ids),
+                BookableStaff.is_active.is_(True),
+            )
+        )
+        bookable_user_ids = {
+            user_id for user_id in bookable_result.scalars().all() if user_id is not None
+        }
+        calendar_result = await db.execute(
+            select(
+                GoogleCalendarConnection.user_id,
+                GoogleCalendarConnection.google_email,
+            ).where(GoogleCalendarConnection.user_id.in_(user_ids))
+        )
+        calendar_connections = dict(calendar_result.tuples().all())
 
     return [
         TeamMemberResponse(
@@ -293,6 +311,9 @@ async def get_team_members(
             full_name=m.user.full_name,
             avatar_url=m.user.avatar_url,
             role=m.role,
+            is_bookable=m.user_id in bookable_user_ids,
+            google_calendar_connected=m.user_id in calendar_connections,
+            google_calendar_email=calendar_connections.get(m.user_id),
             created_at=m.created_at,
         )
         for m in memberships

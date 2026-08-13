@@ -146,12 +146,16 @@ async def main() -> None:
 
         # --- default pipeline ---
         pipeline = (
-            await db.execute(
-                select(Pipeline).where(
-                    Pipeline.workspace_id == ws.id, Pipeline.is_active.is_(True)
+            (
+                await db.execute(
+                    select(Pipeline).where(
+                        Pipeline.workspace_id == ws.id, Pipeline.is_active.is_(True)
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if pipeline is None:
             pipeline = Pipeline(
                 workspace_id=ws.id,
@@ -168,48 +172,68 @@ async def main() -> None:
 
         # --- wipe prior seeded advertisers/prospects/contacts/opps ---
         advs = (
-            await db.execute(
-                select(AdAdvertiser).where(
-                    AdAdvertiser.workspace_id == ws.id,
-                    AdAdvertiser.advertiser_key.like("promote-e2e-%"),
+            (
+                await db.execute(
+                    select(AdAdvertiser).where(
+                        AdAdvertiser.workspace_id == ws.id,
+                        AdAdvertiser.advertiser_key.like("promote-e2e-%"),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         prospect_ids = [a.prospect_id for a in advs if a.prospect_id]
         for a in advs:
             await db.delete(a)
         await db.flush()
         if prospect_ids:
             contact_ids = (
-                await db.execute(
-                    select(LeadProspect.contact_id).where(
-                        LeadProspect.id.in_(prospect_ids),
-                        LeadProspect.contact_id.isnot(None),
+                (
+                    await db.execute(
+                        select(LeadProspect.contact_id).where(
+                            LeadProspect.id.in_(prospect_ids),
+                            LeadProspect.contact_id.isnot(None),
+                        )
                     )
                 )
-            ).scalars().all()
-            await db.execute(
-                delete(LeadProspect).where(LeadProspect.id.in_(prospect_ids))
+                .scalars()
+                .all()
             )
+            await db.execute(delete(LeadProspect).where(LeadProspect.id.in_(prospect_ids)))
             if contact_ids:
                 await db.execute(
-                    delete(Opportunity).where(
-                        Opportunity.primary_contact_id.in_(contact_ids)
-                    )
+                    delete(Opportunity).where(Opportunity.primary_contact_id.in_(contact_ids))
                 )
                 await db.execute(delete(Contact).where(Contact.id.in_(contact_ids)))
         await db.flush()
 
         # --- advertiser specs ---
         specs = [
-            ("WithPhone Co", "promot-qa-withphone.example", "+14155550101",
-             "Same roofing promo running since spring — book a free inspection."),
-            ("NoPhone Co", "promotqa-nophone.example", None,
-             "Window replacement special — limited slots this month."),
-            ("Bulk One Co", "promotqa-bulk1.example", "+14155550111",
-             "Solar install financing — 0% APR for 18 months."),
-            ("Bulk Two Co", "promotqa-bulk2.example", "+14155550112",
-             "Gutter cleaning bundle — same offer all year."),
+            (
+                "WithPhone Co",
+                "promot-qa-withphone.example",
+                "+14155550101",
+                "Same roofing promo running since spring — book a free inspection.",
+            ),
+            (
+                "NoPhone Co",
+                "promotqa-nophone.example",
+                None,
+                "Window replacement special — limited slots this month.",
+            ),
+            (
+                "Bulk One Co",
+                "promotqa-bulk1.example",
+                "+14155550111",
+                "Solar install financing — 0% APR for 18 months.",
+            ),
+            (
+                "Bulk Two Co",
+                "promotqa-bulk2.example",
+                "+14155550112",
+                "Gutter cleaning bundle — same offer all year.",
+            ),
         ]
 
         created = []

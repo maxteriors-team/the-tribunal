@@ -263,6 +263,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/google-calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Disconnect */
+        delete: operations["disconnect_api_v1_integrations_google_calendar_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/google-calendar/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Authorize */
+        post: operations["authorize_api_v1_integrations_google_calendar_authorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/google-calendar/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Connection Status */
+        get: operations["connection_status_api_v1_integrations_google_calendar_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integrations/openai/oauth/callback": {
         parameters: {
             query?: never;
@@ -357,46 +408,6 @@ export interface paths {
          * @description Complete onboarding in a single call.
          */
         post: operations["onboard_api_v1_onboarding_onboard_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/onboarding/parse-calcom-url": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Parse Calcom Url
-         * @description Parse a Cal.com booking URL and resolve the event_type_id.
-         */
-        post: operations["parse_calcom_url_api_v1_onboarding_parse_calcom_url_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/onboarding/verify-calcom": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Verify Calcom
-         * @description Verify a Cal.com API key by calling the /me endpoint.
-         */
-        get: operations["verify_calcom_api_v1_onboarding_verify_calcom_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -9931,35 +9942,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/webhooks/calcom/booking": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Calcom Booking Webhook
-         * @description Handle Cal.com booking events.
-         *
-         *     Cal.com sends webhooks for:
-         *     - ``BOOKING_CREATED``: New booking created
-         *     - ``BOOKING_RESCHEDULED``: Booking rescheduled
-         *     - ``BOOKING_CANCELLED``: Booking cancelled
-         *     - ``MEETING_ENDED``: Meeting completed (or marked no-show)
-         *
-         *     Every delivery passes two gates before a single side effect runs:
-         *     signature verification, then the durable replay ledger. Both fail closed.
-         */
-        post: operations["calcom_booking_webhook_webhooks_calcom_booking_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/webhooks/mac-relay/messages": {
         parameters: {
             query?: never;
@@ -10981,8 +10963,6 @@ export interface components {
              * @default false
              */
             auto_evaluate: boolean;
-            /** Calcom Event Type Id */
-            calcom_event_type_id?: number | null;
             /**
              * Channel Mode
              * @default both
@@ -11172,8 +11152,6 @@ export interface components {
             assignment_strategy: string;
             /** Auto Evaluate */
             auto_evaluate: boolean;
-            /** Calcom Event Type Id */
-            calcom_event_type_id: number | null;
             /** Channel Mode */
             channel_mode: string;
             /**
@@ -11340,8 +11318,6 @@ export interface components {
             assignment_strategy?: string | null;
             /** Auto Evaluate */
             auto_evaluate?: boolean | null;
-            /** Calcom Event Type Id */
-            calcom_event_type_id?: number | null;
             /** Channel Mode */
             channel_mode?: string | null;
             /** Confirmation Email Enabled */
@@ -11536,14 +11512,10 @@ export interface components {
         AppointmentResponse: {
             /** Agent Id */
             agent_id: string | null;
+            /** Bookable Staff Id */
+            bookable_staff_id?: string | null;
             /** Business Location Id */
             business_location_id?: string | null;
-            /** Calcom Booking Id */
-            calcom_booking_id: number | null;
-            /** Calcom Booking Uid */
-            calcom_booking_uid: string | null;
-            /** Calcom Event Type Id */
-            calcom_event_type_id: number | null;
             /** Campaign Id */
             campaign_id?: string | null;
             contact?: components["schemas"]["ContactSummary"] | null;
@@ -11559,10 +11531,16 @@ export interface components {
              * @default 30
              */
             duration_minutes: number;
+            /** Google Calendar Event Id */
+            google_calendar_event_id: string | null;
+            /** Google Calendar Event Url */
+            google_calendar_event_url: string | null;
             /** Id */
             id: number;
             /** Last Synced At */
             last_synced_at: string | null;
+            /** Meeting Url */
+            meeting_url?: string | null;
             /** Message Id */
             message_id?: string | null;
             /** Notes */
@@ -12521,8 +12499,6 @@ export interface components {
          * @description Schema for creating a bookable staff member.
          */
         BookableStaffCreate: {
-            /** Calcom Event Type Id */
-            calcom_event_type_id?: number | null;
             /** Email */
             email?: string | null;
             /**
@@ -12583,8 +12559,6 @@ export interface components {
             agent_id: string | null;
             /** Assignment Count */
             assignment_count: number;
-            /** Calcom Event Type Id */
-            calcom_event_type_id: number | null;
             /**
              * Created At
              * Format: date-time
@@ -12625,8 +12599,6 @@ export interface components {
          * @description Schema for updating a bookable staff member.
          */
         BookableStaffUpdate: {
-            /** Calcom Event Type Id */
-            calcom_event_type_id?: number | null;
             /** Email */
             email?: string | null;
             /** Is Active */
@@ -17221,6 +17193,29 @@ export interface components {
             /** Value */
             value: number;
         };
+        /** GoogleCalendarAuthorizeRequest */
+        GoogleCalendarAuthorizeRequest: {
+            /** Return Url */
+            return_url?: string | null;
+        };
+        /** GoogleCalendarAuthorizeResponse */
+        GoogleCalendarAuthorizeResponse: {
+            /** Authorization Url */
+            authorization_url: string;
+        };
+        /** GoogleCalendarStatus */
+        GoogleCalendarStatus: {
+            /** Calendar Id */
+            calendar_id?: string | null;
+            /** Configured */
+            configured: boolean;
+            /** Connected */
+            connected: boolean;
+            /** Connected At */
+            connected_at?: string | null;
+            /** Google Email */
+            google_email?: string | null;
+        };
         /**
          * GuaranteeProgressResponse
          * @description Guarantee progress response.
@@ -17660,7 +17655,7 @@ export interface components {
              * Integration Type
              * @enum {string}
              */
-            integration_type: "calcom" | "telnyx" | "openai" | "resend" | "meta_ad_library" | "google_ads_transparency" | "companycam";
+            integration_type: "telnyx" | "openai" | "resend" | "meta_ad_library" | "google_ads_transparency" | "companycam";
             /**
              * Is Active
              * @default true
@@ -21628,16 +21623,6 @@ export interface components {
              * @description Optional 3-digit US area code for phone number provisioning
              */
             area_code?: string | null;
-            /**
-             * Calcom Api Key
-             * @description Cal.com API key
-             */
-            calcom_api_key: string;
-            /**
-             * Calcom Event Type Id
-             * @description Cal.com event type ID
-             */
-            calcom_event_type_id: number;
         };
         /**
          * OnboardResponse
@@ -21649,8 +21634,8 @@ export interface components {
              * Format: uuid
              */
             agent_id: string;
-            /** Calcom Connected */
-            calcom_connected: boolean;
+            /** Google Calendar Connected */
+            google_calendar_connected: boolean;
             /** Message */
             message: string;
             /** Phone Number */
@@ -22990,34 +22975,6 @@ export interface components {
              * @enum {string}
              */
             type: "paragraph";
-        };
-        /**
-         * ParseCalcomUrlRequest
-         * @description Request body for the parse-calcom-url endpoint.
-         */
-        ParseCalcomUrlRequest: {
-            /**
-             * Api Key
-             * @description Cal.com API key — only needed when no Cal.com integration exists yet
-             */
-            api_key?: string | null;
-            /**
-             * Url
-             * @description Cal.com booking URL, e.g. https://cal.com/johndoe/30min
-             */
-            url: string;
-        };
-        /**
-         * ParseCalcomUrlResponse
-         * @description Parsed Cal.com event type info.
-         */
-        ParseCalcomUrlResponse: {
-            /** Event Type Id */
-            event_type_id: number;
-            /** Slug */
-            slug: string;
-            /** Username */
-            username: string;
         };
         /** PaymentMilestoneSchema */
         PaymentMilestoneSchema: {
@@ -29005,8 +28962,20 @@ export interface components {
             email: string;
             /** Full Name */
             full_name: string | null;
+            /**
+             * Google Calendar Connected
+             * @default false
+             */
+            google_calendar_connected: boolean;
+            /** Google Calendar Email */
+            google_calendar_email?: string | null;
             /** Id */
             id: number;
+            /**
+             * Is Bookable
+             * @default false
+             */
+            is_bookable: boolean;
             /** Role */
             role: string;
         };
@@ -30189,16 +30158,6 @@ export interface components {
             variant_name: string;
         };
         /**
-         * VerifyCalcomResponse
-         * @description Result of verifying a Cal.com API key.
-         */
-        VerifyCalcomResponse: {
-            /** Username */
-            username: string | null;
-            /** Valid */
-            valid: boolean;
-        };
-        /**
          * VersionComparisonItem
          * @description Schema for individual version comparison stats.
          */
@@ -31339,6 +31298,77 @@ export interface operations {
             };
         };
     };
+    disconnect_api_v1_integrations_google_calendar_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    authorize_api_v1_integrations_google_calendar_authorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleCalendarAuthorizeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarAuthorizeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connection_status_api_v1_integrations_google_calendar_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleCalendarStatus"];
+                };
+            };
+        };
+    };
     complete_openai_subscription_login_api_v1_integrations_openai_oauth_callback_get: {
         parameters: {
             query: {
@@ -31488,71 +31518,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OnboardResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    parse_calcom_url_api_v1_onboarding_parse_calcom_url_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ParseCalcomUrlRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ParseCalcomUrlResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    verify_calcom_api_v1_onboarding_verify_calcom_get: {
-        parameters: {
-            query: {
-                /** @description Cal.com API key to verify */
-                api_key: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VerifyCalcomResponse"];
                 };
             };
             /** @description Validation Error */
@@ -51394,28 +51359,6 @@ export interface operations {
         };
     };
     version_version_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-        };
-    };
-    calcom_booking_webhook_webhooks_calcom_booking_post: {
         parameters: {
             query?: never;
             header?: never;

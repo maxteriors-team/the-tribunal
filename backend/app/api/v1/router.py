@@ -31,6 +31,7 @@ from app.api.v1 import (
     embed,
     field_service,
     find_leads_ai,
+    google_calendar,
     human_profiles,
     improvement_suggestions,
     integrations,
@@ -79,6 +80,7 @@ api_router = APIRouter()
 
 # Include routers
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+api_router.include_router(google_calendar.router)
 api_router.include_router(settings.router, prefix="/settings", tags=["Settings"])
 api_router.include_router(realtime.router, prefix="/realtime", tags=["Realtime"])
 api_router.include_router(device_tokens.router, prefix="/settings", tags=["Settings"])

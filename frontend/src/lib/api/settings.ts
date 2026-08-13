@@ -70,6 +70,9 @@ export interface TeamMember {
   full_name: string | null;
   avatar_url: string | null;
   role: string;
+  is_bookable: boolean;
+  google_calendar_connected: boolean;
+  google_calendar_email: string | null;
   created_at: string;
 }
 
@@ -232,140 +235,120 @@ export const settingsApi = {
 
   // Workspace integrations
   getIntegrations: async (workspaceId: string): Promise<IntegrationsResponse> => {
-    return apiGet<IntegrationsResponse>(
-      `/api/v1/settings/workspaces/${workspaceId}/integrations`
-    );
+    return apiGet<IntegrationsResponse>(`/api/v1/settings/workspaces/${workspaceId}/integrations`);
   },
 
   // Active workspace users eligible for sales-record ownership.
   getActiveTeamMembers: async (workspaceId: string): Promise<TeamMember[]> => {
-    return apiGet<TeamMember[]>(
-      `/api/v1/settings/workspaces/${workspaceId}/team`,
-    );
+    return apiGet<TeamMember[]>(`/api/v1/settings/workspaces/${workspaceId}/team`);
   },
 
   // Backwards-compatible name used by the team-management settings page.
   getTeamMembers: async (workspaceId: string): Promise<TeamMember[]> => {
-    return apiGet<TeamMember[]>(
-      `/api/v1/settings/workspaces/${workspaceId}/team`,
-    );
+    return apiGet<TeamMember[]>(`/api/v1/settings/workspaces/${workspaceId}/team`);
   },
 
   // Auto-pipeline (inbound leads + sent quotes)
   getAutoPipeline: async (workspaceId: string): Promise<AutoPipelineSettings> => {
-    return apiGet<AutoPipelineSettings>(
-      `/api/v1/settings/workspaces/${workspaceId}/auto-pipeline`
-    );
+    return apiGet<AutoPipelineSettings>(`/api/v1/settings/workspaces/${workspaceId}/auto-pipeline`);
   },
 
   updateAutoPipeline: async (
     workspaceId: string,
-    data: AutoPipelineSettings
+    data: AutoPipelineSettings,
   ): Promise<AutoPipelineSettings> => {
     return apiPut<AutoPipelineSettings>(
       `/api/v1/settings/workspaces/${workspaceId}/auto-pipeline`,
-      data
+      data,
     );
   },
 
   // Speed-to-lead SLA
   getSpeedToLead: async (workspaceId: string): Promise<SpeedToLeadSettings> => {
-    return apiGet<SpeedToLeadSettings>(
-      `/api/v1/settings/workspaces/${workspaceId}/speed-to-lead`
-    );
+    return apiGet<SpeedToLeadSettings>(`/api/v1/settings/workspaces/${workspaceId}/speed-to-lead`);
   },
 
   updateSpeedToLead: async (
     workspaceId: string,
-    data: UpdateSpeedToLeadRequest
+    data: UpdateSpeedToLeadRequest,
   ): Promise<SpeedToLeadSettings> => {
     return apiPut<SpeedToLeadSettings>(
       `/api/v1/settings/workspaces/${workspaceId}/speed-to-lead`,
-      data
+      data,
     );
   },
 
-  getSpeedToLeadMetrics: async (
-    workspaceId: string
-  ): Promise<SpeedToLeadMetrics> => {
+  getSpeedToLeadMetrics: async (workspaceId: string): Promise<SpeedToLeadMetrics> => {
     return apiGet<SpeedToLeadMetrics>(
-      `/api/v1/settings/workspaces/${workspaceId}/speed-to-lead/metrics`
+      `/api/v1/settings/workspaces/${workspaceId}/speed-to-lead/metrics`,
     );
   },
 
   // Missed-call text-back
-  getMissedCallTextback: async (
-    workspaceId: string
-  ): Promise<MissedCallTextbackSettings> => {
+  getMissedCallTextback: async (workspaceId: string): Promise<MissedCallTextbackSettings> => {
     return apiGet<MissedCallTextbackSettings>(
-      `/api/v1/settings/workspaces/${workspaceId}/missed-call-textback`
+      `/api/v1/settings/workspaces/${workspaceId}/missed-call-textback`,
     );
   },
 
   updateMissedCallTextback: async (
     workspaceId: string,
-    data: UpdateMissedCallTextbackRequest
+    data: UpdateMissedCallTextbackRequest,
   ): Promise<MissedCallTextbackSettings> => {
     return apiPut<MissedCallTextbackSettings>(
       `/api/v1/settings/workspaces/${workspaceId}/missed-call-textback`,
-      data
+      data,
     );
   },
 
   // First-14-days post-estimate follow-up
-  getQuoteFollowup: async (
-    workspaceId: string
-  ): Promise<QuoteFollowupSettings> => {
+  getQuoteFollowup: async (workspaceId: string): Promise<QuoteFollowupSettings> => {
     return apiGet<QuoteFollowupSettings>(
-      `/api/v1/settings/workspaces/${workspaceId}/post-estimate-followup`
+      `/api/v1/settings/workspaces/${workspaceId}/post-estimate-followup`,
     );
   },
 
   updateQuoteFollowup: async (
     workspaceId: string,
-    data: UpdateQuoteFollowupSettings
+    data: UpdateQuoteFollowupSettings,
   ): Promise<QuoteFollowupSettings> => {
     return apiPut<QuoteFollowupSettings>(
       `/api/v1/settings/workspaces/${workspaceId}/post-estimate-followup`,
-      data
+      data,
     );
   },
 
   // 30/60/90-day unsold-quote revival
-  getQuoteRevival: async (
-    workspaceId: string
-  ): Promise<QuoteRevivalSettings> => {
+  getQuoteRevival: async (workspaceId: string): Promise<QuoteRevivalSettings> => {
     return apiGet<QuoteRevivalSettings>(
-      `/api/v1/settings/workspaces/${workspaceId}/unsold-quote-revival`
+      `/api/v1/settings/workspaces/${workspaceId}/unsold-quote-revival`,
     );
   },
 
   updateQuoteRevival: async (
     workspaceId: string,
-    data: UpdateQuoteRevivalSettings
+    data: UpdateQuoteRevivalSettings,
   ): Promise<QuoteRevivalSettings> => {
     return apiPut<QuoteRevivalSettings>(
       `/api/v1/settings/workspaces/${workspaceId}/unsold-quote-revival`,
-      data
+      data,
     );
   },
 
   // Job-site neighbor outreach
-  getNeighborOutreach: async (
-    workspaceId: string
-  ): Promise<NeighborOutreachSettings> => {
+  getNeighborOutreach: async (workspaceId: string): Promise<NeighborOutreachSettings> => {
     return apiGet<NeighborOutreachSettings>(
-      `/api/v1/settings/workspaces/${workspaceId}/neighbor-outreach`
+      `/api/v1/settings/workspaces/${workspaceId}/neighbor-outreach`,
     );
   },
 
   updateNeighborOutreach: async (
     workspaceId: string,
-    data: UpdateNeighborOutreachSettings
+    data: UpdateNeighborOutreachSettings,
   ): Promise<NeighborOutreachSettings> => {
     return apiPut<NeighborOutreachSettings>(
       `/api/v1/settings/workspaces/${workspaceId}/neighbor-outreach`,
-      data
+      data,
     );
   },
 };

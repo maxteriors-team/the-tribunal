@@ -27,6 +27,7 @@ import {
   FileCheck,
   FileX,
   Receipt,
+  BadgeCheck,
   BadgeDollarSign,
   CalendarClock,
   Wrench,
@@ -119,7 +120,7 @@ const triggerTypeConfig: Record<AutomationTriggerType, { label: string; icon: Lu
   event: { label: "Event", icon: Zap, color: "text-warning", description: "When an event occurs" },
   schedule: { label: "Schedule", icon: Clock, color: "text-info", description: "Runs on a schedule" },
   condition: { label: "Condition", icon: Settings2, color: "text-primary", description: "When conditions are met" },
-  appointment_booked: { label: "Appointment Booked", icon: CalendarCheck, color: "text-success", description: "When a contact books an appointment" },
+  appointment_booked: { label: "Appointment Booked", icon: CalendarCheck, color: "text-success", description: "When a qualified lead books a CRM appointment" },
   booking_created: { label: "Booking Created", icon: CalendarCheck, color: "text-success", description: "When a booking is created" },
   no_show: { label: "No-show", icon: CalendarX, color: "text-destructive", description: "When a contact misses an appointment" },
   contact_tagged: { label: "Contact Tagged", icon: Tag, color: "text-primary", description: "When a contact gets a specific tag" },
@@ -133,6 +134,7 @@ const triggerTypeConfig: Record<AutomationTriggerType, { label: string; icon: Lu
   roleplay_completed: { label: "Roleplay Completed", icon: GraduationCap, color: "text-primary", description: "When a practice-arena rehearsal finishes" },
   knowledge_document_uploaded: { label: "Knowledge Doc Uploaded", icon: FileText, color: "text-info", description: "When a knowledge document is added" },
   lead_created: { label: "New Lead Captured", icon: UserPlus, color: "text-success", description: "When a new lead is captured from a lead source" },
+  lead_qualified: { label: "Lead Qualified", icon: BadgeCheck, color: "text-success", description: "When AI validates a lead's qualification evidence and score" },
   quote_sent: { label: "Quote Sent", icon: FileText, color: "text-info", description: "When a quote goes out to a customer" },
   quote_approved: { label: "Quote Approved", icon: FileCheck, color: "text-success", description: "When a customer approves a quote" },
   quote_declined: { label: "Quote Declined", icon: FileX, color: "text-destructive", description: "When a customer declines a quote" },
@@ -146,7 +148,7 @@ const triggerTypeConfig: Record<AutomationTriggerType, { label: string; icon: Lu
 // Triggers offered in the builder dropdown, grouped for readability.
 const TRIGGER_OPTIONS: { group: string; values: AutomationTriggerType[] }[] = [
   { group: "General", values: ["event", "schedule", "condition"] },
-  { group: "Leads", values: ["lead_created"] },
+  { group: "Leads", values: ["lead_created", "lead_qualified"] },
   { group: "Capacity", values: ["backlog_below_threshold"] },
   { group: "Appointments", values: ["appointment_booked", "booking_created", "no_show", "never_booked"] },
   { group: "Contacts & Pipeline", values: ["contact_tagged", "opportunity_created", "deal_stage_changed"] },

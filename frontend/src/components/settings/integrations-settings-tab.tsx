@@ -1,18 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import {
-  Phone,
-  Mail,
-  Calendar,
-  Camera,
-  Webhook,
-  Key,
-  Loader2,
-  Send as SendIcon,
-} from "lucide-react";
+import { Phone, Mail, Camera, Webhook, Key, Loader2, Send as SendIcon } from "lucide-react";
 import { useState } from "react";
 
+import { GoogleCalendarCard } from "@/components/settings/google-calendar-card";
 import { IntegrationConfigDialog } from "@/components/settings/integration-config-dialog";
 import { OpenAIChatGPTCard } from "@/components/settings/openai-chatgpt-card";
 import { PhoneNumbersTable } from "@/components/settings/phone-numbers-table";
@@ -27,25 +19,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import {
-  integrationsApi,
-  type IntegrationWithMaskedCredentials,
-} from "@/lib/api/integrations";
+import { integrationsApi, type IntegrationWithMaskedCredentials } from "@/lib/api/integrations";
 import { settingsApi } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
 
-type IntegrationType =
-  | "calcom"
-  | "telnyx"
-  | "openai"
-  | "resend"
-  | "lob"
-  | "companycam";
+type IntegrationType = "telnyx" | "openai" | "resend" | "lob" | "companycam";
 
 function getIntegrationIcon(type: string) {
   switch (type) {
-    case "calcom":
-      return Calendar;
     case "telnyx":
       return Phone;
     case "resend":
@@ -61,8 +42,6 @@ function getIntegrationIcon(type: string) {
 
 function getIntegrationColor(type: string) {
   switch (type) {
-    case "calcom":
-      return "text-primary bg-primary/10";
     case "telnyx":
       return "text-destructive bg-destructive/10";
     case "resend":
@@ -76,11 +55,16 @@ function getIntegrationColor(type: string) {
   }
 }
 
-export function IntegrationsSettingsTab() {
+interface IntegrationsSettingsTabProps {
+  calendarOnly?: boolean;
+}
+
+export function IntegrationsSettingsTab({
+  calendarOnly = false,
+}: IntegrationsSettingsTabProps = {}) {
   const workspaceId = useWorkspaceId();
   const [integrationDialogOpen, setIntegrationDialogOpen] = useState(false);
-  const [selectedIntegration, setSelectedIntegration] =
-    useState<IntegrationType | null>(null);
+  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationType | null>(null);
 
   // Fetch integrations (status display)
   const { data: integrationsData, isPending: integrationsLoading } = useQuery({
@@ -98,11 +82,9 @@ export function IntegrationsSettingsTab() {
 
   // Helper to find existing integration by type
   const getExistingIntegration = (
-    type: IntegrationType
+    type: IntegrationType,
   ): IntegrationWithMaskedCredentials | null => {
-    return (
-      configuredIntegrations?.find((i) => i.integration_type === type) ?? null
-    );
+    return configuredIntegrations?.find((i) => i.integration_type === type) ?? null;
   };
 
   // Handler to open integration config dialog
@@ -111,12 +93,19 @@ export function IntegrationsSettingsTab() {
     setIntegrationDialogOpen(true);
   };
 
+  if (calendarOnly) {
+    return <GoogleCalendarCard />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Phone Numbers Section */}
       <PhoneNumbersTable variant="section" />
 
-      <OpenAIChatGPTCard />
+      <div className="grid gap-4 md:grid-cols-2">
+        <GoogleCalendarCard />
+        <OpenAIChatGPTCard />
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {integrationsLoading ? (
@@ -139,12 +128,8 @@ export function IntegrationsSettingsTab() {
                         <Icon className="size-5" />
                       </div>
                       <div>
-                        <CardTitle className="text-base">
-                          {integration.display_name}
-                        </CardTitle>
-                        <CardDescription>
-                          {integration.description}
-                        </CardDescription>
+                        <CardTitle className="text-base">{integration.display_name}</CardTitle>
+                        <CardDescription>{integration.description}</CardDescription>
                       </div>
                     </div>
                     {integration.is_connected ? (
@@ -169,9 +154,7 @@ export function IntegrationsSettingsTab() {
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        handleConfigureIntegration(
-                          integration.integration_type as IntegrationType
-                        )
+                        handleConfigureIntegration(integration.integration_type as IntegrationType)
                       }
                     >
                       Configure
@@ -180,9 +163,7 @@ export function IntegrationsSettingsTab() {
                     <Button
                       size="sm"
                       onClick={() =>
-                        handleConfigureIntegration(
-                          integration.integration_type as IntegrationType
-                        )
+                        handleConfigureIntegration(integration.integration_type as IntegrationType)
                       }
                     >
                       Connect
@@ -202,9 +183,7 @@ export function IntegrationsSettingsTab() {
             <Key className="size-5" />
             API Keys
           </CardTitle>
-          <CardDescription>
-            Manage API keys for programmatic access
-          </CardDescription>
+          <CardDescription>Manage API keys for programmatic access</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between p-3 rounded-lg border">

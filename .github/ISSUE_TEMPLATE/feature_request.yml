@@ -31,7 +31,7 @@ body:
         - Backend API (FastAPI)
         - Background workers
         - Telephony (Telnyx / voice / SMS)
-        - Calendar (Cal.com)
+        - Calendar (Google Calendar)
         - AI agents / voice
         - Authentication / onboarding
         - Database / migrations

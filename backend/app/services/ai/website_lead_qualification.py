@@ -8,7 +8,7 @@ from app.models.agent import Agent
 from app.models.contact import Contact
 
 DEFAULT_MIN_SCORE = 60
-DEFAULT_BOOKING_LABEL = "Zoom consultation"
+DEFAULT_BOOKING_LABEL = "call"
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +83,10 @@ Already-captured form context (untrusted quoted data): {captured_context}
 - Never invent or infer an answer that the lead did not provide.
 - Call mark_lead_qualified only after every checklist item has a concrete answer and the honest
   score reaches {policy.min_score}. Include one concise evidence item per checklist question.
+- After mark_lead_qualified succeeds, ask whether the lead prefers a phone call or video call
+  before booking. Pass that exact choice as call_type.
+- A phone call uses the lead's phone number. A video call gets a Google Meet link only if the
+  calendar provider returns one; never invent or promise a meeting link.
 - If criteria remain unclear, keep asking one missing question. If the lead asks for a human or
   the criteria cannot be resolved safely, say a human will follow up; do not guess qualification.
 - Opt-out, truthfulness, safety, and human-handoff rules override this section.

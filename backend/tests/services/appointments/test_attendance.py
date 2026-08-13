@@ -1,8 +1,7 @@
 """Attendance marking must leave one contact state, whoever marked it.
 
-Before this, ``AppointmentStatus.COMPLETED``/``NO_SHOW`` were written only by
-Cal.com's ``meeting_ended`` webhook. An in-app control that set
-``appointments.status`` alone would produce a no-show that
+An in-app control that only set ``appointments.status`` used to produce a
+no-show that
 ``noshow_reengagement_worker`` (which selects on
 ``contacts.last_appointment_status`` + the ``no-show`` tag) and the ``no_show``
 automation trigger could not see.
@@ -106,9 +105,7 @@ async def test_re_marking_a_no_show_does_not_double_count(tag_service: MagicMock
     db = _db_returning(contact)
     appointment = _appointment(contact, AppointmentStatus.NO_SHOW)
 
-    await record_attendance_outcome(
-        db, appointment, previous_status=AppointmentStatus.NO_SHOW
-    )
+    await record_attendance_outcome(db, appointment, previous_status=AppointmentStatus.NO_SHOW)
 
     assert contact.noshow_count == 1
     assert contact.last_appointment_status == "no_show"
@@ -132,9 +129,7 @@ async def test_completed_applies_showed_up_tag_and_leaves_counter(
     assert contact.noshow_count == 2  # a completion never clears history
 
 
-@pytest.mark.parametrize(
-    "status", [AppointmentStatus.SCHEDULED, AppointmentStatus.CANCELLED]
-)
+@pytest.mark.parametrize("status", [AppointmentStatus.SCHEDULED, AppointmentStatus.CANCELLED])
 async def test_undecided_and_cancelled_write_nothing(
     tag_service: MagicMock, status: AppointmentStatus
 ) -> None:
@@ -210,9 +205,9 @@ async def _persist_appointment(db: Any, workspace_id: uuid.UUID, contact_id: int
 
 async def _tag_names(db: Any, contact_id: int) -> set[str]:
     rows = await db.execute(
-        select(Tag.name).join(ContactTag, ContactTag.tag_id == Tag.id).where(
-            ContactTag.contact_id == contact_id
-        )
+        select(Tag.name)
+        .join(ContactTag, ContactTag.tag_id == Tag.id)
+        .where(ContactTag.contact_id == contact_id)
     )
     return set(rows.scalars().all())
 

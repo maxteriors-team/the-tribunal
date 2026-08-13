@@ -6,13 +6,7 @@ import { Loader2, UserPlus } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { settingsApi, type TeamMember } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
 import { getInitialsFromName } from "@/lib/utils/initials";
@@ -49,9 +43,7 @@ export function TeamMembersList({
         <div className="flex items-center justify-between">
           <div>
             <CardTitle>Team Members</CardTitle>
-            <CardDescription>
-              Manage who has access to your workspace
-            </CardDescription>
+            <CardDescription>Manage who has access to your workspace</CardDescription>
           </div>
           {canEditWorkspace && (
             <Button onClick={onInvite}>
@@ -84,24 +76,28 @@ export function TeamMembersList({
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-medium">
-                    {member.full_name || member.email}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {member.email}
-                  </p>
+                  <p className="font-medium">{member.full_name || member.email}</p>
+                  <p className="text-sm text-muted-foreground">{member.email}</p>
+                  {member.is_bookable && (
+                    <p className="text-xs text-muted-foreground">
+                      {member.google_calendar_connected
+                        ? `Calendar connected${member.google_calendar_email ? `: ${member.google_calendar_email}` : ""}`
+                        : "Bookable — Google Calendar not connected"}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                {member.is_bookable && (
+                  <Badge variant={member.google_calendar_connected ? "default" : "secondary"}>
+                    {member.google_calendar_connected ? "Calendar ready" : "Calendar needed"}
+                  </Badge>
+                )}
                 <Badge variant="outline" className="capitalize">
                   {member.role}
                 </Badge>
                 {canEditWorkspace && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEditMember(member)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onEditMember(member)}>
                     Edit
                   </Button>
                 )}
@@ -109,9 +105,7 @@ export function TeamMembersList({
             </div>
           ))
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            No team members found
-          </div>
+          <div className="text-center py-8 text-muted-foreground">No team members found</div>
         )}
       </CardContent>
     </Card>

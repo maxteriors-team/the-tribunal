@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
 
 import structlog
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bookable_staff import BookableStaff
@@ -53,7 +53,7 @@ class StaffLike(Protocol):
     priority: int
     assignment_count: int
     last_assigned_at: datetime | None
-    calcom_event_type_id: int | None
+    user_id: int | None
     name: str
 
 
@@ -134,17 +134,14 @@ async def resolve_staff_for_booking(
 ) -> BookableStaff | None:
     """Resolve and (optionally) record the staff member for a booking.
 
-    Returns ``None`` when the agent uses the ``single`` strategy, has no
-    eligible staff, or no staff matches a requested skill — in which case the
-    caller should fall back to ``agent.calcom_event_type_id``.
+    Returns ``None`` when there is no eligible staff member or no staff matches
+    a requested skill. Login-backed staff carry the user whose Google Calendar
+    should be checked and receive the event.
 
     When ``record`` is True (the default, used for an actual booking) the
     chosen member's round-robin counters are bumped (``assignment_count`` +1,
     ``last_assigned_at`` = now) and persisted. Pass ``record=False`` to *peek*
-    the selection — e.g. an availability check that needs the staff member's
-    event type but must not consume a round-robin turn. The deterministic
-    tie-break keeps a peek and the following booking on the same member as long
-    as no other booking lands in between.
+    the selection for an availability check without consuming a turn.
     """
     strategy = getattr(agent, "assignment_strategy", STRATEGY_SINGLE) or STRATEGY_SINGLE
     if strategy not in VALID_STRATEGIES:
@@ -157,13 +154,26 @@ async def resolve_staff_for_booking(
     pool_scope = or_(BookableStaff.agent_id == agent.id, BookableStaff.agent_id.is_(None))
     selection_strategy = STRATEGY_ROUND_ROBIN if strategy == STRATEGY_SINGLE else strategy
 
-    result = await db.execute(
-        select(BookableStaff).where(
-            BookableStaff.workspace_id == agent.workspace_id,
-            pool_scope,
-            BookableStaff.is_active.is_(True),
-        )
+    # Serialize selection per workspace. PostgreSQL advisory transaction locks
+    # keep concurrent AI channels from reading the same round-robin counters and
+    # assigning the same rep. Tests/SQLite may not support this function.
+    get_bind = getattr(db, "get_bind", None)
+    bind = get_bind() if get_bind is not None else None
+    if record and bind is not None and bind.dialect.name == "postgresql":
+        workspace_lock = int.from_bytes(agent.workspace_id.bytes[:8], "big", signed=True)
+        await db.execute(select(func.pg_advisory_xact_lock(workspace_lock)))
+
+    query = select(BookableStaff).where(
+        BookableStaff.workspace_id == agent.workspace_id,
+        pool_scope,
+        BookableStaff.is_active.is_(True),
+        # AI bookings must resolve to a login so conflicts can be checked and
+        # the event can land on that rep's own Google Calendar.
+        BookableStaff.user_id.is_not(None),
     )
+    if record:
+        query = query.with_for_update()
+    result = await db.execute(query)
     pool = list(result.scalars().all())
     if not pool:
         logger.info(
@@ -204,7 +214,7 @@ async def resolve_staff_for_booking(
         required_skill=required_skill,
         staff_id=str(chosen.id),
         staff_name=chosen.name,
-        calcom_event_type_id=chosen.calcom_event_type_id,
+        user_id=chosen.user_id,
         assignment_count=chosen.assignment_count,
     )
     return chosen
@@ -215,7 +225,7 @@ def staff_to_assignment_dict(staff: BookableStaff) -> dict[str, object]:
     return {
         "id": str(staff.id),
         "name": staff.name,
-        "calcom_event_type_id": staff.calcom_event_type_id,
+        "user_id": staff.user_id,
         "skills": list(staff.skills or []),
     }
 

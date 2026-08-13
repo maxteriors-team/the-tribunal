@@ -81,6 +81,7 @@ from app.models.opportunity import Opportunity
 from app.models.phone_number import PhoneNumber
 from app.models.pipeline import Pipeline, PipelineStage
 from app.models.tag import ContactTag, Tag
+from app.models.workspace import Workspace
 from app.services.approval.approval_gate_service import approval_gate_service
 from app.services.automations.branching import contact_matches_rules, parse_branch_condition
 from app.services.automations.conditions import (
@@ -107,13 +108,16 @@ from app.services.automations.runner import (
     step_at,
     wait_duration,
 )
+from app.services.compliance.quiet_hours import parse_clock
 from app.services.email import send_automation_email, send_template_email
 from app.services.email_layout import EmailCategory
 from app.services.email_opt_out import build_email_unsubscribe_url, email_suppressed
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
+from app.services.leads.funnel_transitions import mark_contact_contacted
 from app.services.outbound.delivery import (
     OutboundDeliveryChannel,
     OutboundDeliveryRequest,
+    OutboundDeliveryResult,
     outbound_delivery_service,
 )
 from app.services.reactivation.drip_runner import enroll_contacts
@@ -121,6 +125,7 @@ from app.services.reporting.capacity_service import CapacityService
 from app.services.tags import TagService
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 from app.utils.phone import normalize_phone_safe
+from app.utils.timezones import workspace_timezone_name
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -192,6 +197,13 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                     )
 
             await db.commit()
+
+    @staticmethod
+    def _acquisition_funnel_id(automation: Automation) -> str | None:
+        """Return the explicit acquisition funnel identifier, if configured."""
+        value = (automation.trigger_config or {}).get("funnel_id")
+        normalized = str(value).strip() if value is not None else ""
+        return normalized or None
 
     # ------------------------------------------------------------------ #
     # Resuming parked workflows                                            #
@@ -276,6 +288,18 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 execution.scheduled_for = None
                 log.info("automation_resume_abandoned", reason="contact_missing")
                 return
+
+        if (
+            contact is not None
+            and self._acquisition_funnel_id(automation) is not None
+            and contact.last_appointment_status == "scheduled"
+        ):
+            execution.status = "completed"
+            execution.error = "Acquisition funnel stopped after appointment booking"
+            execution.scheduled_for = None
+            execution.executed_at = datetime.now(UTC)
+            log.info("automation_resume_completed", reason="appointment_booked")
+            return
 
         # Consent can be withdrawn during a wait, and a parked run is exactly
         # where that is most likely to happen. Re-check before sending the rest.
@@ -520,7 +544,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             not_(no_automation_tag_exists(automation.workspace_id, Contact.id)),
         ]
 
-        if trigger in ("appointment_booked", "booking_created"):
+        if trigger == "booking_created":
             contacts = await self._contacts_appointment_booked(base_filters, since, db)
 
         elif trigger == "no_show":
@@ -665,6 +689,8 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         db: AsyncSession,
     ) -> None:
         """Execute all actions for *automation* against a polling-matched *contact*."""
+        if await automation_suppressed(db, automation.workspace_id, contact.id):
+            return
         execution = AutomationExecution(
             automation_id=automation.id,
             contact_id=contact.id,
@@ -687,6 +713,11 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         unique index ``uq_automation_execution_event``) means re-draining the
         same event never re-runs an automation that already executed for it.
         """
+        if contact is not None and await automation_suppressed(
+            db, automation.workspace_id, contact.id
+        ):
+            return
+
         existing = await db.execute(
             select(AutomationExecution.id)
             .where(
@@ -795,7 +826,19 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                     cursor = await self._resolve_branch(automation, contact, steps, step, db, log)
                     continue
 
-                await self._execute_step(automation, contact, step, context, db, log)
+                status_before_step = contact.status if contact is not None else None
+                delivery_result = await self._execute_step(
+                    automation, contact, step, context, db, log
+                )
+                if (
+                    automation.trigger_type == "lead_created"
+                    and step.type == "send_sms"
+                    and contact is not None
+                    and status_before_step == "new"
+                    and delivery_result is not None
+                    and delivery_result.delivered
+                ):
+                    await mark_contact_contacted(db, contact)
                 cursor += 1
 
             execution.step_index = max(cursor, 0)
@@ -866,13 +909,21 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         payload: dict[str, Any],
         db: AsyncSession,
         log: Any,
-    ) -> None:
+    ) -> OutboundDeliveryResult | None:
         """Run one side-effecting step: approval gate, then dispatch.
 
         Control-flow steps (``wait``, ``branch``) never reach here — they move
         the cursor instead of acting on a customer, so gating them for approval
         would ask an operator to authorise a delay.
         """
+        if (
+            step.type == "send_sms"
+            and contact is not None
+            and self._acquisition_funnel_id(automation) is not None
+            and contact.last_appointment_status == "scheduled"
+        ):
+            log.info("automation_sms_skipped", reason="appointment_booked")
+            return None
         action_type = step.type
         action_config = step.config
 
@@ -895,20 +946,19 @@ class AutomationWorker(RetryableWorker, BaseWorker):
 
         if decision == "pending":
             log.info("automation_action_pending_approval", action_type=action_type)
-            return
+            return None
         elif decision == "blocked":
             log.warning("automation_action_blocked", action_type=action_type)
-            return
+            return None
 
         # Actions targeting a contact are skipped when the (event)
         # trigger has none. Checking here lets mypy narrow ``contact``.
         if action_type in _CONTACT_ACTIONS and contact is None:
             log.warning("automation_action_requires_contact", action_type=action_type)
-            return
+            return None
 
         if action_type == "send_sms" and contact is not None:
-            await self._action_send_sms(automation, contact, action_config, payload, db)
-
+            return await self._action_send_sms(automation, contact, action_config, payload, db)
         elif action_type == "send_email" and contact is not None:
             await self._action_send_email(automation, contact, action_config, payload, db)
 
@@ -937,6 +987,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 "Unknown action type — skipping",
                 action_type=action_type,
             )
+        return None
 
     async def _notify_automation_triggered(
         self,
@@ -994,7 +1045,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         config: dict[str, Any],
         payload: dict[str, Any],
         db: AsyncSession,
-    ) -> None:
+    ) -> OutboundDeliveryResult | None:
         """Send an SMS to the contact.
 
         Config keys:
@@ -1003,6 +1054,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                            payload token (e.g. {rating}, {stage}).
             fallbacks (dict): Optional per-token defaults used when a token
                            renders blank (e.g. {"first_name": "there"}).
+            agent_id (UUID): AI agent that owns the SMS conversation.
             require_consent (bool): Require an explicit ``opted_in`` SMS status.
                            Defaults to False for legacy automations, but global
                            STOP/opt-out suppression always applies.
@@ -1013,14 +1065,14 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 "send_sms action has no message template",
                 automation_id=str(automation.id),
             )
-            return
+            return None
 
         if not contact.phone_number:
             self.logger.warning(
                 "Contact has no phone number",
                 contact_id=contact.id,
             )
-            return
+            return None
 
         # Leads can arrive with raw US numbers like "(248) 555-0123" from imports
         # or ad-platform webhooks; the provider requires E.164. Normalize here so
@@ -1031,7 +1083,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 "Contact phone not valid E.164 — skipping SMS",
                 contact_id=contact.id,
             )
-            return
+            return None
 
         message_body = self._render_template(
             message_template, contact, payload, config.get("fallbacks")
@@ -1043,7 +1095,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 "No from-number available for workspace",
                 workspace_id=str(automation.workspace_id),
             )
-            return
+            return None
 
         # Event payloads carry the domain object id (job_id, invoice_id, etc.).
         # Include it so retrying one event collapses, while a later second job for
@@ -1060,6 +1112,22 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         if event_identity is not None:
             idempotency_parts += (event_identity,)
 
+        raw_agent_id = config.get("agent_id")
+        try:
+            agent_id = uuid.UUID(str(raw_agent_id)) if raw_agent_id else None
+        except (TypeError, ValueError):
+            self.logger.warning(
+                "send_sms action has invalid agent_id",
+                automation_id=str(automation.id),
+                agent_id=str(raw_agent_id),
+            )
+            return None
+
+        workspace = await db.get(Workspace, automation.workspace_id)
+        timezone_name = workspace_timezone_name(workspace)
+        quiet_start = config.get("quiet_hours_start", "21:00")
+        quiet_end = config.get("quiet_hours_end", "08:00")
+
         result = await outbound_delivery_service.deliver(
             db,
             OutboundDeliveryRequest(
@@ -1069,9 +1137,13 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 from_=from_number,
                 body=message_body,
                 contact=contact,
+                agent_id=agent_id,
                 idempotency_key=derive_outbound_key("automation_sms", *idempotency_parts),
                 action_type="automation_sms",
                 require_sms_consent=bool(config.get("require_consent")),
+                quiet_hours_start=parse_clock(quiet_start),
+                quiet_hours_end=parse_clock(quiet_end),
+                timezone=timezone_name,
             ),
         )
         self.logger.info(
@@ -1081,6 +1153,13 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             status=result.status.value,
             reason=result.reason,
         )
+        if result.delivered and result.message is not None and agent_id is not None:
+            conversation = await db.get(Conversation, result.message.conversation_id)
+            if conversation is not None:
+                conversation.assigned_agent_id = agent_id
+                conversation.ai_enabled = True
+                await db.flush()
+        return result
 
     async def _resolve_email_content(
         self,

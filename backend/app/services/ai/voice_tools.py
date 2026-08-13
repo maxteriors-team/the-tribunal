@@ -3,7 +3,7 @@
 This module consolidates tool definitions that were previously scattered
 across multiple voice agent implementations. Provides:
 - DTMF tool for IVR navigation
-- Cal.com booking tools with dynamic date context
+- Google Calendar booking tools with dynamic date context
 - Grok built-in tools (web_search, x_search)
 
 Usage:
@@ -440,7 +440,7 @@ VOICE_BOOKING_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "name": "book_appointment",
         "description": (
-            "Book an appointment/meeting with the customer on Cal.com. "
+            "Book an appointment/meeting with the customer on the assigned Google Calendar. "
             "Use this when the customer agrees to schedule a call, meeting, "
             "or appointment. You MUST collect the customer's email address first."
         ),
@@ -490,7 +490,7 @@ VOICE_BOOKING_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "name": "check_availability",
         "description": (
-            "Check available time slots on Cal.com for a date range. "
+            "Check available time slots on the assigned Google Calendar for a date range. "
             "Use before booking to confirm slot availability."
         ),
         "parameters": {
@@ -503,6 +503,11 @@ VOICE_BOOKING_TOOLS: list[dict[str, Any]] = [
                 "end_date": {
                     "type": "string",
                     "description": "End date in YYYY-MM-DD (defaults to start)",
+                },
+                "duration_minutes": {
+                    "type": "integer",
+                    "description": "Meeting length in minutes (defaults to 30)",
+                    "default": 30,
                 },
                 "skill": {
                     "type": "string",
@@ -546,7 +551,8 @@ def get_booking_tools(timezone: str = "America/New_York") -> list[dict[str, Any]
             "type": "function",
             "name": "book_appointment",
             "description": (
-                f"Book an appointment on Cal.com. TODAY IS {today_str} ({today_iso}). "
+                "Book an appointment on the assigned Google Calendar. "
+                f"TODAY IS {today_str} ({today_iso}). "
                 f"When converting relative dates to YYYY-MM-DD: 'today' = {today_iso}, "
                 "'tomorrow' = the day after today, 'Friday' = the NEXT Friday from today. "
                 "You MUST collect the customer's email address first."
@@ -590,7 +596,7 @@ def get_booking_tools(timezone: str = "America/New_York") -> list[dict[str, Any]
             "type": "function",
             "name": "check_availability",
             "description": (
-                f"Check available time slots on Cal.com. "
+                f"Check available time slots on the assigned Google Calendar. "
                 f"TODAY IS {today_str} ({today_iso}). "
                 f"When the user says 'Friday', 'tomorrow', or 'next week', "
                 f"convert to YYYY-MM-DD relative to today ({today_iso}). "
@@ -610,6 +616,11 @@ def get_booking_tools(timezone: str = "America/New_York") -> list[dict[str, Any]
                     "end_date": {
                         "type": "string",
                         "description": "End date in YYYY-MM-DD (defaults to start_date)",
+                    },
+                    "duration_minutes": {
+                        "type": "integer",
+                        "description": "Meeting length in minutes (defaults to 30)",
+                        "default": 30,
                     },
                     "skill": {
                         "type": "string",
@@ -668,7 +679,7 @@ def build_tools_list(
     """Build a complete tools list based on enabled features.
 
     Args:
-        enable_booking: Include Cal.com booking tools
+        enable_booking: Include Google Calendar booking tools
         enable_web_search: Include Grok web search tool
         enable_x_search: Include Grok X/Twitter search tool
         enable_dtmf: Include DTMF tool for IVR navigation
@@ -771,7 +782,7 @@ def get_tools_from_agent_config(
 
     Args:
         agent: Agent model with enabled_tools and tool_settings
-        enable_booking: Whether Cal.com booking is available
+        enable_booking: Whether Google Calendar booking is available
         timezone: Timezone for booking tools date context
 
     Returns:
@@ -951,12 +962,14 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
             "function": {
                 "name": "book_appointment",
                 "description": (
-                    f"Book an appointment/meeting with the customer on Cal.com. "
+                    "Book a qualified website lead's phone or video call on the "
+                    "assigned representative's calendar. "
                     f"TODAY IS {today_str} ({today_iso}). "
-                    f"Use this when the customer agrees to schedule a call, meeting, "
-                    f"or appointment. Parse relative dates like 'tomorrow at 2pm'. "
-                    f"IMPORTANT: You MUST collect the customer's email address and include "
-                    f"it in this call. Ask for email in the same message as confirming the booking."
+                    "Use this only after asking whether the lead prefers a phone call "
+                    "or video call; never infer the format or invent a meeting link. "
+                    "Parse relative dates like 'tomorrow at 2pm'. "
+                    "IMPORTANT: You MUST collect the customer's email address and include "
+                    "it in this call. Ask for email in the same message as confirming the booking."
                 ),
                 "parameters": {
                     "type": "object",
@@ -983,6 +996,14 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                                 "REQUIRED - always ask for and include the email."
                             ),
                         },
+                        "call_type": {
+                            "type": "string",
+                            "enum": ["phone_call", "video_call"],
+                            "description": (
+                                "Lead's explicit format choice. Phone calls use their phone; "
+                                "video calls request Google Meet from the rep's calendar."
+                            ),
+                        },
                         "duration_minutes": {
                             "type": "integer",
                             "description": "Duration in minutes. Default is 30.",
@@ -1002,7 +1023,7 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                             ),
                         },
                     },
-                    "required": ["date", "time", "email"],
+                    "required": ["date", "time", "email", "call_type"],
                 },
             },
         },
@@ -1011,7 +1032,7 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
             "function": {
                 "name": "check_availability",
                 "description": (
-                    f"Check available time slots on Cal.com for a date range. "
+                    f"Check available time slots on the assigned Google Calendar for a date range. "
                     f"TODAY IS {today_str} ({today_iso}). "
                     f"Use before booking to confirm slot availability."
                 ),
@@ -1027,6 +1048,11 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                         "end_date": {
                             "type": "string",
                             "description": "End date in YYYY-MM-DD (defaults to start)",
+                        },
+                        "duration_minutes": {
+                            "type": "integer",
+                            "description": "Meeting length in minutes (defaults to 30)",
+                            "default": 30,
                         },
                         "skill": {
                             "type": "string",
