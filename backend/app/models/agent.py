@@ -22,6 +22,7 @@ def generate_public_id() -> str:
 
 
 if TYPE_CHECKING:
+    from app.models.agent_training_example import AgentTrainingExample
     from app.models.appointment import Appointment
     from app.models.bookable_staff import BookableStaff
     from app.models.campaign import Campaign
@@ -251,7 +252,7 @@ class Agent(Base):
         back_populates="agent",
         order_by="PromptVersion.version_number.desc()",
     )
-    training_examples: Mapped[list[Any]] = relationship(
+    training_examples: Mapped[list["AgentTrainingExample"]] = relationship(
         "AgentTrainingExample", back_populates="agent", cascade="all, delete-orphan"
     )
 

@@ -61,8 +61,8 @@ class BookableStaffService:
         """Enable or disable a workspace member's booking resources.
 
         A person can belong to multiple agents' booking pools, so the Team toggle
-        updates every linked row. Disabling preserves login links, Cal.com wiring,
-        and appointment references; re-enabling restores those same resources.
+        updates every linked row. Disabling preserves login links, Google Calendar
+        ownership, and appointment references; re-enabling restores those resources.
         If the member has no staff row yet, enabling creates a workspace-level
         resource that can be configured into an agent pool later.
 

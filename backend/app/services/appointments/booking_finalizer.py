@@ -23,26 +23,32 @@ customer about an appointment whose transaction was rolled back.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 from app.models.agent import Agent
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.automation import Automation
+from app.models.automation_execution import AutomationExecution
 from app.models.bookable_staff import BookableStaff
 from app.models.contact import Contact
-from app.models.workspace import Workspace
+from app.models.user import User
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.appointments.lifecycle_sms import build_confirmation_body, send_lifecycle_sms
+from app.services.automations.events import EVENT_APPOINTMENT_BOOKED, emit_automation_event
 from app.services.calendar.ics import CalendarInvite, appointment_uid, render_invite
 from app.services.email import (
     send_appointment_booked_notification,
     send_appointment_confirmation_to_attendee,
 )
+from app.services.google_calendar import GoogleCalendarError
 from app.services.idempotency import derive_outbound_key
+from app.services.leads.funnel_transitions import mark_contact_booked
 from app.utils.background_tasks import spawn_background_task
 from app.utils.timezones import DEFAULT_WORKSPACE_TIMEZONE, workspace_timezone_name
 
@@ -66,9 +72,6 @@ async def finalize_booking(
     service_type: str | None = None,
     assigned_staff_id: uuid.UUID | None = None,
     required_skill: str | None = None,
-    calcom_booking_uid: str | None = None,
-    calcom_booking_id: int | None = None,
-    calcom_event_type_id: int | None = None,
     notify: bool = True,
     send_customer_sms: bool = True,
 ) -> Appointment:
@@ -104,6 +107,15 @@ async def finalize_booking(
             contact_id=contact_id,
             scheduled_at=scheduled_at.isoformat(),
         )
+        if notify and existing.sync_status != "synced":
+            spawn_background_task(
+                deliver_booking_notifications(
+                    existing.id,
+                    send_customer_sms=send_customer_sms,
+                    send_notifications=False,
+                ),
+                name=f"booking_calendar_retry:{existing.id}",
+            )
         return existing
 
     staff_id = assigned_staff_id
@@ -123,14 +135,30 @@ async def finalize_booking(
         status=AppointmentStatus.SCHEDULED,
         service_type=service_type,
         notes=notes,
-        calcom_booking_uid=calcom_booking_uid,
-        calcom_booking_id=calcom_booking_id,
-        calcom_event_type_id=calcom_event_type_id,
-        sync_status="synced",
-        last_synced_at=datetime.now(scheduled_at.tzinfo),
+        sync_status="pending",
     )
     db.add(appointment)
     try:
+        await db.flush()
+        await mark_contact_booked(db, contact)
+        await _cancel_acquisition_funnel_executions(
+            db,
+            workspace_id=workspace_id,
+            contact_id=contact_id,
+        )
+        await emit_automation_event(
+            db,
+            workspace_id=workspace_id,
+            event_type=EVENT_APPOINTMENT_BOOKED,
+            contact_id=contact_id,
+            payload={
+                "appointment_id": appointment.id,
+                "service_type": service_type,
+                "scheduled_at": scheduled_at.isoformat(),
+                "bookable_staff_id": str(staff_id) if staff_id is not None else None,
+                "sync_status": appointment.sync_status,
+            },
+        )
         await db.commit()
     except IntegrityError:
         # Lost the race: another booking for this contact+slot committed between
@@ -141,7 +169,7 @@ async def finalize_booking(
         await db.rollback()
         winner = await _find_duplicate(db, workspace_id, contact_id, scheduled_at)
         if winner is None:
-            # The violation was something else (a duplicate Cal.com uid, say).
+            # The violation was something else; do not disguise it as idempotency.
             # Surfacing it is correct: we have no booking to hand back.
             raise
         logger.info(
@@ -169,6 +197,33 @@ async def finalize_booking(
         )
 
     return appointment
+
+
+async def _cancel_acquisition_funnel_executions(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    contact_id: int,
+) -> None:
+    """Complete only explicitly identified acquisition runs for this contact."""
+    acquisition_ids = select(Automation.id).where(
+        Automation.workspace_id == workspace_id,
+        Automation.trigger_config["funnel_id"].astext.is_not(None),
+    )
+    await db.execute(
+        update(AutomationExecution)
+        .where(
+            AutomationExecution.automation_id.in_(acquisition_ids),
+            AutomationExecution.contact_id == contact_id,
+            AutomationExecution.status.in_(["pending", "running", "scheduled"]),
+        )
+        .values(
+            status="completed",
+            scheduled_for=None,
+            executed_at=datetime.now(UTC),
+            error="Acquisition funnel stopped after appointment booking",
+        )
+    )
 
 
 async def _find_duplicate(
@@ -229,6 +284,7 @@ async def deliver_booking_notifications(
     appointment_id: int,
     *,
     send_customer_sms: bool = True,
+    send_notifications: bool = True,
 ) -> None:
     """Send customer and rep booking notifications.
 
@@ -260,7 +316,17 @@ async def deliver_booking_notifications(
             else None
         )
 
-        if send_customer_sms:
+        # Sync first so every confirmation is generated from provider truth: a
+        # successful video call includes Google Meet; a failure promises follow-up.
+        await _sync_google_calendar(
+            db,
+            appointment=appointment,
+            contact=contact,
+            workspace=workspace,
+            staff=staff,
+            log=log,
+        )
+        if send_notifications and send_customer_sms:
             await _send_customer_confirmation(
                 db,
                 appointment=appointment,
@@ -269,21 +335,22 @@ async def deliver_booking_notifications(
                 agent=agent,
                 log=log,
             )
-        await _send_attendee_confirmation(
-            appointment=appointment,
-            contact=contact,
-            workspace=workspace,
-            agent=agent,
-            log=log,
-        )
-        await _send_rep_invite(
-            db,
-            appointment=appointment,
-            contact=contact,
-            workspace=workspace,
-            staff=staff,
-            log=log,
-        )
+        if send_notifications:
+            await _send_attendee_confirmation(
+                appointment=appointment,
+                contact=contact,
+                workspace=workspace,
+                agent=agent,
+                log=log,
+            )
+            await _send_rep_invite(
+                db,
+                appointment=appointment,
+                contact=contact,
+                workspace=workspace,
+                staff=staff,
+                log=log,
+            )
 
 
 async def _send_customer_confirmation(
@@ -343,7 +410,7 @@ async def _send_attendee_confirmation(
     try:
         contact_name = contact.full_name or "there"
         business_name = workspace.name if workspace is not None else ""
-        location = format_contact_address(contact)
+        location = _meeting_method(contact, appointment)
 
         summary = (
             f"{appointment.service_type or DEFAULT_SERVICE_SUMMARY} — {business_name}"
@@ -354,7 +421,7 @@ async def _send_attendee_confirmation(
             duration_minutes=appointment.duration_minutes,
             summary=summary,
             description=_invite_description(contact, appointment),
-            location=location,
+            location=location or "",
             organizer_email=_organizer_email(),
             organizer_name=business_name or None,
             attendee_email=contact.email,
@@ -368,6 +435,8 @@ async def _send_attendee_confirmation(
             appointment_time=appointment.scheduled_at,
             service_type=appointment.service_type,
             location=location or None,
+            meeting_url=appointment.meeting_url,
+            sync_status=appointment.sync_status,
             timezone=_workspace_timezone(workspace),
             ics_content=render_invite(invite),
             idempotency_key=derive_outbound_key("attendee_booking_invite_email", appointment.id),
@@ -375,6 +444,77 @@ async def _send_attendee_confirmation(
         log.info("attendee_confirmation_email_dispatched", contact_id=contact.id)
     except Exception:  # noqa: BLE001 - notification must not break booking
         log.exception("attendee_confirmation_email_failed")
+
+
+async def _sync_google_calendar(
+    db: AsyncSession,
+    *,
+    appointment: Appointment,
+    contact: Contact,
+    workspace: Workspace | None,
+    staff: BookableStaff | None,
+    log: structlog.BoundLogger,
+) -> None:
+    """Create the event on the assigned rep's connected Google Calendar.
+
+    Provider sync follows the durable local appointment but precedes lifecycle
+    copy, so every notification reflects the resulting Meet URL or failure state.
+    """
+    if appointment.google_calendar_event_id and appointment.sync_status == "synced":
+        return
+    if staff is None or staff.user_id is None:
+        appointment.sync_status = "not_connected"
+        appointment.sync_error = "Assigned staff does not have a login-linked calendar"
+        await db.commit()
+        return
+
+    try:
+        from app.services.google_calendar import create_event
+
+        event = await create_event(
+            db,
+            user_id=staff.user_id,
+            summary=(
+                f"{appointment.service_type or DEFAULT_SERVICE_SUMMARY} — "
+                f"{contact.full_name or 'Customer'}"
+            ),
+            description=_invite_description(contact, appointment),
+            location=_meeting_method(contact, appointment, include_failure=False),
+            starts_at=appointment.scheduled_at,
+            duration_minutes=appointment.duration_minutes,
+            timezone=_workspace_timezone(workspace),
+            attendee_email=contact.email,
+            attendee_name=contact.full_name or None,
+            conference=appointment.service_type == "video_call",
+            event_id=f"tribunalappointment{appointment.id}",
+        )
+        appointment.google_calendar_event_id = event.event_id
+        appointment.google_calendar_event_url = event.html_link
+        appointment.meeting_url = (
+            event.meet_link if appointment.service_type == "video_call" else None
+        )
+        appointment.sync_status = "synced"
+        appointment.sync_error = None
+        appointment.last_synced_at = datetime.now(UTC)
+        await db.commit()
+        log.info(
+            "google_calendar_event_created",
+            user_id=staff.user_id,
+            event_id=event.event_id,
+        )
+    except GoogleCalendarError as exc:
+        error_text = str(exc)
+        appointment.sync_status = (
+            "not_connected" if "not connected" in error_text.lower() else "failed"
+        )
+        appointment.sync_error = error_text[:2000]
+        await db.commit()
+        log.warning("google_calendar_event_not_created", error=error_text)
+    except Exception:  # noqa: BLE001 - CRM booking must survive provider failures
+        appointment.sync_status = "failed"
+        appointment.sync_error = "Google Calendar synchronization failed"
+        await db.commit()
+        log.exception("google_calendar_event_create_failed")
 
 
 async def _send_rep_invite(
@@ -403,9 +543,7 @@ async def _send_rep_invite(
             duration_minutes=appointment.duration_minutes,
             summary=f"{appointment.service_type or DEFAULT_SERVICE_SUMMARY} — {contact_name}",
             description=_invite_description(contact, appointment),
-            # Calendar apps turn LOCATION into a tap-to-navigate link, which is
-            # the whole job for a trades rep driving to the address.
-            location=format_contact_address(contact),
+            location=_meeting_method(contact, appointment) or "",
             # The sending identity organizes; the rep attends. Naming the rep as
             # both makes it a self-organized event, and clients like Gmail then
             # hide the Accept/Decline controls.
@@ -421,6 +559,7 @@ async def _send_rep_invite(
             contact_name=contact_name,
             contact_phone=contact.phone_number or "",
             appointment_time=appointment.scheduled_at,
+            calendar_event_url=appointment.google_calendar_event_url,
             timezone=timezone,
             ics_content=render_invite(invite),
             idempotency_key=derive_outbound_key("local_booking_invite_email", appointment.id),
@@ -442,10 +581,25 @@ async def _resolve_invite_recipient(
     """
     if staff is not None and staff.email:
         return staff.email, staff.name
+    if staff is not None and staff.user_id is not None:
+        user = await db.get(User, staff.user_id)
+        if user is not None:
+            return user.email, user.full_name or staff.name
 
-    from app.api.webhooks.calcom_events import get_workspace_owner
-
-    return await get_workspace_owner(db, workspace_id)
+    result = await db.execute(
+        select(User.email, User.full_name)
+        .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
+        .where(
+            WorkspaceMembership.workspace_id == workspace_id,
+            WorkspaceMembership.role == "owner",
+        )
+        .order_by(WorkspaceMembership.created_at.asc())
+        .limit(1)
+    )
+    row = result.first()
+    if row is None:
+        return None
+    return row.email, row.full_name or row.email
 
 
 def _organizer_email() -> str:
@@ -475,9 +629,30 @@ def format_contact_address(contact: Contact) -> str:
     return " ".join(filter(None, [locality, contact.address_zip])).strip()
 
 
+def _meeting_method(
+    contact: Contact,
+    appointment: Appointment,
+    *,
+    include_failure: bool = True,
+) -> str | None:
+    """Return only a real call method; provider failure never fabricates a URL."""
+    if appointment.service_type == "phone_call":
+        return f"Phone call: {contact.phone_number}" if contact.phone_number else "Phone call"
+    if appointment.service_type == "video_call":
+        if appointment.meeting_url:
+            return appointment.meeting_url
+        if include_failure:
+            return "Video link pending — operator follow-up required"
+        return None
+    return format_contact_address(contact) or None
+
+
 def _invite_description(contact: Contact, appointment: Appointment) -> str:
-    """Build the invite body the rep reads on their phone before knocking."""
+    """Build call details and contact context for customer/rep calendars."""
     parts = [f"Customer: {contact.full_name or 'Customer'}"]
+    method = _meeting_method(contact, appointment)
+    if method:
+        parts.append(f"Meeting method: {method}")
     if contact.phone_number:
         parts.append(f"Phone: {contact.phone_number}")
     if contact.email:

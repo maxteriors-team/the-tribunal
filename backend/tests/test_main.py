@@ -305,9 +305,9 @@ class TestSecurityHeadersMiddleware:
         response = await headers_client.get("/ping")
         assert response.status_code == 200
         for header, value in _EXPECTED_SECURITY_HEADERS.items():
-            assert (
-                response.headers.get(header) == value
-            ), f"missing or wrong {header}; got {response.headers.get(header)!r}"
+            assert response.headers.get(header) == value, (
+                f"missing or wrong {header}; got {response.headers.get(header)!r}"
+            )
 
     async def test_csp_locks_default_src(self, headers_client: AsyncClient) -> None:
         response = await headers_client.get("/ping")
@@ -743,7 +743,10 @@ class TestValidateStartupConfig:
         defaults: dict[str, Any] = {
             "openai_api_key": "sk-test",
             "telnyx_api_key": "telnyx-test",
-            "calcom_api_key": "cal-test",
+            "google_calendar_client_id": "google-client",
+            "google_calendar_client_secret": MagicMock(
+                get_secret_value=MagicMock(return_value="google-secret")
+            ),
             "elevenlabs_api_key": "el-test",
             "telnyx_public_key": "pub-test",
             "skip_webhook_verification": False,
@@ -775,7 +778,11 @@ class TestValidateStartupConfig:
             _validate_startup_config()
 
     def test_missing_optional_integrations_warn(self) -> None:
-        cfg = self._make_settings(calcom_api_key="", elevenlabs_api_key="")
+        cfg = self._make_settings(
+            google_calendar_client_id="",
+            google_calendar_client_secret=MagicMock(get_secret_value=MagicMock(return_value="")),
+            elevenlabs_api_key="",
+        )
         with patch.object(main_module, "settings", cfg):
             _validate_startup_config()
 

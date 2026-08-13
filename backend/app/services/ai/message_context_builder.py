@@ -5,7 +5,6 @@ Handles:
 - Extracting email addresses from message history
 - Fetching workspace timezone settings
 - Loading offer context from campaign associations
-- Generating Cal.com booking URLs with pre-filled contact info
 """
 
 import re
@@ -15,9 +14,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent import Agent
 from app.models.campaign import CampaignContact
-from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.workspace import Workspace
 
@@ -159,47 +156,3 @@ async def get_offer_context(
     context_parts.append("Refer to this offer in your responses if relevant to the conversation.")
 
     return "\n".join(context_parts)
-
-
-async def get_booking_url(
-    agent: Agent,
-    conversation: Conversation,
-    db: AsyncSession,
-) -> str | None:
-    """Get Cal.com booking URL for an agent with pre-filled contact information.
-
-    Args:
-        agent: The agent with potential calcom_event_type_id
-        conversation: The conversation
-        db: Database session
-
-    Returns:
-        Cal.com booking URL with pre-filled parameters, or None if not configured
-    """
-    from app.utils.calendar import generate_booking_url
-
-    # Check if agent has a Cal.com event type configured
-    if not agent.calcom_event_type_id:
-        return None
-
-    # Try to get contact info if available
-    contact_email: str | None = None
-    contact_name: str | None = None
-
-    # Load contact if conversation has one
-    if conversation.contact_id:
-        result = await db.execute(select(Contact).where(Contact.id == conversation.contact_id))
-        contact = result.scalar_one_or_none()
-        if contact:
-            contact_email = contact.email
-            contact_name = contact.full_name
-
-    # Build the booking URL with contact pre-fill
-    booking_url = generate_booking_url(
-        event_type_id=agent.calcom_event_type_id,
-        contact_email=contact_email,
-        contact_name=contact_name,
-        contact_phone=conversation.contact_phone,
-    )
-
-    return booking_url

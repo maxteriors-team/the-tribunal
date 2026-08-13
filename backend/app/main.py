@@ -25,7 +25,6 @@ from app.api.redirects import router as redirects_router
 from app.api.service_errors import install_service_error_handler
 from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
-from app.api.webhooks.calcom import router as calcom_webhook_router
 from app.api.webhooks.mac_relay import router as mac_relay_webhook_router
 from app.api.webhooks.resend import router as resend_webhook_router
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
@@ -465,8 +464,14 @@ def _validate_startup_config() -> None:
         log.warning("missing_telnyx_api_key", severity="critical")
 
     # Check optional but important integrations
-    if not settings.calcom_api_key:
-        log.warning("missing_calcom_api_key", message="Cal.com appointments disabled")
+    if not (
+        settings.google_calendar_client_id
+        and settings.google_calendar_client_secret.get_secret_value()
+    ):
+        log.warning(
+            "missing_google_calendar_oauth",
+            message="Google Calendar connections disabled",
+        )
 
     if not settings.elevenlabs_api_key:
         log.warning("missing_elevenlabs_api_key", message="ElevenLabs voice disabled")
@@ -603,7 +608,7 @@ if settings.sentry_dsn:
 
 app = FastAPI(
     title="AI CRM API",
-    description="AI-powered CRM with voice agents, SMS campaigns, and Cal.com integration",
+    description="AI-powered CRM with voice agents, SMS campaigns, and Google Calendar integration",
     version="0.1.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
@@ -696,7 +701,6 @@ app.include_router(redirects_router)
 # Include webhook routers
 app.include_router(telnyx_webhook_router, prefix="/webhooks/telnyx", tags=["webhooks"])
 app.include_router(mac_relay_webhook_router, prefix="/webhooks/mac-relay", tags=["webhooks"])
-app.include_router(calcom_webhook_router, prefix="/webhooks/calcom", tags=["webhooks"])
 app.include_router(resend_webhook_router, prefix="/webhooks/resend", tags=["webhooks"])
 
 # Include WebSocket routers

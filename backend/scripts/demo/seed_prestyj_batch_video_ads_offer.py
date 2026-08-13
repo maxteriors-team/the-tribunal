@@ -217,8 +217,7 @@ def parse_args() -> argparse.Namespace:
         type=uuid.UUID,
         default=DEFAULT_WORKSPACE_ID,
         help=(
-            "Workspace UUID to seed into. Defaults to DEFAULT_WORKSPACE_ID env var or app "
-            "default."
+            "Workspace UUID to seed into. Defaults to DEFAULT_WORKSPACE_ID env var or app default."
         ),
     )
     return parser.parse_args()

@@ -39,7 +39,9 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { agentsApi } from "@/lib/api/agents";
+import { bookableStaffApi } from "@/lib/api/bookable-staff";
 import { campaignsApi } from "@/lib/api/campaigns";
+import { humanProfilesApi } from "@/lib/api/human-profiles";
 import {
   leadSourcesApi,
   type LeadSource,
@@ -47,9 +49,40 @@ import {
   type LeadSourceType,
   type LeadSourceUpdateRequest,
 } from "@/lib/api/lead-sources";
+import { settingsApi } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
 import type { Campaign } from "@/types";
 import type { Agent } from "@/types/agent";
+
+interface CallBookingReadinessInput {
+  qualificationEnabled: boolean;
+  bookingEnabled: boolean;
+  bookingPolicy: string | undefined;
+  bookableRep: boolean;
+  videoCalendarReady: boolean;
+}
+
+export function getCallBookingReadiness({
+  qualificationEnabled,
+  bookingEnabled,
+  bookingPolicy,
+  bookableRep,
+  videoCalendarReady,
+}: CallBookingReadinessInput) {
+  const bookingAutoApproved = bookingPolicy === "auto";
+  const blockers = [
+    !qualificationEnabled && "AI qualification is not enabled",
+    !bookingEnabled && "booking tool is not enabled",
+    !bookingAutoApproved && "booking policy is not auto-approved",
+    !bookableRep && "no active bookable rep is assigned",
+    !videoCalendarReady && "Google Calendar is not connected for video calls",
+  ].filter(Boolean) as string[];
+  return {
+    callBookingReady:
+      qualificationEnabled && bookingEnabled && bookingAutoApproved && bookableRep,
+    blockers,
+  };
+}
 
 const ACTION_LABELS: Record<string, string> = {
   collect: "Collect Only",
@@ -140,14 +173,51 @@ function LeadSourceDialog({
   const agents: Agent[] = agentsData?.items ?? [];
   const campaigns: Campaign[] = campaignsData?.items ?? [];
   const selectedAgent = agents.find((agent) => agent.id === form.action_config.agent_id);
+  const selectedAgentId = selectedAgent?.id ?? "";
   const qualificationEnabled =
     selectedAgent?.tool_settings?.website_lead_qualification_enabled === true;
-  const zoomFunnelReady = Boolean(
-    selectedAgent &&
-    selectedAgent.enabled_tools?.includes("book_appointment") &&
-    selectedAgent.calcom_event_type_id &&
-    qualificationEnabled,
+  const bookingEnabled = selectedAgent?.enabled_tools?.includes("book_appointment") === true;
+  const humanProfileQuery = useQuery({
+    queryKey: queryKeys.humanProfiles.detail(workspaceId ?? "", selectedAgentId),
+    queryFn: () => humanProfilesApi.get(workspaceId!, selectedAgentId),
+    enabled: Boolean(workspaceId && selectedAgentId),
+    retry: false,
+  });
+  const staffQuery = useQuery({
+    queryKey: queryKeys.bookableStaff.detail(workspaceId ?? "", selectedAgentId),
+    queryFn: () => bookableStaffApi.list(workspaceId!, selectedAgentId),
+    enabled: Boolean(workspaceId && selectedAgentId),
+  });
+  const teamQuery = useQuery({
+    queryKey: queryKeys.settings.team(workspaceId ?? ""),
+    queryFn: () => settingsApi.getTeamMembers(workspaceId!),
+    enabled: Boolean(workspaceId && selectedAgentId),
+  });
+  const bookableUserIds = new Set(
+    staffQuery.data?.items
+      .filter(
+        (staff) =>
+          staff.is_active &&
+          staff.user_id !== null &&
+          (staff.agent_id === selectedAgentId || staff.agent_id === null),
+      )
+      .map((staff) => staff.user_id) ?? [],
   );
+  const bookableRep = bookableUserIds.size > 0;
+  const videoCalendarReady =
+    teamQuery.data?.some(
+      (member) => bookableUserIds.has(member.id) && member.google_calendar_connected,
+    ) === true;
+  const bookingPolicy =
+    humanProfileQuery.data?.action_policies?.book_appointment ??
+    (humanProfileQuery.isError ? "auto" : undefined);
+  const { callBookingReady, blockers: readinessBlockers } = getCallBookingReadiness({
+    qualificationEnabled,
+    bookingEnabled,
+    bookingPolicy,
+    bookableRep,
+    videoCalendarReady,
+  });
 
   const createMutation = useMutation({
     mutationFn: (data: LeadSourceCreateRequest) => leadSourcesApi.create(workspaceId, data),
@@ -373,20 +443,22 @@ function LeadSourceDialog({
               <div
                 role="status"
                 className={
-                  zoomFunnelReady
+                  callBookingReady
                     ? "rounded-md border border-green-500/30 bg-green-500/10 p-3 text-xs text-green-700 dark:text-green-300"
                     : "rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground"
                 }
               >
-                {zoomFunnelReady ? (
+                {callBookingReady ? (
                   <>
-                    <strong>Qualification-to-Zoom ready.</strong> This agent gates booking until the
-                    website lead qualifies.
+                    <strong>Call-booking ready.</strong> AI qualification and auto-approved booking
+                    are configured. Video calls are ready only when the assigned rep has Google
+                    Calendar connected.
                   </>
                 ) : (
                   <>
-                    <strong>For gated Zoom booking:</strong> select an agent with booking enabled, a
-                    Cal.com event type, and website-lead qualification enabled under AI Prompt.
+                    <strong>Call-booking blockers:</strong>{" "}
+                    {readinessBlockers.join("; ") || "select an AI agent"}. Phone calls need a
+                    bookable rep; video calls also need that rep&apos;s Google Calendar connection.
                   </>
                 )}
               </div>

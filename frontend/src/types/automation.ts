@@ -9,7 +9,6 @@ export type AutomationTriggerType =
   | "event"
   | "condition"
   // Polling triggers (contact-centric)
-  | "appointment_booked"
   | "booking_created"
   | "no_show"
   | "contact_tagged"
@@ -24,8 +23,10 @@ export type AutomationTriggerType =
   | "missed_call"
   | "roleplay_completed"
   | "knowledge_document_uploaded"
-  // Lead capture trigger (emitted by the public lead-form ingestion path)
+  // Lead funnel events emitted by capture, qualification, and booking transitions
   | "lead_created"
+  | "lead_qualified"
+  | "appointment_booked"
   // Quote/invoice/job lifecycle events (emitted by quote, invoice and job services)
   | "quote_sent"
   | "quote_approved"

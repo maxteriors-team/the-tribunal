@@ -11,8 +11,6 @@ functions/dataclasses live here.
 from __future__ import annotations
 
 import base64
-import hashlib
-import hmac
 import json
 import os
 import time
@@ -62,34 +60,6 @@ def new_telnyx_signer() -> TelnyxSigner:
         private_key=private_key,
         public_key_b64=base64.b64encode(public_bytes).decode(),
     )
-
-
-# --------------------------------------------------------------------------- #
-# Cal.com — HMAC-SHA256 signer
-# --------------------------------------------------------------------------- #
-
-
-# Deterministic value used only by the contract test suite. Production
-# rejects this string because it never matches the real ``calcom_webhook_secret``
-# (which is loaded from env vars and never committed). Naming avoids the
-# ``*_SECRET = "..."`` shape so gitleaks doesn't flag it as a leaked credential.
-CALCOM_TEST_SIGNING_KEY = "".join(["contract-test", "-", "calcom-hmac-key"])
-
-
-def sign_calcom(body: bytes, secret: str = CALCOM_TEST_SIGNING_KEY) -> dict[str, str]:
-    """Return Cal.com signature headers for ``body``.
-
-    Cal.com signs with HMAC-SHA256 over the raw body and, in production, sends
-    only ``x-cal-signature-256`` (no timestamp header). We additionally attach a
-    fresh ``x-cal-timestamp`` so the verifier's best-effort staleness window
-    (applied only when the header is present) is exercised; the verifier does
-    not require it.
-    """
-    sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return {
-        "x-cal-signature-256": sig,
-        "x-cal-timestamp": str(int(time.time())),
-    }
 
 
 # --------------------------------------------------------------------------- #

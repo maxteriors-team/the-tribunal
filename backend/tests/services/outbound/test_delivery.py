@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, time
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import ANY, AsyncMock
@@ -239,6 +240,47 @@ async def test_automation_sms_blocks_without_explicit_contact_consent() -> None:
     assert result.reason == "missing_sms_consent"
     provider.send_message.assert_not_awaited()
     provider.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_automation_sms_blocks_during_quiet_hours() -> None:
+    contact = SimpleNamespace(id=123, sms_consent_status="opted_in")
+    provider = _FakeTextProvider(
+        SimpleNamespace(
+            id=uuid.uuid4(),
+            status=MessageStatus.SENT,
+            provider_message_id="msg_123",
+            error_message=None,
+        )
+    )
+    service = OutboundDeliveryService(
+        text_provider_factory=lambda preferred_provider=None, *, mac_relay_service=None: provider,
+        email_provider=_FakeEmailProvider(),
+        push_provider=_FakePushProvider(),
+        opt_out_manager=_FakeOptOutManager(),
+        clock=lambda: datetime(2026, 8, 13, 2, 0, tzinfo=UTC),
+    )
+
+    result = await service.deliver(
+        AsyncMock(),
+        OutboundDeliveryRequest(
+            workspace_id=uuid.uuid4(),
+            channel=OutboundDeliveryChannel.SMS,
+            to="+12025550123",
+            from_="+12025550199",
+            body="Booking follow-up",
+            contact=contact,
+            action_type="automation_sms",
+            require_sms_consent=True,
+            quiet_hours_start=time(21, 0),
+            quiet_hours_end=time(8, 0),
+            timezone="UTC",
+        ),
+    )
+
+    assert result.status is OutboundDeliveryStatus.BLOCKED
+    assert result.reason == "quiet_hours"
+    provider.send_message.assert_not_awaited()
 
 
 @pytest.mark.asyncio

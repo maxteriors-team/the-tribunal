@@ -33,7 +33,6 @@ import pytest
 
 from app.core.circuit_breakers import (
     ALL_BREAKERS,
-    CalComUnavailableError,
     ElevenLabsUnavailableError,
     GooglePlacesUnavailableError,
     OpenAIUnavailableError,
@@ -42,7 +41,6 @@ from app.core.circuit_breakers import (
     ResendUnavailableError,
     StripeUnavailableError,
     TelnyxUnavailableError,
-    calcom_breaker,
     circuit_breaker_state,
     elevenlabs_breaker,
     googleplaces_breaker,
@@ -96,11 +94,10 @@ def _gauge_value(provider: str) -> float:
 class TestProviderSingletons:
     """Every external provider has a breaker with uniform defaults."""
 
-    def test_all_seven_providers_have_a_breaker(self) -> None:
+    def test_all_six_providers_have_a_breaker(self) -> None:
         providers = {b.provider for b in ALL_BREAKERS}
         assert providers == {
             "telnyx",
-            "calcom",
             "openai",
             "elevenlabs",
             "resend",
@@ -112,7 +109,6 @@ class TestProviderSingletons:
         "breaker",
         [
             telnyx_breaker,
-            calcom_breaker,
             openai_breaker,
             elevenlabs_breaker,
             resend_breaker,
@@ -127,7 +123,6 @@ class TestProviderSingletons:
     def test_each_breaker_raises_provider_specific_exception(self) -> None:
         # Mapping: breaker name \u2192 expected exception subclass.
         assert telnyx_breaker._unavailable_exc is TelnyxUnavailableError
-        assert calcom_breaker._unavailable_exc is CalComUnavailableError
         assert openai_breaker._unavailable_exc is OpenAIUnavailableError
         assert elevenlabs_breaker._unavailable_exc is ElevenLabsUnavailableError
         assert resend_breaker._unavailable_exc is ResendUnavailableError
@@ -138,7 +133,6 @@ class TestProviderSingletons:
         # Callers can degrade gracefully by catching the umbrella type.
         for exc_cls in (
             TelnyxUnavailableError,
-            CalComUnavailableError,
             OpenAIUnavailableError,
             ElevenLabsUnavailableError,
             ResendUnavailableError,

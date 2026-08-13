@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
@@ -10,6 +10,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.agent import Agent
+    from app.models.conversation import Conversation, Message
+    from app.models.user import User
+    from app.models.workspace import Workspace
 
 
 class AgentTrainingExample(Base):
@@ -73,11 +79,11 @@ class AgentTrainingExample(Base):
         ),
     )
 
-    workspace: Mapped[Any] = relationship("Workspace")
-    agent: Mapped[Any] = relationship("Agent", back_populates="training_examples")
-    conversation: Mapped[Any | None] = relationship("Conversation")
-    source_message: Mapped[Any | None] = relationship("Message")
-    created_by_user: Mapped[Any | None] = relationship("User")
+    workspace: Mapped["Workspace"] = relationship("Workspace")
+    agent: Mapped["Agent"] = relationship("Agent", back_populates="training_examples")
+    conversation: Mapped["Conversation | None"] = relationship("Conversation")
+    source_message: Mapped["Message | None"] = relationship("Message")
+    created_by_user: Mapped["User | None"] = relationship("User")
 
     def __repr__(self) -> str:
         return f"<AgentTrainingExample(id={self.id}, agent_id={self.agent_id})>"

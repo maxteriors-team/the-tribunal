@@ -9,8 +9,6 @@ from pydantic import BaseModel, Field
 class OnboardRequest(BaseModel):
     """Request body for the onboarding endpoint."""
 
-    calcom_api_key: str = Field(..., min_length=1, description="Cal.com API key")
-    calcom_event_type_id: int = Field(..., description="Cal.com event type ID")
     area_code: str | None = Field(
         None,
         min_length=3,
@@ -34,7 +32,7 @@ class OnboardResponse(BaseModel):
             "When false, the workspace cannot launch SMS/voice campaigns until a number is added."
         ),
     )
-    calcom_connected: bool
+    google_calendar_connected: bool
     message: str
 
 
@@ -50,36 +48,3 @@ class LaunchCampaignResponse(BaseModel):
     phone_number_used: str
     agent_id: uuid.UUID
     started_at: datetime | None
-
-
-# ---------------------------------------------------------------------------
-# Cal.com helper schemas
-# ---------------------------------------------------------------------------
-
-
-class ParseCalcomUrlRequest(BaseModel):
-    """Request body for the parse-calcom-url endpoint."""
-
-    url: str = Field(
-        ..., min_length=1, description="Cal.com booking URL, e.g. https://cal.com/johndoe/30min"
-    )
-    api_key: str | None = Field(
-        None,
-        min_length=1,
-        description="Cal.com API key — only needed when no Cal.com integration exists yet",
-    )
-
-
-class ParseCalcomUrlResponse(BaseModel):
-    """Parsed Cal.com event type info."""
-
-    event_type_id: int
-    slug: str
-    username: str
-
-
-class VerifyCalcomResponse(BaseModel):
-    """Result of verifying a Cal.com API key."""
-
-    valid: bool
-    username: str | None

@@ -7,7 +7,7 @@
  * (keyed by the selected appointment id) instead of each rendering their own —
  * no duplicated 100-line dialog body, one place to evolve the detail view.
  */
-import { Clock, Trash2 } from "lucide-react";
+import { CalendarDays, Clock, ExternalLink, Phone, Trash2, Video } from "lucide-react";
 
 import {
   AttendanceControl,
@@ -67,18 +67,12 @@ export function AppointmentDetailsDialog({
                 <div className="flex items-center gap-3">
                   <Avatar className="size-10">
                     <AvatarFallback>
-                      {getInitials(
-                        apt.contact?.first_name || "",
-                        apt.contact?.last_name,
-                      )}
+                      {getInitials(apt.contact?.first_name || "", apt.contact?.last_name)}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <p className="font-medium">{getContactName(apt.contact)}</p>
-                    <Badge
-                      variant="outline"
-                      className={appointmentStatusColors[apt.status]}
-                    >
+                    <Badge variant="outline" className={appointmentStatusColors[apt.status]}>
                       {apt.status}
                     </Badge>
                     <ReminderBadges
@@ -121,8 +115,8 @@ export function AppointmentDetailsDialog({
                 <div className="space-y-2 rounded-md border bg-muted/30 p-3">
                   <p className="text-sm font-medium">Did they show up?</p>
                   <p className="text-xs text-muted-foreground">
-                    Recording this is what makes your show-up rate a number instead
-                    of a dash — and a no-show starts the re-engagement follow-up.
+                    Recording this is what makes your show-up rate a number instead of a dash — and
+                    a no-show starts the re-engagement follow-up.
                   </p>
                   <AttendanceControl
                     appointment={apt}
@@ -136,9 +130,47 @@ export function AppointmentDetailsDialog({
                   <Clock className="size-4 text-muted-foreground" />
                   <span>{apt.duration_minutes} minutes</span>
                 </div>
-                {apt.notes && (
-                  <div className="text-sm text-muted-foreground">{apt.notes}</div>
-                )}
+                {apt.service_type === "phone_call" ? (
+                  <div className="flex items-center gap-2">
+                    <Phone className="size-4 text-muted-foreground" />
+                    <span>Phone call</span>
+                  </div>
+                ) : apt.service_type === "video_call" ? (
+                  <div className="flex items-center gap-2">
+                    <Video className="size-4 text-muted-foreground" />
+                    <span>Video call</span>
+                  </div>
+                ) : null}
+                {apt.meeting_url ? (
+                  <Button variant="default" size="sm" asChild className="w-fit">
+                    <a href={apt.meeting_url} target="_blank" rel="noreferrer">
+                      <Video className="mr-2 size-4" />
+                      Join Google Meet
+                      <ExternalLink className="ml-2 size-3" />
+                    </a>
+                  </Button>
+                ) : null}
+                {apt.google_calendar_event_url ? (
+                  <Button variant="outline" size="sm" asChild className="w-fit">
+                    <a href={apt.google_calendar_event_url} target="_blank" rel="noreferrer">
+                      <CalendarDays className="mr-2 size-4" />
+                      Open in Google Calendar
+                      <ExternalLink className="ml-2 size-3" />
+                    </a>
+                  </Button>
+                ) : null}
+                {apt.sync_status === "failed" || apt.sync_status === "not_connected" ? (
+                  <div className="space-y-2 rounded-md border border-destructive/30 p-3">
+                    <p className="text-xs text-destructive">
+                      Google Calendar sync needs attention:{" "}
+                      {apt.sync_error || "Connect the assigned rep’s calendar and retry."}
+                    </p>
+                    <Button variant="outline" size="sm" asChild className="w-fit">
+                      <a href="/settings?tab=calendar">Connect or retry Google Calendar</a>
+                    </Button>
+                  </div>
+                ) : null}
+                {apt.notes && <div className="text-sm text-muted-foreground">{apt.notes}</div>}
               </div>
             </div>
           </>

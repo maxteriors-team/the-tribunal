@@ -3,6 +3,7 @@
 import uuid
 from types import SimpleNamespace
 
+from app.services.ai.voice_tools import get_text_booking_tools
 from app.services.ai.website_lead_qualification import (
     build_qualification_instructions,
     gate_website_lead_booking_tools,
@@ -52,6 +53,8 @@ def test_instructions_use_form_context_and_require_one_question_at_a_time() -> N
     assert "do not offer times, links, availability, or booking yet" in instructions
     assert "Zoom estimate" in instructions
     assert "human will follow up" in instructions
+    assert "phone call or video call" in instructions
+    assert "never invent or promise a meeting link" in instructions
 
 
 def test_booking_tool_schemas_are_removed_until_persisted_qualification() -> None:
@@ -80,6 +83,21 @@ def test_booking_tool_schemas_are_removed_until_persisted_qualification() -> Non
 
     assert pending_names == ["cancel_appointment", "mark_lead_qualified"]
     assert qualified_names == ["book_appointment", "check_availability", "cancel_appointment"]
+
+
+def test_text_booking_requires_explicit_call_type() -> None:
+    book_tool = next(
+        tool
+        for tool in get_text_booking_tools("America/New_York")
+        if tool["function"]["name"] == "book_appointment"
+    )
+    parameters = book_tool["function"]["parameters"]
+
+    assert "call_type" in parameters["required"]
+    assert parameters["properties"]["call_type"]["enum"] == [
+        "phone_call",
+        "video_call",
+    ]
 
 
 def test_mark_tool_requires_one_evidence_item_per_question() -> None:

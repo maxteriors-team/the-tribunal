@@ -146,6 +146,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
     from app.models.conversation import Conversation, Message
     from app.models.demo_request import DemoRequest
     from app.models.field_service import ServiceLocation
+    from app.models.google_calendar_connection import GoogleCalendarConnection
     from app.models.human_profile import HumanProfile
     from app.models.lead_magnet_lead import LeadMagnetLead
     from app.models.lead_prospect import LeadProspect
@@ -187,6 +188,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
         ),
         RotationTarget(LinkClick, ("ip_address",)),
         RotationTarget(MessageAttachment, ("source_url",)),
+        RotationTarget(GoogleCalendarConnection, ("access_token", "refresh_token")),
         # Conversation/message payloads. These carry the bulk of the customer
         # PII in the product (SMS bodies, call transcripts, recording URLs).
         RotationTarget(

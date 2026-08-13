@@ -324,6 +324,7 @@ EXAMPLES:
 - "cancel" -> cancel_appointment -> "All set, I've cancelled Monday at 2."
 - "it's more than I want to invest" -> cancel_appointment(reason="cost") ->
   "I've cancelled it."
+
 - book_appointment returns success=false with alternative_slots ->
   "That time just got taken - I have 3 or 4:30 open. Which works?"
 - book_appointment returns success=false about the email ->

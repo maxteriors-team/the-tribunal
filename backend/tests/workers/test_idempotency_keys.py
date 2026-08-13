@@ -102,7 +102,6 @@ class TestReminderWorkerKey:
                 reminder_enabled=True,
                 reminder_offsets=[60],
                 reminder_template=None,
-                calcom_event_type_id=None,
                 value_reinforcement_enabled=False,
                 value_reinforcement_template=None,
             ),
@@ -125,7 +124,7 @@ class TestReminderWorkerKey:
         with (
             patch(
                 "app.workers.reminder_worker.settings",
-                SimpleNamespace(telnyx_api_key="k", calcom_api_key=None, public_base_url=""),
+                SimpleNamespace(telnyx_api_key="k", public_base_url=""),
             ),
             patch(
                 "app.workers.reminder_worker.resolve_from_number",
@@ -234,7 +233,7 @@ class TestReminderWorkerKey:
         with (
             patch(
                 "app.workers.reminder_worker.settings",
-                SimpleNamespace(telnyx_api_key="k", calcom_api_key=None, public_base_url=""),
+                SimpleNamespace(telnyx_api_key="k", public_base_url=""),
             ),
             patch(
                 "app.workers.reminder_worker.resolve_from_number",
@@ -486,8 +485,14 @@ class TestAdditionalRetrySendKeys:
         automation = SimpleNamespace(id=automation_id, workspace_id=uuid4())
         contact = SimpleNamespace(id=contact_id, phone_number="+12025551234", first_name="A")
         db = MagicMock()
+        db.get = AsyncMock(return_value=SimpleNamespace(settings={"timezone": "UTC"}))
 
-        delivered = SimpleNamespace(status=SimpleNamespace(value="sent"), reason=None)
+        delivered = SimpleNamespace(
+            status=SimpleNamespace(value="sent"),
+            reason=None,
+            delivered=False,
+            message=None,
+        )
         with (
             patch.object(worker, "_resolve_from_number", AsyncMock(return_value="+12025556789")),
             patch.object(worker, "_render_template", return_value="hi"),

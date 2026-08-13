@@ -186,7 +186,6 @@ async def create_or_update_demo_agent(session: AsyncSession) -> Agent:
         existing_agent.system_prompt = ALYX_SYSTEM_PROMPT
         existing_agent.initial_greeting = ALYX_INITIAL_GREETING
         existing_agent.enabled_tools = ["web_search", "x_search", "book_appointment"]
-        existing_agent.calcom_event_type_id = 4453549
         existing_agent.is_active = True
 
         await session.commit()
@@ -220,7 +219,6 @@ async def create_or_update_demo_agent(session: AsyncSession) -> Agent:
             text_response_delay_ms=30_000,
             text_max_context_messages=20,
             enabled_tools=["web_search", "x_search", "book_appointment"],
-            calcom_event_type_id=4453549,
             is_active=True,
         )
 

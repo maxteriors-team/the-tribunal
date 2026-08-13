@@ -173,7 +173,6 @@ class VoiceSessionFactory:
             "grok_voice_session_creating",
             agent_name=agent.name if agent else None,
             agent_id=str(agent.id) if agent else None,
-            calcom_event_type_id=agent.calcom_event_type_id if agent else None,
             enable_tools=enable_tools,
             agent_enabled_tools=agent.enabled_tools if agent else None,
         )
@@ -226,7 +225,7 @@ class VoiceSessionFactory:
         if not self.settings.xai_api_key:
             return None, "xAI API key required for ElevenLabs mode (used for STT+LLM)"
 
-        # Enable tools if agent has Cal.com configured
+        # Enable tools for configured agents; booking availability is enforced server-side.
         enable_tools = self._should_enable_tools(agent)
 
         return ElevenLabsVoiceAgentSession(
@@ -238,25 +237,8 @@ class VoiceSessionFactory:
         ), None
 
     def _should_enable_tools(self, agent: Agent | None) -> bool:
-        """Determine if tools should be enabled for an agent.
-
-        Tools require:
-        - Agent with calcom_event_type_id configured
-        - Cal.com API key in settings
-
-        Args:
-            agent: Agent to check
-
-        Returns:
-            True if tools should be enabled
-        """
-        if not agent:
-            return False
-
-        if not agent.calcom_event_type_id:
-            return False
-
-        return bool(self.settings.calcom_api_key)
+        """Enable tools when an agent exists; each booking tool enforces its dependencies."""
+        return agent is not None
 
     def get_provider_for_agent(self, agent: Agent | None) -> str:
         """Get the voice provider for an agent.
@@ -372,7 +354,6 @@ async def setup_voice_session(
             "setting_up_tool_callback",
             session_type=type(voice_session).__name__,
             agent_name=agent.name if agent else None,
-            calcom_event_type_id=agent.calcom_event_type_id if agent else None,
         )
 
         callback = create_tool_callback(

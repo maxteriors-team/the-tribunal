@@ -6,19 +6,13 @@ from typing import NoReturn
 
 from fastapi import HTTPException, status
 
-from app.schemas.onboarding import (
-    LaunchCampaignResponse,
-    OnboardResponse,
-    ParseCalcomUrlResponse,
-    VerifyCalcomResponse,
-)
+from app.schemas.onboarding import LaunchCampaignResponse, OnboardResponse
 from app.services.onboarding.exceptions import (
     OnboardingExternalServiceError,
     OnboardingPermissionError,
     OnboardingServiceError,
     OnboardingUnprocessableError,
 )
-from app.services.onboarding.external_checks import CalcomEventTypeLookup, CalcomVerification
 from app.services.onboarding.workspace_setup import CampaignResult, OnboardingResult
 
 
@@ -56,7 +50,7 @@ def onboard_response(result: OnboardingResult) -> OnboardResponse:
         phone_number_id=result.phone_number_id,
         phone_number=result.phone_number,
         phone_provisioned=result.phone_number is not None,
-        calcom_connected=result.calcom_connected,
+        google_calendar_connected=result.google_calendar_connected,
         message=message,
     )
 
@@ -74,17 +68,3 @@ def launch_campaign_response(result: CampaignResult) -> LaunchCampaignResponse:
         agent_id=result.agent_id,
         started_at=result.started_at,
     )
-
-
-def parse_calcom_url_response(result: CalcomEventTypeLookup) -> ParseCalcomUrlResponse:
-    """Build the public Cal.com URL parse response from the service result."""
-    return ParseCalcomUrlResponse(
-        event_type_id=result.event_type_id,
-        slug=result.slug,
-        username=result.username,
-    )
-
-
-def verify_calcom_response(result: CalcomVerification) -> VerifyCalcomResponse:
-    """Build the public Cal.com verification response from the service result."""
-    return VerifyCalcomResponse(valid=result.valid, username=result.username)

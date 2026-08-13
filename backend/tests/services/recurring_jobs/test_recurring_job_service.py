@@ -87,8 +87,10 @@ def _create_payload(contact_id: int, next_run_at: datetime, **overrides) -> dict
 
 async def _jobs_for_template(db, template_id: uuid.UUID) -> list[Job]:
     rows = (
-        await db.execute(select(Job).where(Job.recurring_template_id == template_id))
-    ).scalars().all()
+        (await db.execute(select(Job).where(Job.recurring_template_id == template_id)))
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -174,8 +176,10 @@ async def test_run_template_generates_job_and_advances_cursor() -> None:
 
         # Default technician was tagged onto the generated job.
         assignments = (
-            await db.execute(select(JobAssignment).where(JobAssignment.job_id == job.id))
-        ).scalars().all()
+            (await db.execute(select(JobAssignment).where(JobAssignment.job_id == job.id)))
+            .scalars()
+            .all()
+        )
         assert [a.technician_id for a in assignments] == [tech.id]
 
 
@@ -261,13 +265,9 @@ async def test_materialize_due_respects_lead_window() -> None:
         now = datetime(2026, 7, 1, 9, 0, tzinfo=UTC)
 
         # Due soon (within the 14-day lead window) → generated.
-        due = await svc.create(
-            ws.id, _create_payload(contact.id, now + timedelta(days=3))
-        )
+        due = await svc.create(ws.id, _create_payload(contact.id, now + timedelta(days=3)))
         # Far out (beyond the lead window) → not yet generated.
-        far = await svc.create(
-            ws.id, _create_payload(contact.id, now + timedelta(days=90))
-        )
+        far = await svc.create(ws.id, _create_payload(contact.id, now + timedelta(days=90)))
 
         await svc.materialize_due(now=now)
 

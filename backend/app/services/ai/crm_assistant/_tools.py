@@ -1051,6 +1051,30 @@ CRM_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "list_pipeline_stages",
+            "description": (
+                "List workspace pipeline and stage names with their UUIDs in stage order. "
+                "Use this to resolve stage_id and pipeline_id before creating stage actions. "
+                "Optional name filters are case-insensitive partial matches."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pipeline_name": {
+                        "type": "string",
+                        "description": "Optional pipeline name filter",
+                    },
+                    "stage_name": {
+                        "type": "string",
+                        "description": "Optional stage name filter",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_opportunities",
             "description": "Pipeline opportunities/deals.",
             "parameters": {

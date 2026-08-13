@@ -34,7 +34,9 @@ export function PromptTab({ form }: PromptTabProps) {
         <div className="flex items-center justify-between rounded-lg border border-dashed bg-muted/50 p-3">
           <div>
             <p className="text-sm font-medium">Need help writing a prompt?</p>
-            <p className="text-xs text-muted-foreground">Start with our best practices template</p>
+            <p className="text-xs text-muted-foreground">
+              Start with our best practices template
+            </p>
           </div>
           <Button
             type="button"
@@ -65,7 +67,7 @@ export function PromptTab({ form }: PromptTabProps) {
                       "text-xs",
                       isOptimal && "text-green-600",
                       isTooShort && "text-yellow-600",
-                      isTooLong && "text-destructive",
+                      isTooLong && "text-destructive"
                     )}
                   >
                     {formatNumber(charCount)} characters
@@ -166,9 +168,7 @@ export function PromptTab({ form }: PromptTabProps) {
                     <FormControl>
                       <Input aria-label="Booking transition label" {...field} />
                     </FormControl>
-                    <FormDescription>
-                      Shown to the AI, for example Zoom consultation.
-                    </FormDescription>
+                    <FormDescription>Shown to the AI, for example Zoom consultation.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -192,7 +192,8 @@ export function PromptTab({ form }: PromptTabProps) {
                 <div className="flex items-center justify-between">
                   <FormLabel>Temperature</FormLabel>
                   <span className="text-sm font-medium">
-                    {field.value?.toFixed(1) ?? "0.7"} ({getTemperatureLabel(field.value ?? 0.7)})
+                    {field.value?.toFixed(1) ?? "0.7"} (
+                    {getTemperatureLabel(field.value ?? 0.7)})
                   </span>
                 </div>
                 <FormControl>

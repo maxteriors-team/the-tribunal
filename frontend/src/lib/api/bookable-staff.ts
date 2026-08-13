@@ -8,7 +8,7 @@ export interface BookableStaff {
   agent_id: string | null;
   name: string;
   email: string | null;
-  calcom_event_type_id: number | null;
+  user_id: number | null;
   skills: string[];
   is_active: boolean;
   priority: number;
@@ -26,7 +26,6 @@ export interface BookableStaffList {
 export interface CreateBookableStaffRequest {
   name: string;
   email?: string | null;
-  calcom_event_type_id?: number | null;
   skills?: string[];
   is_active?: boolean;
   priority?: number;
@@ -35,7 +34,6 @@ export interface CreateBookableStaffRequest {
 export interface UpdateBookableStaffRequest {
   name?: string;
   email?: string | null;
-  calcom_event_type_id?: number | null;
   skills?: string[];
   is_active?: boolean;
   priority?: number;

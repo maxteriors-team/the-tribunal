@@ -174,9 +174,9 @@ class TestAppointmentResponse:
             "service_type": None,
             "notes": None,
             "status": "scheduled",
-            "calcom_booking_uid": None,
-            "calcom_booking_id": None,
-            "calcom_event_type_id": None,
+            "google_calendar_event_id": None,
+            "google_calendar_event_url": None,
+            "meeting_url": None,
             "sync_status": "pending",
             "last_synced_at": None,
             "sync_error": None,
@@ -190,9 +190,13 @@ class TestAppointmentResponse:
 
     def test_valid_response(self) -> None:
         """Valid data creates AppointmentResponse."""
-        response = self._make_response()
+        response = self._make_response(
+            service_type="video_call",
+            meeting_url="https://meet.google.com/abc-defg-hij",
+        )
         assert response.status == "scheduled"
         assert response.duration_minutes == 30
+        assert response.meeting_url == "https://meet.google.com/abc-defg-hij"
 
     def test_from_attributes_config(self) -> None:
         """model_config has from_attributes=True."""

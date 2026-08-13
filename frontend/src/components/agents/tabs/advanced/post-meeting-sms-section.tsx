@@ -36,7 +36,7 @@ export function PostMeetingSmsSection({ control }: PostMeetingSmsSectionProps) {
               <div className="space-y-0.5">
                 <FormLabel className="text-base">Enable Post-Meeting SMS</FormLabel>
                 <FormDescription>
-                  Send a follow-up SMS after a completed meeting (fires on Cal.com MEETING_ENDED event)
+                  Send a follow-up SMS after the meeting is marked complete on the CRM calendar
                 </FormDescription>
               </div>
               <FormControl>
@@ -58,7 +58,9 @@ export function PostMeetingSmsSection({ control }: PostMeetingSmsSectionProps) {
                     className={`text-xs ${postMeetingCharCount > 160 ? "text-amber-600 font-medium" : "text-muted-foreground"}`}
                   >
                     {postMeetingCharCount} / 160
-                    {postMeetingCharCount > 160 ? ` (${Math.ceil(postMeetingCharCount / 153)} segments)` : ""}
+                    {postMeetingCharCount > 160
+                      ? ` (${Math.ceil(postMeetingCharCount / 153)} segments)`
+                      : ""}
                   </span>
                 </div>
                 <FormControl>

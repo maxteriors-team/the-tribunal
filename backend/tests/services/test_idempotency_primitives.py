@@ -80,12 +80,12 @@ def test_worker_retry_key_is_stable_text() -> None:
 
 
 def test_webhook_key_derivation_and_missing_fields() -> None:
-    assert webhook_key_prefix("CalCom") == "calcom:webhook:"
-    assert derive_webhook_delivery_key("calcom", "BOOKING_CREATED", "uid", "ts") == (
-        "calcom:webhook:BOOKING_CREATED:uid:ts"
+    assert webhook_key_prefix("Resend") == "resend:webhook:"
+    assert derive_webhook_delivery_key("resend", "email.delivered", "uid", "ts") == (
+        "resend:webhook:email.delivered:uid:ts"
     )
-    assert derive_webhook_delivery_key("calcom", "BOOKING_CREATED", None) is None
-    assert derive_webhook_delivery_key("calcom", "BOOKING_CREATED", "") is None
+    assert derive_webhook_delivery_key("resend", "email.delivered", None) is None
+    assert derive_webhook_delivery_key("resend", "email.delivered", "") is None
 
 
 @pytest.mark.parametrize(
@@ -110,7 +110,7 @@ async def test_redis_claim_uses_set_nx_ex() -> None:
     redis_getter = AsyncMock(return_value=redis_client)
 
     claim = await claim_redis_idempotency_key(
-        "calcom:webhook:evt_1",
+        "resend:webhook:evt_1",
         log=MagicMock(),
         redis_getter=redis_getter,
     )
@@ -118,7 +118,7 @@ async def test_redis_claim_uses_set_nx_ex() -> None:
     assert claim.claimed is True
     assert claim.reason == "claimed"
     redis_client.set.assert_awaited_once_with(
-        "calcom:webhook:evt_1",
+        "resend:webhook:evt_1",
         "1",
         nx=True,
         ex=DEFAULT_WEBHOOK_IDEMPOTENCY_TTL_SECONDS,
@@ -130,7 +130,7 @@ async def test_redis_claim_returns_duplicate_on_nx_collision() -> None:
     redis_client.set = AsyncMock(return_value=None)
 
     claim = await claim_redis_idempotency_key(
-        "calcom:webhook:evt_1",
+        "resend:webhook:evt_1",
         log=MagicMock(),
         redis_getter=AsyncMock(return_value=redis_client),
     )
@@ -145,17 +145,17 @@ async def test_redis_claim_fails_open_on_redis_error() -> None:
     log = MagicMock()
 
     claim = await claim_redis_idempotency_key(
-        "calcom:webhook:evt_1",
+        "resend:webhook:evt_1",
         log=log,
         redis_getter=AsyncMock(return_value=redis_client),
-        failure_event="calcom_idempotency_redis_unavailable",
+        failure_event="resend_idempotency_redis_unavailable",
     )
 
     assert claim.claimed is True
     assert claim.reason == "redis_unavailable"
     log.warning.assert_called_once_with(
-        "calcom_idempotency_redis_unavailable",
-        key="calcom:webhook:evt_1",
+        "resend_idempotency_redis_unavailable",
+        key="resend:webhook:evt_1",
         error="redis down",
     )
 

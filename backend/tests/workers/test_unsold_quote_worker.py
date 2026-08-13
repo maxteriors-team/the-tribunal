@@ -316,9 +316,7 @@ def test_high_value_quote_gets_the_high_value_approach() -> None:
         template_id=routine,
         high_value_template_id=high_value,
     )
-    assert (
-        resolve_template_id(touch, quote_total=12_000, high_value_threshold=5_000) == high_value
-    )
+    assert resolve_template_id(touch, quote_total=12_000, high_value_threshold=5_000) == high_value
     assert resolve_template_id(touch, quote_total=1_500, high_value_threshold=5_000) == routine
 
 
@@ -361,9 +359,7 @@ def test_template_exposes_price_validity_hooks() -> None:
         recipient=_recipient(),
         now=ANCHOR + timedelta(days=30),
     )
-    assert body == (
-        "Hi Jamie, quote Q-1042 is 30 days old and the price holds until 2026-07-31."
-    )
+    assert body == ("Hi Jamie, quote Q-1042 is 30 days old and the price holds until 2026-07-31.")
 
 
 def test_template_renders_cleanly_when_no_expiry_is_set() -> None:

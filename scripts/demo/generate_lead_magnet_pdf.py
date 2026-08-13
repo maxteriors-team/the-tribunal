@@ -51,7 +51,13 @@ class LeadMagnetPDF(FPDF):
         self.set_text_color(100, 100, 100)
         self.cell(0, 8, "Combining the best of:", align="C", ln=True)
         self.set_font("Helvetica", "B", 11)
-        self.cell(0, 8, "NEPQ (Jeremy Miner) + Value-First (Alex Hormozi) + Reverse Selling (Brandon Mulrenin)", align="C", ln=True)
+        self.cell(
+            0,
+            8,
+            "NEPQ (Jeremy Miner) + Value-First (Alex Hormozi) + Reverse Selling (Brandon Mulrenin)",
+            align="C",
+            ln=True,
+        )
 
         self.ln(40)
 
@@ -133,9 +139,9 @@ def create_pdf():
 
     pdf.body_text(
         "Most agents blast their old leads with desperate messages like:\n"
-        "- \"Just checking in!\"\n"
-        "- \"Still looking to buy/sell?\"\n"
-        "- \"I have a great listing for you!\"\n\n"
+        '- "Just checking in!"\n'
+        '- "Still looking to buy/sell?"\n'
+        '- "I have a great listing for you!"\n\n'
         "These get ignored because they're seller-focused and predictable."
     )
 
@@ -151,7 +157,9 @@ def create_pdf():
 
     # Script 1
     pdf.script_header(1, "The Database Cleanup", "Brandon Mulrenin's Reverse Selling")
-    pdf.psychology_box("People fear loss more than they desire gain. By suggesting you're removing them, you trigger loss aversion.")
+    pdf.psychology_box(
+        "People fear loss more than they desire gain. By suggesting you're removing them, you trigger loss aversion."
+    )
 
     pdf.script_box(
         "Hey {first_name}, I'm cleaning up my database and noticed\n"
@@ -161,18 +169,22 @@ def create_pdf():
         "Should I keep you on my list or go ahead and close out your file?"
     )
 
-    pdf.why_it_works([
-        "Pattern interrupt (they expect you to CHASE, not remove)",
-        "No pressure (disarms their defenses)",
-        "Forces a response (they don't want to be \"closed out\")",
-        "Qualifies them (serious people identify themselves)"
-    ])
+    pdf.why_it_works(
+        [
+            "Pattern interrupt (they expect you to CHASE, not remove)",
+            "No pressure (disarms their defenses)",
+            'Forces a response (they don\'t want to be "closed out")',
+            "Qualifies them (serious people identify themselves)",
+        ]
+    )
 
     pdf.divider()
 
     # Script 2
     pdf.script_header(2, "The Curiosity Question", "Jeremy Miner's NEPQ")
-    pdf.psychology_box("Questions create engagement. This gets them talking about their situation without feeling sold to.")
+    pdf.psychology_box(
+        "Questions create engagement. This gets them talking about their situation without feeling sold to."
+    )
 
     pdf.script_box(
         "Hey {first_name}, random question for you -\n\n"
@@ -181,18 +193,22 @@ def create_pdf():
         "or is it still something you're thinking about?"
     )
 
-    pdf.why_it_works([
-        "Opens with curiosity (non-threatening)",
-        "References past conversation (shows you remember)",
-        "Neutral question (not pushing for a yes)",
-        "\"Still thinking about\" acknowledges life happens"
-    ])
+    pdf.why_it_works(
+        [
+            "Opens with curiosity (non-threatening)",
+            "References past conversation (shows you remember)",
+            "Neutral question (not pushing for a yes)",
+            '"Still thinking about" acknowledges life happens',
+        ]
+    )
 
     pdf.add_page()
 
     # Script 3
     pdf.script_header(3, "The Valuable Intel", "Alex Hormozi's Value-First")
-    pdf.psychology_box("Lead with something genuinely useful. No ask, just value. Builds reciprocity and positions you as expert.")
+    pdf.psychology_box(
+        "Lead with something genuinely useful. No ask, just value. Builds reciprocity and positions you as expert."
+    )
 
     pdf.script_box(
         "Hey {first_name}, thought of you -\n\n"
@@ -202,18 +218,22 @@ def create_pdf():
         "you'd want to know."
     )
 
-    pdf.why_it_works([
-        "Specific data (not vague \"market is hot\")",
-        "Personalized to their area (shows you did homework)",
-        "No ask (pure value, no pressure)",
-        "\"Not sure if that changes anything\" is Mulrenin's takeaway"
-    ])
+    pdf.why_it_works(
+        [
+            'Specific data (not vague "market is hot")',
+            "Personalized to their area (shows you did homework)",
+            "No ask (pure value, no pressure)",
+            '"Not sure if that changes anything" is Mulrenin\'s takeaway',
+        ]
+    )
 
     pdf.divider()
 
     # Script 4
     pdf.script_header(4, "The Honest Question", "Jeremy Miner's Problem-Awareness")
-    pdf.psychology_box("Gets them to verbalize what's stopping them - saying it out loud often makes them realize it's not a real blocker.")
+    pdf.psychology_box(
+        "Gets them to verbalize what's stopping them - saying it out loud often makes them realize it's not a real blocker."
+    )
 
     pdf.script_box(
         "Hey {first_name}, honest question -\n\n"
@@ -222,18 +242,22 @@ def create_pdf():
         "No pressure either way, just curious."
     )
 
-    pdf.why_it_works([
-        "\"Honest question\" signals authenticity",
-        "Asks what happened (not \"are you still interested\")",
-        "\"No pressure\" disarms (Mulrenin technique)",
-        "They often talk themselves back into it"
-    ])
+    pdf.why_it_works(
+        [
+            '"Honest question" signals authenticity',
+            'Asks what happened (not "are you still interested")',
+            '"No pressure" disarms (Mulrenin technique)',
+            "They often talk themselves back into it",
+        ]
+    )
 
     pdf.divider()
 
     # Script 5
-    pdf.script_header(5, "The \"Found Something\" Tease", "Hormozi Value + Mulrenin Takeaway")
-    pdf.psychology_box("Specificity creates curiosity. The takeaway prevents it from feeling salesy.")
+    pdf.script_header(5, 'The "Found Something" Tease', "Hormozi Value + Mulrenin Takeaway")
+    pdf.psychology_box(
+        "Specificity creates curiosity. The takeaway prevents it from feeling salesy."
+    )
 
     pdf.script_box(
         "Hey {first_name}, this might be a long shot, but...\n\n"
@@ -244,18 +268,22 @@ def create_pdf():
         "I'd mention it just in case."
     )
 
-    pdf.why_it_works([
-        "\"Long shot\" and \"probably not\" = reverse selling",
-        "Specific detail proves you remember their criteria",
-        "Creates FOMO (what if it IS perfect?)",
-        "Low pressure response"
-    ])
+    pdf.why_it_works(
+        [
+            '"Long shot" and "probably not" = reverse selling',
+            "Specific detail proves you remember their criteria",
+            "Creates FOMO (what if it IS perfect?)",
+            "Low pressure response",
+        ]
+    )
 
     pdf.add_page()
 
     # Script 6
     pdf.script_header(6, "The Permission Close", "All Three Combined")
-    pdf.psychology_box("For warmer leads. Combines Miner's commitment questions, Hormozi's specificity, and Mulrenin's takeaway.")
+    pdf.psychology_box(
+        "For warmer leads. Combines Miner's commitment questions, Hormozi's specificity, and Mulrenin's takeaway."
+    )
 
     pdf.script_box(
         "Hey {first_name}, I know we've been talking on and off\n"
@@ -266,26 +294,30 @@ def create_pdf():
         "{buying/selling} in the next 6 months?"
     )
 
-    pdf.why_it_works([
-        "Acknowledges the long timeline (validates them)",
-        "\"Don't want to bother you\" = permission to leave (Mulrenin)",
-        "\"Don't want you to miss out\" = subtle FOMO (Hormozi)",
-        "Scale question = commitment question (Miner)"
-    ])
+    pdf.why_it_works(
+        [
+            "Acknowledges the long timeline (validates them)",
+            '"Don\'t want to bother you" = permission to leave (Mulrenin)',
+            '"Don\'t want you to miss out" = subtle FOMO (Hormozi)',
+            "Scale question = commitment question (Miner)",
+        ]
+    )
 
     pdf.ln(3)
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(0, 6, "Follow-up based on their number:", ln=True)
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, "1-3: \"Got it, I'll check back in a few months.\"", ln=True)
-    pdf.cell(0, 6, "4-6: \"What would need to happen to move that to a 7 or 8?\"", ln=True)
-    pdf.cell(0, 6, "7-10: \"Love it. What's been stopping us from getting started?\"", ln=True)
+    pdf.cell(0, 6, '1-3: "Got it, I\'ll check back in a few months."', ln=True)
+    pdf.cell(0, 6, '4-6: "What would need to happen to move that to a 7 or 8?"', ln=True)
+    pdf.cell(0, 6, '7-10: "Love it. What\'s been stopping us from getting started?"', ln=True)
 
     pdf.divider()
 
     # Script 7
     pdf.script_header(7, "The Straight Shooter", "Brandon Mulrenin's Radical Honesty")
-    pdf.psychology_box("Brutal honesty is the ultimate pattern interrupt. Works when you've followed up multiple times with no response.")
+    pdf.psychology_box(
+        "Brutal honesty is the ultimate pattern interrupt. Works when you've followed up multiple times with no response."
+    )
 
     pdf.script_box(
         "Hey {first_name}, I'm just gonna be real with you.\n\n"
@@ -296,12 +328,14 @@ def create_pdf():
         "stop reaching out?"
     )
 
-    pdf.why_it_works([
-        "Radical honesty (unexpected from a salesperson)",
-        "Gives them permission to say no (reduces pressure)",
-        "Binary choice forces a decision",
-        "Respectful of their time"
-    ])
+    pdf.why_it_works(
+        [
+            "Radical honesty (unexpected from a salesperson)",
+            "Gives them permission to say no (reduces pressure)",
+            "Binary choice forces a decision",
+            "Respectful of their time",
+        ]
+    )
 
     # Follow-up Framework
     pdf.add_page()
@@ -313,25 +347,25 @@ def create_pdf():
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 7, "Step 1: Acknowledge + Question", ln=True)
     pdf.set_font("Courier", "", 10)
-    pdf.cell(0, 6, "\"That makes sense. What's been the main thing holding you back?\"", ln=True)
+    pdf.cell(0, 6, '"That makes sense. What\'s been the main thing holding you back?"', ln=True)
 
     pdf.ln(3)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 7, "Step 2: Go Deeper", ln=True)
     pdf.set_font("Courier", "", 10)
-    pdf.cell(0, 6, "\"And what happens if that doesn't change in 6-12 months?\"", ln=True)
+    pdf.cell(0, 6, '"And what happens if that doesn\'t change in 6-12 months?"', ln=True)
 
     pdf.ln(3)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 7, "Step 3: Solution Awareness", ln=True)
     pdf.set_font("Courier", "", 10)
-    pdf.cell(0, 6, "\"If we could solve {their problem}, would that change things?\"", ln=True)
+    pdf.cell(0, 6, '"If we could solve {their problem}, would that change things?"', ln=True)
 
     pdf.ln(3)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 7, "Step 4: Soft Close", ln=True)
     pdf.set_font("Courier", "", 10)
-    pdf.cell(0, 6, "\"Want to hop on a quick call and see if it makes sense?\"", ln=True)
+    pdf.cell(0, 6, '"Want to hop on a quick call and see if it makes sense?"', ln=True)
 
     # Quick Reference
     pdf.add_page()
@@ -347,13 +381,13 @@ def create_pdf():
     pdf.set_font("Helvetica", "", 9)
 
     data = [
-        ("#1", "Cold/old leads", "\"I'm cleaning up my database...\""),
-        ("#2", "Anyone", "\"Has anything changed with...\""),
-        ("#3", "Warm leads", "\"Just saw {market data}...\""),
-        ("#4", "Engaged then quiet", "\"What ended up happening...\""),
-        ("#5", "Specific criteria", "\"Came across something...\""),
-        ("#6", "Warm, ready to close", "\"Scale of 1-10...\""),
-        ("#7", "Multiple no-responses", "\"I'm just gonna be real...\""),
+        ("#1", "Cold/old leads", '"I\'m cleaning up my database..."'),
+        ("#2", "Anyone", '"Has anything changed with..."'),
+        ("#3", "Warm leads", '"Just saw {market data}..."'),
+        ("#4", "Engaged then quiet", '"What ended up happening..."'),
+        ("#5", "Specific criteria", '"Came across something..."'),
+        ("#6", "Warm, ready to close", '"Scale of 1-10..."'),
+        ("#7", "Multiple no-responses", '"I\'m just gonna be real..."'),
     ]
 
     for row in data:
@@ -374,19 +408,21 @@ def create_pdf():
 
     pdf.set_font("Helvetica", "", 12)
     pdf.set_text_color(60, 60, 60)
-    pdf.multi_cell(0, 7,
+    pdf.multi_cell(
+        0,
+        7,
         "Our AI can send these scripts to your entire database,\n"
         "handle all the responses, qualify the leads,\n"
         "and book appointments on your calendar -\n"
         "all while you focus on closings.",
-        align="C"
+        align="C",
     )
 
     pdf.ln(15)
 
     pdf.set_font("Helvetica", "B", 14)
     pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 10, "Reply \"AUTOMATE\" to learn more", align="C", ln=True)
+    pdf.cell(0, 10, 'Reply "AUTOMATE" to learn more', align="C", ln=True)
 
     pdf.ln(30)
 

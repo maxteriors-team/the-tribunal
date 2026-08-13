@@ -13,7 +13,6 @@ on:
         default: telnyx_webhook
         options:
           - telnyx_webhook
-          - calcom_webhook
           - auth_login
           - voice_ws
           - all
@@ -74,7 +73,6 @@ jobs:
       - name: Run k6
         env:
           BASE_URL: ${{ inputs.base_url }}
-          CALCOM_WEBHOOK_SECRET: ${{ secrets.STAGING_CALCOM_WEBHOOK_SECRET }}
           WS_TICKET: ${{ secrets.STAGING_WS_TICKET }}
           WS_PATH_TEMPLATE: ${{ inputs.ws_path_template }}
           SCRIPT: ${{ inputs.script }}
@@ -89,7 +87,6 @@ jobs:
           }
           if [ "$SCRIPT" = "all" ]; then
             run_one telnyx_webhook
-            run_one calcom_webhook
             run_one auth_login
             run_one voice_ws
           else

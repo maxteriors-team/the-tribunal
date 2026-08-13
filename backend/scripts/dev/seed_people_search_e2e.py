@@ -35,16 +35,76 @@ SEED_TAG = "people_search_e2e"
 
 PEOPLE = [
     # full_name, first, last, title, company, host, city, region, score, has_email, status, signals
-    ("Dana Whitfield", "Dana", "Whitfield", "Head of Marketing", "Acme Roofing", "acmeroofing.com", "Austin", "TX", 92, True, ProspectStatus.ENRICHED,
-     [(ProspectSignalType.RUNNING_ADS, 90), (ProspectSignalType.AD_TECH, 70)]),
-    ("Marcus Lee", "Marcus", "Lee", "CEO", "Lone Star HVAC", "lonestarhvac.com", "Austin", "TX", 88, False, ProspectStatus.NEW,
-     [(ProspectSignalType.RUNNING_ADS, 85), (ProspectSignalType.HIRING, 60)]),
-    ("Priya Nair", "Priya", "Nair", "VP Growth", "Hill Country Solar", "hillcountrysolar.com", "Dallas", "TX", 81, True, ProspectStatus.ENRICHED,
-     [(ProspectSignalType.FUNDING, 95)]),
-    ("Tom Becker", "Tom", "Becker", "Owner", "Becker Landscaping", "beckerlandscaping.com", "Round Rock", "TX", 74, False, ProspectStatus.NEW,
-     [(ProspectSignalType.AD_TECH, 55)]),
-    ("Sara Kim", "Sara", "Kim", "Marketing Director", "BrightPath Dental", "brightpathdental.com", "Houston", "TX", 69, False, ProspectStatus.NEW,
-     []),
+    (
+        "Dana Whitfield",
+        "Dana",
+        "Whitfield",
+        "Head of Marketing",
+        "Acme Roofing",
+        "acmeroofing.com",
+        "Austin",
+        "TX",
+        92,
+        True,
+        ProspectStatus.ENRICHED,
+        [(ProspectSignalType.RUNNING_ADS, 90), (ProspectSignalType.AD_TECH, 70)],
+    ),
+    (
+        "Marcus Lee",
+        "Marcus",
+        "Lee",
+        "CEO",
+        "Lone Star HVAC",
+        "lonestarhvac.com",
+        "Austin",
+        "TX",
+        88,
+        False,
+        ProspectStatus.NEW,
+        [(ProspectSignalType.RUNNING_ADS, 85), (ProspectSignalType.HIRING, 60)],
+    ),
+    (
+        "Priya Nair",
+        "Priya",
+        "Nair",
+        "VP Growth",
+        "Hill Country Solar",
+        "hillcountrysolar.com",
+        "Dallas",
+        "TX",
+        81,
+        True,
+        ProspectStatus.ENRICHED,
+        [(ProspectSignalType.FUNDING, 95)],
+    ),
+    (
+        "Tom Becker",
+        "Tom",
+        "Becker",
+        "Owner",
+        "Becker Landscaping",
+        "beckerlandscaping.com",
+        "Round Rock",
+        "TX",
+        74,
+        False,
+        ProspectStatus.NEW,
+        [(ProspectSignalType.AD_TECH, 55)],
+    ),
+    (
+        "Sara Kim",
+        "Sara",
+        "Kim",
+        "Marketing Director",
+        "BrightPath Dental",
+        "brightpathdental.com",
+        "Houston",
+        "TX",
+        69,
+        False,
+        ProspectStatus.NEW,
+        [],
+    ),
 ]
 
 
@@ -52,41 +112,49 @@ async def main() -> None:
     async with AsyncSessionLocal() as db:
         # Owner of the workspace -> token subject.
         owner = (
-            await db.execute(
-                select(WorkspaceMembership).where(
-                    WorkspaceMembership.workspace_id == WORKSPACE_ID
+            (
+                await db.execute(
+                    select(WorkspaceMembership).where(
+                        WorkspaceMembership.workspace_id == WORKSPACE_ID
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if owner is None:
             raise SystemExit(f"No membership found for workspace {WORKSPACE_ID}")
 
         # Wipe prior seed rows (signals first via cascade-safe explicit delete).
         prior = (
-            await db.execute(
-                select(LeadProspect.id).where(
-                    LeadProspect.workspace_id == WORKSPACE_ID,
-                    LeadProspect.source_query == SEED_TAG,
+            (
+                await db.execute(
+                    select(LeadProspect.id).where(
+                        LeadProspect.workspace_id == WORKSPACE_ID,
+                        LeadProspect.source_query == SEED_TAG,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         if prior:
-            await db.execute(
-                delete(ProspectSignal).where(ProspectSignal.prospect_id.in_(prior))
-            )
-            await db.execute(
-                delete(LeadProspect).where(LeadProspect.id.in_(prior))
-            )
+            await db.execute(delete(ProspectSignal).where(ProspectSignal.prospect_id.in_(prior)))
+            await db.execute(delete(LeadProspect).where(LeadProspect.id.in_(prior)))
 
         # Ensure a mission exists to test "Add to mission".
         mission = (
-            await db.execute(
-                select(OutboundMission).where(
-                    OutboundMission.workspace_id == WORKSPACE_ID,
-                    OutboundMission.name == "People Search QA Mission",
+            (
+                await db.execute(
+                    select(OutboundMission).where(
+                        OutboundMission.workspace_id == WORKSPACE_ID,
+                        OutboundMission.name == "People Search QA Mission",
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if mission is None:
             mission = OutboundMission(
                 workspace_id=WORKSPACE_ID,
@@ -94,8 +162,20 @@ async def main() -> None:
             )
             db.add(mission)
 
-        for (full, first, last, title, company, host, city, region, score,
-             has_email, status, signals) in PEOPLE:
+        for (
+            full,
+            first,
+            last,
+            title,
+            company,
+            host,
+            city,
+            region,
+            score,
+            has_email,
+            status,
+            signals,
+        ) in PEOPLE:
             prospect = LeadProspect(
                 workspace_id=WORKSPACE_ID,
                 identity_kind=ProspectIdentityKind.OWNER_NAME,

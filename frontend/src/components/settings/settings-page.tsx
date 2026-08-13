@@ -1,6 +1,27 @@
 "use client";
 
-import { Bell, Building2, CalendarClock, CreditCard, DollarSign, FileInput, FileText, HandHeart, History, Home, KanbanSquare, Layers, MapPin, Star, Tags, Target, User, Webhook, Zap } from "lucide-react";
+import {
+  Bell,
+  Building2,
+  CalendarClock,
+  CalendarDays,
+  CreditCard,
+  DollarSign,
+  FileInput,
+  FileText,
+  HandHeart,
+  History,
+  Home,
+  KanbanSquare,
+  Layers,
+  MapPin,
+  Star,
+  Tags,
+  Target,
+  User,
+  Webhook,
+  Zap,
+} from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 import { AttachRulesSettingsTab } from "@/components/settings/attach-rules-settings-tab";
@@ -43,6 +64,7 @@ const settingsTabs = [
   { value: "estimate-followup", label: "Estimate Follow-up", icon: CalendarClock },
   { value: "quote-revival", label: "Quote Revival", icon: History },
   { value: "neighbors", label: "Neighbors", icon: Home },
+  { value: "calendar", label: "My Calendar", icon: CalendarDays },
   { value: "integrations", label: "Integrations", icon: Webhook },
   { value: "billing", label: "Billing", icon: CreditCard },
   { value: "team", label: "Team", icon: Building2 },
@@ -55,17 +77,14 @@ const TAB_VALUES = new Set(settingsTabs.map((tab) => tab.value));
 export function SettingsPage() {
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const defaultTab =
-    requestedTab && TAB_VALUES.has(requestedTab) ? requestedTab : "profile";
+  const defaultTab = requestedTab && TAB_VALUES.has(requestedTab) ? requestedTab : "profile";
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage your account and application preferences
-        </p>
+        <p className="text-muted-foreground">Manage your account and application preferences</p>
       </div>
 
       <Tabs defaultValue={defaultTab} className="space-y-6">
@@ -171,6 +190,12 @@ export function SettingsPage() {
         <TabsContent value="neighbors">
           <QueryErrorBoundary message="Failed to load neighbor outreach settings. Please try again.">
             <NeighborOutreachSettingsTab />
+          </QueryErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="calendar">
+          <QueryErrorBoundary message="Failed to load your calendar connection. Please try again.">
+            <IntegrationsSettingsTab calendarOnly />
           </QueryErrorBoundary>
         </TabsContent>
 

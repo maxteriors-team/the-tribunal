@@ -12,7 +12,7 @@ Every lead that comes through your door ends up here. Every conversation, every 
 
 **You make the call.** When it's time for a human touch, you step in. Review conversations, check the history, and close the deal. The Tribunal gives you everything you need to make the right decision at the right moment.
 
-**Appointments get booked.** Cal.com integration means leads can book time with you directly. No back-and-forth. No missed opportunities.
+**Appointments get booked.** Per-user Google Calendar integration lets the AI show each rep’s real availability and book directly onto that rep’s calendar. No back-and-forth. No missed opportunities.
 
 ## The Setup
 

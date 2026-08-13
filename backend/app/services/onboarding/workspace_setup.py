@@ -8,13 +8,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.permissions import Capability, role_can
 from app.db.scope import apply_workspace_scope
 from app.models.agent import Agent
+from app.models.bookable_staff import BookableStaff
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus
 from app.models.contact import Contact
 from app.models.phone_number import PhoneNumber
@@ -24,7 +25,6 @@ from app.services.agents.reactivation_template import (
     get_reactivation_campaign_defaults,
 )
 from app.services.contacts import ContactImportService, ImportResult
-from app.services.onboarding.credentials import store_calcom_credentials
 from app.services.onboarding.exceptions import (
     OnboardingPermissionError,
     OnboardingValidationError,
@@ -47,8 +47,6 @@ LEGACY_REACTIVATION_AGENT_NAME = "Realtor Lead Reactivation Agent"
 class OnboardingInput:
     """Input values required to complete workspace onboarding."""
 
-    calcom_api_key: str
-    calcom_event_type_id: int
     area_code: str | None = None
 
 
@@ -60,7 +58,7 @@ class OnboardingResult:
     agent_id: uuid.UUID
     phone_number_id: uuid.UUID | None
     phone_number: str | None
-    calcom_connected: bool
+    google_calendar_connected: bool
 
 
 @dataclass(slots=True, frozen=True)
@@ -113,8 +111,8 @@ async def get_user_workspace(current_user_id: int, db: AsyncSession) -> Workspac
 async def get_managed_user_workspace(current_user_id: int, db: AsyncSession) -> Workspace:
     """Resolve the user's workspace and require ``workspace:manage`` within it.
 
-    Onboarding creates agents, overwrites the workspace's Cal.com credential, and
-    buys Telnyx numbers on the owner's account, so it is an owner/admin action.
+    Onboarding creates agents and buys Telnyx numbers on the owner's account, so
+    it is an owner/admin action.
     The target workspace comes from the caller's default membership, and any
     member can move their own default (``POST /workspaces/{id}/set-default``) —
     so the check below is made against the role the caller holds **in the
@@ -173,22 +171,17 @@ async def complete_onboarding(
     workspace = await get_managed_user_workspace(current_user_id, db)
     workspace_id = workspace.id
 
-    agent = await create_reactivation_agent(
+    agent = await create_reactivation_agent(db=db, workspace_id=workspace_id)
+    await ensure_owner_bookable_staff(
         db=db,
-        workspace_id=workspace_id,
-        calcom_event_type_id=request.calcom_event_type_id,
+        workspace=workspace,
+        agent=agent,
+        user_id=current_user_id,
     )
     logger.info(
         "reactivation_agent_created",
         workspace_id=str(workspace_id),
         agent_id=str(agent.id),
-        user_id=current_user_id,
-    )
-
-    await store_calcom_credentials(db, workspace_id, request.calcom_api_key)
-    logger.info(
-        "calcom_integration_stored",
-        workspace_id=str(workspace_id),
         user_id=current_user_id,
     )
 
@@ -204,12 +197,15 @@ async def complete_onboarding(
 
     await db.commit()
 
+    from app.services.google_calendar import get_connection
+
+    calendar_connection = await get_connection(db, current_user_id)
     return OnboardingResult(
         workspace_id=workspace_id,
         agent_id=agent.id,
         phone_number_id=phone.phone_number_id,
         phone_number=phone.phone_number,
-        calcom_connected=True,
+        google_calendar_connected=calendar_connection is not None,
     )
 
 
@@ -234,18 +230,50 @@ def mark_onboarding_complete(
         workspace.onboarding_completed_at = now()
 
 
+async def ensure_owner_bookable_staff(
+    *,
+    db: AsyncSession,
+    workspace: Workspace,
+    agent: Agent,
+    user_id: int,
+) -> BookableStaff:
+    """Return/create the onboarding owner's login-backed booking resource."""
+    result = await db.execute(
+        select(BookableStaff)
+        .where(
+            BookableStaff.workspace_id == workspace.id,
+            BookableStaff.user_id == user_id,
+            or_(BookableStaff.agent_id == agent.id, BookableStaff.agent_id.is_(None)),
+        )
+        .order_by(BookableStaff.created_at.asc())
+        .limit(1)
+    )
+    staff = result.scalar_one_or_none()
+    if staff is not None:
+        staff.agent_id = agent.id
+        staff.is_active = True
+        return staff
+    staff = BookableStaff(
+        workspace_id=workspace.id,
+        agent_id=agent.id,
+        user_id=user_id,
+        name=workspace.name,
+        is_active=True,
+    )
+    db.add(staff)
+    return staff
+
+
 async def create_reactivation_agent(
     *,
     db: AsyncSession,
     workspace_id: uuid.UUID,
-    calcom_event_type_id: int,
 ) -> Agent:
     """Create a reactivation template text agent in the workspace."""
     agent_config = get_reactivation_agent_config()
     agent = Agent(
         workspace_id=workspace_id,
         name=REACTIVATION_AGENT_NAME,
-        calcom_event_type_id=calcom_event_type_id,
         **agent_config,
     )
     db.add(agent)

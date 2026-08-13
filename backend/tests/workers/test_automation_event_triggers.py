@@ -17,7 +17,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 
@@ -27,6 +27,7 @@ from app.models.automation_event import (
 )
 from app.services.automations.events import (
     AUTOMATION_EVENT_TRIGGERS,
+    EVENT_APPOINTMENT_BOOKED,
     EVENT_DEAL_STAGE_CHANGED,
     EVENT_INVOICE_PAID,
     EVENT_INVOICE_SENT,
@@ -34,6 +35,7 @@ from app.services.automations.events import (
     EVENT_JOB_SCHEDULED,
     EVENT_KNOWLEDGE_DOCUMENT_UPLOADED,
     EVENT_LEAD_CREATED,
+    EVENT_LEAD_QUALIFIED,
     EVENT_MISSED_CALL,
     EVENT_OPPORTUNITY_CREATED,
     EVENT_QUOTE_APPROVED,
@@ -43,6 +45,11 @@ from app.services.automations.events import (
     EVENT_REVIEW_RECEIVED,
     EVENT_REVIEW_REQUEST_RESPONSE,
     EVENT_ROLEPLAY_COMPLETED,
+)
+from app.services.outbound.delivery import (
+    OutboundDeliveryChannel,
+    OutboundDeliveryResult,
+    OutboundDeliveryStatus,
 )
 from app.workers.automation_worker import AutomationWorker
 
@@ -55,6 +62,8 @@ ALL_EVENT_TRIGGERS = [
     EVENT_ROLEPLAY_COMPLETED,
     EVENT_KNOWLEDGE_DOCUMENT_UPLOADED,
     EVENT_LEAD_CREATED,
+    EVENT_LEAD_QUALIFIED,
+    EVENT_APPOINTMENT_BOOKED,
     EVENT_QUOTE_SENT,
     EVENT_QUOTE_APPROVED,
     EVENT_QUOTE_DECLINED,
@@ -253,20 +262,31 @@ async def test_action_send_sms_normalizes_raw_us_number(
     contact.first_name = None  # exercise the fallback path
     contact.phone_number = "(248) 555-0123"
 
-    delivered = SimpleNamespace(status=SimpleNamespace(value="sent"), reason=None)
+    agent_id = uuid.uuid4()
+    conversation = SimpleNamespace(assigned_agent_id=None, ai_enabled=False)
+    message = SimpleNamespace(conversation_id=uuid.uuid4())
+    delivered = OutboundDeliveryResult(
+        channel=OutboundDeliveryChannel.SMS,
+        status=OutboundDeliveryStatus.SENT,
+        message=message,
+    )
     deliver = AsyncMock(return_value=delivered)
     monkeypatch.setattr(mod.outbound_delivery_service, "deliver", deliver)
     worker._resolve_from_number = AsyncMock(return_value="+12485930266")  # type: ignore[method-assign]
 
     automation = _automation("lead_created", [])
     db = MagicMock()
-    await worker._action_send_sms(
+    workspace = SimpleNamespace(settings={"timezone": "America/New_York"})
+    db.get = AsyncMock(side_effect=[workspace, conversation])
+    db.flush = AsyncMock()
+    result = await worker._action_send_sms(
         automation,
         contact,
         {
             "message": "Hi {first_name}",
             "fallbacks": {"first_name": "there"},
             "require_consent": True,
+            "agent_id": str(agent_id),
         },
         {},
         db,
@@ -280,6 +300,66 @@ async def test_action_send_sms_normalizes_raw_us_number(
     assert request.contact is contact
     assert request.require_sms_consent is True
     assert request.action_type == "automation_sms"
+    assert request.agent_id == agent_id
+    assert result is delivered
+    assert conversation.assigned_agent_id == agent_id
+    assert conversation.ai_enabled is True
+    db.flush.assert_awaited_once()
+
+
+async def test_lead_created_advances_only_after_accepted_sms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The first accepted outreach owns new -> contacted; blocked sends do not."""
+    import app.workers.automation_worker as mod
+
+    worker = AutomationWorker()
+    _auto_gate(monkeypatch)
+    transition = AsyncMock(return_value=True)
+    monkeypatch.setattr(mod, "mark_contact_contacted", transition)
+    accepted = OutboundDeliveryResult(
+        channel=OutboundDeliveryChannel.SMS,
+        status=OutboundDeliveryStatus.SENT,
+    )
+    worker._action_send_sms = AsyncMock(return_value=accepted)  # type: ignore[method-assign]
+    automation = _automation("lead_created", [{"type": "send_sms", "config": {"message": "Hi"}}])
+    contact = _contact()
+    contact.status = "new"
+
+    await worker._run_actions(automation, contact, {}, _execution(), MagicMock())
+    transition.assert_awaited_once_with(ANY, contact)
+
+    transition.reset_mock()
+    contact.status = "qualified"
+    await worker._run_actions(automation, contact, {}, _execution(), MagicMock())
+    transition.assert_not_awaited()
+
+    contact.status = "new"
+    blocked = OutboundDeliveryResult(
+        channel=OutboundDeliveryChannel.SMS,
+        status=OutboundDeliveryStatus.BLOCKED,
+    )
+    worker._action_send_sms = AsyncMock(return_value=blocked)  # type: ignore[method-assign]
+    await worker._run_actions(automation, contact, {}, _execution(), MagicMock())
+    transition.assert_not_awaited()
+
+
+async def test_event_execution_hard_stops_no_automation_contact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.workers.automation_worker as mod
+
+    worker = AutomationWorker()
+    monkeypatch.setattr(mod, "automation_suppressed", AsyncMock(return_value=True))
+    automation = _automation("lead_created", [{"type": "send_sms", "config": {}}])
+    event = SimpleNamespace(id=uuid.uuid4(), contact_id=44, payload={})
+    db = MagicMock()
+    db.execute = AsyncMock()
+
+    await worker._execute_event_for_automation(automation, event, _contact(), db)
+
+    db.execute.assert_not_awaited()
+    db.add.assert_not_called()
 
 
 async def test_action_send_sms_skips_unnormalizable_phone(

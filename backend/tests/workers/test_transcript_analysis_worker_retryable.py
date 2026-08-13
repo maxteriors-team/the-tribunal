@@ -23,9 +23,7 @@ def test_class_inherits_retryable_and_base() -> None:
 
 
 def test_retry_configuration() -> None:
-    assert (
-        TranscriptAnalysisWorker.COMPONENT_NAME == "transcript_analysis_worker"
-    )
+    assert TranscriptAnalysisWorker.COMPONENT_NAME == "transcript_analysis_worker"
     assert TranscriptAnalysisWorker.max_retries == 3
     assert TranscriptAnalysisWorker.backoff_base_seconds == 2.0
 
@@ -52,9 +50,7 @@ async def test_successful_batch_does_not_touch_dlq() -> None:
     worker = TranscriptAnalysisWorker()
     recorder = wire_worker_for_retry_test(worker)
 
-    with patch.object(
-        worker, "_process_batch", AsyncMock(return_value=None)
-    ) as batch:
+    with patch.object(worker, "_process_batch", AsyncMock(return_value=None)) as batch:
         await worker._process_items()
         batch.assert_awaited_once()
 

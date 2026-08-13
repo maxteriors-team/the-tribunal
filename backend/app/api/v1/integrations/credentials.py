@@ -250,33 +250,6 @@ async def delete_integration(
     )
 
 
-async def _test_calcom(client: httpx.AsyncClient, api_key: str) -> IntegrationTestResult:
-    """Test Cal.com API connection."""
-    response = await client.get(
-        "https://api.cal.com/v1/me",
-        headers={"Authorization": f"Bearer {api_key}"},
-    )
-    if response.status_code == 200:
-        try:
-            data = response.json()
-            user_data = data.get("data", {})
-            user_name = user_data.get("name") if isinstance(user_data, dict) else None
-            return IntegrationTestResult(
-                success=True,
-                message="Successfully connected to Cal.com",
-                details={"user": user_name},
-            )
-        except (ValueError, TypeError):
-            return IntegrationTestResult(
-                success=False,
-                message="Cal.com returned invalid JSON response",
-            )
-    return IntegrationTestResult(
-        success=False,
-        message=f"Cal.com API returned status {response.status_code}",
-    )
-
-
 async def _test_telnyx(client: httpx.AsyncClient, api_key: str) -> IntegrationTestResult:
     """Test Telnyx API connection."""
     response = await client.get(
@@ -467,7 +440,6 @@ async def _test_google_ads_transparency(
 
 # Map integration types to their (uniform-signature) test functions.
 _INTEGRATION_TESTERS = {
-    "calcom": _test_calcom,
     "telnyx": _test_telnyx,
     "openai": _test_openai,
     "resend": _test_resend,

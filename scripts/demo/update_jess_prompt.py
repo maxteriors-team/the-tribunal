@@ -3,7 +3,8 @@
 
 import asyncio
 import sys
-sys.path.insert(0, '/home/groot/aicrm/backend')
+
+sys.path.insert(0, "/home/groot/aicrm/backend")
 
 from sqlalchemy import select
 from app.db.session import AsyncSessionLocal
@@ -206,9 +207,7 @@ Transfer to a human when:
 async def update_jess():
     """Update Jess's system prompt and voice settings."""
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Agent).where(Agent.id == JESS_AGENT_ID)
-        )
+        result = await db.execute(select(Agent).where(Agent.id == JESS_AGENT_ID))
         jess = result.scalar_one_or_none()
 
         if not jess:
@@ -227,10 +226,18 @@ async def update_jess():
 
         # Update voice settings - CRITICAL: Use Grok for pattern interrupt opener
         jess.voice_provider = "grok"
-        jess.voice_id = "eve"  # American girl voice - energetic & upbeat (options: ara, rex, sal, eve, leo)
+        jess.voice_id = (
+            "eve"  # American girl voice - energetic & upbeat (options: ara, rex, sal, eve, leo)
+        )
         jess.enabled_tools = [
-            "web_search", "x_search", "book_appointment",
-            "call_control", "crm", "bookings", "twilio-sms", "cal-com"
+            "web_search",
+            "x_search",
+            "book_appointment",
+            "call_control",
+            "crm",
+            "bookings",
+            "twilio-sms",
+            "cal-com",
         ]
 
         # Update the prompt
@@ -257,6 +264,7 @@ async def preview_only():
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--preview", action="store_true", help="Preview without updating")
     args = parser.parse_args()

@@ -41,7 +41,6 @@ class BookableStaffCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=200)
     email: str | None = None
-    calcom_event_type_id: int | None = None
     skills: list[str] = []
     is_active: bool = True
     priority: int = 0
@@ -64,7 +63,6 @@ class BookableStaffUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     email: str | None = None
-    calcom_event_type_id: int | None = None
     skills: list[str] | None = None
     is_active: bool | None = None
     priority: int | None = None
@@ -94,7 +92,6 @@ class BookableStaffResponse(BaseModel):
     name: str
     email: str | None
     user_id: int | None
-    calcom_event_type_id: int | None
     skills: list[str]
     is_active: bool
     priority: int

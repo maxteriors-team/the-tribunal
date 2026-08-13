@@ -60,7 +60,7 @@ async def create_realtime_token(
     agent = await AgentService(db).get_agent(workspace_id, agent_id)
     tools = get_tools_from_agent_config(
         agent,
-        enable_booking=bool(agent.calcom_event_type_id),
+        enable_booking=True,
     )
     instructions = body.instructions or agent.system_prompt
 

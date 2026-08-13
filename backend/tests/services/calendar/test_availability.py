@@ -104,6 +104,26 @@ class TestComputeAvailableSlots:
         )
         assert [s.time for s in slots] == ["09:00", "10:00", "10:30"]
 
+    def test_long_meeting_must_fit_before_close_and_busy_period(self) -> None:
+        schedule = {2: DayHours(enabled=True, open=time(9, 0), close=time(11, 0))}
+        busy = [
+            BusyInterval(
+                start=datetime(2026, 7, 15, 10, 30, tzinfo=TZ),
+                end=datetime(2026, 7, 15, 11, 0, tzinfo=TZ),
+            )
+        ]
+        slots = compute_available_slots(
+            schedule=schedule,
+            tz=TZ,
+            start_date=date(2026, 7, 15),
+            end_date=date(2026, 7, 15),
+            busy=busy,
+            slot_minutes=30,
+            meeting_minutes=60,
+            now=datetime(2026, 7, 1, tzinfo=TZ),
+        )
+        assert [s.time for s in slots] == ["09:00", "09:30"]
+
     def test_past_slots_are_excluded(self) -> None:
         schedule = {2: DayHours(enabled=True, open=time(9, 0), close=time(11, 0))}
         slots = compute_available_slots(

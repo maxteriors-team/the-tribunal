@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.models.agent import Agent
+from app.models.bookable_staff import BookableStaff
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus
 from app.models.contact import Contact
 from app.models.phone_number import PhoneNumber
@@ -184,9 +185,9 @@ async def test_get_user_workspace_raises_when_user_has_no_membership() -> None:
 
 @pytest.mark.parametrize("role", ["technician", "member", "sales_rep", "manager", "dispatcher"])
 async def test_onboarding_refuses_roles_without_workspace_manage(role: str) -> None:
-    """Defence in depth behind the API gate: onboarding rewrites the workspace's
-    Cal.com credential and buys a Telnyx number, so a non-admin membership must
-    be refused even if a caller reaches the service directly. ``is_default`` is
+    """Defence in depth behind the API gate: onboarding creates booking resources
+    and buys a Telnyx number, so a non-admin membership must be refused even if a
+    caller reaches the service directly. ``is_default`` is
     set here — it selects the target workspace and must confer no privilege."""
     db = _db()
     membership, _ = _workspace(user_id=7, role=role)
@@ -196,7 +197,7 @@ async def test_onboarding_refuses_roles_without_workspace_manage(role: str) -> N
         await complete_onboarding(
             db=db,
             current_user_id=7,
-            request=OnboardingInput(calcom_api_key="cal_key", calcom_event_type_id=123),
+            request=OnboardingInput(),
             telnyx_api_key="telnyx_key",
             telnyx_service_factory=lambda api_key: _MockTelnyxService([]),
         )
@@ -205,12 +206,13 @@ async def test_onboarding_refuses_roles_without_workspace_manage(role: str) -> N
     db.commit.assert_not_awaited()
 
 
-async def test_complete_onboarding_stores_credentials_and_purchases_phone() -> None:
+async def test_complete_onboarding_creates_calendar_resource_and_purchases_phone() -> None:
     db = _db()
     membership, workspace = _workspace(user_id=7)
     db.execute.side_effect = [
         _ExecuteResult(membership),
         _ExecuteResult(workspace),
+        _ExecuteResult(None),
         _ExecuteResult(None),
     ]
     available_number = PhoneNumberInfo(id="", phone_number="+15555550123")
@@ -220,11 +222,7 @@ async def test_complete_onboarding_stores_credentials_and_purchases_phone() -> N
     result = await complete_onboarding(
         db=db,
         current_user_id=7,
-        request=OnboardingInput(
-            calcom_api_key="cal_key",
-            calcom_event_type_id=123,
-            area_code="512",
-        ),
+        request=OnboardingInput(area_code="512"),
         telnyx_api_key="telnyx_key",
         telnyx_service_factory=lambda api_key: telnyx,
     )
@@ -233,13 +231,14 @@ async def test_complete_onboarding_stores_credentials_and_purchases_phone() -> N
     assert result.agent_id is not None
     assert result.phone_number_id is not None
     assert result.phone_number == "+15555550123"
-    assert result.calcom_connected is True
+    assert result.google_calendar_connected is False
     assert telnyx.search_calls == [{"country": "US", "area_code": "512", "limit": 5}]
     assert telnyx.purchase_calls == ["+15555550123"]
     assert telnyx.closed is True
     assert db.add.call_count == 3
     added_types = [type(call.args[0]) for call in db.add.call_args_list]
     assert Agent in added_types
+    assert BookableStaff in added_types
     assert PhoneNumber in added_types
     db.commit.assert_awaited_once()
     # The wizard finishing is the *only* thing that marks a workspace onboarded.

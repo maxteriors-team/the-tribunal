@@ -32,7 +32,7 @@ class FakeStaff:
     """Lightweight stand-in matching the StaffLike protocol."""
 
     name: str
-    calcom_event_type_id: int | None = 100
+    user_id: int | None = 1
     skills: list[str] = field(default_factory=list)
     is_active: bool = True
     priority: int = 0
@@ -112,11 +112,9 @@ def test_pick_round_robin_skips_inactive() -> None:
     assert pick_round_robin(staff).name == "Valid"
 
 
-def test_pick_round_robin_eligible_without_event_type() -> None:
-    # Booking is local, so an active staff member with no Cal.com event type is
-    # still eligible (and here wins on fewest assignments).
+def test_pick_round_robin_eligible_with_login_link() -> None:
     staff = [
-        FakeStaff("NoEvent", calcom_event_type_id=None, assignment_count=0),
+        FakeStaff("NoEvent", user_id=1, assignment_count=0),
         FakeStaff("Valid", assignment_count=4),
     ]
     assert pick_round_robin(staff).name == "NoEvent"
@@ -222,7 +220,6 @@ def _agent(strategy: str) -> Any:
         id=uuid.uuid4(),
         workspace_id=uuid.uuid4(),
         assignment_strategy=strategy,
-        calcom_event_type_id=1,
     )
 
 

@@ -43,7 +43,10 @@ async def test_normalizes_nested_envelope() -> None:
                             "cta_type": "LEARN_MORE",
                             "display_format": "DCO",
                             "cards": [
-                                {"title": "Convierte tu web", "link_url": "https://www.shopify.com/x"}
+                                {
+                                    "title": "Convierte tu web",
+                                    "link_url": "https://www.shopify.com/x",
+                                }
                             ],
                         },
                         "is_active": True,

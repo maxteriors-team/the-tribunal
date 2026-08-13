@@ -28,10 +28,7 @@ class TestExtractPhoneCandidates:
 
     def test_dedupes_by_e164_keeping_highest_confidence(self) -> None:
         # Same number as both a tel: link and in the page text.
-        html = (
-            '<a href="tel:+14155550132">Call</a>'
-            "<p>Or dial (415) 555-0132 anytime.</p>"
-        )
+        html = '<a href="tel:+14155550132">Call</a><p>Or dial (415) 555-0132 anytime.</p>'
         candidates = extract_phone_candidates(html)
         assert len(candidates) == 1
         assert candidates[0].phone == "+14155550132"
@@ -40,10 +37,7 @@ class TestExtractPhoneCandidates:
         assert candidates[0].confidence == 85
 
     def test_descending_confidence_ordering(self) -> None:
-        html = (
-            '<a href="tel:+14155550132">Call</a>'
-            "<p>Sales fax: (628) 555-0188.</p>"
-        )
+        html = '<a href="tel:+14155550132">Call</a><p>Sales fax: (628) 555-0188.</p>'
         candidates = extract_phone_candidates(html)
         confs = [c.confidence for c in candidates]
         assert confs == sorted(confs, reverse=True)

@@ -62,9 +62,9 @@
                 style="width:100%;padding:10px;margin-top:4px;border:1px solid #ccc;border-radius:6px;box-sizing:border-box;"></textarea>
     </label>
 
-    <!-- SMS consent (required, unticked): T-Mobile 806 compliance block -->
+    <!-- SMS consent (optional, unticked): automated SMS remains blocked unless checked -->
     <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13px;line-height:1.5;color:#333;">
-      <input type="checkbox" id="mxSmsConsent" required style="margin-top:3px;flex-shrink:0;">
+      <input type="checkbox" id="mxSmsConsent" name="sms_consent" style="margin-top:3px;flex-shrink:0;">
       <span>
         I agree to receive text messages from <strong>MAXTERIORS LLC</strong> about my
         lighting inquiry, quotes, and appointment updates at the mobile number
@@ -111,13 +111,15 @@
     if (f.get("address")) noteParts.push("Property address: " + f.get("address"));
     if (heard) noteParts.push("How they heard about us: " + heard);
     if (f.get("notes")) noteParts.push("Project: " + f.get("notes"));
-    noteParts.push("[SMS consent checkbox checked at " + new Date().toISOString() + "]");
+    var smsConsent = document.getElementById("mxSmsConsent").checked;
+    if (smsConsent) noteParts.push("[SMS consent recorded at " + new Date().toISOString() + "]");
     var payload = {
       first_name: f.get("first_name"),
       last_name: f.get("last_name") || null,
       email: f.get("email") || null,
       phone_number: f.get("phone_number"),
       notes: noteParts.join(NL),
+      sms_consent: smsConsent,
       source_detail: heard ? "website-quote-form: " + heard.slice(0, 170) : "website-quote-form",
       landing_page: location.href.slice(0, 2048),
       referrer: document.referrer ? document.referrer.slice(0, 2048) : null
@@ -131,7 +133,12 @@
       .then(function (res) {
         if (res.ok && res.d.success) {
           form.reset();
-          show("Thanks! We received your request and will text you shortly to schedule your free consultation.", true);
+          show(
+            smsConsent
+              ? "Thanks! We received your request and will text you shortly."
+              : "Thanks! We received your request. We will not send automated texts without your consent.",
+            true
+          );
           // Meta Pixel lead tracking (replaces the old Jobber-iframe listener)
           if (typeof fbq !== "undefined") {
             fbq("track", "Lead", {

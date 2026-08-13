@@ -286,7 +286,9 @@ JULES_MESSAGE_TEMPLATE = (
 
 
 async def _create_or_update_jules(
-    session: AsyncSession, jess: Agent, workspace_id: uuid.UUID,
+    session: AsyncSession,
+    jess: Agent,
+    workspace_id: uuid.UUID,
 ) -> Agent:
     """Create or update the Jules agent, copying settings from Jess."""
     jules_result = await session.execute(
@@ -313,7 +315,6 @@ async def _create_or_update_jules(
     jules.voice_id = jess.voice_id
     jules.temperature = jess.temperature
     jules.max_tokens = jess.max_tokens
-    jules.calcom_event_type_id = jess.calcom_event_type_id
     jules.turn_detection_mode = jess.turn_detection_mode
     jules.turn_detection_threshold = jess.turn_detection_threshold
     jules.silence_duration_ms = jess.silence_duration_ms
@@ -333,7 +334,9 @@ async def _create_or_update_jules(
 
 
 async def _create_or_update_lead_source(
-    session: AsyncSession, jules: Agent, workspace_id: uuid.UUID,
+    session: AsyncSession,
+    jules: Agent,
+    workspace_id: uuid.UUID,
 ) -> LeadSource:
     """Create or update the Free Ads lead source."""
     ls_result = await session.execute(
@@ -349,7 +352,8 @@ async def _create_or_update_lead_source(
     else:
         print("Creating new lead source...")
         lead_source = LeadSource(
-            workspace_id=workspace_id, name="Free Ads Landing Page",
+            workspace_id=workspace_id,
+            name="Free Ads Landing Page",
         )
         session.add(lead_source)
 
@@ -380,7 +384,6 @@ def _print_summary(jules: Agent, lead_source: LeadSource) -> None:
     print(f"  Voice ID:       {jules.voice_id}")
     print(f"  Temperature:    {jules.temperature}")
     print(f"  Tools:          {jules.enabled_tools}")
-    print(f"  Cal.com Event:  {jules.calcom_event_type_id}")
     print()
     print("=" * 60)
     print("LEAD SOURCE")
@@ -419,9 +422,7 @@ async def main() -> None:
         workspace_id = uuid.UUID(WORKSPACE_ID)
 
         # Load Jess to copy settings
-        jess_result = await session.execute(
-            select(Agent).where(Agent.id == JESS_AGENT_ID)
-        )
+        jess_result = await session.execute(select(Agent).where(Agent.id == JESS_AGENT_ID))
         jess = jess_result.scalar_one_or_none()
         if not jess:
             print("ERROR: Jess agent not found!")

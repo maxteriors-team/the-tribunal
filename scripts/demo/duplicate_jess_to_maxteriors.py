@@ -20,9 +20,7 @@ MAXTERIORS_SLUG = "maxteriors"
 
 async def get_or_create_maxteriors_workspace(db) -> Workspace:
     """Find existing maxteriors workspace or create it."""
-    result = await db.execute(
-        select(Workspace).where(Workspace.slug == MAXTERIORS_SLUG)
-    )
+    result = await db.execute(select(Workspace).where(Workspace.slug == MAXTERIORS_SLUG))
     workspace = result.scalar_one_or_none()
 
     if workspace:
@@ -109,7 +107,6 @@ async def duplicate_jess_agent():
         target_agent.initial_greeting = jess.initial_greeting
         target_agent.text_response_delay_ms = jess.text_response_delay_ms
         target_agent.text_max_context_messages = jess.text_max_context_messages
-        target_agent.calcom_event_type_id = jess.calcom_event_type_id
         target_agent.enabled_tools = jess.enabled_tools.copy() if jess.enabled_tools else []
         target_agent.tool_settings = dict(jess.tool_settings) if jess.tool_settings else {}
         target_agent.is_active = True
@@ -176,8 +173,6 @@ async def preview_jess():
         print(f"\n--- Tools ---")
         print(f"Enabled Tools: {jess.enabled_tools}")
         print(f"Tool Settings: {jess.tool_settings}")
-        print(f"\n--- Integration ---")
-        print(f"Cal.com Event Type ID: {jess.calcom_event_type_id}")
         print(f"\n--- Embed Settings ---")
         print(f"Public ID: {jess.public_id}")
         print(f"Embed Enabled: {jess.embed_enabled}")
@@ -187,14 +182,20 @@ async def preview_jess():
         print(f"Total Calls: {jess.total_calls}")
         print(f"Total Messages: {jess.total_messages}")
         print(f"\n--- System Prompt ---")
-        print(jess.system_prompt[:500] + "..." if len(jess.system_prompt) > 500 else jess.system_prompt)
+        print(
+            jess.system_prompt[:500] + "..."
+            if len(jess.system_prompt) > 500
+            else jess.system_prompt
+        )
 
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Duplicate JESS agent to maxteriors workspace")
-    parser.add_argument("--preview", action="store_true", help="Preview JESS settings without duplicating")
+    parser.add_argument(
+        "--preview", action="store_true", help="Preview JESS settings without duplicating"
+    )
     args = parser.parse_args()
 
     if args.preview:

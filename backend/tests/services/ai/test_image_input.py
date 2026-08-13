@@ -26,9 +26,7 @@ def test_validate_image_data_url_accepts_supported_png() -> None:
 
 
 def test_validate_image_data_url_normalizes_mime_case() -> None:
-    assert (
-        validate_image_data_url(f"data:IMAGE/PNG;base64,{_PNG_B64}") == _PNG_DATA_URL
-    )
+    assert validate_image_data_url(f"data:IMAGE/PNG;base64,{_PNG_B64}") == _PNG_DATA_URL
 
 
 def test_validate_image_data_url_rejects_non_data_url() -> None:

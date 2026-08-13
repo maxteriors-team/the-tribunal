@@ -231,7 +231,7 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
     WorkerSpec(
         name="approval_worker",
         registry=approval_registry,
-        dependencies=("postgres", "text_message_provider", "expo_push", "calcom"),
+        dependencies=("postgres", "text_message_provider", "expo_push"),
     ),
     WorkerSpec(
         name="drip_campaign_worker",

@@ -15,8 +15,11 @@ def test_estimate_tokens_includes_tool_calls() -> None:
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "1", "type": "function",
-                 "function": {"name": "list_agents", "arguments": "{}"}},
+                {
+                    "id": "1",
+                    "type": "function",
+                    "function": {"name": "list_agents", "arguments": "{}"},
+                },
             ],
         },
     ]
@@ -110,8 +113,7 @@ def test_split_point_avoids_breaking_tool_pairs() -> None:
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": "T1", "type": "function",
-                 "function": {"name": "x", "arguments": "{}"}},
+                {"id": "T1", "type": "function", "function": {"name": "x", "arguments": "{}"}},
             ],
         }
     )

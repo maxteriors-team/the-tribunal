@@ -4,9 +4,8 @@ Confirmation / cancellation texts sent to the *customer* when an appointment
 changes state, plus the from-number resolution and TCPA opt-out checks every
 such send has to pass.
 
-This lives in the service layer rather than beside the Cal.com webhook because
-appointments are now booked locally by the AI agents too — the webhook is only
-one of several callers.
+This lives in the service layer because appointments can be booked or changed
+through several CRM and AI paths, all of which need the same messaging rules.
 """
 
 from __future__ import annotations
@@ -136,33 +135,15 @@ def build_confirmation_body(
     template = agent.reminder_template if agent is not None else None
 
     if not template:
-        return DEFAULT_CONFIRMATION_BODY.format(
+        body = DEFAULT_CONFIRMATION_BODY.format(
             first_name=first_name,
             appointment_date=date_str,
             appointment_time=time_str,
         )
+        return _append_call_details(body, contact, appointment)
 
-    # Build reschedule link if agent has a Cal.com event type configured
+    # Rescheduling stays inside the CRM; no public booking-page provider is used.
     reschedule_link = ""
-    if agent is not None and agent.calcom_event_type_id and settings.calcom_api_key:
-        try:
-            from app.services.calendar.calcom import CalComService
-
-            calcom = CalComService(settings.calcom_api_key)
-            contact_name = (
-                " ".join(filter(None, [contact.first_name, contact.last_name])) or first_name
-            )
-            reschedule_link = calcom.generate_booking_url(
-                event_type_id=agent.calcom_event_type_id,
-                contact_email=contact.email or "",
-                contact_name=contact_name,
-                contact_phone=contact.phone_number,
-            )
-        except Exception:
-            logger.warning(
-                "confirmation_sms_reschedule_link_failed",
-                appointment_id=appointment.id,
-            )
 
     replacements: dict[str, str] = {
         "first_name": contact.first_name or "",
@@ -181,7 +162,17 @@ def build_confirmation_body(
         except Exception:
             pass  # Non-fatal; leave placeholder as-is
 
-    return message
+    return _append_call_details(message, contact, appointment)
+
+
+def _append_call_details(body: str, contact: Contact, appointment: Appointment) -> str:
+    if appointment.service_type == "phone_call":
+        return f"{body} We'll call you at {contact.phone_number}."
+    if appointment.service_type == "video_call":
+        if appointment.meeting_url:
+            return f"{body} Join Google Meet: {appointment.meeting_url}"
+        return f"{body} We'll follow up with the video link."
+    return body
 
 
 async def send_lifecycle_sms(

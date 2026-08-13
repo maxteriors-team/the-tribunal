@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Calendar, Loader2, Bell } from "lucide-react";
+import { Bell, Calendar, ExternalLink, Loader2, Phone, Video } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -81,12 +81,38 @@ export function ContactAppointments({
             >
               <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">
-                  {apt.service_type || "Appointment"}
-                </p>
+                <div className="flex items-center gap-1.5">
+                  {apt.service_type === "phone_call" ? (
+                    <Phone className="size-3 text-muted-foreground" aria-hidden />
+                  ) : apt.service_type === "video_call" ? (
+                    <Video className="size-3 text-muted-foreground" aria-hidden />
+                  ) : null}
+                  <p className="font-medium truncate">
+                    {apt.service_type === "phone_call"
+                      ? "Phone call"
+                      : apt.service_type === "video_call"
+                        ? "Video call"
+                        : apt.service_type || "Appointment"}
+                  </p>
+                </div>
                 <p className="text-muted-foreground text-xs">
                   {formatDate(apt.scheduled_at, { pattern: "MMM d, h:mm a" })}
                 </p>
+                {apt.meeting_url ? (
+                  <a
+                    href={apt.meeting_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                  >
+                    Join Google Meet <ExternalLink className="size-2.5" />
+                  </a>
+                ) : null}
+                {apt.sync_status === "failed" || apt.sync_status === "not_connected" ? (
+                  <Link href="/settings?tab=calendar" className="text-destructive hover:underline">
+                    Calendar sync needs attention
+                  </Link>
+                ) : null}
               </div>
               <Badge variant="outline" className="text-xs py-0">
                 {apt.status}

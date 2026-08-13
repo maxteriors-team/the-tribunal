@@ -3,7 +3,8 @@
 
 import asyncio
 import sys
-sys.path.insert(0, '/home/groot/aicrm/backend')
+
+sys.path.insert(0, "/home/groot/aicrm/backend")
 
 from sqlalchemy import select
 from app.db.session import AsyncSessionLocal
@@ -18,15 +19,11 @@ async def fetch_agents():
     """Fetch both agents from the database."""
     async with AsyncSessionLocal() as db:
         # Fetch Jess
-        result = await db.execute(
-            select(Agent).where(Agent.id == JESS_AGENT_ID)
-        )
+        result = await db.execute(select(Agent).where(Agent.id == JESS_AGENT_ID))
         jess = result.scalar_one_or_none()
 
         # Fetch Chloe
-        result = await db.execute(
-            select(Agent).where(Agent.id == CHLOE_AGENT_ID)
-        )
+        result = await db.execute(select(Agent).where(Agent.id == CHLOE_AGENT_ID))
         chloe = result.scalar_one_or_none()
 
         return jess, chloe

@@ -219,7 +219,9 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
 
     const values = agentToEditFormValues(agent);
     expect(values.websiteLeadQualificationEnabled).toBe(true);
-    expect(values.qualificationQuestions).toBe("What service do you need?\nWhat is your timeline?");
+    expect(values.qualificationQuestions).toBe(
+      "What service do you need?\nWhat is your timeline?",
+    );
     expect(values.enabledToolIds).toEqual({ calendar: ["book"] });
 
     const req = buildUpdateAgentRequest(values);

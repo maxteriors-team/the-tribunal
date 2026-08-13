@@ -55,7 +55,7 @@ In scope:
 - The backend API (`backend/`) and its services, workers, and webhooks
 - The frontend application (`frontend/`) and the embeddable widget
 - Authentication, authorization, multi-tenant isolation, and data handling
-- Third-party integrations as configured in this repository (Telnyx, Cal.com, OpenAI, ElevenLabs, SendGrid)
+- Third-party integrations configured here (Telnyx, Google Calendar, OpenAI, ElevenLabs, Resend)
 
 Out of scope:
 

@@ -12,10 +12,8 @@ told them to, so nothing noticed the query itself was incapable of matching.
 Each model carries a deterministic ``*_hash`` companion column
 (:class:`LookupHash`) that exists purely so these lookups can work.
 
-Three call sites shipped to production with the broken form:
+Two call sites shipped to production with the broken form:
 
-* ``calcom_parser.find_contact_by_attendee`` — a booking webhook could not find
-  the contact who made the booking, so bookings orphaned or duplicated contacts.
 * ``offers.submit_offer_optin`` — every opt-in created a new contact instead of
   matching the existing one.
 * ``invitations.create_invitation`` — "is this user already a member?" always
@@ -30,12 +28,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import select
 
-from app.api.webhooks.calcom_parser import find_contact_by_attendee
 from app.core.encryption import EncryptedString, LookupHash, hash_phone, hash_value
 from app.models.contact import Contact
 from app.models.user import User
@@ -88,47 +85,6 @@ class TestModelShape:
         assert hash_phone("+15551234567") == hash_phone("+15551234567")
 
 
-class TestCalcomParser:
-    """A booking webhook has to find the contact who booked."""
-
-    @pytest.mark.asyncio
-    async def test_email_lookup_uses_the_hash_column(self) -> None:
-        db, statements = _capturing_db(hits=[None])
-
-        await find_contact_by_attendee(email="dana@example.com", phone=None, db=db, log=MagicMock())
-
-        where = _compile(statements[0]).split("WHERE", 1)[1]
-        assert "contacts.email_hash" in where
-        assert "contacts.email =" not in where
-
-    @pytest.mark.asyncio
-    async def test_phone_fallback_uses_the_hash_column(self) -> None:
-        db, statements = _capturing_db(hits=[None, None])
-
-        await find_contact_by_attendee(
-            email="dana@example.com", phone="+1 (555) 123-4567", db=db, log=MagicMock()
-        )
-
-        # Only the WHERE clause matters: every column appears in the SELECT list.
-        where = _compile(statements[1]).split("WHERE", 1)[1]
-        assert "contacts.phone_hash" in where
-        # The old form was a suffix LIKE against ciphertext.
-        assert "LIKE" not in where.upper()
-        assert "contacts.phone_number" not in where
-
-    @pytest.mark.asyncio
-    async def test_a_seeded_contact_is_actually_found(self) -> None:
-        """End to end through the real function, with the hash the code computes."""
-        contact = MagicMock(id=42)
-        db, _ = _capturing_db(hits=[contact])
-
-        found = await find_contact_by_attendee(
-            email="dana@example.com", phone=None, db=db, log=MagicMock()
-        )
-
-        assert found is contact
-
-
 class TestStaticGuard:
     """No call site anywhere may filter an encrypted column by equality.
 
@@ -167,29 +123,6 @@ class TestStaticGuard:
                     )
 
         assert not offenders, "encrypted columns compared by equality:\n  " + "\n  ".join(offenders)
-
-
-def _capturing_db(hits: list[Any]) -> tuple[AsyncMock, list[Any]]:
-    """An async session stand-in that records every statement it executes."""
-    statements: list[Any] = []
-
-    def _result(value: Any) -> MagicMock:
-        result = MagicMock()
-        result.scalar_one_or_none = MagicMock(return_value=value)
-        scalars = MagicMock()
-        scalars.first = MagicMock(return_value=value)
-        result.scalars = MagicMock(return_value=scalars)
-        return result
-
-    results = iter([_result(hit) for hit in hits])
-
-    async def execute(statement: Any) -> MagicMock:
-        statements.append(statement)
-        return next(results)
-
-    db = AsyncMock()
-    db.execute = execute
-    return db, statements
 
 
 def test_select_on_the_encrypted_column_compiles_but_cannot_match() -> None:

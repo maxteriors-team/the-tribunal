@@ -15,9 +15,8 @@ What this script does (idempotent):
      texts hit this assistant instead of the inactive default agent.
 
 It does NOT copy settings from another agent: there is no legitimate Maxteriors
-source agent, and copying the Prestyj default would pull Prestyj's Cal.com calendar
-into this workspace. calcom_event_type_id is left unset until Cal.com is connected;
-until then the assistant collects a preferred time and hands off to a human.
+source agent. Bookings route through login-backed Team members, and each rep must
+connect their own Google Calendar before the assistant offers times.
 
 Usage:
     cd backend && uv run python ../scripts/demo/create_maxteriors_agent.py --preview
@@ -139,9 +138,6 @@ async def _create_or_update_agent(db):
     agent.text_response_delay_ms = 30_000
     agent.text_max_context_messages = 24
     agent.initial_greeting = None
-    # Leave Cal.com unset until it's connected for this workspace; the assistant
-    # collects a preferred time and hands off to a human in the meantime.
-    agent.calcom_event_type_id = None
     agent.enabled_tools = ["book_appointment", "human_handoff", "crm_update"]
     agent.tool_settings = {
         "calendar": ["check_availability", "book_appointment"],
@@ -202,7 +198,6 @@ async def apply() -> None:
         print(f"  Agent ID:       {agent.id}")
         print(f"  Workspace:      {agent.workspace_id}")
         print(f"  Channel Mode:   {agent.channel_mode}")
-        print(f"  Cal.com Event:  {agent.calcom_event_type_id}")
         print(f"  Tools:          {agent.enabled_tools}")
         print(f"  Prompt Length:  {len(agent.system_prompt)} chars")
         if phone is not None:

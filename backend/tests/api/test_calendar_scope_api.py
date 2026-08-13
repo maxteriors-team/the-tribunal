@@ -166,6 +166,18 @@ def _appointment_service() -> AsyncMock:
     service.get_appointment.return_value = _appointment_response()
     service.update_appointment.return_value = _appointment_response()
     service.send_reminder.return_value = {"success": True, "message": "sent"}
+    service.get_stats.return_value = {
+        "overall": {
+            "total": 0,
+            "scheduled": 0,
+            "completed": 0,
+            "no_show": 0,
+            "cancelled": 0,
+            "show_up_rate": 0.0,
+        },
+        "by_agent": [],
+        "by_campaign": [],
+    }
     return service
 
 
@@ -211,6 +223,15 @@ class TestJobReadScope:
         kwargs = service.list.await_args.kwargs
         assert kwargs["status"] == JobStatus.SCHEDULED
         assert kwargs["visible_to_user_id"] == USER_ID
+
+    async def test_stats_carries_the_scope(self) -> None:
+        service = _appointment_service()
+        async with _client(
+            appointments_module, service, "sales_rep", APPOINTMENTS_PREFIX
+        ) as client:
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/appointments/stats")
+        assert response.status_code == 200
+        assert service.get_stats.await_args.kwargs["visible_to_user_id"] == USER_ID
 
     async def test_deep_link_carries_the_scope(self) -> None:
         """``GET /jobs/{id}`` cannot be used to bypass the list filter."""
