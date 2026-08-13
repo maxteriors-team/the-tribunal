@@ -2314,6 +2314,13 @@ export interface paths {
          *     Requires workspace membership. All appointments are filtered by workspace_id
          *     to ensure workspace isolation.
          *
+         *     Dispatchers and up see every appointment. Below that line the list is scoped
+         *     server-side to the appointments the caller is booked on (their linked
+         *     bookable-staff row); an unlinked caller gets an empty page, not an error.
+         *
+         *     ``mine=true`` narrows the result to the caller's own bookings whatever their
+         *     role; for the field tier it is already implied.
+         *
          *     Optional filters:
          *     - status_filter: filter by appointment status
          *     - contact_id: filter by contact (indexed)
@@ -2327,9 +2334,10 @@ export interface paths {
          * Create Appointment
          * @description Create a new appointment.
          *
-         *     Requires workspace membership. Validates contact and agent exist in workspace.
-         *     The appointment is stored in the CRM, which is the single source of truth for
-         *     scheduling (no external calendar sync).
+         *     Dispatch-tier callers create an unassigned board appointment as before.
+         *     Restricted callers are assigned to their active linked booking resource so
+         *     the row remains visible on their scoped calendar; an admin must enable that
+         *     resource in Settings → Team first.
          */
         post: operations["create_appointment_api_v1_workspaces__workspace_id__appointments_post"];
         delete?: never;
@@ -2373,17 +2381,20 @@ export interface paths {
         /**
          * Get Appointment
          * @description Get an appointment by ID.
+         *
+         *     Carries the same scope as the list, so a deep link to an appointment the
+         *     caller is not booked on 404s rather than bypassing the filter.
          */
         get: operations["get_appointment_api_v1_workspaces__workspace_id__appointments__appointment_id__get"];
         /**
          * Update Appointment
-         * @description Update an appointment.
+         * @description Update an appointment within the caller's calendar scope.
          */
         put: operations["update_appointment_api_v1_workspaces__workspace_id__appointments__appointment_id__put"];
         post?: never;
         /**
          * Delete Appointment
-         * @description Delete/cancel an appointment.
+         * @description Delete/cancel an appointment within the caller's calendar scope.
          */
         delete: operations["delete_appointment_api_v1_workspaces__workspace_id__appointments__appointment_id__delete"];
         options?: never;
@@ -2402,7 +2413,7 @@ export interface paths {
         put?: never;
         /**
          * Manually send an SMS reminder for a scheduled appointment
-         * @description Send an immediate SMS reminder for a scheduled appointment.
+         * @description Send an immediate SMS reminder for an appointment visible to the caller.
          *
          *     Only works for appointments with status='scheduled'.
          *     Updates reminder_sent_at on success.
@@ -2626,6 +2637,53 @@ export interface paths {
          * @description Toggle automation active status.
          */
         post: operations["toggle_automation_api_v1_workspaces__workspace_id__automations__automation_id__toggle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/bookable-staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Workspace Bookable Staff
+         * @description Every bookable staff row in the workspace, across all agents.
+         *
+         *     Answers "does this member have a booking calendar?" on the Team screen,
+         *     which has no agent context.
+         */
+        get: operations["list_workspace_bookable_staff_api_v1_workspaces__workspace_id__bookable_staff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/bookable-staff/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Member Bookable
+         * @description Enable or disable a workspace member's booking calendar.
+         *
+         *     Linked appointments appear on that member's own calendar while the staff
+         *     row is active. Disabling preserves the link and appointment history so
+         *     re-enabling restores the same booking resource.
+         */
+        put: operations["set_member_bookable_api_v1_workspaces__workspace_id__bookable_staff_members__user_id__put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5176,6 +5234,13 @@ export interface paths {
         /**
          * List Jobs
          * @description List jobs for the dispatch board / calendar, with optional filters.
+         *
+         *     Dispatchers and up see the whole board. Below that line the list is scoped
+         *     server-side to the jobs the caller is assigned to — the requested filters
+         *     narrow that set further, they never widen it.
+         *
+         *     ``mine=true`` narrows the result to the caller's own work whatever their
+         *     role; for the field tier it is already implied.
          */
         get: operations["list_jobs_api_v1_workspaces__workspace_id__jobs_get"];
         put?: never;
@@ -5223,6 +5288,9 @@ export interface paths {
         /**
          * Get Job
          * @description Get a single job with its assigned technicians.
+         *
+         *     Carries the same visibility scope as the list, so a deep link to somebody
+         *     else's job 404s for the field tier instead of routing around the filter.
          */
         get: operations["get_job_api_v1_workspaces__workspace_id__jobs__job_id__get"];
         put?: never;
@@ -12354,6 +12422,22 @@ export interface components {
              * @description Workspace member this staff row belongs to. Setting it puts the bookings on that person's calendar, so it requires members:manage.
              */
             user_id?: number | null;
+        };
+        /**
+         * BookableStaffLinkRequest
+         * @description Give a workspace member a booking calendar, or take it away.
+         *
+         *     The Settings → Team form of the link. ``name``/``email`` seed the staff row
+         *     the first time a member is made bookable; they are ignored once a row exists,
+         *     so the toggle never overwrites a name someone edited in the agent's pool.
+         */
+        BookableStaffLinkRequest: {
+            /** Bookable */
+            bookable: boolean;
+            /** Email */
+            email?: string | null;
+            /** Name */
+            name: string;
         };
         /**
          * BookableStaffList
@@ -35114,6 +35198,8 @@ export interface operations {
                 business_location_id?: string | null;
                 date_from?: string | null;
                 date_to?: string | null;
+                /** @description Only appointments the caller is booked on */
+                mine?: boolean;
             };
             header?: never;
             path: {
@@ -35788,6 +35874,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AutomationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_workspace_bookable_staff_api_v1_workspaces__workspace_id__bookable_staff_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookableStaffList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_member_bookable_api_v1_workspaces__workspace_id__bookable_staff_members__user_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookableStaffLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookableStaffResponse"] | null;
                 };
             };
             /** @description Validation Error */
@@ -40934,6 +41087,8 @@ export interface operations {
                 date_from?: string | null;
                 /** @description Jobs scheduled on or before this time */
                 date_to?: string | null;
+                /** @description Only jobs the caller is assigned to */
+                mine?: boolean;
             };
             header?: never;
             path: {

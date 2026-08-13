@@ -23,6 +23,19 @@ def _normalize_skills(value: object) -> object:
     return out
 
 
+class BookableStaffLinkRequest(BaseModel):
+    """Give a workspace member a booking calendar, or take it away.
+
+    The Settings → Team form of the link. ``name``/``email`` seed the staff row
+    the first time a member is made bookable; they are ignored once a row exists,
+    so the toggle never overwrites a name someone edited in the agent's pool.
+    """
+
+    bookable: bool
+    name: str = Field(min_length=1, max_length=200)
+    email: str | None = None
+
+
 class BookableStaffCreate(BaseModel):
     """Schema for creating a bookable staff member."""
 

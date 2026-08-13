@@ -218,15 +218,79 @@ class _FakeSession:
 
 
 def _agent(strategy: str) -> Any:
-    return SimpleNamespace(id=uuid.uuid4(), assignment_strategy=strategy, calcom_event_type_id=1)
+    return SimpleNamespace(
+        id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        assignment_strategy=strategy,
+        calcom_event_type_id=1,
+    )
 
 
 @pytest.mark.asyncio
-async def test_resolve_single_strategy_skips_query() -> None:
+async def test_resolve_single_strategy_uses_enabled_shared_staff() -> None:
+    """A Team-enabled resource makes default-strategy bookings visible to it."""
     session = _FakeSession([FakeStaff("Alice")])
+    chosen = await resolve_staff_for_booking(session, agent=_agent(STRATEGY_SINGLE))
+    assert chosen is not None and chosen.name == "Alice"
+    assert session.committed is True
+
+
+@pytest.mark.asyncio
+async def test_resolve_single_strategy_without_team_staff_keeps_default_path() -> None:
+    session = _FakeSession([])
     chosen = await resolve_staff_for_booking(session, agent=_agent(STRATEGY_SINGLE))
     assert chosen is None
     assert session.committed is False
+
+
+@pytest.mark.asyncio
+async def test_resolver_query_includes_shared_workspace_staff() -> None:
+    """Team-created rows (agent_id NULL) belong to every agent's booking pool."""
+    from sqlalchemy.dialects import postgresql
+
+    session = _FakeSession([])
+    agent = _agent(STRATEGY_ROUND_ROBIN)
+    await resolve_staff_for_booking(session, agent=agent)
+
+    # Compile the query through a capturing session so the pool boundary is
+    # explicit: this agent's own rows OR workspace-level rows, never another
+    # workspace's resources.
+    class CapturingSession(_FakeSession):
+        query: Any = None
+
+        async def execute(self, query: Any) -> _FakeResult:
+            self.query = query
+            return _FakeResult([])
+
+    capture = CapturingSession([])
+    await resolve_staff_for_booking(capture, agent=agent)
+    sql = str(
+        capture.query.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "bookable_staff.workspace_id" in sql
+    assert "bookable_staff.agent_id IS NULL" in sql
+    assert str(agent.id) in sql
+
+
+@pytest.mark.asyncio
+async def test_single_strategy_query_includes_own_and_shared_staff() -> None:
+    """Default agents honor linked rows in either supported pool shape."""
+    from sqlalchemy.dialects import postgresql
+
+    class CapturingSession(_FakeSession):
+        query: Any = None
+
+        async def execute(self, query: Any) -> _FakeResult:
+            self.query = query
+            return _FakeResult([])
+
+    capture = CapturingSession([])
+    await resolve_staff_for_booking(capture, agent=_agent(STRATEGY_SINGLE))
+    sql = str(
+        capture.query.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "bookable_staff.agent_id IS NULL" in sql
+    assert "bookable_staff.agent_id =" in sql
 
 
 @pytest.mark.asyncio

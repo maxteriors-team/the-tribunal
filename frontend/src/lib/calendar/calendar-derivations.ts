@@ -15,7 +15,13 @@ import {
 } from "@/lib/utils/date";
 import type { Appointment, Contact } from "@/types";
 
-export type StatusFilter = "" | "scheduled" | "no_show" | "completed" | "cancelled";
+export type StatusFilter =
+  | ""
+  | "scheduled"
+  | "in_progress"
+  | "no_show"
+  | "completed"
+  | "cancelled";
 
 export interface StatusOption {
   value: StatusFilter;
@@ -25,6 +31,7 @@ export interface StatusOption {
 export const STATUS_OPTIONS: readonly StatusOption[] = [
   { value: "", label: "All" },
   { value: "scheduled", label: "Scheduled" },
+  { value: "in_progress", label: "In progress" },
   { value: "no_show", label: "No-Show" },
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
@@ -157,6 +164,7 @@ export function buildAppointmentsQueryParams(
   weekEndIso: string,
   statusFilter: StatusFilter,
   businessLocationId?: string,
+  mine?: boolean,
 ): {
   page: number;
   page_size: number;
@@ -164,6 +172,7 @@ export function buildAppointmentsQueryParams(
   date_to: string;
   status_filter?: StatusFilter;
   business_location_id?: string;
+  mine?: boolean;
 } {
   return {
     page: 1,
@@ -172,5 +181,6 @@ export function buildAppointmentsQueryParams(
     date_to: weekEndIso,
     ...(statusFilter ? { status_filter: statusFilter } : {}),
     ...(businessLocationId ? { business_location_id: businessLocationId } : {}),
+    ...(mine ? { mine: true } : {}),
   };
 }

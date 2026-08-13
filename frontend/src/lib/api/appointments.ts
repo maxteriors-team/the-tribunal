@@ -12,6 +12,12 @@ export interface AppointmentsListParams {
   business_location_id?: string;
   date_from?: string; // ISO datetime string
   date_to?: string; // ISO datetime string
+  /**
+   * Narrow the result to the appointments the caller is booked on. Below the
+   * dispatch tier the server applies this regardless; a dispatcher sets it to
+   * filter the schedule down to their own bookings.
+   */
+  mine?: boolean;
 }
 
 export interface AppointmentsListResponse {

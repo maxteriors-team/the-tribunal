@@ -71,20 +71,20 @@ class BaseToolExecutor:
     async def _resolve_assigned_staff(
         self, required_skill: str | None, *, record: bool = True
     ) -> None:
-        """Assign a staff member for this booking attempt (multi-staff agents).
+        """Assign a staff member for this booking attempt.
 
-        For round-robin / skill-based agents this picks a staff member from the
-        pool and records the choice in ``self.assigned_staff`` (later written to
-        the appointment's ``bookable_staff_id``). Single-strategy agents book
-        against workspace hours with no staff assignment.
+        Every agent selects from its own pool plus workspace-level Team resources.
+        A single-strategy agent round-robins that pool; with none configured the
+        resolver returns ``None`` and booking keeps the established agent-default
+        path. A selected row is
+        recorded in ``self.assigned_staff`` and later written to
+        ``appointment.bookable_staff_id``.
 
         ``record`` controls whether the selection consumes a round-robin turn.
         Bookings record (default); availability checks pass ``record=False`` so
         they only peek without skewing distribution.
         """
         self.assigned_staff = None
-        if self._assignment_strategy() == "single":
-            return
 
         from app.db.session import AsyncSessionLocal
         from app.services.calendar.staff_assignment import (

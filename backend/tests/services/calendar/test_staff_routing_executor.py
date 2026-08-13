@@ -91,11 +91,11 @@ class _FakeBookingService:
         pass
 
 
-def _round_robin_agent() -> Any:
+def _agent(strategy: str = "round_robin") -> Any:
     return SimpleNamespace(
         id=uuid.uuid4(),
         workspace_id=uuid.uuid4(),
-        assignment_strategy="round_robin",
+        assignment_strategy=strategy,
         calcom_event_type_id=None,
     )
 
@@ -109,13 +109,11 @@ async def test_book_appointment_routes_to_selected_staff() -> None:
         _FakeStaff("Bob", count=0),
     ]
 
-    agent = _round_robin_agent()
+    agent = _agent()
     executor = VoiceToolExecutor(agent=agent)
 
     with (
-        patch.object(
-            db_session_module, "AsyncSessionLocal", return_value=_FakeSession(pool)
-        ),
+        patch.object(db_session_module, "AsyncSessionLocal", return_value=_FakeSession(pool)),
         patch.object(base_tool_executor, "BookingService", _FakeBookingService),
     ):
         result = await executor.execute(
@@ -133,3 +131,29 @@ async def test_book_appointment_routes_to_selected_staff() -> None:
     assert executor.assigned_staff is not None
     assert executor.assigned_staff["name"] == "Bob"
     assert "Bob" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_default_agent_routes_to_team_enabled_staff() -> None:
+    """The Team toggle creates a real booking assignment, not a display-only link."""
+    staff = _FakeStaff("Terry Tech")
+    agent = _agent("single")
+    executor = VoiceToolExecutor(agent=agent)
+
+    with (
+        patch.object(db_session_module, "AsyncSessionLocal", return_value=_FakeSession([staff])),
+        patch.object(base_tool_executor, "BookingService", _FakeBookingService),
+    ):
+        result = await executor.execute(
+            "book_appointment",
+            {
+                "date": "2099-01-15",
+                "time": "14:00",
+                "email": "caller@example.com",
+            },
+        )
+
+    assert result["success"] is True
+    assert executor.assigned_staff is not None
+    assert executor.assigned_staff["name"] == "Terry Tech"
+    assert executor.assigned_staff_id() == staff.id

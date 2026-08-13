@@ -6,7 +6,7 @@ from typing import Any
 
 import structlog
 from fastapi import HTTPException, status
-from sqlalchemy import case, func, select
+from sqlalchemy import ColumnElement, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,6 +14,7 @@ from app.db.pagination import paginate
 from app.db.scope import assert_workspace_owned
 from app.models.agent import Agent
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.bookable_staff import BookableStaff
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.field_service import BusinessLocation
@@ -52,6 +53,27 @@ class AppointmentService:
         self.db = db
         self.log = logger.bind(component="appointment_service")
 
+    @staticmethod
+    def booked_for_user_predicate(workspace_id: uuid.UUID, user_id: int) -> ColumnElement[bool]:
+        """SQL predicate matching only the appointments ``user_id`` is booked on.
+
+        The appointment counterpart of
+        :meth:`app.services.jobs.job_service.JobService.assigned_job_predicate`:
+        an appointment is theirs when its bookable-staff row is linked to their
+        login (``bookable_staff.user_id``).
+
+        Quiet and fail-closed: someone with no linked staff row simply matches
+        nothing, which reads as an empty calendar rather than an error — the
+        same failure mode an unlinked technician already has on the job board.
+        """
+        return Appointment.bookable_staff_id.in_(
+            select(BookableStaff.id).where(
+                BookableStaff.workspace_id == workspace_id,
+                BookableStaff.user_id == user_id,
+                BookableStaff.is_active.is_(True),
+            )
+        )
+
     async def list_appointments(
         self,
         workspace_id: uuid.UUID,
@@ -63,14 +85,23 @@ class AppointmentService:
         business_location_id: uuid.UUID | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        visible_to_user_id: int | None = None,
     ) -> PaginatedAppointments:
-        """List appointments with optional filters."""
+        """List appointments with optional filters.
+
+        ``visible_to_user_id`` restricts the page to the appointments that user
+        is booked on (see :meth:`booked_for_user_predicate`). Callers pass it for
+        anyone below the dispatch tier; the remaining filters narrow that set
+        further, never widen it.
+        """
         query = (
             select(Appointment)
             .options(selectinload(Appointment.contact))
             .where(Appointment.workspace_id == workspace_id)
         )
 
+        if visible_to_user_id is not None:
+            query = query.where(self.booked_for_user_predicate(workspace_id, visible_to_user_id))
         if status_filter:
             query = query.where(Appointment.status == status_filter)
         if contact_id is not None:
@@ -93,8 +124,16 @@ class AppointmentService:
         self,
         workspace_id: uuid.UUID,
         appointment_in: AppointmentCreate,
+        *,
+        booked_for_user_id: int | None = None,
     ) -> Appointment:
-        """Create a new appointment in the CRM (the single source of truth)."""
+        """Create an appointment, optionally assigning it to the caller's staff row.
+
+        Restricted calendar callers pass ``booked_for_user_id`` so the row they
+        create remains visible on their own server-scoped calendar. If Team has
+        not enabled a booking resource for that login, creation is refused rather
+        than writing an appointment the caller can never retrieve.
+        """
         log = self.log.bind(workspace_id=str(workspace_id), contact_id=appointment_in.contact_id)
 
         # Verify contact exists in workspace
@@ -129,9 +168,32 @@ class AppointmentService:
                     detail="Agent not found",
                 )
 
+        bookable_staff_id: uuid.UUID | None = None
+        if booked_for_user_id is not None:
+            staff_result = await self.db.execute(
+                select(BookableStaff.id)
+                .where(
+                    BookableStaff.workspace_id == workspace_id,
+                    BookableStaff.user_id == booked_for_user_id,
+                    BookableStaff.is_active.is_(True),
+                )
+                .order_by(BookableStaff.priority.desc(), BookableStaff.created_at.asc())
+                .limit(1)
+            )
+            bookable_staff_id = staff_result.scalar_one_or_none()
+            if bookable_staff_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Your booking calendar is not enabled. Ask an admin to enable "
+                        "it in Settings > Team."
+                    ),
+                )
+
         appointment = Appointment(
             workspace_id=workspace_id,
             agent_id=uuid.UUID(appointment_in.agent_id) if appointment_in.agent_id else None,
+            bookable_staff_id=bookable_staff_id,
             **appointment_in.model_dump(exclude={"agent_id"}),
         )
         self.db.add(appointment)
@@ -152,19 +214,28 @@ class AppointmentService:
         self,
         workspace_id: uuid.UUID,
         appointment_id: int,
+        *,
+        visible_to_user_id: int | None = None,
     ) -> Appointment:
         """Get an appointment by ID, raising 404 if not found.
 
         Eager-loads ``contact`` so ``AppointmentResponse`` can serialize the
         nested contact summary without triggering an async lazy-load (which
         raises ``MissingGreenlet``) after the request session has committed.
+
+        ``visible_to_user_id`` applies the same scope as the list, so a deep link
+        to somebody else's appointment 404s instead of routing around it.
         """
+        criteria: list[ColumnElement[bool]] = []
+        if visible_to_user_id is not None:
+            criteria.append(self.booked_for_user_predicate(workspace_id, visible_to_user_id))
         result = await self.db.execute(
             select(Appointment)
             .options(selectinload(Appointment.contact))
             .where(
                 Appointment.id == appointment_id,
                 Appointment.workspace_id == workspace_id,
+                *criteria,
             )
         )
         appointment = result.scalar_one_or_none()
@@ -180,9 +251,15 @@ class AppointmentService:
         workspace_id: uuid.UUID,
         appointment_id: int,
         appointment_in: AppointmentUpdate,
+        *,
+        visible_to_user_id: int | None = None,
     ) -> Appointment:
-        """Update an appointment's fields."""
-        appointment = await self.get_appointment(workspace_id, appointment_id)
+        """Update an appointment's fields within the caller's visibility scope."""
+        appointment = await self.get_appointment(
+            workspace_id,
+            appointment_id,
+            visible_to_user_id=visible_to_user_id,
+        )
 
         previous_status = appointment.status
         update_data = appointment_in.model_dump(exclude_unset=True)
@@ -240,9 +317,15 @@ class AppointmentService:
         self,
         workspace_id: uuid.UUID,
         appointment_id: int,
+        *,
+        visible_to_user_id: int | None = None,
     ) -> None:
-        """Delete an appointment."""
-        appointment = await self.get_appointment(workspace_id, appointment_id)
+        """Delete an appointment within the caller's visibility scope."""
+        appointment = await self.get_appointment(
+            workspace_id,
+            appointment_id,
+            visible_to_user_id=visible_to_user_id,
+        )
         await self.db.delete(appointment)
         await self.db.commit()
         self.log.info(
@@ -339,11 +422,17 @@ class AppointmentService:
         workspace_id: uuid.UUID,
         appointment_id: int,
         workspace: Workspace,
+        *,
+        visible_to_user_id: int | None = None,
     ) -> dict[str, Any]:
-        """Send an SMS reminder for a scheduled appointment."""
+        """Send an SMS reminder for an appointment visible to the caller."""
         from app.services.calendar import reminder_service
 
-        appointment = await self.get_appointment(workspace_id, appointment_id)
+        appointment = await self.get_appointment(
+            workspace_id,
+            appointment_id,
+            visible_to_user_id=visible_to_user_id,
+        )
 
         if appointment.status != "scheduled":
             raise HTTPException(

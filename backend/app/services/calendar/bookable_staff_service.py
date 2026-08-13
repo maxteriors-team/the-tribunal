@@ -31,6 +31,80 @@ class BookableStaffService:
         """Ensure the agent exists and belongs to the workspace."""
         return await get_or_404(self.db, Agent, agent_id, workspace_id=workspace_id)
 
+    # ------------------------------------------------------------------ #
+    # Workspace-level login link (Settings → Team)
+    # ------------------------------------------------------------------ #
+    async def list_workspace_staff(self, workspace_id: uuid.UUID) -> BookableStaffList:
+        """Every bookable staff row in the workspace, across all agents.
+
+        The Team screen needs to answer "is this member bookable?" without
+        knowing which agent's pool they happen to sit in, so this deliberately
+        ignores ``agent_id``.
+        """
+        result = await self.db.execute(
+            select(BookableStaff)
+            .where(BookableStaff.workspace_id == workspace_id)
+            .order_by(BookableStaff.priority.desc(), BookableStaff.created_at.asc())
+        )
+        items = list(result.scalars().all())
+        return BookableStaffList(items=items, total=len(items))  # type: ignore[arg-type]
+
+    async def set_member_bookable(
+        self,
+        workspace_id: uuid.UUID,
+        user_id: int,
+        *,
+        bookable: bool,
+        name: str,
+        email: str | None = None,
+    ) -> BookableStaff | None:
+        """Enable or disable a workspace member's booking resources.
+
+        A person can belong to multiple agents' booking pools, so the Team toggle
+        updates every linked row. Disabling preserves login links, Cal.com wiring,
+        and appointment references; re-enabling restores those same resources.
+        If the member has no staff row yet, enabling creates a workspace-level
+        resource that can be configured into an agent pool later.
+
+        Returns one affected row, or ``None`` when disabling an unlinked member.
+        """
+        await assert_user_is_member(self.db, user_id, workspace_id)
+        linked_rows = list(
+            (
+                await self.db.execute(
+                    select(BookableStaff).where(
+                        BookableStaff.workspace_id == workspace_id,
+                        BookableStaff.user_id == user_id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        if linked_rows:
+            for staff in linked_rows:
+                staff.is_active = bookable
+            await self.db.commit()
+            await self.db.refresh(linked_rows[0])
+            return linked_rows[0]
+
+        if not bookable:
+            return None
+
+        staff = BookableStaff(
+            workspace_id=workspace_id,
+            agent_id=None,
+            user_id=user_id,
+            name=name,
+            email=email,
+            is_active=True,
+        )
+        self.db.add(staff)
+        await self.db.commit()
+        await self.db.refresh(staff)
+        return staff
+
     async def list_staff(
         self,
         workspace_id: uuid.UUID,
