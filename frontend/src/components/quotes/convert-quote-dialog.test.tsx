@@ -129,9 +129,11 @@ describe("ConvertQuoteDialog guided closeout", () => {
       ),
     );
     expect(await screen.findByText(/Crew delivery: sent · 1\/1 recipients/)).toBeInTheDocument();
+    // The schedule is one surface; `/calendar?job=` opens the new job's detail
+    // dialog directly instead of bouncing through the retired `/jobs` redirect.
     expect(screen.getByRole("link", { name: /Open job/ })).toHaveAttribute(
       "href",
-      "/jobs?job=job-1",
+      "/calendar?job=job-1",
     );
     expect(screen.getByRole("link", { name: /Open invoice/ })).toHaveAttribute(
       "href",

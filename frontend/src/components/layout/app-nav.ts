@@ -39,7 +39,6 @@ import {
   TreePine,
   UserSearch,
   Users,
-  Wrench,
   Zap,
 } from "lucide-react";
 
@@ -383,16 +382,11 @@ export const marketingNavItems: AppNavItem[] = [
 
 export const operationsNavItems: AppNavItem[] = [
   {
+    // The single schedule surface: appointments and field jobs on one grid.
+    // `/jobs` used to be a second, job-only calendar and now redirects here.
     title: "Calendar",
     url: "/calendar",
     icon: Calendar,
-    sidebar: true,
-    commandPalette: true,
-  },
-  {
-    title: "Jobs",
-    url: "/jobs",
-    icon: Wrench,
     sidebar: true,
     commandPalette: true,
   },
@@ -625,12 +619,16 @@ export function isNavItemVisible(item: AppNavItem) {
 
 /**
  * Route prefixes a field technician (operational-only tier) may see and reach.
- * Field techs get the jobs schedule, its calendar, and the on-site upsell flow —
- * nothing else in the CRM.
+ * Field techs get the schedule and the on-site upsell flow — nothing else in
+ * the CRM.
  *
  * `/upsell` is safe to expose to the narrowest tier because the surface behind it
  * is scoped server-side (assigned jobs + attachable catalog items only); see
  * `backend/app/api/v1/upsell.py`. This list is UX, not the security boundary.
+ *
+ * `/jobs` no longer has a screen of its own — it redirects to `/calendar` — but
+ * it stays listed so an existing bookmark or a `?job=` deep link still resolves
+ * for the tier that most often follows one.
  */
 /**
  * Paths an on-site tier (`field`, `lead`) may reach. `/upsell` is listed here

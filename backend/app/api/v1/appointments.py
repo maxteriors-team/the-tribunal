@@ -7,8 +7,9 @@ from typing import Annotated, Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, CurrentUser, get_workspace
-from app.models.workspace import Workspace
+from app.api.deps import DB, CurrentMembership, CurrentUser, get_workspace
+from app.core.permissions import Capability, role_can
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentResponse,
@@ -22,10 +23,29 @@ router = APIRouter()
 logger = structlog.get_logger()
 
 
+def _calendar_scope_user_id(
+    membership: WorkspaceMembership, user_id: int, *, mine: bool = False
+) -> int | None:
+    """The user a caller's appointment reads are confined to, or ``None`` for everything.
+
+    Mirrors the jobs board exactly (``app.api.v1.jobs._calendar_scope_user_id``)
+    so one calendar has one visibility rule: ``jobs:write`` — owner, admin,
+    manager, dispatcher — runs the schedule and sees all of it; everyone below
+    sees only what they are booked on.
+
+    ``mine`` lets a dispatcher voluntarily narrow to their own bookings; it can
+    only tighten the scope, never widen it.
+    """
+    if mine or not role_can(membership.role, Capability.JOBS_WRITE):
+        return user_id
+    return None
+
+
 @router.get("", response_model=PaginatedAppointments)
 async def list_appointments(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
     page: int = Query(1, ge=1),
@@ -38,11 +58,19 @@ async def list_appointments(
     business_location_id: uuid.UUID | None = Query(None),
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
+    mine: bool = Query(False, description="Only appointments the caller is booked on"),
 ) -> PaginatedAppointments:
     """List appointments in a workspace.
 
     Requires workspace membership. All appointments are filtered by workspace_id
     to ensure workspace isolation.
+
+    Dispatchers and up see every appointment. Below that line the list is scoped
+    server-side to the appointments the caller is booked on (their linked
+    bookable-staff row); an unlinked caller gets an empty page, not an error.
+
+    ``mine=true`` narrows the result to the caller's own bookings whatever their
+    role; for the field tier it is already implied.
 
     Optional filters:
     - status_filter: filter by appointment status
@@ -62,6 +90,7 @@ async def list_appointments(
         business_location_id=business_location_id,
         date_from=date_from,
         date_to=date_to,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id, mine=mine),
     )
 
 
@@ -70,17 +99,23 @@ async def create_appointment(
     workspace_id: uuid.UUID,
     appointment_in: AppointmentCreate,
     current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> Any:
     """Create a new appointment.
 
-    Requires workspace membership. Validates contact and agent exist in workspace.
-    The appointment is stored in the CRM, which is the single source of truth for
-    scheduling (no external calendar sync).
+    Dispatch-tier callers create an unassigned board appointment as before.
+    Restricted callers are assigned to their active linked booking resource so
+    the row remains visible on their scoped calendar; an admin must enable that
+    resource in Settings → Team first.
     """
     service = AppointmentService(db)
-    return await service.create_appointment(workspace_id, appointment_in)
+    return await service.create_appointment(
+        workspace_id,
+        appointment_in,
+        booked_for_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
 
 
 @router.get("/stats", response_model=AppointmentStatsResponse)
@@ -106,12 +141,21 @@ async def get_appointment(
     workspace_id: uuid.UUID,
     appointment_id: int,
     current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> Any:
-    """Get an appointment by ID."""
+    """Get an appointment by ID.
+
+    Carries the same scope as the list, so a deep link to an appointment the
+    caller is not booked on 404s rather than bypassing the filter.
+    """
     service = AppointmentService(db)
-    return await service.get_appointment(workspace_id, appointment_id)
+    return await service.get_appointment(
+        workspace_id,
+        appointment_id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
 
 
 @router.put("/{appointment_id}", response_model=AppointmentResponse)

@@ -327,7 +327,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!isFieldTech) return;
-    router.replace("/jobs");
+    router.replace("/calendar");
   }, [isFieldTech, router]);
 
   // Hold the wizard back until the role is known so a technician never sees the

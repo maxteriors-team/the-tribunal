@@ -2089,11 +2089,6 @@
             "title": "Channel Mode",
             "type": "string"
           },
-          "confirmation_email_enabled": {
-            "default": true,
-            "title": "Confirmation Email Enabled",
-            "type": "boolean"
-          },
           "description": {
             "anyOf": [
               {
@@ -2254,16 +2249,6 @@
             ],
             "title": "Post Meeting Template"
           },
-          "reminder_channels": {
-            "default": [
-              "sms"
-            ],
-            "items": {
-              "type": "string"
-            },
-            "title": "Reminder Channels",
-            "type": "array"
-          },
           "reminder_enabled": {
             "default": true,
             "title": "Reminder Enabled",
@@ -2319,7 +2304,12 @@
             "type": "integer"
           },
           "tool_settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
             "default": {},
             "title": "Tool Settings",
             "type": "object"
@@ -2416,11 +2406,6 @@
           "channel_mode": {
             "title": "Channel Mode",
             "type": "string"
-          },
-          "confirmation_email_enabled": {
-            "default": true,
-            "title": "Confirmation Email Enabled",
-            "type": "boolean"
           },
           "created_at": {
             "format": "date-time",
@@ -2588,16 +2573,6 @@
             ],
             "title": "Post Meeting Template"
           },
-          "reminder_channels": {
-            "default": [
-              "sms"
-            ],
-            "items": {
-              "type": "string"
-            },
-            "title": "Reminder Channels",
-            "type": "array"
-          },
           "reminder_enabled": {
             "title": "Reminder Enabled",
             "type": "boolean"
@@ -2641,7 +2616,12 @@
             "type": "integer"
           },
           "tool_settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
             "title": "Tool Settings",
             "type": "object"
           },
@@ -2828,17 +2808,6 @@
               }
             ],
             "title": "Channel Mode"
-          },
-          "confirmation_email_enabled": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Confirmation Email Enabled"
           },
           "description": {
             "anyOf": [
@@ -3096,20 +3065,6 @@
             ],
             "title": "Post Meeting Template"
           },
-          "reminder_channels": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reminder Channels"
-          },
           "reminder_enabled": {
             "anyOf": [
               {
@@ -3206,7 +3161,12 @@
           "tool_settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
                 "type": "object"
               },
               {
@@ -5777,12 +5737,56 @@
             },
             "title": "Skills",
             "type": "array"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Workspace member this staff row belongs to. Setting it puts the bookings on that person's calendar, so it requires members:manage.",
+            "title": "User Id"
           }
         },
         "required": [
           "name"
         ],
         "title": "BookableStaffCreate",
+        "type": "object"
+      },
+      "BookableStaffLinkRequest": {
+        "description": "Give a workspace member a booking calendar, or take it away.\n\nThe Settings → Team form of the link. ``name``/``email`` seed the staff row\nthe first time a member is made bookable; they are ignored once a row exists,\nso the toggle never overwrites a name someone edited in the agent's pool.",
+        "properties": {
+          "bookable": {
+            "title": "Bookable",
+            "type": "boolean"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bookable",
+          "name"
+        ],
+        "title": "BookableStaffLinkRequest",
         "type": "object"
       },
       "BookableStaffList": {
@@ -5894,6 +5898,17 @@
             "title": "Updated At",
             "type": "string"
           },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
           "workspace_id": {
             "format": "uuid",
             "title": "Workspace Id",
@@ -5906,6 +5921,7 @@
           "agent_id",
           "name",
           "email",
+          "user_id",
           "calcom_event_type_id",
           "skills",
           "is_active",
@@ -5991,6 +6007,18 @@
               }
             ],
             "title": "Skills"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Workspace member this staff row belongs to; send null to unlink. Requires members:manage — the link decides whose calendar the bookings appear on.",
+            "title": "User Id"
           }
         },
         "title": "BookableStaffUpdate",
@@ -25075,20 +25103,6 @@
           "phone_number"
         ],
         "title": "ManualContactCreate",
-        "type": "object"
-      },
-      "MarkAllReadResponse": {
-        "description": "Result of clearing every unread thread in a workspace.",
-        "properties": {
-          "conversations_marked": {
-            "title": "Conversations Marked",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "conversations_marked"
-        ],
-        "title": "MarkAllReadResponse",
         "type": "object"
       },
       "MeasurementSchema": {
@@ -47493,132 +47507,6 @@
         "title": "TaxConfig",
         "type": "object"
       },
-      "TeachAIRequest": {
-        "description": "Human-approved correction to one AI-generated SMS reply.",
-        "properties": {
-          "ideal_response": {
-            "maxLength": 1000,
-            "minLength": 1,
-            "title": "Ideal Response",
-            "type": "string"
-          },
-          "note": {
-            "anyOf": [
-              {
-                "maxLength": 1000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Note"
-          },
-          "source_message_id": {
-            "format": "uuid",
-            "title": "Source Message Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "source_message_id",
-          "ideal_response"
-        ],
-        "title": "TeachAIRequest",
-        "type": "object"
-      },
-      "TeachAIResponse": {
-        "description": "Saved correction and its agent target; never returned across tenants.",
-        "properties": {
-          "agent_id": {
-            "format": "uuid",
-            "title": "Agent Id",
-            "type": "string"
-          },
-          "agent_name": {
-            "title": "Agent Name",
-            "type": "string"
-          },
-          "conversation_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Id"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "ideal_response": {
-            "title": "Ideal Response",
-            "type": "string"
-          },
-          "is_active": {
-            "title": "Is Active",
-            "type": "boolean"
-          },
-          "note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Note"
-          },
-          "source_message_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Message Id"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "workspace_id": {
-            "format": "uuid",
-            "title": "Workspace Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "workspace_id",
-          "agent_id",
-          "conversation_id",
-          "source_message_id",
-          "ideal_response",
-          "note",
-          "is_active",
-          "agent_name",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "TeachAIResponse",
-        "type": "object"
-      },
       "TeamMemberResponse": {
         "description": "Schema for team member response.",
         "properties": {
@@ -48735,18 +48623,6 @@
       "TimelineItem": {
         "description": "A unified timeline item.",
         "properties": {
-          "agent_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Agent Id"
-          },
           "attachments": {
             "items": {
               "$ref": "#/components/schemas/TimelineAttachment"
@@ -49308,25 +49184,6 @@
           "created_at"
         ],
         "title": "UnattributedLeadResponse",
-        "type": "object"
-      },
-      "UnreadSummary": {
-        "description": "Workspace-wide unread rollup backing the header chat badge.\n\n``unread_messages`` is the sum of every thread's ``unread_count`` (what the\nbadge shows); ``unread_conversations`` is how many threads are waiting.",
-        "properties": {
-          "unread_conversations": {
-            "title": "Unread Conversations",
-            "type": "integer"
-          },
-          "unread_messages": {
-            "title": "Unread Messages",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "unread_conversations",
-          "unread_messages"
-        ],
-        "title": "UnreadSummary",
         "type": "object"
       },
       "UpdateMemberRoleRequest": {
@@ -60310,7 +60167,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/appointments": {
       "get": {
-        "description": "List appointments in a workspace.\n\nRequires workspace membership. All appointments are filtered by workspace_id\nto ensure workspace isolation.\n\nOptional filters:\n- status_filter: filter by appointment status\n- contact_id: filter by contact (indexed)\n- agent_id: filter by agent UUID (indexed)\n- date_from: appointments scheduled on or after this datetime (indexed)\n- date_to: appointments scheduled on or before this datetime (indexed)",
+        "description": "List appointments in a workspace.\n\nRequires workspace membership. All appointments are filtered by workspace_id\nto ensure workspace isolation.\n\nDispatchers and up see every appointment. Below that line the list is scoped\nserver-side to the appointments the caller is booked on (their linked\nbookable-staff row); an unlinked caller gets an empty page, not an error.\n\n``mine=true`` narrows the result to the caller's own bookings whatever their\nrole; for the field tier it is already implied.\n\nOptional filters:\n- status_filter: filter by appointment status\n- contact_id: filter by contact (indexed)\n- agent_id: filter by agent UUID (indexed)\n- date_from: appointments scheduled on or after this datetime (indexed)\n- date_to: appointments scheduled on or before this datetime (indexed)",
         "operationId": "list_appointments_api_v1_workspaces__workspace_id__appointments_get",
         "parameters": [
           {
@@ -60446,6 +60303,18 @@
               ],
               "title": "Date To"
             }
+          },
+          {
+            "description": "Only appointments the caller is booked on",
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only appointments the caller is booked on",
+              "title": "Mine",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -60481,7 +60350,7 @@
         ]
       },
       "post": {
-        "description": "Create a new appointment.\n\nRequires workspace membership. Validates contact and agent exist in workspace.\nThe appointment is stored in the CRM, which is the single source of truth for\nscheduling (no external calendar sync).",
+        "description": "Create a new appointment.\n\nDispatch-tier callers create an unassigned board appointment as before.\nRestricted callers are assigned to their active linked booking resource so\nthe row remains visible on their scoped calendar; an admin must enable that\nresource in Settings → Team first.",
         "operationId": "create_appointment_api_v1_workspaces__workspace_id__appointments_post",
         "parameters": [
           {
@@ -60638,7 +60507,7 @@
         ]
       },
       "get": {
-        "description": "Get an appointment by ID.",
+        "description": "Get an appointment by ID.\n\nCarries the same scope as the list, so a deep link to an appointment the\ncaller is not booked on 404s rather than bypassing the filter.",
         "operationId": "get_appointment_api_v1_workspaces__workspace_id__appointments__appointment_id__get",
         "parameters": [
           {
@@ -61634,6 +61503,131 @@
         "summary": "Toggle Automation",
         "tags": [
           "Automations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/bookable-staff": {
+      "get": {
+        "description": "Every bookable staff row in the workspace, across all agents.\n\nAnswers \"does this member have a booking calendar?\" on the Team screen,\nwhich has no agent context.",
+        "operationId": "list_workspace_bookable_staff_api_v1_workspaces__workspace_id__bookable_staff_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookableStaffList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Workspace Bookable Staff",
+        "tags": [
+          "Bookable Staff"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/bookable-staff/members/{user_id}": {
+      "put": {
+        "description": "Enable or disable a workspace member's booking calendar.\n\nLinked appointments appear on that member's own calendar while the staff\nrow is active. Disabling preserves the link and appointment history so\nre-enabling restores the same booking resource.",
+        "operationId": "set_member_bookable_api_v1_workspaces__workspace_id__bookable_staff_members__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookableStaffLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/BookableStaffResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Set Member Bookable Api V1 Workspaces  Workspace Id  Bookable Staff Members  User Id  Put"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Set Member Bookable",
+        "tags": [
+          "Bookable Staff"
         ]
       }
     },
@@ -67119,104 +67113,6 @@
         ]
       }
     },
-    "/api/v1/workspaces/{workspace_id}/conversations/read": {
-      "post": {
-        "description": "Mark every conversation in the workspace as read.",
-        "operationId": "mark_all_conversations_read_api_v1_workspaces__workspace_id__conversations_read_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MarkAllReadResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Mark All Conversations Read",
-        "tags": [
-          "Conversations"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/conversations/unread": {
-      "get": {
-        "description": "Unread rollup for the workspace, polled by the header chat badge.",
-        "operationId": "get_unread_summary_api_v1_workspaces__workspace_id__conversations_unread_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnreadSummary"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get Unread Summary",
-        "tags": [
-          "Conversations"
-        ]
-      }
-    },
     "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}": {
       "get": {
         "description": "Get a conversation with its messages.",
@@ -68011,134 +67907,6 @@
           }
         ],
         "summary": "Send Message",
-        "tags": [
-          "Conversations"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/read": {
-      "post": {
-        "description": "Mark a single conversation as read.",
-        "operationId": "mark_conversation_read_api_v1_workspaces__workspace_id__conversations__conversation_id__read_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Mark Conversation Read",
-        "tags": [
-          "Conversations"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/teach-ai": {
-      "post": {
-        "description": "Save or update a human-approved correction for one AI SMS reply.",
-        "operationId": "teach_ai_api_v1_workspaces__workspace_id__conversations__conversation_id__teach_ai_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TeachAIRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TeachAIResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Teach Ai",
         "tags": [
           "Conversations"
         ]
@@ -71727,7 +71495,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/jobs": {
       "get": {
-        "description": "List jobs for the dispatch board / calendar, with optional filters.",
+        "description": "List jobs for the dispatch board / calendar, with optional filters.\n\nDispatchers and up see the whole board. Below that line the list is scoped\nserver-side to the jobs the caller is assigned to — the requested filters\nnarrow that set further, they never widen it.\n\n``mine=true`` narrows the result to the caller's own work whatever their\nrole; for the field tier it is already implied.",
         "operationId": "list_jobs_api_v1_workspaces__workspace_id__jobs_get",
         "parameters": [
           {
@@ -71843,6 +71611,18 @@
               ],
               "description": "Jobs scheduled on or before this time",
               "title": "Date To"
+            }
+          },
+          {
+            "description": "Only jobs the caller is assigned to",
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Only jobs the caller is assigned to",
+              "title": "Mine",
+              "type": "boolean"
             }
           }
         ],
@@ -72075,7 +71855,7 @@
         ]
       },
       "get": {
-        "description": "Get a single job with its assigned technicians.",
+        "description": "Get a single job with its assigned technicians.\n\nCarries the same visibility scope as the list, so a deep link to somebody\nelse's job 404s for the field tier instead of routing around the filter.",
         "operationId": "get_job_api_v1_workspaces__workspace_id__jobs__job_id__get",
         "parameters": [
           {

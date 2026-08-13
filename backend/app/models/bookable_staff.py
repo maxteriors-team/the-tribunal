@@ -34,6 +34,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
+    from app.models.user import User
     from app.models.workspace import Workspace
 
 
@@ -42,7 +43,8 @@ class BookableStaff(Base):
 
     Scoped to a workspace and (optionally) a specific agent's pool. When
     ``agent_id`` is set the staff member belongs to that agent's booking pool;
-    the booking tool only assigns from staff matching the active agent.
+    when it is null the row is a Team-managed workspace resource shared by the
+    workspace's booking agents.
     """
 
     __tablename__ = "bookable_staff"
@@ -76,6 +78,20 @@ class BookableStaff(Base):
     # Identity
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Optional link to a login, mirroring ``Technician.user_id``. This is what
+    # makes "show me the appointments I'm booked on" answerable: without it an
+    # appointment has no path back to a signed-in user, so the calendar cannot
+    # scope reads for the field tier. Nullable because most staff rows are
+    # booking resources, not seats. SET NULL keeps the staff row (and its
+    # booking history) if the login is removed.
+    # ``users.id`` is an integer PK (see app.models.user.User).
+    user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     # Each staff member books against their own Cal.com event type / schedule.
     calcom_event_type_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -112,6 +128,7 @@ class BookableStaff(Base):
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="bookable_staff")
     agent: Mapped["Agent | None"] = relationship("Agent", back_populates="bookable_staff")
+    user: Mapped["User | None"] = relationship("User", lazy="raise")
 
     def __repr__(self) -> str:
         return f"<BookableStaff(id={self.id}, name={self.name}, skills={self.skills})>"

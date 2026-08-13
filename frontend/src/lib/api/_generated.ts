@@ -2314,6 +2314,13 @@ export interface paths {
          *     Requires workspace membership. All appointments are filtered by workspace_id
          *     to ensure workspace isolation.
          *
+         *     Dispatchers and up see every appointment. Below that line the list is scoped
+         *     server-side to the appointments the caller is booked on (their linked
+         *     bookable-staff row); an unlinked caller gets an empty page, not an error.
+         *
+         *     ``mine=true`` narrows the result to the caller's own bookings whatever their
+         *     role; for the field tier it is already implied.
+         *
          *     Optional filters:
          *     - status_filter: filter by appointment status
          *     - contact_id: filter by contact (indexed)
@@ -2327,9 +2334,10 @@ export interface paths {
          * Create Appointment
          * @description Create a new appointment.
          *
-         *     Requires workspace membership. Validates contact and agent exist in workspace.
-         *     The appointment is stored in the CRM, which is the single source of truth for
-         *     scheduling (no external calendar sync).
+         *     Dispatch-tier callers create an unassigned board appointment as before.
+         *     Restricted callers are assigned to their active linked booking resource so
+         *     the row remains visible on their scoped calendar; an admin must enable that
+         *     resource in Settings → Team first.
          */
         post: operations["create_appointment_api_v1_workspaces__workspace_id__appointments_post"];
         delete?: never;
@@ -2373,6 +2381,9 @@ export interface paths {
         /**
          * Get Appointment
          * @description Get an appointment by ID.
+         *
+         *     Carries the same scope as the list, so a deep link to an appointment the
+         *     caller is not booked on 404s rather than bypassing the filter.
          */
         get: operations["get_appointment_api_v1_workspaces__workspace_id__appointments__appointment_id__get"];
         /**
@@ -2626,6 +2637,53 @@ export interface paths {
          * @description Toggle automation active status.
          */
         post: operations["toggle_automation_api_v1_workspaces__workspace_id__automations__automation_id__toggle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/bookable-staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Workspace Bookable Staff
+         * @description Every bookable staff row in the workspace, across all agents.
+         *
+         *     Answers "does this member have a booking calendar?" on the Team screen,
+         *     which has no agent context.
+         */
+        get: operations["list_workspace_bookable_staff_api_v1_workspaces__workspace_id__bookable_staff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/bookable-staff/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Member Bookable
+         * @description Enable or disable a workspace member's booking calendar.
+         *
+         *     Linked appointments appear on that member's own calendar while the staff
+         *     row is active. Disabling preserves the link and appointment history so
+         *     re-enabling restores the same booking resource.
+         */
+        put: operations["set_member_bookable_api_v1_workspaces__workspace_id__bookable_staff_members__user_id__put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3934,46 +3992,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/conversations/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Mark All Conversations Read
-         * @description Mark every conversation in the workspace as read.
-         */
-        post: operations["mark_all_conversations_read_api_v1_workspaces__workspace_id__conversations_read_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/conversations/unread": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Unread Summary
-         * @description Unread rollup for the workspace, polled by the header chat badge.
-         */
-        get: operations["get_unread_summary_api_v1_workspaces__workspace_id__conversations_unread_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}": {
         parameters: {
             query?: never;
@@ -4193,46 +4211,6 @@ export interface paths {
          * @description Clear all messages in a conversation.
          */
         delete: operations["clear_conversation_history_api_v1_workspaces__workspace_id__conversations__conversation_id__messages_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Mark Conversation Read
-         * @description Mark a single conversation as read.
-         */
-        post: operations["mark_conversation_read_api_v1_workspaces__workspace_id__conversations__conversation_id__read_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/teach-ai": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Teach Ai
-         * @description Save or update a human-approved correction for one AI SMS reply.
-         */
-        post: operations["teach_ai_api_v1_workspaces__workspace_id__conversations__conversation_id__teach_ai_post"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -5176,6 +5154,13 @@ export interface paths {
         /**
          * List Jobs
          * @description List jobs for the dispatch board / calendar, with optional filters.
+         *
+         *     Dispatchers and up see the whole board. Below that line the list is scoped
+         *     server-side to the jobs the caller is assigned to — the requested filters
+         *     narrow that set further, they never widen it.
+         *
+         *     ``mine=true`` narrows the result to the caller's own work whatever their
+         *     role; for the field tier it is already implied.
          */
         get: operations["list_jobs_api_v1_workspaces__workspace_id__jobs_get"];
         put?: never;
@@ -5223,6 +5208,9 @@ export interface paths {
         /**
          * Get Job
          * @description Get a single job with its assigned technicians.
+         *
+         *     Carries the same visibility scope as the list, so a deep link to somebody
+         *     else's job 404s for the field tier instead of routing around the filter.
          */
         get: operations["get_job_api_v1_workspaces__workspace_id__jobs__job_id__get"];
         put?: never;
@@ -10723,11 +10711,6 @@ export interface components {
              * @default both
              */
             channel_mode: string;
-            /**
-             * Confirmation Email Enabled
-             * @default true
-             */
-            confirmation_email_enabled: boolean;
             /** Description */
             description?: string | null;
             /**
@@ -10812,13 +10795,6 @@ export interface components {
             /** Post Meeting Template */
             post_meeting_template?: string | null;
             /**
-             * Reminder Channels
-             * @default [
-             *       "sms"
-             *     ]
-             */
-            reminder_channels: string[];
-            /**
              * Reminder Enabled
              * @default true
              */
@@ -10861,7 +10837,7 @@ export interface components {
              * @default {}
              */
             tool_settings: {
-                [key: string]: unknown;
+                [key: string]: string[];
             };
             /** Transfer Briefing Template */
             transfer_briefing_template?: string | null;
@@ -10911,11 +10887,6 @@ export interface components {
             calcom_event_type_id: number | null;
             /** Channel Mode */
             channel_mode: string;
-            /**
-             * Confirmation Email Enabled
-             * @default true
-             */
-            confirmation_email_enabled: boolean;
             /**
              * Created At
              * Format: date-time
@@ -10987,13 +10958,6 @@ export interface components {
             post_meeting_sms_enabled: boolean;
             /** Post Meeting Template */
             post_meeting_template?: string | null;
-            /**
-             * Reminder Channels
-             * @default [
-             *       "sms"
-             *     ]
-             */
-            reminder_channels: string[];
             /** Reminder Enabled */
             reminder_enabled: boolean;
             /** Reminder Minutes Before */
@@ -11012,7 +10976,7 @@ export interface components {
             text_response_delay_ms: number;
             /** Tool Settings */
             tool_settings: {
-                [key: string]: unknown;
+                [key: string]: string[];
             };
             /** Transfer Briefing Template */
             transfer_briefing_template?: string | null;
@@ -11079,8 +11043,6 @@ export interface components {
             calcom_event_type_id?: number | null;
             /** Channel Mode */
             channel_mode?: string | null;
-            /** Confirmation Email Enabled */
-            confirmation_email_enabled?: boolean | null;
             /** Description */
             description?: string | null;
             /** Enable Ivr Navigation */
@@ -11127,8 +11089,6 @@ export interface components {
             post_meeting_sms_enabled?: boolean | null;
             /** Post Meeting Template */
             post_meeting_template?: string | null;
-            /** Reminder Channels */
-            reminder_channels?: string[] | null;
             /** Reminder Enabled */
             reminder_enabled?: boolean | null;
             /** Reminder Minutes Before */
@@ -11147,7 +11107,7 @@ export interface components {
             text_response_delay_ms?: number | null;
             /** Tool Settings */
             tool_settings?: {
-                [key: string]: unknown;
+                [key: string]: string[];
             } | null;
             /** Transfer Briefing Template */
             transfer_briefing_template?: string | null;
@@ -12267,6 +12227,27 @@ export interface components {
              * @default []
              */
             skills: string[];
+            /**
+             * User Id
+             * @description Workspace member this staff row belongs to. Setting it puts the bookings on that person's calendar, so it requires members:manage.
+             */
+            user_id?: number | null;
+        };
+        /**
+         * BookableStaffLinkRequest
+         * @description Give a workspace member a booking calendar, or take it away.
+         *
+         *     The Settings → Team form of the link. ``name``/``email`` seed the staff row
+         *     the first time a member is made bookable; they are ignored once a row exists,
+         *     so the toggle never overwrites a name someone edited in the agent's pool.
+         */
+        BookableStaffLinkRequest: {
+            /** Bookable */
+            bookable: boolean;
+            /** Email */
+            email?: string | null;
+            /** Name */
+            name: string;
         };
         /**
          * BookableStaffList
@@ -12316,6 +12297,8 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /** User Id */
+            user_id: number | null;
             /**
              * Workspace Id
              * Format: uuid
@@ -12339,6 +12322,11 @@ export interface components {
             priority?: number | null;
             /** Skills */
             skills?: string[] | null;
+            /**
+             * User Id
+             * @description Workspace member this staff row belongs to; send null to unlink. Requires members:manage — the link decides whose calendar the bookings appear on.
+             */
+            user_id?: number | null;
         };
         /**
          * BulkDeleteRequest
@@ -19816,14 +19804,6 @@ export interface components {
             utm_source?: string | null;
             /** Utm Term */
             utm_term?: string | null;
-        };
-        /**
-         * MarkAllReadResponse
-         * @description Result of clearing every unread thread in a workspace.
-         */
-        MarkAllReadResponse: {
-            /** Conversations Marked */
-            conversations_marked: number;
         };
         /** MeasurementSchema */
         MeasurementSchema: {
@@ -28311,64 +28291,6 @@ export interface components {
             rate: number;
         };
         /**
-         * TeachAIRequest
-         * @description Human-approved correction to one AI-generated SMS reply.
-         */
-        TeachAIRequest: {
-            /** Ideal Response */
-            ideal_response: string;
-            /** Note */
-            note?: string | null;
-            /**
-             * Source Message Id
-             * Format: uuid
-             */
-            source_message_id: string;
-        };
-        /**
-         * TeachAIResponse
-         * @description Saved correction and its agent target; never returned across tenants.
-         */
-        TeachAIResponse: {
-            /**
-             * Agent Id
-             * Format: uuid
-             */
-            agent_id: string;
-            /** Agent Name */
-            agent_name: string;
-            /** Conversation Id */
-            conversation_id: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Ideal Response */
-            ideal_response: string;
-            /** Is Active */
-            is_active: boolean;
-            /** Note */
-            note: string | null;
-            /** Source Message Id */
-            source_message_id: string | null;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Workspace Id
-             * Format: uuid
-             */
-            workspace_id: string;
-        };
-        /**
          * TeamMemberResponse
          * @description Schema for team member response.
          */
@@ -28819,8 +28741,6 @@ export interface components {
          * @description A unified timeline item.
          */
         TimelineItem: {
-            /** Agent Id */
-            agent_id?: string | null;
             /** Attachments */
             attachments?: components["schemas"]["TimelineAttachment"][];
             /** Booking Outcome */
@@ -29066,19 +28986,6 @@ export interface components {
             /** Suggested Lead Source Id */
             suggested_lead_source_id?: string | null;
             suggested_source_type?: components["schemas"]["LeadSourceType"] | null;
-        };
-        /**
-         * UnreadSummary
-         * @description Workspace-wide unread rollup backing the header chat badge.
-         *
-         *     ``unread_messages`` is the sum of every thread's ``unread_count`` (what the
-         *     badge shows); ``unread_conversations`` is how many threads are waiting.
-         */
-        UnreadSummary: {
-            /** Unread Conversations */
-            unread_conversations: number;
-            /** Unread Messages */
-            unread_messages: number;
         };
         /**
          * UpdateMemberRoleRequest
@@ -34953,6 +34860,8 @@ export interface operations {
                 business_location_id?: string | null;
                 date_from?: string | null;
                 date_to?: string | null;
+                /** @description Only appointments the caller is booked on */
+                mine?: boolean;
             };
             header?: never;
             path: {
@@ -35627,6 +35536,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AutomationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_workspace_bookable_staff_api_v1_workspaces__workspace_id__bookable_staff_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookableStaffList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_member_bookable_api_v1_workspaces__workspace_id__bookable_staff_members__user_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookableStaffLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookableStaffResponse"] | null;
                 };
             };
             /** @description Validation Error */
@@ -38275,68 +38251,6 @@ export interface operations {
             };
         };
     };
-    mark_all_conversations_read_api_v1_workspaces__workspace_id__conversations_read_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MarkAllReadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_unread_summary_api_v1_workspaces__workspace_id__conversations_unread_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnreadSummary"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_conversation_api_v1_workspaces__workspace_id__conversations__conversation_id__get: {
         parameters: {
             query?: {
@@ -38743,74 +38657,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    mark_conversation_read_api_v1_workspaces__workspace_id__conversations__conversation_id__read_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConversationResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    teach_ai_api_v1_workspaces__workspace_id__conversations__conversation_id__teach_ai_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                conversation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TeachAIRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TeachAIResponse"];
-                };
             };
             /** @description Validation Error */
             422: {
@@ -40773,6 +40619,8 @@ export interface operations {
                 date_from?: string | null;
                 /** @description Jobs scheduled on or before this time */
                 date_to?: string | null;
+                /** @description Only jobs the caller is assigned to */
+                mine?: boolean;
             };
             header?: never;
             path: {
