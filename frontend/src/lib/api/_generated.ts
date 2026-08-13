@@ -10963,6 +10963,8 @@ export interface components {
              * @default false
              */
             auto_evaluate: boolean;
+            /** Calcom Event Type Id */
+            calcom_event_type_id?: number | null;
             /**
              * Channel Mode
              * @default both
@@ -11152,6 +11154,8 @@ export interface components {
             assignment_strategy: string;
             /** Auto Evaluate */
             auto_evaluate: boolean;
+            /** Calcom Event Type Id */
+            calcom_event_type_id: number | null;
             /** Channel Mode */
             channel_mode: string;
             /**
@@ -11318,6 +11322,8 @@ export interface components {
             assignment_strategy?: string | null;
             /** Auto Evaluate */
             auto_evaluate?: boolean | null;
+            /** Calcom Event Type Id */
+            calcom_event_type_id?: number | null;
             /** Channel Mode */
             channel_mode?: string | null;
             /** Confirmation Email Enabled */
