@@ -2073,17 +2073,6 @@
             "title": "Auto Evaluate",
             "type": "boolean"
           },
-          "calcom_event_type_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Event Type Id"
-          },
           "channel_mode": {
             "default": "both",
             "title": "Channel Mode",
@@ -2402,17 +2391,6 @@
             "title": "Auto Evaluate",
             "type": "boolean"
           },
-          "calcom_event_type_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Event Type Id"
-          },
           "channel_mode": {
             "title": "Channel Mode",
             "type": "string"
@@ -2725,7 +2703,6 @@
           "temperature",
           "text_response_delay_ms",
           "text_max_context_messages",
-          "calcom_event_type_id",
           "enabled_tools",
           "tool_settings",
           "is_active",
@@ -2806,17 +2783,6 @@
               }
             ],
             "title": "Auto Evaluate"
-          },
-          "calcom_event_type_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Event Type Id"
           },
           "channel_mode": {
             "anyOf": [
