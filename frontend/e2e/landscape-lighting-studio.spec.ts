@@ -415,8 +415,18 @@ test.describe("landscape lighting studio", () => {
 
     const baselineUpdateCount = updates.length;
     await page.getByRole("button", { name: "Highlight" }).click();
-    await page.getByRole("button", { name: "Save now" }).click();
+    const canvas = page.getByLabel("Lighting design canvas");
+    const canvasBox = await canvas.boundingBox();
+    if (!canvasBox) throw new Error("Lighting design canvas did not render");
+    await page.mouse.move(canvasBox.x + 260, canvasBox.y + 260);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox.x + 430, canvasBox.y + 310, { steps: 8 });
+    await page.mouse.up();
     await expect.poll(() => updates.length).toBeGreaterThan(baselineUpdateCount);
+    const latestDraft = updates.at(-1) as {
+      document?: { shots?: Array<{ design?: { highlights?: unknown[] } }> };
+    };
+    expect(latestDraft.document?.shots?.[0]?.design?.highlights).toHaveLength(1);
 
     await page.getByRole("button", { name: "File", exact: true }).click();
     const download = page.waitForEvent("download");
