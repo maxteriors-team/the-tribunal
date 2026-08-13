@@ -18,6 +18,9 @@ from app.schemas.appointment import (
     PaginatedAppointments,
 )
 from app.services.appointments import AppointmentService
+from app.services.rate_limiting.appointment_reminder_limiter import (
+    enforce_appointment_reminder_rate_limit,
+)
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -221,6 +224,7 @@ async def send_appointment_reminder(
         appointment_id=appointment_id,
         user_id=current_user.id,
     )
+    await enforce_appointment_reminder_rate_limit(workspace_id, current_user.id)
     service = AppointmentService(db)
     try:
         result = await service.send_reminder(
