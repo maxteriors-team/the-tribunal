@@ -16,7 +16,6 @@ from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation
@@ -210,7 +209,7 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
 ) -> str | None:
     """Generate AI response for a text conversation.
 
-    Supports OpenAI function calling for booking appointments via Cal.com.
+    Supports OpenAI function calling for booking appointments via Google Calendar.
 
     Args:
         agent: The text agent to use
@@ -276,11 +275,7 @@ async def generate_text_response(  # noqa: PLR0915, PLR0912
         )
 
     # Build system instructions - booking tools are server-gated while qualification is pending.
-    booking_configured = bool(
-        agent.calcom_event_type_id
-        and settings.calcom_api_key
-        and "book_appointment" in (agent.enabled_tools or [])
-    )
+    booking_configured = "book_appointment" in (agent.enabled_tools or [])
 
     booking_instructions = ""
     extracted_email = None
