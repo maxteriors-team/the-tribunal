@@ -156,11 +156,13 @@ export function buildJobsQueryParams(
   weekEndIso: string,
   statusFilter: JobStatusFilter,
   businessLocationId?: string,
+  mine?: boolean,
 ): JobListParams {
   return {
     date_from: weekStartIso,
     date_to: weekEndIso,
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(businessLocationId ? { business_location_id: businessLocationId } : {}),
+    ...(mine ? { mine: true } : {}),
   };
 }

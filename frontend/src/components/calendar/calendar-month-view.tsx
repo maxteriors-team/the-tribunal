@@ -1,49 +1,42 @@
 "use client";
 
 /**
- * Jobber-style month grid for the calendar screen.
+ * Month grid for the unified calendar screen.
  *
- * Presentational: given the week rows and the appointments already fetched for
- * the visible range, it renders a Sun→Sat month grid with per-day appointment
- * chips. Clicking a chip bubbles the appointment up via `onSelect`; the page
- * owns the shared details dialog. Days outside the active month are dimmed.
+ * Presentational: given the week rows and the entries already fetched for the
+ * visible range, it renders a Sun→Sat month grid with per-day chips for both
+ * species of work — appointments and scheduled jobs — in one cell, in time
+ * order. Clicking a chip bubbles the entry up via `onSelect`; the page owns the
+ * two detail dialogs. Days outside the active month are dimmed.
  */
-import { appointmentsForDay } from "@/lib/calendar/calendar-derivations";
+import { CalendarEntryChip } from "@/components/calendar/calendar-entry-chip";
+import type { CalendarEntry } from "@/lib/calendar/calendar-entries";
+import { entriesForDay } from "@/lib/calendar/calendar-entries";
 import { cn } from "@/lib/utils";
 import { formatDate, isSameDay, isSameMonth } from "@/lib/utils/date";
-import type { Appointment } from "@/types";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 /** How many chips fit in a cell before collapsing into a "+N more" row. */
 const MAX_CHIPS_PER_DAY = 3;
 
-/** Chip tint by appointment status (background + text), matching the app palette. */
-function chipClasses(status: Appointment["status"]): string {
-  switch (status) {
-    case "completed":
-      return "bg-success/15 text-success hover:bg-success/25";
-    case "no_show":
-      return "bg-destructive/15 text-destructive hover:bg-destructive/25";
-    case "cancelled":
-      return "bg-muted text-muted-foreground line-through hover:bg-muted/80";
-    default:
-      return "bg-primary/15 text-primary hover:bg-primary/25";
-  }
-}
-
 interface CalendarMonthViewProps {
   weeks: Date[][];
   monthDate: Date;
-  appointments: Appointment[];
-  onSelect: (appointment: Appointment) => void;
+  entries: CalendarEntry[];
+  onSelect: (entry: CalendarEntry) => void;
+  /** Reveals a day's hidden chips; the page owns which day is expanded. */
+  expandedDayIso?: string | null;
+  onExpandDay?: (dayIso: string) => void;
 }
 
 export function CalendarMonthView({
   weeks,
   monthDate,
-  appointments,
+  entries,
   onSelect,
+  expandedDayIso = null,
+  onExpandDay,
 }: CalendarMonthViewProps) {
   const today = new Date();
 
@@ -69,14 +62,19 @@ export function CalendarMonthView({
             className="grid grid-cols-7 border-b last:border-b-0"
           >
             {week.map((day) => {
-              const dayAppointments = appointmentsForDay(appointments, day);
+              const dayIso = day.toISOString();
+              const dayEntries = entriesForDay(entries, day);
               const inMonth = isSameMonth(day, monthDate);
               const isToday = isSameDay(day, today);
-              const overflow = dayAppointments.length - MAX_CHIPS_PER_DAY;
+              const expanded = expandedDayIso === dayIso;
+              const visible = expanded
+                ? dayEntries
+                : dayEntries.slice(0, MAX_CHIPS_PER_DAY);
+              const overflow = dayEntries.length - visible.length;
 
               return (
                 <div
-                  key={day.toISOString()}
+                  key={dayIso}
                   className={cn(
                     "min-h-[104px] border-r p-1.5 last:border-r-0",
                     !inMonth && "bg-muted/30",
@@ -98,32 +96,28 @@ export function CalendarMonthView({
                   </div>
 
                   <div className="space-y-1">
-                    {dayAppointments.slice(0, MAX_CHIPS_PER_DAY).map((apt) => (
-                      <button
-                        key={apt.id}
-                        type="button"
-                        onClick={() => onSelect(apt)}
-                        title={`${formatDate(apt.scheduled_at, { pattern: "h:mm a" })} · ${
-                          apt.service_type || "Appointment"
-                        }`}
-                        className={cn(
-                          "flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px] font-medium transition-colors",
-                          chipClasses(apt.status),
-                        )}
-                      >
-                        <span className="shrink-0 tabular-nums opacity-80">
-                          {formatDate(apt.scheduled_at, { pattern: "h:mm a" })}
-                        </span>
-                        <span className="truncate">
-                          {apt.service_type || "Appointment"}
-                        </span>
-                      </button>
+                    {visible.map((entry) => (
+                      <CalendarEntryChip
+                        key={entry.key}
+                        entry={entry}
+                        onSelect={onSelect}
+                        density="compact"
+                      />
                     ))}
-                    {overflow > 0 && (
-                      <div className="px-1.5 text-[11px] font-medium text-muted-foreground">
-                        +{overflow} more
-                      </div>
-                    )}
+                    {overflow > 0 &&
+                      (onExpandDay ? (
+                        <button
+                          type="button"
+                          onClick={() => onExpandDay(dayIso)}
+                          className="w-full rounded px-1.5 text-left text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+                        >
+                          +{overflow} more
+                        </button>
+                      ) : (
+                        <div className="px-1.5 text-[11px] font-medium text-muted-foreground">
+                          +{overflow} more
+                        </div>
+                      ))}
                   </div>
                 </div>
               );

@@ -4,7 +4,6 @@ import { apiClient, type Schemas } from "@/lib/api/_client";
 import {
   jobsApi,
   type JobAssignRequest,
-  type JobCalendarParams,
   type JobCreateRequest,
   type JobCrewList,
   type JobInstallationPlan,
@@ -34,19 +33,6 @@ export function useJob(workspaceId: string, jobId: string, enabled = true) {
     queryFn: () => jobsApi.get(workspaceId, jobId),
     enabled: enabled && Boolean(workspaceId) && Boolean(jobId),
     retry: false,
-  });
-}
-
-/** Jobs assigned to the signed-in user — their personal calendar. */
-export function useMyJobsCalendar(
-  workspaceId: string,
-  params: JobCalendarParams = {},
-  enabled = true,
-) {
-  return useQuery<JobList>({
-    queryKey: queryKeys.jobs.mine(workspaceId, params as Record<string, unknown>),
-    queryFn: () => jobsApi.listMine(workspaceId, params),
-    enabled: enabled && Boolean(workspaceId),
   });
 }
 
@@ -140,6 +126,55 @@ export function useSetMemberOnRoster(workspaceId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.technicians.all(workspaceId),
+      });
+    },
+  });
+}
+
+/**
+ * Whether each member has a booking calendar (a linked `bookable_staff` row).
+ *
+ * Team-settings only: gated on `members:manage` server-side, so it is fetched
+ * with `enabled` from the same check that renders the toggle.
+ */
+export function useWorkspaceBookableStaff(workspaceId: string, enabled = true) {
+  return useQuery<Schemas["BookableStaffList"]>({
+    queryKey: queryKeys.bookableStaff.all(workspaceId),
+    queryFn: () =>
+      apiClient.get("/api/v1/workspaces/{workspace_id}/bookable-staff", {
+        path: { workspace_id: workspaceId },
+      }),
+    enabled: enabled && Boolean(workspaceId),
+  });
+}
+
+interface BookableToggleInput {
+  userId: number;
+  name: string;
+  email?: string | null;
+  bookable: boolean;
+}
+
+/**
+ * Enable or disable a member's booking resources from Settings → Team.
+ *
+ * Disabling preserves staff links and appointment history, so enabling again
+ * restores the same resources. Sits beside {@link useSetMemberOnRoster}: one
+ * screen decides both whether
+ * someone can be dispatched to jobs and whether they can be booked for
+ * appointments, which are the two halves of what shows on their calendar.
+ */
+export function useSetMemberBookable(workspaceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, name, email, bookable }: BookableToggleInput) =>
+      apiClient.put("/api/v1/workspaces/{workspace_id}/bookable-staff/members/{user_id}", {
+        path: { workspace_id: workspaceId, user_id: userId },
+        body: { bookable, name, email: email ?? null },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.bookableStaff.all(workspaceId),
       });
     },
   });

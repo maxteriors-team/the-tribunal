@@ -137,7 +137,7 @@ export function ConvertQuoteDialog({
             <div className="flex flex-wrap gap-2">
               {result.job_id ? (
                 <Button asChild>
-                  <Link href={`/jobs?job=${result.job_id}`}>
+                  <Link href={`/calendar?job=${result.job_id}`}>
                     Open job <ExternalLink />
                   </Link>
                 </Button>

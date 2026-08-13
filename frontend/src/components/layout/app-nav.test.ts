@@ -61,7 +61,7 @@ describe("findNavSectionIdForPath", () => {
 
   it("matches sub-routes, so a contact detail page keeps Customers open", () => {
     expect(findNavSectionIdForPath("/contacts/6980/details")).toBe("customers");
-    expect(findNavSectionIdForPath("/jobs/123")).toBe("operations");
+    expect(findNavSectionIdForPath("/calendar/week")).toBe("operations");
   });
 
   it("prefers the longest matching url over a shorter prefix", () => {
@@ -85,11 +85,17 @@ describe("findNavSectionIdForPath", () => {
 });
 
 describe("isFieldOperationalPath", () => {
-  it("allows the jobs schedule and calendar (and their sub-routes)", () => {
-    expect(isFieldOperationalPath("/jobs")).toBe(true);
-    expect(isFieldOperationalPath("/jobs/123")).toBe(true);
+  it("allows the calendar and its sub-routes", () => {
     expect(isFieldOperationalPath("/calendar")).toBe(true);
     expect(isFieldOperationalPath("/calendar/week")).toBe(true);
+  });
+
+  it("still allows /jobs so an existing deep link can reach its redirect", () => {
+    // `/jobs` has no screen any more, but already-sent notifications and the
+    // convert-quote flow point at `/jobs?job=<id>`. Dropping it here would make
+    // the redirect unreachable for the tier that follows those links most.
+    expect(isFieldOperationalPath("/jobs")).toBe(true);
+    expect(isFieldOperationalPath("/jobs/123")).toBe(true);
   });
 
   it("blocks every other CRM surface", () => {
@@ -145,14 +151,19 @@ describe("canSeeNavItem — the crew lead is fail-closed too", () => {
 
 describe("real nav items under the on-site tiers", () => {
   const contacts = allNavItems.find((i) => i.url === "/contacts")!;
-  const jobs = allNavItems.find((i) => i.url === "/jobs")!;
   const calendar = allNavItems.find((i) => i.url === "/calendar")!;
   const upsell = allNavItems.find((i) => i.url === "/upsell")!;
 
-  it("hides Contacts/Campaigns but shows Jobs & Calendar", () => {
+  it("hides Contacts/Campaigns but shows the Calendar", () => {
     expect(canSeeNavItem(contacts, "field", canAll)).toBe(false);
-    expect(canSeeNavItem(jobs, "field", canAll)).toBe(true);
     expect(canSeeNavItem(calendar, "field", canAll)).toBe(true);
+  });
+
+  it("has one schedule entry, not a separate Jobs board", () => {
+    // Jobs and appointments share `/calendar` now and `/jobs` redirects there,
+    // so a second nav entry would be two doors into the same room.
+    expect(allNavItems.filter((i) => i.url === "/jobs")).toHaveLength(0);
+    expect(allNavItems.filter((i) => i.url === "/calendar")).toHaveLength(1);
   });
 
   it("shows 'Sell add-on' to a crew lead and hides it from a plain technician", () => {

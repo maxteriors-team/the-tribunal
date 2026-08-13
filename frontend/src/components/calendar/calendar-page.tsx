@@ -1,23 +1,40 @@
 "use client";
 
+/**
+ * The calendar: one surface for everything that is scheduled.
+ *
+ * Appointments and field jobs used to live on two separate screens, which meant
+ * nobody could answer "what is happening on Thursday?" without checking both and
+ * reconciling them by hand. They are merged here into one month/week grid where
+ * each day cell shows both species of work in time order.
+ *
+ * Visibility is enforced by the API, not by this component: below the dispatch
+ * tier both list endpoints return only the entries the caller is tagged on, so
+ * what a field worker sees here is already their own schedule. The controls that
+ * belong to running the board — the unscheduled dispatch queue, "New job", and
+ * the personal "Only mine" filter — are gated on `jobs:write` to match.
+ */
+
 import {
   ChevronLeft,
   ChevronRight,
   Plus,
   Calendar as CalendarIcon,
+  Inbox,
   Settings,
+  Wrench,
 } from "lucide-react";
-import { motion } from "motion/react";
 import Link from "next/link";
-import { useState, useMemo } from "react";
+import { useCallback, useState, useMemo } from "react";
 import { toast } from "sonner";
 
-import { ReminderBadges } from "@/components/calendar/appointment-actions";
 import { AppointmentDetailsDialog } from "@/components/calendar/appointment-details-dialog";
+import { CalendarEntryChip } from "@/components/calendar/calendar-entry-chip";
 import { CalendarMonthView } from "@/components/calendar/calendar-month-view";
 import { NewAppointmentDialog } from "@/components/calendar/new-appointment-dialog";
+import { JobDetailDialog } from "@/components/jobs/job-detail-dialog";
+import { NewJobDialog } from "@/components/jobs/new-job-dialog";
 import { LocationFilter } from "@/components/locations/location-filter";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,91 +44,221 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { Label } from "@/components/ui/label";
+import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { useAppointments, useDeleteAppointment } from "@/hooks/useAppointments";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import { useJob, useJobs } from "@/hooks/useJobs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import type { Job, JobListParams } from "@/lib/api/jobs";
 import {
   STATUS_OPTIONS,
-  appointmentsForDay,
   buildAppointmentsQueryParams,
-  getContactName,
-  getInitials,
   getMonthRange,
   getWeekRange,
-  scheduledCount,
   statusFilterLabel,
-  todaysAppointments,
-  upcomingAppointments,
   type StatusFilter,
 } from "@/lib/calendar/calendar-derivations";
-import { appointmentStatusColors } from "@/lib/status-colors";
+import {
+  countByKind,
+  entriesForDay,
+  toCalendarEntries,
+  todaysEntries,
+  upcomingEntries,
+  type CalendarEntry,
+} from "@/lib/calendar/calendar-entries";
+import {
+  buildJobsQueryParams,
+  jobStatusColors,
+  jobStatusLabel,
+} from "@/lib/jobs/job-derivations";
 import { formatDate, addDays, addMonths, isSameDay } from "@/lib/utils/date";
 
 type CalendarView = "month" | "week";
 
-export function CalendarPage() {
+/**
+ * The dispatch backlog is workspace-wide and independent of the visible range,
+ * so it is fetched with its own status filter rather than derived from the
+ * range-scoped list — whose `date_from`/`date_to` window excludes null-start
+ * rows. Module-level so the query key stays referentially stable across renders.
+ */
+const UNSCHEDULED_QUEUE_PARAMS: JobListParams = { status: "unscheduled" };
+
+export function CalendarPage({ initialJobId }: { initialJobId?: string } = {}) {
+  const workspaceId = useWorkspaceId();
+  const { can, tier } = useCapabilities();
+  // jobs:write — owner/admin/manager/dispatcher. They run the board: the
+  // unscheduled queue, job creation, and the personal "Only mine" filter are
+  // theirs. Everyone below already receives a scoped list from the API, so a
+  // filter for "only mine" would be a no-op switch, and the queue is dispatch
+  // work they cannot act on.
+  const canWriteJobs = can("jobs:write");
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>("month");
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(null);
-  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
   const [locationId, setLocationId] = useState<string | undefined>(undefined);
-  const workspaceId = useWorkspaceId();
+  const [mineOnly, setMineOnly] = useState(false);
+  const [expandedDayIso, setExpandedDayIso] = useState<string | null>(null);
 
-  // The visible date range drives both the fetch (query key + params) and the
-  // grid. Month view spans whole weeks around the month; week view is Mon→Sun.
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<number | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(initialJobId ?? null);
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const [isNewJobOpen, setIsNewJobOpen] = useState(false);
+
+  // The visible range drives both fetches (query key + params) and the grid.
+  // Month view spans whole weeks around the month; week view is Mon→Sun.
   const monthRange = useMemo(() => getMonthRange(currentDate), [currentDate]);
   const weekRange = useMemo(() => getWeekRange(currentDate), [currentDate]);
   const rangeStartIso =
     view === "month" ? monthRange.gridStartIso : weekRange.weekStartIso;
-  const rangeEndIso =
-    view === "month" ? monthRange.gridEndIso : weekRange.weekEndIso;
+  const rangeEndIso = view === "month" ? monthRange.gridEndIso : weekRange.weekEndIso;
 
-  const queryParams = useMemo(
+  // "Only mine" is a dispatcher's personal filter. Below that tier the API
+  // already scopes both lists, so asking for it again would change nothing.
+  const scopeToMine = canWriteJobs && mineOnly;
+
+  // Both endpoint calls stay range-scoped and unfiltered; the shared status
+  // control is applied to the merged datasets below. This matters because the
+  // two APIs have overlapping but non-identical vocabularies (`in_progress` is
+  // job-only, `no_show` is appointment-only), and a single server value cannot
+  // express that union without making the other species disappear incorrectly.
+  const appointmentParams = useMemo(
     () =>
-      buildAppointmentsQueryParams(rangeStartIso, rangeEndIso, statusFilter, locationId),
-    [rangeStartIso, rangeEndIso, statusFilter, locationId],
+      buildAppointmentsQueryParams(
+        rangeStartIso,
+        rangeEndIso,
+        "",
+        locationId,
+        scopeToMine,
+      ),
+    [rangeStartIso, rangeEndIso, locationId, scopeToMine],
   );
 
-  const { data: appointmentsData, isPending, error, refetch } = useAppointments(
-    workspaceId ?? "",
-    queryParams,
+  const jobParams = useMemo(
+    () => buildJobsQueryParams(rangeStartIso, rangeEndIso, "", locationId, scopeToMine),
+    [rangeStartIso, rangeEndIso, locationId, scopeToMine],
   );
+
+  const appointmentsQuery = useAppointments(workspaceId ?? "", appointmentParams);
+  const jobsQuery = useJobs(workspaceId ?? "", jobParams);
+  // Dispatch-only: a field worker cannot schedule, so the backlog is not theirs.
+  const unscheduledQuery = useJobs(
+    workspaceId ?? "",
+    UNSCHEDULED_QUEUE_PARAMS,
+    canWriteJobs,
+  );
+
   const deleteAppointmentMutation = useDeleteAppointment(workspaceId ?? "");
 
-  const appointmentsList = useMemo(
-    () => appointmentsData?.items || [],
-    [appointmentsData?.items],
+  const appointmentsList = useMemo(() => {
+    const items = appointmentsQuery.data?.items ?? [];
+    if (!statusFilter || statusFilter === "in_progress") {
+      return statusFilter === "in_progress" ? [] : items;
+    }
+    return items.filter((appointment) => appointment.status === statusFilter);
+  }, [appointmentsQuery.data?.items, statusFilter]);
+  const jobsList = useMemo(() => {
+    const items = jobsQuery.data?.items ?? [];
+    if (!statusFilter || statusFilter === "no_show") {
+      return statusFilter === "no_show" ? [] : items;
+    }
+    return items.filter((job) => job.status === statusFilter);
+  }, [jobsQuery.data?.items, statusFilter]);
+  const queue = useMemo(
+    () => unscheduledQuery.data?.items ?? [],
+    [unscheduledQuery.data?.items],
   );
 
-  const totalCount = appointmentsData?.total ?? 0;
+  const entries = useMemo(
+    () => toCalendarEntries(appointmentsList, jobsList),
+    [appointmentsList, jobsList],
+  );
+  const counts = useMemo(() => countByKind(entries), [entries]);
+  const todayEntries = useMemo(() => todaysEntries(entries), [entries]);
+  const upcomingList = useMemo(() => upcomingEntries(entries), [entries]);
 
   const selectedAppointment = useMemo(
     () => appointmentsList.find((apt) => apt.id === selectedAppointmentId) ?? null,
     [appointmentsList, selectedAppointmentId],
   );
 
-  const todayAppointments = useMemo(
-    () => todaysAppointments(appointmentsList),
-    [appointmentsList],
+  // Ordinary selections resolve from the live lists. A `?job=` deep link (the
+  // convert-quote flow lands on one) may point outside the visible range, so
+  // that job is loaded directly.
+  const listedSelectedJob = useMemo(
+    () =>
+      jobsList.find((job) => job.id === selectedJobId) ??
+      queue.find((job) => job.id === selectedJobId) ??
+      null,
+    [jobsList, queue, selectedJobId],
   );
-
-  const upcomingList = useMemo(
-    () => upcomingAppointments(appointmentsList),
-    [appointmentsList],
+  const linkedJobQuery = useJob(
+    workspaceId ?? "",
+    selectedJobId ?? "",
+    Boolean(selectedJobId) && listedSelectedJob === null,
   );
+  const selectedJob = listedSelectedJob ?? linkedJobQuery.data ?? null;
 
-  const goToday = () => setCurrentDate(new Date());
+  const openEntry = useCallback((entry: CalendarEntry) => {
+    if (entry.kind === "appointment") setSelectedAppointmentId(entry.appointment.id);
+    else setSelectedJobId(entry.job.id);
+  }, []);
+
+  // Changing the visible set closes any open entry, so a detail dialog cannot
+  // resurrect when its row scrolls back into range. Doing it in the handlers
+  // keeps this out of a render effect.
+  const clearSelection = useCallback(() => {
+    setSelectedAppointmentId(null);
+    setSelectedJobId(null);
+    setExpandedDayIso(null);
+  }, []);
+
+  const goToDate = useCallback(
+    (next: Date) => {
+      setCurrentDate(next);
+      clearSelection();
+    },
+    [clearSelection],
+  );
+  const goToday = () => goToDate(new Date());
   const goPrev = () =>
-    setCurrentDate((d) => (view === "month" ? addMonths(d, -1) : addDays(d, -7)));
+    goToDate(view === "month" ? addMonths(currentDate, -1) : addDays(currentDate, -7));
   const goNext = () =>
-    setCurrentDate((d) => (view === "month" ? addMonths(d, 1) : addDays(d, 7)));
+    goToDate(view === "month" ? addMonths(currentDate, 1) : addDays(currentDate, 7));
 
-  const handleDeleteAppointment = async (appointmentId: number) => {
+  const changeView = useCallback(
+    (next: CalendarView) => {
+      setView(next);
+      clearSelection();
+    },
+    [clearSelection],
+  );
+  const changeStatus = useCallback(
+    (next: StatusFilter) => {
+      setStatusFilter(next);
+      clearSelection();
+    },
+    [clearSelection],
+  );
+  const changeLocation = useCallback(
+    (next: string | undefined) => {
+      setLocationId(next);
+      clearSelection();
+    },
+    [clearSelection],
+  );
+  const changeMineOnly = useCallback(
+    (checked: boolean) => {
+      setMineOnly(checked);
+      clearSelection();
+    },
+    [clearSelection],
+  );
+
+  const handleDeleteAppointment = (appointmentId: number) => {
     deleteAppointmentMutation.mutate(appointmentId, {
       onSuccess: () => {
         toast.success("Appointment cancelled");
@@ -123,59 +270,94 @@ export function CalendarPage() {
     });
   };
 
+  const isPending = appointmentsQuery.isPending || jobsQuery.isPending;
+  const error = appointmentsQuery.error ?? jobsQuery.error;
+
+  const retry = () => {
+    void appointmentsQuery.refetch();
+    void jobsQuery.refetch();
+  };
+
+  if (!workspaceId) {
+    return <PageLoadingState className="h-96" message="Loading workspace…" />;
+  }
+
   if (isPending) {
-    return <PageLoadingState className="h-96" message="Loading appointments…" />;
+    return <PageLoadingState className="h-96" message="Loading schedule…" />;
   }
 
   if (error) {
     return (
       <PageErrorState
         className="h-96"
-        message="Failed to load appointments"
-        onRetry={() => refetch()}
+        message="Failed to load the schedule"
+        onRetry={retry}
       />
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Calendar</h1>
           <p className="text-muted-foreground">
-            Manage appointments and scheduling
+            {canWriteJobs
+              ? "Every appointment and job on one schedule"
+              : "Your appointments and jobs"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/settings">
-              <Settings className="mr-2 size-4" />
-              Settings
-            </Link>
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {tier !== "field" && (
+            <Button variant="outline" asChild>
+              <Link href="/settings">
+                <Settings className="mr-2 size-4" />
+                Settings
+              </Link>
+            </Button>
+          )}
+          {canWriteJobs && (
+            <Button variant="outline" onClick={() => setIsNewJobOpen(true)}>
+              <Wrench className="mr-2 size-4" />
+              New job
+            </Button>
+          )}
           <Button onClick={() => setIsScheduleOpen(true)}>
             <Plus className="mr-2 size-4" />
-            New Appointment
+            New appointment
           </Button>
         </div>
       </div>
 
-      <NewAppointmentDialog
-        open={isScheduleOpen}
-        onOpenChange={setIsScheduleOpen}
-      />
+      <NewAppointmentDialog open={isScheduleOpen} onOpenChange={setIsScheduleOpen} />
 
-      {/* Filter Bar */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+      {/* Mounted only for dispatchers: the create form's customer picker reads
+          the workspace contact list, which is 403 for a field technician. */}
+      {canWriteJobs && (
+        <NewJobDialog
+          workspaceId={workspaceId}
+          open={isNewJobOpen}
+          onOpenChange={setIsNewJobOpen}
+        />
+      )}
+
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div
+          className="flex flex-wrap items-center gap-1 rounded-lg bg-muted p-1"
+          role="group"
+          aria-label="Filter appointments by status"
+        >
           {STATUS_OPTIONS.map((opt) => (
             <button
               key={opt.value}
-              onClick={() => setStatusFilter(opt.value as StatusFilter)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              type="button"
+              onClick={() => changeStatus(opt.value)}
+              aria-pressed={statusFilter === opt.value}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none ${
                 statusFilter === opt.value
-                  ? "bg-background shadow-sm text-foreground"
+                  ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -183,21 +365,28 @@ export function CalendarPage() {
             </button>
           ))}
         </div>
-        {workspaceId && (
-          <LocationFilter
-            workspaceId={workspaceId}
-            value={locationId}
-            onChange={setLocationId}
-          />
+        <LocationFilter
+          workspaceId={workspaceId}
+          value={locationId}
+          onChange={changeLocation}
+        />
+        {canWriteJobs && (
+          <div className="flex items-center gap-2">
+            <Switch id="mine-only" checked={mineOnly} onCheckedChange={changeMineOnly} />
+            <Label htmlFor="mine-only" className="text-sm">
+              Only mine
+            </Label>
+          </div>
         )}
         <span className="text-sm text-muted-foreground">
-          {totalCount} result{totalCount !== 1 ? "s" : ""}
+          {counts.appointments} appointment{counts.appointments !== 1 ? "s" : ""} ·{" "}
+          {counts.jobs} job{counts.jobs !== 1 ? "s" : ""}
         </span>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Calendar View */}
-        <div className="lg:col-span-2 space-y-4">
+        {/* Calendar */}
+        <div className="space-y-4 lg:col-span-2">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -205,15 +394,20 @@ export function CalendarPage() {
                   {formatDate(currentDate, { pattern: "MMMM yyyy" })}
                 </CardTitle>
                 <div className="flex items-center gap-2">
-                  {/* View toggle */}
-                  <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                  <div
+                    className="flex items-center gap-1 rounded-lg bg-muted p-1"
+                    role="group"
+                    aria-label="Calendar view"
+                  >
                     {(["month", "week"] as const).map((v) => (
                       <button
                         key={v}
-                        onClick={() => setView(v)}
-                        className={`px-3 py-1 rounded-md text-sm font-medium capitalize transition-colors ${
+                        type="button"
+                        onClick={() => changeView(v)}
+                        aria-pressed={view === v}
+                        className={`rounded-md px-3 py-1 text-sm font-medium capitalize transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none ${
                           view === v
-                            ? "bg-background shadow-sm text-foreground"
+                            ? "bg-background text-foreground shadow-sm"
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
@@ -221,15 +415,24 @@ export function CalendarPage() {
                       </button>
                     ))}
                   </div>
-                  {/* Navigation */}
                   <div className="flex items-center gap-1">
-                    <Button variant="outline" size="icon-sm" onClick={goPrev}>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={goPrev}
+                      aria-label={view === "month" ? "Previous month" : "Previous week"}
+                    >
                       <ChevronLeft className="size-4" />
                     </Button>
                     <Button variant="outline" size="sm" onClick={goToday}>
                       Today
                     </Button>
-                    <Button variant="outline" size="icon-sm" onClick={goNext}>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={goNext}
+                      aria-label={view === "month" ? "Next month" : "Next week"}
+                    >
                       <ChevronRight className="size-4" />
                     </Button>
                   </div>
@@ -241,17 +444,19 @@ export function CalendarPage() {
                 <CalendarMonthView
                   weeks={monthRange.weeks}
                   monthDate={monthRange.monthDate}
-                  appointments={appointmentsList}
-                  onSelect={(apt) => setSelectedAppointmentId(apt.id)}
+                  entries={entries}
+                  onSelect={openEntry}
+                  expandedDayIso={expandedDayIso}
+                  onExpandDay={setExpandedDayIso}
                 />
               ) : (
                 <>
-                  {/* Week Days Header */}
-                  <div className="grid grid-cols-7 gap-2 mb-2">
+                  {/* Week day headers */}
+                  <div className="mb-2 hidden grid-cols-7 gap-2 md:grid">
                     {weekRange.weekDays.map((day) => (
                       <div
                         key={day.toISOString()}
-                        className={`text-center p-2 rounded-lg ${
+                        className={`rounded-lg p-2 text-center ${
                           isSameDay(day, new Date())
                             ? "bg-primary text-primary-foreground"
                             : ""
@@ -267,44 +472,66 @@ export function CalendarPage() {
                     ))}
                   </div>
 
-                  {/* Appointments for the week */}
-                  <div className="grid grid-cols-7 gap-2 min-h-[300px]">
+                  {/* Both species of entry, one column per day */}
+                  <div className="hidden min-h-[300px] grid-cols-7 gap-2 md:grid">
                     {weekRange.weekDays.map((day) => {
-                      const dayAppointments = appointmentsForDay(
-                        appointmentsList,
-                        day,
-                      );
-
+                      const dayEntries = entriesForDay(entries, day);
                       return (
                         <div
                           key={day.toISOString()}
-                          className="border rounded-lg p-2 min-h-[200px]"
+                          className="min-h-[200px] rounded-lg border p-2"
                         >
-                          <ScrollArea className="h-[180px]">
+                          <ScrollArea className="h-[260px]">
                             <div className="space-y-1">
-                              {dayAppointments.map((apt) => (
-                                <motion.button
-                                  key={apt.id}
-                                  className="w-full text-left p-2 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
-                                  whileHover={{ scale: 1.02 }}
-                                  whileTap={{ scale: 0.98 }}
-                                  onClick={() => setSelectedAppointmentId(apt.id)}
-                                >
-                                  <p className="text-xs font-medium truncate">
-                                    {apt.service_type || "Appointment"}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {formatDate(apt.scheduled_at, {
-                                      pattern: "h:mm a",
-                                    })}
-                                  </p>
-                                </motion.button>
+                              {dayEntries.map((entry) => (
+                                <CalendarEntryChip
+                                  key={entry.key}
+                                  entry={entry}
+                                  onSelect={openEntry}
+                                  density="stacked"
+                                />
                               ))}
                             </div>
                           </ScrollArea>
                         </div>
                       );
                     })}
+                  </div>
+
+                  {/*
+                    Phones get an agenda, not seven 40px columns. This is the
+                    view a technician actually reads on site, so it keeps the
+                    customer line and skips days with nothing on them.
+                  */}
+                  <div className="space-y-4 md:hidden">
+                    {weekRange.weekDays
+                      .map((day) => ({ day, dayEntries: entriesForDay(entries, day) }))
+                      .filter(({ dayEntries }) => dayEntries.length > 0)
+                      .map(({ day, dayEntries }) => (
+                        <div key={day.toISOString()} className="space-y-1.5">
+                          <h3
+                            className={`text-sm font-semibold ${
+                              isSameDay(day, new Date()) ? "text-primary" : ""
+                            }`}
+                          >
+                            {formatDate(day, { pattern: "EEEE, MMMM d" })}
+                          </h3>
+                          {dayEntries.map((entry) => (
+                            <CalendarEntryChip
+                              key={entry.key}
+                              entry={entry}
+                              onSelect={openEntry}
+                              showDetail
+                              className="py-2 text-xs"
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    {entries.length === 0 && (
+                      <p className="py-8 text-center text-sm text-muted-foreground">
+                        Nothing scheduled this week
+                      </p>
+                    )}
                   </div>
                 </>
               )}
@@ -314,7 +541,7 @@ export function CalendarPage() {
 
         {/* Sidebar */}
         <div className="space-y-4">
-          {/* Today's Schedule */}
+          {/* Today */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -326,59 +553,67 @@ export function CalendarPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {todayAppointments.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No appointments today
+              {todayEntries.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  Nothing scheduled today
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {todayAppointments.map((apt) => (
-                    <div
-                      key={apt.id}
-                      role="button"
-                      tabIndex={0}
-                      className="flex items-center gap-3 p-2 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => setSelectedAppointmentId(apt.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setSelectedAppointmentId(apt.id);
-                        }
-                      }}
-                    >
-                      <Avatar className="size-8">
-                        <AvatarFallback className="text-xs">
-                          {getInitials(
-                            apt.contact?.first_name || "",
-                            apt.contact?.last_name,
-                          )}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {getContactName(apt.contact)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDate(apt.scheduled_at, { pattern: "h:mm a" })} •{" "}
-                          {apt.duration_minutes}min
-                        </p>
-                      </div>
-                      <ReminderBadges
-                        reminderSentAt={apt.reminder_sent_at}
-                        remindersSent={apt.reminders_sent}
-                      />
-                      <Badge
-                        variant="outline"
-                        className={appointmentStatusColors[apt.status]}
-                      >
-                        {apt.status}
-                      </Badge>
-                    </div>
+                <div className="space-y-1.5">
+                  {todayEntries.map((entry) => (
+                    <CalendarEntryChip
+                      key={entry.key}
+                      entry={entry}
+                      onSelect={openEntry}
+                      showDetail
+                    />
                   ))}
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Unscheduled dispatch queue — dispatchers only. */}
+          {canWriteJobs && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Inbox className="size-5" />
+                  Unscheduled
+                </CardTitle>
+                <CardDescription>Jobs waiting for a time window</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {unscheduledQuery.isPending ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    Loading queue…
+                  </p>
+                ) : queue.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    Nothing in the queue
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {queue.map((job: Job) => (
+                      <button
+                        key={job.id}
+                        type="button"
+                        onClick={() => setSelectedJobId(job.id)}
+                        className="w-full space-y-1 rounded-lg border p-2 text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+                      >
+                        <p className="truncate text-sm font-medium">{job.title}</p>
+                        <Badge
+                          variant="outline"
+                          className={`${jobStatusColors[job.status]} py-0 text-[10px]`}
+                        >
+                          {jobStatusLabel(job.status)}
+                        </Badge>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Upcoming */}
           <Card>
@@ -387,73 +622,41 @@ export function CalendarPage() {
               <CardDescription>Next in view</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {upcomingList.slice(0, 5).map((apt) => (
-                  <div
-                    key={apt.id}
-                    role="button"
-                    tabIndex={0}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => setSelectedAppointmentId(apt.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedAppointmentId(apt.id);
-                      }
-                    }}
-                  >
-                    <div className="text-center min-w-[40px]">
-                      <div className="text-xs font-medium text-muted-foreground">
-                        {formatDate(apt.scheduled_at, { pattern: "MMM" })}
-                      </div>
-                      <div className="text-lg font-bold">
-                        {formatDate(apt.scheduled_at, { pattern: "d" })}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {getContactName(apt.contact)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {apt.service_type || "Appointment"} •{" "}
-                        {formatDate(apt.scheduled_at, { pattern: "h:mm a" })}
-                      </p>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={appointmentStatusColors[apt.status]}
-                    >
-                      {apt.status}
-                    </Badge>
-                  </div>
-                ))}
-                {upcomingList.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Nothing upcoming in this range
-                  </p>
-                )}
-              </div>
+              {upcomingList.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  Nothing upcoming in this range
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {upcomingList.slice(0, 5).map((entry) => (
+                    <CalendarEntryChip
+                      key={entry.key}
+                      entry={entry}
+                      onSelect={openEntry}
+                      showDetail
+                    />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Quick Stats */}
+          {/* Range stats */}
           <Card>
             <CardHeader>
-              <CardTitle>{view === "month" ? "This Month" : "This Week"}</CardTitle>
+              <CardTitle>{view === "month" ? "This month" : "This week"}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-center">
-                <div className="p-3 rounded-lg bg-muted/50">
-                  <div className="text-2xl font-bold">{totalCount}</div>
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <div className="text-2xl font-bold">{counts.appointments}</div>
                   <div className="text-xs text-muted-foreground">
-                    {statusFilterLabel(statusFilter)}
+                    {statusFilterLabel(statusFilter)} appointments
                   </div>
                 </div>
-                <div className="p-3 rounded-lg bg-muted/50">
-                  <div className="text-2xl font-bold text-success">
-                    {scheduledCount(appointmentsList)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Scheduled</div>
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <div className="text-2xl font-bold">{counts.jobs}</div>
+                  <div className="text-xs text-muted-foreground">Jobs</div>
                 </div>
               </div>
             </CardContent>
@@ -461,15 +664,24 @@ export function CalendarPage() {
         </div>
       </div>
 
-      {/* Shared appointment details dialog (week + month + sidebar) */}
+      {/* Shared detail dialogs — one per species, both driven by the grid. */}
       <AppointmentDetailsDialog
         appointment={selectedAppointment}
-        workspaceId={workspaceId ?? undefined}
+        workspaceId={workspaceId}
         open={selectedAppointmentId !== null}
         onOpenChange={(open) => !open && setSelectedAppointmentId(null)}
         onDelete={handleDeleteAppointment}
-        onChanged={() => void refetch()}
+        onChanged={() => void appointmentsQuery.refetch()}
         deleting={deleteAppointmentMutation.isPending}
+      />
+
+      <JobDetailDialog
+        key={selectedJobId ?? "none"}
+        workspaceId={workspaceId}
+        job={selectedJob}
+        open={selectedJob !== null}
+        onOpenChange={(next) => !next && setSelectedJobId(null)}
+        readOnly={!canWriteJobs}
       />
     </div>
   );

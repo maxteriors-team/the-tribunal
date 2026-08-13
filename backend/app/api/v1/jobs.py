@@ -76,9 +76,34 @@ def _can_see_costs(membership: WorkspaceMembership) -> bool:
     return role_can(membership.role, Capability.BILLING_READ)
 
 
+def _calendar_scope_user_id(
+    membership: WorkspaceMembership, user_id: int, *, mine: bool = False
+) -> int | None:
+    """The user a caller's job reads are confined to, or ``None`` for the whole board.
+
+    ``jobs:write`` is the dispatch line — owner, admin, manager, dispatcher.
+    They run the board, so they read all of it. Everyone below (sales, tech,
+    lead, field) sees only the jobs they are tagged on, which is the same
+    predicate their own calendar already uses.
+
+    Keying off the capability rather than naming roles keeps the read boundary
+    on exactly the same line as the write boundary, and fails closed for
+    unknown/legacy role strings (they resolve to the field tier).
+
+    ``mine`` lets a dispatcher voluntarily narrow to their own work. It can only
+    ever tighten the scope — there is no value of it that widens the field
+    tier's view.
+    """
+    if mine or not role_can(membership.role, Capability.JOBS_WRITE):
+        return user_id
+    return None
+
+
 @router.get("", response_model=JobListResponse)
 async def list_jobs(
     workspace: WorkspaceAccess,
+    membership: CurrentMembership,
+    current_user: CurrentUser,
     db: DB,
     status: JobStatus | None = None,
     crew_id: uuid.UUID | None = None,
@@ -86,8 +111,17 @@ async def list_jobs(
     technician_id: uuid.UUID | None = None,
     date_from: datetime | None = Query(None, description="Jobs scheduled on or after this time"),
     date_to: datetime | None = Query(None, description="Jobs scheduled on or before this time"),
+    mine: bool = Query(False, description="Only jobs the caller is assigned to"),
 ) -> JobListResponse:
-    """List jobs for the dispatch board / calendar, with optional filters."""
+    """List jobs for the dispatch board / calendar, with optional filters.
+
+    Dispatchers and up see the whole board. Below that line the list is scoped
+    server-side to the jobs the caller is assigned to — the requested filters
+    narrow that set further, they never widen it.
+
+    ``mine=true`` narrows the result to the caller's own work whatever their
+    role; for the field tier it is already implied.
+    """
     service = JobService(db)
     return JobListResponse(
         **await service.list(
@@ -98,6 +132,7 @@ async def list_jobs(
             technician_id=technician_id,
             date_from=date_from,
             date_to=date_to,
+            visible_to_user_id=_calendar_scope_user_id(membership, current_user.id, mine=mine),
         )
     )
 
@@ -141,11 +176,21 @@ async def list_my_calendar(
 async def get_job(
     job_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    membership: CurrentMembership,
+    current_user: CurrentUser,
     db: DB,
 ) -> JobResponse:
-    """Get a single job with its assigned technicians."""
+    """Get a single job with its assigned technicians.
+
+    Carries the same visibility scope as the list, so a deep link to somebody
+    else's job 404s for the field tier instead of routing around the filter.
+    """
     service = JobService(db)
-    return await service.get(job_id, workspace.id)
+    return await service.get(
+        job_id,
+        workspace.id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
 
 
 @router.get("/{job_id}/installation-plan", response_model=JobInstallationPlanResponse)

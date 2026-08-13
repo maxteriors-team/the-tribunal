@@ -27,7 +27,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, or_, select
+from sqlalchemy import ColumnElement, delete, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -370,13 +370,24 @@ class JobService:
         """Serialize a single job (same embedding rules as a page)."""
         return (await self._to_responses([job], workspace_id))[0]
 
-    async def _load(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> Job:
-        """Fetch a workspace-owned job with response relations loaded, or 404."""
+    async def _load(
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *criteria: Any,
+    ) -> Job:
+        """Fetch a workspace-owned job with response relations loaded, or 404.
+
+        Extra ``criteria`` narrow the row further (used to apply the caller's
+        visibility predicate); a job excluded by them 404s exactly like a
+        cross-tenant one, so existence never leaks.
+        """
         return await assert_workspace_owned(
             self.db,
             Job,
             job_id,
             workspace_id,
+            *criteria,
             detail="Job not found",
             options=list(_LOAD_OPTIONS),
         )
@@ -384,6 +395,42 @@ class JobService:
     # ------------------------------------------------------------------ #
     # Queries
     # ------------------------------------------------------------------ #
+    async def assigned_job_predicate(
+        self, workspace_id: uuid.UUID, user_id: int
+    ) -> ColumnElement[bool]:
+        """SQL predicate matching only the jobs ``user_id`` is tagged on.
+
+        This is *the* visibility rule for the field tier, in one place: a job is
+        theirs when it is assigned directly to one of their technician rows in
+        this workspace, or routed to a crew they belong to.
+
+        Fail-closed and quiet: a login with no technician record matches nothing
+        (``false()``) rather than raising — that login simply isn't a field
+        worker yet, which is a normal state, not an error.
+        """
+        tech_rows = (
+            await self.db.execute(
+                select(Technician.id, Technician.crew_id).where(
+                    Technician.workspace_id == workspace_id,
+                    Technician.user_id == user_id,
+                )
+            )
+        ).all()
+        if not tech_rows:
+            return false()
+
+        technician_ids = [row[0] for row in tech_rows]
+        crew_ids = [row[1] for row in tech_rows if row[1] is not None]
+
+        visibility: list[ColumnElement[bool]] = [
+            Job.id.in_(
+                select(JobAssignment.job_id).where(JobAssignment.technician_id.in_(technician_ids))
+            )
+        ]
+        if crew_ids:
+            visibility.append(Job.crew_id.in_(crew_ids))
+        return or_(*visibility)
+
     async def list(
         self,
         workspace_id: uuid.UUID,
@@ -394,9 +441,18 @@ class JobService:
         technician_id: uuid.UUID | None = None,
         date_from: datetime | None = None,
         date_to: datetime | None = None,
+        visible_to_user_id: int | None = None,
     ) -> dict[str, Any]:
-        """List jobs for the board/calendar, with optional filters."""
+        """List jobs for the board/calendar, with optional filters.
+
+        ``visible_to_user_id`` restricts the page to the jobs that user is
+        tagged on (see :meth:`assigned_job_predicate`). Callers pass it for
+        anyone below the dispatch tier; the remaining filters apply on top of
+        it, never instead of it.
+        """
         criteria: list[Any] = []
+        if visible_to_user_id is not None:
+            criteria.append(await self.assigned_job_predicate(workspace_id, visible_to_user_id))
         if status is not None:
             criteria.append(Job.status == status)
         if crew_id is not None:
@@ -421,8 +477,18 @@ class JobService:
         items = await self._to_responses(rows, workspace_id)
         return {"items": items, "total": len(items)}
 
-    async def get(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> JobResponse:
-        job = await self._load(job_id, workspace_id)
+    async def get(
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        visible_to_user_id: int | None = None,
+    ) -> JobResponse:
+        """Fetch one job, optionally confined to what ``visible_to_user_id`` may see."""
+        criteria: list[Any] = []
+        if visible_to_user_id is not None:
+            criteria.append(await self.assigned_job_predicate(workspace_id, visible_to_user_id))
+        job = await self._load(job_id, workspace_id, *criteria)
         return await self._one_response(job, workspace_id)
 
     async def list_for_user(
@@ -440,31 +506,7 @@ class JobService:
         crew they belong to. Returns an empty list (not an error) when the user
         has no technician record \u2014 a login simply isn't a field worker yet.
         """
-        tech_rows = (
-            await self.db.execute(
-                select(Technician.id, Technician.crew_id).where(
-                    Technician.workspace_id == workspace_id,
-                    Technician.user_id == user_id,
-                )
-            )
-        ).all()
-        if not tech_rows:
-            return {"items": [], "total": 0}
-
-        technician_ids = [row[0] for row in tech_rows]
-        crew_ids = [row[1] for row in tech_rows if row[1] is not None]
-
-        visibility = [
-            Job.id.in_(
-                select(JobAssignment.job_id).where(JobAssignment.technician_id.in_(technician_ids))
-            )
-        ]
-        if crew_ids:
-            visibility.append(Job.crew_id.in_(crew_ids))
-
-        # A job is on the worker's calendar if it's tagged to them OR routed to
-        # one of their crews.
-        criteria: list[Any] = [or_(*visibility)]
+        criteria: list[Any] = [await self.assigned_job_predicate(workspace_id, user_id)]
         if date_from is not None:
             criteria.append(Job.scheduled_start >= date_from)
         if date_to is not None:

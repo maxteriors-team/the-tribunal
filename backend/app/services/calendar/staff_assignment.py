@@ -1,8 +1,9 @@
 """Staff assignment strategies for appointment booking.
 
 Decides which bookable staff member an AI-driven booking should land on.
-Booking is local (CRM-backed); any active staff member is eligible. Two
-strategies are supported on top of the default single-assignee behavior:
+Booking is local (CRM-backed); any active staff member in the agent's pool or
+in the workspace-wide Team pool is eligible. Two strategies are supported on
+top of the default single-assignee behavior:
 
 - ``round_robin``: distribute bookings evenly across the agent's active staff
   pool, preferring whoever has the fewest assignments (ties broken by who was
@@ -23,7 +24,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bookable_staff import BookableStaff
@@ -146,12 +147,20 @@ async def resolve_staff_for_booking(
     as no other booking lands in between.
     """
     strategy = getattr(agent, "assignment_strategy", STRATEGY_SINGLE) or STRATEGY_SINGLE
-    if strategy not in VALID_STRATEGIES or strategy == STRATEGY_SINGLE:
+    if strategy not in VALID_STRATEGIES:
         return None
+
+    # Team-created rows have no agent_id and are shared workspace resources.
+    # Every strategy sees those rows plus this agent's own pool; a legacy
+    # ``single`` agent uses round-robin only when that combined pool is non-empty.
+    # Empty pools still return None and preserve the established agent-default path.
+    pool_scope = or_(BookableStaff.agent_id == agent.id, BookableStaff.agent_id.is_(None))
+    selection_strategy = STRATEGY_ROUND_ROBIN if strategy == STRATEGY_SINGLE else strategy
 
     result = await db.execute(
         select(BookableStaff).where(
-            BookableStaff.agent_id == agent.id,
+            BookableStaff.workspace_id == agent.workspace_id,
+            pool_scope,
             BookableStaff.is_active.is_(True),
         )
     )
@@ -164,7 +173,7 @@ async def resolve_staff_for_booking(
         )
         return None
 
-    chosen = select_staff_member(pool, strategy, required_skill)
+    chosen = select_staff_member(pool, selection_strategy, required_skill)
     if chosen is None:
         logger.info(
             "staff_assignment_no_match",

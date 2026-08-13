@@ -34,7 +34,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useSetMemberOnRoster, useWorkspaceRoster } from "@/hooks/useJobs";
+import {
+  useSetMemberBookable,
+  useSetMemberOnRoster,
+  useWorkspaceBookableStaff,
+  useWorkspaceRoster,
+} from "@/hooks/useJobs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { workspacesApi } from "@/lib/api/workspaces";
 import { queryKeys } from "@/lib/query-keys";
@@ -78,6 +83,9 @@ export function EditMemberDialog({
   const canEditRole = member.role !== "owner" && currentUserRole !== "member";
   // Technician writes are gated on WorkspaceManager (owner/admin/manager).
   const canManageRoster = ["owner", "admin", "manager"].includes(currentUserRole);
+  // Linking a login to a booking calendar decides whose calendar an appointment
+  // lands on, so the API gates it on `members:manage` — the admin tier.
+  const canManageBooking = ["owner", "admin"].includes(currentUserRole);
   const canRemove =
     member.role !== "owner" &&
     (currentUserRole === "owner" ||
@@ -133,6 +141,37 @@ export function EditMemberDialog({
           ),
         onError: (error: Error) =>
           toast.error(error.message || "Failed to update the job roster"),
+      },
+    );
+  };
+
+  // The appointment half of the same question. Without this link an appointment
+  // has no path back to a login, so a member booked for one would not see it on
+  // their own calendar — the same failure mode the job roster has.
+  const { data: bookableStaff, isLoading: bookingLoading } = useWorkspaceBookableStaff(
+    workspaceId ?? "",
+    canManageBooking,
+  );
+  const bookingEntries =
+    bookableStaff?.items.filter((staff) => staff.user_id === member.id) ?? [];
+  const hasActiveBookingEntry = bookingEntries.some((staff) => staff.is_active);
+  const setBookable = useSetMemberBookable(workspaceId ?? "");
+
+  const handleBookingChange = (bookable: boolean) => {
+    setBookable.mutate(
+      {
+        userId: member.id,
+        name: member.full_name || member.email.split("@")[0],
+        email: member.email,
+        bookable,
+      },
+      {
+        onSuccess: () =>
+          toast.success(
+            bookable ? "Booking calendar enabled" : "Booking calendar disabled",
+          ),
+        onError: (error: Error) =>
+          toast.error(error.message || "Failed to update the booking calendar"),
       },
     );
   };
@@ -207,6 +246,25 @@ export function EditMemberDialog({
                 checked={rosterEntry?.is_active ?? false}
                 onCheckedChange={handleRosterChange}
                 disabled={rosterLoading || setOnRoster.isPending}
+              />
+            </div>
+          )}
+
+          {canManageBooking && (
+            <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+              <div className="space-y-1">
+                <Label htmlFor="booking-calendar">Booking calendar</Label>
+                <p className="text-xs text-muted-foreground">
+                  Adds {member.full_name || "them"} to the workspace booking pool and
+                  puts their assigned appointments on their calendar. Turn it off to
+                  stop new assignments and hide those bookings from their schedule.
+                </p>
+              </div>
+              <Switch
+                id="booking-calendar"
+                checked={hasActiveBookingEntry}
+                onCheckedChange={handleBookingChange}
+                disabled={bookingLoading || setBookable.isPending}
               />
             </div>
           )}

@@ -409,16 +409,17 @@ export function AppSidebar({ children }: AppSidebarProps) {
   // "Finish setup" link into the setup wizard.
   const showSetupNav = needsSetup && canSeeNavItem(setupNavItem, tier, can);
 
-  // Field technicians are operational-only: keep them on the jobs schedule and
-  // its calendar. This is UX, not the security boundary — the API enforces the
-  // capability gate — so it waits for the workspace/role to load before acting
-  // (the tier fails closed to "field" while the role is still resolving, which
-  // must not bounce a real manager/admin off a CRM page mid-load).
+  // Field technicians are operational-only: keep them on the calendar, which is
+  // now the single schedule surface. This is UX, not the security boundary — the
+  // API enforces the capability gate — so it waits for the workspace/role to
+  // load before acting (the tier fails closed to "field" while the role is still
+  // resolving, which must not bounce a real manager/admin off a CRM page
+  // mid-load).
   useEffect(() => {
     if (workspacePending) return;
     if (tier !== "field") return;
     if (isFieldOperationalPath(pathname)) return;
-    router.replace("/jobs");
+    router.replace("/calendar");
   }, [workspacePending, tier, pathname, router]);
 
   return (

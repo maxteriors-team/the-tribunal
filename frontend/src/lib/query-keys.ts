@@ -597,6 +597,10 @@ export const queryKeys = {
     ...technicians,
     active: (workspaceId: string) => technicians.list(workspaceId, { is_active: true }),
   },
+  // Who in the workspace has a booking calendar. Read by Settings → Team, which
+  // toggles the `bookable_staff.user_id` link that puts appointments on a
+  // member's own calendar.
+  bookableStaff: createResourceQueryKeys("bookable-staff"),
   // On-site upsell: the technician's own jobs and the attachable add-on menu.
   // Keyed separately from `jobs`/`catalogItems` because these are different,
   // server-scoped projections of those resources, not cacheable as the same data.

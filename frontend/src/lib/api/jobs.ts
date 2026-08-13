@@ -46,6 +46,12 @@ export interface JobListParams {
   technician_id?: string;
   date_from?: string;
   date_to?: string;
+  /**
+   * Narrow the result to the caller's own work. Below the dispatch tier the
+   * server applies this regardless; a dispatcher sets it to filter their board
+   * down to what they are personally on.
+   */
+  mine?: boolean;
 }
 
 export interface JobCalendarParams {
