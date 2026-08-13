@@ -628,6 +628,8 @@ export interface SceneOpts {
   calibrateTool?: boolean;
   /** Decoded image elements keyed by persisted plan-image id. */
   planImageElements?: ReadonlyMap<string, CanvasImageSource>;
+  /** Freehand highlighter points currently being dragged, before commit. */
+  draftHighlight?: Point[] | null;
 }
 
 export function drawScene(
@@ -704,6 +706,20 @@ export function drawScene(
     );
     ctx.restore();
   }
+
+  // Highlights sit above pinned reference photos but below fixture symbols and
+  // selections. Round, translucent strokes match the NiteLite drawing marker.
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const highlight of design.highlights ?? []) {
+    strokePath(ctx, highlight.points, highlight.color, highlight.widthPx / vs);
+  }
+  if (opts.draftHighlight && opts.draftHighlight.length > 1) {
+    strokePath(ctx, opts.draftHighlight, "rgba(255, 226, 74, 0.55)", 34 / vs);
+  }
+  ctx.restore();
 
   // Wire circuits are construction-plan chrome. They stay off dusk exports and
   // quote geometry, but remain editable and printable on the field plan.

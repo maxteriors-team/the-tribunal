@@ -103,6 +103,31 @@ describe("landscape proposal pricing payload", () => {
     expect((quantities ?? []).filter((line) => line.item_id === "shared-path")).toHaveLength(1);
   });
 
+  it("includes valid additional line items in server-priced package totals", () => {
+    const payload = buildLandscapeProposalPayload({
+      pricing: PRICING,
+      catalog: CATALOG,
+      fixtureCounts: { uplight: 2 },
+      wireRuns: [],
+      selectedTierKey: "good",
+      selectedCarePlanKey: null,
+      additionalLineItems: [
+        { description: "  Core drill through masonry  ", amount: 275.5 },
+        { description: "", amount: 99 },
+        { description: "No-charge note", amount: 0 },
+      ],
+    });
+
+    expect(payload.additional_charges).toEqual([
+      {
+        description: "Core drill through masonry",
+        net_amount: 275.5,
+        catalog_item_id: null,
+        tier_key: null,
+      },
+    ]);
+  });
+
   it("keeps project linkage, package, and care-plan choices in the server-owned quote payload", () => {
     const payload = buildLandscapeProposalPayload({
       pricing: PRICING,

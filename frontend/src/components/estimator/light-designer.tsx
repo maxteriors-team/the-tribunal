@@ -124,6 +124,7 @@ import {
 import {
   beamAngleFor,
   type LandscapePreconState,
+  type LandscapeProposalLineItem,
   type PhotoInfo,
   type Product,
 } from "@/lib/estimator/types";
@@ -260,7 +261,9 @@ const landscapeDraftSignature = (
   activeShotId: string | null,
   selectedTierKey: string | null,
   selectedCarePlanKey: string | null,
-): string => JSON.stringify({ activeShotId, shots, selectedTierKey, selectedCarePlanKey });
+  additionalLineItems: LandscapeProposalLineItem[] = [],
+): string =>
+  JSON.stringify({ activeShotId, shots, selectedTierKey, selectedCarePlanKey, additionalLineItems });
 
 interface LandscapeFixtureScheduleRow {
   id: string;
@@ -531,7 +534,13 @@ function LandscapeDraftingToolbar({
       <DrawingToolbar
         paperSize={sheetSize as import("@/lib/estimator/types").LandscapePaperSize}
         activeAction={
-          activeTool.type === "select" ? "select" : activeTool.type === "draw" ? "wire" : undefined
+          activeTool.type === "select"
+            ? "select"
+            : activeTool.type === "draw"
+              ? "wire"
+              : activeTool.type === "highlight"
+                ? "highlight"
+                : undefined
         }
         canUndo={canUndo}
         canRedo={false}
@@ -1168,11 +1177,13 @@ function LandscapeProposalPanel({
   selectedTierKey,
   selectedCarePlanKey,
   wireItems,
+  additionalLineItems,
   pricingPending,
   pricingError,
   onRetryPricing,
   onSelectTier,
   onSelectCarePlan,
+  onAdditionalLineItemsChange,
   onCreateQuote,
   createQuotePending,
   createQuoteError,
@@ -1192,11 +1203,13 @@ function LandscapeProposalPanel({
   selectedTierKey: string | null;
   selectedCarePlanKey: string | null;
   wireItems: Map<10 | 12, CatalogItemResponse | null>;
+  additionalLineItems: LandscapeProposalLineItem[];
   pricingPending: boolean;
   pricingError: string | null;
   onRetryPricing: () => void;
   onSelectTier: (tierKey: string) => void;
   onSelectCarePlan: (carePlanKey: string | null) => void;
+  onAdditionalLineItemsChange: (items: LandscapeProposalLineItem[]) => void;
   onCreateQuote: () => void;
   createQuotePending: boolean;
   createQuoteError: string | null;
@@ -1362,6 +1375,86 @@ function LandscapeProposalPanel({
             </div>
           </div>
         ) : null}
+
+        <fieldset className="ll-proposal-fieldset ll-additional-lines">
+          <legend>Additional line items</legend>
+          <p>Add job-specific work or materials. Each completed line is included in every package total.</p>
+          <div className="ll-additional-line-list">
+            {additionalLineItems.map((line, index) => (
+              <div className="ll-additional-line" key={line.id}>
+                <label>
+                  <span className="sr-only">Line item {index + 1} description</span>
+                  <input
+                    value={line.description}
+                    maxLength={500}
+                    placeholder="Description"
+                    onChange={(event) =>
+                      onAdditionalLineItemsChange(
+                        additionalLineItems.map((item) =>
+                          item.id === line.id ? { ...item, description: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label className="ll-additional-line-amount">
+                  <span aria-hidden="true">$</span>
+                  <span className="sr-only">Line item {index + 1} amount</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    max="1000000"
+                    step="0.01"
+                    value={line.amount || ""}
+                    placeholder="0.00"
+                    onChange={(event) =>
+                      onAdditionalLineItemsChange(
+                        additionalLineItems.map((item) =>
+                          item.id === line.id
+                            ? {
+                                ...item,
+                                amount: Math.min(
+                                  1_000_000,
+                                  Math.max(0, Number(event.target.value) || 0),
+                                ),
+                              }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="est-btn ll-additional-line-remove"
+                  aria-label={`Remove line item ${index + 1}`}
+                  onClick={() =>
+                    onAdditionalLineItemsChange(
+                      additionalLineItems.filter((item) => item.id !== line.id),
+                    )
+                  }
+                >
+                  <X aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="est-btn"
+            disabled={additionalLineItems.length >= 100}
+            onClick={() =>
+              onAdditionalLineItemsChange([
+                ...additionalLineItems,
+                { id: nextId("line-item"), description: "", amount: 0 },
+              ])
+            }
+          >
+            <Plus aria-hidden="true" />
+            Add line item
+          </button>
+        </fieldset>
 
         <fieldset className="ll-proposal-fieldset">
           <legend>Care plan</legend>
@@ -1575,11 +1668,13 @@ function LandscapeWorkspacePanel({
   selectedTierKey,
   selectedCarePlanKey,
   wireItems,
+  additionalLineItems,
   pricingPending,
   pricingError,
   onRetryPricing,
   onSelectTier,
   onSelectCarePlan,
+  onAdditionalLineItemsChange,
   onCreateQuote,
   createQuotePending,
   createQuoteError,
@@ -1614,11 +1709,13 @@ function LandscapeWorkspacePanel({
   selectedTierKey: string | null;
   selectedCarePlanKey: string | null;
   wireItems: Map<10 | 12, CatalogItemResponse | null>;
+  additionalLineItems: LandscapeProposalLineItem[];
   pricingPending: boolean;
   pricingError: string | null;
   onRetryPricing: () => void;
   onSelectTier: (tierKey: string) => void;
   onSelectCarePlan: (carePlanKey: string | null) => void;
+  onAdditionalLineItemsChange: (items: LandscapeProposalLineItem[]) => void;
   onCreateQuote: () => void;
   createQuotePending: boolean;
   createQuoteError: string | null;
@@ -1752,11 +1849,13 @@ function LandscapeWorkspacePanel({
         selectedTierKey={selectedTierKey}
         selectedCarePlanKey={selectedCarePlanKey}
         wireItems={wireItems}
+        additionalLineItems={additionalLineItems}
         pricingPending={pricingPending}
         pricingError={pricingError}
         onRetryPricing={onRetryPricing}
         onSelectTier={onSelectTier}
         onSelectCarePlan={onSelectCarePlan}
+        onAdditionalLineItemsChange={onAdditionalLineItemsChange}
         onCreateQuote={onCreateQuote}
         createQuotePending={createQuotePending}
         createQuoteError={createQuoteError}
@@ -1838,6 +1937,7 @@ export function LightDesigner({
   const [measurementsVisible, setMeasurementsVisible] = useState(true);
   const [halosVisible, setHalosVisible] = useState(true);
   const [studioNotice, setStudioNotice] = useState<string | null>(null);
+  const [planImageRequestToken, setPlanImageRequestToken] = useState(0);
   const [preconState, setPreconState] = useState<LandscapePreconState>(
     () => projectInitialDraft?.precon ?? { responses: [], leadInstaller: "", notes: "" },
   );
@@ -1857,6 +1957,7 @@ export function LightDesigner({
         {
           selectedTierKey: selectedLandscapeTierKey,
           selectedCarePlanKey: selectedLandscapeCarePlanKey,
+          additionalLineItems: landscapeAdditionalLineItems,
         },
       );
       const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
@@ -1900,19 +2001,16 @@ export function LightDesigner({
       });
       setStudioNotice("Measurement added. Use undo to remove it.");
     } else if (action === "highlight") {
-      dispatch({
-        type: "ADD_HIGHLIGHT",
-        highlight: {
-          id: nextId("highlight"),
-          points: [
-            { x: 80, y: 120 },
-            { x: 260, y: 120 },
-          ],
-          color: "#F2C94C",
-          widthPx: 18,
-        },
-      });
-      setStudioNotice("Highlight added. Use undo to remove it.");
+      if (state.tool.type === "highlight") {
+        dispatch({ type: "SET_TOOL", tool: { type: "select" } });
+        setStudioNotice("Highlight mode closed.");
+      } else {
+        dispatch({ type: "SET_TOOL", tool: { type: "highlight" } });
+        setStudioNotice("Highlight mode on. Drag across the plan to mark an area.");
+      }
+    } else if (action === "add-photo") {
+      setPlanImageRequestToken((token) => token + 1);
+      setStudioNotice("Choose a photo to pin onto this drawing sheet.");
     } else if (action === "draw-arrow") {
       dispatch({
         type: "ADD_ARROW",
@@ -1920,7 +2018,7 @@ export function LightDesigner({
       });
       setStudioNotice("Arrow added. Use undo to remove it.");
     } else if (action.startsWith("add-")) {
-      const annotationType = action.slice(4) as "note" | "line" | "tree" | "photo" | "revision";
+      const annotationType = action.slice(4) as "note" | "line" | "tree" | "revision";
       dispatch({
         type: "ADD_ANNOTATION",
         annotation: {
@@ -1952,6 +2050,9 @@ export function LightDesigner({
   const [selectedLandscapeCarePlanKey, setSelectedLandscapeCarePlanKey] = useState<string | null>(
     () => projectInitialDraft?.proposal?.selectedCarePlanKey ?? null,
   );
+  const [landscapeAdditionalLineItems, setLandscapeAdditionalLineItems] = useState<
+    LandscapeProposalLineItem[]
+>(() => projectInitialDraft?.proposal?.additionalLineItems ?? []);
 
   // Every photo the rep has open, in the order they added them. The *active*
   // shot's drawing lives in the editor reducer (that's what the canvas, palette
@@ -1989,6 +2090,7 @@ export function LightDesigner({
       activeShot?.id ?? null,
       selectedLandscapeTierKey,
       selectedLandscapeCarePlanKey,
+      landscapeAdditionalLineItems,
     ),
   );
   const persistedItemCountRef = useRef(
@@ -2069,6 +2171,7 @@ export function LightDesigner({
         createLandscapeDraft(liveShots, activeShot?.id ?? null, new Date().toISOString(), {
           selectedTierKey: selectedLandscapeTierKey,
           selectedCarePlanKey: selectedLandscapeCarePlanKey,
+          additionalLineItems: landscapeAdditionalLineItems,
         }),
       )
         .then((draft) => {
@@ -2088,6 +2191,7 @@ export function LightDesigner({
     activeShot?.id,
     draftReady,
     hosted,
+    landscapeAdditionalLineItems,
     landscapeOnly,
     liveShots,
     selectedLandscapeCarePlanKey,
@@ -2112,6 +2216,7 @@ export function LightDesigner({
         nextActiveShot?.id ?? null,
         projectInitialDraft.proposal?.selectedTierKey ?? null,
         projectInitialDraft.proposal?.selectedCarePlanKey ?? null,
+        projectInitialDraft.proposal?.additionalLineItems ?? [],
       );
       persistedItemCountRef.current = projectInitialDraft.shots.reduce(
         (total, shot) => total + shot.design.items.length,
@@ -2122,6 +2227,7 @@ export function LightDesigner({
       setProposalPreviews({});
       setSelectedLandscapeTierKey(projectInitialDraft.proposal?.selectedTierKey ?? null);
       setSelectedLandscapeCarePlanKey(projectInitialDraft.proposal?.selectedCarePlanKey ?? null);
+      setLandscapeAdditionalLineItems(projectInitialDraft.proposal?.additionalLineItems ?? []);
       dispatch({
         type: "RESET",
         design: nextActiveShot?.design ?? EMPTY_DESIGN,
@@ -2152,12 +2258,14 @@ export function LightDesigner({
       nextActiveShotId,
       selectedLandscapeTierKey,
       selectedLandscapeCarePlanKey,
+      landscapeAdditionalLineItems,
     );
     emittedServerDraftSignatureRef.current = signature;
     emitProjectDraft(
       createLandscapeDraft(liveShots, nextActiveShotId, new Date().toISOString(), {
         selectedTierKey: selectedLandscapeTierKey,
         selectedCarePlanKey: selectedLandscapeCarePlanKey,
+        additionalLineItems: landscapeAdditionalLineItems,
       }),
       { immediate: true },
     );
@@ -2165,6 +2273,7 @@ export function LightDesigner({
     activeShot?.id,
     draftReady,
     emitProjectDraft,
+    landscapeAdditionalLineItems,
     landscapeOnly,
     liveShots,
     selectedLandscapeCarePlanKey,
@@ -2185,6 +2294,7 @@ export function LightDesigner({
       nextActiveShotId,
       selectedLandscapeTierKey,
       selectedLandscapeCarePlanKey,
+      landscapeAdditionalLineItems,
     );
     if (signature === emittedServerDraftSignatureRef.current) return;
 
@@ -2194,6 +2304,7 @@ export function LightDesigner({
         createLandscapeDraft(liveShots, nextActiveShotId, new Date().toISOString(), {
           selectedTierKey: selectedLandscapeTierKey,
           selectedCarePlanKey: selectedLandscapeCarePlanKey,
+          additionalLineItems: landscapeAdditionalLineItems,
         }),
       );
     }, 600);
@@ -2202,6 +2313,7 @@ export function LightDesigner({
     activeShot?.id,
     draftReady,
     emitProjectDraft,
+    landscapeAdditionalLineItems,
     landscapeOnly,
     liveShots,
     selectedLandscapeCarePlanKey,
@@ -2534,6 +2646,7 @@ export function LightDesigner({
       })),
       selectedTierKey: effectiveLandscapeTierKey,
       selectedCarePlanKey: selectedLandscapeCarePlanKey,
+      additionalLineItems: landscapeAdditionalLineItems,
       contactId: landscapeProject?.contactId,
       opportunityId: landscapeProject?.opportunityId,
       serviceLocationId: landscapeProject?.serviceLocationId,
@@ -2544,6 +2657,7 @@ export function LightDesigner({
     circuitLoads,
     effectiveLandscapeTierKey,
     inputs.fixtures,
+    landscapeAdditionalLineItems,
     landscapeOnly,
     landscapeProject?.contactId,
     landscapeProject?.opportunityId,
@@ -3388,10 +3502,16 @@ export function LightDesigner({
             scheduleRows={numberedFixtureScheduleRows}
             catalogItems={priceBook ?? []}
             onUpdateSchedule={(itemId, update) => {
-              setShots((current) => updateFixtureScheduleSelection(current, itemId, update));
+              const next = updateFixtureScheduleSelection(liveShots, itemId, update);
+              setShots(next);
+              const nextActive = next.find((shot) => shot.id === activeShot?.id);
+              if (nextActive) dispatch({ type: "RESET", design: nextActive.design });
             }}
             onCopyScheduleType={(itemId) => {
-              setShots((current) => copyScheduleSelectionToType(current, itemId));
+              const next = copyScheduleSelectionToType(liveShots, itemId);
+              setShots(next);
+              const nextActive = next.find((shot) => shot.id === activeShot?.id);
+              if (nextActive) dispatch({ type: "RESET", design: nextActive.design });
             }}
             electricalLoad={electricalLoad}
             circuitLoads={circuitLoads}
@@ -3403,11 +3523,13 @@ export function LightDesigner({
             selectedTierKey={effectiveLandscapeTierKey}
             selectedCarePlanKey={selectedLandscapeCarePlanKey}
             wireItems={selectedTierWireItems}
+            additionalLineItems={landscapeAdditionalLineItems}
             pricingPending={landscapeProposalQuery.isFetching}
             pricingError={landscapePricingError}
             onRetryPricing={() => void landscapeProposalQuery.refetch()}
             onSelectTier={setSelectedLandscapeTierKey}
             onSelectCarePlan={setSelectedLandscapeCarePlanKey}
+            onAdditionalLineItemsChange={setLandscapeAdditionalLineItems}
             onCreateQuote={createLandscapeQuote}
             createQuotePending={landscapeQuoteMutation.isPending}
             createQuoteError={landscapeCreateQuoteError}
@@ -3519,6 +3641,8 @@ export function LightDesigner({
                         products={products}
                         state={state}
                         dispatch={dispatch}
+                        planImageRequestToken={planImageRequestToken}
+                        onPlanImageRequestHandled={() => setPlanImageRequestToken(0)}
                       />
                       {landscapeLegendOpen ? (
                         <LandscapeLiveLegend rows={fixtureScheduleRows} />

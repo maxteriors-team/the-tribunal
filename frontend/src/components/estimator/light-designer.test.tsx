@@ -1432,6 +1432,25 @@ describe("LightDesigner", () => {
     expect(screen.queryByText(/financed/i)).not.toBeInTheDocument();
     expect(screen.getByText("$500.00")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Add line item" }));
+    fireEvent.change(screen.getByPlaceholderText("Description"), {
+      target: { value: "Core drill through masonry" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("0.00"), { target: { value: "275.50" } });
+
+    await waitFor(() =>
+      expect(salesWizardApi.preview).toHaveBeenLastCalledWith(
+        "ws_1",
+        expect.objectContaining({
+          additional_charges: [
+            expect.objectContaining({
+              description: "Core drill through masonry",
+              net_amount: 275.5,
+            }),
+          ],
+        }),
+      ),
+    );
     fireEvent.click(screen.getByRole("button", { name: /Better.*\$1,330\.00/i }));
     fireEvent.click(screen.getByRole("button", { name: /Essential Care.*\$249\.00\/year/i }));
     const createQuote = screen.getByRole("button", { name: "Create draft quote" });
@@ -1448,6 +1467,12 @@ describe("LightDesigner", () => {
           selected_tier: "better",
           care_plan_tier: "essential",
           care_count_manual: 2,
+          additional_charges: [
+            expect.objectContaining({
+              description: "Core drill through masonry",
+              net_amount: 275.5,
+            }),
+          ],
         }),
       ),
     );

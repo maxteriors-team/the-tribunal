@@ -2597,6 +2597,65 @@
   line-height: 1.55;
 }
 
+.ll-additional-line-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 12px;
+}
+
+.ll-additional-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 180px) 40px;
+  gap: 10px;
+  align-items: center;
+}
+
+.ll-additional-line input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  color: #1c2420;
+  background: #fff;
+  border: 1px solid #9da39f;
+  border-radius: 2px;
+}
+
+.ll-additional-line input:focus-visible {
+  outline: 3px solid #1d5f8c;
+  outline-offset: 1px;
+}
+
+.ll-additional-line-amount {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  color: #4b5550;
+}
+
+.ll-additional-line-remove {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+}
+
+.ll-additional-line-remove svg,
+.ll-additional-lines > .est-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+@media (max-width: 640px) {
+  .ll-additional-line {
+    grid-template-columns: minmax(0, 1fr) 40px;
+  }
+
+  .ll-additional-line > label:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
 .ll-package-options,
 .ll-care-options {
   display: grid;

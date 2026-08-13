@@ -340,6 +340,12 @@ class ProposalEnhancementSchema(DocumentSchema):
     note: DocumentText = ""
 
 
+class ProposalLineItemSchema(DocumentSchema):
+    id: ShortText
+    description: Annotated[str, Field(max_length=500)] = ""
+    amount: Annotated[float, Field(ge=0, le=1_000_000)] = 0
+
+
 class ProposalDraftSchema(DocumentSchema):
     selected_tier_key: ShortText | None = Field(
         default=None, validation_alias=AliasChoices("selectedTierKey", "selected_tier_key")
@@ -370,6 +376,10 @@ class ProposalDraftSchema(DocumentSchema):
     )
     enhancements: Annotated[list[ProposalEnhancementSchema], Field(max_length=100)] = Field(
         default_factory=list
+    )
+    additional_line_items: Annotated[list[ProposalLineItemSchema], Field(max_length=100)] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("additionalLineItems", "additional_line_items"),
     )
     commitments: Annotated[list[DocumentText], Field(max_length=100)] = Field(default_factory=list)
     signature_name: ShortText = Field(

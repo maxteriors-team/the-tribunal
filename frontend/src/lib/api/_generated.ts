@@ -24456,6 +24456,8 @@ export interface components {
         };
         /** ProposalDraftSchema */
         ProposalDraftSchema: {
+            /** Additionallineitems */
+            additionalLineItems?: components["schemas"]["ProposalLineItemSchema"][];
             /** Commitments */
             commitments?: string[];
             /**
@@ -24556,6 +24558,21 @@ export interface components {
             transformer: boolean;
             /** Unit Price */
             unit_price: number;
+        };
+        /** ProposalLineItemSchema */
+        ProposalLineItemSchema: {
+            /**
+             * Amount
+             * @default 0
+             */
+            amount: number;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
         };
         /**
          * ProposalMockup

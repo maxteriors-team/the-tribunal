@@ -31,6 +31,7 @@ export interface BuildLandscapeProposalPayloadOptions extends LandscapeProposalL
   wireRuns: LandscapeWireQuoteInput[];
   selectedTierKey: string | null;
   selectedCarePlanKey: string | null;
+  additionalLineItems?: Array<{ description: string; amount: number }>;
 }
 
 function addQuantity(quantities: Map<string, number>, itemId: string | null, quantity: number) {
@@ -90,6 +91,7 @@ export function buildLandscapeProposalPayload({
   wireRuns,
   selectedTierKey,
   selectedCarePlanKey,
+  additionalLineItems = [],
   contactId,
   opportunityId,
   serviceLocationId,
@@ -109,7 +111,14 @@ export function buildLandscapeProposalPayload({
     title: title?.trim() || "Landscape lighting proposal",
     categories: ["landscape"],
     quantities: buildLandscapeProposalQuantities(pricing, catalog, fixtureCounts, wireRuns),
-    additional_charges: [],
+    additional_charges: additionalLineItems
+      .map((line) => ({
+        description: line.description.trim(),
+        net_amount: Number.isFinite(line.amount) ? Math.max(0, line.amount) : 0,
+        catalog_item_id: null,
+        tier_key: null,
+      }))
+      .filter((line) => line.description && line.net_amount > 0),
     selected_tier: selectedTierKey,
     care_plan_tier: selectedCarePlanKey,
     care_count_manual: careFixtureCount,
