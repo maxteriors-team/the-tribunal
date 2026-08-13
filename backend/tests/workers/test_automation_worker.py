@@ -24,8 +24,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.schemas.automation import AUTOMATION_ACTION_TYPES
-from app.workers.automation_worker import AutomationWorker
+from app.schemas.automation import AUTOMATION_ACTION_TYPES, AUTOMATION_CONTROL_FLOW_ACTIONS
+from app.workers.automation_worker import _BRANCH_STEP, _WAIT_STEPS, AutomationWorker
 
 # --------------------------------------------------------------------------- #
 # Action-type parity                                                           #
@@ -39,10 +39,26 @@ def test_declared_action_types_match_what_the_worker_dispatches() -> None:
     assistant would offer the model an action that silently does nothing, or
     hide one that works. This keeps the single source of truth honest.
     """
-    source = inspect.getsource(AutomationWorker._run_actions)
+    # Side-effecting actions are dispatched in ``_execute_step``. Control-flow
+    # steps never reach it — they move the cursor in ``_run_actions`` and are
+    # matched against module-level constants, so they are checked separately.
+    source = inspect.getsource(AutomationWorker._execute_step)
 
     for action_type in AUTOMATION_ACTION_TYPES:
+        if action_type in AUTOMATION_CONTROL_FLOW_ACTIONS:
+            continue
         assert f'"{action_type}"' in source, f"{action_type} is declared but never dispatched"
+
+
+def test_control_flow_actions_are_handled_by_the_cursor_loop() -> None:
+    """The step loop must recognise every declared control-flow step.
+
+    An unrecognised control-flow step would fall through to the dispatch table
+    and be logged as an unknown action — so a ``wait`` would stop delaying and
+    the whole sequence would fire at once.
+    """
+    handled = set(_WAIT_STEPS) | {_BRANCH_STEP}
+    assert handled == set(AUTOMATION_CONTROL_FLOW_ACTIONS)
 
 
 # --------------------------------------------------------------------------- #
@@ -90,6 +106,11 @@ def _execution() -> SimpleNamespace:
         scheduled_for=None,
         executed_at=None,
         error=None,
+        # Resume state: the cursor the step walk starts from, the trigger
+        # payload carried across a wait, and the loop budget.
+        step_index=0,
+        context={},
+        resume_count=0,
     )
 
 

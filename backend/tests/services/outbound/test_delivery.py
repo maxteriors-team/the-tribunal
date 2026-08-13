@@ -204,6 +204,44 @@ async def test_sms_delivery_blocks_global_opt_out_before_provider_call() -> None
 
 
 @pytest.mark.asyncio
+async def test_automation_sms_blocks_without_explicit_contact_consent() -> None:
+    """Post-install automation cannot text an unknown/legacy consent record."""
+    contact = SimpleNamespace(id=123, sms_consent_status="unknown")
+    message = SimpleNamespace(
+        id=uuid.uuid4(),
+        status=MessageStatus.SENT,
+        provider_message_id="msg_123",
+        error_message=None,
+    )
+    provider = _FakeTextProvider(message)
+    service = OutboundDeliveryService(
+        text_provider_factory=lambda preferred_provider=None, *, mac_relay_service=None: provider,
+        email_provider=_FakeEmailProvider(),
+        push_provider=_FakePushProvider(),
+        opt_out_manager=_FakeOptOutManager(),
+    )
+
+    result = await service.deliver(
+        AsyncMock(),
+        OutboundDeliveryRequest(
+            workspace_id=uuid.uuid4(),
+            channel=OutboundDeliveryChannel.SMS,
+            to="+12025550123",
+            from_="+12025550199",
+            body="Your Maxteriors owner's guide",
+            contact=contact,
+            action_type="automation_sms",
+            require_sms_consent=True,
+        ),
+    )
+
+    assert result.status is OutboundDeliveryStatus.BLOCKED
+    assert result.reason == "missing_sms_consent"
+    provider.send_message.assert_not_awaited()
+    provider.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_sms_delivery_blocks_disabled_user_preference() -> None:
     """A recipient ``User`` with ``notification_sms=False`` blocks the SMS send.
 

@@ -1,11 +1,15 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, Search, Send } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Send } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  ContactPicker,
+  contactDisplayName,
+} from "@/components/ui/contact-combobox";
 import {
   Dialog,
   DialogContent,
@@ -15,40 +19,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { useDebounce } from "@/hooks/useDebounce";
+import { Label } from "@/components/ui/label";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import { contactsApi } from "@/lib/api/contacts";
 import { reviewsApi } from "@/lib/api/reviews";
 import { queryKeys } from "@/lib/query-keys";
-import { cn } from "@/lib/utils";
+import { formatPhoneNumber } from "@/lib/utils/phone";
 import type { Contact } from "@/types";
-
-function contactName(contact: Contact): string {
-  const name = [contact.first_name, contact.last_name].filter(Boolean).join(" ");
-  return name || contact.email || contact.phone_number || `Contact #${contact.id}`;
-}
 
 export function SendReviewRequestDialog() {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Contact | null>(null);
-  const debouncedSearch = useDebounce(search, 300);
-
-  const { data, isPending: contactsLoading } = useQuery({
-    queryKey: queryKeys.contacts.search(workspaceId ?? "", debouncedSearch),
-    queryFn: () =>
-      contactsApi.list(workspaceId!, {
-        search: debouncedSearch || undefined,
-        page_size: 20,
-      }),
-    enabled: !!workspaceId && open,
-  });
-
-  const contacts = data?.items ?? [];
 
   const mutation = useMutation({
     mutationFn: (contactId: number) =>
@@ -76,7 +59,6 @@ export function SendReviewRequestDialog() {
 
   const resetAndClose = () => {
     setOpen(false);
-    setSearch("");
     setSelected(null);
   };
 
@@ -106,60 +88,25 @@ export function SendReviewRequestDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search contacts by name, email, phone…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-
-          <div className="h-64 overflow-auto rounded-lg border">
-            {contactsLoading ? (
-              <div className="flex h-full items-center justify-center text-muted-foreground">
-                <Loader2 className="size-6 animate-spin" />
-              </div>
-            ) : contacts.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                No contacts found
-              </div>
-            ) : (
-              <ul className="p-1">
-                {contacts.map((contact) => {
-                  const isSelected = selected?.id === contact.id;
-                  return (
-                    <li key={contact.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelected(contact)}
-                        className={cn(
-                          "flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors",
-                          isSelected ? "bg-primary/10" : "hover:bg-muted/50",
-                        )}
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium">
-                            {contactName(contact)}
-                          </span>
-                          {contact.phone_number && (
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {contact.phone_number}
-                            </span>
-                          )}
-                        </span>
-                        {isSelected && (
-                          <Check className="size-4 shrink-0 text-primary" />
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="review-request-contact">Contact</Label>
+          <ContactPicker
+            id="review-request-contact"
+            workspaceId={workspaceId}
+            value={selected ? String(selected.id) : ""}
+            onChange={(_, contact) => setSelected(contact)}
+            placeholder="Search contacts by name, phone, or email…"
+            disabled={mutation.isPending}
+          />
+          {/* The request goes out by SMS, so the number it will reach is the
+              one fact worth confirming before sending. */}
+          <p className="min-h-5 text-sm text-muted-foreground">
+            {selected
+              ? selected.phone_number
+                ? `Texting ${contactDisplayName(selected)} at ${formatPhoneNumber(selected.phone_number)}.`
+                : `${contactDisplayName(selected)} has no phone number, so this request can't be texted.`
+              : null}
+          </p>
         </div>
 
         <DialogFooter>
@@ -173,7 +120,7 @@ export function SendReviewRequestDialog() {
           <Button
             className="gap-2"
             onClick={() => selected && mutation.mutate(selected.id)}
-            disabled={!selected || mutation.isPending}
+            disabled={!selected || !selected.phone_number || mutation.isPending}
           >
             {mutation.isPending && <Loader2 className="size-4 animate-spin" />}
             Send request

@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -11,6 +11,7 @@ import * as z from "zod";
 import { CatalogPicker } from "@/components/catalog/catalog-picker";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FormContactPicker } from "@/components/ui/contact-combobox";
 import {
   Dialog,
   DialogContent,
@@ -28,16 +29,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import { contactsApi } from "@/lib/api/contacts";
 import { invoicesApi } from "@/lib/api/invoices";
 import { describeInvoiceDelivery } from "@/lib/invoice-delivery";
 import { queryKeys } from "@/lib/query-keys";
@@ -122,36 +115,25 @@ export function InvoiceCreateDialog({
 }: InvoiceCreateDialogProps) {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
-  const [contactSearch, setContactSearch] = useState("");
   // Only picked here when the caller didn't already know the customer.
   const needsContactPicker = contactId === undefined;
+  const [pickedContact, setPickedContact] = useState<Contact | null>(null);
 
   const form = useForm<CreateInvoiceFormValues>({
     resolver: zodResolver(createInvoiceSchema),
     defaultValues: DEFAULT_VALUES,
   });
 
-  // Server-side search keeps the picker usable past the endpoint's page cap:
-  // the operator narrows by name/email instead of loading the whole roster.
-  const contactsParams = {
-    page: 1,
-    page_size: 100,
-    search: contactSearch.trim() || undefined,
-  };
-  const contactsQuery = useQuery({
-    queryKey: queryKeys.contacts.list(workspaceId ?? "", contactsParams),
-    queryFn: () => contactsApi.list(workspaceId ?? "", contactsParams),
-    enabled: Boolean(workspaceId) && open && needsContactPicker,
-  });
-  const contacts = contactsQuery.data?.items ?? [];
-
   const selectedContactId = useWatch({
     control: form.control,
     name: "contact_id",
   });
-  const selectedContact = contacts.find(
-    (c) => String(c.id) === selectedContactId
-  );
+  // Deriving through the form value (rather than trusting the last pick)
+  // means a form reset drops the warning below with it.
+  const selectedContact =
+    pickedContact && String(pickedContact.id) === selectedContactId
+      ? pickedContact
+      : undefined;
   // A contact with no email can be billed, but not *delivered* to. Say so
   // before the operator hits send rather than after.
   const selectedHasNoEmail = Boolean(selectedContact && !selectedContact.email);
@@ -220,7 +202,7 @@ export function InvoiceCreateDialog({
         });
       }
       onCreated?.(invoice);
-      setContactSearch("");
+      setPickedContact(null);
       onOpenChange(false);
     },
     onError: (err: unknown) =>
@@ -241,8 +223,8 @@ export function InvoiceCreateDialog({
 
   const handleOpenChange = (next: boolean) => {
     if (!next && createMutation.isPending) return;
-    // Clear the picker's search on close so the next open starts fresh.
-    if (!next) setContactSearch("");
+    // Drop the picked customer on close so the next open starts fresh.
+    if (!next) setPickedContact(null);
     onOpenChange(next);
   };
 
@@ -272,45 +254,16 @@ export function InvoiceCreateDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Bill to</FormLabel>
-                    <Input
-                      placeholder="Search customers by name or email…"
-                      value={contactSearch}
-                      onChange={(event) => setContactSearch(event.target.value)}
-                      className="mb-2"
+                    <FormContactPicker
+                      workspaceId={workspaceId}
+                      value={field.value}
+                      onChange={(nextId, contact) => {
+                        setPickedContact(contact);
+                        field.onChange(nextId);
+                      }}
+                      placeholder="Search customers by name, phone, or email…"
                       disabled={createMutation.isPending}
                     />
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={createMutation.isPending}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue
-                            placeholder={
-                              contactsQuery.isLoading
-                                ? "Loading customers…"
-                                : "Select a customer"
-                            }
-                          />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {contacts.length === 0 ? (
-                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                            {contactsQuery.isLoading
-                              ? "Loading customers…"
-                              : "No customers found"}
-                          </div>
-                        ) : (
-                          contacts.map((c: Contact) => (
-                            <SelectItem key={c.id} value={String(c.id)}>
-                              {contactLabel(c)}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
                     {selectedHasNoEmail && (
                       <p className="text-sm text-amber-600 dark:text-amber-500">
                         This customer has no email address, so the invoice can be

@@ -215,6 +215,17 @@ class Contact(Base):
     )
     sms_consent_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Email opt-out. Distinct from the campaign-enrollment unsubscribe, which
+    # only silences one campaign: this is contact-level and suppresses every
+    # commercial email to this person — workflow sends included. A nullable
+    # timestamp rather than a boolean so "when did they opt out?" stays
+    # answerable, which is the question that actually comes up in a complaint.
+    email_opted_out_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    # Where the opt-out came from: "unsubscribe_link", "operator", "import", ...
+    email_opt_out_source: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     # Engagement tracking
     last_engaged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True

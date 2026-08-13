@@ -11,9 +11,6 @@ import {
   Trash2,
   Zap,
   Clock,
-  MessageSquare,
-  Mail,
-  Phone,
   Tag,
   ArrowRight,
   Settings2,
@@ -26,10 +23,13 @@ import {
   CalendarCheck,
   CalendarX,
   UserPlus,
-  Megaphone,
-  Timer,
   Gauge,
-  Rocket,
+  FileCheck,
+  FileX,
+  Receipt,
+  BadgeDollarSign,
+  CalendarClock,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -44,6 +44,17 @@ import {
   parseBacklogTriggerConfig,
   validateBacklogTriggerInputs,
 } from "@/components/automations/backlog-trigger";
+import {
+  describeBranchStep,
+  describeWaitStep,
+  isWaitAction,
+  normalizeSteps,
+  validateSteps,
+} from "@/components/automations/workflow-steps";
+import {
+  WorkflowStepsEditor,
+  actionMeta,
+} from "@/components/automations/workflow-steps-editor";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -102,7 +113,6 @@ import type {
   Automation,
   AutomationAction,
   AutomationTriggerType,
-  AutomationActionType,
 } from "@/types";
 
 const triggerTypeConfig: Record<AutomationTriggerType, { label: string; icon: LucideIcon; color: string; description: string }> = {
@@ -123,20 +133,14 @@ const triggerTypeConfig: Record<AutomationTriggerType, { label: string; icon: Lu
   roleplay_completed: { label: "Roleplay Completed", icon: GraduationCap, color: "text-primary", description: "When a practice-arena rehearsal finishes" },
   knowledge_document_uploaded: { label: "Knowledge Doc Uploaded", icon: FileText, color: "text-info", description: "When a knowledge document is added" },
   lead_created: { label: "New Lead Captured", icon: UserPlus, color: "text-success", description: "When a new lead is captured from a lead source" },
-};
-
-const actionTypeConfig: Record<AutomationActionType, { label: string; icon: LucideIcon }> = {
-  send_sms: { label: "Send SMS", icon: MessageSquare },
-  send_email: { label: "Send Email", icon: Mail },
-  make_call: { label: "Make Call", icon: Phone },
-  enroll_campaign: { label: "Enroll in Campaign", icon: Megaphone },
-  start_drip_campaign: { label: "Start Drip Campaign", icon: Rocket },
-  apply_tag: { label: "Apply Tag", icon: Tag },
-  add_tag: { label: "Add Tag", icon: Tag },
-  move_to_stage: { label: "Move Deal Stage", icon: TrendingUp },
-  wait: { label: "Wait", icon: Timer },
-  delay: { label: "Delay", icon: Timer },
-  update_status: { label: "Update Status", icon: Settings2 },
+  quote_sent: { label: "Quote Sent", icon: FileText, color: "text-info", description: "When a quote goes out to a customer" },
+  quote_approved: { label: "Quote Approved", icon: FileCheck, color: "text-success", description: "When a customer approves a quote" },
+  quote_declined: { label: "Quote Declined", icon: FileX, color: "text-destructive", description: "When a customer declines a quote" },
+  quote_converted: { label: "Quote Converted", icon: FileCheck, color: "text-success", description: "When a quote becomes a job or invoice" },
+  invoice_sent: { label: "Invoice Sent", icon: Receipt, color: "text-info", description: "When an invoice is sent" },
+  invoice_paid: { label: "Invoice Paid", icon: BadgeDollarSign, color: "text-success", description: "When an invoice is paid" },
+  job_scheduled: { label: "Job Scheduled", icon: CalendarClock, color: "text-info", description: "When a job gets a date on the calendar" },
+  job_completed: { label: "Job Completed", icon: Wrench, color: "text-success", description: "When a job is marked complete — the moment to send resources or ask for a review" },
 };
 
 // Triggers offered in the builder dropdown, grouped for readability.
@@ -147,27 +151,17 @@ const TRIGGER_OPTIONS: { group: string; values: AutomationTriggerType[] }[] = [
   { group: "Appointments", values: ["appointment_booked", "booking_created", "no_show", "never_booked"] },
   { group: "Contacts & Pipeline", values: ["contact_tagged", "opportunity_created", "deal_stage_changed"] },
   { group: "Engagement", values: ["review_received", "review_request_response", "missed_call", "roleplay_completed", "knowledge_document_uploaded"] },
+  { group: "Quotes & Invoices", values: ["quote_sent", "quote_approved", "quote_declined", "quote_converted", "invoice_sent", "invoice_paid"] },
+  { group: "Jobs", values: ["job_scheduled", "job_completed"] },
 ];
-
-// Actions offered in the builder dropdown.
-const ACTION_OPTIONS: AutomationActionType[] = [
-  "send_sms",
-  "send_email",
-  "make_call",
-  "enroll_campaign",
-  "start_drip_campaign",
-  "apply_tag",
-  "move_to_stage",
-  "wait",
-];
-
-// Actions that tag the contact and therefore need a tag-name value. An empty
-// tag makes the worker skip the action, so the builder requires one.
-const TAG_ACTIONS: AutomationActionType[] = ["apply_tag", "add_tag"];
 
 // Sentinel for the "any lead source" option: Radix Select items can't use an
 // empty-string value, so we map this back to "" (match every new lead).
 const ALL_LEAD_SOURCES = "__all__";
+
+// A brand-new workflow starts with one step; the builder never allows zero,
+// since an automation with no steps fires and does nothing.
+const defaultSteps = (): AutomationAction[] => [{ type: "send_sms", config: {} }];
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -211,22 +205,18 @@ export function AutomationsPage() {
   const [newAutomationName, setNewAutomationName] = useState("");
   const [newAutomationDescription, setNewAutomationDescription] = useState("");
   const [newTriggerType, setNewTriggerType] = useState<AutomationTriggerType>("event");
-  const [newActionType, setNewActionType] = useState<AutomationActionType>("send_sms");
-  // Tag name for apply_tag/add_tag actions; lead-source public_key that narrows
-  // a lead_created trigger to one form ("" = every new lead); tag that fires a
-  // contact_tagged trigger (service line, e.g. "Landscape Lighting").
-  const [newTagValue, setNewTagValue] = useState("");
+  // The workflow itself: a flat, ordered list of steps. Whole step objects are
+  // held in state (not one field per action setting) so config keys the builder
+  // doesn't surface — an SMS body, a branch's step id — survive an edit.
+  const [newSteps, setNewSteps] = useState<AutomationAction[]>(defaultSteps);
+  // Lead-source public_key that narrows a lead_created trigger to one form
+  // ("" = every new lead); tag that fires a contact_tagged trigger (service
+  // line, e.g. "Landscape Lighting").
   const [newLeadSourceKey, setNewLeadSourceKey] = useState("");
   const [newTriggerTag, setNewTriggerTag] = useState("");
-  // Destination stage for a move_to_stage action; the owning pipeline is stored
-  // alongside it for builder context / opportunity disambiguation.
-  const [newStageId, setNewStageId] = useState("");
-  const [newStagePipelineId, setNewStagePipelineId] = useState("");
   // backlog_below_threshold settings: fire under this many weeks of booked work,
   // then stay silent for this many days so a slow month can't re-blast everyone.
   const [newBacklogInputs, setNewBacklogInputs] = useState(defaultBacklogTriggerInputs);
-  // Drip sequence a start_drip_campaign action switches on.
-  const [newDripCampaignId, setNewDripCampaignId] = useState("");
   const [editingAutomation, setEditingAutomation] = useState<Automation | null>(null);
 
   const { data, isPending, error } = useAutomations(workspaceId ?? "");
@@ -263,9 +253,6 @@ export function AutomationsPage() {
   const automations = data?.items ?? [];
   const leadSources = leadSourcesData ?? [];
   const tagOptions = tagsData?.items ?? [];
-  const isTagAction = TAG_ACTIONS.includes(newActionType);
-  const isStageAction = newActionType === "move_to_stage";
-  const isDripAction = newActionType === "start_drip_campaign";
   const isTagTrigger = newTriggerType === "contact_tagged";
   const isBacklogTrigger = newTriggerType === "backlog_below_threshold";
   const pipelines = pipelinesData ?? [];
@@ -298,42 +285,10 @@ export function AutomationsPage() {
     setNewAutomationName("");
     setNewAutomationDescription("");
     setNewTriggerType("event");
-    setNewActionType("send_sms");
-    setNewTagValue("");
+    setNewSteps(defaultSteps());
     setNewLeadSourceKey("");
     setNewTriggerTag("");
-    setNewStageId("");
-    setNewStagePipelineId("");
     setNewBacklogInputs(defaultBacklogTriggerInputs());
-    setNewDripCampaignId("");
-  };
-
-  // Build the first action's config from the builder fields while preserving
-  // any config keys the builder doesn't surface (e.g. an existing SMS body), so
-  // editing an automation's name never blanks its action settings.
-  const buildActions = (): AutomationAction[] => {
-    const config: Record<string, unknown> =
-      editingAutomation?.actions[0]?.type === newActionType
-        ? { ...(editingAutomation.actions[0]?.config ?? {}) }
-        : {};
-    if (TAG_ACTIONS.includes(newActionType)) {
-      config.tag = newTagValue.trim();
-    }
-    // move_to_stage stores the destination stage plus its owning pipeline (kept
-    // for builder context and opportunity disambiguation on the backend).
-    if (newActionType === "move_to_stage") {
-      config.stage_id = newStageId;
-      if (newStagePipelineId) {
-        config.pipeline_id = newStagePipelineId;
-      } else {
-        delete config.pipeline_id;
-      }
-    }
-    // The worker reads drip_campaign_id; without it the action is a no-op.
-    if (newActionType === "start_drip_campaign") {
-      config.drip_campaign_id = newDripCampaignId;
-    }
-    return [{ type: newActionType, config }];
   };
 
   // Narrow a lead_created automation to one lead source, or clear the selector
@@ -367,20 +322,13 @@ export function AutomationsPage() {
       toast.error("Please enter a name for the automation");
       return;
     }
-    if (TAG_ACTIONS.includes(newActionType) && !newTagValue.trim()) {
-      toast.error("Enter a tag name for the Apply Tag action");
-      return;
-    }
-    if (newActionType === "move_to_stage" && !newStageId) {
-      toast.error("Pick the stage to move the deal to");
-      return;
-    }
     if (newTriggerType === "contact_tagged" && !newTriggerTag.trim()) {
       toast.error("Pick the tag that should trigger this automation");
       return;
     }
-    if (newActionType === "start_drip_campaign" && !newDripCampaignId) {
-      toast.error("Pick the drip campaign to start");
+    const stepsError = validateSteps(newSteps);
+    if (stepsError) {
+      toast.error(stepsError);
       return;
     }
     if (isBacklogTrigger) {
@@ -400,7 +348,7 @@ export function AutomationsPage() {
             description: newAutomationDescription || undefined,
             trigger_type: newTriggerType,
             trigger_config: buildTriggerConfig(),
-            actions: buildActions(),
+            actions: normalizeSteps(newSteps),
           },
         });
         toast.success("Automation updated successfully");
@@ -411,7 +359,7 @@ export function AutomationsPage() {
           description: newAutomationDescription || undefined,
           trigger_type: newTriggerType,
           trigger_config: buildTriggerConfig(),
-          actions: buildActions(),
+          actions: normalizeSteps(newSteps),
           is_active: true,
         });
         toast.success("Automation created successfully");
@@ -427,19 +375,12 @@ export function AutomationsPage() {
     setNewAutomationName(automation.name);
     setNewAutomationDescription(automation.description ?? "");
     setNewTriggerType(automation.trigger_type);
-    const firstAction = automation.actions[0];
-    setNewActionType(firstAction?.type ?? "send_sms");
-    setNewTagValue(typeof firstAction?.config?.tag === "string" ? firstAction.config.tag : "");
-    setNewStageId(
-      typeof firstAction?.config?.stage_id === "string" ? firstAction.config.stage_id : ""
-    );
-    setNewStagePipelineId(
-      typeof firstAction?.config?.pipeline_id === "string" ? firstAction.config.pipeline_id : ""
-    );
-    setNewDripCampaignId(
-      typeof firstAction?.config?.drip_campaign_id === "string"
-        ? firstAction.config.drip_campaign_id
-        : ""
+    // Copy each step (config included) so edits in the dialog can't mutate the
+    // cached automation before the operator saves.
+    setNewSteps(
+      automation.actions.length > 0
+        ? automation.actions.map((action) => ({ ...action, config: { ...action.config } }))
+        : defaultSteps()
     );
     setNewBacklogInputs(parseBacklogTriggerConfig(automation.trigger_config));
     const sourceKey = automation.trigger_config?.lead_source_public_key;
@@ -675,115 +616,13 @@ export function AutomationsPage() {
                   </div>
                 </div>
               )}
-              <div className="space-y-2">
-                <Label>Action</Label>
-                <Select
-                  value={newActionType}
-                  onValueChange={(v) => setNewActionType(v as AutomationActionType)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ACTION_OPTIONS.map((value) => {
-                      const cfg = actionTypeConfig[value];
-                      const Icon = cfg.icon;
-                      return (
-                        <SelectItem key={value} value={value}>
-                          <div className="flex items-center gap-2">
-                            <Icon className="size-4 text-muted-foreground" />
-                            {cfg.label}
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-              {isTagAction && (
-                <div className="space-y-2">
-                  <Label htmlFor="auto-tag">Tag to apply</Label>
-                  <Input
-                    id="auto-tag"
-                    placeholder="e.g. Perm Lighting"
-                    value={newTagValue}
-                    onChange={(e) => setNewTagValue(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Created in this workspace if it doesn&apos;t exist yet, then added to the contact.
-                  </p>
-                </div>
-              )}
-              {isStageAction && (
-                <div className="space-y-2">
-                  <Label>Move deal to stage</Label>
-                  {pipelines.length > 0 ? (
-                    <Select
-                      value={newStageId}
-                      onValueChange={(v) => {
-                        setNewStageId(v);
-                        const owner = pipelines.find((p) =>
-                          p.stages?.some((s) => s.id === v)
-                        );
-                        setNewStagePipelineId(owner?.id ?? "");
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a stage" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {pipelines.map((pipeline) => (
-                          <SelectGroup key={pipeline.id}>
-                            <SelectLabel>{pipeline.name}</SelectLabel>
-                            {[...pipeline.stages]
-                              .sort((a, b) => a.order - b.order)
-                              .map((stage) => (
-                                <SelectItem key={stage.id} value={stage.id}>
-                                  {stage.name}
-                                </SelectItem>
-                              ))}
-                          </SelectGroup>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No pipelines yet — create one in Opportunities first.
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    When this runs, the contact&apos;s open deal is moved to this stage
-                    (e.g. Estimate Scheduled).
-                  </p>
-                </div>
-              )}
-              {isDripAction && (
-                <div className="space-y-2">
-                  <Label>Drip campaign to start</Label>
-                  {dripCampaigns.length > 0 ? (
-                    <Select value={newDripCampaignId} onValueChange={setNewDripCampaignId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a drip campaign" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {dripCampaigns.map((campaign) => (
-                          <SelectItem key={campaign.id} value={campaign.id}>
-                            {campaign.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      No drip campaigns yet — create a reactivation sequence first.
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Switches the sequence on so its enrolled past customers start receiving
-                    it. When the trigger has a contact, that contact is enrolled too.
-                  </p>
-                </div>
-              )}
+              <WorkflowStepsEditor
+                workspaceId={workspaceId ?? ""}
+                steps={newSteps}
+                onStepsChange={setNewSteps}
+                pipelines={pipelines}
+                dripCampaigns={dripCampaigns}
+              />
             </div>
             <DialogFooter>
               <Button
@@ -1021,10 +860,7 @@ export function AutomationsPage() {
                       {/* Actions */}
                       <div className="space-y-2">
                         {automation.actions.map((action, index) => {
-                          const actionConfig = actionTypeConfig[action.type] ?? {
-                            label: action.type,
-                            icon: Settings2,
-                          };
+                          const actionConfig = actionMeta(action.type);
                           const ActionIcon = actionConfig.icon;
                           const tagValue =
                             typeof action.config?.tag === "string" ? action.config.tag : "";
@@ -1036,8 +872,9 @@ export function AutomationsPage() {
                             typeof action.config?.drip_campaign_id === "string"
                               ? action.config.drip_campaign_id
                               : "";
-                          // Show the tag for tag actions, or the resolved stage /
-                          // drip-campaign name for the actions that target one.
+                          // Show the tag for tag actions, the resolved stage /
+                          // drip-campaign name for the actions that target one,
+                          // and the duration / condition count for control flow.
                           const chip =
                             action.type === "move_to_stage"
                               ? stageId
@@ -1047,7 +884,11 @@ export function AutomationsPage() {
                                 ? dripId
                                   ? dripCampaignNameById(dripId) ?? "Drip campaign"
                                   : ""
-                                : tagValue;
+                                : isWaitAction(action.type)
+                                  ? describeWaitStep(action.config)
+                                  : action.type === "branch"
+                                    ? describeBranchStep(action.config)
+                                    : tagValue;
                           return (
                             <div
                               key={index}

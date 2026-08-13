@@ -151,6 +151,15 @@ beforeEach(() => {
   draftMocks.deleteDraft.mockResolvedValue(undefined);
 });
 
+/**
+ * The customer field is a typeahead: focusing it opens the suggestion listbox,
+ * and the customer is taken by clicking an option.
+ */
+async function pickCustomer(name: RegExp | string) {
+  await userEvent.click(screen.getByLabelText("Customer"));
+  await userEvent.click(await screen.findByRole("option", { name }));
+}
+
 describe("LightingProjectsPage", () => {
   it("renders loading, empty, error, and retry states", async () => {
     let resolveList: ((value: PaginatedLightingProjects) => void) | undefined;
@@ -221,9 +230,8 @@ describe("LightingProjectsPage", () => {
     await userEvent.click(
       screen.getAllByRole("button", { name: "New lighting project" })[0],
     );
-    await screen.findByText("pat@example.com");
     await userEvent.type(screen.getByLabelText("Project name"), "Front walk");
-    await userEvent.click(screen.getByRole("radio", { name: /Pat Lee/ }));
+    await pickCustomer(/Pat Lee/);
     await userEvent.click(screen.getByRole("button", { name: "Create project" }));
 
     await waitFor(() =>
@@ -255,8 +263,7 @@ describe("LightingProjectsPage", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Recover browser draft" }),
     );
-    await screen.findByRole("radio", { name: /Pat Lee/ });
-    await userEvent.click(screen.getByRole("radio", { name: /Pat Lee/ }));
+    await pickCustomer(/Pat Lee/);
     await userEvent.click(screen.getByRole("button", { name: "Recover project" }));
 
     await waitFor(() => expect(draftMocks.deleteDraft).toHaveBeenCalledWith(WORKSPACE_ID));
@@ -286,8 +293,7 @@ describe("LightingProjectsPage", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: "Recover browser draft" }),
     );
-    await screen.findByRole("radio", { name: /Pat Lee/ });
-    await userEvent.click(screen.getByRole("radio", { name: /Pat Lee/ }));
+    await pickCustomer(/Pat Lee/);
     await userEvent.click(screen.getByRole("button", { name: "Recover project" }));
     await screen.findByRole("alert");
     expect(draftMocks.deleteDraft).not.toHaveBeenCalled();

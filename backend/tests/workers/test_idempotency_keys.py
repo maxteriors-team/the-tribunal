@@ -487,15 +487,15 @@ class TestAdditionalRetrySendKeys:
         contact = SimpleNamespace(id=contact_id, phone_number="+12025551234", first_name="A")
         db = MagicMock()
 
+        delivered = SimpleNamespace(status=SimpleNamespace(value="sent"), reason=None)
         with (
             patch.object(worker, "_resolve_from_number", AsyncMock(return_value="+12025556789")),
             patch.object(worker, "_render_template", return_value="hi"),
-            patch("app.workers.automation_worker.get_text_message_provider") as provider_factory,
+            patch(
+                "app.workers.automation_worker.outbound_delivery_service.deliver",
+                AsyncMock(return_value=delivered),
+            ) as deliver,
         ):
-            sms_instance = provider_factory.return_value
-            sms_instance.send_message = AsyncMock(return_value=SimpleNamespace(id=uuid4()))
-            sms_instance.close = AsyncMock()
-
             await worker._action_send_sms(  # type: ignore[arg-type]
                 automation,
                 contact,
@@ -504,8 +504,8 @@ class TestAdditionalRetrySendKeys:
                 db,
             )
 
-        call_kwargs = sms_instance.send_message.call_args.kwargs
-        assert call_kwargs["idempotency_key"] == derive("automation_sms", automation_id, contact_id)
+        request = deliver.await_args.args[1]
+        assert request.idempotency_key == derive("automation_sms", automation_id, contact_id)
 
     async def test_sms_fallback_forwards_campaign_contact_key(self) -> None:
         from app.services.campaigns.sms_fallback import send_sms_fallback

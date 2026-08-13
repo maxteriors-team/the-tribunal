@@ -46,8 +46,14 @@ this prefix (e.g. `/static/lead-magnets/<slug>.pdf`).
 
 ```
 backend/static/
+├── guides/              # Customer-facing owner's guides (HTML, printable)
 └── lead-magnets/        # Downloadable lead-magnet PDFs
 ```
+
+`guides/index.html` is the resources hub the post-install automation links to
+(`scripts/ops/setup_post_install_resources.py`). Keep that URL stable — it is the
+target of short links already texted to customers — so add a new system as
+another card plus a sibling page rather than renaming what is there.
 
 Rules for this directory:
 

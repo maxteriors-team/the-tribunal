@@ -169,3 +169,4 @@ backend/backups/
 *.dump
 .local-bundles/
 .worktrees/
+.ezcoder/worktrees/

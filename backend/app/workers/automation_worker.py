@@ -76,11 +76,13 @@ from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.drip_campaign import DripCampaign, DripCampaignStatus
+from app.models.email_template import EmailTemplate
 from app.models.opportunity import Opportunity
 from app.models.phone_number import PhoneNumber
 from app.models.pipeline import Pipeline, PipelineStage
 from app.models.tag import ContactTag, Tag
 from app.services.approval.approval_gate_service import approval_gate_service
+from app.services.automations.branching import contact_matches_rules, parse_branch_condition
 from app.services.automations.conditions import (
     AUTOMATION_CONDITION_TRIGGERS,
     CONDITION_BACKLOG_BELOW_THRESHOLD,
@@ -91,13 +93,34 @@ from app.services.automations.events import (
     EVENT_LEAD_CREATED,
     lead_created_event_matches,
 )
-from app.services.email import send_automation_email
+from app.services.automations.opt_out import (
+    NO_AUTOMATION_TAG,
+    automation_suppressed,
+    no_automation_tag_exists,
+)
+from app.services.automations.runner import (
+    END_OF_WORKFLOW,
+    MAX_RESUMES,
+    MAX_STEPS_PER_RUN,
+    WorkflowStep,
+    branch_targets,
+    normalize_steps,
+    step_at,
+    wait_duration,
+)
+from app.services.email import send_automation_email, send_template_email
+from app.services.email_layout import EmailCategory
+from app.services.email_opt_out import build_email_unsubscribe_url, email_suppressed
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
+from app.services.outbound.delivery import (
+    OutboundDeliveryChannel,
+    OutboundDeliveryRequest,
+    outbound_delivery_service,
+)
 from app.services.reactivation.drip_runner import enroll_contacts
 from app.services.reporting.capacity_service import CapacityService
 from app.services.tags import TagService
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
-from app.services.telephony.text_provider import get_text_message_provider
 from app.utils.phone import normalize_phone_safe
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -120,6 +143,16 @@ _CONTACT_ACTIONS = frozenset(
     {"send_sms", "send_email", "make_call", "enroll_campaign", "apply_tag", "add_tag"}
 )
 
+# Step types handled by the cursor loop itself rather than dispatched as an
+# action: they move the cursor instead of doing something to a customer, and so
+# never pass through the approval gate.
+_WAIT_STEPS = frozenset({"wait", "delay"})
+_BRANCH_STEP = "branch"
+
+# Executions resumed per poll cycle. Bounds the work one cycle can pick up when
+# a large drip comes due all at once.
+MAX_RESUMES_PER_CYCLE = 100
+
 
 class AutomationWorker(RetryableWorker, BaseWorker):
     """Executes trigger-based automations against contacts."""
@@ -136,8 +169,12 @@ class AutomationWorker(RetryableWorker, BaseWorker):
     # ------------------------------------------------------------------ #
 
     async def _process_items(self) -> None:
-        """Drain queued events, then evaluate active polling automations."""
+        """Resume due workflows, drain queued events, evaluate polling triggers."""
         async with AsyncSessionLocal() as db:
+            # 0) Workflows parked on a ``wait`` whose time has come. First so a
+            #    customer mid-sequence is served before new work is taken on.
+            await self._resume_scheduled_executions(db)
+
             # 1) Event-based triggers (review/opportunity/missed_call/...).
             await self._process_events(db)
 
@@ -156,6 +193,108 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                     )
 
             await db.commit()
+
+    # ------------------------------------------------------------------ #
+    # Resuming parked workflows                                            #
+    # ------------------------------------------------------------------ #
+
+    async def _resume_scheduled_executions(self, db: AsyncSession) -> None:
+        """Continue workflows whose ``wait`` has elapsed.
+
+        This is the other half of the ``wait`` step. Without it a parked run is
+        simply abandoned: the row sits at ``status='scheduled'`` forever and the
+        customer never receives the rest of the sequence.
+
+        Ordering by ``scheduled_for`` serves the longest-overdue customer first,
+        which is the fair thing to do when a backlog builds. The query is served
+        by the existing ``ix_automation_executions_status_scheduled_for`` index.
+        """
+        now = datetime.now(UTC)
+        result = await db.execute(
+            select(AutomationExecution)
+            .where(
+                AutomationExecution.status == "scheduled",
+                AutomationExecution.scheduled_for.is_not(None),
+                AutomationExecution.scheduled_for <= now,
+            )
+            .order_by(AutomationExecution.scheduled_for)
+            .limit(MAX_RESUMES_PER_CYCLE)
+        )
+        executions = list(result.scalars().all())
+        if not executions:
+            return
+
+        self.logger.info("Resuming scheduled automations", count=len(executions))
+        for execution in executions:
+            await self.execute_with_retry(
+                self._resume_execution,
+                execution,
+                db,
+                item_key=derive_worker_retry_key("automation_resume", execution.id),
+            )
+
+    async def _resume_execution(self, execution: AutomationExecution, db: AsyncSession) -> None:
+        """Re-enter one parked run at its saved cursor.
+
+        Re-reads the automation and contact rather than trusting anything held
+        across the wait — either may have been edited, deactivated or deleted in
+        the interim, and a run must not outlive the automation that owns it.
+        """
+        log = self.logger.bind(
+            execution_id=str(execution.id),
+            automation_id=str(execution.automation_id),
+            step_index=execution.step_index,
+        )
+
+        if execution.resume_count >= MAX_RESUMES:
+            # A goto cycle with a wait inside it resumes politely and forever;
+            # this is where that run is stopped and made visible.
+            execution.status = "failed"
+            execution.error = (
+                f"Workflow resumed {MAX_RESUMES} times without finishing — "
+                "check the branch targets for a loop."
+            )
+            execution.scheduled_for = None
+            log.error("automation_resume_budget_exhausted", resume_count=execution.resume_count)
+            return
+
+        automation = await db.get(Automation, execution.automation_id)
+        if automation is None or not automation.is_active:
+            # Paused mid-wait is a deliberate operator act: stop the run rather
+            # than deliver the back half of a sequence they switched off.
+            execution.status = "failed"
+            execution.error = "Automation was deleted or deactivated during a wait step"
+            execution.scheduled_for = None
+            log.info("automation_resume_abandoned", reason="automation_inactive")
+            return
+
+        contact: Contact | None = None
+        if execution.contact_id is not None:
+            contact = await db.get(Contact, execution.contact_id)
+            if contact is None:
+                execution.status = "failed"
+                execution.error = "Contact was deleted during a wait step"
+                execution.scheduled_for = None
+                log.info("automation_resume_abandoned", reason="contact_missing")
+                return
+
+        # Consent can be withdrawn during a wait, and a parked run is exactly
+        # where that is most likely to happen. Re-check before sending the rest.
+        if contact is not None and await automation_suppressed(
+            db, automation.workspace_id, contact.id
+        ):
+            execution.status = "failed"
+            execution.error = f"Contact tagged '{NO_AUTOMATION_TAG}' during a wait step"
+            execution.scheduled_for = None
+            log.info("automation_resume_abandoned", reason="no_automation_tag")
+            return
+
+        execution.resume_count += 1
+        execution.status = "pending"
+        execution.scheduled_for = None
+
+        log.info("automation_resumed", resume_count=execution.resume_count)
+        await self._run_actions(automation, contact, execution.context or {}, execution, db)
 
     # ------------------------------------------------------------------ #
     # Event-based triggers                                                 #
@@ -374,6 +513,11 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         base_filters = [
             Contact.workspace_id == automation.workspace_id,
             not_(Contact.id.in_(already_executed)),
+            # The ``no-automation`` kill switch is enforced at
+            # ``emit_automation_event`` for event triggers, which polling
+            # triggers never pass through — so without this a muted customer
+            # still gets texted by never_booked/no_show/contact_tagged.
+            not_(no_automation_tag_exists(automation.workspace_id, Contact.id)),
         ]
 
         if trigger in ("appointment_booked", "booking_created"):
@@ -572,12 +716,20 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         execution: AutomationExecution,
         db: AsyncSession,
     ) -> None:
-        """Run an automation's action list against *contact*, recording results.
+        """Walk an automation's steps against *contact* from the saved cursor.
 
-        Shared by the polling-trigger and event-trigger paths. ``contact`` may
-        be ``None`` for event triggers without an associated contact; actions
-        that require one are skipped with a warning. ``payload`` provides extra
-        template tokens (e.g. ``{rating}``, ``{stage}``) for message rendering.
+        Shared by the polling-trigger, event-trigger and resume paths.
+        ``contact`` may be ``None`` for event triggers without an associated
+        contact; steps that require one are skipped with a warning. ``payload``
+        provides extra template tokens (e.g. ``{rating}``, ``{stage}``).
+
+        The walk starts at ``execution.step_index``, which is why a workflow
+        survives a ``wait``: hitting one persists the *next* cursor and returns
+        with the row left ``scheduled``, and a later cycle re-enters here to
+        finish the sequence. ``payload`` is merged into ``execution.context`` and
+        saved for the same reason — the trigger's tokens are an in-memory
+        argument that would otherwise be gone by the time the run resumes.
+
         Never raises — failures are recorded on the execution row.
         """
         log = self.logger.bind(
@@ -586,97 +738,205 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             execution_id=str(execution.id),
         )
 
+        steps = normalize_steps(automation.actions)
+
+        # Persisted context wins on nothing: the live payload refreshes tokens
+        # for the step about to run, while keys captured at trigger time survive
+        # a wait. Assigned back so the merge is durable for the next resume.
+        context: dict[str, Any] = {**(execution.context or {}), **(payload or {})}
+        execution.context = context
+
+        cursor = execution.step_index or 0
+        steps_run = 0
+
         try:
-            for action in automation.actions:
-                action_type: str = str(action.get("type", "")).lower()
-                action_config: dict[str, Any] = action.get("config", {})
+            while True:
+                step = step_at(steps, cursor)
+                if step is None:
+                    break  # Cursor ran off the end — the workflow is finished.
 
-                log.debug("Executing action", action_type=action_type)
-
-                # Check approval gate (automation has no agent_id)
-                decision, _gate_result = await approval_gate_service.check_and_execute_or_queue(
-                    db=db,
-                    agent_id=None,
-                    workspace_id=automation.workspace_id,
-                    action_type=action_type,
-                    action_payload=action_config,
-                    description=f"Automation '{automation.name}': {action_type}",
-                    context={
-                        "source": "automation",
-                        "automation_id": str(automation.id),
-                        "contact_id": contact.id if contact else None,
-                    },
-                )
-
-                if decision == "pending":
-                    log.info("automation_action_pending_approval", action_type=action_type)
-                    continue
-                elif decision == "blocked":
-                    log.warning("automation_action_blocked", action_type=action_type)
-                    continue
-
-                # Actions targeting a contact are skipped when the (event)
-                # trigger has none. Checking here lets mypy narrow ``contact``.
-                if action_type in _CONTACT_ACTIONS and contact is None:
-                    log.warning("automation_action_requires_contact", action_type=action_type)
-                    continue
-
-                if action_type == "send_sms" and contact is not None:
-                    await self._action_send_sms(automation, contact, action_config, payload, db)
-
-                elif action_type == "send_email" and contact is not None:
-                    await self._action_send_email(automation, contact, action_config, payload, db)
-
-                elif action_type == "make_call" and contact is not None:
-                    await self._action_make_call(automation, contact, action_config, db)
-
-                elif action_type == "enroll_campaign" and contact is not None:
-                    await self._action_enroll_campaign(automation, contact, action_config, db)
-
-                elif action_type == "start_drip_campaign":
-                    # Not a _CONTACT_ACTION: starting a drip is a workspace-level
-                    # act, so a contactless condition trigger can launch one.
-                    await self._action_start_drip_campaign(automation, contact, action_config, db)
-
-                elif action_type == "move_to_stage":
-                    # Not a _CONTACT_ACTION: the event path can carry an
-                    # opportunity_id with no contact, so the handler does its own
-                    # None-safe resolution.
-                    await self._action_move_to_stage(
-                        automation, contact, action_config, payload, db
+                if steps_run >= MAX_STEPS_PER_RUN:
+                    # Only reachable via a backward goto. Failing loudly is the
+                    # point: a looping workflow is misauthored, and quietly
+                    # truncating it would hide that while it kept messaging.
+                    execution.status = "failed"
+                    execution.error = (
+                        f"Workflow ran {MAX_STEPS_PER_RUN} steps in one cycle without "
+                        "finishing — check the branch targets for a loop."
                     )
+                    execution.step_index = cursor
+                    log.error(
+                        "automation_step_budget_exhausted",
+                        step_index=cursor,
+                        steps_run=steps_run,
+                    )
+                    return
+                steps_run += 1
 
-                elif action_type in ("apply_tag", "add_tag") and contact is not None:
-                    await self._action_apply_tag(contact, action_config, db)
-
-                elif action_type in ("wait", "delay"):
-                    # Schedule the execution for later — skip remaining actions
-                    delay_hours: int = int(action_config.get("hours", 1))
+                if step.type in _WAIT_STEPS:
+                    delay = wait_duration(step.config)
+                    if delay <= timedelta():
+                        cursor += 1  # An explicit zero wait is a no-op.
+                        continue
+                    # Park the run. The cursor points *past* the wait so the
+                    # resume does not re-serve the same delay forever.
+                    execution.step_index = cursor + 1
                     execution.status = "scheduled"
-                    execution.scheduled_for = datetime.now(UTC) + timedelta(hours=delay_hours)
+                    execution.scheduled_for = datetime.now(UTC) + delay
                     log.info(
-                        "Action delayed",
-                        delay_hours=delay_hours,
+                        "automation_step_waiting",
+                        step_index=cursor,
+                        delay_seconds=int(delay.total_seconds()),
                         scheduled_for=execution.scheduled_for.isoformat(),
                     )
-                    return  # Do not mark as completed yet
+                    return  # Do not mark completed — this run is unfinished.
 
-                else:
-                    log.warning(
-                        "Unknown action type — skipping",
-                        action_type=action_type,
-                    )
+                if step.type == _BRANCH_STEP:
+                    cursor = await self._resolve_branch(automation, contact, steps, step, db, log)
+                    continue
 
+                await self._execute_step(automation, contact, step, context, db, log)
+                cursor += 1
+
+            execution.step_index = max(cursor, 0)
             execution.status = "completed"
             execution.executed_at = datetime.now(UTC)
             automation.last_triggered_at = datetime.now(UTC)
             await self._notify_automation_triggered(automation, contact, execution, db)
-            log.info("Automation executed successfully")
+            log.info("Automation executed successfully", steps_run=steps_run)
 
         except Exception as exc:
             execution.status = "failed"
             execution.error = str(exc)
+            execution.step_index = max(cursor, 0)
             log.exception("Automation execution failed", error=str(exc))
+
+    async def _resolve_branch(
+        self,
+        automation: Automation,
+        contact: Contact | None,
+        steps: list[WorkflowStep],
+        step: WorkflowStep,
+        db: AsyncSession,
+        log: Any,
+    ) -> int:
+        """Evaluate a ``branch`` step and return the cursor to continue at.
+
+        A contactless trigger (workspace conditions) has nobody to ask about, so
+        the condition cannot be true; such a run takes the else-path.
+        """
+        when_true, when_false = branch_targets(steps, step)
+        rules, logic = parse_branch_condition(step.config)
+
+        if contact is None:
+            matched = False
+        else:
+            matched = await contact_matches_rules(
+                db,
+                workspace_id=automation.workspace_id,
+                contact_id=contact.id,
+                rules=rules,
+                logic=logic,
+            )
+
+        target = when_true if matched else when_false
+        if target.dangling:
+            log.warning(
+                "automation_branch_target_missing",
+                step_index=step.index,
+                matched=matched,
+                detail="branch names a step id that does not exist — ending run",
+            )
+
+        log.info(
+            "automation_branch_evaluated",
+            step_index=step.index,
+            matched=matched,
+            rule_count=len(rules),
+            next_index=target.index,
+        )
+        # END_OF_WORKFLOW is negative, which step_at() reads as "finished".
+        return target.index if target.index != END_OF_WORKFLOW else END_OF_WORKFLOW
+
+    async def _execute_step(
+        self,
+        automation: Automation,
+        contact: Contact | None,
+        step: WorkflowStep,
+        payload: dict[str, Any],
+        db: AsyncSession,
+        log: Any,
+    ) -> None:
+        """Run one side-effecting step: approval gate, then dispatch.
+
+        Control-flow steps (``wait``, ``branch``) never reach here — they move
+        the cursor instead of acting on a customer, so gating them for approval
+        would ask an operator to authorise a delay.
+        """
+        action_type = step.type
+        action_config = step.config
+
+        log.debug("Executing action", action_type=action_type, step_index=step.index)
+
+        # Check approval gate (automation has no agent_id)
+        decision, _gate_result = await approval_gate_service.check_and_execute_or_queue(
+            db=db,
+            agent_id=None,
+            workspace_id=automation.workspace_id,
+            action_type=action_type,
+            action_payload=action_config,
+            description=f"Automation '{automation.name}': {action_type}",
+            context={
+                "source": "automation",
+                "automation_id": str(automation.id),
+                "contact_id": contact.id if contact else None,
+            },
+        )
+
+        if decision == "pending":
+            log.info("automation_action_pending_approval", action_type=action_type)
+            return
+        elif decision == "blocked":
+            log.warning("automation_action_blocked", action_type=action_type)
+            return
+
+        # Actions targeting a contact are skipped when the (event)
+        # trigger has none. Checking here lets mypy narrow ``contact``.
+        if action_type in _CONTACT_ACTIONS and contact is None:
+            log.warning("automation_action_requires_contact", action_type=action_type)
+            return
+
+        if action_type == "send_sms" and contact is not None:
+            await self._action_send_sms(automation, contact, action_config, payload, db)
+
+        elif action_type == "send_email" and contact is not None:
+            await self._action_send_email(automation, contact, action_config, payload, db)
+
+        elif action_type == "make_call" and contact is not None:
+            await self._action_make_call(automation, contact, action_config, db)
+
+        elif action_type == "enroll_campaign" and contact is not None:
+            await self._action_enroll_campaign(automation, contact, action_config, db)
+
+        elif action_type == "start_drip_campaign":
+            # Not a _CONTACT_ACTION: starting a drip is a workspace-level
+            # act, so a contactless condition trigger can launch one.
+            await self._action_start_drip_campaign(automation, contact, action_config, db)
+
+        elif action_type == "move_to_stage":
+            # Not a _CONTACT_ACTION: the event path can carry an
+            # opportunity_id with no contact, so the handler does its own
+            # None-safe resolution.
+            await self._action_move_to_stage(automation, contact, action_config, payload, db)
+
+        elif action_type in ("apply_tag", "add_tag") and contact is not None:
+            await self._action_apply_tag(contact, action_config, db)
+
+        else:
+            log.warning(
+                "Unknown action type — skipping",
+                action_type=action_type,
+            )
 
     async def _notify_automation_triggered(
         self,
@@ -743,6 +1003,9 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                            payload token (e.g. {rating}, {stage}).
             fallbacks (dict): Optional per-token defaults used when a token
                            renders blank (e.g. {"first_name": "there"}).
+            require_consent (bool): Require an explicit ``opted_in`` SMS status.
+                           Defaults to False for legacy automations, but global
+                           STOP/opt-out suppression always applies.
         """
         message_template: str = config.get("message", "")
         if not message_template:
@@ -782,24 +1045,65 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             )
             return
 
-        sms_service = get_text_message_provider()
-        try:
-            idempotency_key = derive_outbound_key("automation_sms", automation.id, contact.id)
-            await sms_service.send_message(
-                to_number=to_number,
-                from_number=from_number,
-                body=message_body,
-                db=db,
+        result = await outbound_delivery_service.deliver(
+            db,
+            OutboundDeliveryRequest(
                 workspace_id=automation.workspace_id,
-                idempotency_key=idempotency_key,
-            )
-            self.logger.info(
-                "Automation SMS sent",
-                contact_id=contact.id,
+                channel=OutboundDeliveryChannel.SMS,
                 to=to_number,
+                from_=from_number,
+                body=message_body,
+                contact=contact,
+                idempotency_key=derive_outbound_key("automation_sms", automation.id, contact.id),
+                action_type="automation_sms",
+                require_sms_consent=bool(config.get("require_consent")),
+            ),
+        )
+        self.logger.info(
+            "Automation SMS delivery resolved",
+            contact_id=contact.id,
+            to=to_number,
+            status=result.status.value,
+            reason=result.reason,
+        )
+
+    async def _resolve_email_content(
+        self,
+        automation: Automation,
+        config: dict[str, Any],
+        db: AsyncSession,
+    ) -> tuple["EmailTemplate | None", str, str, EmailCategory] | None:
+        """Pick the copy and category for a ``send_email`` step.
+
+        Returns ``(template, subject_template, body_template, category)``, or
+        ``None`` when the step cannot be sent safely — the caller then stops
+        without sending. Split out of :meth:`_action_send_email` to keep that
+        method inside the branch budget.
+        """
+        raw_template_id = config.get("template_id")
+        if raw_template_id:
+            template = await self._load_email_template(automation, raw_template_id, db)
+            if template is None:
+                # Deleted or cross-workspace: sending the inline fallback would
+                # put unreviewed copy in front of a customer.
+                return None
+            # Body content comes from the template's own blocks.
+            return template, template.subject, "", EmailCategory(template.category)
+
+        subject_template = config.get("subject", "")
+        body_template = config.get("message") or config.get("body") or ""
+        if not subject_template or not body_template:
+            self.logger.warning(
+                "send_email action missing subject or body",
+                automation_id=str(automation.id),
             )
-        finally:
-            await sms_service.close()
+            return None
+        category = (
+            EmailCategory.TRANSACTIONAL
+            if bool(config.get("transactional"))
+            else EmailCategory.MARKETING
+        )
+        return None, subject_template, body_template, category
 
     async def _action_send_email(
         self,
@@ -809,36 +1113,79 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         payload: dict[str, Any],
         db: AsyncSession,
     ) -> None:
-        """Send a transactional email to the contact via Resend.
+        """Send an email to the contact via Resend.
 
         Config keys:
+            template_id (str): Saved :class:`EmailTemplate` to render. Takes
+                precedence over inline subject/message and supplies its own
+                category.
             subject (str): Subject template (placeholders supported).
-            message / body (str): Body template (placeholders supported). Plain
-                text is rendered into a simple HTML paragraph block.
-        """
-        subject_template: str = config.get("subject", "")
-        body_template: str = config.get("message") or config.get("body") or ""
-        if not subject_template or not body_template:
-            self.logger.warning(
-                "send_email action missing subject or body",
-                automation_id=str(automation.id),
-            )
-            return
+            message / body (str): Body template (placeholders supported).
+            transactional (bool): Mark this step as service mail (a
+                confirmation or receipt the customer's own action produced), so
+                it carries no unsubscribe footer. Defaults to False — a workflow
+                send is commercial unless the operator says otherwise.
 
+        Commercial sends are suppressed for contacts who opted out and always
+        carry a working unsubscribe link. Both checks live here, on the one path
+        workflow email takes.
+        """
         if not contact.email:
             self.logger.warning("Contact has no email", contact_id=contact.id)
             return
 
-        subject = self._render_template(subject_template, contact, payload, config.get("fallbacks"))
-        body = self._render_template(body_template, contact, payload, config.get("fallbacks"))
+        resolved = await self._resolve_email_content(automation, config, db)
+        if resolved is None:
+            return
+        template, subject_template, body_template, category = resolved
+
+        unsubscribe_url: str | None = None
+        if category is EmailCategory.MARKETING:
+            if await email_suppressed(db, contact.id):
+                self.logger.info(
+                    "automation_email_suppressed",
+                    contact_id=contact.id,
+                    reason="contact_email_opted_out",
+                )
+                return
+            unsubscribe_url = build_email_unsubscribe_url(contact.id)
+            if unsubscribe_url is None:
+                # No public origin configured, so any footer link would be dead.
+                # Not sending is the correct outcome: a commercial email whose
+                # opt-out 404s is worse than one that never went out.
+                self.logger.error(
+                    "automation_email_blocked",
+                    contact_id=contact.id,
+                    reason="frontend_url_not_configured",
+                    detail="cannot build a working unsubscribe link",
+                )
+                return
+
+        fallbacks = config.get("fallbacks")
+        subject = self._render_template(subject_template, contact, payload, fallbacks)
         idempotency_key = derive_outbound_key("automation_email", automation.id, contact.id)
 
-        sent = await send_automation_email(
-            to_email=contact.email,
-            subject=subject,
-            body=body,
-            idempotency_key=idempotency_key,
-        )
+        if template is not None:
+            sent = await send_template_email(
+                to_email=contact.email,
+                subject=subject,
+                template=template,
+                values=self._template_values(contact, payload, fallbacks),
+                idempotency_key=idempotency_key,
+                unsubscribe_url=unsubscribe_url,
+            )
+        else:
+            body = self._render_template(body_template, contact, payload, fallbacks)
+            sent = await send_automation_email(
+                to_email=contact.email,
+                subject=subject,
+                body=body,
+                idempotency_key=idempotency_key,
+                unsubscribe_url=unsubscribe_url,
+                category=category,
+                business_name=config.get("business_name"),
+                logo_url=config.get("logo_url"),
+            )
         if sent:
             self.logger.info(
                 "Automation email sent",
@@ -1278,6 +1625,24 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         ``"there"`` when the lead record has no first name). Unknown tokens are
         left untouched.
         """
+        replacements = self._template_values(contact, payload, fallbacks)
+        result = template
+        for key, value in replacements.items():
+            result = result.replace(f"{{{key}}}", value)
+        return result
+
+    def _template_values(
+        self,
+        contact: Contact,
+        payload: dict[str, Any] | None = None,
+        fallbacks: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Build the ``{token} -> value`` map for one contact.
+
+        Shared by inline copy and stored email templates so a token means the
+        same thing wherever an operator writes it — two maps would drift, and
+        the drift would only show up in a customer's inbox.
+        """
         full_name = " ".join(filter(None, [contact.first_name, contact.last_name]))
         replacements: dict[str, str] = {
             str(key): "" if value is None else str(value) for key, value in (payload or {}).items()
@@ -1296,10 +1661,53 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         for key, fallback in (fallbacks or {}).items():
             if not replacements.get(str(key)):
                 replacements[str(key)] = "" if fallback is None else str(fallback)
-        result = template
-        for key, value in replacements.items():
-            result = result.replace(f"{{{key}}}", value)
-        return result
+        return replacements
+
+    async def _load_email_template(
+        self,
+        automation: Automation,
+        raw_template_id: Any,
+        db: AsyncSession,
+    ) -> EmailTemplate | None:
+        """Load a workspace-scoped, active email template, or ``None``.
+
+        Scoped to the automation's workspace so a stale or hand-edited
+        ``template_id`` can never render another tenant's copy into this
+        workspace's mail.
+        """
+        try:
+            template_id = uuid.UUID(str(raw_template_id))
+        except (ValueError, AttributeError, TypeError):
+            self.logger.warning(
+                "automation_email_template_invalid_id",
+                automation_id=str(automation.id),
+                template_id=str(raw_template_id),
+            )
+            return None
+
+        result = await db.execute(
+            select(EmailTemplate).where(
+                EmailTemplate.id == template_id,
+                EmailTemplate.workspace_id == automation.workspace_id,
+            )
+        )
+        template = result.scalar_one_or_none()
+
+        if template is None:
+            self.logger.warning(
+                "automation_email_template_missing",
+                automation_id=str(automation.id),
+                template_id=str(template_id),
+            )
+            return None
+        if not template.is_active:
+            self.logger.info(
+                "automation_email_template_inactive",
+                automation_id=str(automation.id),
+                template_id=str(template_id),
+            )
+            return None
+        return template
 
     async def _resolve_from_number(
         self,

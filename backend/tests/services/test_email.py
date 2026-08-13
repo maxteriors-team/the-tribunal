@@ -253,3 +253,110 @@ async def test_invoice_email_escapes_notes(fake_resend: _FakeResend) -> None:
     html = fake_resend.Emails.send_async.await_args.args[0]["html"]
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
+
+
+@pytest.mark.asyncio
+async def test_campaign_email_makes_bare_url_clickable(fake_resend: _FakeResend) -> None:
+    """A resource link the customer cannot tap reads exactly like a broken send.
+
+    Mail clients do not reliably auto-link a bare URL inside an HTML part, and
+    the campaign shell (unlike the shared ``email_layout`` renderer) did not
+    link them at all — so a texted-and-emailed guide link arrived as dead text.
+    """
+    message_id = await email.send_campaign_email(
+        to_email="customer@example.com",
+        subject="Your lighting guide",
+        body=(
+            "Everything you need: https://go.example.com/static/guides/index.html\nText us anytime."
+        ),
+        unsubscribe_url="https://go.example.com/u/abc",
+    )
+
+    assert message_id == "email_123"
+    html = fake_resend.Emails.send_async.await_args.args[0]["html"]
+    assert '<a href="https://go.example.com/static/guides/index.html"' in html
+    assert "Text us anytime." in html
+
+
+@pytest.mark.asyncio
+async def test_campaign_email_link_keeps_trailing_punctuation_out_of_href(
+    fake_resend: _FakeResend,
+) -> None:
+    await email.send_campaign_email(
+        to_email="customer@example.com",
+        subject="Guide",
+        body="Read it here: https://go.example.com/g.html.",
+    )
+
+    html = fake_resend.Emails.send_async.await_args.args[0]["html"]
+    assert '<a href="https://go.example.com/g.html"' in html
+    assert "g.html.</a>" not in html
+
+
+@pytest.mark.asyncio
+async def test_campaign_email_still_escapes_markup(fake_resend: _FakeResend) -> None:
+    """Linkifying must not reopen the injection path it runs after."""
+    await email.send_campaign_email(
+        to_email="customer@example.com",
+        subject="Guide",
+        body="<img src=x onerror=alert(1)> https://go.example.com/a?b=1&c=2",
+    )
+
+    html = fake_resend.Emails.send_async.await_args.args[0]["html"]
+    assert "<img" not in html
+    assert "&lt;img" in html
+    # Query separators stay escaped inside the href: valid HTML that the
+    # browser decodes back to a single "&".
+    assert '<a href="https://go.example.com/a?b=1&amp;c=2"' in html
+
+
+@pytest.mark.asyncio
+async def test_automation_email_carries_explicit_workspace_brand_logo(
+    fake_resend: _FakeResend,
+) -> None:
+    """One workspace can opt into its logo without branding every tenant."""
+    logo_url = "https://go.example.com/static/brand/maxteriors-logo.png"
+
+    sent = await email.send_automation_email(
+        to_email="customer@example.com",
+        subject="Your new lighting",
+        body="Here's how to run it: https://go.example.com/static/guides/index.html",
+        category=email.EmailCategory.TRANSACTIONAL,
+        business_name="Maxteriors",
+        logo_url=logo_url,
+    )
+
+    assert sent is True
+    html = fake_resend.Emails.send_async.await_args.args[0]["html"]
+    assert f'src="{logo_url}"' in html, "brand logo must be in the header"
+    assert 'alt="Maxteriors"' in html
+
+
+@pytest.mark.parametrize(
+    "logo_url",
+    [
+        "http://localhost:8000/static/logo.png",
+        "https://localhost:8000/static/logo.png",
+        "",
+        "/static/logo.png",
+    ],
+)
+def test_safe_logo_url_refuses_an_unusable_url(logo_url: str) -> None:
+    """A mail client cannot fetch localhost or a relative path.
+
+    Returning None makes the shell fall back to a readable text wordmark instead
+    of putting a broken-image icon at the top of a customer's email.
+    """
+    assert email._safe_logo_url(logo_url) is None
+    assert email._brand("Other Workspace", logo_url).logo_url is None
+
+
+def test_brand_without_explicit_logo_does_not_leak_maxteriors_asset() -> None:
+    """The app is multi-tenant; branding must come from the sending workspace."""
+    assert email._brand("Other Workspace").logo_url is None
+
+
+def test_safe_logo_url_accepts_absolute_https() -> None:
+    logo_url = "https://go.example.com/static/brand/maxteriors-logo.png"
+
+    assert email._safe_logo_url(logo_url) == logo_url

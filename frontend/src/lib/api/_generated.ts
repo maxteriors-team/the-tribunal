@@ -240,6 +240,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/email/unsubscribe-contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unsubscribe Contact
+         * @description Honor a contact-level email opt-out link (workflow/automation email).
+         *
+         *     Suppresses commercial email to this person across every automation and
+         *     workflow, not just the one that prompted the click. Always returns 200.
+         */
+        get: operations["unsubscribe_contact_api_v1_email_unsubscribe_contact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integrations/openai/oauth/callback": {
         parameters: {
             query?: never;
@@ -4540,6 +4563,98 @@ export interface paths {
         get: operations["get_drip_campaign_stats_api_v1_workspaces__workspace_id__drip_campaigns__campaign_id__stats_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/email-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Email Templates
+         * @description List a workspace's email templates, newest first.
+         */
+        get: operations["list_email_templates_api_v1_workspaces__workspace_id__email_templates_get"];
+        put?: never;
+        /**
+         * Create Email Template
+         * @description Create a template.
+         */
+        post: operations["create_email_template_api_v1_workspaces__workspace_id__email_templates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/email-templates/preview-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Email Draft
+         * @description Render unsaved blocks — powers live preview while authoring.
+         */
+        post: operations["preview_email_draft_api_v1_workspaces__workspace_id__email_templates_preview_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/email-templates/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Email Template
+         * @description Get one template.
+         */
+        get: operations["get_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__get"];
+        /**
+         * Update Email Template
+         * @description Update a template. Unset fields are left untouched.
+         */
+        put: operations["update_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__put"];
+        post?: never;
+        /**
+         * Delete Email Template
+         * @description Delete a template.
+         */
+        delete: operations["delete_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/email-templates/{template_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Email Template
+         * @description Render a saved template with sample values. Sends nothing.
+         */
+        post: operations["preview_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -11980,6 +12095,11 @@ export interface components {
         /**
          * AutomationActionSchema
          * @description Schema for automation action.
+         *
+         *     Steps are stored as raw JSONB, so this model's serialized shape *is* the
+         *     stored shape. A step without an ``id`` therefore serializes without the key
+         *     at all (see :meth:`_omit_absent_id`) rather than writing ``"id": null`` into
+         *     every action of every automation in the product.
          */
         AutomationActionSchema: {
             /**
@@ -11990,8 +12110,13 @@ export interface components {
                 [key: string]: unknown;
             };
             /**
+             * Id
+             * @description Stable step id. Only needed on steps that a branch jumps to; steps authored before branching have none and still run.
+             */
+            id?: string | null;
+            /**
              * Type
-             * @description Action type: send_sms, send_email, make_call, enroll_campaign, start_drip_campaign, move_to_stage, apply_tag/add_tag, wait/delay
+             * @description Action type: send_sms, send_email, make_call, enroll_campaign, start_drip_campaign, move_to_stage, apply_tag/add_tag, wait/delay, branch
              */
             type: string;
         };
@@ -12918,6 +13043,26 @@ export interface components {
             total_found: number;
         };
         /**
+         * ButtonBlockSchema
+         * @description A single call to action.
+         *
+         *     ``url`` is not pattern-validated here because it may contain placeholders
+         *     (``{booking_url}``) that are substituted at send time; the renderer refuses
+         *     any non-HTTP scheme after substitution, which is where the real check has
+         *     to live.
+         */
+        ButtonBlockSchema: {
+            /** Label */
+            label: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "button";
+            /** Url */
+            url: string;
+        };
+        /**
          * COGSBreakdownRow
          * @description One grouped slice of cost of goods sold.
          */
@@ -13464,6 +13609,25 @@ export interface components {
             to_number?: string | null;
             /** Transcript */
             transcript: string | null;
+        };
+        /**
+         * CalloutBlockSchema
+         * @description A tinted panel for the one thing that matters (a total, a code).
+         */
+        CalloutBlockSchema: {
+            /** Text */
+            text: string;
+            /**
+             * Tone
+             * @default neutral
+             * @enum {string}
+             */
+            tone: "neutral" | "success" | "warning" | "destructive";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "callout";
         };
         /**
          * CampaignAnalytics
@@ -15837,6 +16001,21 @@ export interface components {
             runs?: components["schemas"]["RunSchema"][];
         };
         /**
+         * DetailsBlockSchema
+         * @description Label/value rows — appointment facts, quote lines, job details.
+         */
+        DetailsBlockSchema: {
+            /** Rows */
+            rows?: {
+                [key: string]: string;
+            };
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "details";
+        };
+        /**
          * DiscountType
          * @description Discount type options.
          * @enum {string}
@@ -15854,6 +16033,17 @@ export interface components {
          * @enum {string}
          */
         DiscoverySourceType: "google_places" | "web_scrape" | "web_people" | "csv_import" | "manual" | "api" | "linkedin" | "meta_ad_library" | "google_ads_transparency" | "other";
+        /**
+         * DividerBlockSchema
+         * @description A horizontal rule.
+         */
+        DividerBlockSchema: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "divider";
+        };
         /** DocumentSettingsSchema */
         DocumentSettingsSchema: {
             /**
@@ -16124,6 +16314,155 @@ export interface components {
             step: number;
             /** Type */
             type: string;
+        };
+        /**
+         * EmailTemplateCreate
+         * @description Payload for creating a template.
+         */
+        EmailTemplateCreate: {
+            /** Blocks */
+            blocks?: (components["schemas"]["ParagraphBlockSchema"] | components["schemas"]["DetailsBlockSchema"] | components["schemas"]["ButtonBlockSchema"] | components["schemas"]["CalloutBlockSchema"] | components["schemas"]["DividerBlockSchema"])[];
+            /**
+             * Category
+             * @default marketing
+             */
+            category: string;
+            /** Description */
+            description?: string | null;
+            /** Heading */
+            heading?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Preheader */
+            preheader?: string | null;
+            /** Subject */
+            subject: string;
+        };
+        /**
+         * EmailTemplateDraftRequest
+         * @description Ad-hoc render of unsaved blocks — powers live preview while authoring.
+         */
+        EmailTemplateDraftRequest: {
+            /** Blocks */
+            blocks?: (components["schemas"]["ParagraphBlockSchema"] | components["schemas"]["DetailsBlockSchema"] | components["schemas"]["ButtonBlockSchema"] | components["schemas"]["CalloutBlockSchema"] | components["schemas"]["DividerBlockSchema"])[];
+            /**
+             * Category
+             * @default marketing
+             */
+            category: string;
+            /** Heading */
+            heading?: string | null;
+            /** Preheader */
+            preheader?: string | null;
+            /** Sample Values */
+            sample_values?: {
+                [key: string]: string;
+            };
+            /** Subject */
+            subject: string;
+        };
+        /** EmailTemplateListResponse */
+        EmailTemplateListResponse: {
+            /** Templates */
+            templates: components["schemas"]["EmailTemplateResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * EmailTemplatePreviewRequest
+         * @description Render a template with sample values without sending anything.
+         */
+        EmailTemplatePreviewRequest: {
+            /** Sample Values */
+            sample_values?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * EmailTemplatePreviewResponse
+         * @description Both rendered parts, so the operator can check the text fallback too.
+         */
+        EmailTemplatePreviewResponse: {
+            /** Html */
+            html: string;
+            /** Includes Unsubscribe */
+            includes_unsubscribe: boolean;
+            /** Subject */
+            subject: string;
+            /** Text */
+            text: string;
+        };
+        /** EmailTemplateResponse */
+        EmailTemplateResponse: {
+            /** Blocks */
+            blocks?: (components["schemas"]["ParagraphBlockSchema"] | components["schemas"]["DetailsBlockSchema"] | components["schemas"]["ButtonBlockSchema"] | components["schemas"]["CalloutBlockSchema"] | components["schemas"]["DividerBlockSchema"])[];
+            /**
+             * Category
+             * @default marketing
+             */
+            category: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Heading */
+            heading?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Preheader */
+            preheader?: string | null;
+            /** Subject */
+            subject: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
+         * EmailTemplateUpdate
+         * @description Partial update. Unset fields are left untouched.
+         */
+        EmailTemplateUpdate: {
+            /** Blocks */
+            blocks?: (components["schemas"]["ParagraphBlockSchema"] | components["schemas"]["DetailsBlockSchema"] | components["schemas"]["ButtonBlockSchema"] | components["schemas"]["CalloutBlockSchema"] | components["schemas"]["DividerBlockSchema"])[] | null;
+            /** Category */
+            category?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Heading */
+            heading?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Preheader */
+            preheader?: string | null;
+            /** Subject */
+            subject?: string | null;
         };
         /**
          * EmbedActionResponse
@@ -22633,6 +22972,24 @@ export interface components {
             pages: number;
             /** Total */
             total: number;
+        };
+        /**
+         * ParagraphBlockSchema
+         * @description A run of copy. Placeholders supported; escaped and linkified on render.
+         */
+        ParagraphBlockSchema: {
+            /**
+             * Muted
+             * @default false
+             */
+            muted: boolean;
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "paragraph";
         };
         /**
          * ParseCalcomUrlRequest
@@ -30921,6 +31278,37 @@ export interface operations {
         };
     };
     unsubscribe_api_v1_email_unsubscribe_get: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_contact_api_v1_email_unsubscribe_contact_get: {
         parameters: {
             query: {
                 token: string;
@@ -39635,6 +40023,243 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DripCampaignStats"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_email_templates_api_v1_workspaces__workspace_id__email_templates_get: {
+        parameters: {
+            query?: {
+                active_only?: boolean;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTemplateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_email_template_api_v1_workspaces__workspace_id__email_templates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailTemplateCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_email_draft_api_v1_workspaces__workspace_id__email_templates_preview_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailTemplateDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTemplatePreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailTemplateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailTemplatePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTemplatePreviewResponse"];
                 };
             };
             /** @description Validation Error */

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { TechnicianSelect } from "@/components/jobs/technician-select";
 import { Button } from "@/components/ui/button";
+import { ContactPicker } from "@/components/ui/contact-combobox";
 import {
   Dialog,
   DialogContent,
@@ -16,15 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useContacts } from "@/hooks/useContacts";
 import { useCreateJob, useWorkspaceTechnicians } from "@/hooks/useJobs";
 import type { JobCreateRequest } from "@/lib/api/jobs";
 import { jobWindowError, localToIso } from "@/lib/jobs/job-derivations";
@@ -46,23 +39,15 @@ const EMPTY_FORM = {
 export function NewJobDialog({ workspaceId, open, onOpenChange }: NewJobDialogProps) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [selectedTechs, setSelectedTechs] = useState<string[]>([]);
-  const [contactSearch, setContactSearch] = useState("");
 
-  const { data: contactsData, isPending: contactsLoading } = useContacts(workspaceId, {
-    page: 1,
-    page_size: 50,
-    search: contactSearch || undefined,
-  });
   const { data: techData } = useWorkspaceTechnicians(workspaceId, open);
   const createJob = useCreateJob(workspaceId);
 
-  const contacts = useMemo(() => contactsData?.items ?? [], [contactsData?.items]);
   const technicians = useMemo(() => techData?.items ?? [], [techData?.items]);
 
   const reset = () => {
     setForm(EMPTY_FORM);
     setSelectedTechs([]);
-    setContactSearch("");
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -114,29 +99,13 @@ export function NewJobDialog({ workspaceId, open, onOpenChange }: NewJobDialogPr
           {/* Customer */}
           <div className="space-y-1.5">
             <Label htmlFor="job-contact">Customer</Label>
-            <Input
-              placeholder="Search contacts…"
-              value={contactSearch}
-              onChange={(event) => setContactSearch(event.target.value)}
-              className="mb-2"
-            />
-            <Select
+            <ContactPicker
+              id="job-contact"
+              workspaceId={workspaceId}
               value={form.contactId}
-              onValueChange={(value) => setForm((prev) => ({ ...prev, contactId: value }))}
-            >
-              <SelectTrigger id="job-contact">
-                <SelectValue placeholder={contactsLoading ? "Loading…" : "Select a customer"} />
-              </SelectTrigger>
-              <SelectContent>
-                {contacts.map((contact) => (
-                  <SelectItem key={contact.id} value={String(contact.id)}>
-                    {[contact.first_name, contact.last_name].filter(Boolean).join(" ") ||
-                      contact.email ||
-                      `Contact #${contact.id}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(contactId) => setForm((prev) => ({ ...prev, contactId }))}
+              placeholder="Search customers by name, phone, or email…"
+            />
           </div>
 
           {/* Title */}

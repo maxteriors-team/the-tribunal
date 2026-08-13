@@ -1,5 +1,7 @@
 // Automation types
 
+import type { FilterDefinition, FilterRule } from "./filter";
+
 // Generic/legacy trigger kinds plus the concrete event/polling triggers the
 // backend automation worker evaluates.
 export type AutomationTriggerType =
@@ -23,7 +25,16 @@ export type AutomationTriggerType =
   | "roleplay_completed"
   | "knowledge_document_uploaded"
   // Lead capture trigger (emitted by the public lead-form ingestion path)
-  | "lead_created";
+  | "lead_created"
+  // Quote/invoice/job lifecycle events (emitted by quote, invoice and job services)
+  | "quote_sent"
+  | "quote_approved"
+  | "quote_declined"
+  | "quote_converted"
+  | "invoice_sent"
+  | "invoice_paid"
+  | "job_scheduled"
+  | "job_completed";
 
 // Action types the backend automation worker can execute, plus UI-only kinds
 // retained for backward compatibility with existing automations.
@@ -38,11 +49,52 @@ export type AutomationActionType =
   | "move_to_stage"
   | "wait"
   | "delay"
+  | "branch"
   | "update_status";
 
 export interface AutomationAction {
+  /**
+   * Stable step id. Only steps a branch jumps to need one, so the key is
+   * absent on everything else — the backend omits it from serialization when
+   * unset rather than writing `"id": null` into every stored step.
+   */
+  id?: string;
   type: AutomationActionType;
   config: Record<string, unknown>;
+}
+
+/**
+ * Where a branch sends the run:
+ * - a step `id` present in the workflow -> jump to that step;
+ * - `"__end__"` -> finish the run;
+ * - `null` -> fall through to the following step.
+ *
+ * An id matching no step ends the run (the backend refuses to fall through
+ * after a typo'd target), so the builder must never leave one dangling.
+ */
+export type AutomationGotoTarget = string | null;
+
+/**
+ * Config of a `wait`/`delay` step. Every unit present is summed, so
+ * `{ days: 1, hours: 12 }` is 36 hours; `hours` is the legacy key older
+ * automations were written with.
+ */
+export interface AutomationWaitConfig {
+  minutes?: number;
+  hours?: number;
+  days?: number;
+}
+
+/**
+ * Config of a `branch` step. `conditions` is the same JSON rule shape as the
+ * contacts list / saved segments (`FilterRule`), which is why branches can be
+ * authored with the existing `ContactFilterBuilder`.
+ */
+export interface AutomationBranchConfig {
+  conditions: FilterRule[];
+  logic: FilterDefinition["logic"];
+  then_goto: AutomationGotoTarget;
+  else_goto: AutomationGotoTarget;
 }
 
 export interface Automation {
