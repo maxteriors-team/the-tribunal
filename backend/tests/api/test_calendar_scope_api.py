@@ -128,8 +128,8 @@ async def _client(module, service: AsyncMock, role: str, prefix: str) -> AsyncIt
         yield AsyncMock()
 
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user] = lambda: _make_user()
-    app.dependency_overrides[get_workspace] = lambda: _make_workspace()
+    app.dependency_overrides[get_current_user] = _make_user
+    app.dependency_overrides[get_workspace] = _make_workspace
     app.dependency_overrides[get_membership] = lambda: _make_membership(role)
     app.include_router(module.router, prefix=prefix)
 
