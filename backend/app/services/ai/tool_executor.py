@@ -136,7 +136,6 @@ class VoiceToolExecutor(BaseToolExecutor):
     """
 
     max_slots = 10
-    pre_validate = True
 
     def __init__(
         self,
@@ -359,7 +358,11 @@ class VoiceToolExecutor(BaseToolExecutor):
                 ),
             }
 
-        return {"success": False, "error": result.error or "Booking failed"}
+        return {
+            "success": False,
+            "error": result.error or "Booking failed",
+            "message": getattr(result, "message", None) or result.error or "Booking failed",
+        }
 
     async def post_booking_success(
         self,

@@ -17,7 +17,7 @@ export interface Agent {
   calcom_event_type_id: number | null;
   assignment_strategy: string;
   enabled_tools: string[];
-  tool_settings: Record<string, string[]>;
+  tool_settings: Record<string, unknown>;
   is_active: boolean;
   // IVR navigation settings
   enable_ivr_navigation: boolean;
@@ -35,6 +35,8 @@ export interface Agent {
   reminder_minutes_before: number;
   reminder_offsets: number[];
   reminder_template: string | null;
+  reminder_channels: ("sms" | "email")[];
+  confirmation_email_enabled: boolean;
   noshow_sms_enabled: boolean;
   // No-show multi-day re-engagement sequence
   noshow_reengagement_enabled: boolean;

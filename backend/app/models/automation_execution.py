@@ -2,10 +2,10 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -30,7 +30,11 @@ class AutomationExecution(Base):
       repeated events (e.g. a deal moving stage twice).
 
     A ``status`` field lets delayed/scheduled executions carry state across
-    poll cycles.
+    poll cycles. Three columns make that resumable rather than merely recorded:
+    ``step_index`` (how far the workflow got), ``context`` (the trigger payload,
+    which is otherwise an in-memory argument and would be lost across a wait,
+    rendering ``{rating}``-style tokens blank on resume), and ``resume_count``
+    (the lifetime budget that stops a goto loop hiding behind a wait).
     """
 
     __tablename__ = "automation_executions"
@@ -83,6 +87,23 @@ class AutomationExecution(Base):
     # For delayed actions — worker re-checks executions where this is <= now
     scheduled_for: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
+    )
+
+    # Cursor into ``automations.actions``: the step to run next. Workflows are a
+    # flat list precisely so a paused run's position is one integer.
+    step_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    # Trigger payload ({rating}, {stage}, ...) carried across a wait. Passed as
+    # an in-memory dict on the first cycle; persisted here so a resumed step
+    # renders the same tokens instead of blanks.
+    context: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
+
+    # Lifetime resume budget (see runner.MAX_RESUMES). Bounds a goto cycle that
+    # passes through a wait and would otherwise resume politely, forever.
+    resume_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
     )
 
     # Optional error message

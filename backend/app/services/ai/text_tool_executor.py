@@ -20,7 +20,7 @@ Usage:
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -35,7 +35,8 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.workspace import WorkspaceIntegration
 from app.services.ai.base_tool_executor import BaseToolExecutor
-from app.services.appointments.booking_finalizer import finalize_booking
+from app.services.ai.website_lead_qualification import WebsiteLeadQualificationPolicy
+from app.services.appointments.booking_finalizer import finalize_booking, format_contact_address
 from app.services.appointments.cancellation import cancel_upcoming_appointments
 from app.services.approval.approval_gate_service import approval_gate_service
 
@@ -48,7 +49,9 @@ logger = structlog.get_logger()
 # recreates the failure it exists to fix: the appointment stays ``scheduled``
 # while an operator sleeps, so the reminder worker keeps texting someone who
 # already cancelled. Declining to cancel is not the safe default here.
-GATE_EXEMPT_TOOLS: frozenset[str] = frozenset({"search_knowledge", "cancel_appointment"})
+GATE_EXEMPT_TOOLS: frozenset[str] = frozenset(
+    {"search_knowledge", "cancel_appointment", "mark_lead_qualified"}
+)
 
 
 class TextToolExecutor(BaseToolExecutor):
@@ -70,11 +73,13 @@ class TextToolExecutor(BaseToolExecutor):
         conversation: Conversation,
         db: AsyncSession,
         timezone: str = "America/New_York",
+        qualification_policy: WebsiteLeadQualificationPolicy | None = None,
     ) -> None:
         super().__init__(agent=agent, timezone=timezone)
         self.conversation = conversation
         self.db = db
         self._contact: Contact | None = None
+        self.qualification_policy = qualification_policy
         self.log = logger.bind(
             service="text_tool_executor",
             agent_id=str(agent.id),
@@ -101,7 +106,11 @@ class TextToolExecutor(BaseToolExecutor):
                 "executing_tool_call",
                 tool_call_id=tool_call.id,
                 function_name=function_name,
-                arguments=arguments,
+                arguments=(
+                    {"redacted": True, "keys": sorted(arguments)}
+                    if function_name == "mark_lead_qualified"
+                    else arguments
+                ),
             )
 
             # Read-only tools (e.g. knowledge lookups) skip the approval gate.
@@ -170,12 +179,18 @@ class TextToolExecutor(BaseToolExecutor):
 
     # ── Main dispatch ───────────────────────────────────────────────
 
-    async def execute(
+    async def execute(  # noqa: PLR0911
         self,
         function_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
         """Execute a tool call."""
+        if function_name in {"book_appointment", "check_availability"}:
+            qualification_error = await self._qualification_booking_error()
+            if qualification_error is not None:
+                return qualification_error
+        if function_name == "mark_lead_qualified":
+            return await self._execute_mark_lead_qualified(arguments)
         if function_name == "book_appointment":
             return await self._execute_book_with_contact_lookup(
                 date_str=arguments.get("date", ""),
@@ -210,6 +225,86 @@ class TextToolExecutor(BaseToolExecutor):
 
         self.log.warning("unknown_text_tool", function_name=function_name)
         return {"success": False, "error": f"Unknown function: {function_name}"}
+
+    async def _qualification_booking_error(self) -> dict[str, Any] | None:
+        """Block direct booking calls until persisted website-lead qualification passes."""
+        if self.qualification_policy is None:
+            return None
+        contact = await self._get_contact()
+        if contact is not None and contact.is_qualified:
+            return None
+        return {
+            "success": False,
+            "blocked": True,
+            "error": (
+                "Booking and availability are unavailable until the website lead is "
+                "persistently qualified. Continue the checklist one question at a time."
+            ),
+        }
+
+    async def _execute_mark_lead_qualified(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Persist live website-lead qualification after strict local validation."""
+        policy = self.qualification_policy
+        contact = await self._get_contact()
+        if policy is None or contact is None or contact.source != "lead_form":
+            return {
+                "success": False,
+                "blocked": True,
+                "error": "Qualification policy is not active for this website lead.",
+            }
+
+        score = arguments.get("score")
+        evidence = arguments.get("criteria_evidence")
+        summary = arguments.get("summary")
+        if isinstance(score, bool) or not isinstance(score, int) or score < policy.min_score:
+            return {
+                "success": False,
+                "error": f"Qualification score must be at least {policy.min_score}.",
+            }
+        if (
+            not isinstance(evidence, list)
+            or len(evidence) != len(policy.questions)
+            or any(not isinstance(item, str) or not item.strip() for item in evidence)
+        ):
+            return {
+                "success": False,
+                "error": "Provide one non-empty evidence item for every qualification question.",
+            }
+        if not isinstance(summary, str) or not summary.strip():
+            return {"success": False, "error": "Qualification summary is required."}
+
+        now = datetime.now(UTC)
+        contact.is_qualified = True
+        contact.status = "qualified"
+        contact.lead_score = min(score, 100)
+        contact.qualified_at = now
+        contact.qualification_signals = {
+            "source": "website_lead_live_ai",
+            "score": min(score, 100),
+            "criteria": [
+                {"question": question, "evidence": str(item).strip()[:300]}
+                for question, item in zip(policy.questions, evidence, strict=True)
+            ],
+            "summary": summary.strip()[:500],
+            "last_analyzed_at": now.isoformat(),
+        }
+        await self.db.flush()
+        self._contact = contact
+        self.log.info(
+            "website_lead_qualified",
+            contact_id=contact.id,
+            score=min(score, 100),
+            criteria_count=len(evidence),
+        )
+        return {
+            "success": True,
+            "qualified": True,
+            "score": min(score, 100),
+            "message": (
+                f"Lead qualification persisted. Transition now to offering the "
+                f"{policy.booking_label}; do not ask another qualification question."
+            ),
+        }
 
     # ── Knowledge retrieval ─────────────────────────────────────────
 
@@ -388,6 +483,11 @@ class TextToolExecutor(BaseToolExecutor):
             return self._clean_phone_number(self._contact.phone_number)
         return None
 
+    def get_contact_address(self) -> str | None:
+        if self._contact:
+            return format_contact_address(self._contact) or None
+        return None
+
     def get_booking_metadata(self, notes: str | None) -> dict[str, Any] | None:
         return {
             "source": "ai_text_agent",
@@ -445,7 +545,16 @@ class TextToolExecutor(BaseToolExecutor):
             "booking_uid": result.booking_uid,
             "scheduled_at": self._appointment_datetime.isoformat(),
             "duration_minutes": duration_minutes,
-            "message": f"Appointment booked for {formatted_time}",
+            "booking_email": email,
+            # The locally-generated attendee invite is queued after the appointment
+            # commit. This tells the model what the booking path actually attempted;
+            # provider rejection is logged separately and must never undo the booking.
+            "invitation_sent": True,
+            "message": (
+                f"Appointment booked for {formatted_time}. "
+                f"Calendar invitation queued for {email}. "
+                "Send one concise confirmation and no separate reminder."
+            ),
         }
 
     async def post_booking_success(
@@ -488,6 +597,9 @@ class TextToolExecutor(BaseToolExecutor):
             calcom_booking_uid=result.booking_uid,
             calcom_booking_id=result.booking_id,
             calcom_event_type_id=resolved_event_type_id,
+            # The assistant's reply confirms the booking in this same SMS turn.
+            # Suppress the generic lifecycle confirmation to avoid double-texting.
+            send_customer_sms=False,
         )
 
         self.log.info("appointment_created", appointment_id=appointment.id)
@@ -642,7 +754,10 @@ class TextToolExecutor(BaseToolExecutor):
             return None
 
         result = await self.db.execute(
-            select(Contact).where(Contact.id == self.conversation.contact_id)
+            select(Contact).where(
+                Contact.id == self.conversation.contact_id,
+                Contact.workspace_id == self.conversation.workspace_id,
+            )
         )
         contact = result.scalar_one_or_none()
 

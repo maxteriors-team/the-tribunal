@@ -2089,6 +2089,11 @@
             "title": "Channel Mode",
             "type": "string"
           },
+          "confirmation_email_enabled": {
+            "default": true,
+            "title": "Confirmation Email Enabled",
+            "type": "boolean"
+          },
           "description": {
             "anyOf": [
               {
@@ -2249,6 +2254,16 @@
             ],
             "title": "Post Meeting Template"
           },
+          "reminder_channels": {
+            "default": [
+              "sms"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reminder Channels",
+            "type": "array"
+          },
           "reminder_enabled": {
             "default": true,
             "title": "Reminder Enabled",
@@ -2304,12 +2319,7 @@
             "type": "integer"
           },
           "tool_settings": {
-            "additionalProperties": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
+            "additionalProperties": true,
             "default": {},
             "title": "Tool Settings",
             "type": "object"
@@ -2406,6 +2416,11 @@
           "channel_mode": {
             "title": "Channel Mode",
             "type": "string"
+          },
+          "confirmation_email_enabled": {
+            "default": true,
+            "title": "Confirmation Email Enabled",
+            "type": "boolean"
           },
           "created_at": {
             "format": "date-time",
@@ -2573,6 +2588,16 @@
             ],
             "title": "Post Meeting Template"
           },
+          "reminder_channels": {
+            "default": [
+              "sms"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reminder Channels",
+            "type": "array"
+          },
           "reminder_enabled": {
             "title": "Reminder Enabled",
             "type": "boolean"
@@ -2616,12 +2641,7 @@
             "type": "integer"
           },
           "tool_settings": {
-            "additionalProperties": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
+            "additionalProperties": true,
             "title": "Tool Settings",
             "type": "object"
           },
@@ -2808,6 +2828,17 @@
               }
             ],
             "title": "Channel Mode"
+          },
+          "confirmation_email_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Email Enabled"
           },
           "description": {
             "anyOf": [
@@ -3065,6 +3096,20 @@
             ],
             "title": "Post Meeting Template"
           },
+          "reminder_channels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Channels"
+          },
           "reminder_enabled": {
             "anyOf": [
               {
@@ -3161,12 +3206,7 @@
           "tool_settings": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -4796,7 +4836,7 @@
         "type": "object"
       },
       "AutomationActionSchema": {
-        "description": "Schema for automation action.",
+        "description": "Schema for automation action.\n\nSteps are stored as raw JSONB, so this model's serialized shape *is* the\nstored shape. A step without an ``id`` therefore serializes without the key\nat all (see :meth:`_omit_absent_id`) rather than writing ``\"id\": null`` into\nevery action of every automation in the product.",
         "properties": {
           "config": {
             "additionalProperties": true,
@@ -4804,8 +4844,21 @@
             "title": "Config",
             "type": "object"
           },
+          "id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable step id. Only needed on steps that a branch jumps to; steps authored before branching have none and still run.",
+            "title": "Id"
+          },
           "type": {
-            "description": "Action type: send_sms, send_email, make_call, enroll_campaign, start_drip_campaign, move_to_stage, apply_tag/add_tag, wait/delay",
+            "description": "Action type: send_sms, send_email, make_call, enroll_campaign, start_drip_campaign, move_to_stage, apply_tag/add_tag, wait/delay, branch",
             "title": "Type",
             "type": "string"
           }
@@ -6970,6 +7023,35 @@
         "title": "BusinessSearchResponse",
         "type": "object"
       },
+      "ButtonBlockSchema": {
+        "description": "A single call to action.\n\n``url`` is not pattern-validated here because it may contain placeholders\n(``{booking_url}``) that are substituted at send time; the renderer refuses\nany non-HTTP scheme after substitution, which is where the real check has\nto live.",
+        "properties": {
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "type": {
+            "const": "button",
+            "title": "Type",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "label",
+          "url"
+        ],
+        "title": "ButtonBlockSchema",
+        "type": "object"
+      },
       "COGSBreakdownRow": {
         "description": "One grouped slice of cost of goods sold.",
         "properties": {
@@ -8339,6 +8421,39 @@
           "created_at"
         ],
         "title": "CallResponse",
+        "type": "object"
+      },
+      "CalloutBlockSchema": {
+        "description": "A tinted panel for the one thing that matters (a total, a code).",
+        "properties": {
+          "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "tone": {
+            "default": "neutral",
+            "enum": [
+              "neutral",
+              "success",
+              "warning",
+              "destructive"
+            ],
+            "title": "Tone",
+            "type": "string"
+          },
+          "type": {
+            "const": "callout",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "CalloutBlockSchema",
         "type": "object"
       },
       "CampaignAnalytics": {
@@ -14764,6 +14879,29 @@
         "title": "DesignSchema",
         "type": "object"
       },
+      "DetailsBlockSchema": {
+        "description": "Label/value rows — appointment facts, quote lines, job details.",
+        "properties": {
+          "rows": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 25,
+            "title": "Rows",
+            "type": "object"
+          },
+          "type": {
+            "const": "details",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "DetailsBlockSchema",
+        "type": "object"
+      },
       "DiscountType": {
         "description": "Discount type options.",
         "enum": [
@@ -14802,6 +14940,21 @@
         ],
         "title": "DiscoverySourceType",
         "type": "string"
+      },
+      "DividerBlockSchema": {
+        "description": "A horizontal rule.",
+        "properties": {
+          "type": {
+            "const": "divider",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "DividerBlockSchema",
+        "type": "object"
       },
       "DocumentSettingsSchema": {
         "additionalProperties": false,
@@ -15481,6 +15634,520 @@
           "type"
         ],
         "title": "DripStepSchema",
+        "type": "object"
+      },
+      "EmailTemplateCreate": {
+        "description": "Payload for creating a template.",
+        "properties": {
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "button": "#/components/schemas/ButtonBlockSchema",
+                  "callout": "#/components/schemas/CalloutBlockSchema",
+                  "details": "#/components/schemas/DetailsBlockSchema",
+                  "divider": "#/components/schemas/DividerBlockSchema",
+                  "paragraph": "#/components/schemas/ParagraphBlockSchema"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ParagraphBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/DetailsBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/ButtonBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/CalloutBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/DividerBlockSchema"
+                }
+              ]
+            },
+            "maxItems": 50,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "category": {
+            "default": "marketing",
+            "pattern": "^(transactional|marketing)$",
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "preheader": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preheader"
+          },
+          "subject": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "subject"
+        ],
+        "title": "EmailTemplateCreate",
+        "type": "object"
+      },
+      "EmailTemplateDraftRequest": {
+        "description": "Ad-hoc render of unsaved blocks — powers live preview while authoring.",
+        "properties": {
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "button": "#/components/schemas/ButtonBlockSchema",
+                  "callout": "#/components/schemas/CalloutBlockSchema",
+                  "details": "#/components/schemas/DetailsBlockSchema",
+                  "divider": "#/components/schemas/DividerBlockSchema",
+                  "paragraph": "#/components/schemas/ParagraphBlockSchema"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ParagraphBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/DetailsBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/ButtonBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/CalloutBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/DividerBlockSchema"
+                }
+              ]
+            },
+            "maxItems": 50,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "category": {
+            "default": "marketing",
+            "pattern": "^(transactional|marketing)$",
+            "title": "Category",
+            "type": "string"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          },
+          "preheader": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preheader"
+          },
+          "sample_values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 50,
+            "title": "Sample Values",
+            "type": "object"
+          },
+          "subject": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "title": "EmailTemplateDraftRequest",
+        "type": "object"
+      },
+      "EmailTemplateListResponse": {
+        "properties": {
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/EmailTemplateResponse"
+            },
+            "title": "Templates",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "templates",
+          "total"
+        ],
+        "title": "EmailTemplateListResponse",
+        "type": "object"
+      },
+      "EmailTemplatePreviewRequest": {
+        "description": "Render a template with sample values without sending anything.",
+        "properties": {
+          "sample_values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 50,
+            "title": "Sample Values",
+            "type": "object"
+          }
+        },
+        "title": "EmailTemplatePreviewRequest",
+        "type": "object"
+      },
+      "EmailTemplatePreviewResponse": {
+        "description": "Both rendered parts, so the operator can check the text fallback too.",
+        "properties": {
+          "html": {
+            "title": "Html",
+            "type": "string"
+          },
+          "includes_unsubscribe": {
+            "title": "Includes Unsubscribe",
+            "type": "boolean"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "html",
+          "text",
+          "includes_unsubscribe"
+        ],
+        "title": "EmailTemplatePreviewResponse",
+        "type": "object"
+      },
+      "EmailTemplateResponse": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "button": "#/components/schemas/ButtonBlockSchema",
+                  "callout": "#/components/schemas/CalloutBlockSchema",
+                  "details": "#/components/schemas/DetailsBlockSchema",
+                  "divider": "#/components/schemas/DividerBlockSchema",
+                  "paragraph": "#/components/schemas/ParagraphBlockSchema"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ParagraphBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/DetailsBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/ButtonBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/CalloutBlockSchema"
+                },
+                {
+                  "$ref": "#/components/schemas/DividerBlockSchema"
+                }
+              ]
+            },
+            "maxItems": 50,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "category": {
+            "default": "marketing",
+            "pattern": "^(transactional|marketing)$",
+            "title": "Category",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "preheader": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preheader"
+          },
+          "subject": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "subject",
+          "id",
+          "workspace_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EmailTemplateResponse",
+        "type": "object"
+      },
+      "EmailTemplateUpdate": {
+        "description": "Partial update. Unset fields are left untouched.",
+        "properties": {
+          "blocks": {
+            "anyOf": [
+              {
+                "items": {
+                  "discriminator": {
+                    "mapping": {
+                      "button": "#/components/schemas/ButtonBlockSchema",
+                      "callout": "#/components/schemas/CalloutBlockSchema",
+                      "details": "#/components/schemas/DetailsBlockSchema",
+                      "divider": "#/components/schemas/DividerBlockSchema",
+                      "paragraph": "#/components/schemas/ParagraphBlockSchema"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ParagraphBlockSchema"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DetailsBlockSchema"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ButtonBlockSchema"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CalloutBlockSchema"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DividerBlockSchema"
+                    }
+                  ]
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocks"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "pattern": "^(transactional|marketing)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "preheader": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preheader"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          }
+        },
+        "title": "EmailTemplateUpdate",
         "type": "object"
       },
       "EmbedActionResponse": {
@@ -25105,6 +25772,20 @@
         "title": "ManualContactCreate",
         "type": "object"
       },
+      "MarkAllReadResponse": {
+        "description": "Result of clearing every unread thread in a workspace.",
+        "properties": {
+          "conversations_marked": {
+            "title": "Conversations Marked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversations_marked"
+        ],
+        "title": "MarkAllReadResponse",
+        "type": "object"
+      },
       "MeasurementSchema": {
         "additionalProperties": false,
         "properties": {
@@ -32216,6 +32897,33 @@
           "pages"
         ],
         "title": "PaginatedVoiceCampaigns",
+        "type": "object"
+      },
+      "ParagraphBlockSchema": {
+        "description": "A run of copy. Placeholders supported; escaped and linkified on render.",
+        "properties": {
+          "muted": {
+            "default": false,
+            "title": "Muted",
+            "type": "boolean"
+          },
+          "text": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "paragraph",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "ParagraphBlockSchema",
         "type": "object"
       },
       "ParseCalcomUrlRequest": {
@@ -47507,6 +48215,132 @@
         "title": "TaxConfig",
         "type": "object"
       },
+      "TeachAIRequest": {
+        "description": "Human-approved correction to one AI-generated SMS reply.",
+        "properties": {
+          "ideal_response": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Ideal Response",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source_message_id": {
+            "format": "uuid",
+            "title": "Source Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_message_id",
+          "ideal_response"
+        ],
+        "title": "TeachAIRequest",
+        "type": "object"
+      },
+      "TeachAIResponse": {
+        "description": "Saved correction and its agent target; never returned across tenants.",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "agent_name": {
+            "title": "Agent Name",
+            "type": "string"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ideal_response": {
+            "title": "Ideal Response",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "agent_id",
+          "conversation_id",
+          "source_message_id",
+          "ideal_response",
+          "note",
+          "is_active",
+          "agent_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TeachAIResponse",
+        "type": "object"
+      },
       "TeamMemberResponse": {
         "description": "Schema for team member response.",
         "properties": {
@@ -48623,6 +49457,18 @@
       "TimelineItem": {
         "description": "A unified timeline item.",
         "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
           "attachments": {
             "items": {
               "$ref": "#/components/schemas/TimelineAttachment"
@@ -49184,6 +50030,25 @@
           "created_at"
         ],
         "title": "UnattributedLeadResponse",
+        "type": "object"
+      },
+      "UnreadSummary": {
+        "description": "Workspace-wide unread rollup backing the header chat badge.\n\n``unread_messages`` is the sum of every thread's ``unread_count`` (what the\nbadge shows); ``unread_conversations`` is how many threads are waiting.",
+        "properties": {
+          "unread_conversations": {
+            "title": "Unread Conversations",
+            "type": "integer"
+          },
+          "unread_messages": {
+            "title": "Unread Messages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unread_conversations",
+          "unread_messages"
+        ],
+        "title": "UnreadSummary",
         "type": "object"
       },
       "UpdateMemberRoleRequest": {
@@ -52921,6 +53786,49 @@
           }
         },
         "summary": "Unsubscribe",
+        "tags": [
+          "Email Unsubscribe"
+        ]
+      }
+    },
+    "/api/v1/email/unsubscribe-contact": {
+      "get": {
+        "description": "Honor a contact-level email opt-out link (workflow/automation email).\n\nSuppresses commercial email to this person across every automation and\nworkflow, not just the one that prompted the click. Always returns 200.",
+        "operationId": "unsubscribe_contact_api_v1_email_unsubscribe_contact_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unsubscribe Contact",
         "tags": [
           "Email Unsubscribe"
         ]
@@ -67113,6 +68021,104 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/conversations/read": {
+      "post": {
+        "description": "Mark every conversation in the workspace as read.",
+        "operationId": "mark_all_conversations_read_api_v1_workspaces__workspace_id__conversations_read_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkAllReadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Mark All Conversations Read",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/unread": {
+      "get": {
+        "description": "Unread rollup for the workspace, polled by the header chat badge.",
+        "operationId": "get_unread_summary_api_v1_workspaces__workspace_id__conversations_unread_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Unread Summary",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}": {
       "get": {
         "description": "Get a conversation with its messages.",
@@ -67907,6 +68913,134 @@
           }
         ],
         "summary": "Send Message",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/read": {
+      "post": {
+        "description": "Mark a single conversation as read.",
+        "operationId": "mark_conversation_read_api_v1_workspaces__workspace_id__conversations__conversation_id__read_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Mark Conversation Read",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/teach-ai": {
+      "post": {
+        "description": "Save or update a human-approved correction for one AI SMS reply.",
+        "operationId": "teach_ai_api_v1_workspaces__workspace_id__conversations__conversation_id__teach_ai_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeachAIRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeachAIResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Teach Ai",
         "tags": [
           "Conversations"
         ]
@@ -68787,6 +69921,426 @@
         "summary": "Get Drip Campaign Stats",
         "tags": [
           "Drip Campaigns"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/email-templates": {
+      "get": {
+        "description": "List a workspace's email templates, newest first.",
+        "operationId": "list_email_templates_api_v1_workspaces__workspace_id__email_templates_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Active Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailTemplateListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Email Templates",
+        "tags": [
+          "Email Templates"
+        ]
+      },
+      "post": {
+        "description": "Create a template.",
+        "operationId": "create_email_template_api_v1_workspaces__workspace_id__email_templates_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailTemplateCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailTemplateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Email Template",
+        "tags": [
+          "Email Templates"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/email-templates/preview-draft": {
+      "post": {
+        "description": "Render unsaved blocks — powers live preview while authoring.",
+        "operationId": "preview_email_draft_api_v1_workspaces__workspace_id__email_templates_preview_draft_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailTemplateDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailTemplatePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Preview Email Draft",
+        "tags": [
+          "Email Templates"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/email-templates/{template_id}": {
+      "delete": {
+        "description": "Delete a template.",
+        "operationId": "delete_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Email Template",
+        "tags": [
+          "Email Templates"
+        ]
+      },
+      "get": {
+        "description": "Get one template.",
+        "operationId": "get_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailTemplateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Email Template",
+        "tags": [
+          "Email Templates"
+        ]
+      },
+      "put": {
+        "description": "Update a template. Unset fields are left untouched.",
+        "operationId": "update_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailTemplateUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailTemplateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Email Template",
+        "tags": [
+          "Email Templates"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/email-templates/{template_id}/preview": {
+      "post": {
+        "description": "Render a saved template with sample values. Sends nothing.",
+        "operationId": "preview_email_template_api_v1_workspaces__workspace_id__email_templates__template_id__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailTemplatePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailTemplatePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Preview Email Template",
+        "tags": [
+          "Email Templates"
         ]
       }
     },
@@ -77709,6 +79263,22 @@
                 }
               ],
               "title": "Owner Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "contact_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contact Id"
             }
           },
           {

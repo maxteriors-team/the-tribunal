@@ -26,6 +26,7 @@ from app.api.v1 import (
     demo,
     device_tokens,
     drip_campaigns,
+    email_templates,
     email_unsubscribe,
     embed,
     field_service,
@@ -180,6 +181,11 @@ api_router.include_router(
     message_templates.router,
     prefix="/workspaces/{workspace_id}/message-templates",
     tags=["Message Templates"],
+)
+api_router.include_router(
+    email_templates.router,
+    prefix="/workspaces/{workspace_id}/email-templates",
+    tags=["Email Templates"],
 )
 api_router.include_router(
     offers.router,

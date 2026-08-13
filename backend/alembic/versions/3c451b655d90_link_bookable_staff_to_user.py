@@ -1,7 +1,7 @@
 """link bookable staff to a login
 
 Revision ID: 3c451b655d90
-Revises: 20260811_lighting_handoff
+Revises: 20260812_training_examples
 Create Date: 2026-08-12 18:28:26.622262
 
 Mirrors ``technicians.user_id``: an optional link from a bookable staff row to
@@ -22,7 +22,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "3c451b655d90"
-down_revision: str | Sequence[str] | None = "20260811_lighting_handoff"
+down_revision: str | Sequence[str] | None = "20260812_training_examples"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

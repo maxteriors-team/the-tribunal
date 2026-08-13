@@ -15,6 +15,7 @@ import {
   useToggleConversationAI,
   useAssignAgent,
   useClearConversationHistory,
+  useMarkConversationRead,
 } from "@/hooks/useConversations";
 import { usePhoneNumbers } from "@/hooks/usePhoneNumbers";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
@@ -25,12 +26,13 @@ import { cn } from "@/lib/utils";
 import { isSameDay } from "@/lib/utils/date";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { normalizePhoneForComparison } from "@/lib/utils/phone";
-import type { Conversation } from "@/types";
+import type { Conversation, TimelineItem } from "@/types";
 
 import { ChatHeader } from "./chat-header";
 import { DateSeparator } from "./date-separator";
 import { MessageComposer } from "./message-composer";
 import { MessageItem } from "./message-item";
+import { TeachAIDialog } from "./teach-ai-dialog";
 
 interface ConversationFeedProps {
   className?: string;
@@ -40,17 +42,9 @@ function LoadingSkeleton() {
   return (
     <div className="space-y-4 p-4">
       {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          key={i}
-          className={cn(
-            "flex gap-3",
-            i % 2 === 0 ? "flex-row" : "flex-row-reverse",
-          )}
-        >
+        <div key={i} className={cn("flex gap-3", i % 2 === 0 ? "flex-row" : "flex-row-reverse")}>
           <Skeleton className="h-8 w-8 rounded-full shrink-0" />
-          <Skeleton
-            className={cn("h-16 rounded-2xl", i % 2 === 0 ? "w-48" : "w-64")}
-          />
+          <Skeleton className={cn("h-16 rounded-2xl", i % 2 === 0 ? "w-48" : "w-64")} />
         </div>
       ))}
     </div>
@@ -68,43 +62,30 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     isPending: isLoadingTimeline,
     isError: isTimelineError,
     refetch: refetchTimeline,
-  } = useContactTimeline(
-    workspaceId ?? "",
-    selectedContact?.id ?? 0,
-  );
+  } = useContactTimeline(workspaceId ?? "", selectedContact?.id ?? 0);
   const timeline = useMemo(() => timelineData ?? [], [timelineData]);
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [selectedFromNumber, setSelectedFromNumber] = useState<
-    string | undefined
-  >();
+  const [selectedFromNumber, setSelectedFromNumber] = useState<string | undefined>();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [teachAIMessage, setTeachAIMessage] = useState<TimelineItem | null>(null);
 
   // Fetch phone numbers for the workspace
   const { data: phoneNumbersData } = usePhoneNumbers(workspaceId ?? "", {
     sms_enabled: true,
     active_only: true,
   });
-  const phoneNumbers = useMemo(
-    () => phoneNumbersData?.items ?? [],
-    [phoneNumbersData?.items],
-  );
+  const phoneNumbers = useMemo(() => phoneNumbersData?.items ?? [], [phoneNumbersData?.items]);
   const fallbackFromNumber = phoneNumbers[0]?.phone_number;
   const activeFromNumber = selectedFromNumber ?? fallbackFromNumber;
 
   // Fetch agents for the workspace
   const { data: agentsData } = useAgents(workspaceId ?? "");
-  const agents = useMemo(
-    () => agentsData?.items ?? [],
-    [agentsData?.items],
-  );
+  const agents = useMemo(() => agentsData?.items ?? [], [agentsData?.items]);
 
   // Fetch conversations to find the one for the current contact
   const { data: conversationsData } = useQuery({
-    queryKey: queryKeys.conversations.byContact(
-      workspaceId ?? "",
-      selectedContact?.id,
-    ),
+    queryKey: queryKeys.conversations.byContact(workspaceId ?? "", selectedContact?.id),
     queryFn: () =>
       workspaceId
         ? conversationsApi.list(workspaceId, { page: 1, page_size: 100 })
@@ -118,25 +99,23 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     enabled: !!workspaceId && !!selectedContact,
   });
 
-  const selectedContactPhone = normalizePhoneForComparison(
-    selectedContact?.phone_number,
-  );
+  const selectedContactPhone = normalizePhoneForComparison(selectedContact?.phone_number);
 
   // Find the conversation for the current contact. Inbound relay threads may
   // arrive before the contact_id is linked, so fall back to normalized phone.
-  const contactConversation: Conversation | undefined =
-    conversationsData?.items?.find((conv) => {
-      if (conv.contact_id === selectedContact?.id) return true;
-      return (
-        !!selectedContactPhone &&
-        normalizePhoneForComparison(conv.contact_phone) === selectedContactPhone
-      );
-    });
+  const contactConversation: Conversation | undefined = conversationsData?.items?.find((conv) => {
+    if (conv.contact_id === selectedContact?.id) return true;
+    return (
+      !!selectedContactPhone &&
+      normalizePhoneForComparison(conv.contact_phone) === selectedContactPhone
+    );
+  });
 
   // Mutations for AI toggle, agent assignment, and clear history
   const toggleAIMutation = useToggleConversationAI(workspaceId ?? "");
   const assignAgentMutation = useAssignAgent(workspaceId ?? "");
   const clearHistoryMutation = useClearConversationHistory(workspaceId ?? "");
+  const markReadMutation = useMarkConversationRead(workspaceId ?? "");
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -169,6 +148,27 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     return groups;
   }, [timeline]);
 
+  const previousInboundFor = (sourceItem: TimelineItem): TimelineItem | undefined => {
+    const sourceIndex = timeline.findIndex((item) => item.id === sourceItem.id);
+    if (sourceIndex <= 0) return undefined;
+    return timeline
+      .slice(0, sourceIndex)
+      .reverse()
+      .find((item) => item.direction === "inbound" && item.type === "sms");
+  };
+
+  const handleTeachAI = (item: TimelineItem) => {
+    if (!item.agent_id) {
+      toast.error("This AI reply has no assigned agent to teach");
+      return;
+    }
+    if (!previousInboundFor(item)) {
+      toast.error("This AI reply has no prior customer message to learn from");
+      return;
+    }
+    setTeachAIMessage(item);
+  };
+
   const handleSendMessage = async () => {
     if (!message.trim() || !selectedContact || !workspaceId || isSending) return;
 
@@ -181,22 +181,18 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         workspaceId,
         selectedContact.id,
         messageBody,
-        activeFromNumber
+        activeFromNumber,
       );
 
       // Invalidate timeline so the sent message appears immediately
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.contacts.timeline(
-          workspaceId ?? "",
-          selectedContact.id,
-        ),
+        queryKey: queryKeys.contacts.timeline(workspaceId ?? "", selectedContact.id),
       });
       toast.success("Message sent");
     } catch (error) {
       // Restore the message if sending failed
       setMessage(messageBody);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to send message";
+      const errorMessage = error instanceof Error ? error.message : "Failed to send message";
       toast.error(errorMessage);
     } finally {
       setIsSending(false);
@@ -214,9 +210,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
       { conversationId: contactConversation.id, enabled: newState },
       {
         onSuccess: () => {
-          toast.success(
-            newState ? "AI engagement enabled" : "AI engagement disabled",
-          );
+          toast.success(newState ? "AI engagement enabled" : "AI engagement disabled");
         },
         onError: (err: unknown) => {
           toast.error(getApiErrorMessage(err, "Failed to toggle AI"));
@@ -236,10 +230,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
       {
         onSuccess: () => {
           void queryClient.invalidateQueries({
-            queryKey: queryKeys.conversations.byContact(
-              workspaceId ?? "",
-              selectedContact?.id,
-            ),
+            queryKey: queryKeys.conversations.byContact(workspaceId ?? "", selectedContact?.id),
           });
           toast.success(agentId ? "Agent assigned" : "Agent unassigned");
         },
@@ -248,6 +239,22 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         },
       },
     );
+  };
+
+  const handleMarkRead = () => {
+    if (!contactConversation) {
+      toast.error("No conversation found for this contact");
+      return;
+    }
+
+    markReadMutation.mutate(contactConversation.id, {
+      onSuccess: () => {
+        toast.success("Marked as read");
+      },
+      onError: (err: unknown) => {
+        toast.error(getApiErrorMessage(err, "Failed to mark as read"));
+      },
+    });
   };
 
   const handleClearHistory = () => {
@@ -259,10 +266,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     clearHistoryMutation.mutate(contactConversation.id, {
       onSuccess: () => {
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.contacts.timeline(
-            workspaceId ?? "",
-            selectedContact?.id,
-          ),
+          queryKey: queryKeys.contacts.timeline(workspaceId ?? "", selectedContact?.id),
         });
         toast.success("Conversation history cleared");
       },
@@ -273,9 +277,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   };
 
   const contactName = selectedContact
-    ? [selectedContact.first_name, selectedContact.last_name]
-        .filter(Boolean)
-        .join(" ")
+    ? [selectedContact.first_name, selectedContact.last_name].filter(Boolean).join(" ")
     : undefined;
 
   if (!selectedContact) {
@@ -301,9 +303,11 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         isToggleAIPending={toggleAIMutation.isPending}
         isAssignAgentPending={assignAgentMutation.isPending}
         isClearHistoryPending={clearHistoryMutation.isPending}
+        isMarkReadPending={markReadMutation.isPending}
         onToggleAI={handleToggleAI}
         onAssignAgent={handleAssignAgent}
         onClearHistory={handleClearHistory}
+        onMarkRead={handleMarkRead}
       />
 
       {/* Messages */}
@@ -334,6 +338,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
                       key={item.id}
                       item={item}
                       contactName={contactName}
+                      onTeachAI={item.agent_id ? handleTeachAI : undefined}
                     />
                   ))}
                 </div>
@@ -342,6 +347,29 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
           </div>
         )}
       </ScrollArea>
+
+      {workspaceId && contactConversation && teachAIMessage && (
+        <TeachAIDialog
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setTeachAIMessage(null);
+          }}
+          workspaceId={workspaceId}
+          conversationId={contactConversation.id}
+          sourceMessageId={teachAIMessage.original_id || teachAIMessage.id}
+          customerMessage={previousInboundFor(teachAIMessage)?.content ?? ""}
+          aiResponse={teachAIMessage.content}
+          onSaved={(agentName) => {
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.contacts.timeline(workspaceId, selectedContact.id),
+            });
+            void queryClient.invalidateQueries({
+              queryKey: queryKeys.conversations.byContact(workspaceId, selectedContact.id),
+            });
+            toast.success(`Lesson saved for ${agentName}`);
+          }}
+        />
+      )}
 
       <MessageComposer
         message={message}

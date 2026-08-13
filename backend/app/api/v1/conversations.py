@@ -9,6 +9,7 @@ from app.models.conversation import Message
 from app.schemas.conversation import (
     AgentAssign,
     AIToggle,
+    ConversationResponse,
     ConversationWithMessages,
     FollowupGenerateRequest,
     FollowupGenerateResponse,
@@ -16,10 +17,15 @@ from app.schemas.conversation import (
     FollowupSendResponse,
     FollowupSettingsResponse,
     FollowupSettingsUpdate,
+    MarkAllReadResponse,
     MessageCreate,
     MessageResponse,
     PaginatedConversations,
+    TeachAIRequest,
+    TeachAIResponse,
+    UnreadSummary,
 )
+from app.services.ai.teach_ai import save_training_example
 from app.services.conversations import ConversationService
 
 router = APIRouter()
@@ -49,6 +55,33 @@ async def list_conversations(
     )
 
 
+# NOTE: the two static paths below must stay ABOVE `/{conversation_id}`. FastAPI
+# matches routes in declaration order, so a later `GET /unread` would be
+# swallowed by the UUID path param and fail validation with a 422.
+@router.get("/unread", response_model=UnreadSummary)
+async def get_unread_summary(
+    workspace_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> UnreadSummary:
+    """Unread rollup for the workspace, polled by the header chat badge."""
+    svc = ConversationService(db)
+    return await svc.get_unread_summary(workspace_id=workspace_id)
+
+
+@router.post("/read", response_model=MarkAllReadResponse)
+async def mark_all_conversations_read(
+    workspace_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> MarkAllReadResponse:
+    """Mark every conversation in the workspace as read."""
+    svc = ConversationService(db)
+    return await svc.mark_all_read(workspace_id=workspace_id)
+
+
 @router.get("/{conversation_id}", response_model=ConversationWithMessages)
 async def get_conversation(
     workspace_id: uuid.UUID,
@@ -64,6 +97,60 @@ async def get_conversation(
         conversation_id=conversation_id,
         workspace_id=workspace_id,
         limit=limit,
+    )
+
+
+# Unread state is shared across the workspace and `GET /{conversation_id}`
+# already clears it, so this deliberately requires only CRM read — anyone who
+# can open the inbox can clear its badge.
+@router.post("/{conversation_id}/read", response_model=ConversationResponse)
+async def mark_conversation_read(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> ConversationResponse:
+    """Mark a single conversation as read."""
+    svc = ConversationService(db)
+    return await svc.mark_read(
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+    )
+
+
+@router.post("/{conversation_id}/teach-ai", response_model=TeachAIResponse)
+async def teach_ai(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    request: TeachAIRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteCRM,
+) -> TeachAIResponse:
+    """Save or update a human-approved correction for one AI SMS reply."""
+    saved = await save_training_example(
+        db,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        source_message_id=request.source_message_id,
+        ideal_response=request.ideal_response.strip(),
+        note=request.note.strip() if request.note else None,
+        user_id=current_user.id,
+    )
+    example = saved.example
+    return TeachAIResponse(
+        id=example.id,
+        workspace_id=example.workspace_id,
+        agent_id=example.agent_id,
+        conversation_id=example.conversation_id,
+        source_message_id=example.source_message_id,
+        ideal_response=example.ideal_response,
+        note=example.operator_note,
+        is_active=example.is_active,
+        agent_name=saved.agent_name,
+        created_at=example.created_at,
+        updated_at=example.updated_at,
     )
 
 

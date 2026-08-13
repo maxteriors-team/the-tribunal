@@ -123,6 +123,26 @@ async def test_detail_embeds_the_primary_contact_too() -> None:
         assert detail.primary_contact.phone_number == "+15125550188"
 
 
+async def test_list_can_narrow_to_one_contacts_deals() -> None:
+    """The contact sidebar asks for one lead's cards, not the whole board.
+
+    Without the filter the panel would render every deal in the workspace and
+    an operator could not tell whether *this* lead is already in the pipeline.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        pipeline, stage = await _pipeline(db, ws.id)
+        contact = await _contact(db, ws.id, phone="+15125550171")
+        other = await _contact(db, ws.id, phone="+15125550172")
+        mine = await _opportunity(db, ws.id, pipeline.id, stage.id, contact_id=contact.id)
+        await _opportunity(db, ws.id, pipeline.id, stage.id, contact_id=other.id)
+        await _opportunity(db, ws.id, pipeline.id, stage.id, contact_id=None)
+
+        page = await OpportunityService(db).list_opportunities(ws.id, contact_id=contact.id)
+
+        assert [item.id for item in page.items] == [mine.id]
+
+
 async def test_summary_omits_contact_fields_the_board_has_no_use_for() -> None:
     """Guards the blast radius: this endpoint is not a contact export.
 

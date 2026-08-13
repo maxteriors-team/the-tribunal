@@ -161,6 +161,15 @@ function LeadSourceDialog({
 
   const agents: Agent[] = agentsData?.items ?? [];
   const campaigns: Campaign[] = campaignsData?.items ?? [];
+  const selectedAgent = agents.find((agent) => agent.id === form.action_config.agent_id);
+  const qualificationEnabled =
+    selectedAgent?.tool_settings?.website_lead_qualification_enabled === true;
+  const zoomFunnelReady = Boolean(
+    selectedAgent &&
+      selectedAgent.enabled_tools?.includes("book_appointment") &&
+      selectedAgent.calcom_event_type_id &&
+      qualificationEnabled,
+  );
 
   const createMutation = useMutation({
     mutationFn: (data: LeadSourceCreateRequest) =>
@@ -378,7 +387,7 @@ function LeadSourceDialog({
 
           {/* Action Config - Message Template (auto_text only) */}
           {form.action === "auto_text" && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <Label>Message Template (optional)</Label>
               <Input
                 placeholder="Hi {name}! Thanks for your interest..."
@@ -396,6 +405,26 @@ function LeadSourceDialog({
               <p className="text-xs text-muted-foreground">
                 Leave blank for default message.
               </p>
+              <div
+                role="status"
+                className={
+                  zoomFunnelReady
+                    ? "rounded-md border border-green-500/30 bg-green-500/10 p-3 text-xs text-green-700 dark:text-green-300"
+                    : "rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground"
+                }
+              >
+                {zoomFunnelReady ? (
+                  <>
+                    <strong>Qualification-to-Zoom ready.</strong> This agent gates booking until the
+                    website lead qualifies.
+                  </>
+                ) : (
+                  <>
+                    <strong>For gated Zoom booking:</strong> select an agent with booking enabled,
+                    a Cal.com event type, and website-lead qualification enabled under AI Prompt.
+                  </>
+                )}
+              </div>
             </div>
           )}
 

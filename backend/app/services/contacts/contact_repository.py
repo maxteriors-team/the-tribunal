@@ -510,6 +510,7 @@ async def get_contact_timeline(
                     "timestamp": msg.created_at,
                     "direction": msg.direction,
                     "is_ai": msg.is_ai,
+                    "agent_id": getattr(msg, "agent_id", None),
                     "content": msg.body,
                     "duration_seconds": msg.duration_seconds,
                     "recording_url": msg.recording_url,

@@ -33,6 +33,7 @@ COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY static/ ./static/
+COPY docs/ ./docs/
 RUN uv sync --frozen --no-dev
 
 # ---------- Stage 2: runtime ----------
@@ -59,6 +60,7 @@ COPY --from=builder --chown=app:app /app/app /app/app
 COPY --from=builder --chown=app:app /app/alembic /app/alembic
 COPY --from=builder --chown=app:app /app/alembic.ini /app/alembic.ini
 COPY --from=builder --chown=app:app /app/static /app/static
+COPY --from=builder --chown=app:app /app/docs /app/docs
 
 # Build identity for GET /version. Declared last so it never invalidates the
 # dependency/source layers above. Railway builds this service with nixpacks and

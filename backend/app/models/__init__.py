@@ -3,6 +3,7 @@
 from app.models.ad_advertiser import AdAdvertiser, AdPlatform
 from app.models.ad_creative import AdCreative, AdMediaType
 from app.models.agent import Agent
+from app.models.agent_training_example import AgentTrainingExample
 from app.models.api_key import APIKey
 from app.models.appointment import Appointment
 from app.models.assistant_conversation import AssistantConversation, AssistantMessage
@@ -27,6 +28,7 @@ from app.models.demo_request import DemoRequest
 from app.models.device_token import DeviceToken
 from app.models.drip_campaign import DripCampaign, DripEnrollment
 from app.models.email_event import EmailEvent, EmailEventType
+from app.models.email_template import EmailTemplate
 from app.models.failed_job import (
     FAILED_JOB_STATUS_ABANDONED,
     FAILED_JOB_STATUS_PENDING,
@@ -183,6 +185,7 @@ __all__ = [
     "Message",
     "DemoRequest",
     "Agent",
+    "AgentTrainingExample",
     "Campaign",
     "CampaignContact",
     "CampaignNumberPool",
@@ -257,6 +260,7 @@ __all__ = [
     "ReferralPartnerType",
     "RevenueTarget",
     "MessageAttachment",
+    "EmailTemplate",
     "MessageTemplate",
     "MessageTest",
     "MessageTestStatus",

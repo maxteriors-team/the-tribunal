@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Exists, select
+from sqlalchemy import Exists, SQLColumnExpression, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tag import ContactTag, Tag
@@ -37,8 +37,18 @@ __all__ = ["NO_AUTOMATION_TAG", "automation_suppressed", "no_automation_tag_exis
 NO_AUTOMATION_TAG = "no-automation"
 
 
-def no_automation_tag_exists(workspace_id: uuid.UUID, contact_id: int) -> Exists:
-    """``EXISTS`` predicate: this contact carries the ``no-automation`` tag."""
+def no_automation_tag_exists(
+    workspace_id: uuid.UUID,
+    contact_id: int | SQLColumnExpression[int],
+) -> Exists:
+    """``EXISTS`` predicate: this contact carries the ``no-automation`` tag.
+
+    ``contact_id`` takes either a literal id — the one-contact check behind
+    :func:`automation_suppressed` — or a column such as ``Contact.id``, which
+    correlates the subquery against an enclosing contact query. The second form
+    is what lets the polling triggers exclude muted customers in the same scan
+    that selects them, instead of a follow-up query per contact.
+    """
     return (
         select(ContactTag.id)
         .join(Tag, Tag.id == ContactTag.tag_id)

@@ -1,13 +1,14 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarIcon, Loader2, Search } from "lucide-react";
-import { useState, useMemo } from "react";
+import { CalendarIcon, Loader2 } from "lucide-react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar-lazy";
+import { FormContactPicker } from "@/components/ui/contact-combobox";
 import {
   Dialog,
   DialogContent,
@@ -40,7 +41,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAgents } from "@/hooks/useAgents";
-import { useContacts } from "@/hooks/useContacts";
 import { useCreateAppointment } from "@/hooks/useCreateAppointment";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
@@ -70,18 +70,12 @@ const timeSlots = generateTimeSlots();
 export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialogProps) {
   const workspaceId = useWorkspaceId();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [contactSearch, setContactSearch] = useState("");
 
   const { data: agentsData, isPending: agentsLoading } = useAgents(
     workspaceId ?? "",
     { active_only: true, page_size: 100 }
   );
   const agents = agentsData?.items ?? [];
-
-  const { data: contactsData, isPending: contactsLoading } = useContacts(
-    workspaceId ?? "",
-    { page: 1, page_size: 100, search: contactSearch || undefined }
-  );
 
   const form = useForm<NewAppointmentFormValues>({
     resolver: zodResolver(newAppointmentFormSchema),
@@ -91,24 +85,10 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
     },
   });
 
-  // Filter contacts by search (server-side search is already applied, client-side filter for instant feedback)
-  const filteredContacts = useMemo(() => {
-    const items = contactsData?.items ?? [];
-    if (!contactSearch) return items;
-    const q = contactSearch.toLowerCase();
-    return items.filter((c) => {
-      const name = [c.first_name, c.last_name].filter(Boolean).join(" ").toLowerCase();
-      const phone = c.phone_number?.toLowerCase() ?? "";
-      const email = c.email?.toLowerCase() ?? "";
-      return name.includes(q) || phone.includes(q) || email.includes(q);
-    });
-  }, [contactsData?.items, contactSearch]);
-
   const createAppointmentMutation = useCreateAppointment({
     workspaceId,
     onSuccess: () => {
       form.reset();
-      setContactSearch("");
       onOpenChange(false);
     },
   });
@@ -130,7 +110,6 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       form.reset();
-      setContactSearch("");
     }
     onOpenChange(open);
   };
@@ -154,53 +133,12 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Contact *</FormLabel>
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search contacts..."
-                        value={contactSearch}
-                        onChange={(e) => setContactSearch(e.target.value)}
-                        className="pl-8"
-                      />
-                    </div>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={contactsLoading}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          {contactsLoading ? (
-                            <span className="flex items-center gap-2 text-muted-foreground">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Loading contacts...
-                            </span>
-                          ) : (
-                            <SelectValue placeholder="Select a contact" />
-                          )}
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {filteredContacts.length === 0 && !contactsLoading ? (
-                          <SelectItem value="__empty__" disabled>
-                            No contacts found
-                          </SelectItem>
-                        ) : (
-                          filteredContacts.map((contact) => (
-                            <SelectItem key={contact.id} value={String(contact.id)}>
-                              {[contact.first_name, contact.last_name].filter(Boolean).join(" ")}
-                              {contact.phone_number && (
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                  {contact.phone_number}
-                                </span>
-                              )}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <FormContactPicker
+                    workspaceId={workspaceId}
+                    value={field.value}
+                    onChange={(contactId) => field.onChange(contactId)}
+                    placeholder="Search contacts by name, phone, or email…"
+                  />
                   <FormMessage />
                 </FormItem>
               )}

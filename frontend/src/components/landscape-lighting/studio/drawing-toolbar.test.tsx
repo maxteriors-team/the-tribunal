@@ -4,6 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DrawingToolbar } from "./drawing-toolbar";
 
+/**
+ * The menu tests below open a Radix dropdown and click one item at a time, ~24
+ * open/close cycles in a row. That lands at 2.5-3.8s alone but drifts past
+ * vitest's 5s default when the full suite loads the machine, which reddened CI
+ * on a test that was never actually broken. Timed generously so the assertion
+ * that fails is a real one.
+ */
+const MENU_WALK_TIMEOUT_MS = 30_000;
+
 const renderToolbar = () => {
   const onAction = vi.fn();
   const onPaperSizeChange = vi.fn();
@@ -68,7 +77,7 @@ describe("DrawingToolbar", () => {
       await clickMenuItem("Plan", label);
       expect(onAction).toHaveBeenLastCalledWith(expected);
     }
-  });
+  }, MENU_WALK_TIMEOUT_MS);
 
   it("exercises every add, wiring, legend, file, and help action", async () => {
     const { onAction } = renderToolbar();
@@ -89,5 +98,5 @@ describe("DrawingToolbar", () => {
       expect(onAction).toHaveBeenLastCalledWith(expected);
     }
     expect(onAction).toHaveBeenCalledTimes(groups.reduce((total, [, items]) => total + items.length, 0) + 3);
-  });
+  }, MENU_WALK_TIMEOUT_MS);
 });

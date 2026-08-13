@@ -156,6 +156,11 @@ class Appointment(Base):
     )
     # Multi-touch reminder tracking — list of offsets (minutes) already sent
     reminders_sent: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list, nullable=False)
+    # Email reminders track their offsets separately: sharing ``reminders_sent``
+    # would let an SMS send at 1440 suppress the email at the same offset.
+    reminders_sent_email: Mapped[list[int]] = mapped_column(
+        ARRAY(Integer), default=list, server_default="{}", nullable=False
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

@@ -85,12 +85,13 @@ async def _contact(db, workspace_id: uuid.UUID, **overrides) -> Contact:
     return contact
 
 
-async def _agent(db, workspace_id: uuid.UUID, *, strategy: str = "single") -> Agent:
+async def _agent(db, workspace_id: uuid.UUID, *, strategy: str = "single", **overrides) -> Agent:
     agent = Agent(
         workspace_id=workspace_id,
         name="Reactivation Agent",
         system_prompt="You book appointments.",
         assignment_strategy=strategy,
+        **overrides,
     )
     db.add(agent)
     await db.flush()
@@ -325,8 +326,18 @@ class TestNotifications:
             sink["email"].append(kwargs)
             return True
 
+        async def _fake_attendee_email(**kwargs):
+            sink["attendee_email"].append(kwargs)
+            return True
+
+        sink["attendee_email"] = []
         monkeypatch.setattr(booking_finalizer, "send_lifecycle_sms", _fake_sms)
         monkeypatch.setattr(booking_finalizer, "send_appointment_booked_notification", _fake_email)
+        monkeypatch.setattr(
+            booking_finalizer,
+            "send_appointment_confirmation_to_attendee",
+            _fake_attendee_email,
+        )
         return sink
 
     async def _book(self, workspace_id, **overrides) -> int:
@@ -371,6 +382,16 @@ class TestNotifications:
 
         keys = {call["idempotency_parts"] for call in captured["sms"]}
         assert keys == {(appointment_id,)}
+
+    async def test_live_text_booking_can_suppress_the_generic_confirmation(
+        self, workspace_id, captured
+    ) -> None:
+        appointment_id = await self._book(workspace_id)
+        await deliver_booking_notifications(appointment_id, send_customer_sms=False)
+
+        assert captured["sms"] == []
+        assert len(captured["attendee_email"]) == 1
+        assert len(captured["email"]) == 1
 
     async def test_invite_goes_to_the_assigned_rep(self, workspace_id, captured) -> None:
         appointment_id = await self._book(workspace_id, with_staff=True)
@@ -426,10 +447,58 @@ class TestNotifications:
 
         assert len(captured["sms"]) == 1
 
+    async def test_customer_gets_an_invite_email(self, workspace_id, captured) -> None:
+        appointment_id = await self._book(workspace_id)
+        await deliver_booking_notifications(appointment_id)
+
+        assert len(captured["attendee_email"]) == 1
+        sent = captured["attendee_email"][0]
+        assert sent["to_email"] == "dana@example.com"
+        ics = sent["ics_content"]
+        assert "BEGIN:VCALENDAR" in ics
+        assert "DTSTART:20990610T180000Z" in ics
+        assert f"UID:appointment-{appointment_id}@" in ics
+        assert "dana@example.com" in ics
+
+    async def test_attendee_email_skipped_when_agent_disables_it(
+        self, workspace_id, captured
+    ) -> None:
+        appointment_id = await self._book(
+            workspace_id, agent_fields={"confirmation_email_enabled": False}
+        )
+        await deliver_booking_notifications(appointment_id)
+
+        assert captured["attendee_email"] == []
+        # The rep invite and the customer text are unaffected.
+        assert len(captured["sms"]) == 1
+        assert len(captured["email"]) == 1
+
+    async def test_attendee_email_skipped_without_an_address(self, workspace_id, captured) -> None:
+        appointment_id = await self._book(workspace_id, contact_fields={"email": None})
+        await deliver_booking_notifications(appointment_id)
+
+        assert captured["attendee_email"] == []
+        assert len(captured["sms"]) == 1
+
+    async def test_attendee_email_failure_does_not_suppress_the_rep_invite(
+        self, workspace_id, captured, monkeypatch
+    ) -> None:
+        async def _boom(**_kwargs):
+            raise RuntimeError("resend down")
+
+        monkeypatch.setattr(booking_finalizer, "send_appointment_confirmation_to_attendee", _boom)
+        appointment_id = await self._book(workspace_id)
+
+        await deliver_booking_notifications(appointment_id)
+
+        assert len(captured["sms"]) == 1
+        assert len(captured["email"]) == 1
+
     async def test_missing_appointment_is_a_no_op(self, workspace_id, captured) -> None:
         await deliver_booking_notifications(999_999_999)
         assert captured["sms"] == []
         assert captured["email"] == []
+        assert captured["attendee_email"] == []
 
 
 class TestDuplicateGuard:

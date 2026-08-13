@@ -13,15 +13,15 @@ import {
   FolderOpen,
   Loader2,
   Plus,
-  Search,
   UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { ContactPicker } from "@/components/ui/contact-combobox";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +36,6 @@ import {
   PageErrorState,
   PageLoadingState,
 } from "@/components/ui/page-state";
-import { contactsApi } from "@/lib/api/contacts";
 import {
   lightingProjectsApi,
   type LightingProjectDetail,
@@ -50,7 +49,6 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_30S, STATIC } from "@/lib/query-options";
 import { getApiErrorMessage } from "@/lib/utils/errors";
-import type { Contact } from "@/types";
 
 interface LightingProjectsPageProps {
   workspaceId: string;
@@ -63,11 +61,6 @@ const projectTimeFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
 });
-
-function contactLabel(contact: Contact): string {
-  const name = [contact.first_name, contact.last_name].filter(Boolean).join(" ");
-  return name || contact.company_name || contact.email || `Contact ${contact.id}`;
-}
 
 function DraftCreateDialog({
   workspaceId,
@@ -82,35 +75,13 @@ function DraftCreateDialog({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const searchId = useId();
+  const customerId = useId();
   const nameId = useId();
   const [name, setName] = useState(
     mode === "recover" ? "Recovered landscape lighting plan" : "",
   );
-  const [contactSearch, setContactSearch] = useState("");
-  const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const timer = window.setTimeout(
-      () => setDebouncedContactSearch(contactSearch.trim()),
-      250,
-    );
-    return () => window.clearTimeout(timer);
-  }, [contactSearch]);
-
-  const contactParams = {
-    page: 1,
-    page_size: 20,
-    ...(debouncedContactSearch ? { search: debouncedContactSearch } : {}),
-  };
-  const contactsQuery = useQuery({
-    queryKey: queryKeys.contacts.list(workspaceId, contactParams),
-    queryFn: () => contactsApi.list(workspaceId, contactParams),
-    enabled: true,
-    ...STATIC,
-  });
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -176,8 +147,6 @@ function DraftCreateDialog({
     },
   });
 
-  const contacts = contactsQuery.data?.items ?? [];
-
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
@@ -218,80 +187,20 @@ function DraftCreateDialog({
             />
           </div>
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Customer</legend>
-            <label htmlFor={searchId} className="sr-only">
-              Search customers
+          <div className="space-y-2">
+            <label htmlFor={customerId} className="text-sm font-medium">
+              Customer
             </label>
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                id={searchId}
-                value={contactSearch}
-                onChange={(event) => setContactSearch(event.target.value)}
-                placeholder="Search customers by name or email"
-                className="pl-9"
-                disabled={createMutation.isPending}
-              />
-            </div>
-            <div className="max-h-52 overflow-y-auto rounded-md border" role="group">
-              {contactsQuery.isPending ? (
-                <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                  Loading customers...
-                </div>
-              ) : contactsQuery.isError ? (
-                <div className="space-y-2 px-3 py-4 text-sm text-muted-foreground">
-                  <p>Customers could not be loaded.</p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => contactsQuery.refetch()}
-                  >
-                    Try again
-                  </Button>
-                </div>
-              ) : contacts.length === 0 ? (
-                <p className="px-3 py-4 text-sm text-muted-foreground">
-                  No matching customers.
-                </p>
-              ) : (
-                contacts.map((contact) => {
-                  const label = contactLabel(contact);
-                  return (
-                    <label
-                      key={contact.id}
-                      className="flex cursor-pointer items-start gap-3 border-b px-3 py-3 last:border-b-0 hover:bg-muted/60 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-[-2px] has-[:focus-visible]:outline-ring"
-                    >
-                      <input
-                        type="radio"
-                        name="lighting-project-contact"
-                        value={contact.id}
-                        checked={selectedContactId === contact.id}
-                        onChange={() => setSelectedContactId(contact.id)}
-                        className="mt-1 accent-primary"
-                        disabled={createMutation.isPending}
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">
-                          {label}
-                        </span>
-                        {contact.email ? (
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {contact.email}
-                          </span>
-                        ) : null}
-                      </span>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-          </fieldset>
+            <ContactPicker
+              id={customerId}
+              workspaceId={workspaceId}
+              value={selectedContactId === null ? "" : String(selectedContactId)}
+              onChange={(_, contact) => setSelectedContactId(contact?.id ?? null)}
+              placeholder="Search customers by name, phone, or email"
+              disabled={createMutation.isPending}
+              aria-invalid={Boolean(formError && !selectedContactId)}
+            />
+          </div>
 
           {formError ? (
             <p className="text-sm text-destructive" role="alert">

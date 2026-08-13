@@ -1,14 +1,15 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 
 import { Button } from "@/components/ui/button";
+import { FormContactPicker } from "@/components/ui/contact-combobox";
 import {
   Dialog,
   DialogContent,
@@ -37,7 +38,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import { contactsApi } from "@/lib/api/contacts";
 import { servicePlansApi } from "@/lib/api/service-plans";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -135,16 +135,6 @@ function isoToLocalInput(iso: string): string {
   )}:${pad(d.getMinutes())}`;
 }
 
-function contactLabel(c: {
-  id: number;
-  first_name?: string | null;
-  last_name?: string | null;
-  email?: string | null;
-}): string {
-  const name = [c.first_name, c.last_name].filter(Boolean).join(" ").trim();
-  return name || c.email || `Contact #${c.id}`;
-}
-
 interface ServicePlanDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -160,25 +150,10 @@ export function ServicePlanDialog({
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const isEdit = Boolean(plan);
-  const [contactSearch, setContactSearch] = useState("");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: DEFAULT_VALUES,
-  });
-
-  // Server-side contact search keeps the picker usable in workspaces with more
-  // than the endpoint's 100-per-page cap — the operator narrows by name/email
-  // instead of the client trying to load every contact at once.
-  const contactsParams = {
-    page: 1,
-    page_size: 100,
-    search: contactSearch.trim() || undefined,
-  };
-  const contactsQuery = useQuery({
-    queryKey: queryKeys.contacts.list(workspaceId ?? "", contactsParams),
-    queryFn: () => contactsApi.list(workspaceId ?? "", contactsParams),
-    enabled: Boolean(workspaceId) && open && !isEdit,
   });
 
   useEffect(() => {
@@ -255,7 +230,6 @@ export function ServicePlanDialog({
           queryKey: queryKeys.servicePlans.all(workspaceId),
         });
       }
-      setContactSearch("");
       onOpenChange(false);
     },
     onError: (err: unknown) =>
@@ -264,11 +238,8 @@ export function ServicePlanDialog({
 
   const handleOpenChange = (next: boolean) => {
     if (!next && saveMutation.isPending) return;
-    if (!next) setContactSearch("");
     onOpenChange(next);
   };
-
-  const contacts = contactsQuery.data?.items ?? [];
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -295,40 +266,12 @@ export function ServicePlanDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Customer</FormLabel>
-                    <Input
-                      placeholder="Search customers by name or email…"
-                      value={contactSearch}
-                      onChange={(event) => setContactSearch(event.target.value)}
-                      className="mb-2"
+                    <FormContactPicker
+                      workspaceId={workspaceId}
+                      value={field.value}
+                      onChange={(contactId) => field.onChange(contactId)}
+                      placeholder="Search customers by name, phone, or email…"
                     />
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              contactsQuery.isLoading
-                                ? "Loading customers..."
-                                : "Select a customer"
-                            }
-                          />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {contacts.length === 0 ? (
-                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                            {contactsQuery.isLoading
-                              ? "Loading customers…"
-                              : "No customers found"}
-                          </div>
-                        ) : (
-                          contacts.map((c) => (
-                            <SelectItem key={c.id} value={String(c.id)}>
-                              {contactLabel(c)}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

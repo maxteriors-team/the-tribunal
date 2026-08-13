@@ -334,6 +334,8 @@ export const queryKeys = {
       [...conversations.detail(workspaceId, conversationId), "messages"] as const,
     followupSettings: (workspaceId: string, conversationId: string) =>
       [...conversations.detail(workspaceId, conversationId), "followup-settings"] as const,
+    unreadSummary: (workspaceId: string) =>
+      [...conversations.all(workspaceId), "unread-summary"] as const,
   },
   dripCampaigns,
   dashboard: {

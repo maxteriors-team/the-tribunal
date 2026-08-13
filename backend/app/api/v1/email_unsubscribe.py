@@ -1,8 +1,16 @@
-"""Public one-click email unsubscribe endpoint (no auth).
+"""Public one-click email unsubscribe endpoints (no auth).
 
-Linked from the footer of marketing-campaign emails. Verifies an HMAC-signed
-token, marks the campaign enrollment opted-out, and returns a small HTML
-confirmation page. Idempotent: repeat clicks show the same confirmation.
+Two scopes, because the product sends two kinds of commercial mail:
+
+* ``/unsubscribe`` silences **one campaign enrollment**, and
+* ``/unsubscribe-contact`` silences **every commercial email** to a contact,
+  which is what a workflow-sent email links to — those have no campaign
+  enrollment behind them, so the narrower opt-out cannot express "stop".
+
+Both verify an HMAC-signed token before honouring anything, so links cannot be
+forged or enumerated, and both are idempotent: repeat clicks show the same
+confirmation. Both always return 200 with an HTML page — a mail client
+prefetching the link must never show the recipient an error.
 """
 
 from __future__ import annotations
@@ -21,6 +29,7 @@ from app.models.campaign import (
     CampaignContactStatus,
 )
 from app.services.campaigns.email_unsubscribe import verify_unsubscribe_token
+from app.services.email_opt_out import record_email_opt_out, verify_email_unsubscribe_token
 
 logger = structlog.get_logger()
 
@@ -74,5 +83,24 @@ async def unsubscribe(db: DB, token: str = Query(...)) -> HTMLResponse:
 
         await db.commit()
         logger.info("campaign_email_unsubscribed", campaign_contact_id=str(campaign_contact_id))
+
+    return _page("You've been unsubscribed and won't receive these emails again.", ok=True)
+
+
+@public_router.get("/unsubscribe-contact", response_class=HTMLResponse)
+async def unsubscribe_contact(db: DB, token: str = Query(...)) -> HTMLResponse:
+    """Honor a contact-level email opt-out link (workflow/automation email).
+
+    Suppresses commercial email to this person across every automation and
+    workflow, not just the one that prompted the click. Always returns 200.
+    """
+    contact_id = verify_email_unsubscribe_token(token)
+    if contact_id is None:
+        return _page("This unsubscribe link is invalid or has expired.", ok=False)
+
+    # A deleted contact receives nothing anyway, so the honest answer to the
+    # person clicking is still "you're unsubscribed".
+    await record_email_opt_out(db, contact_id, source="unsubscribe_link")
+    await db.commit()
 
     return _page("You've been unsubscribed and won't receive these emails again.", ok=True)

@@ -1,29 +1,25 @@
-"""Workspace-level product help corpus — the source for ``search_help``.
+"""Bundled product-help source used directly by ``search_help``.
 
-Before this existed, "how do I set up an automation?" had no grounded answer.
-Every ``KnowledgeDocument`` belonged to a customer-facing agent and held
-per-tenant *business* material (faq/pricing/policy) for answering *contacts*, so
-the assistant had to either refuse or answer product questions from model
-priors — while its own prompt forbids inventing facts.
+Before this existed, product questions had no grounded answer: customer-facing
+agent knowledge contains per-tenant business material, not instructions for the
+CRM itself. The operator corpus therefore ships as markdown under
+``backend/docs/help`` so it is present in backend-only production deploys.
 
-This module ships an operator-facing help corpus as markdown and syncs it into
-the workspace-scoped side of the same hybrid retrieval stack the voice/text
-agents already use: ``KnowledgeDocument`` rows with ``agent_id IS NULL``.
-
-The markdown lives under ``backend/docs/help`` rather than the repo-root
-``docs/`` tree on purpose: production deploys upload the ``backend/`` folder
-only, so a repo-root path would simply not exist on the server.
-
-Sync is idempotent. Documents are matched on their ``slug`` (the filename), so
-re-running updates content in place instead of duplicating it, and the
-ingestion service skips re-embedding when a document's chunk hashes are
-unchanged.
+``search_help_documents`` ranks sections from those files at request time. A docs
+change becomes authoritative with the deployment and does not depend on a seed
+job, an embedding provider, or potentially stale database rows. The optional
+``sync_product_help`` path remains for consumers that want the same articles in
+the hybrid knowledge index; it is idempotent and skips unchanged chunk hashes.
 """
 
 from __future__ import annotations
 
+import math
+import re
 import uuid
+from collections import Counter
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import structlog
@@ -57,6 +53,16 @@ class HelpDocument:
     slug: str
     title: str
     content: str
+
+
+@dataclass(frozen=True, slots=True)
+class HelpPassage:
+    """One ranked section from a bundled product-help article."""
+
+    title: str
+    content: str
+    source: str
+    score: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,21 +104,233 @@ def load_help_documents(directory: Path | None = None) -> list[HelpDocument]:
         raise ProductHelpError(f"Help corpus directory not found: {source}")
 
     documents: list[HelpDocument] = []
-    for path in sorted(source.glob("*.md")):
-        content = path.read_text(encoding="utf-8").strip()
-        if not content:
-            continue
-        documents.append(
-            HelpDocument(
-                slug=path.stem,
-                title=_title_from_markdown(content, path.stem.replace("-", " ").title()),
-                content=content,
+    try:
+        paths = sorted(source.glob("*.md"))
+        for path in paths:
+            content = path.read_text(encoding="utf-8").strip()
+            if not content:
+                continue
+            documents.append(
+                HelpDocument(
+                    slug=path.stem,
+                    title=_title_from_markdown(
+                        content,
+                        path.stem.replace("-", " ").title(),
+                    ),
+                    content=content,
+                )
             )
-        )
+    except OSError as exc:
+        raise ProductHelpError(f"Could not read help corpus at {source}: {exc}") from exc
 
     if not documents:
         raise ProductHelpError(f"Help corpus directory has no markdown files: {source}")
     return documents
+
+
+@lru_cache(maxsize=1)
+def load_product_help_articles() -> list[HelpDocument]:
+    """Load the deployed corpus once per backend process."""
+
+    return load_help_documents()
+
+
+# Question filler must not make an unrelated article look relevant. Product
+# nouns and action verbs intentionally stay searchable.
+_SEARCH_STOP_WORDS = frozenset(
+    {
+        "a",
+        "about",
+        "an",
+        "and",
+        "are",
+        "can",
+        "could",
+        "crm",
+        "do",
+        "does",
+        "find",
+        "for",
+        "from",
+        "go",
+        "how",
+        "i",
+        "in",
+        "is",
+        "it",
+        "me",
+        "my",
+        "of",
+        "on",
+        "please",
+        "see",
+        "show",
+        "system",
+        "tell",
+        "that",
+        "the",
+        "this",
+        "to",
+        "tribunal",
+        "view",
+        "want",
+        "what",
+        "when",
+        "where",
+        "which",
+        "with",
+        "would",
+        "you",
+    }
+)
+
+_SEARCH_ALIASES: dict[str, frozenset[str]] = {
+    "appointment": frozenset({"appointment", "booking", "calendar", "schedule"}),
+    "bill": frozenset({"bill", "invoice"}),
+    "billing": frozenset({"billing", "invoice", "subscription"}),
+    "call": frozenset({"call", "phone", "voice"}),
+    "customer": frozenset({"customer", "contact", "lead"}),
+    "estimate": frozenset({"estimate", "quote", "proposal"}),
+    "followup": frozenset({"followup", "follow", "nudge"}),
+    "lead": frozenset({"lead", "contact", "prospect"}),
+    "message": frozenset({"message", "sms", "text", "conversation"}),
+    "payment": frozenset({"payment", "paid", "invoice"}),
+    "pipeline": frozenset({"pipeline", "opportunity", "stage"}),
+    "product": frozenset({"product", "catalog", "item"}),
+    "proposal": frozenset({"proposal", "quote", "estimate"}),
+    "staff": frozenset({"staff", "team", "member", "role"}),
+    "stock": frozenset({"stock", "inventory"}),
+    "text": frozenset({"text", "sms", "message", "conversation"}),
+}
+
+
+def _search_tokenize(text: str) -> list[str]:
+    """Return stable lowercase terms with conservative plural normalization."""
+
+    terms: list[str] = []
+    for raw in re.findall(r"[a-z0-9]+", text.lower()):
+        if len(raw) > 4 and raw.endswith("ies"):
+            raw = f"{raw[:-3]}y"
+        elif len(raw) > 4 and raw.endswith("s") and not raw.endswith("ss"):
+            raw = raw[:-1]
+        if raw not in _SEARCH_STOP_WORDS and len(raw) > 1:
+            terms.append(raw)
+    return terms
+
+
+def _query_concepts(query: str) -> list[frozenset[str]]:
+    """Expand common operator wording without making aliases extra requirements."""
+
+    concepts: list[frozenset[str]] = []
+    seen: set[frozenset[str]] = set()
+    for term in _search_tokenize(query):
+        concept = _SEARCH_ALIASES.get(term, frozenset({term}))
+        if concept not in seen:
+            seen.add(concept)
+            concepts.append(concept)
+    return concepts
+
+
+def _preamble_has_guidance(lines: list[str]) -> bool:
+    """Return whether pre-heading lines contain guidance beyond metadata and H1."""
+
+    in_frontmatter = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "---":
+            in_frontmatter = not in_frontmatter
+            continue
+        if in_frontmatter or not stripped or stripped.startswith("# "):
+            continue
+        return True
+    return False
+
+
+def _article_sections(document: HelpDocument) -> list[tuple[str, str]]:
+    """Split an article at level-two headings while preserving source text."""
+
+    sections: list[tuple[str, list[str]]] = []
+    heading = document.title
+    lines: list[str] = []
+    found_section = False
+    for line in document.content.splitlines():
+        if line.startswith("## "):
+            if (found_section and any(part.strip() for part in lines)) or (
+                not found_section and _preamble_has_guidance(lines)
+            ):
+                sections.append((heading, lines))
+            found_section = True
+            heading = line[3:].strip()
+            lines = [line]
+        elif found_section or not sections:
+            lines.append(line)
+    if found_section and any(part.strip() for part in lines):
+        sections.append((heading, lines))
+
+    if not found_section:
+        return [(document.title, document.content)]
+    return [
+        (heading, "\n".join(section_lines).strip())
+        for heading, section_lines in sections
+        if "\n".join(section_lines).strip()
+    ]
+
+
+def search_help_documents(
+    query: str,
+    *,
+    top_k: int = 5,
+    documents: list[HelpDocument] | None = None,
+) -> list[HelpPassage]:
+    """Rank bundled help sections for ``query`` without external services.
+
+    A passage must cover at least 60% of the meaningful query concepts. This
+    prevents a request for an unsupported integration from being presented as
+    supported merely because a generic word such as "export" matched.
+    """
+
+    concepts = _query_concepts(query)
+    if not concepts:
+        return []
+
+    required_matches = max(1, math.ceil(len(concepts) * 0.6))
+    corpus = documents if documents is not None else load_product_help_articles()
+    ranked: list[HelpPassage] = []
+
+    for document in corpus:
+        article_terms = Counter(_search_tokenize(f"{document.title} {document.slug}"))
+        for heading, content in _article_sections(document):
+            passage_terms = Counter(_search_tokenize(content))
+            heading_terms = Counter(_search_tokenize(heading))
+            matched = 0
+            score = 0.0
+            for concept in concepts:
+                passage_frequency = max((passage_terms[term] for term in concept), default=0)
+                heading_frequency = max((heading_terms[term] for term in concept), default=0)
+                article_frequency = max((article_terms[term] for term in concept), default=0)
+                if passage_frequency or heading_frequency or article_frequency:
+                    matched += 1
+                    score += min(passage_frequency, 3)
+                    score += min(heading_frequency, 1) * 4
+                    score += min(article_frequency, 1) * 2
+
+            if matched < required_matches:
+                continue
+            # Prefer passages covering every concept, then break ties by lexical
+            # density. The rounded score is stable and safe to expose to the model.
+            coverage = matched / len(concepts)
+            score += coverage * 10
+            ranked.append(
+                HelpPassage(
+                    title=f"{document.title} — {heading}",
+                    content=content,
+                    source=f"docs/help/{document.slug}.md",
+                    score=round(score, 4),
+                )
+            )
+
+    ranked.sort(key=lambda passage: (-passage.score, passage.source, passage.title))
+    return ranked[: max(1, min(top_k, 8))]
 
 
 async def _existing_help_documents(

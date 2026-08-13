@@ -54,6 +54,8 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     reminder_minutes_before: 60,
     reminder_offsets: [2880, 60],
     reminder_template: "Reminder!",
+    reminder_channels: ["sms", "email"],
+    confirmation_email_enabled: true,
     noshow_sms_enabled: true,
     noshow_reengagement_enabled: false,
     noshow_day3_template: "d3",
@@ -202,6 +204,45 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
     expect(req.post_meeting_template).toBe(agent.post_meeting_template);
     expect(req.auto_evaluate).toBe(agent.auto_evaluate);
     expect(req.calcom_event_type_id).toBe(agent.calcom_event_type_id);
+  });
+
+  it("round-trips typed website-lead qualification settings", () => {
+    const agent = makeAgent({
+      tool_settings: {
+        calendar: ["book"],
+        website_lead_qualification_enabled: true,
+        qualification_questions: ["What service do you need?", "What is your timeline?"],
+        qualification_min_score: 75,
+        qualification_booking_label: "Zoom estimate",
+      },
+    });
+
+    const values = agentToEditFormValues(agent);
+    expect(values.websiteLeadQualificationEnabled).toBe(true);
+    expect(values.qualificationQuestions).toBe(
+      "What service do you need?\nWhat is your timeline?",
+    );
+    expect(values.enabledToolIds).toEqual({ calendar: ["book"] });
+
+    const req = buildUpdateAgentRequest(values);
+    expect(req.tool_settings).toMatchObject({
+      calendar: ["book"],
+      website_lead_qualification_enabled: true,
+      qualification_questions: ["What service do you need?", "What is your timeline?"],
+      qualification_min_score: 75,
+      qualification_booking_label: "Zoom estimate",
+    });
+  });
+
+  it("rejects an oversized qualification checklist", () => {
+    const values = {
+      ...agentToEditFormValues(makeAgent()),
+      websiteLeadQualificationEnabled: true,
+      qualificationQuestions: Array.from({ length: 11 }, (_, index) => `Question ${index}`).join(
+        "\n",
+      ),
+    };
+    expect(editAgentFormSchema.safeParse(values).success).toBe(false);
   });
 
   it("round-trips live transfer settings", () => {

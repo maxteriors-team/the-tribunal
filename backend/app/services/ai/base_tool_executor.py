@@ -21,7 +21,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 
-from app.services.calendar.booking import BookingService
+from app.services.appointments.booking_validation import validate_booking_request
+from app.services.calendar.booking import BookingResult, BookingService
 
 logger = structlog.get_logger()
 
@@ -38,7 +39,6 @@ class BaseToolExecutor:
     """
 
     max_slots: int = 15
-    pre_validate: bool = False
 
     def __init__(self, agent: Any, timezone: str = "America/New_York") -> None:
         self.agent = agent
@@ -173,13 +173,43 @@ class BaseToolExecutor:
         notes: str | None = None,
         required_skill: str | None = None,
     ) -> dict[str, Any]:
-        """Book an appointment locally. Delegates formatting/persistence to hooks."""
+        """Book an appointment locally. Delegates formatting/persistence to hooks.
+
+        Validates the request *before* the booking service runs, because the
+        agent confirms to the customer off this return value: anything not
+        rejected here becomes a promise we cannot keep.
+        """
         if not email:
             return {
                 "success": False,
                 "error": "Email address is required for booking",
                 "message": "Please ask the customer for their email address",
             }
+
+        validation = validate_booking_request(
+            date_str=date_str,
+            time_str=time_str,
+            email=email,
+            duration_minutes=duration_minutes,
+            tz=self._get_timezone(),
+            service_type=self.get_service_type(),
+            contact_address=self.get_contact_address(),
+        )
+        if not validation.valid:
+            self.log.info(
+                "booking_request_rejected",
+                error=validation.error,
+                date=date_str,
+                time=time_str,
+            )
+            return self.format_booking_failure(
+                BookingResult(
+                    success=False,
+                    error=validation.error,
+                    message=validation.message,
+                ),
+                time_str,
+            )
 
         await self._resolve_assigned_staff(required_skill)
 
@@ -197,7 +227,6 @@ class BaseToolExecutor:
                 duration_minutes=duration_minutes,
                 metadata=metadata,
                 phone_number=contact_phone,
-                pre_validate=self.pre_validate,
             )
 
             if not result.success:
@@ -232,6 +261,14 @@ class BaseToolExecutor:
 
     def get_contact_phone(self) -> str | None:
         """Return customer phone for booking. Override in subclass."""
+        return None
+
+    def get_contact_address(self) -> str | None:
+        """Return the customer's service address, if known. Override in subclass."""
+        return None
+
+    def get_service_type(self) -> str | None:
+        """Return the service being booked, if known. Override in subclass."""
         return None
 
     def get_booking_metadata(self, notes: str | None) -> dict[str, Any] | None:
@@ -272,7 +309,11 @@ class BaseToolExecutor:
         time_str: str,
     ) -> dict[str, Any]:
         """Format failed booking response. Override in subclass."""
-        return {"success": False, "error": result.error or "Booking failed"}
+        return {
+            "success": False,
+            "error": result.error or "Booking failed",
+            "message": getattr(result, "message", None) or result.error or "Booking failed",
+        }
 
     async def post_booking_success(
         self,

@@ -70,6 +70,7 @@ import {
 } from "@/components/landscape-lighting/studio/drawing-toolbar";
 import { PreconChecklist } from "@/components/landscape-lighting/studio/precon-checklist";
 import { ConvertQuoteDialog } from "@/components/quotes/convert-quote-dialog";
+import { ContactCombobox } from "@/components/ui/contact-combobox";
 import { estimatorApi } from "@/lib/api/estimator";
 import { quotesApi } from "@/lib/api/quotes";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
@@ -3695,14 +3696,23 @@ export function LightDesigner({
                         <div className="est-customer">
                           <div className="est-customer-title">Save to customer</div>
                           <div className="est-customer-fields">
-                            <input
+                            <ContactCombobox
                               className="est-input"
-                              type="text"
+                              unstyled
+                              workspaceId={workspaceId}
                               placeholder="Customer name"
-                              autoComplete="off"
-                              value={clientName}
-                              onChange={(e) => editCustomer(setClientName)(e.target.value)}
                               aria-label="Customer name"
+                              value={clientName}
+                              onValueChange={editCustomer(setClientName)}
+                              // Taking a saved customer fills the block it
+                              // belongs to, so the estimate attaches to that
+                              // record instead of minting a near-duplicate.
+                              onSelectContact={(contact) => {
+                                editCustomer(setClientEmail)(contact.email ?? "");
+                                editCustomer(setClientPhone)(
+                                  contact.phone_number ?? "",
+                                );
+                              }}
                             />
                             <input
                               className="est-input"
