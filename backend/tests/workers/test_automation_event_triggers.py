@@ -51,7 +51,9 @@ from app.services.outbound.delivery import (
     OutboundDeliveryResult,
     OutboundDeliveryStatus,
 )
-from app.workers.automation_worker import AutomationWorker
+from app.workers import automation_worker
+
+AutomationWorker = automation_worker.AutomationWorker
 
 ALL_EVENT_TRIGGERS = [
     EVENT_REVIEW_RECEIVED,
@@ -77,10 +79,8 @@ ALL_EVENT_TRIGGERS = [
 
 def _auto_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch the approval gate so every action auto-executes (auto-restored)."""
-    import app.workers.automation_worker as mod
-
     monkeypatch.setattr(
-        mod.approval_gate_service,
+        automation_worker.approval_gate_service,
         "check_and_execute_or_queue",
         AsyncMock(return_value=("auto", None)),
     )
@@ -255,8 +255,6 @@ async def test_action_send_sms_normalizes_raw_us_number(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A raw US number like \"(248) 555-0123\" is sent as E.164, with fallback."""
-    import app.workers.automation_worker as mod
-
     worker = AutomationWorker()
     contact = _contact()
     contact.first_name = None  # exercise the fallback path
@@ -271,7 +269,7 @@ async def test_action_send_sms_normalizes_raw_us_number(
         message=message,
     )
     deliver = AsyncMock(return_value=delivered)
-    monkeypatch.setattr(mod.outbound_delivery_service, "deliver", deliver)
+    monkeypatch.setattr(automation_worker.outbound_delivery_service, "deliver", deliver)
     worker._resolve_from_number = AsyncMock(return_value="+12485930266")  # type: ignore[method-assign]
 
     automation = _automation("lead_created", [])
@@ -311,12 +309,10 @@ async def test_lead_created_advances_only_after_accepted_sms(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The first accepted outreach owns new -> contacted; blocked sends do not."""
-    import app.workers.automation_worker as mod
-
     worker = AutomationWorker()
     _auto_gate(monkeypatch)
     transition = AsyncMock(return_value=True)
-    monkeypatch.setattr(mod, "mark_contact_contacted", transition)
+    monkeypatch.setattr(automation_worker, "mark_contact_contacted", transition)
     accepted = OutboundDeliveryResult(
         channel=OutboundDeliveryChannel.SMS,
         status=OutboundDeliveryStatus.SENT,
@@ -347,10 +343,8 @@ async def test_lead_created_advances_only_after_accepted_sms(
 async def test_event_execution_hard_stops_no_automation_contact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import app.workers.automation_worker as mod
-
     worker = AutomationWorker()
-    monkeypatch.setattr(mod, "automation_suppressed", AsyncMock(return_value=True))
+    monkeypatch.setattr(automation_worker, "automation_suppressed", AsyncMock(return_value=True))
     automation = _automation("lead_created", [{"type": "send_sms", "config": {}}])
     event = SimpleNamespace(id=uuid.uuid4(), contact_id=44, payload={})
     db = MagicMock()
@@ -366,14 +360,12 @@ async def test_action_send_sms_skips_unnormalizable_phone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An unparseable phone is skipped cleanly (no send, no raise)."""
-    import app.workers.automation_worker as mod
-
     worker = AutomationWorker()
     contact = _contact()
     contact.phone_number = "not-a-phone"
 
     deliver = AsyncMock()
-    monkeypatch.setattr(mod.outbound_delivery_service, "deliver", deliver)
+    monkeypatch.setattr(automation_worker.outbound_delivery_service, "deliver", deliver)
     worker._resolve_from_number = AsyncMock(return_value="+12485930266")  # type: ignore[method-assign]
 
     automation = _automation("lead_created", [])

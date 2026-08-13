@@ -355,7 +355,6 @@ async def run_stress_test():
     print("=" * 80)
 
     passed = sum(1 for r in results if r.passed)
-    failed = len(results) - passed
     total_time = sum(r.duration_ms for r in results)
 
     print(f"\nOverall: {passed}/{len(results)} passed ({100 * passed / len(results):.1f}%)")

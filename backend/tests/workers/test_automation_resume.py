@@ -20,17 +20,17 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.services.automations.runner import MAX_RESUMES, MAX_STEPS_PER_RUN
-from app.workers.automation_worker import AutomationWorker
+from app.workers import automation_worker
+
+AutomationWorker = automation_worker.AutomationWorker
 
 pytestmark = pytest.mark.asyncio
 
 
 def _auto_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch the approval gate so every action auto-executes (auto-restored)."""
-    import app.workers.automation_worker as mod
-
     monkeypatch.setattr(
-        mod.approval_gate_service,
+        automation_worker.approval_gate_service,
         "check_and_execute_or_queue",
         AsyncMock(return_value=("auto", None)),
     )

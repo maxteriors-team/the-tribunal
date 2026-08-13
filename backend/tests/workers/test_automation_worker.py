@@ -25,7 +25,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.schemas.automation import AUTOMATION_ACTION_TYPES, AUTOMATION_CONTROL_FLOW_ACTIONS
-from app.workers.automation_worker import _BRANCH_STEP, _WAIT_STEPS, AutomationWorker
+from app.workers import automation_worker
+
+_BRANCH_STEP = automation_worker._BRANCH_STEP
+_WAIT_STEPS = automation_worker._WAIT_STEPS
+AutomationWorker = automation_worker.AutomationWorker
 
 # --------------------------------------------------------------------------- #
 # Action-type parity                                                           #
@@ -68,10 +72,8 @@ def test_control_flow_actions_are_handled_by_the_cursor_loop() -> None:
 
 def _auto_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch the approval gate so every action auto-executes (auto-restored)."""
-    import app.workers.automation_worker as mod
-
     monkeypatch.setattr(
-        mod.approval_gate_service,
+        automation_worker.approval_gate_service,
         "check_and_execute_or_queue",
         AsyncMock(return_value=("auto", None)),
     )
