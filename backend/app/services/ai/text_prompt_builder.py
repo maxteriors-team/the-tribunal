@@ -105,7 +105,7 @@ def build_text_instructions(
         timezone: Workspace timezone
         contact_phone: The contact's phone number
         offer_context: Optional offer context to include in instructions
-        booking_url: Optional Cal.com booking URL to include in instructions
+        booking_url: Optional Google Calendar booking URL to include in instructions
         knowledge_context: Optional knowledge base context for CAG
         lead_context: Optional lead intake notes - what the lead already told us on
             the form that captured them. The voice pipeline has always injected
