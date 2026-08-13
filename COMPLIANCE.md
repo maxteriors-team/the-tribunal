@@ -109,3 +109,90 @@ Snapshot: 12 August 2026 · NOT LEGAL ADVICE
 - **Messaging — Unchanged:** Teach AI has no send path; existing consent and opt-out controls remain the only customer-message gates.
 - **Key rotation — Fixed:** all four new `EncryptedString` columns are registered in `scripts/ops/reencrypt_with_old_key.py`, with a regression guard.
 - **LAWYER before relying broadly:** define lesson retention and deletion propagation, disclose AI/personal-data reuse, and confirm lawful basis/data-subject rights where EU/UK leads are served.
+
+## Addendum — Unified jobs and appointments calendar
+
+Snapshot: 13 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
+
+Commits reviewed: `02b4fb77`, `1ecd31f7`, and `1148fe66`.
+
+Scope: the authenticated calendar, appointment/job visibility and mutations, bookable-staff login linkage, manual appointment reminder SMS, and dependency versions rebuilt for this release. This focused release gate does not replace the product-wide findings above.
+
+### Assumed exposure profile
+
+- **Reach — Confirmed:** deployed, authenticated CRM staff surface; no new public route.
+- **Personal data — Confirmed:** customer names, addresses, appointments, jobs, and staff assignments appear on the calendar.
+- **Tenant model — Confirmed:** every calendar request is workspace-scoped from authenticated membership.
+- **Messaging — Confirmed:** the existing manual appointment reminder can create customer-visible SMS and provider spend.
+- **Jurisdictions — Assumed:** worldwide reach remains possible, but this staff-only feature adds no consumer contract, tracking, or public intake surface.
+- **Minors — Not applicable to this feature:** business staff accounts operate the calendar; it does not collect child-directed data.
+
+### Focused coverage ledger
+
+| # | Checklist item | fail / pass / n-a | Evidence |
+|---|---|---|---|
+| 1 | Secrets in client/repo | pass | RUNTIME: Gitleaks scanned the release commits with the repository config and found no leaks; `.env*`, backups, worktrees, virtual environments, and dependencies are ignored. |
+| 2 | Row-level security / equivalent | n-a | CODE: the browser has no direct database SDK; FastAPI and SQLAlchemy are the only calendar data path. |
+| 3 | Admin/service key in browser | pass | CODE: no provider credential or privileged key was added to frontend code or generated client types. |
+| 4 | Object authorization at server/data layer | pass | RUNTIME: route and PostgreSQL integration tests prove field users can read/mutate only their assigned appointments/jobs; another worker's object returns 404 while dispatch remains workspace-wide. |
+| 4a | Access-granting defaults | pass | CODE: `BookableStaff.user_id` is nullable and grants nothing by default; linking it requires `members:manage`. |
+| 4b | Tenant isolation from authenticated membership | pass | RUNTIME: API tests derive workspace membership server-side; service predicates include both `workspace_id` and assignment/bookable-staff linkage. |
+| 5 | Mass assignment | pass | CODE: Pydantic request schemas and explicit service updates constrain appointment, job, and staff fields. |
+| 6 | String-built queries | pass | CODE: changed data access uses SQLAlchemy expressions and bound predicates only. |
+| 7 | Unauthenticated internal endpoint | pass | CODE/tests: calendar, staff-link, mutation, and reminder routes require authenticated workspace membership. |
+| 8 | Public writable/listable storage | n-a | No storage surface or upload was added. |
+| 9 | Expensive/abusable endpoint rate limit | pass | RUNTIME: manual reminder SMS is capped per user and workspace with hourly/daily Redis windows, returns 429 with `Retry-After`, and fails closed with 503 if metering is unavailable. |
+| 10 | Password hashing | n-a | Authentication storage did not change. |
+| 11 | Session cookie/token storage | n-a | Session handling did not change. |
+| 12 | JWT verification | n-a | Token verification did not change. |
+| 13 | Credentialed wildcard CORS | n-a | CORS configuration did not change. |
+| 14 | Card data reaches Tribunal | n-a | No payment flow changed. |
+| 14b | Cleartext financial/identity identifiers | pass | No bank, tax, government-ID, card, or payout field was added. |
+| 15 | PII in logs/error trackers | pass | CODE: changed logs contain workspace, appointment, user, counts, and status only—not customer bodies, phone numbers, tokens, or message text. |
+| 16 | Transport security / mixed content | pass | RUNTIME: production API and frontend baselines served over HTTPS; no new remote asset or insecure URL was added. |
+| 17 | SSRF | n-a | No server-side user-supplied URL fetch was added. |
+| 18 | Backup/restore | pass | RUNTIME: a mode-600 AES-256-CBC production backup was created before release and decrypted to the `PGDMP` archive signature; existing restore tooling remains unchanged. |
+| U1 | Privacy notice, deletion, retention, vendor list | n-a | No new data class or processor; existing CRM records are projected into a new authenticated view. Product-wide retention/deletion duties remain above. |
+| U2 | Third-party scripts consent | n-a | No analytics, pixel, session replay, or third-party browser script was added. |
+| U3 | Account security baseline | pass | Calendar access reuses authenticated membership and capability checks; auth implementation was not changed or re-audited here. |
+| U4 | Public-page accessibility | n-a | No public page was added; authenticated calendar accessibility is checked separately below. |
+| U5 | Email/SMS duties | pass | CODE: reminder SMS reuses existing appointment reminder consent/opt-out handling; this pass adds spend/abuse limits and does not add marketing messaging. |
+| U6 | Contact-form privacy | n-a | No contact form or public intake was added. |
+| U7 | Error/log handling | pass | CODE/tests: unauthorized objects are non-disclosing 404s; limiter failures return generic 429/503 responses without internal details. |
+| U8 | Personal-liability/entity review | n-a | No new customer-facing promise or contracting surface. |
+| A1 | Image alternatives | n-a | The calendar adds no image content; decorative icons are hidden and entry species is present in accessible names. |
+| A2 | Form labels | pass | CODE: status/view groups have accessible group names, location filtering uses the existing labeled primitive, and the mine-only switch has a linked label. |
+| A3 | Keyboard operability | pass | CODE/tests: entries, overflow controls, filters, navigation, and queue rows use native buttons with keyboard activation. |
+| A4 | Colour contrast | pass | CODE: no literal color values were introduced; design-system tokens are reused, and job/appointment species differ structurally by icon/accent rail rather than color alone. |
+| A5 | Focus visibility | pass | CODE: every added interactive control has the existing `focus-visible` ring treatment. |
+| A6 | Media controls/captions | n-a | No audio or video element. |
+| A7 | Page language | pass | CODE: the calendar inherits the app document's `lang="en"`. |
+| C1-US | Consumer contract duties | n-a | Staff-only scheduling surface; no purchase or consumer agreement changed. |
+| C1-EU/UK | Consumer pre-contract/withdrawal duties | n-a | Staff-only scheduling surface; no purchase or consumer agreement changed. |
+| M1 | Minors | n-a | Authenticated business-operator workflow, not a child-directed consumer feature. |
+
+### Findings
+
+| ID | Severity | Trigger | Evidence (RUNTIME / CODE / DEDUCED) | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| CAL-001 | BLOCKER | A field worker could directly invoke appointment update/delete/reminder routes outside the new read scope | RUNTIME: API and database integration tests now return 404 outside the worker's assigned calendar and preserve dispatch-wide access | Enforce object authorization on reads and every mutation at the service query | Fixed | `test_calendar_scope_api.py` and `test_calendar_visibility.py` |
+| CAL-002 | BLOCKER | Manual reminder SMS creates provider spend and customer-visible messaging without a request cap | RUNTIME: limiter tests exercise per-user/workspace windows, 429 exhaustion, and fail-closed 503 behavior | Meter expensive messaging at the server boundary | Fixed | `test_appointment_reminder_limiter.py` plus route assertion |
+| CAL-003 | HIGH | The release rebuild originally resolved known-vulnerable Next.js, Axios, and transitive packages | RUNTIME/CODE: Next.js and Axios were upgraded to patched releases; full `npm audit` now reports zero vulnerabilities | Do not deploy a fresh client/server bundle with known exploitable dependencies | Fixed | Committed lockfile, `npm ci`, `npm audit`, typecheck, tests, and production build |
+| CAL-004 | BLOCKER | Linking a bookable staff record to a login determines whose customer calendar becomes visible | RUNTIME/CODE: only `members:manage` may set or change `user_id`; workspace and uniqueness constraints are tested | Treat identity linkage as team administration, not ordinary agent configuration | Fixed | `test_bookable_staff_link_api.py` and service tests |
+
+### Implemented and proved in this pass
+
+- Field-role list, deep-link, update, delete, and reminder access now share one assignment predicate and return non-disclosing 404s outside scope.
+- Dispatcher/manager calendar access remains workspace-wide; job dispatch controls stay hidden from field roles.
+- Manual reminder SMS is capped at 25 per user/hour, 100 per workspace/hour, and 500 per workspace/day.
+- Jobs and appointments remain distinguishable without relying on color; native controls and visible focus treatment cover keyboard use.
+- Next.js `16.3.0`, Axios `1.19.0`, and audited transitive versions are lockfile-pinned; `npm audit` reports zero known vulnerabilities.
+
+### Open — needs a decision from you
+
+None for this calendar release.
+
+### Re-verify before relying
+
+- This was source and automated runtime verification, not a legal certification or a manual assistive-technology audit.
+- Re-run dependency audit and authenticated calendar smoke checks for future releases; external advisories and provider behavior change.
