@@ -496,16 +496,53 @@ class TestAdditionalRetrySendKeys:
                 AsyncMock(return_value=delivered),
             ) as deliver,
         ):
+            job_id = uuid4()
             await worker._action_send_sms(  # type: ignore[arg-type]
                 automation,
                 contact,
                 {"message": "hi"},
-                {},
+                {"job_id": str(job_id)},
                 db,
             )
 
         request = deliver.await_args.args[1]
-        assert request.idempotency_key == derive("automation_sms", automation_id, contact_id)
+        assert request.idempotency_key == derive(
+            "automation_sms", automation_id, contact_id, str(job_id)
+        )
+
+    async def test_automation_email_keys_each_completed_job_separately(self) -> None:
+        """A provider retry dedupes, but a second install still gets its guide."""
+        from app.workers.automation_worker import AutomationWorker
+
+        worker = AutomationWorker()
+        automation_id = uuid4()
+        contact_id = 123
+        job_id = uuid4()
+        automation = SimpleNamespace(id=automation_id, workspace_id=uuid4())
+        contact = SimpleNamespace(
+            id=contact_id,
+            email="owner@example.com",
+            first_name="A",
+            last_name=None,
+            company_name=None,
+            phone_number=None,
+        )
+
+        with patch(
+            "app.workers.automation_worker.send_automation_email",
+            AsyncMock(return_value=True),
+        ) as send:
+            await worker._action_send_email(  # type: ignore[arg-type]
+                automation,
+                contact,
+                {"subject": "Your guide", "message": "Read it", "transactional": True},
+                {"job_id": str(job_id)},
+                MagicMock(),
+            )
+
+        assert send.await_args.kwargs["idempotency_key"] == derive(
+            "automation_email", automation_id, contact_id, str(job_id)
+        )
 
     async def test_sms_fallback_forwards_campaign_contact_key(self) -> None:
         from app.services.campaigns.sms_fallback import send_sms_fallback

@@ -1,14 +1,13 @@
 """Create/refresh the post-install "here's how your system works" automation.
 
-Wires a ``job_completed`` automation so every finished job sends the customer
-their owner's resources: a text with a tracked short link, and an email with the
-same link (the email path linkifies bare URLs, so it arrives clickable).
+Wires a ``job_completed`` automation so a finished lighting-project install
+sends the customer their owner's resources: a text with a tracked short link,
+and an email with the same link.
 
-The link points at the **resources hub**, not at one product guide, on purpose:
-``job_completed`` fires for *every* completed job in the workspace — installs,
-service calls, holiday-light takedowns — and the worker has no per-job-type
-selector (only ``lead_created`` supports trigger_config narrowing today). A hub
-is correct for all of them; a Luxor-app guide texted after a takedown is not.
+The link points at the **resources hub**, not at one product guide, so one stable
+customer URL can grow as new guides are added. The trigger is narrowed with
+``lighting_project_only``: landscape/Luxor owners receive it, while permanent
+systems, service calls, repairs, and takedowns wait for their own relevant guide.
 
 Content served from ``backend/static/guides/`` (public, no PII — see
 CLAUDE.md > backend/static):
@@ -19,7 +18,8 @@ CLAUDE.md > backend/static):
 Idempotent: matched on (workspace, ``job_completed``,
 ``trigger_config.marker == post_install_resources``); re-running updates the
 existing row in place instead of creating a second automation that double-texts
-every customer.
+every customer. The same run backfills durable ownership tags for already-
+completed installs; future completions apply them in ``JobService``.
 
 Usage
 -----
@@ -43,6 +43,8 @@ import asyncio
 import logging
 import sys
 import uuid
+from collections import defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 from urllib.parse import urlparse
@@ -250,6 +252,65 @@ def _parse_plan(args: argparse.Namespace, logger: logging.Logger) -> _Plan | Non
     return _Plan(workspace_id, guide_url, with_sms, with_email)
 
 
+def _group_completed_install_tags(jobs: Sequence[Any]) -> dict[int, list[str]]:
+    """Collapse completed jobs into one deterministic tag set per contact."""
+    from app.services.jobs.system_tags import completed_install_tags
+
+    grouped: dict[int, set[str]] = defaultdict(set)
+    for job in jobs:
+        grouped[job.contact_id].update(completed_install_tags(job))
+    return {contact_id: sorted(tags) for contact_id, tags in sorted(grouped.items()) if tags}
+
+
+async def _backfill_completed_install_tags(
+    db: Any,
+    *,
+    workspace_id: uuid.UUID,
+    dry_run: bool,
+    logger: logging.Logger,
+) -> dict[int, list[str]]:
+    """Apply ownership tags to customers with already-completed installs."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.models.field_service import Job, JobStatus
+    from app.services.tags import TagService
+
+    jobs = (
+        (
+            await db.execute(
+                select(Job)
+                .where(Job.workspace_id == workspace_id, Job.status == JobStatus.COMPLETED)
+                .options(
+                    selectinload(Job.lighting_project),
+                    selectinload(Job.source_quote),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    grouped = _group_completed_install_tags(jobs)
+    if not dry_run:
+        tag_service = TagService(db)
+        for contact_id, names in grouped.items():
+            await tag_service.add_tags_to_contact(
+                workspace_id=workspace_id,
+                contact_id=contact_id,
+                names=names,
+                color="#ffb90a",
+            )
+    log_event(
+        logger,
+        logging.INFO,
+        "completed-install ownership tags resolved",
+        contacts=len(grouped),
+        assignments=sum(len(names) for names in grouped.values()),
+        dry_run=dry_run,
+    )
+    return grouped
+
+
 async def _apply(ctx: ExecutionContext, args: argparse.Namespace) -> int:
     from sqlalchemy import select
 
@@ -284,14 +345,10 @@ async def _apply(ctx: ExecutionContext, args: argparse.Namespace) -> int:
             sends_email=with_email,
         )
 
-        # The worker matches event automations on trigger type alone (only
-        # lead_created narrows via trigger_config), so this fires for every
-        # completed job — service calls and takedowns included. That is why the
-        # link is the hub rather than one product's guide.
         log_event(
             logger,
-            logging.WARNING,
-            "job_completed has no per-job-type filter: every completed job sends this",
+            logging.INFO,
+            "job_completed is limited to landscape-project installs",
             link_target="resources hub",
         )
 
@@ -328,6 +385,12 @@ async def _apply(ctx: ExecutionContext, args: argparse.Namespace) -> int:
         )
 
         if ctx.dry_run:
+            await _backfill_completed_install_tags(
+                db,
+                workspace_id=workspace_id,
+                dry_run=True,
+                logger=logger,
+            )
             for action in actions:
                 log_event(
                     logger,
@@ -339,9 +402,21 @@ async def _apply(ctx: ExecutionContext, args: argparse.Namespace) -> int:
             log_event(logger, logging.WARNING, "dry-run: no changes committed")
             return EXIT_OK
 
-        ctx.confirm(f"{verb} the '{args.name}' automation")
+        ctx.confirm(f"{verb} the '{args.name}' automation and backfill completed-install tags")
+        await _backfill_completed_install_tags(
+            db,
+            workspace_id=workspace_id,
+            dry_run=False,
+            logger=logger,
+        )
 
-        trigger_config = {"marker": MARKER, "guide_url": guide_url}
+        trigger_config = {
+            "marker": MARKER,
+            "guide_url": guide_url,
+            # Structured filter: job titles are customer-authored and cannot
+            # distinguish installations from service calls or takedowns safely.
+            "lighting_project_only": True,
+        }
         if existing is not None:
             existing.name = args.name
             existing.description = args.description

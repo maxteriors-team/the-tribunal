@@ -87,6 +87,7 @@ Scope: human-approved AI SMS examples, live website-lead qualification before bo
 - Post-install SMS is now forced through the unified STOP/opt-out gate and requires explicit `opted_in` consent.
 - Post-install email is explicitly service/transactional; adding an offer or upsell must switch it to marketing and restore unsubscribe handling.
 - Maxteriors logo, wordmark, palette, phone, branded URLs, and accessible image alternatives are explicit on the resource hub, Luxor guide, and this workspace's email; other tenants do not inherit the logo.
+- Completed installs create durable ownership segments from structured project/approved-quote data: `Lighting System`, `Luxor System`, `Permanent Light System`, and (only for a known non-Luxor controller) `Luxor Upgrade Candidate`. The upgrade tag does not itself authorize marketing; later campaigns still use the existing consent/opt-out gates.
 
 ## Open — needs a decision from you
 

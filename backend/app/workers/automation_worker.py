@@ -90,8 +90,7 @@ from app.services.automations.conditions import (
 )
 from app.services.automations.events import (
     AUTOMATION_EVENT_TRIGGERS,
-    EVENT_LEAD_CREATED,
-    lead_created_event_matches,
+    event_matches_trigger_config,
 )
 from app.services.automations.opt_out import (
     NO_AUTOMATION_TAG,
@@ -341,15 +340,16 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         )
         automations = list(matches.scalars().all())
 
-        # ``lead_created`` automations may narrow to specific lead sources via
-        # trigger_config; drop the ones whose selectors don't match this event
-        # so a Facebook-funnel automation never fires for an unrelated source.
-        if event.event_type.lower() == EVENT_LEAD_CREATED:
-            automations = [
-                automation
-                for automation in automations
-                if lead_created_event_matches(automation.trigger_config, event.payload)
-            ]
+        # Some event triggers support selectors in trigger_config. Apply them
+        # before creating an execution so a source-specific lead workflow — or
+        # a lighting-install owner guide — cannot fire on an unrelated event.
+        automations = [
+            automation
+            for automation in automations
+            if event_matches_trigger_config(
+                event.event_type, automation.trigger_config, event.payload
+            )
+        ]
 
         contact: Contact | None = None
         if event.contact_id is not None:
@@ -1045,6 +1045,21 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             )
             return
 
+        # Event payloads carry the domain object id (job_id, invoice_id, etc.).
+        # Include it so retrying one event collapses, while a later second job for
+        # the same customer remains a legitimate new send.
+        event_identity = next(
+            (
+                payload[key]
+                for key in ("job_id", "invoice_id", "quote_id", "event_id")
+                if payload.get(key)
+            ),
+            None,
+        )
+        idempotency_parts: tuple[object, ...] = (automation.id, contact.id)
+        if event_identity is not None:
+            idempotency_parts += (event_identity,)
+
         result = await outbound_delivery_service.deliver(
             db,
             OutboundDeliveryRequest(
@@ -1054,7 +1069,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 from_=from_number,
                 body=message_body,
                 contact=contact,
-                idempotency_key=derive_outbound_key("automation_sms", automation.id, contact.id),
+                idempotency_key=derive_outbound_key("automation_sms", *idempotency_parts),
                 action_type="automation_sms",
                 require_sms_consent=bool(config.get("require_consent")),
             ),
@@ -1163,7 +1178,18 @@ class AutomationWorker(RetryableWorker, BaseWorker):
 
         fallbacks = config.get("fallbacks")
         subject = self._render_template(subject_template, contact, payload, fallbacks)
-        idempotency_key = derive_outbound_key("automation_email", automation.id, contact.id)
+        event_identity = next(
+            (
+                payload[key]
+                for key in ("job_id", "invoice_id", "quote_id", "event_id")
+                if payload.get(key)
+            ),
+            None,
+        )
+        idempotency_parts: tuple[object, ...] = (automation.id, contact.id)
+        if event_identity is not None:
+            idempotency_parts += (event_identity,)
+        idempotency_key = derive_outbound_key("automation_email", *idempotency_parts)
 
         if template is not None:
             sent = await send_template_email(

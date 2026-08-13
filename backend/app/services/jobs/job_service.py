@@ -65,6 +65,8 @@ from app.services.automations.events import (
     emit_automation_event,
 )
 from app.services.field_service.neighbor_outreach import NeighborOutreachService
+from app.services.jobs.system_tags import completed_install_tags
+from app.services.tags import TagService
 
 # Job lifecycle states that drive an automation event when first entered.
 _STATUS_EVENTS: dict[JobStatus, str] = {
@@ -522,6 +524,33 @@ class JobService:
     # ------------------------------------------------------------------ #
     # Automation events
     # ------------------------------------------------------------------ #
+    async def _tag_completed_system(self, job: Job) -> tuple[str, ...]:
+        """Persist equipment ownership tags proven by this completed job.
+
+        Load the two structured sales snapshots only on completion instead of
+        widening every calendar/list query. Tag inserts are idempotent, so a
+        retried status update cannot duplicate either a tag or its assignment.
+        """
+        classified_job = await self.db.scalar(
+            select(Job)
+            .where(Job.id == job.id, Job.workspace_id == job.workspace_id)
+            .options(
+                selectinload(Job.lighting_project),
+                selectinload(Job.source_quote),
+            )
+        )
+        if classified_job is None:
+            return ()
+        tags = completed_install_tags(classified_job)
+        if tags:
+            await TagService(self.db).add_tags_to_contact(
+                workspace_id=job.workspace_id,
+                contact_id=job.contact_id,
+                names=list(tags),
+                color="#ffb90a",
+            )
+        return tags
+
     async def _emit_status_event(self, job: Job, prior_status: JobStatus | str | None) -> None:
         """React to ``job`` first entering scheduled/completed.
 
@@ -530,18 +559,20 @@ class JobService:
         are durable iff the status change commits. ``emit_automation_event`` itself
         no-ops when no automation listens for the trigger.
 
-        Completion additionally kicks off neighbour-outreach generation, because a
-        finished job is the moment the surrounding street is warmest. That call
-        never sends anything, is workspace-config gated, and swallows its own
-        errors inside a ``SAVEPOINT`` — a marketing list must not be able to fail a
-        work-order update.
+        Completion additionally applies equipment-ownership tags and kicks off
+        neighbour-outreach generation. Both share the status transaction: a
+        completion that rolls back cannot leave a customer mislabeled or create
+        an outreach row for work that did not finish. Neighbour generation never
+        sends and contains its own errors inside a ``SAVEPOINT``.
         """
         new_status = JobStatus(job.status)
         if prior_status is not None and JobStatus(prior_status) == new_status:
             return
 
+        installed_system_tags: tuple[str, ...] = ()
         if new_status == JobStatus.COMPLETED:
             await NeighborOutreachService(self.db).maybe_generate_on_completion(job)
+            installed_system_tags = await self._tag_completed_system(job)
 
         event_type = _STATUS_EVENTS.get(new_status)
         if event_type is None:
@@ -555,6 +586,13 @@ class JobService:
                 "job_id": str(job.id),
                 "status": str(new_status),
                 "title": job.title,
+                # Presence is a stable, structured signal that this was a
+                # lighting-project install — unlike title matching, which would
+                # eventually text an owner guide after "Install outlet repair".
+                "lighting_project_id": (
+                    str(job.lighting_project_id) if job.lighting_project_id else None
+                ),
+                "installed_system_tags": list(installed_system_tags),
                 "scheduled_start": (
                     job.scheduled_start.isoformat() if job.scheduled_start else None
                 ),
