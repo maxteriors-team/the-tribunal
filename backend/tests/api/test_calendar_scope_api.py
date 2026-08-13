@@ -14,7 +14,7 @@ against a real database.
 
 import uuid
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import ExitStack, asynccontextmanager
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -134,7 +134,12 @@ async def _client(module, service: AsyncMock, role: str, prefix: str) -> AsyncIt
     app.include_router(module.router, prefix=prefix)
 
     service_name = "JobService" if module is jobs_module else "AppointmentService"
-    with patch.object(module, service_name, return_value=service):
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(module, service_name, return_value=service))
+        if module is appointments_module:
+            stack.enter_context(
+                patch.object(module, "enforce_appointment_reminder_rate_limit", AsyncMock())
+            )
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://testserver"
         ) as ac:
@@ -347,3 +352,19 @@ class TestAppointmentMutationScope:
             "post": service.send_reminder,
         }[method]
         assert service_method.await_args.kwargs["visible_to_user_id"] is None
+
+    async def test_reminder_send_enforces_workspace_rate_limit(self) -> None:
+        service = _appointment_service()
+        limiter = AsyncMock()
+        async with _client(
+            appointments_module, service, "dispatcher", APPOINTMENTS_PREFIX
+        ) as client:
+            with patch.object(
+                appointments_module, "enforce_appointment_reminder_rate_limit", limiter
+            ):
+                response = await client.post(
+                    f"/api/v1/workspaces/{WS_ID}/appointments/{APPOINTMENT_ID}/send-reminder"
+                )
+
+        assert response.status_code == 200
+        limiter.assert_awaited_once_with(WS_ID, USER_ID)
