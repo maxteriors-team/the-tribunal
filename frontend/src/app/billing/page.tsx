@@ -10,7 +10,12 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { createCheckout, createPortal, getBillingStatus, type BillingStatus } from "@/lib/api/billing";
+import {
+  createCheckout,
+  createPortal,
+  getBillingStatus,
+  type BillingStatus,
+} from "@/lib/api/billing";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 
@@ -20,7 +25,7 @@ const PLAN_PRICE = process.env.NEXT_PUBLIC_PLAN_PRICE ?? "$297/month";
 
 const PLAN_FEATURES = [
   "AI-powered SMS agent that texts your dead leads",
-  "Automatic appointment booking directly on your Cal.com calendar",
+  "Automatic appointment booking on each rep’s Google Calendar",
   "Unlimited lead uploads via CSV",
   "Smart follow-up sequences — 2-touch cadence, fully automated",
   "Home-service messaging templates designed to get replies",
@@ -82,12 +87,10 @@ function BillingContent() {
             <Zap className="h-8 w-8 text-primary" />
           </div>
         </div>
-        <h1 className="text-3xl font-bold tracking-tight">
-          Lead Reactivation
-        </h1>
+        <h1 className="text-3xl font-bold tracking-tight">Lead Reactivation</h1>
         <p className="text-muted-foreground max-w-md mx-auto">
-          Let AI text your cold leads, provide value, and book appointments on your
-          calendar — automatically.
+          Let AI text your cold leads, provide value, and book appointments on your calendar —
+          automatically.
         </p>
       </div>
 
@@ -105,9 +108,7 @@ function BillingContent() {
           <div className="flex items-baseline gap-1 mt-1">
             <span className="text-4xl font-bold">{PLAN_PRICE.split("/")[0]}</span>
             {PLAN_PRICE.includes("/") && (
-              <span className="text-muted-foreground text-sm">
-                /{PLAN_PRICE.split("/")[1]}
-              </span>
+              <span className="text-muted-foreground text-sm">/{PLAN_PRICE.split("/")[1]}</span>
             )}
           </div>
         </CardHeader>

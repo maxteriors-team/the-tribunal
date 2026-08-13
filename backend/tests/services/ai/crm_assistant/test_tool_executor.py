@@ -12,34 +12,15 @@ from app.services.ai.crm_assistant._tool_executor import CRMToolExecutor
 from app.services.ai.crm_assistant._tools import CRM_TOOLS, get_crm_tools
 
 
-@pytest.mark.asyncio
-async def test_tool_spec_handler_parity() -> None:
-    """Every tool defined in _tools.py must have a handler in the executor.
-
-    Rather than hard-coding the expected handler set (which silently rots
-    every time we add or rename a tool), drive the assertion off ``execute``
-    itself: dispatching a tool with an empty arg payload must not return the
-    ``Unknown function`` sentinel. Handlers may fail for other reasons
-    (missing DB rows, validation errors) — that's fine. We only care that
-    the dispatcher knows the name.
-    """
-    spec_names = {t["function"]["name"] for t in get_crm_tools()}
+def test_tool_spec_handler_parity() -> None:
+    """Every declared CRM tool has exactly one executor handler."""
+    spec_names = {tool["function"]["name"] for tool in get_crm_tools()}
     assert spec_names, "CRM tool registry is empty"
     assert len(CRM_TOOLS) == len(spec_names)
 
-    # ``db.execute`` is awaited by some handlers before they validate args; a
-    # blanket ``AsyncMock`` keeps that happy without leaking real I/O.
-    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=1)
-    assert executor.workspace_id is not None
+    executor = CRMToolExecutor(db=MagicMock(), workspace_id=uuid.uuid4(), user_id=1)
 
-    for name in spec_names:
-        result = await executor.execute(name, {})
-        # We allow handlers to fail (success=False) but the dispatcher must
-        # not say it doesn't know the name.
-        error = result.get("error") or ""
-        assert not error.startswith("Unknown function"), (
-            f"Tool spec declares {name!r} but executor has no handler: {result!r}"
-        )
+    assert spec_names == set(executor.handlers)
 
 
 @pytest.mark.asyncio

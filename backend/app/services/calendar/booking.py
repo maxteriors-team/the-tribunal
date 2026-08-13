@@ -59,21 +59,19 @@ class AvailabilityResult:
 
 @dataclass
 class BookingResult:
-    """Result of creating a booking.
-
-    ``booking_uid``/``booking_id`` are kept for interface compatibility with the
-    executor persistence hooks; for local bookings they are ``None`` (the CRM
-    appointment row is the record).
-    """
+    """Result of validating a booking before CRM persistence."""
 
     success: bool
+    # Legacy executor compatibility: local bookings have no provider identifier.
     booking_uid: str | None = None
     booking_id: int | None = None
+    appointment_id: int | None = None
     error: str | None = None
     # Customer-facing guidance the agent should act on when ``error`` is a short
     # code (validation failures); optional for availability failures.
     message: str | None = None
     alternative_slots: list[AvailableSlot] = field(default_factory=list)
+    service_type: str | None = None
 
 
 class BookingService:
@@ -108,6 +106,7 @@ class BookingService:
         *,
         max_slots: int = 15,
         now: datetime | None = None,
+        meeting_minutes: int | None = None,
     ) -> AvailabilityResult:
         """Return open slots between two dates (inclusive), YYYY-MM-DD.
 
@@ -139,6 +138,7 @@ class BookingService:
                 slot_minutes=self._slot_minutes,
                 max_slots=max_slots,
                 now=now,
+                meeting_minutes=meeting_minutes,
             )
             self._log.info("availability_computed", slot_count=len(slots))
             return AvailabilityResult(
@@ -158,15 +158,16 @@ class BookingService:
         duration_minutes: int = 30,
         metadata: dict[str, Any] | None = None,
         phone_number: str | None = None,
+        service_type: str | None = None,
         *,
         pre_validate: bool = True,
         now: datetime | None = None,
     ) -> BookingResult:
         """Confirm a local booking.
 
-        No external calendar is contacted — the caller persists the appointment
-        row. The slot is re-checked against current availability and
-        alternatives are returned if it was taken since it was offered. That
+        The caller persists the CRM appointment and mirrors it to Google. The
+        slot is re-checked against current local availability and alternatives
+        are returned if it was taken since it was offered. That
         re-check used to be opt-in per channel, which is exactly how the text
         agent shipped confirming slots that were already booked; only pass
         ``pre_validate=False`` for a caller that has just computed availability
@@ -180,7 +181,13 @@ class BookingService:
             return BookingResult(success=False, error=f"Invalid date/time format: {e}")
 
         if pre_validate:
-            availability = await self.check_availability(date_str, date_str, max_slots=50, now=now)
+            availability = await self.check_availability(
+                date_str,
+                date_str,
+                max_slots=50,
+                now=now,
+                meeting_minutes=duration_minutes,
+            )
             if availability.success:
                 still_open = any(s.time == time_str for s in availability.slots)
                 if not still_open:
@@ -191,8 +198,14 @@ class BookingService:
                         alternative_slots=availability.slots[:5],
                     )
 
-        self._log.info("booking_confirmed_local", date=date_str, time=time_str, email=email)
-        return BookingResult(success=True, booking_uid=None, booking_id=None)
+        self._log.info(
+            "booking_confirmed_local",
+            date=date_str,
+            time=time_str,
+            email=email,
+            service_type=service_type,
+        )
+        return BookingResult(success=True, service_type=service_type)
 
     async def close(self) -> None:
         """No external client to release."""

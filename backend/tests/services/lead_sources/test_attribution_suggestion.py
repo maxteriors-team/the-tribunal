@@ -18,42 +18,29 @@ def test_gclid_implies_google_ads():
 
 
 def test_fbclid_implies_facebook_ads():
-    assert (
-        suggest_source_type(_AttributionSignals(fbclid="xyz789"))
-        == LeadSourceType.FACEBOOK_ADS
-    )
+    assert suggest_source_type(_AttributionSignals(fbclid="xyz789")) == LeadSourceType.FACEBOOK_ADS
 
 
 def test_utm_source_facebook_variants():
     for utm in ("facebook", "Instagram", "META", "fb", "ig"):
         assert (
-            suggest_source_type(_AttributionSignals(utm_source=utm))
-            == LeadSourceType.FACEBOOK_ADS
+            suggest_source_type(_AttributionSignals(utm_source=utm)) == LeadSourceType.FACEBOOK_ADS
         )
 
 
 def test_utm_source_google_variants():
     for utm in ("google", "AdWords", "gads"):
-        assert (
-            suggest_source_type(_AttributionSignals(utm_source=utm))
-            == LeadSourceType.GOOGLE_ADS
-        )
+        assert suggest_source_type(_AttributionSignals(utm_source=utm)) == LeadSourceType.GOOGLE_ADS
 
 
 def test_utm_source_organic():
     for utm in ("organic", "seo", "direct", "referral"):
-        assert (
-            suggest_source_type(_AttributionSignals(utm_source=utm))
-            == LeadSourceType.ORGANIC
-        )
+        assert suggest_source_type(_AttributionSignals(utm_source=utm)) == LeadSourceType.ORGANIC
 
 
 def test_legacy_source_phone_maps_to_phone_radio():
     for source in ("inbound_call", "phone", "call", "radio"):
-        assert (
-            suggest_source_type(_AttributionSignals(source=source))
-            == LeadSourceType.PHONE_RADIO
-        )
+        assert suggest_source_type(_AttributionSignals(source=source)) == LeadSourceType.PHONE_RADIO
 
 
 def test_no_signals_returns_none():

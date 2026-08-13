@@ -158,7 +158,7 @@ class TestCancelUpcomingAppointments:
             assert "customer" in (row.notes or "")
 
     async def test_cancels_every_upcoming_appointment(self, workspace_id) -> None:
-        """"Cancel" over SMS means all of it, not just the next one.
+        """ "Cancel" over SMS means all of it, not just the next one.
 
         An SMS thread is one-to-one with a contact, so a customer saying "cancel"
         is not picking one of several rows out of a list she cannot see. Leaving

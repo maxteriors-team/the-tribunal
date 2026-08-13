@@ -612,14 +612,9 @@ async def submit_lead(
         except Exception:
             logger.exception("lead_notification_failed", contact_id=contact.id)
 
-    # Auto-open a pipeline card so the lead lands on the Opportunities board.
-    # Deduped + workspace-gated inside the helper; never break lead capture.
-    try:
-        from app.services.opportunities import open_lead_opportunity
-
-        await open_lead_opportunity(db, lead_source.workspace_id, contact, source="lead_form")
-    except Exception:
-        logger.exception("auto_pipeline_failed", contact_id=contact.id)
+    # Qualification owns opening the pipeline opportunity. Raw form contacts stay
+    # in Contacts as ``new`` until provider-accepted outreach and evidence-backed AI
+    # qualification advance the CRM funnel.
 
     demo_record.status = "initiated"
     await db.commit()

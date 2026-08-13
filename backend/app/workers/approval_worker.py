@@ -28,7 +28,7 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
 
     POLL_INTERVAL_SECONDS = 30
     COMPONENT_NAME = "approval_worker"
-    # Approved actions hit Telnyx/Cal.com per item — keep modest to avoid
+    # Approved actions hit external providers per item — keep modest to avoid
     # bursting external APIs when a backlog drains.
     MAX_CONCURRENCY = 5
     max_retries = 3

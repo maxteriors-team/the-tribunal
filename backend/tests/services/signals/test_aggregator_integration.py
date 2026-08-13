@@ -56,10 +56,14 @@ async def test_aggregator_upserts_rows_and_folds_score() -> None:
         assert len(signals) == 1
 
         rows = (
-            await db.execute(
-                select(ProspectSignal).where(ProspectSignal.prospect_id == prospect.id)
+            (
+                await db.execute(
+                    select(ProspectSignal).where(ProspectSignal.prospect_id == prospect.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(rows) == 1
         assert rows[0].signal_type == ProspectSignalType.AD_TECH.value
         assert rows[0].strength == 70
@@ -69,10 +73,14 @@ async def test_aggregator_upserts_rows_and_folds_score() -> None:
         # Re-run is idempotent: still one row, no evidence duplication.
         await aggregator.run(db, prospect)
         rows2 = (
-            await db.execute(
-                select(ProspectSignal).where(ProspectSignal.prospect_id == prospect.id)
+            (
+                await db.execute(
+                    select(ProspectSignal).where(ProspectSignal.prospect_id == prospect.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(rows2) == 1
         signal_evidence = [e for e in prospect.evidence if e.get("type") == "signal"]
         assert len(signal_evidence) == 1

@@ -1,7 +1,7 @@
 """Voice agent exception hierarchy.
 
 This module defines custom exceptions for voice agent operations,
-following the pattern established in calcom.py for consistent
+following the pattern established in google_calendar.py for consistent
 error handling across the application.
 
 Exception Hierarchy:

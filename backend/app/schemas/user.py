@@ -140,6 +140,9 @@ class TeamMemberResponse(BaseModel):
     full_name: str | None
     avatar_url: str | None = None
     role: str
+    is_bookable: bool = False
+    google_calendar_connected: bool = False
+    google_calendar_email: str | None = None
     created_at: datetime
 
 

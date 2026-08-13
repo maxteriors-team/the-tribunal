@@ -35,7 +35,6 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
     temperature: 0.5,
     text_response_delay_ms: 40_000,
     text_max_context_messages: 12,
-    calcom_event_type_id: 42,
     assignment_strategy: "single",
     enabled_tools: ["calendar"],
     tool_settings: { calendar: ["book"] },
@@ -203,7 +202,6 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
     expect(req.value_reinforcement_template).toBe(agent.value_reinforcement_template);
     expect(req.post_meeting_template).toBe(agent.post_meeting_template);
     expect(req.auto_evaluate).toBe(agent.auto_evaluate);
-    expect(req.calcom_event_type_id).toBe(agent.calcom_event_type_id);
   });
 
   it("round-trips typed website-lead qualification settings", () => {
@@ -219,9 +217,7 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
 
     const values = agentToEditFormValues(agent);
     expect(values.websiteLeadQualificationEnabled).toBe(true);
-    expect(values.qualificationQuestions).toBe(
-      "What service do you need?\nWhat is your timeline?",
-    );
+    expect(values.qualificationQuestions).toBe("What service do you need?\nWhat is your timeline?");
     expect(values.enabledToolIds).toEqual({ calendar: ["book"] });
 
     const req = buildUpdateAgentRequest(values);
@@ -294,7 +290,6 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
       makeAgent({
         description: null,
         ivr_navigation_goal: null,
-        calcom_event_type_id: null,
         reminder_template: null,
         noshow_day3_template: null,
         noshow_day7_template: null,
@@ -308,8 +303,7 @@ describe("agentToEditFormValues round-trips through buildUpdateAgentRequest", ()
     expect(values.ivrNavigationGoal).toBe("");
     // Empty description becomes a blank string the form can render.
     expect(values.description).toBe("");
-    // Nullable id and templates pass through as null.
-    expect(values.calcomEventTypeId).toBeNull();
+    // Nullable templates pass through as null.
     expect(values.reminderTemplate).toBeNull();
     expect(values.noshowDay3Template).toBeNull();
     expect(values.postMeetingTemplate).toBeNull();

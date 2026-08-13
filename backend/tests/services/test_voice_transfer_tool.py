@@ -36,7 +36,6 @@ def _make_agent(**overrides: Any) -> Agent:
         "temperature": 0.7,
         "text_response_delay_ms": 30_000,
         "text_max_context_messages": 20,
-        "calcom_event_type_id": None,
         "enabled_tools": ["call_control"],
         "tool_settings": {"call_control": ["transfer_call"]},
         "transfer_destination_number": "+15551234567",

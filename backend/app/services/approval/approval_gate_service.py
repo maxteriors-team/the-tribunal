@@ -147,8 +147,8 @@ class LaunchCampaignHandler:
 class BookAppointmentActionHandler:
     """Execute a book_appointment pending action and persist the appointment.
 
-    ``BookingService`` only validates the slot against workspace hours — since the
-    Cal.com sync was removed, the ``appointments`` row *is* the booking. The live
+    ``BookingService`` validates the local slot while ``finalize_booking`` writes
+    the CRM row and mirrors it to the assigned Google Calendar. The live
     tool executors write that row in their ``post_booking_success`` hook, which
     the approval path never runs, so this handler must write it too. Without it
     an approved booking reports success and appears on no calendar.

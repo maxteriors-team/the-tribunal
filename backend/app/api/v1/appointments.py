@@ -8,7 +8,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import DB, CurrentMembership, CurrentUser, get_workspace
-from app.core.permissions import Capability, role_can
+from app.core.permissions import appointment_owner_scope
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.appointment import (
     AppointmentCreate,
@@ -28,16 +28,13 @@ def _calendar_scope_user_id(
 ) -> int | None:
     """The user a caller's appointment reads are confined to, or ``None`` for everything.
 
-    Mirrors the jobs board exactly (``app.api.v1.jobs._calendar_scope_user_id``)
-    so one calendar has one visibility rule: ``jobs:write`` — owner, admin,
-    manager, dispatcher — runs the schedule and sees all of it; everyone below
-    sees only what they are booked on.
-
-    ``mine`` lets a dispatcher voluntarily narrow to their own bookings; it can
-    only tighten the scope, never widen it.
+    Owners, admins, managers, and dispatchers see the whole team. Sales and lower
+    tiers see only appointments assigned to their login-backed staff row. ``mine``
+    can narrow a higher role but can never widen a lower role's scope.
     """
-    if mine or not role_can(membership.role, Capability.JOBS_WRITE):
+    if mine:
         return user_id
+    return appointment_owner_scope(membership.role, user_id)
     return None
 
 
@@ -122,6 +119,7 @@ async def create_appointment(
 async def get_appointment_stats(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> AppointmentStatsResponse:
@@ -133,7 +131,10 @@ async def get_appointment_stats(
     show_up_rate = completed / (completed + no_show) * 100, else 0.
     """
     service = AppointmentService(db)
-    return await service.get_stats(workspace_id)
+    return await service.get_stats(
+        workspace_id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
 
 
 @router.get("/{appointment_id}", response_model=AppointmentResponse)
@@ -164,12 +165,18 @@ async def update_appointment(
     appointment_id: int,
     appointment_in: AppointmentUpdate,
     current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> Any:
-    """Update an appointment."""
+    """Update an appointment within the caller's calendar scope."""
     service = AppointmentService(db)
-    return await service.update_appointment(workspace_id, appointment_id, appointment_in)
+    return await service.update_appointment(
+        workspace_id,
+        appointment_id,
+        appointment_in,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
 
 
 @router.delete("/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -177,12 +184,17 @@ async def delete_appointment(
     workspace_id: uuid.UUID,
     appointment_id: int,
     current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> None:
-    """Delete/cancel an appointment."""
+    """Delete/cancel an appointment within the caller's calendar scope."""
     service = AppointmentService(db)
-    await service.delete_appointment(workspace_id, appointment_id)
+    await service.delete_appointment(
+        workspace_id,
+        appointment_id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
 
 
 @router.post(
@@ -194,6 +206,7 @@ async def send_appointment_reminder(
     workspace_id: uuid.UUID,
     appointment_id: int,
     current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> dict[str, Any]:
@@ -211,7 +224,12 @@ async def send_appointment_reminder(
     )
     service = AppointmentService(db)
     try:
-        result = await service.send_reminder(workspace_id, appointment_id, workspace)
+        result = await service.send_reminder(
+            workspace_id,
+            appointment_id,
+            workspace,
+            visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+        )
         log.info("manual_reminder_result", success=result.get("success"))
         return result
     except HTTPException:

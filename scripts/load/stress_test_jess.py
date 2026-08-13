@@ -20,7 +20,8 @@ from typing import Any
 
 # Add backend to path
 import sys
-sys.path.insert(0, '/home/groot/aicrm/backend')
+
+sys.path.insert(0, "/home/groot/aicrm/backend")
 
 from sqlalchemy import select, text
 from app.db.session import AsyncSessionLocal
@@ -38,6 +39,7 @@ WORKSPACE_ID = "ba0e0e99-c7c9-45ec-9625-567d54d6e9c2"
 @dataclass
 class TestCase:
     """A single test case for the text agent."""
+
     name: str
     messages: list[str]  # Simulated inbound messages
     expected_behaviors: list[str]  # What we expect to see in responses
@@ -47,6 +49,7 @@ class TestCase:
 @dataclass
 class TestResult:
     """Result of a single test case."""
+
     test_case: TestCase
     responses: list[str]
     passed: bool
@@ -61,31 +64,30 @@ TEST_CASES = [
         name="Simple Hello",
         messages=["Hi"],
         expected_behaviors=["hello", "help", "assist"],  # More flexible
-        category="greetings"
+        category="greetings",
     ),
     TestCase(
         name="Question About Service",
         messages=["What do you guys do?"],
         expected_behaviors=["AI", "lead", "appointment"],  # Core value prop
-        category="greetings"
+        category="greetings",
     ),
     TestCase(
         name="Who Is This",
         messages=["Who is this?"],
         expected_behaviors=["Jess", "PRESTYJ"],  # Identity
-        category="greetings"
+        category="greetings",
     ),
-
     # Category: Qualification
     TestCase(
         name="Interested Lead",
         messages=[
             "Hi there",
             "I run a home-services company in Miami",
-            "Yeah I struggle with following up on leads quickly"
+            "Yeah I struggle with following up on leads quickly",
         ],
         expected_behaviors=["?", "lead", "follow"],  # Asks question, mentions leads
-        category="qualification"
+        category="qualification",
     ),
     TestCase(
         name="Volume Question",
@@ -93,15 +95,14 @@ TEST_CASES = [
             "How many leads can your system handle?",
         ],
         expected_behaviors=["unlimited", "handle"],  # Key capacity answer
-        category="qualification"
+        category="qualification",
     ),
     TestCase(
         name="Price Question",
         messages=["How much does it cost?"],
         expected_behaviors=["5,000", "25,000"],  # Accept comma formatting
-        category="qualification"
+        category="qualification",
     ),
-
     # Category: Booking Flow
     TestCase(
         name="Ready to Book",
@@ -110,7 +111,7 @@ TEST_CASES = [
             "Yes I'm interested in scheduling a call",
         ],
         expected_behaviors=["available", "time", "email"],  # Booking flow
-        category="booking"
+        category="booking",
     ),
     TestCase(
         name="Specific Time Request",
@@ -118,7 +119,7 @@ TEST_CASES = [
             "Can we do a call tomorrow at 2pm?",
         ],
         expected_behaviors=["available", "PM", "email"],  # Offers alternatives
-        category="booking"
+        category="booking",
     ),
     TestCase(
         name="Email Collection",
@@ -128,73 +129,70 @@ TEST_CASES = [
             "john.smith@example.com",
         ],
         expected_behaviors=["time", "PM"],  # Should use email and book
-        category="booking"
+        category="booking",
     ),
-
     # Category: Objection Handling
     TestCase(
         name="Too Expensive Objection",
         messages=["That's too expensive for me"],
         expected_behaviors=["understand", "?"],  # Acknowledges, asks question
-        category="objections"
+        category="objections",
     ),
     TestCase(
         name="Already Have a System",
         messages=["I already have a CRM and follow-up system"],
         expected_behaviors=["?", "working"],  # Asks how it's working
-        category="objections"
+        category="objections",
     ),
     TestCase(
         name="Not Interested",
         messages=["I'm not interested"],
         expected_behaviors=["understand", "reach out"],  # Graceful exit
-        category="objections"
+        category="objections",
     ),
     TestCase(
         name="Need to Think About It",
         messages=["I need to think about it"],
         expected_behaviors=["understand", "time"],  # Respects decision
-        category="objections"
+        category="objections",
     ),
-
     # Category: Edge Cases
     TestCase(
         name="Empty/Short Message",
         messages=["ok"],
         expected_behaviors=["?", "assist"],  # Asks clarifying question
-        category="edge_cases"
+        category="edge_cases",
     ),
     TestCase(
         name="Rude Response",
         messages=["Stop texting me this is spam"],
         expected_behaviors=["stop", "understand"],  # NO booking attempt
-        category="edge_cases"
+        category="edge_cases",
     ),
     TestCase(
         name="Off Topic Question",
         messages=["What's the weather like today?"],
         expected_behaviors=["home services", "lead"],  # Redirects to service
-        category="edge_cases"
+        category="edge_cases",
     ),
     TestCase(
         name="Competitor Mention",
         messages=["How are you different from Follow Up Boss or Ylopo?"],
         expected_behaviors=["AI", "90 days"],  # Differentiator
-        category="edge_cases"
+        category="edge_cases",
     ),
     TestCase(
         name="Rapid Fire Questions",
         messages=["What's the price, timeline, and guarantee?"],
         expected_behaviors=["5,000", "90"],  # Answers all three
-        category="edge_cases"
+        category="edge_cases",
     ),
     TestCase(
         name="Confusion Test",
         messages=["Wait what? I don't understand what you're selling"],
         expected_behaviors=["AI", "lead", "appointment"],  # Clear explanation
-        category="edge_cases"
+        category="edge_cases",
     ),
-
     # Category: Multi-turn Conversations
     TestCase(
         name="Full Sales Flow",
@@ -209,7 +207,7 @@ TEST_CASES = [
             "That sounds interesting. What's the investment?",
         ],
         expected_behaviors=["AI", "5,000", "appointment"],  # Key points
-        category="full_flow"
+        category="full_flow",
     ),
 ]
 
@@ -217,9 +215,7 @@ TEST_CASES = [
 async def create_mock_conversation(db, messages: list[str]) -> tuple[Conversation, Agent]:
     """Create a mock conversation with message history."""
     # Get agent
-    result = await db.execute(
-        select(Agent).where(Agent.id == uuid.UUID(AGENT_ID))
-    )
+    result = await db.execute(select(Agent).where(Agent.id == uuid.UUID(AGENT_ID)))
     agent = result.scalar_one_or_none()
     if not agent:
         raise ValueError(f"Agent {AGENT_ID} not found")
@@ -272,7 +268,7 @@ async def run_test_case(test_case: TestCase) -> TestResult:
                     responses=[],
                     passed=False,
                     notes="No OpenAI API key configured",
-                    duration_ms=0
+                    duration_ms=0,
                 )
 
             response = await generate_text_response(
@@ -319,7 +315,7 @@ async def run_test_case(test_case: TestCase) -> TestResult:
         responses=responses,
         passed=passed,
         notes="; ".join(notes_parts) if notes_parts else "OK",
-        duration_ms=duration
+        duration_ms=duration,
     )
 
 
@@ -336,7 +332,7 @@ async def run_stress_test():
     categories: dict[str, list[TestResult]] = {}
 
     for i, test_case in enumerate(TEST_CASES):
-        print(f"\n[{i+1}/{len(TEST_CASES)}] Testing: {test_case.name} ({test_case.category})")
+        print(f"\n[{i + 1}/{len(TEST_CASES)}] Testing: {test_case.name} ({test_case.category})")
         print(f"  Input: {test_case.messages[-1][:60]}...")
 
         result = await run_test_case(test_case)
@@ -362,8 +358,8 @@ async def run_stress_test():
     failed = len(results) - passed
     total_time = sum(r.duration_ms for r in results)
 
-    print(f"\nOverall: {passed}/{len(results)} passed ({100*passed/len(results):.1f}%)")
-    print(f"Total Time: {total_time/1000:.1f}s (avg: {total_time/len(results):.0f}ms per test)")
+    print(f"\nOverall: {passed}/{len(results)} passed ({100 * passed / len(results):.1f}%)")
+    print(f"Total Time: {total_time / 1000:.1f}s (avg: {total_time / len(results):.0f}ms per test)")
 
     print("\nBy Category:")
     for category, cat_results in categories.items():

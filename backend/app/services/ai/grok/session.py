@@ -38,7 +38,7 @@ class GrokVoiceAgentSession(VoiceAgentBase):
     - WebSocket connection to Grok Realtime API
     - Audio streaming and format conversion
     - Session configuration and context injection
-    - Tool calling for Cal.com booking integration
+    - Tool calling for Google Calendar booking integration
     - IVR detection and DTMF navigation
 
     Inherits from VoiceAgentBase for:
@@ -68,7 +68,7 @@ class GrokVoiceAgentSession(VoiceAgentBase):
         Args:
             api_key: xAI API key
             agent: Optional Agent model for configuration
-            enable_tools: Enable booking tools (requires Cal.com config)
+            enable_tools: Enable booking tools (requires calendar configuration)
             timezone: Timezone for date context (default: America/New_York)
         """
         super().__init__(agent, timezone)
@@ -108,7 +108,6 @@ class GrokVoiceAgentSession(VoiceAgentBase):
             agent_name=agent.name if agent else None,
             agent_id=str(agent.id) if agent else None,
             enable_tools=enable_tools,
-            calcom_event_type_id=agent.calcom_event_type_id if agent else None,
             enabled_tools=agent.enabled_tools if agent else None,
         )
 

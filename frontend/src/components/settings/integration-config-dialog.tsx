@@ -35,13 +35,7 @@ import {
   type IntegrationWithMaskedCredentials,
 } from "@/lib/api/integrations";
 import { queryKeys } from "@/lib/query-keys";
-type IntegrationType =
-  | "calcom"
-  | "telnyx"
-  | "openai"
-  | "resend"
-  | "lob"
-  | "companycam";
+type IntegrationType = "telnyx" | "openai" | "resend" | "lob" | "companycam";
 
 interface IntegrationConfig {
   name: string;
@@ -57,26 +51,6 @@ interface IntegrationConfig {
 }
 
 const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
-  calcom: {
-    name: "Cal.com",
-    description: "Connect your Cal.com account for appointment scheduling",
-    fields: [
-      {
-        key: "api_key",
-        label: "API Key",
-        placeholder: "cal_live_...",
-        description: "Find this in Cal.com Settings > Developer > API Keys",
-        required: true,
-        type: "password",
-      },
-      {
-        key: "event_type_id",
-        label: "Event Type ID",
-        placeholder: "123456",
-        description: "Default event type for bookings (optional)",
-      },
-    ],
-  },
   telnyx: {
     name: "Telnyx",
     description: "Connect Telnyx for voice calls and SMS messaging",
@@ -105,27 +79,31 @@ const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
   },
   openai: {
     name: "OpenAI API key",
-    description: "Optional fallback API-key connection for OpenAI. Use the ChatGPT subscription card for Codex OAuth sign-in.",
+    description:
+      "Optional fallback API-key connection for OpenAI. Use the ChatGPT subscription card for Codex OAuth sign-in.",
     fields: [
       {
         key: "api_key",
         label: "API Key",
         placeholder: "sk-...",
-        description: "Find this at platform.openai.com/api-keys. For subscription billing, use the ChatGPT subscription card instead.",
+        description:
+          "Find this at platform.openai.com/api-keys. For subscription billing, use the ChatGPT subscription card instead.",
         type: "password",
       },
       {
         key: "access_token",
         label: "OAuth Access Token",
         placeholder: "eyJ...",
-        description: "Advanced fallback only. Prefer the ChatGPT subscription card so tokens refresh automatically.",
+        description:
+          "Advanced fallback only. Prefer the ChatGPT subscription card so tokens refresh automatically.",
         type: "password",
       },
       {
         key: "refresh_token",
         label: "OAuth Refresh Token",
         placeholder: "rt_...",
-        description: "Advanced fallback only. Stored encrypted and refreshed automatically when possible.",
+        description:
+          "Advanced fallback only. Stored encrypted and refreshed automatically when possible.",
         type: "password",
       },
       {
@@ -221,13 +199,10 @@ function getSchema(integrationType: IntegrationType) {
   const schema = z.object(shape);
 
   if (integrationType === "openai") {
-    return schema.refine(
-      (values) => Boolean(values.api_key || values.access_token),
-      {
-        message: "Enter an API key or OAuth access token",
-        path: ["api_key"],
-      }
-    );
+    return schema.refine((values) => Boolean(values.api_key || values.access_token), {
+      message: "Enter an API key or OAuth access token",
+      path: ["api_key"],
+    });
   }
 
   return schema;
@@ -266,7 +241,7 @@ export function IntegrationConfigDialog({
         acc[field.key] = "";
         return acc;
       },
-      {} as Record<string, string>
+      {} as Record<string, string>,
     ),
   });
 
@@ -279,8 +254,8 @@ export function IntegrationConfigDialog({
             acc[field.key] = "";
             return acc;
           },
-          {} as Record<string, string>
-        )
+          {} as Record<string, string>,
+        ),
       );
     }
   }, [open, integrationType, form, config.fields]);
@@ -289,8 +264,7 @@ export function IntegrationConfigDialog({
   const effectiveTestResult = open ? testResult : null;
 
   const createMutation = useMutation({
-    mutationFn: (data: CreateIntegrationRequest) =>
-      integrationsApi.create(workspaceId!, data),
+    mutationFn: (data: CreateIntegrationRequest) => integrationsApi.create(workspaceId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.integrations(workspaceId ?? ""),
@@ -440,9 +414,7 @@ export function IntegrationConfigDialog({
                         value={(formField.value as string) ?? ""}
                       />
                     </FormControl>
-                    {field.description && (
-                      <FormDescription>{field.description}</FormDescription>
-                    )}
+                    {field.description && <FormDescription>{field.description}</FormDescription>}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -450,55 +422,47 @@ export function IntegrationConfigDialog({
             ))}
 
             <div className="rounded-lg border p-3 bg-muted/50">
-                <p className="text-sm text-muted-foreground mb-2">
-                  {existingIntegration
-                    ? "Current credentials are stored. Enter new values to update."
-                    : "Validate your key before saving."}
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleTest}
-                    disabled={isTesting}
-                  >
-                    {isTesting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Test Connection
-                  </Button>
-                  {effectiveTestResult && (
-                    <div className="flex items-center gap-1 text-sm">
-                      {effectiveTestResult.success ? (
-                        <>
-                          <CheckCircle2 className="h-4 w-4 text-success" />
-                          <span className="text-success">{effectiveTestResult.message}</span>
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-4 w-4 text-destructive" />
-                          <span className="text-destructive">{effectiveTestResult.message}</span>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
+              <p className="text-sm text-muted-foreground mb-2">
+                {existingIntegration
+                  ? "Current credentials are stored. Enter new values to update."
+                  : "Validate your key before saving."}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTest}
+                  disabled={isTesting}
+                >
+                  {isTesting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Test Connection
+                </Button>
+                {effectiveTestResult && (
+                  <div className="flex items-center gap-1 text-sm">
+                    {effectiveTestResult.success ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 text-success" />
+                        <span className="text-success">{effectiveTestResult.message}</span>
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-4 w-4 text-destructive" />
+                        <span className="text-destructive">{effectiveTestResult.message}</span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
+            </div>
 
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isSubmitting
-                  ? "Saving..."
-                  : existingIntegration
-                    ? "Update"
-                    : "Connect"}
+                {isSubmitting ? "Saving..." : existingIntegration ? "Update" : "Connect"}
               </Button>
             </DialogFooter>
           </form>

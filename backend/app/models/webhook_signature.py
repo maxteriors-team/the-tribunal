@@ -1,8 +1,8 @@
 """Durable ledger of provider webhook signatures we have already accepted.
 
-Provider webhook signatures (Cal.com's ``x-cal-signature-256``, and any other
-HMAC-over-body scheme) authenticate the *payload*, not the *delivery*: the same
-``(body, signature)`` pair stays cryptographically valid forever. Anyone who
+Provider webhook signatures from HMAC-over-body schemes authenticate the
+*payload*, not the *delivery*: the same ``(body, signature)`` pair stays
+cryptographically valid forever. Anyone who
 captures one — a proxy log, a mirrored request, a leaked APM trace — can resend
 it verbatim and it will verify.
 
@@ -51,12 +51,12 @@ class SeenWebhookSignature(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    # Short provider slug ("calcom"). Kept separate from the digest so the
+    # Short provider slug (for example, "resend"). Kept separate from the digest so the
     # ledger can be shared by every signed-webhook integration.
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
 
-    # The verbatim signature header value. Cal.com sends a 64-char SHA-256 hex
-    # digest; the column is oversized so a provider that switches to a longer
+    # The verbatim signature header value. The column is oversized so a provider
+    # that switches to a longer
     # or prefixed encoding does not need a migration. Anything reaching this
     # column has already passed HMAC verification, so it is attacker-*chosen*
     # only in the sense that it equals a digest we computed ourselves.

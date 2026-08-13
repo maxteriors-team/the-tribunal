@@ -1,8 +1,8 @@
 """Webhook contract tests.
 
 End-to-end tests that load real-shape, sanitized webhook payloads from
-``tests/contract/fixtures/`` (Telnyx voice + SMS, Cal.com bookings, Resend
-email events), sign them with a deterministic test secret, and POST them
+``tests/contract/fixtures/`` (Telnyx voice + SMS and Resend email events), sign
+them with deterministic test credentials, and POST them
 to the actual webhook router endpoints under a FastAPI test app.
 
 Each test asserts:
@@ -15,8 +15,7 @@ Each test asserts:
 
 These tests are *contract* tests: they pin the wire-format shape of each
 fixture against the router + signature-verification stack as it exists
-today. If the provider changes a field name (e.g. Cal.com renames
-``triggerEvent`` → ``trigger``), the relevant fixture should be updated
+today. If a provider changes a field name, the relevant fixture should be updated
 to match production traffic and these tests will continue to enforce
 that the router parses it correctly.
 """

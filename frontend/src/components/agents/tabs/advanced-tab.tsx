@@ -45,39 +45,6 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
     <>
       <TextSettingsSection control={control} />
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Calendar Integration</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <FormField
-            control={control}
-            name="calcomEventTypeId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Cal.com Event Type ID</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    placeholder="Enter Event Type ID"
-                    value={field.value ?? ""}
-                    onChange={(e) => {
-                      const value = e.target.value ? parseInt(e.target.value) : null;
-                      field.onChange(value);
-                    }}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Optional: Connect to Cal.com for appointment booking. Used directly when the
-                  assignment strategy below is &ldquo;Single calendar&rdquo;.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </CardContent>
-      </Card>
-
       <StaffRoutingSection control={control} workspaceId={agent.workspace_id} agentId={agent.id} />
 
       <RemindersSection control={control} />

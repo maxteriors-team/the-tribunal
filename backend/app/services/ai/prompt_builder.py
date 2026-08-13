@@ -42,7 +42,7 @@ class VoicePromptBuilder:
     - Realism cues for Grok voice expressiveness
     - Search tools guidance for web/X search
     - Telephony behavior guidance
-    - Cal.com booking instructions
+    - Google Calendar booking instructions
 
     Attributes:
         agent: Optional Agent model for configuration
@@ -396,7 +396,7 @@ IMPORTANT: You are on a phone call. When the call connects:
 - Speak clearly and conversationally as if on a real phone call"""
 
     def get_booking_instructions(self) -> str:
-        """Get Cal.com booking instructions with current date context.
+        """Get Google Calendar booking instructions with current date context.
 
         Returns:
             Booking instructions string with embedded date context

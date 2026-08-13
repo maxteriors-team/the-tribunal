@@ -2,8 +2,8 @@
 
 Every route here acts on the caller's *active* workspace (their default
 membership) rather than an explicit ``workspace_id``, and the actions are
-privileged: creating the reactivation agent, overwriting the workspace's Cal.com
-credential, and purchasing a Telnyx number on the owner's account. They are
+privileged: creating the reactivation agent and purchasing a Telnyx number on
+the owner's account. They are
 therefore gated on ``workspace:manage`` (owner/admin tier) via
 :data:`~app.api.deps.CanManageActiveWorkspace`, which authorizes the caller's
 role **in the resolved workspace**. Authentication alone is not enough: any
@@ -16,35 +16,20 @@ parameters to these routes and leaves the published OpenAPI contract unchanged.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Form, HTTPException, UploadFile, status
 
 from app.api.deps import DB, CanManageActiveWorkspace, CurrentUser
-from app.schemas.onboarding import (
-    LaunchCampaignResponse,
-    OnboardRequest,
-    OnboardResponse,
-    ParseCalcomUrlRequest,
-    ParseCalcomUrlResponse,
-    VerifyCalcomResponse,
-)
-from app.services.onboarding.credentials import get_workspace_calcom_api_key
+from app.schemas.onboarding import LaunchCampaignResponse, OnboardRequest, OnboardResponse
 from app.services.onboarding.exceptions import OnboardingServiceError
-from app.services.onboarding.external_checks import (
-    resolve_calcom_event_type_id,
-    verify_calcom_api_key,
-)
 from app.services.onboarding.route_responses import (
     launch_campaign_response,
     onboard_response,
-    parse_calcom_url_response,
     raise_onboarding_http_error,
-    verify_calcom_response,
 )
 from app.services.onboarding.workspace_setup import (
     CampaignInput,
     OnboardingInput,
     complete_onboarding,
-    get_managed_user_workspace,
     launch_campaign_from_csv,
 )
 
@@ -67,11 +52,7 @@ async def onboard(
         result = await complete_onboarding(
             db=db,
             current_user_id=current_user.id,
-            request=OnboardingInput(
-                calcom_api_key=request.calcom_api_key,
-                calcom_event_type_id=request.calcom_event_type_id,
-                area_code=request.area_code,
-            ),
+            request=OnboardingInput(area_code=request.area_code),
         )
     except OnboardingServiceError as exc:
         raise_onboarding_http_error(exc)
@@ -119,44 +100,3 @@ async def create_campaign(
     except OnboardingServiceError as exc:
         raise_onboarding_http_error(exc)
     return launch_campaign_response(result)
-
-
-@router.post("/parse-calcom-url", response_model=ParseCalcomUrlResponse)
-async def parse_calcom_url(
-    request: ParseCalcomUrlRequest,
-    current_user: CurrentUser,
-    db: DB,
-    _gate: CanManageActiveWorkspace,
-) -> ParseCalcomUrlResponse:
-    """Parse a Cal.com booking URL and resolve the event_type_id."""
-    try:
-        workspace = await get_managed_user_workspace(current_user.id, db)
-        api_key = await get_workspace_calcom_api_key(workspace.id, db)
-        if api_key is None:
-            api_key = request.api_key
-        if not api_key:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    "No Cal.com API key found for this workspace. "
-                    "Provide one via the api_key field or connect Cal.com in Settings first."
-                ),
-            )
-        result = await resolve_calcom_event_type_id(url=request.url, api_key=api_key)
-    except OnboardingServiceError as exc:
-        raise_onboarding_http_error(exc)
-    return parse_calcom_url_response(result)
-
-
-@router.get("/verify-calcom", response_model=VerifyCalcomResponse)
-async def verify_calcom(
-    current_user: CurrentUser,
-    _gate: CanManageActiveWorkspace,
-    api_key: str = Query(..., min_length=1, description="Cal.com API key to verify"),
-) -> VerifyCalcomResponse:
-    """Verify a Cal.com API key by calling the /me endpoint."""
-    try:
-        result = await verify_calcom_api_key(api_key)
-    except OnboardingServiceError as exc:
-        raise_onboarding_http_error(exc)
-    return verify_calcom_response(result)

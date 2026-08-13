@@ -9,16 +9,20 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.encryption import hash_phone
 from app.db.session import AsyncSessionLocal, engine
 from app.models.agent import Agent
 from app.models.appointment import Appointment, AppointmentStatus
+from app.models.automation import Automation
+from app.models.automation_event import AutomationEvent
+from app.models.automation_execution import AutomationExecution
 from app.models.bookable_staff import BookableStaff
 from app.models.contact import Contact
 from app.models.user import User
@@ -28,6 +32,8 @@ from app.services.appointments.booking_finalizer import (
     deliver_booking_notifications,
     finalize_booking,
 )
+from app.services.appointments.lifecycle_sms import build_confirmation_body
+from app.services.google_calendar import GoogleCalendarError, GoogleEvent
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
@@ -214,7 +220,8 @@ class TestRepAssignment:
             await _workspace(db, workspace_id)
             contact = await _contact(db, workspace_id)
             agent = await _agent(db, workspace_id, strategy="round_robin")
-            staff = await _staff(db, workspace_id, agent.id)
+            owner = await _owner(db, workspace_id)
+            staff = await _staff(db, workspace_id, agent.id, user_id=owner.id)
 
             appointment = await finalize_booking(
                 db,
@@ -311,6 +318,224 @@ class TestRepAssignment:
             )
             assert appointment.id is not None
             assert appointment.bookable_staff_id is None
+
+
+class TestFunnelFinalization:
+    async def test_booking_moves_crm_emits_event_and_stops_only_acquisition_funnel(
+        self, workspace_id
+    ) -> None:
+        async with AsyncSessionLocal() as db:
+            workspace = await _workspace(db, workspace_id)
+            workspace.settings = {"auto_pipeline": {"enabled": True}}
+            contact = await _contact(db, workspace_id)
+            acquisition = Automation(
+                workspace_id=workspace_id,
+                name="Acquisition funnel",
+                trigger_type="lead_created",
+                trigger_config={"funnel_id": "acquisition:test"},
+                actions=[],
+                is_active=True,
+            )
+            unrelated = Automation(
+                workspace_id=workspace_id,
+                name="Appointment reminder",
+                trigger_type="appointment_booked",
+                trigger_config={},
+                actions=[],
+                is_active=True,
+            )
+            db.add_all([acquisition, unrelated])
+            await db.flush()
+            acquisition_run = AutomationExecution(
+                automation_id=acquisition.id,
+                contact_id=contact.id,
+                status="scheduled",
+                context={},
+            )
+            unrelated_run = AutomationExecution(
+                automation_id=unrelated.id,
+                contact_id=contact.id,
+                status="scheduled",
+                context={},
+            )
+            db.add_all([acquisition_run, unrelated_run])
+            await db.commit()
+
+            appointment = await finalize_booking(
+                db,
+                workspace_id=workspace_id,
+                contact=contact,
+                agent=None,
+                scheduled_at=datetime(2099, 6, 10, 14, 0, tzinfo=NEW_YORK),
+                duration_minutes=30,
+                service_type="phone_call",
+                notify=False,
+            )
+
+            await db.refresh(contact)
+            await db.refresh(acquisition_run)
+            await db.refresh(unrelated_run)
+            assert appointment.status == AppointmentStatus.SCHEDULED
+            assert contact.last_appointment_status == "scheduled"
+            assert acquisition_run.status == "completed"
+            assert unrelated_run.status == "scheduled"
+            event = await db.scalar(
+                select(AutomationEvent).where(
+                    AutomationEvent.workspace_id == workspace_id,
+                    AutomationEvent.event_type == "appointment_booked",
+                    AutomationEvent.contact_id == contact.id,
+                )
+            )
+            assert event is not None
+            assert event.payload["appointment_id"] == appointment.id
+            assert event.payload["service_type"] == "phone_call"
+            assert (
+                await db.scalar(
+                    select(func.count())
+                    .select_from(Appointment)
+                    .where(
+                        Appointment.workspace_id == workspace_id,
+                        Appointment.contact_id == contact.id,
+                    )
+                )
+                == 1
+            )
+
+
+class TestCallTypeContract:
+    async def test_video_sync_persists_real_meet_link(self, workspace_id, monkeypatch) -> None:
+        async with AsyncSessionLocal() as db:
+            workspace = await _workspace(db, workspace_id)
+            contact = await _contact(db, workspace_id)
+            agent = await _agent(db, workspace_id)
+            owner = await _owner(db, workspace_id)
+            staff = await _staff(db, workspace_id, agent.id, user_id=owner.id)
+            appointment = Appointment(
+                workspace_id=workspace_id,
+                contact_id=contact.id,
+                scheduled_at=datetime(2099, 6, 10, 14, 0, tzinfo=NEW_YORK),
+                duration_minutes=30,
+                status="scheduled",
+                service_type="video_call",
+            )
+            db.add(appointment)
+            await db.commit()
+            create = AsyncMock(
+                return_value=GoogleEvent(
+                    event_id="event-1",
+                    html_link="https://calendar.google.com/event-1",
+                    meet_link="https://meet.google.com/abc-defg-hij",
+                )
+            )
+            monkeypatch.setattr("app.services.google_calendar.create_event", create)
+
+            await booking_finalizer._sync_google_calendar(
+                db,
+                appointment=appointment,
+                contact=contact,
+                workspace=workspace,
+                staff=staff,
+                log=booking_finalizer.logger,
+            )
+
+            assert appointment.meeting_url == "https://meet.google.com/abc-defg-hij"
+            assert appointment.sync_status == "synced"
+            assert create.await_args.kwargs["conference"] is True
+
+    async def test_phone_call_never_requests_conference_or_meet(
+        self, workspace_id, monkeypatch
+    ) -> None:
+        async with AsyncSessionLocal() as db:
+            workspace = await _workspace(db, workspace_id)
+            contact = await _contact(db, workspace_id)
+            agent = await _agent(db, workspace_id)
+            owner = await _owner(db, workspace_id)
+            staff = await _staff(db, workspace_id, agent.id, user_id=owner.id)
+            appointment = Appointment(
+                workspace_id=workspace_id,
+                contact_id=contact.id,
+                scheduled_at=datetime(2099, 6, 10, 14, 0, tzinfo=NEW_YORK),
+                duration_minutes=30,
+                status="scheduled",
+                service_type="phone_call",
+            )
+            db.add(appointment)
+            await db.commit()
+            create = AsyncMock(
+                return_value=GoogleEvent(
+                    event_id="event-phone",
+                    html_link="https://calendar.google.com/event-phone",
+                    meet_link="https://meet.google.com/should-not-persist",
+                )
+            )
+            monkeypatch.setattr("app.services.google_calendar.create_event", create)
+
+            await booking_finalizer._sync_google_calendar(
+                db,
+                appointment=appointment,
+                contact=contact,
+                workspace=workspace,
+                staff=staff,
+                log=booking_finalizer.logger,
+            )
+
+            assert create.await_args.kwargs["conference"] is False
+            assert create.await_args.kwargs["location"] == f"Phone call: {contact.phone_number}"
+            assert appointment.meeting_url is None
+
+    async def test_disconnected_video_records_not_connected_without_fake_url(
+        self, workspace_id, monkeypatch
+    ) -> None:
+        async with AsyncSessionLocal() as db:
+            workspace = await _workspace(db, workspace_id)
+            contact = await _contact(db, workspace_id)
+            agent = await _agent(db, workspace_id)
+            owner = await _owner(db, workspace_id)
+            staff = await _staff(db, workspace_id, agent.id, user_id=owner.id)
+            appointment = Appointment(
+                workspace_id=workspace_id,
+                contact_id=contact.id,
+                scheduled_at=datetime(2099, 6, 10, 14, 0, tzinfo=NEW_YORK),
+                duration_minutes=30,
+                status="scheduled",
+                service_type="video_call",
+            )
+            db.add(appointment)
+            await db.commit()
+            monkeypatch.setattr(
+                "app.services.google_calendar.create_event",
+                AsyncMock(side_effect=GoogleCalendarError("Google Calendar is not connected")),
+            )
+
+            await booking_finalizer._sync_google_calendar(
+                db,
+                appointment=appointment,
+                contact=contact,
+                workspace=workspace,
+                staff=staff,
+                log=booking_finalizer.logger,
+            )
+
+            assert appointment.sync_status == "not_connected"
+            assert appointment.meeting_url is None
+            assert "not connected" in (appointment.sync_error or "").lower()
+
+    async def test_phone_and_failed_video_confirmation_copy_is_truthful(self) -> None:
+        contact = Contact(first_name="Dana", phone_number="+15125550123")
+        phone = Appointment(
+            scheduled_at=datetime(2099, 6, 10, 14, 0, tzinfo=UTC),
+            service_type="phone_call",
+        )
+        failed_video = Appointment(
+            scheduled_at=datetime(2099, 6, 10, 14, 0, tzinfo=UTC),
+            service_type="video_call",
+            sync_status="failed",
+        )
+
+        assert "+15125550123" in build_confirmation_body(contact, phone, None, None)
+        failed_copy = build_confirmation_body(contact, failed_video, None, None)
+        assert "follow up with the video link" in failed_copy
+        assert "meet.google.com" not in failed_copy
 
 
 class TestNotifications:

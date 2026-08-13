@@ -400,16 +400,12 @@ async def test_onboarding_is_denied_to_non_admin_roles() -> None:
     These routes take no ``workspace_id``: they act on the caller's *default*
     workspace, and any member can move their own default with
     ``POST /workspaces/{id}/set-default``. Authentication alone therefore let a
-    field technician create an agent in, and overwrite the Cal.com credential of,
-    an employer's workspace — and spend the owner's money provisioning a Telnyx
-    number. Every route must be gated on ``workspace:manage``.
+    field technician create an agent in an employer's workspace and spend the
+    owner's money provisioning a Telnyx number. Every route must be gated on
+    ``workspace:manage``.
     """
     csv_upload = {"file": ("leads.csv", b"first_name,phone\nDana,+15125550123\n", "text/csv")}
-    onboard_body = {
-        "calcom_api_key": "cal_live_injected",
-        "calcom_event_type_id": "12345",
-        "area_code": "512",
-    }
+    onboard_body = {"area_code": "512"}
     try:
         for role in ("technician", "member", "sales_rep", "manager", "dispatcher"):
             async with _client_as(role) as client:
@@ -419,15 +415,6 @@ async def test_onboarding_is_denied_to_non_admin_roles() -> None:
                 assert (
                     await client.post("/api/v1/onboarding/campaigns", files=csv_upload)
                 ).status_code == 403, role
-                assert (
-                    await client.post(
-                        "/api/v1/onboarding/parse-calcom-url",
-                        json={"url": "https://cal.com/dana/intro"},
-                    )
-                ).status_code == 403, role
-                assert (
-                    await client.get("/api/v1/onboarding/verify-calcom?api_key=cal_live_injected")
-                ).status_code == 403, role
         # …and an admin still gets past the gate (the body then trips the mocked DB).
         async with _client_as("admin") as client:
             assert (
@@ -435,12 +422,6 @@ async def test_onboarding_is_denied_to_non_admin_roles() -> None:
             ).status_code != 403
             assert (
                 await client.post("/api/v1/onboarding/campaigns", files=csv_upload)
-            ).status_code != 403
-            assert (
-                await client.post(
-                    "/api/v1/onboarding/parse-calcom-url",
-                    json={"url": "https://cal.com/dana/intro"},
-                )
             ).status_code != 403
     finally:
         _clear_overrides()

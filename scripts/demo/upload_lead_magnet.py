@@ -3,7 +3,8 @@
 
 import asyncio
 import sys
-sys.path.insert(0, '/home/groot/aicrm/backend')
+
+sys.path.insert(0, "/home/groot/aicrm/backend")
 
 from sqlalchemy import select
 from app.db.session import AsyncSessionLocal
@@ -20,7 +21,7 @@ async def upload_lead_magnet():
         result = await db.execute(
             select(LeadMagnet).where(
                 LeadMagnet.workspace_id == WORKSPACE_ID,
-                LeadMagnet.name == "Dead Lead Reactivation Scripts"
+                LeadMagnet.name == "Dead Lead Reactivation Scripts",
             )
         )
         existing = result.scalar_one_or_none()

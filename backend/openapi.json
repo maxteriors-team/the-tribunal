@@ -2073,17 +2073,6 @@
             "title": "Auto Evaluate",
             "type": "boolean"
           },
-          "calcom_event_type_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Event Type Id"
-          },
           "channel_mode": {
             "default": "both",
             "title": "Channel Mode",
@@ -2402,17 +2391,6 @@
             "title": "Auto Evaluate",
             "type": "boolean"
           },
-          "calcom_event_type_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Event Type Id"
-          },
           "channel_mode": {
             "title": "Channel Mode",
             "type": "string"
@@ -2725,7 +2703,6 @@
           "temperature",
           "text_response_delay_ms",
           "text_max_context_messages",
-          "calcom_event_type_id",
           "enabled_tools",
           "tool_settings",
           "is_active",
@@ -2806,17 +2783,6 @@
               }
             ],
             "title": "Auto Evaluate"
-          },
-          "calcom_event_type_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Event Type Id"
           },
           "channel_mode": {
             "anyOf": [
@@ -3590,6 +3556,18 @@
             ],
             "title": "Agent Id"
           },
+          "bookable_staff_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bookable Staff Id"
+          },
           "business_location_id": {
             "anyOf": [
               {
@@ -3601,39 +3579,6 @@
               }
             ],
             "title": "Business Location Id"
-          },
-          "calcom_booking_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Booking Id"
-          },
-          "calcom_booking_uid": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Booking Uid"
-          },
-          "calcom_event_type_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Event Type Id"
           },
           "campaign_id": {
             "anyOf": [
@@ -3673,6 +3618,28 @@
             "title": "Duration Minutes",
             "type": "integer"
           },
+          "google_calendar_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Calendar Event Id"
+          },
+          "google_calendar_event_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Calendar Event Url"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -3688,6 +3655,17 @@
               }
             ],
             "title": "Last Synced At"
+          },
+          "meeting_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Url"
           },
           "message_id": {
             "anyOf": [
@@ -3786,9 +3764,8 @@
           "agent_id",
           "scheduled_at",
           "status",
-          "calcom_booking_uid",
-          "calcom_booking_id",
-          "calcom_event_type_id",
+          "google_calendar_event_id",
+          "google_calendar_event_url",
           "sync_status",
           "last_synced_at",
           "created_at",
@@ -4908,7 +4885,7 @@
           },
           "trigger_type": {
             "default": "event",
-            "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|backlog_below_threshold|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|lead_created|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
+            "pattern": "^(event|schedule|condition|booking_created|no_show|contact_tagged|never_booked|backlog_below_threshold|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|lead_created|lead_qualified|appointment_booked|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
             "title": "Trigger Type",
             "type": "string"
           }
@@ -5098,7 +5075,7 @@
           "trigger_type": {
             "anyOf": [
               {
-                "pattern": "^(event|schedule|condition|appointment_booked|booking_created|no_show|contact_tagged|never_booked|backlog_below_threshold|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|lead_created|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
+                "pattern": "^(event|schedule|condition|booking_created|no_show|contact_tagged|never_booked|backlog_below_threshold|review_received|review_request_response|opportunity_created|deal_stage_changed|missed_call|roleplay_completed|knowledge_document_uploaded|lead_created|lead_qualified|appointment_booked|quote_sent|quote_approved|quote_declined|quote_converted|invoice_sent|invoice_paid|job_scheduled|job_completed)$",
                 "type": "string"
               },
               {
@@ -5745,17 +5722,6 @@
       "BookableStaffCreate": {
         "description": "Schema for creating a bookable staff member.",
         "properties": {
-          "calcom_event_type_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Event Type Id"
-          },
           "email": {
             "anyOf": [
               {
@@ -5883,17 +5849,6 @@
             "title": "Assignment Count",
             "type": "integer"
           },
-          "calcom_event_type_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Event Type Id"
-          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5975,7 +5930,6 @@
           "name",
           "email",
           "user_id",
-          "calcom_event_type_id",
           "skills",
           "is_active",
           "priority",
@@ -5990,17 +5944,6 @@
       "BookableStaffUpdate": {
         "description": "Schema for updating a bookable staff member.",
         "properties": {
-          "calcom_event_type_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calcom Event Type Id"
-          },
           "email": {
             "anyOf": [
               {
@@ -17750,6 +17693,89 @@
         "title": "GeneratedValueStackItem",
         "type": "object"
       },
+      "GoogleCalendarAuthorizeRequest": {
+        "properties": {
+          "return_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Url"
+          }
+        },
+        "title": "GoogleCalendarAuthorizeRequest",
+        "type": "object"
+      },
+      "GoogleCalendarAuthorizeResponse": {
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_url"
+        ],
+        "title": "GoogleCalendarAuthorizeResponse",
+        "type": "object"
+      },
+      "GoogleCalendarStatus": {
+        "properties": {
+          "calendar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Id"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "connected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected At"
+          },
+          "google_email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Email"
+          }
+        },
+        "required": [
+          "configured",
+          "connected"
+        ],
+        "title": "GoogleCalendarStatus",
+        "type": "object"
+      },
       "GuaranteeProgressResponse": {
         "description": "Guarantee progress response.",
         "properties": {
@@ -18823,7 +18849,6 @@
           },
           "integration_type": {
             "enum": [
-              "calcom",
               "telnyx",
               "openai",
               "resend",
@@ -29514,23 +29539,8 @@
             ],
             "description": "Optional 3-digit US area code for phone number provisioning",
             "title": "Area Code"
-          },
-          "calcom_api_key": {
-            "description": "Cal.com API key",
-            "minLength": 1,
-            "title": "Calcom Api Key",
-            "type": "string"
-          },
-          "calcom_event_type_id": {
-            "description": "Cal.com event type ID",
-            "title": "Calcom Event Type Id",
-            "type": "integer"
           }
         },
-        "required": [
-          "calcom_api_key",
-          "calcom_event_type_id"
-        ],
         "title": "OnboardRequest",
         "type": "object"
       },
@@ -29542,8 +29552,8 @@
             "title": "Agent Id",
             "type": "string"
           },
-          "calcom_connected": {
-            "title": "Calcom Connected",
+          "google_calendar_connected": {
+            "title": "Google Calendar Connected",
             "type": "boolean"
           },
           "message": {
@@ -29590,7 +29600,7 @@
           "phone_number_id",
           "phone_number",
           "phone_provisioned",
-          "calcom_connected",
+          "google_calendar_connected",
           "message"
         ],
         "title": "OnboardResponse",
@@ -32924,59 +32934,6 @@
           "text"
         ],
         "title": "ParagraphBlockSchema",
-        "type": "object"
-      },
-      "ParseCalcomUrlRequest": {
-        "description": "Request body for the parse-calcom-url endpoint.",
-        "properties": {
-          "api_key": {
-            "anyOf": [
-              {
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Cal.com API key — only needed when no Cal.com integration exists yet",
-            "title": "Api Key"
-          },
-          "url": {
-            "description": "Cal.com booking URL, e.g. https://cal.com/johndoe/30min",
-            "minLength": 1,
-            "title": "Url",
-            "type": "string"
-          }
-        },
-        "required": [
-          "url"
-        ],
-        "title": "ParseCalcomUrlRequest",
-        "type": "object"
-      },
-      "ParseCalcomUrlResponse": {
-        "description": "Parsed Cal.com event type info.",
-        "properties": {
-          "event_type_id": {
-            "title": "Event Type Id",
-            "type": "integer"
-          },
-          "slug": {
-            "title": "Slug",
-            "type": "string"
-          },
-          "username": {
-            "title": "Username",
-            "type": "string"
-          }
-        },
-        "required": [
-          "event_type_id",
-          "slug",
-          "username"
-        ],
-        "title": "ParseCalcomUrlResponse",
         "type": "object"
       },
       "PaymentMilestoneSchema": {
@@ -48375,9 +48332,30 @@
             ],
             "title": "Full Name"
           },
+          "google_calendar_connected": {
+            "default": false,
+            "title": "Google Calendar Connected",
+            "type": "boolean"
+          },
+          "google_calendar_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Calendar Email"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "is_bookable": {
+            "default": false,
+            "title": "Is Bookable",
+            "type": "boolean"
           },
           "role": {
             "title": "Role",
@@ -51126,32 +51104,6 @@
         "title": "VariantAnalytics",
         "type": "object"
       },
-      "VerifyCalcomResponse": {
-        "description": "Result of verifying a Cal.com API key.",
-        "properties": {
-          "username": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Username"
-          },
-          "valid": {
-            "title": "Valid",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "valid",
-          "username"
-        ],
-        "title": "VerifyCalcomResponse",
-        "type": "object"
-      },
       "VersionComparisonItem": {
         "description": "Schema for individual version comparison stats.",
         "properties": {
@@ -53400,7 +53352,7 @@
     }
   },
   "info": {
-    "description": "AI-powered CRM with voice agents, SMS campaigns, and Cal.com integration",
+    "description": "AI-powered CRM with voice agents, SMS campaigns, and Google Calendar integration",
     "title": "AI CRM API",
     "version": "0.1.0"
   },
@@ -53834,6 +53786,97 @@
         ]
       }
     },
+    "/api/v1/integrations/google-calendar": {
+      "delete": {
+        "operationId": "disconnect_api_v1_integrations_google_calendar_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Disconnect",
+        "tags": [
+          "Google Calendar"
+        ]
+      }
+    },
+    "/api/v1/integrations/google-calendar/authorize": {
+      "post": {
+        "operationId": "authorize_api_v1_integrations_google_calendar_authorize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleCalendarAuthorizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleCalendarAuthorizeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Authorize",
+        "tags": [
+          "Google Calendar"
+        ]
+      }
+    },
+    "/api/v1/integrations/google-calendar/status": {
+      "get": {
+        "operationId": "connection_status_api_v1_integrations_google_calendar_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleCalendarStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Connection Status",
+        "tags": [
+          "Google Calendar"
+        ]
+      }
+    },
     "/api/v1/integrations/openai/oauth/callback": {
       "get": {
         "description": "Hosted OAuth callback for custom OpenAI OAuth clients/redirect URIs.",
@@ -54070,104 +54113,6 @@
           }
         ],
         "summary": "Onboard",
-        "tags": [
-          "Onboarding"
-        ]
-      }
-    },
-    "/api/v1/onboarding/parse-calcom-url": {
-      "post": {
-        "description": "Parse a Cal.com booking URL and resolve the event_type_id.",
-        "operationId": "parse_calcom_url_api_v1_onboarding_parse_calcom_url_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ParseCalcomUrlRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ParseCalcomUrlResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Parse Calcom Url",
-        "tags": [
-          "Onboarding"
-        ]
-      }
-    },
-    "/api/v1/onboarding/verify-calcom": {
-      "get": {
-        "description": "Verify a Cal.com API key by calling the /me endpoint.",
-        "operationId": "verify_calcom_api_v1_onboarding_verify_calcom_get",
-        "parameters": [
-          {
-            "description": "Cal.com API key to verify",
-            "in": "query",
-            "name": "api_key",
-            "required": true,
-            "schema": {
-              "description": "Cal.com API key to verify",
-              "minLength": 1,
-              "title": "Api Key",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VerifyCalcomResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Verify Calcom",
         "tags": [
           "Onboarding"
         ]
@@ -61366,7 +61311,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/appointments/{appointment_id}": {
       "delete": {
-        "description": "Delete/cancel an appointment.",
+        "description": "Delete/cancel an appointment within the caller's calendar scope.",
         "operationId": "delete_appointment_api_v1_workspaces__workspace_id__appointments__appointment_id__delete",
         "parameters": [
           {
@@ -61471,7 +61416,7 @@
         ]
       },
       "put": {
-        "description": "Update an appointment.",
+        "description": "Update an appointment within the caller's calendar scope.",
         "operationId": "update_appointment_api_v1_workspaces__workspace_id__appointments__appointment_id__put",
         "parameters": [
           {
@@ -91847,32 +91792,6 @@
         "tags": [
           "Health",
           "Health"
-        ]
-      }
-    },
-    "/webhooks/calcom/booking": {
-      "post": {
-        "description": "Handle Cal.com booking events.\n\nCal.com sends webhooks for:\n- ``BOOKING_CREATED``: New booking created\n- ``BOOKING_RESCHEDULED``: Booking rescheduled\n- ``BOOKING_CANCELLED``: Booking cancelled\n- ``MEETING_ENDED``: Meeting completed (or marked no-show)\n\nEvery delivery passes two gates before a single side effect runs:\nsignature verification, then the durable replay ledger. Both fail closed.",
-        "operationId": "calcom_booking_webhook_webhooks_calcom_booking_post",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Calcom Booking Webhook Webhooks Calcom Booking Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Calcom Booking Webhook",
-        "tags": [
-          "webhooks"
         ]
       }
     },

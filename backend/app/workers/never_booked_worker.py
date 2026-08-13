@@ -23,7 +23,6 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.agent import Agent
 from app.models.contact import Contact
@@ -241,29 +240,9 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
         return message
 
     def _build_booking_link(self, contact: Contact, agent: Agent) -> str:
-        """Generate a Cal.com booking URL if agent has an event type configured."""
-        if not agent.calcom_event_type_id or not settings.calcom_api_key:
-            return ""
-        try:
-            from app.services.calendar.calcom import CalComService
-
-            calcom = CalComService(settings.calcom_api_key)
-            contact_name = (
-                " ".join(filter(None, [contact.first_name, contact.last_name]))
-                or contact.first_name
-            )
-            return calcom.generate_booking_url(
-                event_type_id=agent.calcom_event_type_id,
-                contact_email=contact.email or "",
-                contact_name=contact_name,
-                contact_phone=contact.phone_number,
-            )
-        except Exception:
-            self.logger.warning(
-                "Could not generate booking link",
-                agent_id=str(agent.id),
-            )
-            return ""
+        """Public booking links are not part of direct Google Calendar booking."""
+        del contact, agent
+        return ""
 
     async def _resolve_from_number(
         self,

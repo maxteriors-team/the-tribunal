@@ -148,7 +148,7 @@ class GrokSessionConfigBuilder:
         """Configure tools for the session.
 
         Args:
-            enable_booking: Enable Cal.com booking tools
+            enable_booking: Enable Google Calendar booking tools
             ivr_detector_active: Whether IVR detector is active (auto-enables DTMF)
 
         Returns:
@@ -174,7 +174,7 @@ class GrokSessionConfigBuilder:
             dtmf_reason = "ivr_detector_active" if ivr_detector_active else "explicit_config"
             self._logger.info("grok_dtmf_tool_enabled", reason=dtmf_reason)
 
-        # Add Cal.com booking tools if enabled
+        # Add Google Calendar booking tools if enabled
         if enable_booking:
             booking_tools = get_booking_tools(self._timezone)
             self._tools.extend(booking_tools)

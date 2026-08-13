@@ -43,7 +43,7 @@ class AppointmentStatus(StrEnum):
 
 
 class Appointment(Base):
-    """Booked appointment with Cal.com sync."""
+    """CRM appointment optionally mirrored to an assigned Google Calendar."""
 
     __tablename__ = "appointments"
     __table_args__ = (
@@ -140,12 +140,13 @@ class Appointment(Base):
     service_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Cal.com sync
-    calcom_booking_uid: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, unique=True, index=True
+    # External Google Calendar copy. The CRM row remains the source of truth and
+    # is always created, even when a rep has not connected Google.
+    google_calendar_event_id: Mapped[str | None] = mapped_column(
+        String(1024), nullable=True, index=True
     )
-    calcom_booking_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    calcom_event_type_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    google_calendar_event_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    meeting_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     sync_status: Mapped[str] = mapped_column(String(50), default="pending", nullable=False)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)

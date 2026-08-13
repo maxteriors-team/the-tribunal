@@ -4,10 +4,9 @@ Extracts the duplicated booking workflow from VoiceToolExecutor and
 TextToolExecutor into a single base class. Subclasses inject
 channel-specific behavior via hook method overrides.
 
-Availability and booking are self-contained: they come from the workspace's
-business hours minus existing CRM appointments (see ``BookingService``), with
-no external calendar. Multi-staff round-robin/skill routing still applies to
-assign a staff member to the appointment.
+Availability starts with workspace business hours and existing CRM appointments,
+then subtracts conflicts from the assigned rep's connected Google Calendar.
+Multi-staff round-robin/skill routing decides which rep/calendar is checked.
 
 Usage:
     class MyExecutor(BaseToolExecutor):
@@ -16,6 +15,7 @@ Usage:
 """
 
 import uuid
+from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -45,8 +45,9 @@ class BaseToolExecutor:
         self.timezone = timezone
         self.log = logger.bind(service="base_tool_executor")
         # Staff member chosen by round-robin / skill-based routing for the most
-        # recent booking attempt (None when the single-event-type path is used).
+        # recent booking attempt.
         self.assigned_staff: dict[str, Any] | None = None
+        self._booked_appointment: Any | None = None
 
     # ── Config validation ───────────────────────────────────────────
 
@@ -74,11 +75,8 @@ class BaseToolExecutor:
         """Assign a staff member for this booking attempt.
 
         Every agent selects from its own pool plus workspace-level Team resources.
-        A single-strategy agent round-robins that pool; with none configured the
-        resolver returns ``None`` and booking keeps the established agent-default
-        path. A selected row is
-        recorded in ``self.assigned_staff`` and later written to
-        ``appointment.bookable_staff_id``.
+        A selected login-backed row determines whose Google Calendar is checked
+        and receives the confirmed event; its id is persisted on the appointment.
 
         ``record`` controls whether the selection consumes a round-robin turn.
         Bookings record (default); availability checks pass ``record=False`` so
@@ -136,6 +134,7 @@ class BaseToolExecutor:
         start_date_str: str,
         end_date_str: str | None,
         required_skill: str | None = None,
+        duration_minutes: int = 30,
     ) -> dict[str, Any]:
         """Check local availability. Delegates formatting to hooks."""
         # Peek only: an availability check must not consume a round-robin turn.
@@ -147,24 +146,30 @@ class BaseToolExecutor:
                 start_date_str=start_date_str,
                 end_date_str=end_date_str,
                 max_slots=self.max_slots,
+                meeting_minutes=duration_minutes,
             )
 
             if not result.success:
                 return {"success": False, "error": result.error or "Unknown error"}
 
-            if not result.slots:
+            slots = await self._remove_google_calendar_conflicts(
+                result.slots,
+                duration_minutes=duration_minutes,
+            )
+
+            if not slots:
                 return {
                     "success": True,
                     "available": False,
                     "message": f"No available slots on {start_date_str}",
                 }
 
-            return self.format_availability_result(result.slots, start_date_str, end_date_str)
+            return self.format_availability_result(slots, start_date_str, end_date_str)
 
         finally:
             await booking_service.close()
 
-    async def execute_book_appointment(
+    async def execute_book_appointment(  # noqa: PLR0911
         self,
         date_str: str,
         time_str: str,
@@ -172,6 +177,7 @@ class BaseToolExecutor:
         duration_minutes: int = 30,
         notes: str | None = None,
         required_skill: str | None = None,
+        service_type: str | None = None,
     ) -> dict[str, Any]:
         """Book an appointment locally. Delegates formatting/persistence to hooks.
 
@@ -192,7 +198,7 @@ class BaseToolExecutor:
             email=email,
             duration_minutes=duration_minutes,
             tz=self._get_timezone(),
-            service_type=self.get_service_type(),
+            service_type=service_type or self.get_service_type(),
             contact_address=self.get_contact_address(),
         )
         if not validation.valid:
@@ -212,6 +218,38 @@ class BaseToolExecutor:
             )
 
         await self._resolve_assigned_staff(required_skill)
+        raw_user_id = (self.assigned_staff or {}).get("user_id")
+        if not raw_user_id:
+            return {
+                "success": False,
+                "error": "No connected sales calendar is available",
+                "message": "Please ask the team to connect a bookable Google Calendar",
+            }
+
+        slot_start = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M").replace(
+            tzinfo=self._get_timezone()
+        )
+        try:
+            from datetime import timedelta
+
+            from app.db.session import AsyncSessionLocal
+            from app.services.google_calendar import GoogleCalendarError, is_time_available
+
+            async with AsyncSessionLocal() as calendar_db:
+                google_slot_open = await is_time_available(
+                    calendar_db,
+                    user_id=int(raw_user_id),
+                    starts_at=slot_start,
+                    ends_at=slot_start + timedelta(minutes=duration_minutes),
+                )
+        except GoogleCalendarError as exc:
+            return {"success": False, "error": str(exc), "message": str(exc)}
+        if not google_slot_open:
+            return {
+                "success": False,
+                "error": "That time is no longer available",
+                "message": "Please offer another available time",
+            }
 
         contact_name = self.get_contact_name()
         contact_phone = self.get_contact_phone()
@@ -227,11 +265,13 @@ class BaseToolExecutor:
                 duration_minutes=duration_minutes,
                 metadata=metadata,
                 phone_number=contact_phone,
+                service_type=service_type or self.get_service_type(),
             )
 
             if not result.success:
                 return self.format_booking_failure(result, time_str)
 
+            self._booked_appointment = None
             await self.post_booking_success(
                 result,
                 date_str,
@@ -252,6 +292,55 @@ class BaseToolExecutor:
 
         finally:
             await booking_service.close()
+
+    async def _remove_google_calendar_conflicts(
+        self,
+        slots: list[Any],
+        *,
+        duration_minutes: int,
+    ) -> list[Any]:
+        """Remove busy slots from the routed rep's connected Google Calendar."""
+        raw_user_id = (self.assigned_staff or {}).get("user_id")
+        if not slots:
+            return slots
+        if not raw_user_id:
+            return []
+
+        from datetime import timedelta
+
+        from app.db.session import AsyncSessionLocal
+        from app.services.google_calendar import GoogleCalendarError, filter_available_slots
+
+        parsed: list[tuple[Any, datetime]] = []
+        timezone = self._get_timezone()
+        for slot in slots:
+            try:
+                starts_at = datetime.fromisoformat(str(slot.iso))
+                if starts_at.tzinfo is None:
+                    starts_at = starts_at.replace(tzinfo=timezone)
+                parsed.append((slot, starts_at))
+            except (TypeError, ValueError):
+                self.log.warning("availability_slot_invalid", slot_iso=str(slot.iso))
+
+        if not parsed:
+            return []
+        try:
+            async with AsyncSessionLocal() as db:
+                available_times = await filter_available_slots(
+                    db,
+                    user_id=int(raw_user_id),
+                    slots=[starts_at for _, starts_at in parsed],
+                    duration=timedelta(minutes=duration_minutes),
+                    timezone=self.timezone,
+                )
+        except GoogleCalendarError as exc:
+            # Never advertise unverified availability: a disconnected calendar must
+            # be fixed by the rep rather than risk a double-booking.
+            self.log.info("google_calendar_conflicts_not_checked", error=str(exc))
+            return []
+
+        available = set(available_times)
+        return [slot for slot, starts_at in parsed if starts_at in available]
 
     # ── Hook methods (override in subclasses) ───────────────────────
 
@@ -298,10 +387,7 @@ class BaseToolExecutor:
         duration_minutes: int,
     ) -> dict[str, Any]:
         """Format successful booking response. Override in subclass."""
-        return {
-            "success": True,
-            "booking_uid": result.booking_uid,
-        }
+        return {"success": True}
 
     def format_booking_failure(
         self,

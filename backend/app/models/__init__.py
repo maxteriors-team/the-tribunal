@@ -45,6 +45,7 @@ from app.models.field_service import (
     ServiceLocation,
     Technician,
 )
+from app.models.google_calendar_connection import GoogleCalendarConnection
 from app.models.human_nudge import HumanNudge
 from app.models.human_profile import HumanProfile
 from app.models.inventory import (
@@ -314,6 +315,7 @@ __all__ = [
     "FAILED_JOB_STATUS_RETRIED",
     "FAILED_JOB_STATUSES",
     "FailedJob",
+    "GoogleCalendarConnection",
     "HumanNudge",
     "HumanProfile",
     "KnowledgeDocument",

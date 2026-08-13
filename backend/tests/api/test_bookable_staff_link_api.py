@@ -50,7 +50,6 @@ def _staff_row(user_id: int | None = None) -> MagicMock:
     row.name = "Estimator"
     row.email = None
     row.user_id = user_id
-    row.calcom_event_type_id = None
     row.skills = []
     row.is_active = True
     row.priority = 0

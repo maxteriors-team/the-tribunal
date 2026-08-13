@@ -20,14 +20,16 @@ import uuid
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from app.core.encryption import hash_phone
 from app.db.session import AsyncSessionLocal, engine
 from app.main import app
 from app.models.automation import Automation
+from app.models.automation_event import AutomationEvent
 from app.models.contact import Contact
 from app.models.lead_source import LeadSource
+from app.models.opportunity import Opportunity
 from app.models.tag import ContactTag, Tag
 from app.models.workspace import Workspace
 from app.services.automations.events import EVENT_LEAD_CREATED
@@ -88,11 +90,14 @@ async def _submit_lead(
     first_name: str,
     phone: str,
     source_detail: str | None = None,
+    sms_consent: bool | None = None,
 ):
     """POST a lead to the public form endpoint through the real ASGI app."""
-    body: dict[str, str] = {"first_name": first_name, "phone_number": phone}
+    body: dict[str, str | bool] = {"first_name": first_name, "phone_number": phone}
     if source_detail is not None:
         body["source_detail"] = source_detail
+    if sms_consent is not None:
+        body["sms_consent"] = sms_consent
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         return await client.post(
@@ -254,6 +259,72 @@ async def test_source_detail_fallback_tags_lead_from_an_unlisted_form() -> None:
             await db.commit()
 
 
+async def test_returning_contact_updates_consent_without_restarting_funnel() -> None:
+    domain = "returning.example.com"
+    phone = "+15550100005"
+    async with AsyncSessionLocal() as db:
+        workspace = Workspace(
+            id=uuid.uuid4(),
+            name="Returning Co",
+            slug=f"returning-{uuid.uuid4().hex[:8]}",
+            settings={"auto_pipeline": {"enabled": True}},
+        )
+        db.add(workspace)
+        await db.flush()
+        public_key = await _seed_form(
+            db, workspace.id, name="Returning Form", domain=domain, tag="New Lead"
+        )
+        await db.commit()
+        workspace_id = workspace.id
+
+    try:
+        first = await _submit_lead(
+            public_key,
+            domain,
+            first_name="Riley",
+            phone=phone,
+            sms_consent=False,
+        )
+        second = await _submit_lead(
+            public_key,
+            domain,
+            first_name="Riley Updated",
+            phone=phone,
+            sms_consent=True,
+        )
+        assert first.status_code == second.status_code == 200
+
+        async with AsyncSessionLocal() as db:
+            contact = await db.scalar(
+                select(Contact).where(
+                    Contact.workspace_id == workspace_id,
+                    Contact.phone_hash == hash_phone(phone),
+                )
+            )
+            assert contact is not None
+            assert contact.sms_consent_status == "opted_in"
+            assert contact.status == "new"
+            event_count = await db.scalar(
+                select(func.count())
+                .select_from(AutomationEvent)
+                .where(
+                    AutomationEvent.workspace_id == workspace_id,
+                    AutomationEvent.event_type == EVENT_LEAD_CREATED,
+                )
+            )
+            assert event_count == 1
+            assert (
+                await db.scalar(
+                    select(Opportunity.id).where(Opportunity.primary_contact_id == contact.id)
+                )
+                is None
+            )
+    finally:
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(Workspace).where(Workspace.id == workspace_id))
+            await db.commit()
+
+
 async def test_lead_form_without_automation_creates_untagged_lead() -> None:
     """A form with no tagging automation still captures the lead — just untagged.
 
@@ -268,6 +339,7 @@ async def test_lead_form_without_automation_creates_untagged_lead() -> None:
             id=uuid.uuid4(),
             name="Plain Co",
             slug=f"plain-{uuid.uuid4().hex[:8]}",
+            settings={"auto_pipeline": {"enabled": True}},
         )
         db.add(workspace)
         await db.flush()
@@ -294,13 +366,20 @@ async def test_lead_form_without_automation_creates_untagged_lead() -> None:
 
         async with AsyncSessionLocal() as db:
             # Contact exists...
-            contact = await db.execute(
+            contact_id = await db.scalar(
                 select(Contact.id).where(
                     Contact.workspace_id == workspace_id,
                     Contact.phone_hash == hash_phone(phone),
                 )
             )
-            assert contact.scalar_one_or_none() is not None
+            assert contact_id is not None
+            # ...but qualification, not capture, owns opening its opportunity.
+            assert (
+                await db.scalar(
+                    select(Opportunity.id).where(Opportunity.primary_contact_id == contact_id)
+                )
+                is None
+            )
             # ...and carries no tags.
             assert await _tags_for_phone(db, workspace_id, phone) == set()
     finally:

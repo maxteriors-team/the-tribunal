@@ -101,8 +101,10 @@ async def test_run_people_discovery_upserts_prospects() -> None:
         assert job.status == DiscoveryJobStatus.SUCCEEDED
 
         rows = (
-            await db.execute(select(LeadProspect).where(LeadProspect.workspace_id == ws.id))
-        ).scalars().all()
+            (await db.execute(select(LeadProspect).where(LeadProspect.workspace_id == ws.id)))
+            .scalars()
+            .all()
+        )
         assert {r.full_name for r in rows} == {"Jane Smith", "Bob Jones"}
         jane = next(r for r in rows if r.full_name == "Jane Smith")
         assert jane.email == "jane@acme.com"
@@ -119,9 +121,11 @@ async def test_run_people_discovery_upserts_prospects() -> None:
         db.add(job2)
         await db.flush()
         outcome2 = await run_people_discovery_job(
-            db, job2, provider=_FakePeopleProvider(  # type: ignore[arg-type]
+            db,
+            job2,
+            provider=_FakePeopleProvider(  # type: ignore[arg-type]
                 (_lead("Jane Smith", "CEO", email="jane@acme.com"),)
-            )
+            ),
         )
         assert outcome2.discovered_count == 0
         assert outcome2.duplicate_count == 1

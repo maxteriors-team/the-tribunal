@@ -12,11 +12,7 @@ import { Button } from "@/components/ui/button";
 import { WizardContainer } from "@/components/wizard/wizard-container";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import type { WizardStepDef } from "@/hooks/useWizard";
-import {
-  createCampaignFromCsv,
-  onboard,
-  parseCalcomUrl,
-} from "@/lib/api/onboarding";
+import { createCampaignFromCsv, onboard } from "@/lib/api/onboarding";
 import { markAutoRedirectedToOnboarding } from "@/lib/onboarding-status";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -29,20 +25,14 @@ import {
   type OnboardingFormValues,
   type OnboardingStepId,
 } from "./_state";
-import { CalcomStep } from "./_steps/calcom-step";
-import {
-  LaunchResultView,
-  type OnboardingLaunchSummary,
-} from "./_steps/launch-result";
+import { GoogleCalendarStep } from "./_steps/google-calendar-step";
+import { LaunchResultView, type OnboardingLaunchSummary } from "./_steps/launch-result";
 import { LeadsStep } from "./_steps/leads-step";
-import {
-  OnboardingExtrasProvider,
-  useOnboardingExtras,
-} from "./_steps/onboarding-context";
+import { OnboardingExtrasProvider, useOnboardingExtras } from "./_steps/onboarding-context";
 import { ReviewStep } from "./_steps/review-step";
 
 const STEPS = [
-  { id: "calcom", label: "Calendar", icon: Calendar },
+  { id: "calendar", label: "Calendar", icon: Calendar },
   { id: "leads", label: "Import Leads", icon: Upload },
   { id: "review", label: "Review & Launch", icon: Rocket },
 ] as const satisfies readonly WizardStepDef<OnboardingStepId>[];
@@ -59,14 +49,12 @@ function OnboardingFlow() {
     mode: "onTouched",
   });
 
-  const [currentStepId, setCurrentStepId] =
-    useState<OnboardingStepId>("calcom");
+  const [currentStepId, setCurrentStepId] = useState<OnboardingStepId>("calendar");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [launchSummary, setLaunchSummary] =
-    useState<OnboardingLaunchSummary | null>(null);
-  // Onboarding (agent + credentials + best-effort phone purchase) is idempotent
-  // only on the client side via this ref, so a retry after the no-phone warning
-  // doesn't create a second agent.
+  const [launchSummary, setLaunchSummary] = useState<OnboardingLaunchSummary | null>(null);
+  // Onboarding (agent + default bookable owner + best-effort phone purchase) is
+  // idempotent only on the client side via this ref, so a retry after the
+  // no-phone warning doesn't create a second agent.
   const onboardedRef = useRef(false);
   const phoneProvisionedRef = useRef(false);
   const [showPhoneWarning, setShowPhoneWarning] = useState(false);
@@ -89,7 +77,7 @@ function OnboardingFlow() {
 
   const currentStepIndex = useMemo(
     () => STEPS.findIndex((s) => s.id === currentStepId),
-    [currentStepId]
+    [currentStepId],
   );
   const isFirstStep = currentStepIndex === 0;
   const isLastStep = currentStepIndex === STEPS.length - 1;
@@ -115,7 +103,7 @@ function OnboardingFlow() {
       }
       return true;
     },
-    [form, extras]
+    [form, extras],
   );
 
   const goToStep = useCallback(
@@ -126,7 +114,7 @@ function OnboardingFlow() {
       }
       setCurrentStepId(stepId);
     },
-    [currentStepId, currentStepIndex, canLeaveStep]
+    [currentStepId, currentStepIndex, canLeaveStep],
   );
 
   const goNext = useCallback(async () => {
@@ -154,14 +142,7 @@ function OnboardingFlow() {
     setIsSubmitting(true);
     try {
       if (!onboardedRef.current) {
-        const { event_type_id } = await parseCalcomUrl(
-          values.calcom_booking_url,
-          values.calcom_api_key
-        );
-
         const onboardResult = await onboard({
-          calcom_api_key: values.calcom_api_key,
-          calcom_event_type_id: event_type_id,
           area_code: values.area_code || undefined,
         });
         onboardedRef.current = true;
@@ -191,20 +172,14 @@ function OnboardingFlow() {
       // missing.
       if (extras.csvFile && !phoneProvisionedRef.current && !showPhoneWarning) {
         setShowPhoneWarning(true);
-        toast.error(
-          "We couldn't get you an SMS number automatically — add one to start texting."
-        );
+        toast.error("We couldn't get you an SMS number automatically — add one to start texting.");
         return;
       }
 
-      const result = await createCampaignFromCsv(
-        currentWorkspaceId,
-        extras.csvFile,
-        {
-          skipDuplicates: true,
-          areaCode: values.area_code || undefined,
-        }
-      );
+      const result = await createCampaignFromCsv(currentWorkspaceId, extras.csvFile, {
+        skipDuplicates: true,
+        areaCode: values.area_code || undefined,
+      });
       const summary: OnboardingLaunchSummary = {
         source: "csv",
         imported: result.contacts_imported,
@@ -230,32 +205,20 @@ function OnboardingFlow() {
       setShowPhoneWarning(false);
       setLaunchSummary(summary);
     } catch (err) {
-      const message = getApiErrorMessage(
-        err,
-        "Launch failed. Please try again."
-      );
+      const message = getApiErrorMessage(err, "Launch failed. Please try again.");
       // Backend hard-fails the CSV launch when no SMS number exists; translate
       // that into the same actionable warning rather than a cryptic toast.
       if (/SMS-enabled phone number/i.test(message)) {
         phoneProvisionedRef.current = false;
         setShowPhoneWarning(true);
-        toast.error(
-          "We couldn't get you an SMS number automatically — add one to start texting."
-        );
+        toast.error("We couldn't get you an SMS number automatically — add one to start texting.");
       } else {
         toast.error(message);
       }
     } finally {
       setIsSubmitting(false);
     }
-  }, [
-    currentWorkspaceId,
-    extras.csvFile,
-    extras.csvRowCount,
-    form,
-    queryClient,
-    showPhoneWarning,
-  ]);
+  }, [currentWorkspaceId, extras.csvFile, extras.csvRowCount, form, queryClient, showPhoneWarning]);
 
   const goToDashboard = useCallback(() => {
     router.push("/dashboard");
@@ -265,10 +228,7 @@ function OnboardingFlow() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-12">
         <div className="w-full max-w-2xl border rounded-xl overflow-hidden shadow-xl bg-card flex flex-col">
-          <LaunchResultView
-            summary={launchSummary}
-            onGoToDashboard={goToDashboard}
-          />
+          <LaunchResultView summary={launchSummary} onGoToDashboard={goToDashboard} />
         </div>
       </div>
     );
@@ -298,11 +258,9 @@ function OnboardingFlow() {
             submittingLabel="Launching..."
             submitIcon={Rocket}
           >
-            {currentStepId === "calcom" && <CalcomStep />}
+            {currentStepId === "calendar" && <GoogleCalendarStep />}
             {currentStepId === "leads" && <LeadsStep />}
-            {currentStepId === "review" && (
-              <ReviewStep showPhoneWarning={showPhoneWarning} />
-            )}
+            {currentStepId === "review" && <ReviewStep showPhoneWarning={showPhoneWarning} />}
           </WizardContainer>
         </div>
       </div>

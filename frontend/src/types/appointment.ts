@@ -19,4 +19,11 @@ export interface Appointment {
   updated_at: string;
   reminder_sent_at?: string;
   reminders_sent?: number[];
+  bookable_staff_id?: string | null;
+  google_calendar_event_id?: string | null;
+  google_calendar_event_url?: string | null;
+  meeting_url?: string | null;
+  sync_status?: string;
+  last_synced_at?: string | null;
+  sync_error?: string | null;
 }

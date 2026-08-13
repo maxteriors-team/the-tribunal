@@ -84,11 +84,7 @@ interface SendReminderButtonProps {
   onSent: () => void;
 }
 
-export function SendReminderButton({
-  appointment,
-  workspaceId,
-  onSent,
-}: SendReminderButtonProps) {
+export function SendReminderButton({ appointment, workspaceId, onSent }: SendReminderButtonProps) {
   const [isSending, setIsSending] = useState(false);
 
   if (appointment.status !== "scheduled") return null;
@@ -120,11 +116,7 @@ export function SendReminderButton({
       disabled={isSending}
       title="Send SMS reminder"
     >
-      {isSending ? (
-        <Loader2 className="size-3 animate-spin" />
-      ) : (
-        <Bell className="size-3" />
-      )}
+      {isSending ? <Loader2 className="size-3 animate-spin" /> : <Bell className="size-3" />}
       Remind
     </Button>
   );
@@ -146,24 +138,18 @@ interface AttendanceControlProps {
  * "Attended / No-show" for an appointment whose slot has passed.
  *
  * Show-up rate is the one funnel number a CRM cannot infer, and until this
- * shipped nothing outside the Cal.com webhook could write it — a workspace
- * booking by phone saw a permanent dash. Deliberately not auto-resolved after N
+ * shipped no operator workflow could write it — a workspace booking by phone
+ * saw a permanent dash. Deliberately not auto-resolved after N
  * hours: assuming attendance would manufacture a 100% show-up rate, which is
  * worse than no number at all.
  */
-export function AttendanceControl({
-  appointment,
-  workspaceId,
-  onMarked,
-}: AttendanceControlProps) {
+export function AttendanceControl({ appointment, workspaceId, onMarked }: AttendanceControlProps) {
   const markAttendance = useMarkAttendance({ workspaceId, onSuccess: onMarked });
 
   if (!hasStarted(appointment.scheduled_at)) return null;
   if (appointment.status === "cancelled") return null;
 
-  const pendingOutcome = markAttendance.isPending
-    ? markAttendance.variables?.outcome
-    : undefined;
+  const pendingOutcome = markAttendance.isPending ? markAttendance.variables?.outcome : undefined;
 
   const mark = (outcome: AttendanceOutcome) => (event: React.MouseEvent) => {
     event.stopPropagation();

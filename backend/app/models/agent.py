@@ -85,10 +85,8 @@ class Agent(Base):
     )
     text_max_context_messages: Mapped[int] = mapped_column(Integer, default=20, nullable=False)
 
-    # Cal.com integration
-    calcom_event_type_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # How the booking tool picks which Cal.com event type / staff member to book.
-    #   "single"       -> always use calcom_event_type_id (legacy default)
+    # How the booking tool picks a login-backed staff member/calendar.
+    #   "single"       -> use the first active staff member
     #   "round_robin"  -> distribute across the agent's active bookable_staff pool
     #   "skill_based"  -> match the requested skill, then round-robin among matches
     assignment_strategy: Mapped[str] = mapped_column(

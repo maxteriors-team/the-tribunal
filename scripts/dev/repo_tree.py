@@ -175,11 +175,7 @@ def render_html(
         if max_depth is not None and depth >= max_depth:
             return
         for child in _sorted_dirs(node):
-            badge = (
-                f'<span class="count">{child.direct_files}</span>'
-                if child.direct_files
-                else ""
-            )
+            badge = f'<span class="count">{child.direct_files}</span>' if child.direct_files else ""
             pad = depth * 22
             items.append(
                 f'<li style="--pad:{pad}px" class="dir">'
@@ -361,7 +357,7 @@ def main(argv: list[str]) -> int:
         # ``git ls-files -- <subpath>`` returns repo-relative paths; strip the
         # prefix so the scoped tree is rooted at the subpath itself.
         prefix = label + "/"
-        files = [f[len(prefix):] if f.startswith(prefix) else f for f in files]
+        files = [f[len(prefix) :] if f.startswith(prefix) else f for f in files]
     root = build_tree(files, label)
 
     if args.serve or args.html:

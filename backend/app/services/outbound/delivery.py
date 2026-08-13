@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import time
+import time as time_module
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -18,6 +18,7 @@ from app.models.contact import Contact
 from app.models.conversation import Message, MessageStatus
 from app.models.user import User
 from app.services.compliance.outbound_compliance import (
+    DirectOutboundComplianceRequest,
     OutboundComplianceRequest,
     OutboundComplianceResult,
     OutboundComplianceService,
@@ -83,6 +84,9 @@ class OutboundDeliveryRequest:
     idempotency_parts: tuple[object, ...] = ()
     action_type: str = "outbound_delivery"
     require_sms_consent: bool = False
+    quiet_hours_start: time | None = None
+    quiet_hours_end: time | None = None
+    timezone: str = "UTC"
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -216,7 +220,7 @@ class OutboundDeliveryService:
         request: OutboundDeliveryRequest,
     ) -> OutboundDeliveryResult:
         """Run compliance gates, send through the selected provider, and normalize the result."""
-        started = time.perf_counter()
+        started = time_module.perf_counter()
         idempotency_key = self._resolve_idempotency_key(request)
         log = self._log.bind(
             workspace_id=str(request.workspace_id),
@@ -345,17 +349,32 @@ class OutboundDeliveryService:
             )
 
         if request.contact is not None and request.require_sms_consent:
-            consent_status = request.contact.sms_consent_status or "unknown"
-            if consent_status != OutboundComplianceService.OPTED_IN:
+            direct_result = await self._compliance_service.evaluate_direct(
+                DirectOutboundComplianceRequest(
+                    workspace_id=request.workspace_id,
+                    channel=request.channel.value,
+                    action_type=request.action_type,
+                    now=self._clock(),
+                    phone_number=recipient,
+                    sms_consent_status=request.contact.sms_consent_status,
+                    contact_id=request.contact.id,
+                    quiet_hours_start=request.quiet_hours_start,
+                    quiet_hours_end=request.quiet_hours_end,
+                    timezone=request.timezone,
+                    require_sms_consent=True,
+                ),
+                db,
+            )
+            if not direct_result.allowed:
                 self._apply_campaign_suppression(
                     request,
-                    "missing_sms_consent",
-                    {"sms_consent_status": consent_status},
+                    direct_result.reason or "outbound_blocked",
+                    direct_result.details,
                 )
                 return _ComplianceDecision(
                     allowed=False,
-                    reason="missing_sms_consent",
-                    details={"sms_consent_status": consent_status},
+                    reason=direct_result.reason,
+                    details=direct_result.details,
                 )
 
         if request.campaign is not None and request.contact is not None:
@@ -636,7 +655,7 @@ def _push_preference_attr(notification_type: str | None) -> str | None:
 
 
 def _elapsed_ms(started: float) -> int:
-    return int((time.perf_counter() - started) * 1000)
+    return int((time_module.perf_counter() - started) * 1000)
 
 
 def _with_elapsed(result: OutboundDeliveryResult, elapsed_ms: int) -> OutboundDeliveryResult:

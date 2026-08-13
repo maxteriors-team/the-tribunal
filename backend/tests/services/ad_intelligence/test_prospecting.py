@@ -117,8 +117,10 @@ async def test_qualified_filter_skips_prolific_testers() -> None:
         # Only the good advertiser became a prospect.
         assert len(created) == 1
         prospects = (
-            await db.execute(select(LeadProspect).where(LeadProspect.workspace_id == ws.id))
-        ).scalars().all()
+            (await db.execute(select(LeadProspect).where(LeadProspect.workspace_id == ws.id)))
+            .scalars()
+            .all()
+        )
         assert len(prospects) == 1
         assert prospects[0].source_external_id == "good"
 

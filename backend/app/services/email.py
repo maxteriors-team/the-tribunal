@@ -971,7 +971,7 @@ async def send_appointment_booked_notification(
     contact_name: str,
     contact_phone: str,
     appointment_time: datetime,
-    calcom_booking_url: str | None = None,
+    calendar_event_url: str | None = None,
     idempotency_key: uuid.UUID | None = None,
     timezone: str | None = None,
     ics_content: str | None = None,
@@ -989,16 +989,16 @@ async def send_appointment_booked_notification(
 
     formatted_time = format_local_datetime(appointment_time, timezone)
 
-    calcom_button = ""
-    if calcom_booking_url:
+    calendar_button = ""
+    if calendar_event_url:
         button_style = (
             "background-color: #000; color: #fff; padding: 12px 30px; "
             "text-decoration: none; border-radius: 5px; display: inline-block; font-weight: 500;"
         )
-        calcom_button = f"""
+        calendar_button = f"""
     <div style="text-align: center; margin: 30px 0;">
-        <a href="{calcom_booking_url}" style="{button_style}">
-            View in Cal.com
+        <a href="{calendar_event_url}" style="{button_style}">
+            View in Google Calendar
         </a>
     </div>"""
 
@@ -1031,7 +1031,7 @@ async def send_appointment_booked_notification(
         <p style="{label_style}">Appointment Time</p>
         <p style="{value_style}">{formatted_time}</p>
     </div>
-    {calcom_button}
+    {calendar_button}
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">
         Sent by your AI Lead Reactivation system
@@ -1077,6 +1077,8 @@ async def send_appointment_confirmation_to_attendee(
     appointment_time: datetime,
     service_type: str | None = None,
     location: str | None = None,
+    meeting_url: str | None = None,
+    sync_status: str | None = None,
     timezone: str | None = None,
     ics_content: str | None = None,
     idempotency_key: uuid.UUID | None = None,
@@ -1114,8 +1116,13 @@ async def send_appointment_confirmation_to_attendee(
         )
     if location:
         detail_rows += (
-            f'<p style="{label_style}">Location</p>'
+            f'<p style="{label_style}">Meeting method</p>'
             f'<p style="{value_style}">{html_escape(location)}</p>'
+        )
+    if service_type == "video_call" and not meeting_url and sync_status != "synced":
+        detail_rows += (
+            f'<p style="{label_style}">Video link</p>'
+            f'<p style="{value_style}">Our team will follow up with the link.</p>'
         )
 
     html_content = f"""<!DOCTYPE html>
@@ -1132,6 +1139,7 @@ async def send_appointment_confirmation_to_attendee(
     <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 24px 0;">
         {detail_rows}
     </div>
+    {f'<p><a href="{html_escape(meeting_url)}">Join Google Meet</a></p>' if meeting_url else ""}
     <p>Need to change or cancel? Just reply to the text message from
        {safe_business} and we'll take care of it.</p>
 </body>

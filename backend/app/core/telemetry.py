@@ -115,7 +115,7 @@ def instrument_app(app: FastAPI, engine: AsyncEngine) -> None:
         excluded_urls="health,healthz,readyz,metrics",
     )
 
-    # Outbound httpx calls (OpenAI, Telnyx, Cal.com, ElevenLabs, SendGrid).
+    # Outbound httpx calls (OpenAI, Telnyx, Google Calendar, ElevenLabs, Resend).
     HTTPXClientInstrumentor().instrument()
 
     # SQLAlchemy uses the *sync* driver underneath the async wrapper, so we

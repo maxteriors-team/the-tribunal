@@ -6,7 +6,7 @@ and AI voice providers (OpenAI/Grok). Key considerations:
 - Telnyx uses μ-law (G.711) at 8kHz sample rate
 - OpenAI/Grok Realtime API uses PCM16 at 24kHz
 - Audio must be converted and resampled in both directions (3x ratio)
-- Supports tool calling for Cal.com booking integration
+- Supports tool calling for Google Calendar booking integration
 
 Architecture Note:
     Audio conversion, tool execution, call context, and session factory
@@ -153,7 +153,6 @@ async def _setup_voice_session(
             "setting_up_tool_callback",
             session_type=type(voice_session).__name__,
             agent_name=agent.name if agent else None,
-            calcom_event_type_id=agent.calcom_event_type_id if agent else None,
         )
 
         # Use the extracted tool executor to create callback

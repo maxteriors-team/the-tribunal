@@ -29,7 +29,7 @@ import {
  *     still find their way back (the persistent sidebar entry is the other half
  *     of discoverability).
  *
- * Setup is an owner/admin job (Cal.com credentials, lead import, launching the
+ * Setup is an owner/admin job (team calendar setup, lead import, launching the
  * first campaign), so everything here is gated on `workspace:manage` — mirroring
  * the backend gate. Without it a field technician was force-redirected into the
  * owner wizard on first login and shown workspace-setup UI on every page.
@@ -89,8 +89,8 @@ export function SetupGate() {
         <div className="min-w-0 flex-1">
           <p className="font-semibold">Finish setting up your workspace</p>
           <p className="text-sm text-muted-foreground">
-            Connect your CRM and calendar, import leads, and launch your first
-            campaign — it only takes a few minutes.
+            Connect your CRM and calendar, import leads, and launch your first campaign — it only
+            takes a few minutes.
           </p>
         </div>
         <Button asChild size="sm">

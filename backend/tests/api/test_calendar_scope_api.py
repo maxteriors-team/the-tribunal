@@ -106,9 +106,8 @@ def _appointment_response() -> dict[str, object]:
         "status": "scheduled",
         "service_type": "Estimate",
         "notes": None,
-        "calcom_booking_uid": None,
-        "calcom_booking_id": None,
-        "calcom_event_type_id": None,
+        "google_calendar_event_id": None,
+        "google_calendar_event_url": None,
         "sync_status": "pending",
         "last_synced_at": None,
         "sync_error": None,
@@ -159,6 +158,20 @@ def _appointment_service() -> AsyncMock:
         "pages": 1,
     }
     service.get_appointment.return_value = _appointment_response()
+    service.update_appointment.return_value = _appointment_response()
+    service.send_reminder.return_value = {"success": True}
+    service.get_stats.return_value = {
+        "overall": {
+            "total": 0,
+            "scheduled": 0,
+            "completed": 0,
+            "no_show": 0,
+            "cancelled": 0,
+            "show_up_rate": 0.0,
+        },
+        "by_agent": [],
+        "by_campaign": [],
+    }
     return service
 
 
@@ -274,6 +287,15 @@ class TestAppointmentReadScope:
         assert response.status_code == 200
         assert service.list_appointments.await_args.kwargs["visible_to_user_id"] is None
 
+    async def test_stats_carries_the_scope(self) -> None:
+        service = _appointment_service()
+        async with _client(
+            appointments_module, service, "sales_rep", APPOINTMENTS_PREFIX
+        ) as client:
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/appointments/stats")
+        assert response.status_code == 200
+        assert service.get_stats.await_args.kwargs["visible_to_user_id"] == USER_ID
+
     async def test_deep_link_carries_the_scope(self) -> None:
         service = _appointment_service()
         async with _client(
@@ -289,3 +311,37 @@ class TestAppointmentReadScope:
             response = await client.get(f"/api/v1/workspaces/{WS_ID}/appointments/{APPOINTMENT_ID}")
         assert response.status_code == 200
         assert service.get_appointment.await_args.kwargs["visible_to_user_id"] is None
+
+    async def test_update_carries_scope(self) -> None:
+        service = _appointment_service()
+        async with _client(
+            appointments_module, service, "sales_rep", APPOINTMENTS_PREFIX
+        ) as client:
+            response = await client.put(
+                f"/api/v1/workspaces/{WS_ID}/appointments/{APPOINTMENT_ID}",
+                json={"notes": "Follow up"},
+            )
+        assert response.status_code == 200
+        assert service.update_appointment.await_args.kwargs["visible_to_user_id"] == USER_ID
+
+    async def test_delete_carries_scope(self) -> None:
+        service = _appointment_service()
+        async with _client(
+            appointments_module, service, "technician", APPOINTMENTS_PREFIX
+        ) as client:
+            response = await client.delete(
+                f"/api/v1/workspaces/{WS_ID}/appointments/{APPOINTMENT_ID}"
+            )
+        assert response.status_code == 204
+        assert service.delete_appointment.await_args.kwargs["visible_to_user_id"] == USER_ID
+
+    async def test_reminder_carries_scope(self) -> None:
+        service = _appointment_service()
+        async with _client(
+            appointments_module, service, "sales_rep", APPOINTMENTS_PREFIX
+        ) as client:
+            response = await client.post(
+                f"/api/v1/workspaces/{WS_ID}/appointments/{APPOINTMENT_ID}/send-reminder"
+            )
+        assert response.status_code == 200
+        assert service.send_reminder.await_args.kwargs["visible_to_user_id"] == USER_ID

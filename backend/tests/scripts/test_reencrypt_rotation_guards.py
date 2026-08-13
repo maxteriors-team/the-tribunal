@@ -17,9 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.core.encryption import EncryptedString, LookupHash
 
-_SCRIPT = (
-    Path(__file__).resolve().parents[3] / "scripts" / "ops" / "reencrypt_with_old_key.py"
-)
+_SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "ops" / "reencrypt_with_old_key.py"
 
 
 def _load_script():

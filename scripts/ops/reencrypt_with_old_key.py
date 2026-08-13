@@ -139,6 +139,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
     quietly no-op.
     """
     from app.models.contact import Contact
+    from app.models.google_calendar_connection import GoogleCalendarConnection
     from app.models.human_profile import HumanProfile
     from app.models.lead_magnet_lead import LeadMagnetLead
     from app.models.link_click import LinkClick
@@ -176,6 +177,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
         ),
         RotationTarget(LinkClick, ("ip_address",)),
         RotationTarget(MessageAttachment, ("source_url",)),
+        RotationTarget(GoogleCalendarConnection, ("access_token", "refresh_token")),
     )
 
 

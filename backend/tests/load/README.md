@@ -1,8 +1,7 @@
 # Load tests
 
-[k6](https://k6.io/) scripts that exercise the hot paths Telnyx and Cal.com
-hit in production, plus the login rate limiter and the voice WebSocket
-bridge.
+[k6](https://k6.io/) scripts that exercise Telnyx hot paths, the login rate
+limiter, and the voice WebSocket bridge.
 
 All scripts target **staging**. Never run them against production.
 
@@ -11,7 +10,6 @@ All scripts target **staging**. Never run them against production.
 | Script | Endpoint | Profile |
 |---|---|---|
 | `telnyx_webhook.js` | `POST /webhooks/telnyx/sms` | 100 RPS × 60s |
-| `calcom_webhook.js` | `POST /webhooks/calcom/booking` | 50 RPS × 60s |
 | `auth_login.js` | `POST /api/v1/auth/login` | 10 RPS × 60s — expects 429s |
 | `voice_ws.js` | `WS /voice/stream/{call_id}` | 50 concurrent × 5min hold |
 | `lib/common.js` | shared helpers (signing, URLs) | — |
@@ -35,8 +33,7 @@ All scripts target **staging**. Never run them against production.
 2. **Staging environment flags.** The Telnyx script can't produce real
    ed25519 signatures (k6's stdlib doesn't expose ed25519 signing). Set
    `SKIP_WEBHOOK_VERIFICATION=true` on the staging service for the duration
-   of the run, then turn it back off. The Cal.com script signs payloads
-   with real HMAC-SHA256, so staging can keep verification on for that one.
+   of the run, then turn it back off.
 
 3. **WS ticket.** The voice bridge requires a short-lived JWT ticket from
    `POST /api/v1/auth/ws-ticket`. Mint one against a staging user, copy
@@ -53,17 +50,6 @@ BASE_URL=https://staging.thetribunal.app \
 ```
 
 **Pass criteria:** `http_req_duration p95 < 500ms`, `p99 < 1500ms`,
-`http_req_failed < 1%`.
-
-### Cal.com — 50 RPS × 60s
-
-```bash
-BASE_URL=https://staging.thetribunal.app \
-CALCOM_WEBHOOK_SECRET=<staging-secret> \
-  k6 run backend/tests/load/calcom_webhook.js
-```
-
-**Pass criteria:** `http_req_duration p95 < 500ms`, `p99 < 2000ms`,
 `http_req_failed < 1%`.
 
 ### Auth login — 10 RPS × 60s (rate-limit test)
@@ -129,9 +115,8 @@ tests only run when a human kicks them off.
 - `voice_ws.js` sends synthetic media frames (`event: media` with a
   3-byte silence payload). It exercises the WS plumbing, not the
   realtime-AI inference path.
-- All scripts generate distinct phone numbers / booking UIDs per
-  request so idempotency dedupe (Telnyx X-Idempotency-Key, Cal.com
-  Redis dedupe) never short-circuits the real handler.
+- Telnyx scripts generate distinct phone numbers and idempotency keys per
+  request so dedupe never short-circuits the real handler.
 - Run order matters when chaining: a 100 RPS Telnyx burst fills the
   message DLQ if the downstream LLM tier can't keep up. Drain
   `pending_actions` and worker queues between consecutive runs.

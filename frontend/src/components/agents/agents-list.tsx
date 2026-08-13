@@ -34,13 +34,7 @@ import {
 } from "@/components/resource-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -148,7 +142,6 @@ export function AgentsList() {
         temperature: agent.temperature,
         text_response_delay_ms: clampTextResponseDelayMs(agent.text_response_delay_ms),
         text_max_context_messages: agent.text_max_context_messages,
-        calcom_event_type_id: agent.calcom_event_type_id ?? undefined,
         enabled_tools: agent.enabled_tools,
         tool_settings: agent.tool_settings,
       });
@@ -174,7 +167,15 @@ export function AgentsList() {
   });
 
   const initiateCallMutation = useMutation({
-    mutationFn: ({ toNumber, fromNumber, agentId }: { toNumber: string; fromNumber: string; agentId: string }) => {
+    mutationFn: ({
+      toNumber,
+      fromNumber,
+      agentId,
+    }: {
+      toNumber: string;
+      fromNumber: string;
+      agentId: string;
+    }) => {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return callsApi.initiate(workspaceId, {
         to_number: toNumber,
@@ -217,7 +218,7 @@ export function AgentsList() {
   const filteredAgents = agents.filter(
     (agent) =>
       agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      agent.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      agent.description?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const activeAgents = agents.filter((a) => a.is_active).length;
@@ -270,9 +271,8 @@ export function AgentsList() {
             { label: "Active Agents", value: activeAgents },
             {
               label: "Voice Enabled",
-              value: agents.filter(
-                (a) => a.channel_mode === "voice" || a.channel_mode === "both"
-              ).length,
+              value: agents.filter((a) => a.channel_mode === "voice" || a.channel_mode === "both")
+                .length,
             },
           ]}
         />
@@ -440,14 +440,18 @@ export function AgentsList() {
                           )}
                           {agent.is_active ? (
                             <DropdownMenuItem
-                              onClick={() => toggleAgentMutation.mutate({ agentId: agent.id, isActive: false })}
+                              onClick={() =>
+                                toggleAgentMutation.mutate({ agentId: agent.id, isActive: false })
+                              }
                             >
                               <Pause className="mr-2 size-4" />
                               Deactivate
                             </DropdownMenuItem>
                           ) : (
                             <DropdownMenuItem
-                              onClick={() => toggleAgentMutation.mutate({ agentId: agent.id, isActive: true })}
+                              onClick={() =>
+                                toggleAgentMutation.mutate({ agentId: agent.id, isActive: true })
+                              }
                             >
                               <Play className="mr-2 size-4" />
                               Activate
@@ -480,9 +484,7 @@ export function AgentsList() {
                       <div className="flex items-center gap-1.5">
                         <ChannelIcon className="size-4 text-muted-foreground" />
                         <span className="capitalize">
-                          {agent.channel_mode === "both"
-                            ? "Voice & Text"
-                            : agent.channel_mode}
+                          {agent.channel_mode === "both" ? "Voice & Text" : agent.channel_mode}
                         </span>
                       </div>
                       {agent.voice_id && (

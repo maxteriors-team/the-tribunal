@@ -10,6 +10,7 @@ from pydantic import (
     Field,
     SerializerFunctionWrapHandler,
     model_serializer,
+    model_validator,
 )
 
 # Trigger identifiers accepted by the automation engine. Combines the legacy
@@ -23,7 +24,6 @@ AUTOMATION_TRIGGER_TYPES: tuple[str, ...] = (
     "schedule",
     "condition",
     # Polling triggers (contact-centric)
-    "appointment_booked",
     "booking_created",
     "no_show",
     "contact_tagged",
@@ -40,6 +40,8 @@ AUTOMATION_TRIGGER_TYPES: tuple[str, ...] = (
     "knowledge_document_uploaded",
     # Lead-capture trigger (emitted by the public lead-form ingestion path)
     "lead_created",
+    "lead_qualified",
+    "appointment_booked",
     # Billing & field-service lifecycle triggers
     "quote_sent",
     "quote_approved",
@@ -78,6 +80,17 @@ AUTOMATION_CONTROL_FLOW_ACTIONS: frozenset[str] = frozenset({"wait", "delay", "b
 _TRIGGER_PATTERN = "^(" + "|".join(AUTOMATION_TRIGGER_TYPES) + ")$"
 
 
+class AutomationSendSMSConfig(BaseModel):
+    """Typed fields supported by a ``send_sms`` action configuration."""
+
+    model_config = ConfigDict(extra="allow")
+
+    agent_id: UUID | None = Field(
+        default=None,
+        description="AI agent that owns the outbound message and subsequent SMS conversation",
+    )
+
+
 class AutomationActionSchema(BaseModel):
     """Schema for automation action.
 
@@ -105,6 +118,14 @@ class AutomationActionSchema(BaseModel):
     config: dict[str, Any] = Field(
         default_factory=dict, description="Action-specific configuration"
     )
+
+    @model_validator(mode="after")
+    def _validate_typed_config(self) -> "AutomationActionSchema":
+        """Validate typed action options while retaining the JSONB wire shape."""
+        if self.type == "send_sms":
+            typed = AutomationSendSMSConfig.model_validate(self.config)
+            self.config = typed.model_dump(mode="json", exclude_none=True)
+        return self
 
     @model_serializer(mode="wrap")
     def _omit_absent_id(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:

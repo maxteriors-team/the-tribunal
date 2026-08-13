@@ -1,7 +1,7 @@
 """Shared pytest fixtures.
 
 Provides:
-- Mock voice agent sessions, WebSocket connections, Cal.com / Telnyx services
+- Mock voice agent sessions, WebSocket connections, and Telnyx services
 - Model factory fixtures (``user_factory``, ``workspace_factory``, etc.)
   backed by factory_boy. See ``tests/factories.py`` and ``CONTRIBUTING.md``.
 """
@@ -39,7 +39,6 @@ def mock_agent() -> MagicMock:
     agent.turn_detection_mode = "server_vad"
     agent.turn_detection_threshold = 0.5
     agent.silence_duration_ms = 700
-    agent.calcom_event_type_id = "test-event-type"
     agent.enabled_tools = ["web_search"]
     agent.tool_settings = {}
     return agent
@@ -94,31 +93,6 @@ def mock_websocket() -> AsyncMock:
     websocket.client.host = "127.0.0.1"
     websocket.client.port = 12345
     return websocket
-
-
-@pytest.fixture
-def mock_calcom_service() -> AsyncMock:
-    """Create a mock Cal.com service for testing.
-
-    Returns:
-        AsyncMock configured as CalComService
-    """
-    service = AsyncMock()
-    service.get_availability = AsyncMock(
-        return_value=[
-            {"time": "09:00", "date": "2024-01-15"},
-            {"time": "10:00", "date": "2024-01-15"},
-            {"time": "14:00", "date": "2024-01-15"},
-        ]
-    )
-    service.create_booking = AsyncMock(
-        return_value={
-            "uid": "booking-uid-123",
-            "id": "booking-id-456",
-        }
-    )
-    service.close = AsyncMock()
-    return service
 
 
 @pytest.fixture

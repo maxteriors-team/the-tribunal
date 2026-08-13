@@ -34,7 +34,6 @@ def _make_agent(workspace_id: uuid.UUID, agent_id: uuid.UUID) -> MagicMock:
     agent.turn_detection_mode = "server_vad"
     agent.turn_detection_threshold = 0.45
     agent.silence_duration_ms = 650
-    agent.calcom_event_type_id = None
     agent.enabled_tools = []
     agent.tool_settings = {}
     return agent

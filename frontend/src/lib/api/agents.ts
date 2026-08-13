@@ -29,7 +29,6 @@ export interface CreateAgentRequest {
   temperature?: number;
   text_response_delay_ms?: number;
   text_max_context_messages?: number;
-  calcom_event_type_id?: number;
   assignment_strategy?: string;
   enabled_tools?: string[];
   tool_settings?: Record<string, unknown>;
@@ -65,7 +64,6 @@ export interface UpdateAgentRequest {
   temperature?: number;
   text_response_delay_ms?: number;
   text_max_context_messages?: number;
-  calcom_event_type_id?: number;
   assignment_strategy?: string;
   is_active?: boolean;
   enabled_tools?: string[];

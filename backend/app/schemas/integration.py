@@ -7,7 +7,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 IntegrationType = Literal[
-    "calcom",
     "telnyx",
     "openai",
     "resend",
@@ -21,12 +20,6 @@ class IntegrationCredentialsBase(BaseModel):
     """Base schema for integration credentials."""
 
     api_key: str = Field(..., min_length=1, description="API key for the integration")
-
-
-class CalcomCredentials(IntegrationCredentialsBase):
-    """Cal.com specific credentials."""
-
-    event_type_id: str | None = Field(None, description="Default event type ID for bookings")
 
 
 class TelnyxCredentials(IntegrationCredentialsBase):

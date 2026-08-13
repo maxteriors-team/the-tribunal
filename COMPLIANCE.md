@@ -1,10 +1,10 @@
 # Compliance Register
 
-Snapshot: 12 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
+Snapshot: 13 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
 
 Commit reviewed: working tree on current `HEAD` (uncommitted approved implementation).
 
-Scope: human-approved AI SMS examples, live website-lead qualification before booking, and the Maxteriors post-install owner-resource SMS/email flow. This is a focused feature review, not a certification or full-product audit.
+Scope: AI lead capture → consent-gated SMS → evidence-backed qualification → CRM phone/video booking → terminal acquisition cleanup, plus the existing focused AI/post-install review. This is engineering guidance and a focused feature review, not a certification or full-product audit.
 
 ## Assumed exposure profile
 
@@ -12,8 +12,8 @@ Scope: human-approved AI SMS examples, live website-lead qualification before bo
 - **Jurisdictions — Assumed:** worldwide reach; US plus EU/UK exposure may apply.
 - **Personal data — Confirmed:** SMS bodies, phone numbers, form answers, AI replies, and operator notes.
 - **AI decisions — Confirmed:** ordinary sales prequalification; no employment, lending, housing, health, or legal eligibility decision.
-- **Messaging — Confirmed:** existing consent-gated SMS; Teach AI adds no send path.
-- **Minors — Assumed unlikely, not age-gated:** B2B home-services workflow is not child-directed.
+- **Messaging — Confirmed:** public form SMS consent is optional and unchecked; all acquisition SMS requires explicit `opted_in` state and passes through the global STOP/opt-out gate.
+- **Minors — Assumed possible, not age-gated:** public home-services form is not child-directed but has no technical age gate.
 - **Entity — Confirmed from repository context:** deployed commercial CRM; exact legal entity was not reviewed.
 
 ## Focused coverage ledger
@@ -41,24 +41,24 @@ Scope: human-approved AI SMS examples, live website-lead qualification before bo
 | 16 | Transport security / mixed content | pass | CODE: authenticated same-origin API; no new remote asset. Production HTTPS remains an environment control. |
 | 17 | SSRF | n-a | No server-side user URL fetch. |
 | 18 | Backup/restore | pass | Existing encrypted backups apply; migration up/down/up passed in a disposable database. |
-| U1 | Privacy notice / deletion / vendor list | fail | CODE/DEDUCED: reusable lessons intentionally survive conversation deletion; notice, retention, and deletion wording were not reviewed. |
-| U2 | Third-party scripts consent | n-a | No tracking script. |
+| U1 | Privacy notice / deletion / vendor list | fail | CODE/DEDUCED: public form links notices, but AI qualification evidence/score retention and processor wording were not reviewed. |
+| U2 | Third-party scripts consent | fail | CODE: form fires a Meta Pixel `Lead` event after submission whenever the host page loaded `fbq`; host-site prior-consent gating is outside this snippet. |
 | U3 | Account security baseline | pass | Focused authorization and isolation tests passed; product-wide auth was not re-audited. |
-| U4 | Public-page accessibility | n-a | No public page added; authenticated operator controls are checked below. |
-| U5 | SMS duties | pass | CODE/tests: post-install SMS uses the unified delivery gate, requires `opted_in`, honors global STOP/opt-out, identifies Maxteriors, and has a stable idempotency key; Teach AI cannot send. |
-| U6 | Contact form privacy | pass | No new intake field; captured answers are reused instead of re-asked. |
-| U7 | Error/log handling | pass | CODE/RUNTIME: logs carry IDs/counts/scores, not SMS or note bodies. |
+| U4 | Public-page accessibility | pass | CODE: native labelled controls, optional checkbox, status region, visible privacy/terms links, keyboard-operable submit. |
+| U5 | SMS duties | pass | CODE/tests: every funnel SMS uses unified delivery, explicit `opted_in`, stable idempotency, bounded waits, STOP/global opt-out, and no-automation suppression; blocked sends do not advance CRM status. |
+| U6 | Contact form privacy | pass | CODE: optional unchecked box submits structured `sms_consent` only from its actual checked state; disclosure includes frequency, rates, STOP/HELP, privacy and terms. |
+| U7 | Error/log handling | pass | CODE/tests: qualification logs carry IDs/counts/scores, not customer evidence/body text. |
 | U8 | Personal-liability/entity review | n-a | Exact contracting entity was outside this pass. |
-| A1 | Image alternatives | n-a | No image; Teach AI icon is inside a labelled button. |
-| A2 | Form labels | pass | CODE/tests: correction, note, checklist, score, label, and switch have labels. |
-| A3 | Keyboard operability | pass | CODE/tests: native buttons, dialog, switch, inputs, and textareas. |
-| A4 | Colour contrast | n-a | Existing tokens reused; no literal colour pair introduced. |
-| A5 | Focus visibility | pass | Existing design-system primitives retain focus treatment. |
+| A1 | Image alternatives | n-a | No image added to the public form or narrow operator extensions. |
+| A2 | Form labels | pass | CODE: every public input is nested in a label; the optional SMS checkbox has adjacent disclosure. |
+| A3 | Keyboard operability | pass | CODE: native form controls, links, buttons, dialog and operator links. |
+| A4 | Colour contrast | pass | CODE: literal public-form foreground/background pairs are dark text on white/light surfaces; status red/green retain text labels, not colour-only meaning. |
+| A5 | Focus visibility | pass | Native browser controls on the public snippet and existing design-system focus treatment in CRM. |
 | A6 | Media controls/captions | n-a | No media. |
-| A7 | Page language | n-a | Existing app document unchanged. |
-| D1-US | Automated qualification notice/fairness | pass | CODE: ordinary sales prequalification is human-correctable and handoff-capable; no regulated eligibility domain. |
-| D1-EU/UK | AI transparency and privacy | fail | DEDUCED: AI scores leads and reusable examples contain personal data; deployed disclosure, lawful basis, retention, and deletion were not reviewed. |
-| M1 | Minors | n-a | Home-services sales; no child-directed profiling. |
+| A7 | Page language | fail | DEDUCED: standalone snippet cannot set the WordPress document's `lang`; host page must retain `lang="en"`. |
+| D1-US | Automated qualification notice/fairness | pass | CODE: ordinary sales qualification is evidence-backed, human-correctable and handoff-capable; no regulated eligibility domain. |
+| D1-EU/UK | AI transparency and privacy | fail | DEDUCED: AI scores public leads; deployed disclosure, lawful basis, retention, rights, and processor wording were not reviewed. |
+| M1 | Minors | fail | CODE: public form has no age gate; product is not child-directed, but under-18 submission remains technically possible. |
 
 ## Findings
 
@@ -71,35 +71,36 @@ Scope: human-approved AI SMS examples, live website-lead qualification before bo
 | AI-005 | HIGH | Teach AI could accidentally send the correction | CODE/tests: dedicated persistence endpoint; dialog disclosure; interaction calls only Teach AI | Separate learning from messaging | Fixed | Frontend interaction test |
 | AI-006 | LAWYER | Identifiable lesson survives CRM history deletion | CODE/DEDUCED: history links null while encrypted lesson remains active | Define/disclose retention, deletion propagation, lawful basis, and access rights | Open | Legal/privacy review plus product policy |
 | AI-007 | LAWYER | EU/UK leads may be AI-qualified and reused as examples | CODE/DEDUCED: AI involvement and personal-data reuse are present | Confirm transparency, lawful basis, rights, retention, and processor terms | Open if served | Legal review and launch checklist |
-| MSG-001 | BLOCKER | `job_completed` sends a customer SMS | CODE/tests: automation SMS now uses `OutboundDeliveryService`, checks global opt-out, and requires `sms_consent_status=opted_in` for this flow | Never text an opted-out or unconsented contact | Fixed | Delivery and setup-script tests |
-| MSG-002 | HIGH | Owner instructions are emailed after a completed install | CODE/tests: explicitly transactional, contains no offer, uses explicit per-workspace Maxteriors identity, and does not add a marketing unsubscribe footer | Keep service instructions separate from promotional copy; if an offer is added, reclassify as marketing | Fixed | Setup-script config test |
-| MSG-003 | HIGH | Branded resources are customer-facing public pages and email assets | RUNTIME/screenshots: guide hub, Luxor guide, logo and mark return 200; mobile/full-page and rendered-email screenshots reviewed | Identify the sender accessibly without leaking one tenant's logo into another tenant's email | Fixed | Explicit-logo tests and visual artifacts |
+| MSG-001 | BLOCKER | Acquisition funnel sends automated SMS | CODE/tests: every SMS sets `require_consent=true`, public form submits explicit checked state, blocked sends do not set `contacted`, STOP/global opt-out and `no-automation` stay enforced | Never text an opted-out or unconsented contact | Fixed | Delivery, worker, form, and provisioning tests |
+| MSG-002 | HIGH | First outreach and delayed nurture could duplicate or continue after booking | CODE/tests: source is forced to `collect`, source-scoped `lead_created` stays new-contact-only, acquisition `funnel_id` runs are cancelled and resume/pre-send guarded | One owner for first SMS; stop acquisition nurture at booking | Fixed | Worker resume/event and script-graph tests |
+| MSG-003 | HIGH | AI could claim a booking/Meet URL that Google never created | CODE/tests: booking requires explicit phone/video choice; CRM appointment stays authoritative; Meet URL is persisted only from provider response; failed video copy promises follow-up | Never fabricate a conference link or call a pending action booked | Fixed | AI tool/finalizer/copy tests |
+| FORM-001 | HIGH | Optional checkbox previously recorded consent only in free-form notes | CODE: `sms_consent` now equals the checkbox's actual checked state and remains optional/unchecked | Store structured affirmative consent; never infer it from form submission | Fixed | Source fixture and lead-form tests |
+| TRACK-001 | HIGH | Meta Pixel may receive a post-submit Lead event | CODE: snippet calls `fbq` if the host loaded it; consent-manager behavior is outside this repository | Gate advertising scripts/events behind prior consent where required and honor opt-out signals | Open operational | Host WordPress consent-manager runtime test |
+| A11Y-001 | MEDIUM | WordPress host controls page language | DEDUCED: snippet cannot set document `lang` | Keep host page language declared | Open operational | Host-page accessibility check |
+| MINOR-001 | MEDIUM | Public form has no technical age gate | CODE | Confirm business policy for under-18 inquiries; add an age gate if minors are not accepted | Open operational | Product/legal decision |
 
 ## Implemented in this pass
 
-- Only authenticated CRM writers can upsert one correction per AI source message; tenant and agent are server-derived.
-- Customer message, AI reply, ideal reply, and operator note are encrypted; audits/logs contain no bodies.
-- Active examples affect future assigned-agent prompts without retraining, capped at 12 and 6,000 characters.
-- Qualification is off by default, asks one missing question at a time, reuses form answers, and requires evidence.
-- Booking/availability are removed at the schema boundary and executor-checked until qualification persists.
-- Teach AI is labelled, keyboard-operable, and discloses no customer send and no base-model retraining.
-- Existing SMS consent, opt-out, no-fabrication, and handoff controls remain intact.
-- Post-install SMS is now forced through the unified STOP/opt-out gate and requires explicit `opted_in` consent.
-- Post-install email is explicitly service/transactional; adding an offer or upsell must switch it to marketing and restore unsubscribe handling.
-- Maxteriors logo, wordmark, palette, phone, branded URLs, and accessible image alternatives are explicit on the resource hub, Luxor guide, and this workspace's email; other tenants do not inherit the logo.
-- Completed installs create durable ownership segments from structured project/approved-quote data: `Lighting System`, `Luxor System`, `Permanent Light System`, and (only for a known non-Luxor controller) `Luxor Upgrade Candidate`. The upgrade tag does not itself authorize marketing; later campaigns still use the existing consent/opt-out gates.
+- Qualification requires configured questions, score threshold, evidence, and auto-approved booking; one deduped opportunity opens only after qualification.
+- Phone/video choice is required. Phone copy names the lead's phone; video copy shows Google Meet only from Google's returned URL and exposes sync failure.
+- First outreach is owned by the source-scoped `lead_created` automation; the source action is `collect`, returning contacts do not restart it, and every SMS requires explicit consent.
+- Successful booking marks the contact/opportunity scheduled, emits a canonical event, cancels only that funnel's active runs, and guards parked/pre-send execution.
+- The public WordPress checkbox is optional and unchecked; its actual checked state is sent as structured `sms_consent` beside frequency, rates, STOP/HELP, privacy, and terms disclosure.
+- Existing quiet hours, rate limits, origin allowlists, honeypot, global opt-out, and `no-automation` controls were not weakened.
+- Existing encrypted reusable AI lessons and post-install messaging controls remain as documented in their stable findings above.
 
 ## Open — needs a decision from you
 
-None for this approved implementation.
+- Confirm the host WordPress consent manager prevents Meta Pixel loading/firing before advertising consent where required.
+- Decide whether under-18 homeowners may submit inquiries; add an age gate if not.
 
 ## Needs a lawyer
 
-- Before launch, define lesson retention, customer/operator deletion propagation, and privacy-notice wording for reusable AI guidance.
-- If EU/UK leads can use the form, confirm AI transparency, lawful basis, rights, retention, and LLM/SMS processor terms.
+- Review the public SMS disclosure, privacy policy, terms, AI qualification disclosure, consent records, retention/deletion, and served jurisdictions before relying on this register.
+- If EU/UK leads can submit, confirm AI transparency, lawful basis, rights, retention, and LLM/SMS processor terms.
 
 ## Re-verify before relying (date-sensitive)
 
-- US/EU/UK AI transparency, privacy, automated-decision, SMS, and accessibility requirements in each served jurisdiction.
-- OpenAI/Telnyx data-processing, retention, and model-training terms for the production account/API mode.
-- Verified: source, tests, disposable Postgres migration cycle, running Teach AI endpoint, ciphertext, and tool gates. Not verified: a real Telnyx send or Cal.com/Zoom invite; production credentials and spend were deliberately not used.
+- US/EU/UK AI transparency, privacy, automated-decision, SMS/telemarketing, minors, advertising tracking, and accessibility requirements in each served jurisdiction.
+- OpenAI/Telnyx/Google/Meta data-processing, retention, consent-mode, and model-training terms for production accounts.
+- Verified in this pass: 111 focused funnel tests, full backend CI (4,355 passed), full frontend lint/type/unit/build CI (140 test files), stable codegen, reversible migration CI, readiness endpoint, and live public lead submissions with consent on/off. External Telnyx, Google OAuth, production WordPress consent-manager, and production sends remain operational prerequisites.

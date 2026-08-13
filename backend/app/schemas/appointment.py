@@ -56,15 +56,16 @@ class AppointmentResponse(AppointmentBase):
     agent_id: uuid.UUID | None
     message_id: uuid.UUID | None = None
     campaign_id: uuid.UUID | None = None
+    bookable_staff_id: uuid.UUID | None = None
     business_location_id: uuid.UUID | None = None
     scheduled_at: datetime
     status: str
-    calcom_booking_uid: str | None
-    calcom_booking_id: int | None
-    calcom_event_type_id: int | None
+    google_calendar_event_id: str | None
+    google_calendar_event_url: str | None
+    meeting_url: str | None = None
     sync_status: str
     last_synced_at: datetime | None
-    sync_error: str | None = None  # Stored error message from Cal.com sync failures
+    sync_error: str | None = None
     reminder_sent_at: datetime | None = None
     reminders_sent: list[int] = []
     created_at: datetime

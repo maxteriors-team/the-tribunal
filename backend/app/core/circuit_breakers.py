@@ -1,7 +1,7 @@
 """Circuit breakers for external providers.
 
 This module instantiates one :class:`pybreaker.CircuitBreaker` per external
-dependency (Telnyx, Cal.com, OpenAI, ElevenLabs, Resend, Stripe, Google
+dependency (Telnyx, Google Calendar, OpenAI, ElevenLabs, Resend, Stripe, Google
 Places). Service clients route their outbound entry methods through the
 matching breaker so that, after ``fail_max`` consecutive failures, further
 calls fail-fast with a domain-specific exception until ``reset_timeout``
@@ -78,10 +78,6 @@ class ProviderUnavailableError(ServiceUnavailableError):
 
 class TelnyxUnavailableError(ProviderUnavailableError):
     provider = "telnyx"
-
-
-class CalComUnavailableError(ProviderUnavailableError):
-    provider = "calcom"
 
 
 class OpenAIUnavailableError(ProviderUnavailableError):
@@ -347,7 +343,6 @@ def _make(provider: str, exc: type[ProviderUnavailableError]) -> ProviderCircuit
 
 
 telnyx_breaker: Final[ProviderCircuitBreaker] = _make("telnyx", TelnyxUnavailableError)
-calcom_breaker: Final[ProviderCircuitBreaker] = _make("calcom", CalComUnavailableError)
 openai_breaker: Final[ProviderCircuitBreaker] = _make("openai", OpenAIUnavailableError)
 elevenlabs_breaker: Final[ProviderCircuitBreaker] = _make("elevenlabs", ElevenLabsUnavailableError)
 resend_breaker: Final[ProviderCircuitBreaker] = _make("resend", ResendUnavailableError)
@@ -359,7 +354,6 @@ googleplaces_breaker: Final[ProviderCircuitBreaker] = _make(
 
 ALL_BREAKERS: Final[tuple[ProviderCircuitBreaker, ...]] = (
     telnyx_breaker,
-    calcom_breaker,
     openai_breaker,
     elevenlabs_breaker,
     resend_breaker,
@@ -402,7 +396,6 @@ def with_breaker(
 
 __all__ = [
     "ALL_BREAKERS",
-    "CalComUnavailableError",
     "ElevenLabsUnavailableError",
     "GooglePlacesUnavailableError",
     "OpenAIUnavailableError",
@@ -411,7 +404,6 @@ __all__ = [
     "ResendUnavailableError",
     "StripeUnavailableError",
     "TelnyxUnavailableError",
-    "calcom_breaker",
     "circuit_breaker_state",
     "elevenlabs_breaker",
     "googleplaces_breaker",

@@ -5,14 +5,7 @@ import { createApiClient } from "./create-api-client";
 export interface IntegrationWithMaskedCredentials {
   id: string;
   workspace_id: string;
-  integration_type:
-    | "calcom"
-    | "telnyx"
-    | "openai"
-    | "sendgrid"
-    | "resend"
-    | "lob"
-    | "companycam";
+  integration_type: "telnyx" | "openai" | "sendgrid" | "resend" | "lob" | "companycam";
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -20,14 +13,7 @@ export interface IntegrationWithMaskedCredentials {
 }
 
 export interface CreateIntegrationRequest {
-  integration_type:
-    | "calcom"
-    | "telnyx"
-    | "openai"
-    | "sendgrid"
-    | "resend"
-    | "lob"
-    | "companycam";
+  integration_type: "telnyx" | "openai" | "sendgrid" | "resend" | "lob" | "companycam";
   credentials: Record<string, string>;
   is_active?: boolean;
 }
@@ -109,39 +95,39 @@ export const integrationsApi = {
   test: async (
     workspaceId: string,
     integrationType: string,
-    credentials?: Record<string, string>
+    credentials?: Record<string, string>,
   ): Promise<IntegrationTestResult> => {
     return apiPost<IntegrationTestResult>(
       `/api/v1/workspaces/${workspaceId}/integrations/${integrationType}/test`,
-      credentials ? { credentials } : undefined
+      credentials ? { credentials } : undefined,
     );
   },
 
   getOpenAIOAuthStatus: async (workspaceId: string): Promise<OpenAIOAuthStatus> => {
     return apiGet<OpenAIOAuthStatus>(
-      `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth/status`
+      `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth/status`,
     );
   },
 
   startOpenAIOAuth: async (workspaceId: string): Promise<OpenAIOAuthStartResponse> => {
     return apiPost<OpenAIOAuthStartResponse>(
-      `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth/start`
+      `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth/start`,
     );
   },
 
   pollOpenAIOAuthDeviceCode: async (
     workspaceId: string,
-    pollToken: string
+    pollToken: string,
   ): Promise<OpenAIOAuthDevicePollResponse> => {
     return apiPost<OpenAIOAuthDevicePollResponse>(
       `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth/device/poll`,
-      { poll_token: pollToken }
+      { poll_token: pollToken },
     );
   },
 
   disconnectOpenAIOAuth: async (workspaceId: string): Promise<OpenAIOAuthStatus> => {
     return apiDelete<OpenAIOAuthStatus>(
-      `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth`
+      `/api/v1/workspaces/${workspaceId}/integrations/openai/oauth`,
     );
   },
 };
