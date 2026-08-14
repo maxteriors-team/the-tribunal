@@ -105,6 +105,15 @@ def _document(
             "selectedTierKey": "better",
             "selectedCarePlanKey": "essential",
         },
+        "bomLineItems": [
+            {
+                "id": "manual-bom-1",
+                "description": "Copper ground stake",
+                "sku": "STAKE-CU",
+                "quantity": 4,
+                "unit": "each",
+            }
+        ],
     }
 
 
@@ -121,6 +130,7 @@ class TestLandscapeDraftSchema:
         populated = LandscapeDraftDocument.model_validate(_document())
 
         assert empty.shots == []
+        assert empty.bom_line_items == []
         assert populated.active_shot_id == "shot-1"
         assert populated.shots[0].design.plan_images[0].name == "Pool equipment detail.png"
         assert populated.shots[0].design.runs[0].wire_gauge == 12
@@ -128,9 +138,13 @@ class TestLandscapeDraftSchema:
         assert populated.shots[0].design.items[0].marker_color == "#F2C94C"
         assert populated.proposal.selected_tier_key == "better"
         assert populated.proposal.selected_care_plan_key == "essential"
+        assert populated.bom_line_items[0].description == "Copper ground stake"
+        assert populated.bom_line_items[0].quantity == 4
         assert populated.settings.paper_size == "tabloid"
         assert populated.active_workflow_tab is None
-        assert populated.model_dump(mode="json", by_alias=True)["activeShotId"] == "shot-1"
+        serialized = populated.model_dump(mode="json", by_alias=True)
+        assert serialized["activeShotId"] == "shot-1"
+        assert serialized["bomLineItems"][0]["sku"] == "STAKE-CU"
 
     @pytest.mark.parametrize(
         "mutate",
@@ -153,6 +167,8 @@ class TestLandscapeDraftSchema:
             lambda document: document["shots"][0]["design"]["runs"][0].update(
                 transformerId="missing-transformer"
             ),
+            lambda document: document["bomLineItems"].append(document["bomLineItems"][0]),
+            lambda document: document["bomLineItems"][0].update(quantity=-1),
             lambda document: document.update(version=1),
             lambda document: document.update(version=3),
         ],

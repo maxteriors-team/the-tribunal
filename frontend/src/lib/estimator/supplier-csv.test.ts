@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { CatalogItemResponse } from "@/types/sales-wizard";
 
-import { buildSupplierCsvRows, serializeSupplierCsv } from "./supplier-csv";
+import {
+  buildManualSupplierCsvRows,
+  buildSupplierCsvRows,
+  serializeSupplierCsv,
+} from "./supplier-csv";
 
 const catalogItem = (overrides: Partial<CatalogItemResponse> = {}): CatalogItemResponse =>
   ({
@@ -88,6 +92,39 @@ describe("supplier CSV", () => {
     const [row] = buildSupplierCsvRows([], [{ label: "C1", wireGauge: 10, lengthFeet: null }]);
 
     expect(row).toMatchObject({ quantity: 0, status: "Needs route scale" });
+  });
+
+  it("exports completed manual BOM lines and skips unfinished rows", () => {
+    const rows = buildManualSupplierCsvRows([
+      {
+        id: "manual-1",
+        description: "  Copper ground stake  ",
+        sku: " STAKE-CU ",
+        quantity: 4.5,
+        unit: "each",
+      },
+      { id: "manual-2", description: "Blank SKU item", sku: "", quantity: 25, unit: "ft" },
+      { id: "manual-3", description: "", sku: "SKIP", quantity: 1, unit: "each" },
+      { id: "manual-4", description: "No quantity", sku: "SKIP", quantity: 0, unit: "each" },
+    ]);
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        description: "Copper ground stake",
+        sku: "STAKE-CU",
+        quantity: 4.5,
+        unit: "each",
+        planSource: "Manual BOM",
+        status: "Ready",
+      }),
+      expect.objectContaining({
+        description: "Blank SKU item",
+        sku: "",
+        quantity: 25,
+        unit: "ft",
+        status: "Needs SKU",
+      }),
+    ]);
   });
 
   it("escapes spreadsheet formulas and quotes in exported cells", () => {

@@ -1325,6 +1325,59 @@ describe("LightDesigner", () => {
     expect(saveLandscapeDraft).not.toHaveBeenCalled();
   });
 
+  it("adds, edits, persists, exports, and removes manual BOM lines without an aerial", async () => {
+    const onLandscapeDraftChange = vi.fn();
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        activeShotId: null,
+        activeWorkflowTab: "bom",
+        shots: [],
+        updatedAt: "2026-08-14T12:00:00.000Z",
+      },
+      onLandscapeDraftChange,
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      resetKey: 0,
+    };
+    renderEstimator(undefined, "landscape", adapter);
+
+    const user = userEvent.setup();
+    expect(screen.getByText(/No materials yet/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "CSV" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Add line item" }));
+    await user.type(
+      screen.getByLabelText("BOM line item 1 description"),
+      "Copper ground stake",
+    );
+    await user.type(screen.getByLabelText("BOM line item 1 SKU"), "STAKE-CU");
+    await user.clear(screen.getByLabelText("BOM line item 1 quantity"));
+    await user.type(screen.getByLabelText("BOM line item 1 quantity"), "4");
+    await user.selectOptions(screen.getByLabelText("BOM line item 1 unit"), "each");
+
+    expect(screen.getByRole("button", { name: "CSV" })).toBeEnabled();
+    await waitFor(() => {
+      const latestDraft = onLandscapeDraftChange.mock.calls.at(-1)?.[0];
+      expect(latestDraft?.bomLineItems).toEqual([
+        expect.objectContaining({
+          description: "Copper ground stake",
+          sku: "STAKE-CU",
+          quantity: 4,
+          unit: "each",
+        }),
+      ]);
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Remove BOM line item 1: Copper ground stake" }),
+    );
+    expect(screen.queryByLabelText("BOM line item 1 description")).not.toBeInTheDocument();
+    await waitFor(() => {
+      const latestDraft = onLandscapeDraftChange.mock.calls.at(-1)?.[0];
+      expect(latestDraft?.bomLineItems).toEqual([]);
+    });
+  });
+
   it("prices Good, Better, and Best fixtures with a care plan and creates the quote here", async () => {
     vi.mocked(designToEstimateInputs).mockReturnValue({
       feet: 0,

@@ -343,6 +343,14 @@ export interface LandscapeLegendSettings {
   scale: number;
 }
 
+export interface LandscapeBomLineItem {
+  id: string;
+  description: string;
+  sku: string;
+  quantity: number;
+  unit: "each" | "ft";
+}
+
 export interface LandscapeProcurementState {
   catalogItemId?: string;
   catalogSku?: string;

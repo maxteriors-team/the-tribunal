@@ -390,6 +390,14 @@ class ProposalDraftSchema(DocumentSchema):
     )
 
 
+class BomLineItemSchema(DocumentSchema):
+    id: ShortText
+    description: Annotated[str, Field(max_length=500)] = ""
+    sku: CatalogKey = ""
+    quantity: Annotated[float, Field(ge=0, le=100_000)] = 1
+    unit: Literal["each", "ft"] = "each"
+
+
 class ProcurementStateSchema(DocumentSchema):
     catalog_item_id: CatalogKey | None = Field(
         default=None, validation_alias=AliasChoices("catalogItemId", "catalog_item_id")
@@ -451,6 +459,9 @@ class LandscapeDraftDocument(DocumentSchema):
     )
     settings: DocumentSettingsSchema = Field(default_factory=DocumentSettingsSchema)
     proposal: ProposalDraftSchema = Field(default_factory=ProposalDraftSchema)
+    bom_line_items: Annotated[list[BomLineItemSchema], Field(max_length=100)] = Field(
+        default_factory=list, validation_alias=AliasChoices("bomLineItems", "bom_line_items")
+    )
     procurement: dict[ShortText, ProcurementStateSchema] = Field(default_factory=dict)
     precon: PreconStateSchema = Field(default_factory=PreconStateSchema)
 
@@ -461,6 +472,9 @@ class LandscapeDraftDocument(DocumentSchema):
             raise ValueError("shot IDs must be unique")
         if self.active_shot_id is not None and self.active_shot_id not in set(shot_ids):
             raise ValueError("activeShotId must reference a saved shot")
+        bom_line_ids = [line.id for line in self.bom_line_items]
+        if len(bom_line_ids) != len(set(bom_line_ids)):
+            raise ValueError("BOM line items must use unique IDs")
         for zone in self.proposal.zones:
             if any(shot_id not in set(shot_ids) for shot_id in zone.shot_ids):
                 raise ValueError("proposal zone shotIds must reference saved shots")

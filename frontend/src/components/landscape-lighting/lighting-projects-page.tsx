@@ -93,14 +93,7 @@ function DraftCreateDialog({
       }
 
       const document =
-        mode === "recover" && browserDraft
-          ? {
-              version: browserDraft.version,
-              activeShotId: browserDraft.activeShotId,
-              shots: browserDraft.shots,
-              updatedAt: browserDraft.updatedAt,
-            }
-          : undefined;
+        mode === "recover" && browserDraft ? browserDraft : undefined;
       const created = await lightingProjectsApi.create(workspaceId, {
         contact_id: selectedContactId,
         name: trimmedName,

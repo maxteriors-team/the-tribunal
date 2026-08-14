@@ -131,6 +131,7 @@ import { fileToPhoto } from "@/lib/estimator/photo";
 import { DEFAULT_DUSK } from "@/lib/estimator/render";
 import { SERVICES, clientThemeClass, type ServiceKey } from "@/lib/estimator/services";
 import {
+  buildManualSupplierCsvRows,
   buildSupplierCsvRows,
   downloadSupplierCsv,
   type SupplierCsvRow,
@@ -138,6 +139,7 @@ import {
 import {
   beamAngleFor,
   type Design,
+  type LandscapeBomLineItem,
   type LandscapePaperSize,
   type LandscapePlanFit,
   type LandscapePreconState,
@@ -285,6 +287,7 @@ const landscapeStateFromDraft = (draft: LandscapeDraft): LandscapeDraftState => 
   activeWorkflowTab: draft.activeWorkflowTab ?? "drawing",
   settings: draft.settings ?? defaultLandscapeSettings(),
   proposal: draft.proposal ?? defaultLandscapeProposal(),
+  bomLineItems: draft.bomLineItems ?? [],
   procurement: draft.procurement ?? {},
   precon: draft.precon ?? defaultLandscapePrecon(),
 });
@@ -970,15 +973,11 @@ function LandscapeEmptyPanel({
 
 function LandscapeFixtureTable({
   rows,
-  mode,
-  supplierRows = [],
   catalog = [],
   onUpdate,
   onCopyToType,
 }: {
   rows: LandscapeFixtureScheduleRow[];
-  mode: "schedule" | "bom";
-  supplierRows?: SupplierCsvRow[];
   catalog?: CatalogItemResponse[];
   onUpdate?: (
     itemId: string,
@@ -989,89 +988,231 @@ function LandscapeFixtureTable({
   return (
     <div className="ll-data-table-wrap">
       <table className="ll-data-table">
-        <caption className="sr-only">
-          {mode === "schedule" ? "Fixture schedule" : "Bill of materials"}
-        </caption>
+        <caption className="sr-only">Fixture schedule</caption>
         <thead>
           <tr>
-            {mode === "schedule" ? <th scope="col">No.</th> : null}
+            <th scope="col">No.</th>
             <th scope="col">Fixture</th>
             <th scope="col">SKU</th>
-            {mode === "schedule" ? <th scope="col">Lamp / accessories</th> : null}
+            <th scope="col">Lamp / accessories</th>
             <th scope="col">Quantity</th>
-            {mode === "schedule" ? <th scope="col">Actions</th> : null}
+            <th scope="col">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {mode === "bom"
-            ? supplierRows.map((row, index) => (
-                <tr key={`${row.sku}:${row.description}:${index}`}>
-                  <td>
-                    <strong>{row.description}</strong>
-                    <span>{row.manufacturer || row.supplier || "Supplier unresolved"}</span>
-                  </td>
-                  <td>{row.sku || "Not assigned"}</td>
-                  <td>{row.quantity}</td>
-                </tr>
-              ))
-            : rows.map((row) => (
-                <tr key={row.id}>
-                  {mode === "schedule" ? <td>{row.number ?? "-"}</td> : null}
-                  <td>
-                    <strong>{row.label}</strong>
-                    {row.productName ? <span>{row.productName}</span> : null}
-                  </td>
-                  <td>{row.sku ?? "Not assigned"}</td>
-                  {mode === "schedule" ? (
-                    <td>
-                      {row.itemId && onUpdate ? (
-                        <div className="grid gap-2">
-                          <label>
-                            <span className="sr-only">Lamp for fixture {row.number}</span>
-                            <select
-                              value={row.lampCatalogItemId ?? ""}
-                              onChange={(event) =>
-                                onUpdate(row.itemId!, {
-                                  lampCatalogItemId: event.target.value || undefined,
-                                })
-                              }
-                            >
-                              <option value="">Unresolved lamp</option>
-                              {catalog
-                                .filter((item) => item.is_active)
-                                .map((item) => (
-                                  <option key={item.id} value={item.id}>
-                                    {item.name}
-                                    {item.sku ? ` (${item.sku})` : ""}
-                                  </option>
-                                ))}
-                            </select>
-                          </label>
-                          <span>{row.accessories?.join(", ") || row.beam}</span>
-                        </div>
-                      ) : (
-                        row.beam
-                      )}
-                    </td>
-                  ) : null}
-                  <td>{row.count}</td>
-                  {mode === "schedule" ? (
-                    <td>
-                      <button
-                        type="button"
-                        className="est-btn ghost"
-                        disabled={!row.itemId || !onCopyToType}
-                        onClick={() => row.itemId && onCopyToType?.(row.itemId)}
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td>{row.number ?? "-"}</td>
+              <td>
+                <strong>{row.label}</strong>
+                {row.productName ? <span>{row.productName}</span> : null}
+              </td>
+              <td>{row.sku ?? "Not assigned"}</td>
+              <td>
+                {row.itemId && onUpdate ? (
+                  <div className="grid gap-2">
+                    <label>
+                      <span className="sr-only">Lamp for fixture {row.number}</span>
+                      <select
+                        value={row.lampCatalogItemId ?? ""}
+                        onChange={(event) =>
+                          onUpdate(row.itemId!, {
+                            lampCatalogItemId: event.target.value || undefined,
+                          })
+                        }
                       >
-                        Copy to type
-                      </button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
+                        <option value="">Unresolved lamp</option>
+                        {catalog
+                          .filter((item) => item.is_active)
+                          .map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                              {item.sku ? ` (${item.sku})` : ""}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <span>{row.accessories?.join(", ") || row.beam}</span>
+                  </div>
+                ) : (
+                  row.beam
+                )}
+              </td>
+              <td>{row.count}</td>
+              <td>
+                <button
+                  type="button"
+                  className="est-btn ghost"
+                  disabled={!row.itemId || !onCopyToType}
+                  onClick={() => row.itemId && onCopyToType?.(row.itemId)}
+                >
+                  Copy to type
+                </button>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function LandscapeBomTable({
+  supplierRows,
+  lineItems,
+  onLineItemsChange,
+}: {
+  supplierRows: SupplierCsvRow[];
+  lineItems: LandscapeBomLineItem[];
+  onLineItemsChange: (lineItems: LandscapeBomLineItem[]) => void;
+}) {
+  const updateLine = (id: string, update: Partial<Omit<LandscapeBomLineItem, "id">>) => {
+    onLineItemsChange(lineItems.map((line) => (line.id === id ? { ...line, ...update } : line)));
+  };
+  const hasRows = supplierRows.length > 0 || lineItems.length > 0;
+
+  return (
+    <section className="ll-bom-lines" aria-labelledby="ll-bom-lines-heading">
+      <div className="ll-bom-lines-heading">
+        <div>
+          <h3 id="ll-bom-lines-heading">Materials</h3>
+          <p>Plan quantities update automatically. Add unplaced materials here.</p>
+        </div>
+        <button
+          type="button"
+          className="est-btn"
+          disabled={lineItems.length >= 100}
+          onClick={() =>
+            onLineItemsChange([
+              ...lineItems,
+              { id: nextId("bom-line"), description: "", sku: "", quantity: 1, unit: "each" },
+            ])
+          }
+        >
+          <Plus aria-hidden="true" />
+          Add line item
+        </button>
+      </div>
+
+      {hasRows ? (
+        <div className="ll-data-table-wrap">
+          <table className="ll-data-table ll-bom-table">
+            <caption className="sr-only">Bill of materials</caption>
+            <thead>
+              <tr>
+                <th scope="col">Item</th>
+                <th scope="col">SKU</th>
+                <th scope="col">Quantity</th>
+                <th scope="col">Unit</th>
+                <th scope="col">Source or action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {supplierRows.map((row, index) => (
+                <tr key={`${row.supplier}:${row.sku}:${row.description}:${index}`}>
+                  <td>
+                    <strong>{row.description}</strong>
+                    <span>{row.manufacturer || row.supplier || row.planSource}</span>
+                  </td>
+                  <td>
+                    {row.sku || "Not assigned"}
+                    <span>{row.status}</span>
+                  </td>
+                  <td>{row.needed ?? row.quantity}</td>
+                  <td>{row.unit}</td>
+                  <td>
+                    <span className="ll-bom-source">Plan</span>
+                  </td>
+                </tr>
+              ))}
+              {lineItems.map((line, index) => (
+                <tr key={line.id} className="ll-bom-manual-row">
+                  <td>
+                    <label>
+                      <span className="sr-only">BOM line item {index + 1} description</span>
+                      <input
+                        className="ll-bom-description-input"
+                        value={line.description}
+                        maxLength={500}
+                        placeholder="Description"
+                        onChange={(event) =>
+                          updateLine(line.id, { description: event.target.value })
+                        }
+                      />
+                    </label>
+                  </td>
+                  <td>
+                    <label>
+                      <span className="sr-only">BOM line item {index + 1} SKU</span>
+                      <input
+                        value={line.sku}
+                        maxLength={160}
+                        placeholder="Optional SKU"
+                        onChange={(event) => updateLine(line.id, { sku: event.target.value })}
+                      />
+                    </label>
+                  </td>
+                  <td>
+                    <label>
+                      <span className="sr-only">BOM line item {index + 1} quantity</span>
+                      <input
+                        className="ll-bom-quantity-input"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        max="100000"
+                        step={line.unit === "ft" ? "0.1" : "1"}
+                        value={line.quantity}
+                        placeholder="0"
+                        onChange={(event) =>
+                          updateLine(line.id, {
+                            quantity: Math.min(
+                              100_000,
+                              Math.max(0, Number(event.target.value) || 0),
+                            ),
+                          })
+                        }
+                      />
+                    </label>
+                  </td>
+                  <td>
+                    <label>
+                      <span className="sr-only">BOM line item {index + 1} unit</span>
+                      <select
+                        value={line.unit}
+                        onChange={(event) =>
+                          updateLine(line.id, { unit: event.target.value === "ft" ? "ft" : "each" })
+                        }
+                      >
+                        <option value="each">each</option>
+                        <option value="ft">ft</option>
+                      </select>
+                    </label>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="est-btn ghost ll-bom-line-remove"
+                      aria-label={`Remove BOM line item ${index + 1}${line.description ? `: ${line.description}` : ""}`}
+                      onClick={() =>
+                        onLineItemsChange(lineItems.filter((item) => item.id !== line.id))
+                      }
+                    >
+                      <Trash2 aria-hidden="true" />
+                      <span>Remove</span>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="ll-panel-inline-empty">
+          No materials yet. Place fixtures on the plan or add a line item.
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1749,6 +1890,8 @@ function LandscapeWorkspacePanel({
   previews,
   previewsPending,
   supplierRows,
+  bomLineItems,
+  onBomLineItemsChange,
   pricingTiers,
   proposalDocument,
   selectedTierKey,
@@ -1789,6 +1932,8 @@ function LandscapeWorkspacePanel({
   previews: Record<string, string>;
   previewsPending: boolean;
   supplierRows: SupplierCsvRow[];
+  bomLineItems: LandscapeBomLineItem[];
+  onBomLineItemsChange: (lineItems: LandscapeBomLineItem[]) => void;
   pricingTiers: TierConfig[];
   proposalDocument: ProposalDocument | undefined;
   selectedTierKey: string | null;
@@ -1836,7 +1981,7 @@ function LandscapeWorkspacePanel({
     { label: "Dusk preview reviewed", complete: shots.some((shot) => shot.dusk > 0) },
   ];
 
-  if (!shots.length) {
+  if (!shots.length && tab !== "bom") {
     return (
       <section className="ll-workspace-panel" aria-label={`${tab} workspace`}>
         <LandscapeEmptyPanel
@@ -1862,29 +2007,35 @@ function LandscapeWorkspacePanel({
             <div className="ll-panel-heading-actions">
               <strong>
                 {tab === "bom"
-                  ? `${supplierRows.length} supplier lines`
+                  ? `${supplierRows.length + bomLineItems.length} line items`
                   : `${fixtureCount} fixtures`}
               </strong>
             </div>
           </header>
-          {(tab === "schedule" ? scheduleRows : rows).length ? (
-            <LandscapeFixtureTable
-              rows={tab === "schedule" ? scheduleRows : rows}
-              mode={tab}
-              supplierRows={supplierRows}
-              catalog={catalogItems}
-              onUpdate={onUpdateSchedule}
-              onCopyToType={onCopyScheduleType}
-            />
+          {tab === "schedule" ? (
+            scheduleRows.length ? (
+              <LandscapeFixtureTable
+                rows={scheduleRows}
+                catalog={catalogItems}
+                onUpdate={onUpdateSchedule}
+                onCopyToType={onCopyScheduleType}
+              />
+            ) : (
+              <div className="ll-panel-inline-empty">
+                Place fixtures on the Drawing Sheet to build this table automatically.
+              </div>
+            )
           ) : (
-            <div className="ll-panel-inline-empty">
-              Place fixtures on the Drawing Sheet to build this table automatically.
-            </div>
+            <LandscapeBomTable
+              supplierRows={supplierRows}
+              lineItems={bomLineItems}
+              onLineItemsChange={onBomLineItemsChange}
+            />
           )}
           {tab === "bom" ? (
             <p className="ll-panel-footnote">
-              Supplier CSV expands catalog components, includes placed transformers and traced wire,
-              and flags any line that still needs a supplier SKU or drawing scale. Wire quantities
+              Supplier CSV includes manual line items, expands catalog components, includes placed
+              transformers and traced wire, and flags missing SKUs or drawing scale. Wire quantities
               use traced one-way route length rounded up to a whole foot without a waste allowance.
             </p>
           ) : null}
@@ -2222,6 +2373,9 @@ export function LightDesigner({
   const [landscapeAdditionalLineItems, setLandscapeAdditionalLineItems] = useState<
     LandscapeProposalLineItem[]
   >(initialLandscapeProposal.additionalLineItems ?? []);
+  const [landscapeBomLineItems, setLandscapeBomLineItems] = useState<LandscapeBomLineItem[]>(
+    () => projectInitialDraft?.bomLineItems ?? [],
+  );
   const [landscapeProcurement, setLandscapeProcurement] = useState<
     Record<string, LandscapeProcurementState>
   >(() => projectInitialDraft?.procurement ?? {});
@@ -2296,6 +2450,7 @@ export function LightDesigner({
         selectedCarePlanKey: selectedLandscapeCarePlanKey,
         additionalLineItems: landscapeAdditionalLineItems,
       },
+      bomLineItems: landscapeBomLineItems,
       procurement: landscapeProcurement,
       precon: preconState,
     }),
@@ -2303,6 +2458,7 @@ export function LightDesigner({
       fixtureNumbersVisible,
       halosVisible,
       landscapeAdditionalLineItems,
+      landscapeBomLineItems,
       landscapeLegendOpen,
       landscapeLegendPosition,
       landscapeLegendScale,
@@ -2370,6 +2526,7 @@ export function LightDesigner({
                 activeWorkflowTab: "drawing" as const,
                 settings: defaultLandscapeSettings(),
                 proposal: defaultLandscapeProposal(),
+                bomLineItems: [],
                 procurement: {},
                 precon: defaultLandscapePrecon(),
               };
@@ -2397,6 +2554,7 @@ export function LightDesigner({
           setSelectedLandscapeTierKey(restoredState.proposal.selectedTierKey);
           setSelectedLandscapeCarePlanKey(restoredState.proposal.selectedCarePlanKey);
           setLandscapeAdditionalLineItems(restoredState.proposal.additionalLineItems ?? []);
+          setLandscapeBomLineItems(restoredState.bomLineItems);
           setLandscapeProcurement(restoredState.procurement);
           setPreconState(restoredState.precon);
           setAutosaveStatus("saved");
@@ -2493,6 +2651,7 @@ export function LightDesigner({
       setSelectedLandscapeTierKey(restoredState.proposal.selectedTierKey);
       setSelectedLandscapeCarePlanKey(restoredState.proposal.selectedCarePlanKey);
       setLandscapeAdditionalLineItems(restoredState.proposal.additionalLineItems ?? []);
+      setLandscapeBomLineItems(restoredState.bomLineItems);
       setLandscapeProcurement(restoredState.procurement);
       setPreconState(restoredState.precon);
       dispatch({
@@ -2854,7 +3013,7 @@ export function LightDesigner({
       ]),
     [priceBook, pricing, tierKey],
   );
-  const supplierRows = useMemo(() => {
+  const generatedSupplierRows = useMemo(() => {
     const fixtures = fixtureLines.map((line) => ({
       label: line.label,
       quantity: line.count,
@@ -2887,6 +3046,10 @@ export function LightDesigner({
     transformerCount,
     transformerResolution,
   ]);
+  const supplierRows = useMemo(
+    () => [...generatedSupplierRows, ...buildManualSupplierCsvRows(landscapeBomLineItems)],
+    [generatedSupplierRows, landscapeBomLineItems],
+  );
   const hasLandscape = fixtureCount > 0 || transformerCount > 0 || inputs.bistro_feet > 0;
 
   const landscapeProposalPayload = useMemo<ProposalWizardPayload | null>(() => {
@@ -3527,11 +3690,9 @@ export function LightDesigner({
               title={
                 supplierRows.length
                   ? "Download supplier bill of materials as CSV"
-                  : "Add fixtures before exporting a supplier CSV."
+                  : "Complete a BOM line item or add fixtures before exporting a supplier CSV."
               }
-              onClick={() =>
-                downloadSupplierCsv(supplierRows, `${landscapeProjectName}-supplier-bom.csv`)
-              }
+              onClick={() => downloadSupplierCsv(supplierRows, landscapeProjectName)}
             >
               <FileDown className="size-3.5" aria-hidden="true" />
               CSV
@@ -3759,6 +3920,7 @@ export function LightDesigner({
               setSelectedLandscapeTierKey(restoredState.proposal.selectedTierKey);
               setSelectedLandscapeCarePlanKey(restoredState.proposal.selectedCarePlanKey);
               setLandscapeAdditionalLineItems(restoredState.proposal.additionalLineItems ?? []);
+              setLandscapeBomLineItems(restoredState.bomLineItems);
               setLandscapeProcurement(restoredState.procurement);
               setPreconState(restoredState.precon);
               dispatch({ type: "RESET", design: first?.design ?? EMPTY_DESIGN });
@@ -3897,7 +4059,9 @@ export function LightDesigner({
               circuitLoads={circuitLoads}
               previews={proposalPreviews}
               previewsPending={proposalPreviewsPending}
-              supplierRows={supplierRows}
+              supplierRows={generatedSupplierRows}
+              bomLineItems={landscapeBomLineItems}
+              onBomLineItemsChange={setLandscapeBomLineItems}
               pricingTiers={landscapePricingTiers}
               proposalDocument={landscapeProposalQuery.data}
               selectedTierKey={effectiveLandscapeTierKey}
