@@ -20136,6 +20136,54 @@ export interface components {
              */
             workspace_id: string;
         };
+        /** LightingProjectSummary */
+        LightingProjectSummary: {
+            /** Assigned User Id */
+            assigned_user_id: number | null;
+            /** Contact Id */
+            contact_id: number;
+            /** Contact Name */
+            contact_name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Installation Shot Id */
+            installation_shot_id: string | null;
+            /** Name */
+            name: string;
+            /** Opportunity Id */
+            opportunity_id: string | null;
+            /** Service Location Id */
+            service_location_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Id */
+            updated_by_id: number | null;
+            /** Updater Name */
+            updater_name: string | null;
+            /** Version */
+            version: number;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
         /** LightingProjectUpdate */
         LightingProjectUpdate: {
             /** Assigned User Id */
@@ -22808,7 +22856,7 @@ export interface components {
         /** PaginatedLightingProjects */
         PaginatedLightingProjects: {
             /** Items */
-            items: components["schemas"]["LightingProjectDetail"][];
+            items: components["schemas"]["LightingProjectSummary"][];
             /** Page */
             page: number;
             /** Page Size */

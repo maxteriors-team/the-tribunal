@@ -235,6 +235,13 @@ def _api_response(**overrides: object) -> dict[str, object]:
     return response
 
 
+def _api_summary_response(**overrides: object) -> dict[str, object]:
+    response = _api_response(**overrides)
+    response.pop("created_by_id")
+    response.pop("document")
+    return response
+
+
 async def _api_client(role: str, service: AsyncMock) -> AsyncIterator[AsyncClient]:
     app = FastAPI(lifespan=_test_lifespan)
 
@@ -261,7 +268,7 @@ async def _api_client(role: str, service: AsyncMock) -> AsyncIterator[AsyncClien
 async def manager_client() -> AsyncIterator[AsyncClient]:
     service = AsyncMock()
     service.list_projects.return_value = {
-        "items": [_api_response()],
+        "items": [_api_summary_response()],
         "total": 1,
         "page": 1,
         "page_size": 50,
@@ -284,7 +291,9 @@ class TestLightingProjectApiPermissions:
     @pytest.mark.asyncio
     async def test_manager_can_read_and_write(self, manager_client: AsyncClient) -> None:
         base = f"/api/v1/workspaces/{WS_ID}/lighting-projects"
-        assert (await manager_client.get(base)).status_code == 200
+        list_response = await manager_client.get(base)
+        assert list_response.status_code == 200
+        assert "document" not in list_response.json()["items"][0]
         response = await manager_client.post(
             base, json={"contact_id": 42, "name": "Patio lighting"}
         )

@@ -7,12 +7,15 @@ export type LightingProjectDetail = Omit<
   components["schemas"]["LightingProjectDetail"],
   "installation_shot_id"
 > & { installation_shot_id?: string | null };
-export type LightingProjectSummary = Omit<LightingProjectDetail, "document" | "created_by_id">;
+export type LightingProjectSummary = Omit<
+  components["schemas"]["LightingProjectSummary"],
+  "installation_shot_id"
+> & { installation_shot_id?: string | null };
 export type LightingProjectUpdate = components["schemas"]["LightingProjectUpdate"];
 export type PaginatedLightingProjects = Omit<
   components["schemas"]["PaginatedLightingProjects"],
   "items"
-> & { items: LightingProjectDetail[] };
+> & { items: LightingProjectSummary[] };
 export type LightingProjectListParams = NonNullable<
   operations["list_lighting_projects_api_v1_workspaces__workspace_id__lighting_projects_get"]["parameters"]["query"]
 >;
