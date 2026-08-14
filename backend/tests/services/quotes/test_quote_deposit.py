@@ -1,9 +1,8 @@
-"""Real-DB integration tests for public-proposal deposit collection.
+"""Real-DB integration tests for proposal deposit collection and recording.
 
-Covers the deposit surface end-to-end against Postgres with the Stripe boundary
-mocked: the public payload derives the deposit amount from the live total, a
-checkout session persists its id on the quote, the webhook marks the deposit
-paid idempotently, and bad states (no deposit, already paid, expired) raise.
+Covers the Stripe-backed public flow plus authenticated-service semantics for
+offline cash/check/other deposits: durable provenance, workspace scoping,
+checkout expiry before manual recording, and a single atomic paid transition.
 Marked ``integration`` and deselected by default; run with ``pytest -m integration``.
 """
 
@@ -20,8 +19,10 @@ from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.quote import Quote
+from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.quote import QuoteCreate, QuoteLineItemCreate
+from app.services.exceptions import ConflictError, NotFoundError
 from app.services.payments import quote_deposit_service as deposit
 from app.services.payments.call_payment_service import (
     CheckoutSessionResult,
@@ -66,6 +67,19 @@ async def _make_contact(db: AsyncSession, workspace_id: uuid.UUID) -> Contact:
     db.add(contact)
     await db.flush()
     return contact
+
+
+async def _make_user(db: AsyncSession) -> User:
+    email = f"operator-{uuid.uuid4().hex[:8]}@example.com"
+    user = User(
+        email=email,
+        email_hash=hash_value(email),
+        hashed_password="x",
+        full_name="Deposit Recorder",
+    )
+    db.add(user)
+    await db.flush()
+    return user
 
 
 async def _sent_quote_with_deposit(
@@ -114,9 +128,7 @@ async def test_no_deposit_yields_null_amount() -> None:
         ws = await _make_workspace(db)
         contact = await _make_contact(db, ws.id)
         svc = QuoteService(db)
-        token, _ = await _sent_quote_with_deposit(
-            svc, ws.id, contact.id, deposit_percentage=None
-        )
+        token, _ = await _sent_quote_with_deposit(svc, ws.id, contact.id, deposit_percentage=None)
 
         proposal = await svc.get_public_proposal(token)
         assert proposal.deposit_percentage is None
@@ -186,6 +198,10 @@ async def test_webhook_marks_deposit_paid_idempotently(monkeypatch) -> None:
 
         proposal = await svc.get_public_proposal(token)
         assert proposal.deposit_paid is True
+        refreshed = await db.get(Quote, quote_id)
+        assert refreshed is not None
+        assert refreshed.deposit_payment_method == "card"
+        assert refreshed.deposit_recorded_by_id is None
         assert notifications == [
             {
                 "workspace_id": ws.id,
@@ -203,12 +219,155 @@ async def test_webhook_marks_deposit_paid_idempotently(monkeypatch) -> None:
         ]
 
         # Idempotent: replaying the webhook keeps a single paid transition/email.
-        refreshed = await db.get(Quote, quote_id)
         first_paid_at = refreshed.deposit_paid_at
         await deposit.handle_deposit_checkout_session_completed(session, db)
         again = await db.get(Quote, quote_id)
         assert again.deposit_paid_at == first_paid_at
         assert len(notifications) == 1
+
+
+async def test_manual_cash_deposit_records_operator_provenance(monkeypatch) -> None:
+    notifications: list[dict[str, object]] = []
+
+    async def _capture_notification(_db, **kwargs):
+        notifications.append(kwargs)
+
+    monkeypatch.setattr(
+        "app.services.payments.customer_payment_notifications.notify_customer_payment",
+        _capture_notification,
+    )
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        operator = await _make_user(db)
+        _, quote_id = await _sent_quote_with_deposit(QuoteService(db), ws.id, contact.id)
+
+        recorded = await deposit.record_manual_deposit(
+            db,
+            ws.id,
+            quote_id,
+            payment_method="cash",
+            recorded_by_id=operator.id,
+        )
+
+        assert recorded.deposit_paid_at is not None
+        assert recorded.deposit_payment_method == "cash"
+        assert recorded.deposit_recorded_by_id == operator.id
+        assert recorded.deposit_payment_intent_id is None
+        # The operator already knows they recorded it; customer-payment alerts are
+        # reserved for unattended card transitions.
+        assert notifications == []
+
+
+async def test_manual_deposit_expires_open_card_checkout(monkeypatch) -> None:
+    expired_sessions: list[str] = []
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        operator = await _make_user(db)
+        _, quote_id = await _sent_quote_with_deposit(QuoteService(db), ws.id, contact.id)
+        quote = await db.get(Quote, quote_id)
+        assert quote is not None
+        quote.deposit_checkout_session_id = "cs_open_manual"
+        await db.commit()
+
+        monkeypatch.setattr(deposit.call_payment_service, "is_payment_configured", lambda: True)
+
+        async def _open_status(session_id: str) -> SessionStatus:
+            assert session_id == "cs_open_manual"
+            return SessionStatus(payment_status="unpaid", status="open", payment_intent_id=None)
+
+        async def _expire(session_id: str) -> bool:
+            expired_sessions.append(session_id)
+            return True
+
+        monkeypatch.setattr(deposit.call_payment_service, "retrieve_session_status", _open_status)
+        monkeypatch.setattr(
+            deposit.call_payment_service, "expire_checkout_session_if_open", _expire
+        )
+
+        recorded = await deposit.record_manual_deposit(
+            db,
+            ws.id,
+            quote_id,
+            payment_method="check",
+            recorded_by_id=operator.id,
+        )
+
+        assert expired_sessions == ["cs_open_manual"]
+        assert recorded.deposit_payment_method == "check"
+        assert recorded.deposit_recorded_by_id == operator.id
+
+
+async def test_paid_card_checkout_wins_over_manual_recording(monkeypatch) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        operator = await _make_user(db)
+        _, quote_id = await _sent_quote_with_deposit(QuoteService(db), ws.id, contact.id)
+        quote = await db.get(Quote, quote_id)
+        assert quote is not None
+        quote.deposit_checkout_session_id = "cs_paid_before_cash"
+        await db.commit()
+
+        monkeypatch.setattr(deposit.call_payment_service, "is_payment_configured", lambda: True)
+
+        async def _paid_status(_session_id: str) -> SessionStatus:
+            return SessionStatus(
+                payment_status="paid",
+                status="complete",
+                payment_intent_id="pi_wins",
+            )
+
+        monkeypatch.setattr(deposit.call_payment_service, "retrieve_session_status", _paid_status)
+
+        recorded = await deposit.record_manual_deposit(
+            db,
+            ws.id,
+            quote_id,
+            payment_method="cash",
+            recorded_by_id=operator.id,
+        )
+
+        assert recorded.deposit_payment_method == "card"
+        assert recorded.deposit_payment_intent_id == "pi_wins"
+        assert recorded.deposit_recorded_by_id is None
+
+
+async def test_manual_deposit_is_workspace_scoped_and_single_transition() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        other_ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        operator = await _make_user(db)
+        _, quote_id = await _sent_quote_with_deposit(QuoteService(db), ws.id, contact.id)
+
+        with pytest.raises(NotFoundError):
+            await deposit.record_manual_deposit(
+                db,
+                other_ws.id,
+                quote_id,
+                payment_method="other",
+                recorded_by_id=operator.id,
+            )
+
+        await deposit.record_manual_deposit(
+            db,
+            ws.id,
+            quote_id,
+            payment_method="other",
+            recorded_by_id=operator.id,
+        )
+        with pytest.raises(ConflictError):
+            await deposit.record_manual_deposit(
+                db,
+                ws.id,
+                quote_id,
+                payment_method="cash",
+                recorded_by_id=operator.id,
+            )
 
 
 async def test_checkout_rejects_bad_states(monkeypatch) -> None:
@@ -344,7 +503,8 @@ async def test_reconcile_marks_paid_when_stripe_reports_paid(monkeypatch) -> Non
         refreshed = await db.get(Quote, quote_id)
         assert refreshed.deposit_paid_at is not None
         assert refreshed.deposit_payment_intent_id == "pi_rec_1"
-
+        assert refreshed.deposit_payment_method == "card"
+        assert refreshed.deposit_recorded_by_id is None
         # Idempotent: a second reconcile keeps the same paid timestamp.
         first = refreshed.deposit_paid_at
         again = await deposit.reconcile_deposit(db, token)
@@ -366,9 +526,7 @@ async def test_reconcile_reports_unpaid_when_stripe_not_paid(monkeypatch) -> Non
         monkeypatch.setattr(deposit.call_payment_service, "is_payment_configured", lambda: True)
 
         async def _unpaid_status(session_id: str) -> SessionStatus:
-            return SessionStatus(
-                payment_status="unpaid", status="open", payment_intent_id=None
-            )
+            return SessionStatus(payment_status="unpaid", status="open", payment_intent_id=None)
 
         monkeypatch.setattr(deposit.call_payment_service, "retrieve_session_status", _unpaid_status)
 

@@ -49,6 +49,7 @@ from app.schemas.quote import (
     QuoteDeclineRequest,
     QuoteDeliverRequest,
     QuoteDeliverResult,
+    QuoteDepositRecordRequest,
     QuoteDetailResponse,
     QuoteLineItemCreate,
     QuoteLineItemUpdate,
@@ -61,6 +62,7 @@ from app.services.idempotency import (
 )
 from app.services.jobs import JobService
 from app.services.notifications import notify_workspace_event
+from app.services.payments.quote_deposit_service import record_manual_deposit
 from app.services.quotes import QuoteService
 
 logger = structlog.get_logger(__name__)
@@ -225,6 +227,26 @@ async def decline_quote(
     """Operator declines a quote on the customer's behalf."""
     service = QuoteService(db)
     return await service.decline_quote(workspace_id, quote_id, reason=payload.reason)
+
+
+@router.post("/{quote_id}/record-deposit", response_model=QuoteDetailResponse)
+async def record_quote_deposit(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    payload: QuoteDepositRecordRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> QuoteDetailResponse:
+    """Attest that an offline cash, check, or other deposit was received."""
+    await record_manual_deposit(
+        db,
+        workspace_id,
+        quote_id,
+        payment_method=payload.payment_method,
+        recorded_by_id=current_user.id,
+    )
+    return await QuoteService(db).get_quote(workspace_id, quote_id)
 
 
 @router.post("/{quote_id}/convert", response_model=QuoteConvertResponse)

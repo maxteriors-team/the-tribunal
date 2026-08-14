@@ -40649,6 +40649,25 @@
         "title": "QuoteDeliverResult",
         "type": "object"
       },
+      "QuoteDepositRecordRequest": {
+        "description": "Record money already received outside the online card flow.\n\n``card`` is deliberately excluded: only Stripe confirmation can attest that\nan online card transaction completed.",
+        "properties": {
+          "payment_method": {
+            "enum": [
+              "cash",
+              "check",
+              "other"
+            ],
+            "title": "Payment Method",
+            "type": "string"
+          }
+        },
+        "required": [
+          "payment_method"
+        ],
+        "title": "QuoteDepositRecordRequest",
+        "type": "object"
+      },
       "QuoteDetailResponse": {
         "description": "Quote with its line items and (when built by the wizard) its rich snapshot.",
         "properties": {
@@ -40804,7 +40823,7 @@
             "title": "Deposit Amount Fixed"
           },
           "deposit_paid": {
-            "description": "Provider-reconciled deposit truth for authenticated staff views.",
+            "description": "Provider-confirmed card payment or authenticated offline record.",
             "readOnly": true,
             "title": "Deposit Paid",
             "type": "boolean"
@@ -40821,6 +40840,23 @@
             ],
             "title": "Deposit Paid At"
           },
+          "deposit_payment_method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "card",
+                  "cash",
+                  "check",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Payment Method"
+          },
           "deposit_percentage": {
             "anyOf": [
               {
@@ -40831,6 +40867,17 @@
               }
             ],
             "title": "Deposit Percentage"
+          },
+          "deposit_recorded_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Recorded By Id"
           },
           "deposit_required": {
             "description": "True when a deposit is owed and not yet paid.",
@@ -41634,7 +41681,7 @@
             "title": "Deposit Amount Fixed"
           },
           "deposit_paid": {
-            "description": "Provider-reconciled deposit truth for authenticated staff views.",
+            "description": "Provider-confirmed card payment or authenticated offline record.",
             "readOnly": true,
             "title": "Deposit Paid",
             "type": "boolean"
@@ -41651,6 +41698,23 @@
             ],
             "title": "Deposit Paid At"
           },
+          "deposit_payment_method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "card",
+                  "cash",
+                  "check",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Payment Method"
+          },
           "deposit_percentage": {
             "anyOf": [
               {
@@ -41661,6 +41725,17 @@
               }
             ],
             "title": "Deposit Percentage"
+          },
+          "deposit_recorded_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Recorded By Id"
           },
           "deposit_required": {
             "description": "True when a deposit is owed and not yet paid.",
@@ -65452,7 +65527,7 @@
         ]
       },
       "post": {
-        "description": "Hold a season slot for a contact and issue the deposit-bearing proposal.\n\nReturns the public proposal link. Paying its deposit — through the existing\nStripe checkout, not a second payment path — is what confirms the booking and\nputs a provisional job into backlog.",
+        "description": "Hold a season slot for a contact and issue the deposit-bearing proposal.\n\nReturns the public proposal link. A confirmed card payment or an authenticated\noperator's offline deposit record is what confirms the booking and puts a\nprovisional job into backlog.",
         "operationId": "reserve_pre_booking_slot_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_reservations_post",
         "parameters": [
           {
@@ -85480,6 +85555,75 @@
           }
         ],
         "summary": "Update Line Item",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/record-deposit": {
+      "post": {
+        "description": "Attest that an offline cash, check, or other deposit was received.",
+        "operationId": "record_quote_deposit_api_v1_workspaces__workspace_id__quotes__quote_id__record_deposit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteDepositRecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Record Quote Deposit",
         "tags": [
           "Quotes"
         ]

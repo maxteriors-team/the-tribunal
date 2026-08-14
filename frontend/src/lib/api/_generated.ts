@@ -3369,9 +3369,9 @@ export interface paths {
          * Reserve Pre Booking Slot
          * @description Hold a season slot for a contact and issue the deposit-bearing proposal.
          *
-         *     Returns the public proposal link. Paying its deposit — through the existing
-         *     Stripe checkout, not a second payment path — is what confirms the booking and
-         *     puts a provisional job into backlog.
+         *     Returns the public proposal link. A confirmed card payment or an authenticated
+         *     operator's offline deposit record is what confirms the booking and puts a
+         *     provisional job into backlog.
          */
         post: operations["reserve_pre_booking_slot_api_v1_workspaces__workspace_id__campaigns__campaign_id__pre_booking_reservations_post"];
         delete?: never;
@@ -8177,6 +8177,26 @@ export interface paths {
          * @description Remove a line item and recompute quote totals.
          */
         delete: operations["remove_line_item_api_v1_workspaces__workspace_id__quotes__quote_id__line_items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/record-deposit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Quote Deposit
+         * @description Attest that an offline cash, check, or other deposit was received.
+         */
+        post: operations["record_quote_deposit_api_v1_workspaces__workspace_id__quotes__quote_id__record_deposit_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -25821,6 +25841,20 @@ export interface components {
             to: string;
         };
         /**
+         * QuoteDepositRecordRequest
+         * @description Record money already received outside the online card flow.
+         *
+         *     ``card`` is deliberately excluded: only Stripe confirmation can attest that
+         *     an online card transaction completed.
+         */
+        QuoteDepositRecordRequest: {
+            /**
+             * Payment Method
+             * @enum {string}
+             */
+            payment_method: "cash" | "check" | "other";
+        };
+        /**
          * QuoteDetailResponse
          * @description Quote with its line items and (when built by the wizard) its rich snapshot.
          */
@@ -25869,13 +25903,17 @@ export interface components {
             deposit_amount_fixed?: number | null;
             /**
              * Deposit Paid
-             * @description Provider-reconciled deposit truth for authenticated staff views.
+             * @description Provider-confirmed card payment or authenticated offline record.
              */
             readonly deposit_paid: boolean;
             /** Deposit Paid At */
             deposit_paid_at?: string | null;
+            /** Deposit Payment Method */
+            deposit_payment_method?: ("card" | "cash" | "check" | "other") | null;
             /** Deposit Percentage */
             deposit_percentage?: number | null;
+            /** Deposit Recorded By Id */
+            deposit_recorded_by_id?: number | null;
             /**
              * Deposit Required
              * @description True when a deposit is owed and not yet paid.
@@ -26157,13 +26195,17 @@ export interface components {
             deposit_amount_fixed?: number | null;
             /**
              * Deposit Paid
-             * @description Provider-reconciled deposit truth for authenticated staff views.
+             * @description Provider-confirmed card payment or authenticated offline record.
              */
             readonly deposit_paid: boolean;
             /** Deposit Paid At */
             deposit_paid_at?: string | null;
+            /** Deposit Payment Method */
+            deposit_payment_method?: ("card" | "cash" | "check" | "other") | null;
             /** Deposit Percentage */
             deposit_percentage?: number | null;
+            /** Deposit Recorded By Id */
+            deposit_recorded_by_id?: number | null;
             /**
              * Deposit Required
              * @description True when a deposit is owed and not yet paid.
@@ -47734,6 +47776,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_quote_deposit_api_v1_workspaces__workspace_id__quotes__quote_id__record_deposit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteDepositRecordRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

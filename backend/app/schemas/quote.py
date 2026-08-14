@@ -24,6 +24,8 @@ from app.schemas.pricing import FinancingEstimate
 from app.schemas.user import AssigneeSummary
 
 QuoteStatus = Literal["draft", "sent", "approved", "declined", "expired"]
+DepositPaymentMethod = Literal["card", "cash", "check", "other"]
+ManualDepositPaymentMethod = Literal["cash", "check", "other"]
 
 
 # --------------------------------------------------------------------------- #
@@ -210,6 +212,16 @@ class QuoteDeclineRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+class QuoteDepositRecordRequest(BaseModel):
+    """Record money already received outside the online card flow.
+
+    ``card`` is deliberately excluded: only Stripe confirmation can attest that
+    an online card transaction completed.
+    """
+
+    payment_method: ManualDepositPaymentMethod
+
+
 class QuoteDeliverRequest(BaseModel):
     """Send the client proposal link by email or SMS.
 
@@ -293,6 +305,8 @@ class QuoteResponse(BaseModel):
     deposit_percentage: float | None = None
     deposit_amount_fixed: float | None = None
     deposit_paid_at: datetime | None = None
+    deposit_payment_method: DepositPaymentMethod | None = None
+    deposit_recorded_by_id: int | None = None
     issue_date: date | None = None
     expiry_date: date | None = None
     sent_at: datetime | None = None
@@ -377,7 +391,7 @@ class QuoteResponse(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def deposit_paid(self) -> bool:
-        """Provider-reconciled deposit truth for authenticated staff views."""
+        """Provider-confirmed card payment or authenticated offline record."""
         return self.deposit_paid_at is not None
 
     model_config = ConfigDict(from_attributes=True)

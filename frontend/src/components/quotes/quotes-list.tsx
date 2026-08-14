@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Banknote,
   Check,
   Copy,
   Eye,
@@ -49,11 +50,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Table,
   TableBody,
@@ -75,11 +72,9 @@ import type { Quote, QuoteDeliverChannel, QuoteStatus } from "@/types";
 import { ConvertQuoteDialog } from "./convert-quote-dialog";
 import { QuoteEditDialog } from "./quote-edit-dialog";
 import { QuoteServicesDialog } from "./quote-services-dialog";
+import { depositPaymentMethodLabel, RecordDepositDialog } from "./record-deposit-dialog";
 
-const STATUS_VARIANT: Record<
-  QuoteStatus,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
+const STATUS_VARIANT: Record<QuoteStatus, "default" | "secondary" | "destructive" | "outline"> = {
   draft: "outline",
   sent: "secondary",
   approved: "default",
@@ -92,6 +87,7 @@ export function QuotesList() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [convertQuote, setConvertQuote] = useState<Quote | null>(null);
+  const [recordDepositQuote, setRecordDepositQuote] = useState<Quote | null>(null);
   const [editing, setEditing] = useState<Quote | null>(null);
   const [servicesQuote, setServicesQuote] = useState<Quote | null>(null);
   const [assignmentQuote, setAssignmentQuote] = useState<Quote | null>(null);
@@ -119,8 +115,7 @@ export function QuotesList() {
       toast.success(`Quote ${q.number} sent`);
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to send quote")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to send quote")),
   });
 
   // Deliberately separate from `sendMutation`: that one marks the quote sent and
@@ -129,13 +124,8 @@ export function QuotesList() {
   // reason on failure — "add a mobile number", "this number opted out" — which
   // is a thing the rep can act on while still standing in the driveway.
   const deliverMutation = useMutation({
-    mutationFn: ({
-      id,
-      channel,
-    }: {
-      id: string;
-      channel: QuoteDeliverChannel;
-    }) => quotesApi.deliver(workspaceId ?? "", id, channel),
+    mutationFn: ({ id, channel }: { id: string; channel: QuoteDeliverChannel }) =>
+      quotesApi.deliver(workspaceId ?? "", id, channel),
     onSuccess: (result) => {
       toast.success(
         result.channel === "sms"
@@ -144,8 +134,7 @@ export function QuotesList() {
       );
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Couldn't send the proposal")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Couldn't send the proposal")),
   });
 
   const approveMutation = useMutation({
@@ -154,8 +143,7 @@ export function QuotesList() {
       toast.success(`Quote ${q.number} approved`);
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to approve quote")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to approve quote")),
   });
 
   const declineMutation = useMutation({
@@ -164,8 +152,7 @@ export function QuotesList() {
       toast.success(`Quote ${q.number} declined`);
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to decline quote")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to decline quote")),
   });
 
   const deleteMutation = useMutation({
@@ -175,8 +162,7 @@ export function QuotesList() {
       setPendingDelete(null);
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to delete quote")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to delete quote")),
   });
 
   const assignmentMutation = useMutation({
@@ -191,8 +177,7 @@ export function QuotesList() {
       setAssignmentQuote(null);
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to update quote owner")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to update quote owner")),
   });
 
   const openAssignment = (quote: Quote) => {
@@ -282,9 +267,7 @@ export function QuotesList() {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5">
-                    <Badge variant={STATUS_VARIANT[quote.status]}>
-                      {quote.status}
-                    </Badge>
+                    <Badge variant={STATUS_VARIANT[quote.status]}>{quote.status}</Badge>
                     {(quote.converted_job_id || quote.converted_invoice_id) && (
                       <Badge variant="outline" className="text-emerald-600">
                         converted
@@ -318,6 +301,18 @@ export function QuotesList() {
                 </TableCell>
                 <TableCell className="min-w-[18rem] text-right">
                   <div>{formatCurrency(quote.total, quote.currency)}</div>
+                  {quote.deposit_paid ? (
+                    <div className="mt-1 text-xs font-medium text-emerald-600">
+                      Deposit paid
+                      {depositPaymentMethodLabel(quote.deposit_payment_method)
+                        ? ` · ${depositPaymentMethodLabel(quote.deposit_payment_method)}`
+                        : ""}
+                    </div>
+                  ) : quote.deposit_required && quote.deposit_amount ? (
+                    <div className="mt-1 text-xs font-medium text-amber-600">
+                      Deposit due · {formatCurrency(quote.deposit_amount, quote.currency)}
+                    </div>
+                  ) : null}
                   <FinancingEstimate
                     financing={quote.financing}
                     variant="compact"
@@ -334,11 +329,10 @@ export function QuotesList() {
                     onAssign={() => openAssignment(quote)}
                     onEdit={() => setEditing(quote)}
                     onSend={() => sendMutation.mutate(quote.id)}
-                    onDeliver={(channel) =>
-                      deliverMutation.mutate({ id: quote.id, channel })
-                    }
+                    onDeliver={(channel) => deliverMutation.mutate({ id: quote.id, channel })}
                     onApprove={() => approveMutation.mutate(quote.id)}
                     onDecline={() => declineMutation.mutate(quote.id)}
+                    onRecordDeposit={() => setRecordDepositQuote(quote)}
                     onConvert={() => setConvertQuote(quote)}
                     onAddServices={() => setServicesQuote(quote)}
                     onCopyLink={() => copyClientLink(quote)}
@@ -366,6 +360,16 @@ export function QuotesList() {
           if (!open) setConvertQuote(null);
         }}
       />
+      {recordDepositQuote ? (
+        <RecordDepositDialog
+          workspaceId={workspaceId ?? ""}
+          quote={recordDepositQuote}
+          open
+          onOpenChange={(open) => {
+            if (!open) setRecordDepositQuote(null);
+          }}
+        />
+      ) : null}
       <QuoteServicesDialog
         workspaceId={workspaceId ?? ""}
         quote={servicesQuote}
@@ -393,8 +397,8 @@ export function QuotesList() {
           <DialogHeader>
             <DialogTitle>Assign quote owner</DialogTitle>
             <DialogDescription>
-              Choose who owns the sales follow-up for quote {assignmentQuote?.number}.
-              Job crews are assigned separately when the quote converts.
+              Choose who owns the sales follow-up for quote {assignmentQuote?.number}. Job crews are
+              assigned separately when the quote converts.
             </DialogDescription>
           </DialogHeader>
           {assignmentQuote?.assignee ? (
@@ -448,9 +452,7 @@ export function QuotesList() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete quote {pendingDelete?.number}?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Delete quote {pendingDelete?.number}?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingDelete?.public_token
                 ? "This quote has already been sent. Deleting it breaks the proposal link the customer has — if they open it again they'll get a dead page. This can't be undone."
@@ -458,9 +460,7 @@ export function QuotesList() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={(event) => {
                 // Keep the dialog mounted while the request is in flight.
@@ -487,6 +487,7 @@ interface RowActionsProps {
   onDeliver: (channel: QuoteDeliverChannel) => void;
   onApprove: () => void;
   onDecline: () => void;
+  onRecordDeposit: () => void;
   onConvert: () => void;
   onAddServices: () => void;
   onCopyLink: () => void;
@@ -509,6 +510,7 @@ function RowActions({
   onDeliver,
   onApprove,
   onDecline,
+  onRecordDeposit,
   onConvert,
   onAddServices,
   onCopyLink,
@@ -517,10 +519,11 @@ function RowActions({
 }: RowActionsProps) {
   const isOpen = quote.status === "draft" || quote.status === "sent";
   const isApproved = quote.status === "approved";
-  const alreadyConverted = Boolean(
-    quote.converted_job_id && quote.converted_invoice_id
-  );
+  const alreadyConverted = Boolean(quote.converted_job_id && quote.converted_invoice_id);
   const canConvert = isApproved && !alreadyConverted;
+  const canRecordDeposit = Boolean(
+    quote.deposit_required && quote.status !== "declined" && quote.status !== "expired",
+  );
   // The client proposal link only exists once a quote has been sent.
   const hasClientLink = Boolean(quote.public_token);
 
@@ -536,7 +539,13 @@ function RowActions({
           <UserRound className="mr-2 h-4 w-4" />
           Assign owner
         </DropdownMenuItem>
-        {(isOpen || canConvert || hasClientLink) && <DropdownMenuSeparator />}
+        {canRecordDeposit && (
+          <DropdownMenuItem onClick={onRecordDeposit}>
+            <Banknote className="mr-2 h-4 w-4" />
+            Record deposit
+          </DropdownMenuItem>
+        )}
+        {(isOpen || canConvert || hasClientLink || canRecordDeposit) && <DropdownMenuSeparator />}
         {isOpen && (
           <>
             {/* Changing the quote leads, because a sent quote is the one an
@@ -595,9 +604,7 @@ function RowActions({
         {canConvert && (
           <>
             {(isOpen || hasClientLink) && <DropdownMenuSeparator />}
-            <DropdownMenuItem onClick={onConvert}>
-              Convert to job &amp; invoice
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onConvert}>Convert to job &amp; invoice</DropdownMenuItem>
           </>
         )}
         {isOpen && (
