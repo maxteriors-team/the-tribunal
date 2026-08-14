@@ -1,6 +1,7 @@
 import { apiPost, apiPut, apiDelete } from "@/lib/api";
 import type {
   CreateQuoteRequest,
+  ManualDepositPaymentMethod,
   Quote,
   QuoteConvertResult,
   QuoteDeliverChannel,
@@ -81,6 +82,16 @@ export const quotesApi = {
   decline: async (workspaceId: string, quoteId: string, reason?: string): Promise<Quote> => {
     return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/decline`, {
       reason,
+    });
+  },
+
+  recordDeposit: async (
+    workspaceId: string,
+    quoteId: string,
+    paymentMethod: ManualDepositPaymentMethod,
+  ): Promise<Quote> => {
+    return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/record-deposit`, {
+      payment_method: paymentMethod,
     });
   },
 

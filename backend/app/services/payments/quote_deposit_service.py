@@ -1,11 +1,10 @@
-"""Stripe-backed deposit collection for public client proposals.
+"""Deposit collection and offline recording for client proposals.
 
-When an operator sets a deposit percentage on a quote, the client can pay that
-deposit online from the public proposal page to accept it. This module owns the
-Stripe boundary for that flow: it turns a proposal token into a hosted Checkout
-Session and reconciles the ``checkout.session.completed`` webhook back onto the
-quote (idempotently). It reuses the generic one-off payment helpers in
-:mod:`app.services.payments.call_payment_service`.
+When an operator sets deposit terms, the client can pay by card from the public
+proposal or an authenticated operator can attest that cash, a check, or another
+offline method was received. This module owns both paths so the first paid
+transition is atomic, carries durable provenance, and closes any open Stripe
+Checkout Session before an offline payment can be recorded.
 """
 
 from __future__ import annotations
@@ -19,6 +18,12 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from app.models.contact import Contact
+from app.services.exceptions import (
+    ConflictError,
+    NotFoundError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 from app.services.payments import call_payment_service
 
 if TYPE_CHECKING:
@@ -217,26 +222,200 @@ async def reconcile_deposit(db: AsyncSession, token: str) -> DepositStatus:
     return DepositStatus(deposit_paid=False, deposit_amount=amount, currency=quote.currency)
 
 
+async def _retrieve_checkout_status_for_manual(
+    quote: Quote,
+    session_id: str,
+) -> call_payment_service.SessionStatus:
+    """Read Stripe state without leaking provider errors through the API."""
+    try:
+        return await call_payment_service.retrieve_session_status(session_id)
+    except Exception as exc:
+        logger.warning(
+            "quote_manual_deposit_checkout_lookup_failed",
+            quote_id=str(quote.id),
+            session_id=session_id,
+            error=str(exc),
+        )
+        raise ServiceUnavailableError(
+            "The online payment link could not be checked. Try again before recording this deposit."
+        ) from exc
+
+
+async def _prepare_checkout_for_manual_deposit(
+    db: AsyncSession,
+    quote: Quote,
+) -> bool:
+    """Close an open checkout; return True if Stripe had already been paid."""
+    session_id = quote.deposit_checkout_session_id
+    if not session_id:
+        return False
+    if not call_payment_service.is_payment_configured():
+        raise ServiceUnavailableError(
+            "The online payment link could not be closed safely. Try again when "
+            "card payments are available."
+        )
+
+    checkout_status = await _retrieve_checkout_status_for_manual(quote, session_id)
+    # A paid card session wins over an operator's later manual attestation.
+    if checkout_status.payment_status == "paid":
+        await mark_deposit_paid(
+            db,
+            quote,
+            payment_intent_id=checkout_status.payment_intent_id,
+        )
+        return True
+    if checkout_status.status != "open":
+        return False
+
+    try:
+        expired = await call_payment_service.expire_checkout_session_if_open(session_id)
+    except Exception as exc:
+        logger.warning(
+            "quote_manual_deposit_checkout_expire_failed",
+            quote_id=str(quote.id),
+            session_id=session_id,
+            error=str(exc),
+        )
+        raise ServiceUnavailableError(
+            "The online payment link could not be closed. Try again before recording this deposit."
+        ) from exc
+    if expired:
+        return False
+
+    # The session changed between lookup and expiry. Reconcile once more rather
+    # than risk recording two payments.
+    checkout_status = await _retrieve_checkout_status_for_manual(quote, session_id)
+    if checkout_status.payment_status == "paid":
+        await mark_deposit_paid(
+            db,
+            quote,
+            payment_intent_id=checkout_status.payment_intent_id,
+        )
+        return True
+    raise ConflictError(
+        "The online payment changed state. Refresh the quote and try again.",
+        code="deposit_checkout_state_changed",
+    )
+
+
+async def record_manual_deposit(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    *,
+    payment_method: str,
+    recorded_by_id: int,
+) -> Quote:
+    """Record an offline deposit received by an authenticated operator.
+
+    An existing Checkout Session is reconciled and, while still open, expired
+    before the transition. Failing closed here prevents a customer with an older
+    browser tab from paying by card after the operator records cash or a check.
+    """
+    from sqlalchemy import select
+
+    from app.models.quote import Quote
+
+    if payment_method not in {"cash", "check", "other"}:
+        raise ValidationError(
+            "Manual deposits must use cash, check, or other.",
+            code="invalid_deposit_payment_method",
+        )
+
+    result = await db.execute(
+        select(Quote)
+        .where(Quote.id == quote_id, Quote.workspace_id == workspace_id)
+        .with_for_update()
+    )
+    quote = result.scalar_one_or_none()
+    if quote is None:
+        raise NotFoundError("Quote not found", code="quote_not_found")
+    if quote.deposit_paid_at is not None:
+        raise ConflictError(
+            "This deposit has already been completed.",
+            code="deposit_already_paid",
+        )
+    if quote.status in {"declined", "expired"}:
+        raise ConflictError(
+            "A deposit cannot be recorded on a declined or expired quote.",
+            code="deposit_quote_inactive",
+        )
+
+    amount = deposit_amount(quote)
+    if amount is None or amount <= 0:
+        raise ValidationError(
+            "No deposit is due on this quote.",
+            code="deposit_not_required",
+        )
+
+    if await _prepare_checkout_for_manual_deposit(db, quote):
+        return quote
+
+    transitioned = await mark_deposit_paid(
+        db,
+        quote,
+        payment_method=payment_method,
+        recorded_by_id=recorded_by_id,
+        notify=False,
+    )
+    if not transitioned:
+        raise ConflictError(
+            "This deposit has already been completed.",
+            code="deposit_already_paid",
+        )
+    return quote
+
+
 async def mark_deposit_paid(
     db: AsyncSession,
     quote: Quote,
     *,
     payment_intent_id: str | None = None,
+    payment_method: str = "card",
+    recorded_by_id: int | None = None,
+    notify: bool = True,
 ) -> bool:
-    """Mark a quote's deposit paid (idempotent). Returns True on the transition."""
+    """Atomically mark a deposit paid; return ``True`` only for the winner."""
+    from sqlalchemy import update
+
+    from app.models.quote import Quote
+
     if quote.deposit_paid_at is not None:
         return False
-    quote.deposit_paid_at = datetime.now(UTC)
+
+    paid_at = datetime.now(UTC)
+    values: dict[str, Any] = {
+        "deposit_paid_at": paid_at,
+        "deposit_payment_method": payment_method,
+        "deposit_recorded_by_id": recorded_by_id,
+    }
     if payment_intent_id:
-        quote.deposit_payment_intent_id = payment_intent_id
+        values["deposit_payment_intent_id"] = payment_intent_id
+
+    result = await db.execute(
+        update(Quote)
+        .where(Quote.id == quote.id, Quote.deposit_paid_at.is_(None))
+        .values(**values)
+        .returning(Quote.id)
+        .execution_options(synchronize_session=False)
+    )
+    transitioned = result.scalar_one_or_none() is not None
     await db.commit()
+    if not transitioned:
+        await db.refresh(quote)
+        return False
+
+    await db.refresh(quote)
     logger.info(
         "quote_deposit_marked_paid",
         quote_id=str(quote.id),
         workspace_id=str(quote.workspace_id),
+        payment_method=payment_method,
+        recorded_by_id=recorded_by_id,
     )
     await _confirm_prebooking(db, quote)
-    await _notify_deposit_paid(db, quote)
+    if notify:
+        await _notify_deposit_paid(db, quote)
     return True
 
 
@@ -281,16 +460,15 @@ async def _notify_deposit_paid(db: AsyncSession, quote: Quote) -> None:
 
 
 async def _confirm_prebooking(db: AsyncSession, quote: Quote) -> None:
-    """Turn a paid pre-booking deposit into a confirmed slot and a queued job.
+    """Turn a completed pre-booking deposit into a confirmed slot and queued job.
 
-    Hung off the single paid transition so the Stripe webhook and the
-    return-from-checkout backstop both land here exactly once, and a pre-booking
-    campaign needs no payment path of its own. A no-op for ordinary quotes.
+    Hung off the single paid transition so card and authenticated offline-payment
+    paths both land here exactly once, and a pre-booking campaign needs no payment
+    path of its own. A no-op for ordinary quotes.
 
-    Failures are logged, never raised: the money is already taken and the deposit
-    is already recorded, so a booking hiccup must not turn a successful payment
-    into a webhook Stripe will retry forever. The confirmation is idempotent, so
-    a retry (or the reconcile backstop) fixes it.
+    Failures are logged, never raised: payment is already complete and the deposit
+    is already recorded, so a booking hiccup must not turn successful processing
+    into retries. The confirmation is idempotent, so a later reconcile can fix it.
     """
     from app.services.prebooking.reservation_service import PreBookingReservationService
 

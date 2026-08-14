@@ -14,6 +14,7 @@ import type { Quote } from "@/types";
 const {
   listMock,
   deliverMock,
+  recordDepositMock,
   sendMock,
   getMock,
   deleteMock,
@@ -24,6 +25,7 @@ const {
 } = vi.hoisted(() => ({
   listMock: vi.fn(),
   deliverMock: vi.fn(),
+  recordDepositMock: vi.fn(),
   sendMock: vi.fn(),
   getMock: vi.fn(),
   deleteMock: vi.fn(),
@@ -42,6 +44,7 @@ vi.mock("@/lib/api/quotes", () => ({
     assign: assignMock,
     send: sendMock,
     deliver: deliverMock,
+    recordDeposit: recordDepositMock,
     approve: vi.fn(),
     decline: vi.fn(),
   },
@@ -64,9 +67,7 @@ vi.mock("@/components/workspaces/team-member-picker", () => ({
       <select
         aria-label={label}
         value={value ?? ""}
-        onChange={(event) =>
-          onValueChange(event.target.value ? Number(event.target.value) : null)
-        }
+        onChange={(event) => onValueChange(event.target.value ? Number(event.target.value) : null)}
       >
         <option value="">Unassigned</option>
         <option value="7">Morgan Manager</option>
@@ -153,6 +154,45 @@ describe("QuotesList client-view signal", () => {
 
     expect(await screen.findByText("QUO-000123")).toBeInTheDocument();
     expect(screen.queryByText(/^Viewed /)).not.toBeInTheDocument();
+  });
+});
+
+describe("QuotesList deposits", () => {
+  const listOne = (overrides: Partial<Quote> = {}) =>
+    listMock.mockResolvedValue({
+      items: [quote(overrides)],
+      total: 1,
+      page: 1,
+      page_size: 100,
+      pages: 1,
+    });
+
+  it("offers manual recording for a due deposit and shows its amount", async () => {
+    listOne({
+      deposit_amount: 321,
+      deposit_required: true,
+      deposit_paid: false,
+    });
+    renderList();
+
+    expect(await screen.findByText("Deposit due · $321.00")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Actions" }));
+    expect(screen.getByRole("menuitem", { name: "Record deposit" })).toBeInTheDocument();
+  });
+
+  it("shows the recorded method and removes the action once paid", async () => {
+    listOne({
+      deposit_amount: 321,
+      deposit_required: false,
+      deposit_paid: true,
+      deposit_paid_at: "2026-08-13T14:00:00Z",
+      deposit_payment_method: "check",
+    });
+    renderList();
+
+    expect(await screen.findByText("Deposit paid · Check")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Actions" }));
+    expect(screen.queryByRole("menuitem", { name: "Record deposit" })).not.toBeInTheDocument();
   });
 });
 
@@ -279,13 +319,9 @@ describe("QuotesList proposal delivery", () => {
     await openMenu();
     await userEvent.click(await screen.findByText("Email proposal to client"));
 
-    await waitFor(() =>
-      expect(deliverMock).toHaveBeenCalledWith("ws-1", "quote-1", "email"),
-    );
+    await waitFor(() => expect(deliverMock).toHaveBeenCalledWith("ws-1", "quote-1", "email"));
     // The address the server actually resolved, not the one the rep assumed.
-    expect(toastMock.success).toHaveBeenCalledWith(
-      "Proposal emailed to jo@example.com",
-    );
+    expect(toastMock.success).toHaveBeenCalledWith("Proposal emailed to jo@example.com");
   });
 
   it("texts the proposal and confirms the number", async () => {
@@ -299,12 +335,8 @@ describe("QuotesList proposal delivery", () => {
     await openMenu();
     await userEvent.click(await screen.findByText("Text proposal to client"));
 
-    await waitFor(() =>
-      expect(deliverMock).toHaveBeenCalledWith("ws-1", "quote-1", "sms"),
-    );
-    expect(toastMock.success).toHaveBeenCalledWith(
-      "Proposal texted to +15551234567",
-    );
+    await waitFor(() => expect(deliverMock).toHaveBeenCalledWith("ws-1", "quote-1", "sms"));
+    expect(toastMock.success).toHaveBeenCalledWith("Proposal texted to +15551234567");
   });
 
   it("surfaces the server's reason when a text can't go out", async () => {
@@ -333,9 +365,7 @@ describe("QuotesList proposal delivery", () => {
 
     await openMenu();
 
-    expect(
-      await screen.findByText("Email proposal to client"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Email proposal to client")).toBeInTheDocument();
     expect(screen.getByText("Text proposal to client")).toBeInTheDocument();
   });
 
@@ -415,9 +445,7 @@ describe("QuotesList editing and deleting", () => {
     await openMenu();
     await userEvent.click(await screen.findByText("Delete quote"));
 
-    expect(
-      await screen.findByText(/never been sent/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/never been sent/i)).toBeInTheDocument();
   });
 
   it("deletes only after the confirmation is accepted", async () => {
@@ -428,13 +456,9 @@ describe("QuotesList editing and deleting", () => {
     await userEvent.click(await screen.findByText("Delete quote"));
     expect(deleteMock).not.toHaveBeenCalled();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Delete quote" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "Delete quote" }));
 
-    await waitFor(() =>
-      expect(deleteMock).toHaveBeenCalledWith("ws-1", "quote-1"),
-    );
+    await waitFor(() => expect(deleteMock).toHaveBeenCalledWith("ws-1", "quote-1"));
     expect(toastMock.success).toHaveBeenCalledWith("Quote QUO-000123 deleted");
   });
 
@@ -446,9 +470,7 @@ describe("QuotesList editing and deleting", () => {
 
     await openMenu();
     await userEvent.click(await screen.findByText("Delete quote"));
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Delete quote" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "Delete quote" }));
 
     await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
     expect(toastMock.success).not.toHaveBeenCalled();

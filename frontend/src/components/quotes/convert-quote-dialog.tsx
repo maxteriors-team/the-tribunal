@@ -25,6 +25,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Quote, QuoteConvertResult } from "@/types";
 
+import { depositPaymentMethodLabel } from "./record-deposit-dialog";
+
 interface ConvertQuoteDialogProps {
   workspaceId: string;
   quote: Quote | null;
@@ -74,6 +76,7 @@ export function ConvertQuoteDialog({
   const requiredDeposit = Boolean(quote?.deposit_required);
   const paidDeposit = Boolean(quote?.deposit_paid);
   const depositAmount = quote?.deposit_amount ?? null;
+  const paidMethod = depositPaymentMethodLabel(quote?.deposit_payment_method);
   const windowError = createJob
     ? !start || !end
       ? "Set both start and end."
@@ -157,7 +160,15 @@ export function ConvertQuoteDialog({
               </p>
               <h3 id="deposit-step" className="mt-1 font-medium">
                 {paidDeposit
-                  ? `Paid${quote?.deposit_paid_at ? ` · ${new Date(quote.deposit_paid_at).toLocaleDateString()}` : ""}`
+                  ? [
+                      "Paid",
+                      paidMethod,
+                      quote?.deposit_paid_at
+                        ? new Date(quote.deposit_paid_at).toLocaleDateString()
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
                   : requiredDeposit
                     ? `Due · ${money(depositAmount, quote?.currency)}`
                     : "No deposit required"}
@@ -165,8 +176,8 @@ export function ConvertQuoteDialog({
               {requiredDeposit ? (
                 <>
                   <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-                    Stripe has not reconciled this required deposit. Scheduling is allowed only
-                    after explicit confirmation.
+                    No deposit has been recorded yet. Scheduling is allowed only after explicit
+                    confirmation.
                   </p>
                   {quote?.public_token ? (
                     <Button variant="link" className="h-auto px-0" asChild>

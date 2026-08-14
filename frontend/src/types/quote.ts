@@ -5,6 +5,8 @@ import type { components } from "@/lib/api/_generated";
 import type { FinancingEstimate } from "./financing";
 
 export type QuoteStatus = "draft" | "sent" | "approved" | "declined" | "expired";
+export type DepositPaymentMethod = "card" | "cash" | "check" | "other";
+export type ManualDepositPaymentMethod = Exclude<DepositPaymentMethod, "card">;
 
 export interface QuoteLineItem {
   id: string;
@@ -44,11 +46,15 @@ export interface Quote {
   deposit_percentage?: number | null;
   deposit_amount_fixed?: number | null;
   deposit_paid_at?: string | null;
+  /** Card is provider-confirmed; offline methods are operator attestations. */
+  deposit_payment_method?: DepositPaymentMethod | null;
+  /** Authenticated operator who recorded cash/check/other; null for card. */
+  deposit_recorded_by_id?: number | null;
   /** Server-computed effective deposit in major units (fixed wins); null = none. */
   deposit_amount?: number | null;
   /** Server-computed: a deposit is owed and not yet paid. */
   deposit_required?: boolean;
-  /** Server/provider-reconciled only; staff cannot fabricate this state. */
+  /** Server-confirmed card payment or authenticated offline-payment record. */
   deposit_paid?: boolean;
   issue_date?: string | null;
   expiry_date?: string | null;

@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     DATE,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -46,6 +47,10 @@ if TYPE_CHECKING:
 # are terminal operator decisions; ``expired`` is derived from ``expiry_date`` on
 # a still-``sent`` quote by the service (never free-set by API clients).
 QUOTE_STATUSES = ("draft", "sent", "approved", "declined", "expired")
+
+# Deposit provenance distinguishes Stripe-confirmed card payments from an
+# authenticated operator's offline-payment attestation.
+DEPOSIT_PAYMENT_METHODS = ("card", "cash", "check", "other")
 
 # The unsold pile: issued and undecided. ``draft`` was never presented and
 # ``approved``/``declined`` are settled outcomes, so neither is recoverable
@@ -75,6 +80,10 @@ class Quote(Base):
     __table_args__ = (
         # Human quote number is unique within a workspace, not globally.
         UniqueConstraint("workspace_id", "number", name="uq_quotes_workspace_number"),
+        CheckConstraint(
+            f"deposit_payment_method IN {DEPOSIT_PAYMENT_METHODS}",
+            name="ck_quotes_deposit_payment_method",
+        ),
         Index("ix_quotes_workspace_lighting_project", "workspace_id", "lighting_project_id"),
     )
 
@@ -132,7 +141,7 @@ class Quote(Base):
     total: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
 
-    # Optional upfront deposit the client can pay online to accept the quote.
+    # Optional upfront deposit the client can pay online or hand to an operator.
     # Percentage of ``total`` (0-100); null = no deposit requested. The deposit
     # amount is derived (never stored) so it always tracks the live total.
     deposit_percentage: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
@@ -140,9 +149,17 @@ class Quote(Base):
     # set it takes precedence over the percentage and is clamped to the total.
     # At most one of the two is set for a given quote.
     deposit_amount_fixed: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
-    # Deposit payment provenance (Stripe Checkout in ``payment`` mode). Set once
-    # the client pays; ``deposit_paid_at`` is the idempotency guard for the webhook.
+    # Payment provenance is immutable after the first paid transition. Stripe
+    # payments record ``card`` plus an intent id; manual cash/check/other entries
+    # record the authenticated operator instead. ``deposit_paid_at`` is the shared
+    # idempotency guard.
     deposit_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deposit_payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    deposit_recorded_by_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     deposit_checkout_session_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True, index=True
     )

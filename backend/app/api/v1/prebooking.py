@@ -401,9 +401,9 @@ async def reserve_pre_booking_slot(
 ) -> PreBookingReserveResponse:
     """Hold a season slot for a contact and issue the deposit-bearing proposal.
 
-    Returns the public proposal link. Paying its deposit — through the existing
-    Stripe checkout, not a second payment path — is what confirms the booking and
-    puts a provisional job into backlog.
+    Returns the public proposal link. A confirmed card payment or an authenticated
+    operator's offline deposit record is what confirms the booking and puts a
+    provisional job into backlog.
     """
     await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
     config = await _config_or_404(db, workspace_id, campaign_id)

@@ -2,16 +2,16 @@
 
 Snapshot: 13 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
 
-Commit reviewed: working tree on `origin/main` (uncommitted NiteLite-parity implementation).
+Commit reviewed: working tree based on `5a2efb34` (uncommitted manual-deposit work after the merged aerial-plan fix).
 
-Scope of this pass: landscape-lighting proposal deposit truth, custom monetary line items, customer acceptance receipts, accepted-quote conversion, crew assignment notifications, and authenticated installation-plan delivery. This is a focused feature review, not a certification or a full-product legal/security audit.
+Scope of this pass: landscape-lighting proposal deposit truth, authenticated cash/check/other deposit recording, custom monetary line items, customer acceptance receipts, accepted-quote conversion, crew assignment notifications, and authenticated installation-plan delivery. This is a focused feature review, not a certification or a full-product legal/security audit.
 
 ## Assumed exposure profile
 
 - **Reach — Confirmed:** deployed CRM with authenticated staff UI plus public customer proposal/payment pages.
 - **Jurisdictions — Assumed:** internet-reachable worldwide; United States plus EU/UK exposure may apply.
 - **Personal data — Confirmed:** customer identity, address, property imagery, field notes, staff identity, and notification addresses.
-- **Money — Confirmed:** consumer deposits use hosted Stripe Checkout; Tribunal retains provider identifiers and reconciled state, not card data.
+- **Money — Confirmed:** consumer card deposits use hosted Stripe Checkout; authenticated operators may now attest that cash, check, or another offline deposit was received. Tribunal records method/user/time but does not receive card data or move the offline funds.
 - **Messaging — Confirmed:** transactional assignment email/push notifications.
 - **Minors — Assumed unlikely but not technically age-gated:** this B2B home-services workflow is not designed for children.
 - **Entity — Confirmed from repository context:** operated as a deployed commercial CRM; exact legal entity details were not reviewed.
@@ -28,7 +28,7 @@ Scope of this pass: landscape-lighting proposal deposit truth, custom monetary l
 | 4b | Tenant isolation from authenticated membership | pass | RUNTIME: workspace mismatch returned 404; service queries include workspace and assignment predicates. |
 | 5 | Mass assignment | pass | CODE: Pydantic request schemas and explicit service field mapping constrain conversion/project updates. |
 | 6 | String-built queries | pass | CODE: SQLAlchemy expression APIs only. |
-| 7 | Unauthenticated internal endpoint | pass | RUNTIME: installation-plan request without authentication returned 401; no public token route exists. |
+| 7 | Unauthenticated internal endpoint | pass | RUNTIME: installation-plan and manual-deposit requests without authentication returned 401; neither has a public token route. |
 | 8 | Public writable/listable storage | n-a | CODE: this feature adds no bucket/static object; plan imagery remains in the private project record. |
 | 9 | Expensive/abusable endpoint rate limit | pass | CODE: plan read is a bounded database projection; checkout remains in the existing rate-limited/provider flow. |
 | 10 | Password hashing | n-a | No authentication implementation changed. |
@@ -65,7 +65,7 @@ Scope of this pass: landscape-lighting proposal deposit truth, custom monetary l
 | ID | Severity | Trigger | Evidence (RUNTIME / CODE / DEDUCED) | Obligation | Status | Guard |
 |---|---|---|---|---|---|---|
 | LL-001 | BLOCKER | Customer property imagery becomes available to field staff | RUNTIME: assigned technician received only `install-front`; unassigned and cross-workspace reads returned 404 | Enforce workspace and direct/crew assignment authorization; avoid public/static delivery | Fixed | Backend service/API tests plus runtime 200/404 probes |
-| LL-002 | BLOCKER | Consumer deposit state affects invoice credit | RUNTIME: paid 25% deposit credited exactly `$250.00`; exact conversion retry retained one job/invoice | Keep payment truth provider-derived and idempotent; never accept manual paid state | Fixed | Quote service integration tests plus runtime row-count/payment proof |
+| LL-002 | BLOCKER | Consumer deposit state affects invoice credit and pre-booking confirmation | RUNTIME: paid 25% deposit credited exactly `$250.00`; authenticated cash recording returned method/user/time; unauthenticated recording returned 401 | Preserve an immutable first-paid transition: provider-confirm card payments; require billing-write authorization and operator attestation for offline payments; record method/user/time; close any open checkout first | Fixed | Quote/deposit integration tests, atomic conditional update, generated API contract, and runtime 200/401 probes |
 | LL-003 | HIGH | Transactional assignment email/push exposes private-work availability | RUNTIME: captured email had one installer recipient and availability copy; no image, token, provider payment ID, or procurement note | Scope recipients, honor preferences, deduplicate, and keep imagery behind authenticated access | Fixed | Notification unit tests, Redis dedupe, delivery counts, Mailpit artifact |
 | LL-004 | HIGH | Failed delivery must remain retryable and truthful | RUNTIME: initial probe found a failed send retained its dedupe claim and a retry falsely said sent | Release dedupe claims after total failure; report delivery separately from committed job | Fixed | Post-fix exact retry remained `failed`; targeted tests and final backend CI |
 | LL-005 | LAWYER | US consumers may pay a landscape-lighting deposit through the public proposal | CODE/DEDUCED: hosted checkout and server-derived totals are present, but the customer-facing cancellation, refund, tax, and contract terms were outside this review | Confirm the actual proposal terms match each US jurisdiction served | Open | Legal review of the deployed proposal and refund/cancellation policy |
@@ -77,7 +77,7 @@ Scope of this pass: landscape-lighting proposal deposit truth, custom monetary l
 - Stable quote/job/project links and database uniqueness prevent duplicate converted jobs.
 - Public proposal schemas omit project IDs, plans, staff assignments, procurement, and job/payment handoff details.
 - Installation imagery is authenticated and assignment-scoped with 404 non-disclosure.
-- Payment truth remains Stripe-derived; scheduling an unpaid required deposit needs explicit acknowledgement but cannot mark it paid.
+- Card truth remains Stripe-derived; cash/check/other can be marked paid only by an authenticated billing-write operator after an explicit received-money confirmation. The API records method/user/time, atomically preserves the first paid transition, and closes any open card checkout before accepting an offline record.
 - Notifications target active direct/crew installers, honor existing master/preferences, use deterministic dedupe, report partial/failure separately, and omit imagery/tokens.
 - Internal payment receipts identify the client using CRM name, email, phone, and quote number; payment credentials and provider identifiers remain excluded, and all customer-supplied values are HTML-escaped.
 - Customer proposal-acceptance receipts are transactional, itemize the accepted total and deposit state, retain a proposal link, and use deterministic idempotency; they do not contain marketing or unsubscribe theater.
@@ -98,6 +98,18 @@ None for this approved implementation.
 - US/EU/UK consumer contract, withdrawal, transactional-email, privacy, and accessibility requirements before launch in each served jurisdiction.
 - Notification provider and Stripe data-processing/retention terms.
 - Local Mailpit exercised the exact assignment email renderer/idempotency-key path and proved one recipient plus no imagery/token leakage; it does not prove Resend delivery or inbox placement.
+
+
+## Addendum — Manual quote deposits
+
+Snapshot: 13 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
+
+- **RUNTIME:** an authenticated owner recorded a `$125.00` cash deposit and received `deposit_paid=true`, `deposit_payment_method=cash`, a recorder ID, and a server timestamp; the same route without credentials returned 401.
+- **Tenant and role control — Fixed:** the route requires `billing:write`; the service selects and locks the quote by both workspace and quote ID, and integration coverage rejects a different workspace.
+- **Double-payment control — Fixed:** an existing Stripe Checkout Session is reconciled and expired before cash/check/other is accepted; a card payment that completed first wins and remains labelled `card`.
+- **Audit/data minimization — Fixed:** the database retains method, operator, and time but no check number, bank account, card number, CVV, or offline-payment note.
+- **Money movement — Not triggered by this change:** Tribunal records an operator's statement that funds were received outside the product; it does not custody, transmit, or settle those funds.
+- **Residual operational risk:** an authorized operator can record money they did not actually receive. The UI warning, irreversible confirmation, role gate, and recorder attribution reduce this risk; workspace owners still need a reconciliation policy and should correct mistakes through an audited adjustment rather than direct database edits.
 
 
 ## Addendum — Teach AI and website-lead qualification

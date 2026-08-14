@@ -255,9 +255,9 @@ class PreBookingReservation(Base):
         nullable=False,
         index=True,
     )
-    # The quote that carries the deposit terms and the public payment link. This
-    # is the *only* payment path: the deposit is collected by the existing Stripe
-    # checkout on the client proposal page (:mod:`app.services.payments`).
+    # The quote carries the deposit terms and shared paid transition. A client can
+    # complete its Stripe Checkout, or an authenticated operator can record money
+    # received offline; both paths confirm this reservation exactly once.
     quote_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("quotes.id", ondelete="SET NULL"),
