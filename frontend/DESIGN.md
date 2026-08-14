@@ -123,22 +123,23 @@ stacked layout.
 - **Surface:** a dashboard/data-dense design tool inside the authenticated CRM.
 - **Audience:** landscape-lighting sales reps working at a desk, on a laptop in a
   home, or on a tablet in the field.
-- **Single job:** turn property photos into a fixture plan that a homeowner can
-  understand and a quote can price.
+- **Single job:** turn a top-down satellite, drone, or site-plan image into a fixture
+  and wiring plan that a homeowner can understand and a quote can price.
 - **Risk and density:** placement and fixture-count errors affect margin and the
-  install crew, so the photo, fixture palette, beam controls, and server-priced
+  install crew, so the aerial, fixture palette, beam controls, and server-priced
   count stay visible together. The canvas leads; pricing remains supporting data.
 - **Platform:** desktop and landscape-tablet are primary. Narrow screens stack the
-  photo, tools, and estimate in task order without removing actions.
+  aerial plan, tools, and estimate in task order without removing actions.
 
 ### Evidence and thesis
 
 The user-provided NiteLiteOS proposal screenshots consistently use property imagery
 as the drawing ground, color-coded symbols tied to a fixture legend, and a document
-title block carrying project metadata. The later authenticated screenshot also shows
-a persistent project rail for Drawing Sheet, Fixture Schedule, BOM, Electrical,
-Proposal, and Pre-Con, plus a visible automatic-save state. Only details visible in
-the supplied captures were used; the linked URL itself remains authentication-gated.
+title block carrying project metadata. Tribunal intentionally narrows that flexible
+reference to a **top-down aerial plan**; street-level and elevation photos are outside
+the landscape workflow. The authenticated screenshot also shows a persistent project
+rail for Drawing Sheet, Fixture Schedule, BOM, Electrical, Proposal, and Pre-Con, plus
+a visible automatic-save state.
 
 The leading direction is a **proposal sheet on a dark drafting desk**. The white
 sheet and right-edge title block make the empty builder specific to lighting plans,
@@ -149,9 +150,10 @@ and install plan, not a generic dashboard.
 ### Reuse map and behavior
 
 - Reuse `LightDesigner`, `LightCanvas`, `ToolPalette`, the workspace price book,
-  server pricing, dusk preview, AI render, and multi-photo strip. Proposal pricing and
-  draft-quote creation now stay inside the landscape project instead of routing through
-  the separate quote builder.
+  server pricing, dusk preview, AI render, and multi-aerial sheet model. The landscape
+  AI prompt must preserve the top-down viewpoint rather than inventing a street-level
+  elevation. Proposal pricing and draft-quote creation stay inside the landscape project
+  instead of routing through the separate quote builder.
 - Lock the dedicated route to landscape fixtures and remove seasonal-only controls.
 - Keep the existing `AppSidebar`, billing capability gate, Lucide icon system, focus
   treatment, and responsive pane order.
@@ -198,7 +200,7 @@ and install plan, not a generic dashboard.
   debounce and queues the complete project draft for immediate server persistence; slower
   drag/aim changes retain coalesced autosave and optimistic-conflict protection.
 - Server-backed projects remove the duplicated inner project identity and keep only
-  compact photo, render, and quote actions. The drawing title block uses the supplied
+  compact aerial, render, and quote actions. The drawing title block uses the supplied
   Maxteriors logo instead of synthesizing a text brand.
 - Loading and no-workspace recovery use shared page-state primitives. Upload errors
   remain announced by the existing image-loader error path; disabled rendering
@@ -212,7 +214,7 @@ and install plan, not a generic dashboard.
   and action order in both compositions.
 - **One shared rail:** dashboard header, recovery notice, filters, and records share
   `max-w-7xl` gutters. The editor project bar and bounded drafting workspace share a
-  wider `max-w-[1600px]` rail because the photo canvas needs the working area.
+  wider `max-w-[1600px]` rail because the aerial canvas needs the working area.
 - **Save language:** `Saved to Tribunal` appears only after an accepted server
   response. `Saved on this device; sync pending` means IndexedDB holds newer work
   that is not team-visible. Saving/loading/conflict states are announced through a
@@ -236,10 +238,10 @@ and install plan, not a generic dashboard.
 ### Production checks
 
 Check desktop and narrow dashboard/editor layouts, keyboard focus order, visible
-focus, dialog Escape/focus return, canvas accessible name and instructions, 200%
-zoom/reflow, reduced motion, measured text/control contrast, upload failure, empty
-workspace, local-only recovery, offline retry, stale-record detection, and both
-conflict outcomes. Automated checks cannot establish full WCAG conformance;
+focus, dialog Escape/focus return, aerial canvas accessible name and instructions,
+200% zoom/reflow, reduced motion, measured text/control contrast, aerial upload
+failure, empty workspace, local-only recovery, offline retry, stale-record detection,
+and both conflict outcomes. Automated checks cannot establish full WCAG conformance;
 keyboard and assistive-technology behavior remain manual verification items.
 
 ### Persistence slice rendered critique (2026-08-11)
@@ -297,7 +299,7 @@ Evidence: `tribunal-simplified-fixture-workflow.png`,
 2. **Information hierarchy 2/2:** fixture placement leads on the drawing; detail and
    document actions remain one obvious control away.
 3. **Composition 2/2:** the single compact tool row aligns with the sheet and leaves the
-   photo as the dominant surface.
+   aerial plan as the dominant surface.
 4. **Consistency and flow 2/2:** existing brass/black controls, Lucide icons, tabs,
    autosave, schedule, and sheet actions retain their established behavior.
 5. **Typography 2/2:** compact technical labels stay subordinate to fixture and load data.

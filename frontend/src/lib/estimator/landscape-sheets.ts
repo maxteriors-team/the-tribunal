@@ -12,8 +12,8 @@ export function relabelLandscapeSheets(shots: readonly DesignerShot[]): Designer
     ...shot,
     sheet: {
       ...shot.sheet,
-      label: shot.sheet?.label?.trim() || `Sheet ${index + 1}`,
-      drawingTitle: shot.sheet?.drawingTitle?.trim() || "Landscape lighting design plan",
+      label: shot.sheet?.label?.trim() || `Aerial plan ${index + 1}`,
+      drawingTitle: shot.sheet?.drawingTitle?.trim() || "Aerial landscape lighting plan",
       drawingNumber: `L-${index + 1}`,
       revisions: shot.sheet?.revisions ?? [],
     },
@@ -53,7 +53,7 @@ export function duplicateLandscapeSheet(
   }));
   copy.sheet = {
     ...copy.sheet,
-    label: `${source.sheet?.label || `Sheet ${index + 1}`} copy`,
+    label: `${source.sheet?.label || `Aerial plan ${index + 1}`} copy`,
   };
   return relabelLandscapeSheets([
     ...shots.slice(0, index + 1),

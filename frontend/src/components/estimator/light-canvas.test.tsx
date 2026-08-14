@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
@@ -111,6 +111,29 @@ function setup() {
 
   return { clickAt, placed, dispatch, rerender };
 }
+
+describe("LightCanvas — aerial plan semantics", () => {
+  it("labels the landscape canvas and scale controls as top-down aerial", async () => {
+    render(
+      <LightCanvas
+        photo={PHOTO}
+        products={[UPLIGHT]}
+        state={initialEditorState()}
+        dispatch={vi.fn()}
+        perspective="aerial"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Top-down aerial lighting plan canvas")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTitle("Set the aerial plan scale from a known top-down distance"),
+    ).toBeInTheDocument();
+    expect(screen.getByTitle("Show the base aerial without lighting")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add detail photo" })).toBeInTheDocument();
+  });
+});
 
 describe("LightCanvas — geometry stays on the photo", () => {
   beforeEach(() => vi.clearAllMocks());

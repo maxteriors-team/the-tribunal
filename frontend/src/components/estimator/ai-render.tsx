@@ -60,6 +60,7 @@ export function AIRenderModal({
   });
 
   const working = render.isPending;
+  const isAerial = mode === "landscape";
 
   const download = () => {
     if (!image) return;
@@ -82,10 +83,10 @@ export function AIRenderModal({
         className="ai-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="AI realistic render"
+        aria-label={isAerial ? "AI aerial render" : "AI realistic render"}
       >
         <div className="ai-modal-head">
-          <h3>✨ AI realistic render</h3>
+          <h3>{isAerial ? "✨ AI aerial render" : "✨ AI realistic render"}</h3>
           <button
             className="ai-close"
             type="button"
@@ -98,9 +99,10 @@ export function AIRenderModal({
         </div>
 
         <p className="ai-modal-note">
-          Turns the drawn design into a photorealistic night photo of this home —
-          the closer for skeptical customers. Each render uses your workspace’s
-          OpenAI account.
+          {isAerial
+            ? "Turns the top-down lighting plan into a nighttime aerial visualization without changing viewpoint."
+            : "Turns the drawn design into a photorealistic night photo of this home — the closer for skeptical customers."}{" "}
+          Each render uses your workspace’s OpenAI account.
         </p>
 
         <div className="ai-stage">
@@ -108,7 +110,7 @@ export function AIRenderModal({
             // eslint-disable-next-line @next/next/no-img-element -- render is a data URL, not a static asset
             <img
               src={showOriginal ? photo.dataUrl : image}
-              alt="AI night render"
+              alt={isAerial ? "AI aerial night render" : "AI night render"}
               onPointerDown={() => setShowOriginal(true)}
               onPointerUp={() => setShowOriginal(false)}
               onPointerLeave={() => setShowOriginal(false)}
@@ -116,18 +118,25 @@ export function AIRenderModal({
           ) : working ? (
             <div className="ai-progress">
               <div className="ai-spinner" aria-hidden />
-              <p>Painting the night scene… (~15–40s)</p>
+              <p>
+                {isAerial ? "Rendering the aerial night plan…" : "Painting the night scene…"}{" "}
+                (~15–40s)
+              </p>
             </div>
           ) : (
             <div className="ai-placeholder">
-              <p>Generate a photorealistic version of the drawn design.</p>
+              <p>
+                {isAerial
+                  ? "Generate a top-down nighttime version of the aerial plan."
+                  : "Generate a photorealistic version of the drawn design."}
+              </p>
             </div>
           )}
         </div>
 
         {image ? (
           <p className="ai-compare-hint">
-            Press and hold the image to compare with the original photo.
+            Press and hold the image to compare with the original {isAerial ? "aerial" : "photo"}.
           </p>
         ) : null}
 
@@ -154,7 +163,9 @@ export function AIRenderModal({
               ? "Rendering…"
               : image
                 ? "↻ Regenerate"
-                : "✨ Generate realistic photo"}
+                : isAerial
+                  ? "✨ Generate aerial render"
+                  : "✨ Generate realistic photo"}
           </button>
         </div>
       </div>

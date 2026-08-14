@@ -12,16 +12,28 @@ const json = (body: unknown, status = 200) => ({
 
 const planSvg = `data:image/svg+xml;base64,${Buffer.from(
   `
-  <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900">
-    <rect width="1400" height="900" fill="#e7e2d7"/>
-    <rect x="150" y="160" width="800" height="470" fill="#fbfaf6" stroke="#8f897c" stroke-width="12"/>
-    <path d="M120 720 H1120" stroke="#908a7c" stroke-width="28"/>
-    <path d="M300 160 V630 M760 160 V630" stroke="#c7c1b5" stroke-width="8"/>
-    <circle cx="1080" cy="260" r="100" fill="#b7c2a1"/>
-    <circle cx="1120" cy="560" r="130" fill="#acb995"/>
-    <text x="180" y="120" font-family="sans-serif" font-size="42" fill="#3d3a34">Hawthorne Residence Lighting Plan</text>
+  <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+    <rect width="1400" height="900" fill="#66885f"/>
+    <path d="M70 60 H1330 V840 H70 Z" fill="#7da06f" stroke="#f4f0dc" stroke-width="6" stroke-dasharray="22 14"/>
+    <path d="M870 510 H1120 V840 H760 V700 H870 Z" fill="#b7afa0" stroke="#ddd7ca" stroke-width="8"/>
+    <path d="M305 200 H965 V565 H305 Z" fill="#c6b9a6" stroke="#443f39" stroke-width="10"/>
+    <path d="M325 220 L635 90 L945 220 L945 545 H325 Z" fill="#76685b" stroke="#443f39" stroke-width="8"/>
+    <path d="M635 90 V545 M325 220 H945" stroke="#9d8d7b" stroke-width="8"/>
+    <rect x="775" y="430" width="170" height="115" fill="#918171" stroke="#443f39" stroke-width="6"/>
+    <path d="M520 545 V690 H760" fill="none" stroke="#d4cbb9" stroke-width="54"/>
+    <path d="M170 160 C230 120 285 145 300 210 C265 270 205 275 155 230 Z" fill="#305b38"/>
+    <path d="M1030 135 C1110 95 1190 130 1205 215 C1150 285 1060 270 1015 210 Z" fill="#315f3a"/>
+    <path d="M150 610 C230 555 315 600 320 690 C265 760 170 750 130 675 Z" fill="#2e5936"/>
+    <path d="M1040 620 C1140 555 1245 610 1250 720 C1180 790 1070 775 1020 690 Z" fill="#2d5734"/>
+    <g fill="#bdd080" stroke="#557047" stroke-width="5">
+      <circle cx="390" cy="625" r="34"/><circle cx="455" cy="640" r="30"/>
+      <circle cx="930" cy="620" r="38"/><circle cx="995" cy="590" r="30"/>
+    </g>
+    <path d="M1220 150 V85 M1220 85 L1200 120 M1220 85 L1240 120" stroke="#f7f2df" stroke-width="8" fill="none"/>
+    <text x="1198" y="70" font-family="Arial" font-size="30" font-weight="700" fill="#f7f2df">N</text>
+    <text x="105" y="115" font-family="Arial" font-size="36" font-weight="700" fill="#f7f2df">TOP-DOWN AERIAL PLAN</text>
   </svg>
-`,
+  `,
 ).toString("base64")}`;
 
 const projectDocument = {
@@ -73,7 +85,7 @@ const projectDocument = {
               { x: 520, y: 680 },
               { x: 840, y: 680 },
             ],
-            circuitLabel: "Front elevation",
+            circuitLabel: "Front yard circuit",
             wireGauge: 12,
             sourceVoltage: 13,
           },
@@ -125,8 +137,8 @@ const projectDocument = {
       },
       dusk: 0.35,
       sheet: {
-        label: "Front elevation",
-        drawingTitle: "Landscape lighting design plan",
+        label: "Aerial plan",
+        drawingTitle: "Aerial landscape lighting plan",
         drawingNumber: "L-1",
         revisions: [],
       },
@@ -415,9 +427,9 @@ test.describe("landscape lighting studio", () => {
 
     const baselineUpdateCount = updates.length;
     await page.getByRole("button", { name: "Highlight" }).click();
-    const canvas = page.getByLabel("Lighting design canvas");
+    const canvas = page.getByLabel("Top-down aerial lighting plan canvas");
     const canvasBox = await canvas.boundingBox();
-    if (!canvasBox) throw new Error("Lighting design canvas did not render");
+    if (!canvasBox) throw new Error("Top-down aerial lighting plan canvas did not render");
     await page.mouse.move(canvasBox.x + 260, canvasBox.y + 260);
     await page.mouse.down();
     await page.mouse.move(canvasBox.x + 430, canvasBox.y + 310, { steps: 8 });
