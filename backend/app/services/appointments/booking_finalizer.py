@@ -50,6 +50,7 @@ from app.services.google_calendar import GoogleCalendarError
 from app.services.idempotency import derive_outbound_key
 from app.services.leads.funnel_transitions import mark_contact_booked
 from app.utils.background_tasks import spawn_background_task
+from app.utils.meeting_urls import meeting_provider_name, zoom_meeting_id_from_url
 from app.utils.timezones import DEFAULT_WORKSPACE_TIMEZONE, workspace_timezone_name
 
 logger = structlog.get_logger()
@@ -316,8 +317,8 @@ async def deliver_booking_notifications(
             else None
         )
 
-        # Sync first so every confirmation is generated from provider truth: a
-        # successful video call includes Google Meet; a failure promises follow-up.
+        # Sync first so every confirmation reflects provider truth: a successful
+        # video call includes its Zoom/Meet link; a failure promises follow-up.
         await _sync_google_calendar(
             db,
             appointment=appointment,
@@ -455,10 +456,10 @@ async def _sync_google_calendar(
     staff: BookableStaff | None,
     log: structlog.BoundLogger,
 ) -> None:
-    """Create the event on the assigned rep's connected Google Calendar.
+    """Create Zoom first, then mirror the booking to the rep's Google Calendar.
 
     Provider sync follows the durable local appointment but precedes lifecycle
-    copy, so every notification reflects the resulting Meet URL or failure state.
+    copy, so every notification reflects the resulting Zoom/Meet URL or failure.
     """
     if appointment.google_calendar_event_id and appointment.sync_status == "synced":
         return
@@ -469,6 +470,13 @@ async def _sync_google_calendar(
         return
 
     try:
+        zoom_created = await _ensure_zoom_meeting(
+            db,
+            appointment=appointment,
+            workspace=workspace,
+            staff=staff,
+            log=log,
+        )
         from app.services.google_calendar import create_event
 
         event = await create_event(
@@ -485,14 +493,13 @@ async def _sync_google_calendar(
             timezone=_workspace_timezone(workspace),
             attendee_email=contact.email,
             attendee_name=contact.full_name or None,
-            conference=appointment.service_type == "video_call",
+            conference=appointment.service_type == "video_call" and not zoom_created,
             event_id=f"tribunalappointment{appointment.id}",
         )
         appointment.google_calendar_event_id = event.event_id
         appointment.google_calendar_event_url = event.html_link
-        appointment.meeting_url = (
-            event.meet_link if appointment.service_type == "video_call" else None
-        )
+        if appointment.service_type == "video_call" and not appointment.meeting_url:
+            appointment.meeting_url = event.meet_link
         appointment.sync_status = "synced"
         appointment.sync_error = None
         appointment.last_synced_at = datetime.now(UTC)
@@ -501,6 +508,11 @@ async def _sync_google_calendar(
             "google_calendar_event_created",
             user_id=staff.user_id,
             event_id=event.event_id,
+            video_provider=(
+                meeting_provider_name(appointment.meeting_url)
+                if appointment.service_type == "video_call"
+                else None
+            ),
         )
     except GoogleCalendarError as exc:
         error_text = str(exc)
@@ -515,6 +527,50 @@ async def _sync_google_calendar(
         appointment.sync_error = "Google Calendar synchronization failed"
         await db.commit()
         log.exception("google_calendar_event_create_failed")
+
+
+async def _ensure_zoom_meeting(
+    db: AsyncSession,
+    *,
+    appointment: Appointment,
+    workspace: Workspace | None,
+    staff: BookableStaff,
+    log: structlog.BoundLogger,
+) -> bool:
+    """Create and durably save one Zoom meeting for the configured host."""
+    if appointment.service_type != "video_call" or staff.user_id is None:
+        return False
+    if zoom_meeting_id_from_url(appointment.meeting_url):
+        return True
+
+    from app.services.zoom import (
+        ZoomError,
+        create_meeting,
+        zoom_configured_for_user,
+    )
+
+    if not await zoom_configured_for_user(db, user_id=staff.user_id):
+        return False
+    try:
+        meeting = await create_meeting(
+            starts_at=appointment.scheduled_at,
+            duration_minutes=appointment.duration_minutes,
+            timezone=_workspace_timezone(workspace),
+            topic=f"{workspace.name if workspace else 'Business'} consultation",
+            agenda=f"CRM appointment {appointment.id}",
+        )
+    except ZoomError:
+        log.warning("zoom_meeting_not_created_using_meet_fallback")
+        return False
+    except Exception:  # noqa: BLE001 - Google Meet remains the safe fallback
+        log.exception("zoom_meeting_create_failed_using_meet_fallback")
+        return False
+
+    appointment.meeting_url = meeting.join_url
+    # Persist before Google sync so a Google retry cannot duplicate a Zoom meeting.
+    await db.commit()
+    log.info("zoom_meeting_created", appointment_id=appointment.id)
+    return True
 
 
 async def _send_rep_invite(
@@ -640,7 +696,7 @@ def _meeting_method(
         return f"Phone call: {contact.phone_number}" if contact.phone_number else "Phone call"
     if appointment.service_type == "video_call":
         if appointment.meeting_url:
-            return appointment.meeting_url
+            return f"{meeting_provider_name(appointment.meeting_url)}: {appointment.meeting_url}"
         if include_failure:
             return "Video link pending — operator follow-up required"
         return None

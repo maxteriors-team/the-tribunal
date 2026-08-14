@@ -18,10 +18,10 @@ _STORAGE_ENV = {
 
 
 @pytest.fixture(autouse=True)
-def _clear_mms_storage_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep developer/CI storage credentials from influencing these tests."""
+def _clear_provider_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep developer/CI provider credentials from influencing these tests."""
     for name in tuple(os.environ):
-        if name.startswith("MMS_STORAGE_"):
+        if name.startswith(("MMS_STORAGE_", "ZOOM_")):
             monkeypatch.delenv(name)
 
 
@@ -111,3 +111,44 @@ def test_mms_storage_allows_http_for_local_emulators() -> None:
 
     assert configured.mms_storage_enabled is True
     assert configured.mms_storage_addressing_style == "path"
+
+
+def test_zoom_is_disabled_by_default() -> None:
+    assert _settings().zoom_enabled is False
+
+
+def test_zoom_loads_complete_configuration_without_leaking_secret() -> None:
+    configured = _settings(
+        zoom_account_id="account-id",
+        zoom_client_id="client-id",
+        zoom_client_secret="do-not-leak-this-secret",
+        zoom_host_email="max@maxteriors.com",
+    )
+
+    assert configured.zoom_enabled is True
+    assert configured.zoom_host_email == "max@maxteriors.com"
+    assert "do-not-leak-this-secret" not in repr(configured)
+
+
+def test_zoom_rejects_partial_configuration_without_leaking_secret() -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        _settings(
+            zoom_client_id="client-id",
+            zoom_client_secret="do-not-leak-this-secret",
+        )
+
+    message = str(exc_info.value)
+    assert "Zoom configuration is incomplete" in message
+    assert "ZOOM_ACCOUNT_ID" in message
+    assert "ZOOM_HOST_EMAIL" in message
+    assert "do-not-leak-this-secret" not in message
+
+
+def test_zoom_requires_email_host_identity() -> None:
+    with pytest.raises(ValidationError, match="ZOOM_HOST_EMAIL must be an email address"):
+        _settings(
+            zoom_account_id="account-id",
+            zoom_client_id="client-id",
+            zoom_client_secret="client-secret",
+            zoom_host_email="not-an-email",
+        )

@@ -30,6 +30,10 @@ from app.schemas.appointment import (
     PaginatedAppointments,
 )
 from app.services.appointments.attendance import record_attendance_outcome
+from app.services.appointments.external_sync import (
+    delete_external_events,
+    update_external_events,
+)
 
 logger = structlog.get_logger()
 
@@ -45,8 +49,9 @@ def _calc_show_up_rate(completed: int, no_show: int) -> float:
 class AppointmentService:
     """Service for appointment CRUD and stats.
 
-    The local ``appointments`` table is the single source of truth; there is no
-    external calendar sync.
+    The local ``appointments`` table is the source of truth; Google Calendar and
+    Zoom synchronization are best-effort mirrors that never block local lifecycle
+    changes.
     """
 
     def __init__(self, db: AsyncSession) -> None:
@@ -231,7 +236,10 @@ class AppointmentService:
             criteria.append(self.booked_for_user_predicate(workspace_id, visible_to_user_id))
         result = await self.db.execute(
             select(Appointment)
-            .options(selectinload(Appointment.contact))
+            .options(
+                selectinload(Appointment.contact),
+                selectinload(Appointment.bookable_staff),
+            )
             .where(
                 Appointment.id == appointment_id,
                 Appointment.workspace_id == workspace_id,
@@ -285,10 +293,15 @@ class AppointmentService:
             appointment.status == AppointmentStatus.CANCELLED
             and previous_status != appointment.status
         ):
-            await self._delete_google_event(appointment)
-            appointment.sync_status = "synced"
-            appointment.sync_error = None
-            appointment.last_synced_at = datetime.now(UTC)
+            await delete_external_events(
+                self.db,
+                appointment=appointment,
+                log=self.log,
+            )
+            if appointment.sync_status != "failed":
+                appointment.sync_status = "cancelled"
+                appointment.sync_error = None
+                appointment.last_synced_at = datetime.now(UTC)
 
         # An operator marking attendance must leave the contact in exactly the
         # state the scheduling lifecycle expects: the lifecycle tag,
@@ -302,12 +315,14 @@ class AppointmentService:
             appointment.scheduled_at != previous_scheduled_at
             or appointment.duration_minutes != previous_duration
         )
-        if (
-            schedule_changed
-            and appointment.status != AppointmentStatus.CANCELLED
-            and appointment.google_calendar_event_id
-        ):
-            await self._sync_google_event_time(appointment)
+        if schedule_changed and appointment.status != AppointmentStatus.CANCELLED:
+            workspace = await self.db.get(Workspace, appointment.workspace_id)
+            await update_external_events(
+                self.db,
+                appointment=appointment,
+                workspace=workspace,
+                log=self.log,
+            )
 
         await self.db.commit()
         await self.db.refresh(appointment)
@@ -348,7 +363,7 @@ class AppointmentService:
             appointment_id,
             visible_to_user_id=visible_to_user_id,
         )
-        await self._delete_google_event(appointment)
+        await delete_external_events(self.db, appointment=appointment, log=self.log)
         await self.db.delete(appointment)
         await self.db.commit()
         self.log.info(
@@ -356,60 +371,6 @@ class AppointmentService:
             workspace_id=str(workspace_id),
             appointment_id=appointment_id,
         )
-
-    async def _calendar_owner_user_id(self, appointment: Appointment) -> int | None:
-        if appointment.bookable_staff_id is None:
-            return None
-        from app.models.bookable_staff import BookableStaff
-
-        staff = await self.db.get(BookableStaff, appointment.bookable_staff_id)
-        return staff.user_id if staff is not None else None
-
-    async def _sync_google_event_time(self, appointment: Appointment) -> None:
-        user_id = await self._calendar_owner_user_id(appointment)
-        if user_id is None or appointment.google_calendar_event_id is None:
-            return
-        from app.services.google_calendar import GoogleCalendarError, update_event_time
-
-        try:
-            from app.utils.timezones import workspace_timezone_name
-
-            workspace = await self.db.get(Workspace, appointment.workspace_id)
-            await update_event_time(
-                self.db,
-                user_id=user_id,
-                event_id=appointment.google_calendar_event_id,
-                starts_at=appointment.scheduled_at,
-                duration_minutes=appointment.duration_minutes,
-                timezone=workspace_timezone_name(workspace),
-            )
-            appointment.sync_status = "synced"
-            appointment.sync_error = None
-            appointment.last_synced_at = datetime.now(UTC)
-        except GoogleCalendarError as exc:
-            appointment.sync_status = "failed"
-            appointment.sync_error = str(exc)[:2000]
-
-    async def _delete_google_event(self, appointment: Appointment) -> None:
-        user_id = await self._calendar_owner_user_id(appointment)
-        if user_id is None or appointment.google_calendar_event_id is None:
-            return
-        from app.services.google_calendar import GoogleCalendarError, delete_event
-
-        try:
-            await delete_event(
-                self.db,
-                user_id=user_id,
-                event_id=appointment.google_calendar_event_id,
-            )
-        except GoogleCalendarError as exc:
-            if "event was not found" in str(exc):
-                return
-            self.log.warning(
-                "google_calendar_delete_failed",
-                appointment_id=appointment.id,
-                error=str(exc),
-            )
 
     async def get_stats(
         self,

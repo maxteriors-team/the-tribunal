@@ -27,6 +27,7 @@ from app.models.workspace import Workspace
 from app.services.idempotency import derive_outbound_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
+from app.utils.meeting_urls import meeting_provider_name
 from app.utils.timezones import resolve_workspace_timezone
 
 logger = structlog.get_logger()
@@ -170,7 +171,8 @@ def _append_call_details(body: str, contact: Contact, appointment: Appointment) 
         return f"{body} We'll call you at {contact.phone_number}."
     if appointment.service_type == "video_call":
         if appointment.meeting_url:
-            return f"{body} Join Google Meet: {appointment.meeting_url}"
+            provider = meeting_provider_name(appointment.meeting_url)
+            return f"{body} Join {provider}: {appointment.meeting_url}"
         return f"{body} We'll follow up with the video link."
     return body
 

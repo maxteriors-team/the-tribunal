@@ -55,6 +55,12 @@ Select the visible tab by its UI label. Saving a setting affects future behavior
 3. Each sales rep repeats this with their own login; never share one Google refresh token across the team.
 4. Owners, admins, managers, and dispatchers can view all rep appointments on the CRM calendar; lower roles see only their assigned appointments.
 
+### Zoom links for video bookings
+
+When deployment operators configure Zoom for the same email as a connected Google account, the AI checks that representative's Google FreeBusy schedule, creates a unique Zoom meeting, adds the Zoom link to the Google event, and sends it in the lead's confirmation. Zoom meetings use a waiting room, block join-before-host, and disable automatic recording. Rescheduling or cancelling the CRM appointment updates or deletes both provider copies; if Zoom is unavailable, the booking safely falls back to Google Meet.
+
+Zoom uses a server-side account credential and one configured host email for now. Never paste its client secret into chat; other representatives continue using Google Meet until they receive their own supported Zoom connection.
+
 ## Connect a workspace integration
 
 1. Open **Settings → Integrations** at `/settings?tab=integrations`.

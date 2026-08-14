@@ -133,6 +133,13 @@ class Settings(BaseSettings):
     google_calendar_client_secret: SecretStr = SecretStr("")
     google_calendar_oauth_redirect_uri: str = ""
 
+    # Zoom Server-to-Server OAuth. For now one host email is intentionally bound
+    # to the same user's Google Calendar connection; other tenants keep Meet fallback.
+    zoom_account_id: str = ""
+    zoom_client_id: str = ""
+    zoom_client_secret: SecretStr = SecretStr("")
+    zoom_host_email: str = ""
+
     # Jobber (field-service sync). The access token is a short-lived OAuth2
     # token; the CLI also accepts it via --token / JOBBER_ACCESS_TOKEN so the
     # value need not be persisted in app config. Pin the GraphQL schema version
@@ -330,10 +337,35 @@ class Settings(BaseSettings):
 
         return self
 
+    @model_validator(mode="after")
+    def validate_zoom(self) -> Self:
+        """Reject partial Zoom credentials and a non-email host identity."""
+        required_values = {
+            "ZOOM_ACCOUNT_ID": self.zoom_account_id,
+            "ZOOM_CLIENT_ID": self.zoom_client_id,
+            "ZOOM_CLIENT_SECRET": self.zoom_client_secret.get_secret_value(),
+            "ZOOM_HOST_EMAIL": self.zoom_host_email,
+        }
+        provided = {name for name, value in required_values.items() if value.strip()}
+        if provided and len(provided) != len(required_values):
+            missing = sorted(required_values.keys() - provided)
+            raise ValueError("Zoom configuration is incomplete; missing " + ", ".join(missing))
+        if provided and (
+            "@" not in self.zoom_host_email
+            or any(character.isspace() for character in self.zoom_host_email)
+        ):
+            raise ValueError("ZOOM_HOST_EMAIL must be an email address")
+        return self
+
     @property
     def mms_storage_enabled(self) -> bool:
         """Return whether a complete private MMS storage backend is configured."""
         return bool(self.mms_storage_bucket.strip())
+
+    @property
+    def zoom_enabled(self) -> bool:
+        """Return whether unique Zoom meetings should replace Meet for the host."""
+        return bool(self.zoom_account_id.strip())
 
     @property
     def secure_auth_cookies(self) -> bool:
