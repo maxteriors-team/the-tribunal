@@ -133,8 +133,8 @@ const normalizedShots = (value: unknown): DesignerShot[] => {
       {
         ...(shot as unknown as DesignerShot),
         sheet: {
-          label: stringValue(sheet?.label, `Sheet ${index + 1}`),
-          drawingTitle: stringValue(sheet?.drawingTitle, "Landscape lighting design plan"),
+          label: stringValue(sheet?.label, `Aerial plan ${index + 1}`),
+          drawingTitle: stringValue(sheet?.drawingTitle, "Aerial landscape lighting plan"),
           drawingNumber: stringValue(sheet?.drawingNumber, `L-${index + 1}`),
           proposalZoneId: stringOrNull(sheet?.proposalZoneId) ?? undefined,
           revisions: Array.isArray(sheet?.revisions) ? (sheet.revisions as never[]) : [],

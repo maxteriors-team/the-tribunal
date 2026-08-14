@@ -51,9 +51,7 @@ describe("AIRenderModal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /generate realistic photo/i }));
 
-    await waitFor(() =>
-      expect(screen.getByAltText("AI night render")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByAltText("AI night render")).toBeInTheDocument());
     // The drawn design is flattened, then only that image is sent to the server.
     expect(exportDesignJpeg).toHaveBeenCalledOnce();
     expect(estimatorApi.render).toHaveBeenCalledWith("ws-1", {
@@ -65,6 +63,35 @@ describe("AIRenderModal", () => {
       "src",
       "data:image/jpeg;base64,RENDER",
     );
+  });
+
+  it("frames landscape renders as top-down aerial visualizations", async () => {
+    vi.mocked(estimatorApi.render).mockResolvedValue({
+      image: "data:image/jpeg;base64,AERIAL_RENDER",
+    });
+
+    wrap(
+      <AIRenderModal
+        workspaceId="ws-1"
+        photo={PHOTO}
+        design={DESIGN}
+        productById={new Map()}
+        mode="landscape"
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "AI aerial render" })).toHaveTextContent(
+      /without changing viewpoint/i,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /generate aerial render/i }));
+
+    await waitFor(() => expect(screen.getByAltText("AI aerial night render")).toBeInTheDocument());
+    expect(estimatorApi.render).toHaveBeenCalledWith("ws-1", {
+      image: "data:image/jpeg;base64,DESIGN",
+      mode: "landscape",
+      prompt: null,
+    });
   });
 
   it("shows the server error message when the render fails", async () => {
@@ -85,9 +112,7 @@ describe("AIRenderModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /generate realistic photo/i }));
 
     await waitFor(() =>
-      expect(
-        screen.getByText("AI render isn't available for this workspace."),
-      ).toBeInTheDocument(),
+      expect(screen.getByText("AI render isn't available for this workspace.")).toBeInTheDocument(),
     );
     expect(screen.queryByAltText("AI night render")).not.toBeInTheDocument();
   });

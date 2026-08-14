@@ -1,8 +1,8 @@
 """Photorealistic night-render of a rep's drawn lighting design (Phase 2).
 
-Turns the composited design image (glowing lights drawn over the customer's
-photo) into a photorealistic dusk photograph via the workspace's OpenAI image
-model — the visual "closer" a rep shows a skeptical homeowner. Uses the
+Turns the composited design image (lighting marks drawn over the customer's
+photo or aerial plan) into a nighttime visualization via the workspace's OpenAI
+image model — the visual "closer" a rep shows a skeptical homeowner. Uses the
 per-tenant OpenAI credential (:func:`create_workspace_openai_client`), so the
 browser never handles a key, mirroring the voice/realtime credential path.
 
@@ -45,8 +45,9 @@ _SUPPORTED_MIME: dict[str, tuple[str, str]] = {
 }
 _DEFAULT_IMAGE: tuple[str, str] = ("design.png", "image/png")
 
-# Ported 1:1 from the in-house light-estimator ``defaultPrompt`` so the render
-# matches what reps already trust. Kept under the OpenAI 1000-char prompt cap.
+# Product-line defaults share the original estimator language. The landscape
+# prompt explicitly preserves the required aerial viewpoint. Keep each prompt
+# under OpenAI's 1000-character cap.
 _LIGHTS = {
     "permanent": (
         "permanent LED track lighting mounted flush along the eaves and "
@@ -57,16 +58,16 @@ _LIGHTS = {
         "glowing bushes and holiday decor exactly where they are drawn"
     ),
     "landscape": (
-        "professional architectural landscape lighting: warm uplights grazing "
-        "the facade, columns and trees, path lights along the walkway, and "
-        "downlights washing the hardscape exactly where the beams are drawn"
+        "professional architectural landscape lighting: warm uplights aimed at "
+        "trees and structures, path lights along walkways, and downlights washing "
+        "hardscape exactly where the beams are drawn"
     ),
 }
 
 # The closing line differs by product line: a landscape design must not be sold
 # back to the homeowner as a holiday installation photo.
 _CLOSERS = {
-    "landscape": ("Dusk sky, magazine-quality architectural landscape lighting photo."),
+    "landscape": "Magazine-quality professional aerial landscape lighting visualization.",
     "permanent": "Dusk sky, magazine-quality permanent lighting installation photo.",
     "seasonal": "Dusk sky, magazine-quality holiday lighting installation photo.",
 }
@@ -74,22 +75,26 @@ _CLOSERS = {
 
 def default_render_prompt(mode: str) -> str:
     """Return the default night-render prompt for the design's product line."""
+    if mode == "landscape":
+        return (
+            "Turn this exact top-down property plan into a photorealistic professional "
+            f"nighttime aerial visualization with {_LIGHTS['landscape']}. Preserve the "
+            "top-down aerial viewpoint, property layout, roof footprint, driveways, "
+            "walkways, planting beds, trees, and lot features exactly. Do not change to "
+            "a street-level, oblique, or elevation view. Replace drawn beams and glow "
+            "pools with realistic fixtures casting soft warm light across the indicated "
+            "ground, plantings, hardscape, and structures. Keep every fixture and light "
+            f"throw where drawn. {_CLOSERS['landscape']}"
+        )
+
     lights = _LIGHTS.get(mode, _LIGHTS["seasonal"])
     closer = _CLOSERS.get(mode, _CLOSERS["seasonal"])
-    fixtures = (
-        "Replace the drawn beams and glow pools with realistic fixtures casting "
-        "soft warm light on the walls, plantings and walkways."
-        if mode == "landscape"
-        else (
-            "Replace the drawn glowing dots with realistic light bulbs casting a "
-            "soft warm glow on the walls and roof."
-        )
-    )
     return (
         f"Turn this into a photorealistic professional night photograph of this "
         f"exact house with {lights}. Keep the architecture, windows, doors, "
-        f"rooflines, landscaping, and camera angle exactly the same. {fixtures} "
-        f"{closer}"
+        "rooflines, landscaping, and camera angle exactly the same. Replace the "
+        "drawn glowing dots with realistic light bulbs casting a soft warm glow "
+        f"on the walls and roof. {closer}"
     )
 
 

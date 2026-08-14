@@ -82,6 +82,7 @@ interface LightCanvasProps {
   products: Product[];
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
+  perspective?: "photo" | "aerial";
   planImageRequestToken?: number;
   onPlanImageRequestHandled?: () => void;
 }
@@ -91,10 +92,12 @@ export function LightCanvas({
   products,
   state,
   dispatch,
+  perspective = "photo",
   planImageRequestToken = 0,
   onPlanImageRequestHandled,
 }: LightCanvasProps) {
   const { design, tool, selection, dusk } = state;
+  const isAerial = perspective === "aerial";
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -121,9 +124,9 @@ export function LightCanvas({
   const tapRef = useRef<{ id: number; x: number; y: number } | null>(null);
   const [panning, setPanning] = useState(false);
   const [pendingCal, setPendingCal] = useState<{ a: Point; b: Point } | null>(null);
-  // "Before": the untouched daylight photo, for the side-by-side moment with the
-  // customer. A toggle rather than a press-and-hold so it works from the
-  // keyboard and on touch.
+  // "Before": the untouched base image (aerial for landscape, daylight photo for
+  // seasonal), for the side-by-side customer moment. A toggle rather than a
+  // press-and-hold keeps it usable from the keyboard and on touch.
   const [showBefore, setShowBefore] = useState(false);
   const duskId = useId();
   const canvasHelpId = useId();
@@ -1144,14 +1147,18 @@ export function LightCanvas({
       ? "Click the other end of your reference object · Shift = straight line"
       : design.calibration
         ? "Drag the cyan handles to adjust — or click two new points to re-measure"
-        : "Click both ends of something with a known size (garage door = 16 ft)";
+        : isAerial
+          ? "Click both ends of a known top-down distance (driveway, walkway, or survey line)"
+          : "Click both ends of something with a known size (garage door = 16 ft)";
   } else if (tool.type === "draw") {
     const liveFt =
       draft.length > 0 ? polylineLength(hoverPt ? [...draft, hoverPt] : draft) * ftPerPx : 0;
     hint =
       draft.length > 0
         ? `${formatFeet(liveFt)} — Enter / double-click to finish · Backspace undoes a point · Esc cancels`
-        : "Click along the roofline to add points · Shift snaps angles";
+        : activeProduct?.style === "wire"
+          ? "Click along the top-down wire route · Shift snaps angles"
+          : "Click along the roofline to add points · Shift snaps angles";
   } else if (tool.type === "place") {
     hint = `Click to place ${activeProduct?.name ?? "item"} · then switch to Select (V) to move or resize`;
   } else if (tool.type === "highlight") {
@@ -1199,9 +1206,10 @@ export function LightCanvas({
     >
       <p id={canvasHelpId} className="sr-only">
         Interactive lighting design canvas. Choose a fixture or tool from the left rail, then use
-        the pointer on the property photo. Press V for Select, S for Set scale, Delete to remove a
-        selected fixture, plus or minus to zoom, and 0 to fit. Drop an image file onto the plan, or
-        use Add plan image, to place a movable reference inset.
+        the pointer on the {isAerial ? "top-down aerial plan" : "property photo"}. Press V for
+        Select, S for Set scale, Delete to remove a selected fixture, plus or minus to zoom, and 0
+        to fit. Drop an image file onto the plan, or use{" "}
+        {isAerial ? "Add detail photo" : "Add plan image"} to place a movable reference inset.
       </p>
       <input
         ref={planImageInputRef}
@@ -1214,7 +1222,11 @@ export function LightCanvas({
         ref={canvasRef}
         className="lc-canvas"
         tabIndex={0}
-        aria-label="Property photo lighting design canvas"
+        aria-label={
+          isAerial
+            ? "Top-down aerial lighting plan canvas"
+            : "Property photo lighting design canvas"
+        }
         aria-describedby={canvasHelpId}
         style={{ cursor }}
         onPointerDown={onPointerDown}
@@ -1230,7 +1242,11 @@ export function LightCanvas({
           type="button"
           className={`lc-chip ${calibrated ? "lc-chip-ok" : "lc-chip-warn"}`}
           onClick={() => dispatch({ type: "SET_TOOL", tool: { type: "calibrate" } })}
-          title="Set the photo scale from a known measurement"
+          title={
+            isAerial
+              ? "Set the aerial plan scale from a known top-down distance"
+              : "Set the photo scale from a known measurement"
+          }
         >
           {!calibrated ? <AlertTriangle className="lc-chip-glyph" aria-hidden="true" /> : null}
           {calibrated && design.calibration
@@ -1242,17 +1258,21 @@ export function LightCanvas({
           className="lc-chip"
           disabled={(design.planImages ?? []).length >= MAX_PLAN_IMAGES}
           onClick={() => planImageInputRef.current?.click()}
-          title="Place a movable detail or reference image on this plan"
+          title={
+            isAerial
+              ? "Insert a movable detail photo over the aerial plan"
+              : "Place a movable detail or reference image on this plan"
+          }
         >
           <ImagePlus className="lc-chip-glyph" aria-hidden="true" />
-          Add plan image
+          {isAerial ? "Add detail photo" : "Add plan image"}
         </button>
       </div>
 
       {imageDragActive ? (
         <div className="lc-image-drop-target" aria-hidden="true">
           <ImagePlus />
-          <strong>Drop image onto plan</strong>
+          <strong>{isAerial ? "Drop detail photo onto aerial" : "Drop image onto plan"}</strong>
           <span>It will stay movable and resizable.</span>
         </div>
       ) : null}
@@ -1269,7 +1289,9 @@ export function LightCanvas({
           className={`lc-chip ${showBefore ? "lc-chip-on" : ""}`}
           aria-pressed={showBefore}
           onClick={() => setShowBefore((v) => !v)}
-          title="Show the untouched daylight photo"
+          title={
+            isAerial ? "Show the base aerial without lighting" : "Show the untouched daylight photo"
+          }
         >
           <Sunrise className="lc-chip-glyph" aria-hidden="true" />
           Before
@@ -1332,6 +1354,7 @@ export function LightCanvas({
 
       {pendingCal ? (
         <FeetModal
+          perspective={perspective}
           onCancel={() => setPendingCal(null)}
           onApply={(feet) => {
             dispatch({
@@ -1348,13 +1371,16 @@ export function LightCanvas({
 }
 
 function FeetModal({
+  perspective,
   onApply,
   onCancel,
 }: {
+  perspective: "photo" | "aerial";
   onApply: (feet: number) => void;
   onCancel: () => void;
 }) {
-  const [value, setValue] = useState("16");
+  const isAerial = perspective === "aerial";
+  const [value, setValue] = useState(isAerial ? "25" : "16");
   const feet = parseFloat(value);
   const valid = Number.isFinite(feet) && feet > 0;
 
@@ -1366,10 +1392,17 @@ function FeetModal({
         aria-label="Cancel setting the scale"
         onClick={onCancel}
       />
-      <div className="lc-modal" role="dialog" aria-modal="true" aria-label="Set photo scale">
+      <div
+        className="lc-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={isAerial ? "Set aerial plan scale" : "Set photo scale"}
+      >
         <h3>How long is that line in real life?</h3>
         <p className="lc-modal-sub">
-          Measure off something you know — a garage door, front door, or siding panel.
+          {isAerial
+            ? "Use a known top-down distance from a survey, driveway, walkway, or measured site line."
+            : "Measure off something you know — a garage door, front door, or siding panel."}
         </p>
         <div className="lc-feet-row">
           <input
@@ -1389,15 +1422,31 @@ function FeetModal({
           <span className="lc-feet-unit">feet</span>
         </div>
         <div className="lc-quick-row">
-          <button type="button" onClick={() => setValue("16")}>
-            2-car garage · 16
-          </button>
-          <button type="button" onClick={() => setValue("9")}>
-            1-car garage · 9
-          </button>
-          <button type="button" onClick={() => setValue("3")}>
-            Front door · 3
-          </button>
+          {isAerial ? (
+            <>
+              <button type="button" onClick={() => setValue("10")}>
+                10 ft reference
+              </button>
+              <button type="button" onClick={() => setValue("25")}>
+                25 ft reference
+              </button>
+              <button type="button" onClick={() => setValue("50")}>
+                50 ft reference
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={() => setValue("16")}>
+                2-car garage · 16
+              </button>
+              <button type="button" onClick={() => setValue("9")}>
+                1-car garage · 9
+              </button>
+              <button type="button" onClick={() => setValue("3")}>
+                Front door · 3
+              </button>
+            </>
+          )}
         </div>
         <div className="lc-modal-actions">
           <button type="button" className="est-btn" onClick={onCancel}>

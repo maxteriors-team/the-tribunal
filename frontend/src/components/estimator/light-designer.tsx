@@ -320,7 +320,7 @@ function LandscapeSheetTitleBlock({
         </div>
         <div>
           <dt>Drawing</dt>
-          <dd>Landscape lighting design plan</dd>
+          <dd>Aerial landscape lighting plan</dd>
         </div>
         <div>
           <dt>Scale</dt>
@@ -383,7 +383,7 @@ function LandscapeWelcome({
   return (
     <section
       className={`est-welcome est-welcome-landscape${dragActive ? " drag-active" : ""}`}
-      aria-label="Landscape drawing sheet file drop zone"
+      aria-label="Aerial plan file drop zone"
       onDragEnter={(event) => {
         if (!acceptsFiles(event)) return;
         event.preventDefault();
@@ -413,26 +413,28 @@ function LandscapeWelcome({
               <span className="ll-sheet-kicker">New design · Sheet L-1</span>
               <div className="ll-empty-sheet-copy">
                 <Layers3 aria-hidden="true" />
-                <h1 id="ll-welcome-title">Start the landscape lighting drawing</h1>
+                <h1 id="ll-welcome-title">Start with a top-down aerial plan</h1>
                 <p>
-                  Drag a downloaded elevation, aerial, or yard image onto this sheet, or choose the
-                  file below. Then set scale, add fixtures, aim each beam, and review the dusk
-                  concept.
+                  Upload a satellite, drone, or site-plan image viewed from directly above.
+                  Street-level and elevation photos do not produce an accurate fixture or wiring
+                  plan.
                 </p>
                 <span className="ll-drop-instruction" aria-live="polite">
-                  {dragActive ? "Release to place this image on Sheet L-1" : "Drop image file here"}
+                  {dragActive
+                    ? "Release to place this aerial on Sheet L-1"
+                    : "Drop top-down aerial image here"}
                 </span>
                 <button className="est-btn primary ll-upload-btn" type="button" onClick={onUpload}>
                   <ImagePlus aria-hidden="true" />
-                  Place property photo
+                  Upload aerial plan
                 </button>
               </div>
-              <div className="ll-empty-sheet-steps" aria-label="Landscape lighting design workflow">
+              <div className="ll-empty-sheet-steps" aria-label="Aerial landscape lighting workflow">
                 <span>
-                  <strong>01</strong> Set scale
+                  <strong>01</strong> Scale the aerial
                 </span>
                 <span>
-                  <strong>02</strong> Place and aim
+                  <strong>02</strong> Place from above
                 </span>
                 <span>
                   <strong>03</strong> Present and quote
@@ -720,8 +722,8 @@ function LandscapeDraftingToolbar({
       </div>
       {helpOpen ? (
         <div className="ll-toolbar-help" role="status">
-          Set one known measurement, choose a fixture icon, then click the photo to place it. Select
-          a fixture to move, aim, or change it. Draft changes save automatically.
+          Set one known top-down distance, choose a fixture icon, then click the aerial to place it.
+          Select a fixture to move or aim it from above. Draft changes save automatically.
         </div>
       ) : null}
     </section>
@@ -750,7 +752,7 @@ function LandscapeSheetBar({
   onRemove: () => void;
 }) {
   return (
-    <div className="ll-sheet-tabs" aria-label="Drawing sheets">
+    <div className="ll-sheet-tabs" aria-label="Aerial drawing sheets">
       <span className="ll-sheet-tabs-label">Sheets</span>
       {!shots.length ? (
         <button type="button" className="active" aria-current="page" disabled>
@@ -785,7 +787,7 @@ function LandscapeSheetBar({
       )}
       <button type="button" disabled={atShotCap} onClick={onAdd}>
         <Plus aria-hidden="true" />
-        Add sheet
+        Add aerial
       </button>
       <button type="button" disabled={!shots.length || atShotCap} onClick={onDuplicate}>
         <Copy aria-hidden="true" />
@@ -876,7 +878,7 @@ function LandscapeEmptyPanel({
       <p>{description}</p>
       <button className="est-btn primary" type="button" onClick={onUpload}>
         <ImagePlus aria-hidden="true" />
-        Upload property photo
+        Upload aerial plan
       </button>
     </div>
   );
@@ -1734,11 +1736,11 @@ function LandscapeWorkspacePanel({
     (sum, row) => sum + (row.id === "transformer" ? 0 : row.count),
     0,
   );
-  const allPhotosScaled =
+  const allAerialPlansScaled =
     shots.length > 0 && shots.every((shot) => Boolean(shot.design.calibration));
   const checklist = [
-    { label: "Property photos added", complete: shots.length > 0 },
-    { label: "Every photo is scaled", complete: allPhotosScaled },
+    { label: "Aerial plan added", complete: shots.length > 0 },
+    { label: "Every aerial plan is scaled", complete: allAerialPlansScaled },
     { label: "Fixture plan completed", complete: fixtureCount > 0 },
     { label: "Wire circuits drawn", complete: circuitLoads.length > 0 },
     {
@@ -1757,7 +1759,7 @@ function LandscapeWorkspacePanel({
       <section className="ll-workspace-panel" aria-label={`${tab} workspace`}>
         <LandscapeEmptyPanel
           title={`Start the ${LANDSCAPE_WORKSPACE_TABS.find((item) => item.key === tab)?.label ?? tab}`}
-          description="Add the first property photo to connect this section to a real lighting plan."
+          description="Add the first top-down aerial to connect this section to a real lighting plan."
           onUpload={onUpload}
         />
       </section>
@@ -2919,7 +2921,7 @@ export function LightDesigner({
       openShot(fallback);
       return;
     }
-    // Last photo gone: back to the welcome screen with a clean editor.
+    // Last base image gone: return to the welcome screen with a clean editor.
     setActiveShotId(null);
     dispatch({ type: "RESET" });
   };
@@ -2945,9 +2947,9 @@ export function LightDesigner({
 
   const atShotCap = shots.length >= MAX_SHOTS;
 
-  // ---- Photo upload ------------------------------------------------------
-  // Always *adds* a photo. The rep designs the front, adds the back, and both
-  // stay — nothing they drew is traded away for the next angle.
+  // ---- Base-image upload -------------------------------------------------
+  // Landscape sheets use top-down aerials; the shared seasonal designer still
+  // accepts elevation photos. Adding either never replaces an existing drawing.
   const addPhotoFile = async (file: File) => {
     if (atShotCap) return;
     try {
@@ -2962,8 +2964,8 @@ export function LightDesigner({
       setShots(next);
       proposal?.onShotsChange(next);
       openShot(shot);
-      // Only the first photo starts the estimate over. Later photos are more of
-      // the same job, so the rep's takedown/rate/line-item work stays put.
+      // Only the first base image starts the estimate over. Later aerials/photos
+      // are more of the same job, so estimate inputs stay in place.
       if (!shots.length) {
         setTakedown(false);
         setStorage(false);
@@ -2985,9 +2987,8 @@ export function LightDesigner({
   };
 
   // ---- Save onto the proposal (Quote Builder host) -----------------------
-  // Every drawn shot is composited and sent together, so the proposal shows the
-  // whole job. Blank shots (a photo the rep added but never drew on) are left
-  // out rather than shipped to the customer as an unlit snapshot.
+  // Every drawn sheet is composited and sent together, so the proposal shows the
+  // whole job. Blank sheets are omitted rather than sent as unmarked base imagery.
   const saveToProposal = async () => {
     if (!proposal || savingProposal) return;
     const drawn = liveShots.filter((shot) => hasDesign(shot.design));
@@ -3293,16 +3294,31 @@ export function LightDesigner({
               disabled={atShotCap}
               title={
                 atShotCap
-                  ? `Up to ${MAX_SHOTS} photos in one design`
-                  : "Add another photo of this job. Existing drawings stay in place."
+                  ? `Up to ${MAX_SHOTS} ${landscapeOnly ? "aerial plans" : "photos"} in one design`
+                  : landscapeOnly
+                    ? "Add another top-down aerial plan. Existing drawings stay in place."
+                    : "Add another photo of this job. Existing drawings stay in place."
               }
               onClick={() => fileRef.current?.click()}
             >
               <ImagePlus aria-hidden="true" />
-              {photo ? "Add photo" : "Upload house photo"}
+              {landscapeOnly
+                ? photo
+                  ? "Add aerial"
+                  : "Upload aerial plan"
+                : photo
+                  ? "Add photo"
+                  : "Upload house photo"}
             </button>
           ) : null}
-          <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            aria-label={landscapeOnly ? "Upload aerial plan" : "Upload house photo"}
+            hidden
+            onChange={onFile}
+          />
           <input
             ref={projectImportRef}
             type="file"
@@ -3376,7 +3392,9 @@ export function LightDesigner({
               title={
                 activeDesignHas
                   ? undefined
-                  : "Place at least one fixture before creating a photorealistic render."
+                  : landscapeOnly
+                    ? "Place at least one fixture before creating the aerial night render."
+                    : "Place at least one fixture before creating a photorealistic render."
               }
               onClick={() => setAiOpen(true)}
             >
@@ -3403,7 +3421,9 @@ export function LightDesigner({
                 title={
                   designHas
                     ? `Save ${drawnShots.length} design${drawnShots.length === 1 ? "" : "s"} onto the proposal`
-                    : "Add a photo and draw the design first"
+                    : landscapeOnly
+                      ? "Add an aerial plan and draw the design first"
+                      : "Add a photo and draw the design first"
                 }
                 onClick={() => void saveToProposal()}
               >
@@ -3641,6 +3661,7 @@ export function LightDesigner({
                         products={products}
                         state={state}
                         dispatch={dispatch}
+                        perspective="aerial"
                         planImageRequestToken={planImageRequestToken}
                         onPlanImageRequestHandled={() => setPlanImageRequestToken(0)}
                       />
@@ -3670,7 +3691,7 @@ export function LightDesigner({
                       <header>
                         <span>
                           <strong>Add fixtures</strong>
-                          <small>Select a fixture, then place it on the drawing.</small>
+                          <small>Select a fixture, then place it on the aerial plan.</small>
                         </span>
                         <button
                           type="button"

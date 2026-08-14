@@ -434,7 +434,7 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
               Landscape lighting projects
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Open a customer plan, design on property photos, and keep the current drawing synced to Tribunal.
+              Open a customer plan, design from a top-down aerial, and keep the current drawing synced to Tribunal.
             </p>
           </div>
           <Button type="button" onClick={() => setCreateMode("create")}>

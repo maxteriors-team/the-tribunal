@@ -42,7 +42,8 @@ describe("landscape document v2", () => {
       precon: { responses: [], leadInstaller: "", notes: "" },
     });
     expect(migrated?.shots[0]?.sheet).toMatchObject({
-      label: "Sheet 1",
+      label: "Aerial plan 1",
+      drawingTitle: "Aerial landscape lighting plan",
       drawingNumber: "L-1",
     });
   });

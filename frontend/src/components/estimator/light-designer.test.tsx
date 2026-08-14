@@ -385,19 +385,19 @@ describe("LightDesigner", () => {
     );
   });
 
-  it("opens a dedicated proposal-sheet workflow when focused on landscape lighting", async () => {
+  it("opens a dedicated top-down aerial workflow when focused on landscape lighting", async () => {
     const { container } = renderEstimator(undefined, "landscape");
 
     expect(
       await screen.findByRole("heading", {
-        name: /Start the landscape lighting drawing/i,
+        name: /Start with a top-down aerial plan/i,
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("Fixture legend")).toBeInTheDocument();
     expect(screen.getAllByText("Untitled lighting project")).not.toHaveLength(0);
     expect(screen.getByLabelText("Drawing sheet tools")).toBeInTheDocument();
     expect(screen.getByRole("combobox")).toHaveValue("tabloid");
-    expect(screen.getByRole("button", { name: /Add sheet/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Add aerial/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open proposal pricing" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Build quote/i })).not.toBeInTheDocument();
     expect(
@@ -406,7 +406,14 @@ describe("LightDesigner", () => {
       }),
     ).toBeInTheDocument();
 
+    expect(
+      screen.getByText(/Street-level and elevation photos do not produce an accurate/i),
+    ).toBeInTheDocument();
+
     await uploadPhoto(container);
+
+    expect(screen.getByLabelText(/top-down aerial lighting plan canvas/i)).toBeInTheDocument();
+    expect(screen.getByText("Aerial landscape lighting plan")).toBeInTheDocument();
 
     const wireTool = await screen.findByRole("button", { name: "Wire" });
     fireEvent.click(wireTool);
@@ -444,20 +451,20 @@ describe("LightDesigner", () => {
     );
   });
 
-  it("accepts a downloaded image dragged onto an empty drawing sheet", async () => {
+  it("accepts a downloaded aerial dragged onto an empty drawing sheet", async () => {
     renderEstimator(undefined, "landscape");
     const dropZone = await screen.findByRole("region", {
-      name: "Landscape drawing sheet file drop zone",
+      name: "Aerial plan file drop zone",
     });
     const image = new File(["aerial"], "downloaded-aerial.png", { type: "image/png" });
     const dataTransfer = { types: ["Files"], files: [image], dropEffect: "none" };
 
     fireEvent.dragEnter(dropZone, { dataTransfer });
-    expect(screen.getByText("Release to place this image on Sheet L-1")).toBeInTheDocument();
+    expect(screen.getByText("Release to place this aerial on Sheet L-1")).toBeInTheDocument();
     fireEvent.drop(dropZone, { dataTransfer });
 
     expect(
-      await screen.findByLabelText(/property photo lighting design canvas/i),
+      await screen.findByLabelText(/top-down aerial lighting plan canvas/i),
     ).toBeInTheDocument();
   });
 
@@ -1225,7 +1232,7 @@ describe("LightDesigner", () => {
 
     renderEstimator(undefined, "landscape", adapter);
     expect(await screen.findByRole("slider", { name: "Dusk" })).toHaveValue("40");
-    expect(screen.getByRole("button", { name: "Add photo" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Add aerial" })).not.toHaveLength(0);
     expect(screen.getByRole("button", { name: "Open proposal pricing" })).toBeInTheDocument();
     expect(screen.queryByText("Lighting plan")).not.toBeInTheDocument();
     expect(loadLandscapeDraft).not.toHaveBeenCalled();
