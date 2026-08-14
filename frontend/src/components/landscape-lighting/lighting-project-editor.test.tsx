@@ -5,6 +5,7 @@ import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LandscapeProjectPersistenceAdapter } from "@/components/estimator/light-designer";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import type { LightingProjectDetail } from "@/lib/api/lighting-projects";
 
 import { LightingProjectEditor } from "./lighting-project-editor";
@@ -35,9 +36,7 @@ vi.mock("@/providers/workspace-provider", () => ({
 }));
 
 vi.mock("@/components/estimator/light-designer", () => ({
-  LightDesigner: (props: {
-    landscapeProject: LandscapeProjectPersistenceAdapter;
-  }) => {
+  LightDesigner: (props: { landscapeProject: LandscapeProjectPersistenceAdapter }) => {
     designerProps(props);
     return (
       <div data-testid="light-designer">
@@ -48,9 +47,7 @@ vi.mock("@/components/estimator/light-designer", () => ({
 }));
 
 vi.mock("@/lib/api/lighting-projects", async (importOriginal) => {
-  const original = await importOriginal<
-    typeof import("@/lib/api/lighting-projects")
-  >();
+  const original = await importOriginal<typeof import("@/lib/api/lighting-projects")>();
   return {
     ...original,
     lightingProjectsApi: apiMocks,
@@ -58,9 +55,7 @@ vi.mock("@/lib/api/lighting-projects", async (importOriginal) => {
 });
 
 vi.mock("@/lib/estimator/landscape-draft", async (importOriginal) => {
-  const original = await importOriginal<
-    typeof import("@/lib/estimator/landscape-draft")
-  >();
+  const original = await importOriginal<typeof import("@/lib/estimator/landscape-draft")>();
   return {
     ...original,
     deletePendingLandscapeDraft: draftMocks.deletePending,
@@ -72,9 +67,7 @@ vi.mock("@/lib/estimator/landscape-draft", async (importOriginal) => {
 const WORKSPACE_ID = "9029c83b-7a2a-44ce-b6b9-5567ac75cc3f";
 const PROJECT_ID = "62774d85-6fb8-49ce-a348-e390972fa9d4";
 
-function project(
-  overrides: Partial<LightingProjectDetail> = {},
-): LightingProjectDetail {
+function project(overrides: Partial<LightingProjectDetail> = {}): LightingProjectDetail {
   return {
     id: PROJECT_ID,
     workspace_id: WORKSPACE_ID,
@@ -120,7 +113,11 @@ function renderEditor() {
     },
   });
   const wrapper = ({ children }: { children: ReactNode }) =>
-    createElement(QueryClientProvider, { client }, children);
+    createElement(
+      QueryClientProvider,
+      { client },
+      createElement(SidebarProvider, { defaultOpen: false }, children),
+    );
   return render(<LightingProjectEditor projectId={PROJECT_ID} />, { wrapper });
 }
 
@@ -145,7 +142,8 @@ describe("LightingProjectEditor", () => {
 
     expect(screen.getByText("Loading the lighting project...")).toBeInTheDocument();
     expect(await screen.findByDisplayValue("Patio lighting")).toBeInTheDocument();
-    expect(screen.getByText(/Pat Lee/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Projects" })).toBeInTheDocument();
+    expect(screen.queryByText(/Pat Lee/)).not.toBeInTheDocument();
     expect(await screen.findByTestId("light-designer")).toHaveTextContent("shot-1");
     expect(designerProps).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -195,19 +193,11 @@ describe("LightingProjectEditor", () => {
     expect(
       await screen.findByRole("dialog", { name: "Choose which lighting plan to keep" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Load Tribunal version" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Save my work as a copy" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Load Tribunal version" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save my work as a copy" })).toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Load Tribunal version" }),
-    );
-    await waitFor(() =>
-      expect(draftMocks.deletePending).toHaveBeenCalledWith(PROJECT_ID),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Load Tribunal version" }));
+    await waitFor(() => expect(draftMocks.deletePending).toHaveBeenCalledWith(PROJECT_ID));
     await waitFor(() =>
       expect(
         screen.queryByRole("dialog", { name: "Choose which lighting plan to keep" }),

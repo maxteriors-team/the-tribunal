@@ -1,41 +1,28 @@
 "use client";
 
 import {
-  ArrowRight,
   Cable,
+  Check,
   ChevronDown,
   CircleDot,
   Download,
   Eye,
-  EyeOff,
   FileJson,
   Fullscreen,
   HelpCircle,
   Highlighter,
   ImageIcon,
-  Layers3,
-  LineChart,
-  Maximize2,
   MousePointer2,
-  Move,
-  Palette,
   Presentation,
-  Printer,
-  Redo2,
   RotateCcw,
   Ruler,
   Sparkles,
-  SquareStack,
-  StickyNote,
   Trash2,
-  TreePine,
   Undo2,
   Upload,
-  Zap,
 } from "lucide-react";
-import { forwardRef, type ComponentProps, type ComponentType } from "react";
+import { forwardRef, useId, type ButtonHTMLAttributes, type ComponentType } from "react";
 
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -47,64 +34,72 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { LandscapePaperSize } from "@/lib/estimator/types";
+import { FIXTURE_MARKER_COLORS } from "@/lib/estimator/marker-colors";
+import type { LandscapePaperSize, LandscapePlanFit } from "@/lib/estimator/types";
 import { cn } from "@/lib/utils";
 
 export type DrawingStudioAction =
+  | "place-aerial"
   | "select"
   | "undo"
-  | "redo"
   | "wire"
   | "highlight"
   | "fixture-numbers"
   | "set-scale"
-  | "measure"
   | "measurements-visible"
-  | "clear-plan"
   | "fit-contain"
   | "fit-cover"
-  | "plan-fade"
-  | "automatic-design"
+  | "opacity-25"
+  | "opacity-50"
+  | "opacity-75"
+  | "opacity-100"
   | "clear-design"
   | "clear-symbols"
-  | "add-note"
-  | "add-line"
-  | "add-tree"
   | "add-photo"
-  | "add-revision"
-  | "draw-wire"
-  | "end-run"
-  | "undo-point"
   | "clear-wires"
-  | "draw-arrow"
-  | "clear-arrows"
-  | "assign-zone"
-  | "source-voltage"
+  | "source-voltage-12"
+  | "source-voltage-13"
+  | "source-voltage-15"
   | "legend-visible"
-  | "legend-move"
+  | "legend-left"
+  | "legend-right"
+  | "legend-up"
+  | "legend-down"
   | "legend-smaller"
   | "legend-larger"
   | "recount"
   | "halos-visible"
   | "import-project"
   | "export-project"
-  | "download-sheets"
-  | "print"
   | "fullscreen"
   | "present"
+  | "toggle-preview"
+  | "render"
   | "download-pdf"
   | "help";
 
 interface DrawingToolbarProps {
   paperSize: LandscapePaperSize;
   activeAction?: DrawingStudioAction;
+  hasAerial: boolean;
+  hasDrawing: boolean;
+  hasPlanSymbols: boolean;
   canUndo: boolean;
-  canRedo: boolean;
+  canWire: boolean;
+  canRender: boolean;
+  duskPreview: boolean;
+  renderDisabledReason?: string;
+  markerColor: string | null;
+  planFit: LandscapePlanFit;
+  planOpacity: number;
+  legendScale: number;
+  sourceVoltage: number;
   fixtureNumbersVisible: boolean;
   measurementsVisible: boolean;
   legendVisible: boolean;
   halosVisible: boolean;
   onPaperSizeChange: (size: LandscapePaperSize) => void;
+  onMarkerColorChange: (color: string) => void;
   onAction: (action: DrawingStudioAction) => void;
   fixtureTools?: Array<{
     id: string;
@@ -115,184 +110,424 @@ interface DrawingToolbarProps {
   }>;
 }
 
-const ToolButton = ({
-  label,
-  icon: Icon,
-  action,
-  active,
-  disabled,
-  onAction,
-}: {
-  label: string;
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
-  action: DrawingStudioAction;
-  active?: boolean;
-  disabled?: boolean;
-  onAction: (action: DrawingStudioAction) => void;
-}) => (
-  <button
-    type="button"
-    disabled={disabled}
-    aria-pressed={active}
-    onClick={() => onAction(action)}
-    className={cn(
-      "flex h-11 min-w-14 flex-col items-center justify-center gap-0.5 border-r border-white/10 px-2 text-[10px] font-semibold uppercase tracking-wide text-neutral-300 transition-[color,background-color] duration-150 hover:bg-white/10 hover:text-white focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 disabled:opacity-40 motion-reduce:transition-none",
-      active && "bg-amber-400 text-black hover:bg-amber-300 hover:text-black",
-    )}
-  >
-    <Icon className="size-4" aria-hidden />
-    {label}
-  </button>
-);
+const paperSizeLabels: Record<LandscapePaperSize, string> = {
+  tabloid: "Tabloid - 17 x 11 in",
+  "super-b": "Super B - 19 x 13 in",
+  letter: "Letter - 11 x 8.5 in",
+  "arch-c": "ARCH C - 24 x 18 in",
+  "arch-d": "ARCH D - 36 x 24 in",
+  "ansi-d": "ANSI D - 34 x 22 in",
+};
 
-const MenuButton = forwardRef<
-  HTMLButtonElement,
-  ComponentProps<typeof Button> & { label: string }
->(({ label, ...props }, ref) => (
-  <Button
-    ref={ref}
-    type="button"
-    variant="ghost"
-    className="h-11 rounded-none border-r border-white/10 px-3 text-xs font-semibold uppercase tracking-wide text-neutral-200 hover:bg-white/10 hover:text-white data-[state=open]:bg-white/10"
-    {...props}
-  >
-    {label}
-    <ChevronDown className="size-3.5" aria-hidden="true" />
-  </Button>
-));
+interface ToolbarButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  active?: boolean;
+}
+
+const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
+  ({ icon: Icon, active, className, children, ...props }, ref) => (
+    <button
+      ref={ref}
+      type="button"
+      aria-pressed={active === undefined ? undefined : active}
+      className={cn(
+        "inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded border border-white/15 bg-[#1a1a1a] px-2.5 text-[11px] font-semibold text-[#e5e3de] transition-[color,background-color,border-color] duration-150 hover:border-white/30 hover:bg-[#242424] hover:text-white focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e2b35f] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0b0b0b] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none",
+        active &&
+          "border-[#d0a153] bg-[#d0a153] text-[#15130f] hover:bg-[#ddb465] hover:text-black",
+        className,
+      )}
+      {...props}
+    >
+      {Icon ? <Icon className="size-3.5 shrink-0" aria-hidden /> : null}
+      {children}
+    </button>
+  ),
+);
+ToolbarButton.displayName = "ToolbarButton";
+
+const MenuButton = forwardRef<HTMLButtonElement, ToolbarButtonProps & { label: string }>(
+  ({ label, ...props }, ref) => (
+    <ToolbarButton ref={ref} {...props}>
+      {label}
+      <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
+    </ToolbarButton>
+  ),
+);
 MenuButton.displayName = "MenuButton";
+
+function MarkerPalette({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (color: string) => void;
+}) {
+  const groupName = useId();
+  return (
+    <fieldset className="flex min-w-0 items-center gap-2" aria-label="Fixture marker color">
+      <legend className="sr-only">Fixture marker color</legend>
+      <span
+        className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.11em] text-[#a9a69f]"
+        aria-hidden="true"
+      >
+        Marker
+      </span>
+      <div className="grid grid-cols-8 gap-1">
+        {FIXTURE_MARKER_COLORS.map((marker) => {
+          const selected = value?.toLowerCase() === marker.value.toLowerCase();
+          return (
+            <label
+              key={marker.value}
+              className="relative grid size-6 cursor-pointer place-items-center rounded-full"
+              title={marker.name}
+            >
+              <input
+                className="peer sr-only"
+                type="radio"
+                name={groupName}
+                value={marker.value}
+                checked={selected}
+                onChange={() => onChange(marker.value)}
+              />
+              <span
+                className="ll-marker-swatch grid size-[18px] place-items-center rounded-full border border-white/45 shadow-[0_0_0_1px_rgba(0,0,0,0.75)] transition-[box-shadow] duration-150 peer-checked:shadow-[0_0_0_2px_#0b0b0b,0_0_0_4px_#e2b35f] peer-focus-visible:shadow-[0_0_0_2px_#0b0b0b,0_0_0_5px_#ffffff] motion-reduce:transition-none"
+                style={{ backgroundColor: marker.value }}
+                aria-hidden="true"
+              >
+                <Check
+                  className={cn(
+                    "size-3 stroke-[3] transition-opacity duration-150 motion-reduce:transition-none",
+                    selected ? "opacity-100" : "opacity-0",
+                    marker.darkForeground ? "text-black" : "text-white",
+                  )}
+                />
+              </span>
+              <span className="sr-only">{marker.name}</span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
 
 export function DrawingToolbar(props: DrawingToolbarProps) {
   const action = props.onAction;
+  const noAerialReason = "Place a top-down aerial before using this drawing tool.";
+
   return (
-    <section className="overflow-x-auto bg-neutral-900 [scrollbar-color:#a98336_#171717]" aria-label="Drawing toolbar">
-      <div className="flex min-w-max items-stretch border-b border-black">
-        <label className="flex h-11 items-center gap-2 border-r border-white/10 px-3 text-xs font-semibold uppercase tracking-wide text-neutral-300">
-          Paper
-          <select
-            value={props.paperSize}
-            onChange={(event) => props.onPaperSizeChange(event.target.value as LandscapePaperSize)}
-            className="h-8 rounded border border-white/20 bg-black ps-2 pe-8 text-xs text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+    <section
+      className="ll-drawing-toolbar border-b border-[#a98336] bg-[#0b0b0b] text-white"
+      aria-label="Drawing toolbar"
+    >
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-2 py-2 sm:px-3">
+        <div className="flex shrink-0 items-center gap-2" role="group" aria-label="Drawing sheet">
+          <strong className="px-1 text-[11px] font-black uppercase tracking-[0.24em] text-[#f2f0eb]">
+            Maxteriors
+          </strong>
+          <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#aaa69e]">
+            Sheet
+            <select
+              value={props.paperSize}
+              onChange={(event) =>
+                props.onPaperSizeChange(event.target.value as LandscapePaperSize)
+              }
+              className="h-8 max-w-48 rounded border border-white/20 bg-[#1a1a1a] ps-2 pe-8 text-[11px] normal-case tracking-normal text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e2b35f]"
+            >
+              {Object.entries(paperSizeLabels).map(([size, label]) => (
+                <option key={size} value={size}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <ToolbarButton icon={ImageIcon} onClick={() => action("place-aerial")}>
+          {props.hasAerial ? "Replace aerial" : "Place aerial"}
+        </ToolbarButton>
+
+        <MarkerPalette value={props.markerColor} onChange={props.onMarkerColorChange} />
+
+        <div className="inline-flex shrink-0 gap-1" role="group" aria-label="Primary drawing modes">
+          <ToolbarButton
+            icon={MousePointer2}
+            active={props.activeAction === "select"}
+            disabled={!props.hasAerial}
+            title={props.hasAerial ? "Select and edit plan items" : noAerialReason}
+            onClick={() => action("select")}
           >
-            <option value="tabloid">Tabloid</option>
-            <option value="super-b">Super B</option>
-            <option value="letter">Letter</option>
-            <option value="arch-c">ARCH C</option>
-            <option value="arch-d">ARCH D</option>
-            <option value="ansi-d">ANSI D</option>
-          </select>
-        </label>
-        <ToolButton label="Select" icon={MousePointer2} action="select" active={props.activeAction === "select"} onAction={action} />
-        <ToolButton label="Undo" icon={Undo2} action="undo" disabled={!props.canUndo} onAction={action} />
-        <ToolButton label="Redo" icon={Redo2} action="redo" disabled={!props.canRedo} onAction={action} />
-        <ToolButton label="Wiring" icon={Cable} action="wire" active={props.activeAction === "wire"} onAction={action} />
-        <ToolButton
-          label="Highlight"
-          icon={Highlighter}
-          action="highlight"
-          active={props.activeAction === "highlight"}
-          onAction={action}
-        />
-        <ToolButton label="Numbers" icon={CircleDot} action="fixture-numbers" active={props.fixtureNumbersVisible} onAction={action} />
-        {props.fixtureTools?.map(({ id, label, icon: Icon, active, onSelect }) => (
-          <button
-            key={id}
-            type="button"
-            aria-pressed={active}
-            title={`Place ${label}`}
-            onClick={onSelect}
-            className={cn(
-              "flex h-11 min-w-16 flex-col items-center justify-center gap-0.5 border-r border-white/10 px-2 text-[10px] font-semibold uppercase tracking-wide text-neutral-300 transition-[color,background-color] duration-150 hover:bg-white/10 hover:text-white focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400 motion-reduce:transition-none",
-              active && "bg-amber-400 text-black hover:bg-amber-300 hover:text-black",
-            )}
+            Select
+          </ToolbarButton>
+          <ToolbarButton
+            icon={Undo2}
+            disabled={!props.canUndo}
+            title={props.canUndo ? "Undo the last drawing change" : "Nothing to undo."}
+            onClick={() => action("undo")}
           >
-            <Icon className="size-4" aria-hidden />
-            {label}
-          </button>
-        ))}
+            Undo
+          </ToolbarButton>
+        </div>
+
+        <div className="inline-flex shrink-0 gap-1" role="group" aria-label="Plan display modes">
+          <ToolbarButton
+            icon={Cable}
+            active={props.activeAction === "wire"}
+            disabled={!props.hasAerial || !props.canWire}
+            title={
+              !props.hasAerial
+                ? noAerialReason
+                : props.canWire
+                  ? "Toggle wire drawing mode"
+                  : "No wire product is configured in the price book."
+            }
+            onClick={() => action("wire")}
+          >
+            Wiring: {props.activeAction === "wire" ? "On" : "Off"}
+          </ToolbarButton>
+          <ToolbarButton
+            icon={Highlighter}
+            active={props.activeAction === "highlight"}
+            disabled={!props.hasAerial}
+            title={props.hasAerial ? "Toggle highlight drawing mode" : noAerialReason}
+            onClick={() => action("highlight")}
+          >
+            Highlight
+          </ToolbarButton>
+          <ToolbarButton
+            icon={CircleDot}
+            active={props.fixtureNumbersVisible}
+            onClick={() => action("fixture-numbers")}
+          >
+            Fixture #: {props.fixtureNumbersVisible ? "On" : "Off"}
+          </ToolbarButton>
+        </div>
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><MenuButton label="Plan" /></DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild>
+            <MenuButton label="Plan" />
+          </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64">
-            <DropdownMenuItem onSelect={() => action("set-scale")}><Ruler />Set scale</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("measure")}><LineChart />Measure distance</DropdownMenuItem>
-            <DropdownMenuCheckboxItem checked={props.measurementsVisible} onCheckedChange={() => action("measurements-visible")}>Show measurements</DropdownMenuCheckboxItem>
+            {!props.hasAerial ? <DropdownMenuLabel>{noAerialReason}</DropdownMenuLabel> : null}
+            <DropdownMenuItem disabled={!props.hasAerial} onSelect={() => action("set-scale")}>
+              <Ruler />
+              Set scale
+            </DropdownMenuItem>
+            <DropdownMenuCheckboxItem
+              checked={props.measurementsVisible}
+              onCheckedChange={() => action("measurements-visible")}
+            >
+              Show saved measurements
+            </DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => action("fit-contain")}><MinimizePlanIcon />Contain plan</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("fit-cover")}><Maximize2 />Cover plan</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("plan-fade")}><Palette />Plan opacity</DropdownMenuItem>
+            <DropdownMenuLabel>Base aerial fit</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={props.planFit}
+              onValueChange={(value) => action(value === "cover" ? "fit-cover" : "fit-contain")}
+            >
+              <DropdownMenuRadioItem value="contain">Contain full aerial</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="cover">Cover drawing area</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            <DropdownMenuLabel>Base aerial opacity</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={String(Math.round(props.planOpacity * 100))}
+              onValueChange={(value) => action(`opacity-${value}` as DrawingStudioAction)}
+            >
+              <DropdownMenuRadioItem value="25">25%</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="50">50%</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="75">75%</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="100">100%</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => action("automatic-design")}><Sparkles />Preview automatic design</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("clear-design")}><RotateCcw />Clear fixture design</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("clear-symbols")}><Trash2 />Clear plan symbols</DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onSelect={() => action("clear-plan")}><Trash2 />Clear plan</DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!props.hasDrawing}
+              variant="destructive"
+              onSelect={() => action("clear-design")}
+            >
+              <RotateCcw />
+              Clear fixtures and wiring
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!props.hasPlanSymbols}
+              variant="destructive"
+              onSelect={() => action("clear-symbols")}
+            >
+              <Trash2 />
+              Clear plan annotations
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><MenuButton label="Add" /></DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={() => action("add-note")}><StickyNote />Note</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("add-line")}><LineChart />Line</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("add-tree")}><TreePine />Tree symbol</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("add-photo")}><ImageIcon />Photo inset</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("add-revision")}><SquareStack />Revision row</DropdownMenuItem>
+          <DropdownMenuTrigger asChild>
+            <MenuButton label="Add" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            className="max-h-[min(70vh,28rem)] w-64 overflow-y-auto"
+          >
+            {!props.hasAerial ? <DropdownMenuLabel>{noAerialReason}</DropdownMenuLabel> : null}
+            <DropdownMenuLabel>Fixture types</DropdownMenuLabel>
+            {props.fixtureTools?.map(({ id, label, icon: Icon, active, onSelect }) => (
+              <DropdownMenuItem
+                key={id}
+                disabled={!props.hasAerial}
+                onSelect={onSelect}
+                className={cn(active && "font-semibold")}
+              >
+                <Icon className="size-4" aria-hidden />
+                {label}
+                {active ? <Check className="ms-auto size-4" aria-hidden /> : null}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={!props.hasAerial} onSelect={() => action("add-photo")}>
+              <ImageIcon />
+              Supplemental detail photo
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
 
+      <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 sm:px-3">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><MenuButton label="Wiring" /></DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild>
+            <MenuButton label="Wiring" icon={Cable} active={props.activeAction === "wire"} />
+          </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-60">
-            <DropdownMenuItem onSelect={() => action("draw-wire")}><Cable />Draw named run</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("end-run")}><CircleDot />End run</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("undo-point")}><Undo2 />Undo wire point</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("clear-wires")}><Trash2 />Clear wire runs</DropdownMenuItem>
+            {!props.canWire ? (
+              <DropdownMenuLabel>
+                No wire product is configured in the price book.
+              </DropdownMenuLabel>
+            ) : null}
+            <DropdownMenuItem
+              disabled={!props.hasAerial || !props.canWire}
+              onSelect={() => action("wire")}
+            >
+              <Cable />
+              Draw wire route
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={!props.hasDrawing}
+              variant="destructive"
+              onSelect={() => action("clear-wires")}
+            >
+              <Trash2 />
+              Clear wire routes
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => action("draw-arrow")}><ArrowRight />Draw arrow</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("clear-arrows")}><Trash2 />Clear arrows</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => action("assign-zone")}><Zap />Assign transformer zone</DropdownMenuItem>
-            <DropdownMenuLabel>Branches use separate named runs</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value="13" onValueChange={() => action("source-voltage")}>
-              <DropdownMenuRadioItem value="12">12 V source</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="13">13 V source</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="14">14 V source</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="15">15 V source</DropdownMenuRadioItem>
+            <DropdownMenuLabel>Default source voltage</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={String(props.sourceVoltage)}
+              onValueChange={(value) => action(`source-voltage-${value}` as DrawingStudioAction)}
+            >
+              <DropdownMenuRadioItem value="12">12 V</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="13">13 V</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="15">15 V</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><MenuButton label="Legend" /></DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild>
+            <MenuButton label="Legend" />
+          </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuCheckboxItem checked={props.legendVisible} onCheckedChange={() => action("legend-visible")}>Show legend</DropdownMenuCheckboxItem>
-            <DropdownMenuItem onSelect={() => action("legend-move")}><Move />Reposition legend</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("legend-smaller")}><EyeOff />Smaller key</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("legend-larger")}><Eye />Larger key</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("recount")}><RotateCcw />Recount fixtures</DropdownMenuItem>
-            <DropdownMenuCheckboxItem checked={props.halosVisible} onCheckedChange={() => action("halos-visible")}>Show light halos</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={props.legendVisible}
+              onCheckedChange={() => action("legend-visible")}
+            >
+              Show legend
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuItem onSelect={() => action("recount")}>
+              <RotateCcw />
+              Recount fixtures
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Legend position</DropdownMenuLabel>
+            <DropdownMenuItem onSelect={() => action("legend-left")}>Move left</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => action("legend-right")}>Move right</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => action("legend-up")}>Move up</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => action("legend-down")}>Move down</DropdownMenuItem>
+            <DropdownMenuLabel>Legend size</DropdownMenuLabel>
+            <DropdownMenuItem
+              disabled={props.legendScale <= 0.6}
+              onSelect={() => action("legend-smaller")}
+            >
+              Smaller
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={props.legendScale >= 1.6}
+              onSelect={() => action("legend-larger")}
+            >
+              Larger
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              checked={props.halosVisible}
+              onCheckedChange={() => action("halos-visible")}
+            >
+              Show light halos
+            </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><MenuButton label="File" /></DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild>
+            <MenuButton label="File" />
+          </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-60">
-            <DropdownMenuItem onSelect={() => action("import-project")}><Upload />Open editable project</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("export-project")}><FileJson />Save editable project</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("download-sheets")}><Download />Download all sheets</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("print")}><Printer />Print active sheet</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => action("fullscreen")}><Fullscreen />Full screen</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => action("import-project")}>
+              <Upload />
+              Open editable project
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => action("export-project")}>
+              <FileJson />
+              Save editable project
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => action("fullscreen")}>
+              <Fullscreen />
+              Full screen
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <ToolButton label="Present" icon={Presentation} action="present" onAction={action} />
-        <ToolButton label="PDF" icon={Download} action="download-pdf" onAction={action} />
-        <ToolButton label="Help" icon={HelpCircle} action="help" onAction={action} />
+        <ToolbarButton icon={HelpCircle} onClick={() => action("help")}>
+          Help
+        </ToolbarButton>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <MenuButton label="Present" icon={Presentation} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-64">
+            <DropdownMenuItem onSelect={() => action("toggle-preview")}>
+              <Eye />
+              {props.duskPreview ? "Show original aerial" : "Show dusk plan"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => action("present")}>
+              <Presentation />
+              Open proposal preview
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!props.canRender} onSelect={() => action("render")}>
+              <Sparkles />
+              Create dusk render
+            </DropdownMenuItem>
+            {!props.canRender && props.renderDisabledReason ? (
+              <DropdownMenuLabel>{props.renderDisabledReason}</DropdownMenuLabel>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <ToolbarButton
+          icon={Download}
+          className="border-[#c99b4d] bg-[#c99b4d] px-3 text-[#15130f] hover:border-[#ddb465] hover:bg-[#ddb465] hover:text-black"
+          onClick={() => action("download-pdf")}
+        >
+          Download PDF
+        </ToolbarButton>
       </div>
     </section>
   );
-}
-
-function MinimizePlanIcon({ className }: { className?: string }) {
-  return <Layers3 className={className} />;
 }

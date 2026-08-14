@@ -624,6 +624,9 @@ export interface SceneOpts {
    * down while the customer watches the house light up.
    */
   dusk?: number;
+  basePhotoOpacity?: number;
+  showHalos?: boolean;
+  showFixtureNumbers?: boolean;
   showChrome?: boolean;
   calibrateTool?: boolean;
   /** Decoded image elements keyed by persisted plan-image id. */
@@ -644,7 +647,10 @@ export function drawScene(
   // keep bulbs readable (and sellable) even on wide photos / small houses
   const minR = photo.naturalWidth * 0.0024;
 
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, Math.max(0.1, opts.basePhotoOpacity ?? 1));
   ctx.drawImage(photo, 0, 0);
+  ctx.restore();
 
   const dusk = Math.min(Math.max(opts.dusk ?? 0, 0), MAX_DUSK);
   if (dusk > 0) {
@@ -656,19 +662,20 @@ export function drawScene(
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   for (const run of design.runs) {
-    const p = productById.get(run.productId);
-    if (p && p.style !== "wire") {
-      drawRunLights(ctx, run.points, withRunOverrides(p, run), pxPerFt, minR);
+    const product = productById.get(run.productId);
+    if (product && product.style !== "wire" && opts.showHalos !== false) {
+      drawRunLights(ctx, run.points, withRunOverrides(product, run), pxPerFt, minR);
     }
   }
   for (const item of design.items) {
-    const p = productById.get(item.productId);
-    if (!p) continue;
-    // Decor (wreaths, wrapped trees) paints opaque greenery, so it draws over
-    // the photo; a landscape fixture is pure light and stays additive.
-    const additive = isLandscapeStyle(p.style);
+    const product = productById.get(item.productId);
+    if (!product) continue;
+    // Decor paints opaque greenery over the photo. Landscape fixtures stay on
+    // the plan even when their optional lighting halos are hidden.
+    const additive = isLandscapeStyle(product.style);
+    if (additive && opts.showHalos === false) continue;
     if (!additive) ctx.globalCompositeOperation = "source-over";
-    drawPlacedItem(ctx, item, p, pxPerFt, minR);
+    drawPlacedItem(ctx, item, product, pxPerFt, minR);
     if (!additive) ctx.globalCompositeOperation = "lighter";
   }
   if (opts.draftRun && opts.draftRun.points.length > 0 && opts.draftRun.product.style !== "wire") {
@@ -748,7 +755,9 @@ export function drawScene(
         item,
         product.style,
         vs,
-        `${fixtureCodes[product.style] ?? "F"}${number}`,
+        opts.showFixtureNumbers === false
+          ? undefined
+          : `${fixtureCodes[product.style] ?? "F"}${number}`,
       );
     }
   }

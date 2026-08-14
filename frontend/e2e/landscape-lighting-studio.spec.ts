@@ -418,7 +418,7 @@ test.describe("landscape lighting studio", () => {
   }) => {
     const { updates, deliveries } = await installStudioApi(page);
     await page.goto(PROJECT_URL);
-    await expect(page.getByRole("button", { name: "Save now" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Drawing Sheet" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -440,6 +440,39 @@ test.describe("landscape lighting studio", () => {
     };
     expect(latestDraft.document?.shots?.[0]?.design?.highlights).toHaveLength(1);
 
+    await page.locator('label[title="Blue"]').click();
+    await expect(page.getByRole("radio", { name: "Blue" })).toBeChecked();
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Uplight" }).click();
+    await canvas.click({ position: { x: canvasBox.width / 2, y: canvasBox.height / 2 } });
+    await expect
+      .poll(() =>
+        updates.some((entry) => {
+          const document = entry as {
+            document?: { shots?: Array<{ design: { items: Array<{ markerColor?: string }> } }> };
+          };
+          return document.document?.shots?.some((shot) =>
+            shot.design.items.some((item) => item.markerColor === "#2f80ed"),
+          );
+        }),
+      )
+      .toBe(true);
+
+    await page.getByRole("button", { name: "Wiring: Off" }).click();
+    await canvas.click({ position: { x: canvasBox.width * 0.35, y: canvasBox.height * 0.62 } });
+    await canvas.click({ position: { x: canvasBox.width * 0.55, y: canvasBox.height * 0.68 } });
+    await canvas.press("Enter");
+    await expect
+      .poll(() =>
+        updates.some((entry) => {
+          const document = entry as {
+            document?: { shots?: Array<{ design: { runs: unknown[] } }> };
+          };
+          return (document.document?.shots?.[0]?.design.runs.length ?? 0) >= 2;
+        }),
+      )
+      .toBe(true);
+
     await page.getByRole("button", { name: "File", exact: true }).click();
     const download = page.waitForEvent("download");
     await page.getByRole("menuitem", { name: "Save editable project" }).click();
@@ -448,6 +481,17 @@ test.describe("landscape lighting studio", () => {
     for (const tab of ["Fixture Schedule", "BOM", "Electrical", "Proposal", "Pre-Con"]) {
       await page.getByRole("tab", { name: tab }).click();
       await expect(page.getByRole("tab", { name: tab })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("button", { name: "Fit document" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Print", exact: true })).toBeVisible();
+      if (tab !== "Fixture Schedule") {
+        await expect(
+          page.getByRole("button", { name: "Save active sheet as PDF using the print dialog" }),
+        ).toBeVisible();
+      }
+      if (tab === "BOM") {
+        await expect(page.getByRole("button", { name: "Recount" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "CSV" })).toBeEnabled();
+      }
     }
 
     await page.getByRole("tab", { name: "Pre-Con" }).click();
@@ -469,6 +513,7 @@ test.describe("landscape lighting studio", () => {
       )
       .toBe(true);
     await page.getByRole("tab", { name: "Proposal" }).click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByRole("button", { name: /Create draft quote/i }).click();
     await expect(page.getByText(/Draft quote Q-1042/i)).toBeVisible();
     await page.getByRole("button", { name: "Email proposal" }).click();
@@ -483,18 +528,49 @@ test.describe("landscape lighting studio", () => {
     await page.emulateMedia({ reducedMotion: "reduce", forcedColors: "active" });
     await page.goto(PROJECT_URL);
 
+    const canvas = page.getByLabel("Top-down aerial lighting plan canvas");
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const desktopScale = Number(await canvas.getAttribute("data-view-scale"));
+    const desktopView = await canvas.evaluate((element) => ({
+      scale: element.getAttribute("data-view-scale"),
+      x: element.getAttribute("data-view-origin-x"),
+      y: element.getAttribute("data-view-origin-y"),
+    }));
+    await canvas.dispatchEvent("wheel", { deltaX: 80, deltaY: 120 });
+    expect(
+      await canvas.evaluate((element) => ({
+        scale: element.getAttribute("data-view-scale"),
+        x: element.getAttribute("data-view-origin-x"),
+        y: element.getAttribute("data-view-origin-y"),
+      })),
+    ).toEqual(desktopView);
+
     for (const viewport of [
-      { width: 1440, height: 1000 },
       { width: 1280, height: 800 },
+      { width: 768, height: 1024 },
       { width: 390, height: 844 },
     ]) {
       await page.setViewportSize(viewport);
       await expect(page.getByRole("tab", { name: "Pre-Con" })).toBeAttached();
       await expect(page.getByRole("region", { name: "Drawing toolbar" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Fit document" })).toBeVisible();
     }
 
+    const mobileScale = Number(await canvas.getAttribute("data-view-scale"));
+    expect(mobileScale).toBeLessThan(desktopScale);
     const toolbar = page.getByRole("region", { name: "Drawing toolbar" });
-    await expect(toolbar).toHaveCSS("overflow-x", "auto");
+    expect(
+      await toolbar.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
+    ).toBe(true);
+    const fitted = await page.locator(".ll-document-viewport").evaluate((viewport) => {
+      const stage = viewport.querySelector<HTMLElement>(".ll-document-stage");
+      const frame = viewport.querySelector<HTMLElement>(".ll-document-scale-frame");
+      if (!stage || !frame) return false;
+      const stageRect = stage.getBoundingClientRect();
+      const frameRect = frame.getBoundingClientRect();
+      return frameRect.width <= stageRect.width + 1 && frameRect.height <= stageRect.height + 1;
+    });
+    expect(fitted).toBe(true);
     const drawing = page.getByRole("tab", { name: "Drawing Sheet" });
     await drawing.focus();
     await page.keyboard.press("ArrowRight");
@@ -504,22 +580,47 @@ test.describe("landscape lighting studio", () => {
     );
   });
 
-  test("captures representative desktop and mobile drawing states", async ({ page }) => {
+  test("captures every document at desktop, tablet, and mobile", async ({ page }) => {
+    test.setTimeout(60_000);
     await installStudioApi(page);
-    await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.goto(PROJECT_URL);
-    await expect(page.getByRole("region", { name: "Drawing toolbar" })).toBeVisible();
-    await page.screenshot({
-      path: "../.ezcoder/screenshots/maxteriors-studio-desktop.png",
-      fullPage: true,
-      animations: "disabled",
-    });
+    const viewports = [
+      { name: "desktop", width: 1440, height: 960 },
+      { name: "tablet", width: 768, height: 1024 },
+      { name: "mobile", width: 390, height: 844 },
+    ] as const;
+    const documents = [
+      { tab: "Drawing Sheet", slug: "drawing" },
+      { tab: "Fixture Schedule", slug: "schedule" },
+      { tab: "BOM", slug: "bom" },
+      { tab: "Electrical", slug: "electrical" },
+      { tab: "Proposal", slug: "proposal" },
+      { tab: "Pre-Con", slug: "precon" },
+    ] as const;
 
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({
-      path: "../.ezcoder/screenshots/maxteriors-studio-mobile.png",
-      fullPage: true,
-      animations: "disabled",
-    });
+    await page.goto(PROJECT_URL);
+    for (const viewport of viewports) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      for (const document of documents) {
+        await page.getByRole("tab", { name: document.tab }).click();
+        await expect(page.getByRole("tab", { name: document.tab })).toHaveAttribute(
+          "aria-selected",
+          "true",
+        );
+        await expect(page.locator(".ll-document-viewport")).toHaveAttribute(
+          "data-document-zoom",
+          /\d+/,
+        );
+        await page.screenshot({
+          path: `../.ezcoder/screenshots/niteliteos-final/${viewport.name}/${document.slug}.png`,
+          animations: "disabled",
+        });
+        if (document.slug === "drawing" && viewport.name !== "tablet") {
+          await page.screenshot({
+            path: `../.ezcoder/screenshots/maxteriors-studio-${viewport.name}.png`,
+            animations: "disabled",
+          });
+        }
+      }
+    }
   });
 });

@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   createLandscapeDocument,
+  defaultLandscapePrecon,
+  defaultLandscapeProposal,
+  defaultLandscapeSettings,
   normalizeLandscapeDocument,
 } from "@/lib/estimator/landscape-document";
+import { createLandscapeDraft } from "@/lib/estimator/landscape-draft";
 
 const shot = {
   id: "shot-1",
@@ -84,6 +88,60 @@ describe("landscape document v2", () => {
       { id: "custom-1", description: "Core drill", amount: 275.5 },
       { id: "custom-2", description: "", amount: 0 },
     ]);
+  });
+
+  it("serializes every live document setting and workflow state", () => {
+    const liveState = {
+      activeWorkflowTab: "precon" as const,
+      settings: {
+        ...defaultLandscapeSettings(),
+        paperSize: "arch-c" as const,
+        planFit: "cover" as const,
+        planOpacity: 0.5,
+        legend: { visible: false, position: { x: 88, y: 64 }, scale: 1.3 },
+        halosVisible: false,
+        fixtureNumbersVisible: false,
+        measurementsVisible: false,
+        sourceVoltage: 15,
+      },
+      proposal: {
+        ...defaultLandscapeProposal(),
+        selectedTierKey: "best",
+        selectedCarePlanKey: "priority",
+        designIntent: "Warm entry and specimen-tree emphasis",
+        showFixtureDetails: false,
+        showCombinedTotal: false,
+        additionalLineItems: [{ id: "custom-1", description: "Core drill", amount: 275 }],
+      },
+      procurement: {
+        "fixture-1": {
+          catalogItemId: "catalog-1",
+          catalogSku: "UP-4W",
+          orderedQuantity: 4,
+          receivedQuantity: 2,
+          supplierNote: "ETA Friday",
+        },
+      },
+      precon: {
+        ...defaultLandscapePrecon(),
+        leadInstaller: "Jordan",
+        notes: "Protect the copper roof.",
+      },
+    };
+
+    const draft = createLandscapeDraft(
+      [shot],
+      "shot-1",
+      "2026-08-14T12:00:00.000Z",
+      undefined,
+      liveState,
+    );
+    const roundTrip = normalizeLandscapeDocument(JSON.parse(JSON.stringify(draft)));
+
+    expect(roundTrip).toMatchObject(liveState);
+    expect(roundTrip?.proposal?.additionalLineItems).toEqual(
+      liveState.proposal.additionalLineItems,
+    );
   });
 
   it("rejects malformed image payloads and excessive sheets", () => {

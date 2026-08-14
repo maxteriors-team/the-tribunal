@@ -27,11 +27,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -86,10 +82,9 @@ import { NewMessageNotifier } from "./new-message-notifier";
 import { RecentChatsMenu } from "./recent-chats-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
-const CommandPalette = dynamic(
-  () => import("./command-palette").then((m) => m.CommandPalette),
-  { ssr: false }
-);
+const CommandPalette = dynamic(() => import("./command-palette").then((m) => m.CommandPalette), {
+  ssr: false,
+});
 
 interface BreadcrumbSegment {
   label: string;
@@ -137,10 +132,7 @@ function getVisibleSidebarSections(
     .map((section) => ({
       ...section,
       items: section.items.filter(
-        (item) =>
-          item.sidebar &&
-          isNavItemVisible(item) &&
-          canSeeNavItem(item, tier, can),
+        (item) => item.sidebar && isNavItemVisible(item) && canSeeNavItem(item, tier, can),
       ),
     }))
     .filter((section) => section.items.length > 0);
@@ -182,9 +174,7 @@ function SidebarNav({ sections, renderItem, leading }: SidebarNavProps) {
     sectionId: string | null;
   } | null>(null);
   const openSectionId =
-    toggled?.path === pathname
-      ? toggled.sectionId
-      : activeSectionId ?? sections[0]?.id ?? null;
+    toggled?.path === pathname ? toggled.sectionId : (activeSectionId ?? sections[0]?.id ?? null);
 
   // The icon rail hides section headers, so a closed section there would be
   // both invisible and unopenable. Show every item and let the rail scroll.
@@ -214,9 +204,7 @@ function SidebarNav({ sections, renderItem, leading }: SidebarNavProps) {
   const sectionMenu = (section: AppNavSection) => (
     <SidebarGroupContent>
       <SidebarMenu className="gap-0.5">
-        {section.items.map((item) =>
-          renderItem(item, { muted: section.devOnly || item.devOnly }),
-        )}
+        {section.items.map((item) => renderItem(item, { muted: section.devOnly || item.devOnly }))}
       </SidebarMenu>
     </SidebarGroupContent>
   );
@@ -356,7 +344,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         .join("")
         .toUpperCase()
         .slice(0, 2)
-    : user?.email?.slice(0, 2).toUpperCase() ?? "U";
+    : (user?.email?.slice(0, 2).toUpperCase() ?? "U");
 
   const badgeCounts: Partial<Record<AppNavBadgeKey, number>> = {
     nudges: nudgeStats?.pending ?? 0,
@@ -380,8 +368,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
   const renderSidebarItem = (item: AppNavItem, options?: { muted?: boolean }) => {
     const Icon = item.icon;
     // Festive tint keeps the seasonal hub recognizable among monochrome items.
-    const accentClass =
-      item.accent === "christmas" ? "text-emerald-600 dark:text-emerald-400" : "";
+    const accentClass = item.accent === "christmas" ? "text-emerald-600 dark:text-emerald-400" : "";
 
     return (
       <SidebarMenuItem key={item.title}>
@@ -423,9 +410,13 @@ export function AppSidebar({ children }: AppSidebarProps) {
   }, [workspacePending, tier, pathname, router]);
 
   return (
-    <SidebarProvider key={focusedLandscapeProject ? "studio" : "crm"} defaultOpen={!focusedLandscapeProject} data-app-shell>
+    <SidebarProvider
+      key={focusedLandscapeProject ? "studio" : "crm"}
+      defaultOpen={!focusedLandscapeProject}
+      data-app-shell
+    >
       <Sidebar
-        collapsible="icon"
+        collapsible={focusedLandscapeProject ? "offcanvas" : "icon"}
         className="border-r border-sidebar-border bg-gradient-to-b from-sidebar via-sidebar to-sidebar"
       >
         <SidebarHeader className="border-b border-sidebar-border">
@@ -458,12 +449,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
                       </AvatarFallback>
                     </Avatar>
                     <div className="grid flex-1 text-left text-sm leading-tight">
-                      <span className="truncate font-semibold">
-                        {user?.full_name || "User"}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {user?.email}
-                      </span>
+                      <span className="truncate font-semibold">{user?.full_name || "User"}</span>
+                      <span className="truncate text-xs text-muted-foreground">{user?.email}</span>
                     </div>
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
@@ -487,7 +474,12 @@ export function AppSidebar({ children }: AppSidebarProps) {
       </Sidebar>
 
       <SidebarInset className="h-svh overflow-hidden">
-        <header className={cn("h-14 shrink-0 items-center gap-2 border-b px-4", focusedLandscapeProject ? "hidden" : "flex")}>
+        <header
+          className={cn(
+            "h-14 shrink-0 items-center gap-2 border-b px-4",
+            focusedLandscapeProject ? "hidden" : "flex",
+          )}
+        >
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="h-4" />
           {/* Deep routes (e.g. /contacts/123/details) must not wrap the header:
@@ -502,9 +494,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 // header. It only surfaced once a route had three crumbs, since
                 // a single-crumb page renders no separator at all.
                 <Fragment key={crumb.href}>
-                  <BreadcrumbItem
-                    className={crumb.isLast ? "min-w-0" : "hidden sm:inline-flex"}
-                  >
+                  <BreadcrumbItem className={crumb.isLast ? "min-w-0" : "hidden sm:inline-flex"}>
                     {crumb.isLast ? (
                       <BreadcrumbPage className="gradient-heading truncate">
                         {crumb.label}
@@ -556,9 +546,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
             )}
           </Button>
         </header>
-        {commandMounted && (
-          <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
-        )}
+        {commandMounted && <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />}
         <main className="app-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           <SetupGate />
           <NoWorkspaceGate>{children}</NoWorkspaceGate>

@@ -101,7 +101,8 @@ describe("FixtureOptions beam slider", () => {
     expect(screen.getByText("2700K LED")).toBeInTheDocument();
     expect(screen.getByText("Long shroud, Ground stake")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Set marker color #f2c94c" }));
+    expect(screen.getAllByRole("radio")).toHaveLength(16);
+    fireEvent.click(screen.getByRole("radio", { name: "Yellow" }));
     expect(dispatch).toHaveBeenCalledWith({
       type: "UPDATE_ITEM",
       id: "item-1",

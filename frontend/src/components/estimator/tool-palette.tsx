@@ -25,10 +25,8 @@ import {
   bulbSizeNameFor,
   presetNameFor,
 } from "@/lib/estimator/catalog";
-import {
-  LANDSCAPE_WIRE_GAUGES,
-  landscapeWireLabel,
-} from "@/lib/estimator/fixtures";
+import { LANDSCAPE_WIRE_GAUGES, landscapeWireLabel } from "@/lib/estimator/fixtures";
+import { FIXTURE_MARKER_COLORS } from "@/lib/estimator/marker-colors";
 import { seasonalIconForStyle, tintSurface } from "@/lib/estimator/seasonal-icons";
 import {
   MAX_BEAM_ANGLE_DEG,
@@ -49,21 +47,6 @@ function newPlacedItemId(): string {
     ? crypto.randomUUID()
     : `item-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
-
-const FIXTURE_MARKER_COLORS = [
-  "#f2c94c",
-  "#f2994a",
-  "#eb5757",
-  "#2f80ed",
-  "#27ae60",
-  "#ffffff",
-  "#9b51e0",
-  "#d62f6f",
-  "#35aee2",
-  "#6b7d86",
-  "#f26b4f",
-  "#008f85",
-] as const;
 
 interface ToolPaletteProps {
   products: Product[];
@@ -321,18 +304,38 @@ function FixtureOptions({
   const rotation = beamRotationFor(item.beamRotationDeg);
   const natural = product.style === "downlight" ? "down" : "up";
 
-  const markerColorButton = (color: string) => (
-    <button
-      type="button"
-      className={item.markerColor === color ? "on" : ""}
-      style={{ backgroundColor: color }}
-      aria-label={`Set marker color ${color}`}
-      aria-pressed={item.markerColor === color}
-      onClick={() =>
-        dispatch({ type: "UPDATE_ITEM", id: item.id, patch: { markerColor: color } })
-      }
-    />
-  );
+  const markerColorButton = (marker: (typeof FIXTURE_MARKER_COLORS)[number], index: number) => {
+    const checked = item.markerColor?.toLowerCase() === marker.value.toLowerCase();
+    return (
+      <button
+        key={marker.value}
+        type="button"
+        role="radio"
+        className={checked ? "on" : ""}
+        style={{ backgroundColor: marker.value }}
+        aria-label={marker.name}
+        aria-checked={checked}
+        tabIndex={checked || (!item.markerColor && index === 0) ? 0 : -1}
+        onClick={() =>
+          dispatch({ type: "UPDATE_ITEM", id: item.id, patch: { markerColor: marker.value } })
+        }
+        onKeyDown={(event) => {
+          if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+          event.preventDefault();
+          const direction = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+          const nextIndex =
+            (index + direction + FIXTURE_MARKER_COLORS.length) % FIXTURE_MARKER_COLORS.length;
+          const nextMarker = FIXTURE_MARKER_COLORS[nextIndex];
+          dispatch({ type: "UPDATE_ITEM", id: item.id, patch: { markerColor: nextMarker.value } });
+          const radios =
+            event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+              '[role="radio"]',
+            );
+          radios?.[nextIndex]?.focus();
+        }}
+      />
+    );
+  };
 
   const changeType = (next: Product) => {
     if (next.id === product.id) return;
@@ -417,19 +420,8 @@ function FixtureOptions({
 
       <div className="tp-mt">
         <p className="tp-opt-label">Plan marker color</p>
-        <div className="tp-marker-colors" role="group" aria-label="Plan marker color">
-          {markerColorButton(FIXTURE_MARKER_COLORS[0])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[1])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[2])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[3])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[4])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[5])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[6])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[7])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[8])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[9])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[10])}
-          {markerColorButton(FIXTURE_MARKER_COLORS[11])}
+        <div className="tp-marker-colors" role="radiogroup" aria-label="Plan marker color">
+          {FIXTURE_MARKER_COLORS.map(markerColorButton)}
         </div>
       </div>
 

@@ -422,3 +422,113 @@ removed the separate Help dropdown, an unnecessary duplicate beside direct Prese
 controls, and forwarded menu-trigger props/ref so expanded and keyboard states work correctly.
 Full assistive-technology testing, formal measured contrast sampling, and complete 200% text zoom
 remain explicitly unverified.
+
+### Fixed drawing desk refinement (2026-08-14)
+
+#### Design read and evidence
+
+- **Surface:** desktop-first, data-dense landscape-lighting drafting and document workspace.
+- **Audience:** estimators and sales operators using keyboard, mouse, trackpad, or touch while
+  building an installation-ready, customer-sendable plan.
+- **Single job:** keep one registered top-down aerial fixed while fixtures, wiring, pricing,
+  procurement, and pre-construction records move through six predictable workflow steps.
+- **Risk:** accidental image movement, stale settings, missing fixture counts, or unclear save
+  state can create installation and quote errors.
+- **Primary local evidence:** authenticated NiteLite OS captures under
+  `.ezcoder/screenshots/niteliteos-reference/`, the prior Maxteriors captures, 18 final renders
+  under `.ezcoder/screenshots/niteliteos-final/{desktop,tablet,mobile}/`, component tests, and the
+  route-intercepted authenticated Playwright flow in `e2e/landscape-lighting-studio.spec.ts`. The
+  reference supplies hierarchy and workflow evidence only; no NiteLite marks, assets, source, or
+  emoji controls are reused.
+
+#### Thesis and craft system
+
+**One fixed drawing desk.** Project identity and save safety lead in one light 50px row. The six
+plain-text workflow steps form the second read. Two compact black tool rows and a charcoal stage
+frame the white document, while muted gold is reserved for selected modes and primary drawing
+actions. The aerial and generated documents, not CRM chrome, occupy the viewport.
+
+- The focused project route uses the existing `Sidebar` off-canvas mode; the deliberate
+  `SidebarTrigger` restores CRM navigation without a resting icon rail.
+- Existing typography, Lucide icons, Radix menus/dialogs, `Button`, autosave status, conflict
+  recovery, price-book calculations, quote delivery, and `LightCanvas` editing remain the reuse
+  foundation.
+- `DrawingToolbar` owns the two-row command geometry. Fixture shortcuts live under Add, all
+  sixteen named marker colors remain immediately visible, and every exposed command changes a
+  setting/tool/document, opens a real picker/menu/dialog, or reports a disabled reason.
+- `DocumentViewport` is shared by Drawing, Schedule, BOM, Electrical, Proposal, and Pre-Con.
+  Fit, plus, minus, range, and percentage controls sit outside the paper and preserve the visual
+  center during manual zoom.
+- Borders and material changes separate header, drafting controls, stage, and paper. There is no
+  decorative gradient, glass layer, generic hover lift, `transition: all`, or ambient motion.
+
+#### Fixed-aerial contract
+
+- The top-down base aerial is a locked landscape-only background. Wheel, middle-button/space
+  drag, and two-finger gestures cannot change its internal view transform.
+- `ResizeObserver` recomputes one deterministic contain or cover fit after container, sidebar,
+  fullscreen, tab, or viewport changes. Replacing the aerial recomputes that fit; fixtures, wire
+  routes, highlights, measurements, and movable supplemental insets remain in image-space
+  coordinates.
+- The shared seasonal/property-photo workflow retains its free pan, wheel zoom, and pinch zoom.
+- Sheet-level zoom scales the complete document around the registered drawing. It does not alter
+  image coordinates or cover the canvas with controls.
+
+#### State and document behavior
+
+The emitted V2 draft includes `paperSize`, `planFit`, `planOpacity`, legend visibility/position/
+scale, halo/fixture-number/measurement visibility, source voltage, active workflow tab, complete
+proposal settings and selections, procurement, and pre-con responses. Browser restore, Tribunal
+autosave, editable JSON import/export, and conflict reset hydrate the same complete state. Legacy
+fixtures without `markerColor` keep their semantic fixture colors; selecting a named swatch writes
+a stable per-fixture color, and new fixtures receive the current toolbar color.
+
+Non-drawing tabs share contextual document actions: Print on Schedule; Recount, CSV, PDF, and
+Print on BOM; PDF and Print on Electrical, Proposal, and Pre-Con. PDF actions honestly open the
+browser print dialog for Save as PDF.
+
+#### Responsive states
+
+- **Wide desktop:** one project row, one workflow row, two tool rows, one sheet strip, and the
+  fitted paper plus external zoom rail. The CRM sidebar consumes zero resting width.
+- **Tablet / 768px:** toolbar groups wrap as intact units, workflow labels scroll only when they
+  cannot fit, and the entire paper starts fitted.
+- **Mobile / 390px:** project name truncates before Send proposal and Save, normal saved status
+  becomes screen-reader-only, tool and sheet groups wrap, and the desktop document anatomy remains
+  a stable fitted thumbnail instead of cropping or recomposing.
+- **Print:** project/workflow/tool chrome and the zoom rail are removed; the active paper resets
+  to an untransformed landscape print layout.
+- **Reduced motion and forced colors:** named transitions collapse under reduced motion; document
+  controls use system colors in forced-colors mode while marker swatches retain color plus a
+  non-color check and selection ring.
+
+#### Verification boundaries
+
+Verified automatically: TypeScript, targeted Vitest state/geometry/menu tests, six-tab keyboard
+navigation, native marker radio semantics, fixed-aerial resize and gesture regression, visual-center
+zoom math, complete V2 serialization, autosave/conflict component behavior, Playwright mouse and
+keyboard editing, mobile fit, toolbar reflow, reduced-motion execution, forced-colors execution,
+quote creation, proposal delivery, and screenshot capture.
+
+Still unverified manually: representative screen-reader output, voice-control naming, browser
+text-only zoom at 200%, physical touch-device behavior, print output on multiple printer drivers,
+and a criterion-by-criterion WCAG 2.2 audit. Automated checks do not establish WCAG or ADA
+conformance.
+
+#### Evidence-led critique and revision
+
+The first 18-view capture exposed two concrete fit defects: the tall Pre-Con document reached the
+20% zoom floor and cropped on narrow screens, while nested sheet shadows produced inconsistent
+paper edges across workflow tabs. The revision lowered the safe document floor to 10%, moved paper
+material and shadow to the shared viewport, removed nested sheet shadows, and renamed the ambiguous
+sheet-strip action from “Add aerial” to “Add sheet.” All six documents were then recaptured at
+1440×960, 768×1024, and 390×844.
+
+Rubric (0–2 each): brief specificity 2; information hierarchy 2; composition 2; consistency and
+flow 2; typography 2; material and surface logic 2; state completeness 2; responsive behavior 2;
+accessibility quality floor 1; motion purpose 2; content authenticity 2; visual distinctiveness 2.
+
+**Final score: 23/24.** Accessibility remains 1/2 because automated keyboard, semantics, reduced-
+motion, and forced-colors evidence cannot substitute for the manual assistive-technology, 200%
+text-only zoom, physical touch, printer, and complete WCAG checks listed above. No required
+criterion scores zero.
