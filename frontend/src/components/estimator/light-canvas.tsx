@@ -48,10 +48,28 @@ import type { Design, PhotoInfo, Point, Product } from "@/lib/estimator/types";
 
 import { EMPTY_DESIGN, nextId, type EditorAction, type EditorState } from "./editor-store";
 
-interface View {
+export interface CanvasView {
   scale: number;
   ox: number;
   oy: number;
+}
+
+export function deterministicPhotoFit(
+  containerWidth: number,
+  containerHeight: number,
+  photoWidth: number,
+  photoHeight: number,
+  fit: "contain" | "cover" = "contain",
+): CanvasView {
+  const scale =
+    fit === "cover"
+      ? Math.max(containerWidth / photoWidth, containerHeight / photoHeight)
+      : Math.min(containerWidth / photoWidth, containerHeight / photoHeight) * 0.96;
+  return {
+    scale,
+    ox: (containerWidth - photoWidth * scale) / 2,
+    oy: (containerHeight - photoHeight * scale) / 2,
+  };
 }
 
 type Drag =
@@ -83,6 +101,13 @@ interface LightCanvasProps {
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
   perspective?: "photo" | "aerial";
+  placementMarkerColor?: string;
+  planFit?: "contain" | "cover";
+  planOpacity?: number;
+  fixtureNumbersVisible?: boolean;
+  measurementsVisible?: boolean;
+  halosVisible?: boolean;
+  defaultSourceVoltage?: number;
   planImageRequestToken?: number;
   onPlanImageRequestHandled?: () => void;
 }
@@ -93,6 +118,13 @@ export function LightCanvas({
   state,
   dispatch,
   perspective = "photo",
+  placementMarkerColor,
+  planFit = "contain",
+  planOpacity = 1,
+  fixtureNumbersVisible = true,
+  measurementsVisible = true,
+  halosVisible = true,
+  defaultSourceVoltage = 12,
   planImageRequestToken = 0,
   onPlanImageRequestHandled,
 }: LightCanvasProps) {
@@ -112,7 +144,7 @@ export function LightCanvas({
   );
   const [planImageError, setPlanImageError] = useState<string | null>(null);
   const [imageDragActive, setImageDragActive] = useState(false);
-  const [view, setView] = useState<View>({ scale: 1, ox: 0, oy: 0 });
+  const [view, setView] = useState<CanvasView>({ scale: 1, ox: 0, oy: 0 });
   const [draft, setDraft] = useState<Point[]>([]);
   const [draftHighlight, setDraftHighlight] = useState<Point[] | null>(null);
   const [calDraft, setCalDraft] = useState<Point | null>(null);
@@ -189,20 +221,28 @@ export function LightCanvas({
   const fitView = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    const { width: cw, height: ch } = el.getBoundingClientRect();
-    if (cw === 0 || ch === 0) return;
-    const scale = Math.min(cw / photo.width, ch / photo.height) * 0.96;
-    setView({
-      scale,
-      ox: (cw - photo.width * scale) / 2,
-      oy: (ch - photo.height * scale) / 2,
-    });
+    const { width: containerWidth, height: containerHeight } = el.getBoundingClientRect();
+    if (containerWidth === 0 || containerHeight === 0) return;
+    const nextView = deterministicPhotoFit(
+      containerWidth,
+      containerHeight,
+      photo.width,
+      photo.height,
+      planFit,
+    );
+    setView((currentView) =>
+      currentView.scale === nextView.scale &&
+      currentView.ox === nextView.ox &&
+      currentView.oy === nextView.oy
+        ? currentView
+        : nextView,
+    );
     fittedRef.current = true;
-  }, [photo.width, photo.height]);
+  }, [photo.width, photo.height, planFit]);
 
   useEffect(() => {
-    if (imgLoaded && !fittedRef.current) fitView();
-  }, [imgLoaded, fitView]);
+    if (imgLoaded && (isAerial || !fittedRef.current)) fitView();
+  }, [fitView, imgLoaded, isAerial]);
 
   // Reset interaction state when the tool changes.
   useEffect(() => {
@@ -242,6 +282,9 @@ export function LightCanvas({
       draftCalPoint: showBefore ? null : calDraft,
       hoverPt: !showBefore && (tool.type === "draw" || tool.type === "calibrate") ? hoverPt : null,
       dusk: showBefore ? 0 : dusk,
+      basePhotoOpacity: isAerial ? planOpacity : 1,
+      showHalos: !isAerial || halosVisible,
+      showFixtureNumbers: !isAerial || fixtureNumbersVisible,
       showChrome: !showBefore,
       calibrateTool: tool.type === "calibrate",
       planImageElements,
@@ -254,7 +297,7 @@ export function LightCanvas({
       ctx.lineJoin = "round";
       ctx.globalAlpha = 1;
       ctx.font = "600 16px sans-serif";
-      for (const measurement of design.measurements ?? []) {
+      for (const measurement of measurementsVisible ? (design.measurements ?? []) : []) {
         if (measurement.visible === false) continue;
         ctx.strokeStyle = "#22d3ee";
         ctx.lineWidth = 2 / Math.max(view.scale, 0.1);
@@ -265,7 +308,11 @@ export function LightCanvas({
         ctx.stroke();
         if (measurement.label) {
           ctx.fillStyle = "#ffffff";
-          ctx.fillText(measurement.label, (measurement.a.x + measurement.b.x) / 2, (measurement.a.y + measurement.b.y) / 2 - 8);
+          ctx.fillText(
+            measurement.label,
+            (measurement.a.x + measurement.b.x) / 2,
+            (measurement.a.y + measurement.b.y) / 2 - 8,
+          );
         }
       }
       ctx.setLineDash([]);
@@ -276,9 +323,15 @@ export function LightCanvas({
         ctx.beginPath();
         ctx.moveTo(arrow.a.x, arrow.a.y);
         ctx.lineTo(arrow.b.x, arrow.b.y);
-        ctx.lineTo(arrow.b.x - 14 * Math.cos(angle - Math.PI / 6), arrow.b.y - 14 * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(
+          arrow.b.x - 14 * Math.cos(angle - Math.PI / 6),
+          arrow.b.y - 14 * Math.sin(angle - Math.PI / 6),
+        );
         ctx.moveTo(arrow.b.x, arrow.b.y);
-        ctx.lineTo(arrow.b.x - 14 * Math.cos(angle + Math.PI / 6), arrow.b.y - 14 * Math.sin(angle + Math.PI / 6));
+        ctx.lineTo(
+          arrow.b.x - 14 * Math.cos(angle + Math.PI / 6),
+          arrow.b.y - 14 * Math.sin(angle + Math.PI / 6),
+        );
         ctx.stroke();
       }
       for (const annotation of design.annotations ?? []) {
@@ -296,8 +349,16 @@ export function LightCanvas({
           ctx.lineTo(annotation.end.x, annotation.end.y);
           ctx.stroke();
         } else {
-          ctx.strokeText(annotation.text || annotation.type.toUpperCase(), annotation.at.x, annotation.at.y);
-          ctx.fillText(annotation.text || annotation.type.toUpperCase(), annotation.at.x, annotation.at.y);
+          ctx.strokeText(
+            annotation.text || annotation.type.toUpperCase(),
+            annotation.at.x,
+            annotation.at.y,
+          );
+          ctx.fillText(
+            annotation.text || annotation.type.toUpperCase(),
+            annotation.at.x,
+            annotation.at.y,
+          );
         }
       }
       ctx.restore();
@@ -314,6 +375,11 @@ export function LightCanvas({
     calDraft,
     hoverPt,
     dusk,
+    fixtureNumbersVisible,
+    halosVisible,
+    isAerial,
+    measurementsVisible,
+    planOpacity,
     showBefore,
     tool.type,
     planImageElements,
@@ -327,12 +393,12 @@ export function LightCanvas({
     const el = containerRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
-      if (!fittedRef.current) fitView();
+      if (isAerial || !fittedRef.current) fitView();
       draw();
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [draw, fitView]);
+  }, [draw, fitView, isAerial]);
 
   // ---- coordinate helpers -------------------------------------------------
   const toImage = useCallback(
@@ -439,16 +505,24 @@ export function LightCanvas({
     void addPlanImage(file, toImage(event.clientX, event.clientY));
   };
 
-  const zoomAt = useCallback((clientX: number, clientY: number, factor: number) => {
-    setView((v) => {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      const cx = rect ? clientX - rect.left : 0;
-      const cy = rect ? clientY - rect.top : 0;
-      const scale = Math.min(40, Math.max(0.02, v.scale * factor));
-      const k = scale / v.scale;
-      return { scale, ox: cx - (cx - v.ox) * k, oy: cy - (cy - v.oy) * k };
-    });
-  }, []);
+  const zoomAt = useCallback(
+    (clientX: number, clientY: number, factor: number) => {
+      if (isAerial) return;
+      setView((currentView) => {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        const cx = rect ? clientX - rect.left : 0;
+        const cy = rect ? clientY - rect.top : 0;
+        const scale = Math.min(40, Math.max(0.02, currentView.scale * factor));
+        const k = scale / currentView.scale;
+        return {
+          scale,
+          ox: cx - (cx - currentView.ox) * k,
+          oy: cy - (cy - currentView.oy) * k,
+        };
+      });
+    },
+    [isAerial],
+  );
 
   const zoomCenter = useCallback(
     (factor: number) => {
@@ -462,19 +536,23 @@ export function LightCanvas({
   // Non-passive wheel listener (React's is passive, so preventDefault fails).
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
-        const factor = Math.min(1.25, Math.max(0.8, Math.exp(-e.deltaY * 0.01)));
-        zoomAt(e.clientX, e.clientY, factor);
+    if (!canvas || isAerial) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) {
+        const factor = Math.min(1.25, Math.max(0.8, Math.exp(-event.deltaY * 0.01)));
+        zoomAt(event.clientX, event.clientY, factor);
       } else {
-        setView((v) => ({ ...v, ox: v.ox - e.deltaX, oy: v.oy - e.deltaY }));
+        setView((currentView) => ({
+          ...currentView,
+          ox: currentView.ox - event.deltaX,
+          oy: currentView.oy - event.deltaY,
+        }));
       }
     };
     canvas.addEventListener("wheel", onWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", onWheel);
-  }, [zoomAt]);
+  }, [isAerial, zoomAt]);
 
   // ---- draft commit / cancel ----------------------------------------------
   const commitDraft = useCallback(() => {
@@ -498,7 +576,7 @@ export function LightCanvas({
             ? {
                 circuitLabel: `C${wireCircuitNumber}`,
                 wireGauge: 12 as const,
-                sourceVoltage: 12,
+                sourceVoltage: defaultSourceVoltage,
               }
             : {}),
         },
@@ -506,7 +584,16 @@ export function LightCanvas({
     }
     setDraft([]);
     setHoverPt(null);
-  }, [tool, draft, view.scale, dispatch, design.runs, productById, activeProduct]);
+  }, [
+    tool,
+    draft,
+    view.scale,
+    dispatch,
+    design.runs,
+    productById,
+    activeProduct,
+    defaultSourceVoltage,
+  ]);
 
   // ---- keyboard -----------------------------------------------------------
   const kbRef = useRef({ draft, calDraft, selection, tool, commitDraft, design, photo });
@@ -525,6 +612,7 @@ export function LightCanvas({
       if (isTyping()) return;
       const k = kbRef.current;
       if (e.key === " ") {
+        if (isAerial) return;
         e.preventDefault();
         setSpaceDown(true);
         return;
@@ -612,13 +700,13 @@ export function LightCanvas({
           break;
         case "+":
         case "=":
-          zoomCenter(1.25);
+          if (!isAerial) zoomCenter(1.25);
           break;
         case "-":
-          zoomCenter(0.8);
+          if (!isAerial) zoomCenter(0.8);
           break;
         case "0":
-          fitView();
+          if (!isAerial) fitView();
           break;
       }
     };
@@ -631,7 +719,7 @@ export function LightCanvas({
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [dispatch, fitView, zoomCenter]);
+  }, [dispatch, fitView, isAerial, zoomCenter]);
 
   // ---- touch gestures -----------------------------------------------------
   // A tablet has no middle mouse button and no spacebar, so without this a rep
@@ -649,6 +737,10 @@ export function LightCanvas({
   } | null>(null);
 
   const beginGesture = useCallback(() => {
+    if (isAerial) {
+      gestureRef.current = null;
+      return;
+    }
     const pts = [...pointersRef.current.values()];
     if (pts.length !== 2) return;
     const [a, b2] = pts;
@@ -660,9 +752,10 @@ export function LightCanvas({
       oy: view.oy,
       scale: view.scale,
     };
-  }, [view]);
+  }, [isAerial, view]);
 
   const updateGesture = useCallback(() => {
+    if (isAerial) return;
     const g = gestureRef.current;
     const pts = [...pointersRef.current.values()];
     if (!g || pts.length !== 2) return;
@@ -684,7 +777,7 @@ export function LightCanvas({
       ox: gx - (gx - g.ox) * k + (cx - g.cx),
       oy: gy - (gy - g.oy) * k + (cy - g.cy),
     });
-  }, []);
+  }, [isAerial]);
 
   // ---- pointer events -----------------------------------------------------
   const onPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -707,7 +800,7 @@ export function LightCanvas({
     }
     if (pointersRef.current.size > 2) return;
 
-    if (e.button === 1 || spaceDown) {
+    if (!isAerial && (e.button === 1 || spaceDown)) {
       dragRef.current = {
         mode: "pan",
         startX: e.clientX,
@@ -778,7 +871,13 @@ export function LightCanvas({
         const sizePx = Math.max(12, activeProduct.sizeFt * pxPerFt);
         dispatch({
           type: "ADD_ITEM",
-          item: { id: nextId("item"), productId: tool.productId, at: p, sizePx },
+          item: {
+            id: nextId("item"),
+            productId: tool.productId,
+            at: p,
+            sizePx,
+            ...(placementMarkerColor ? { markerColor: placementMarkerColor } : {}),
+          },
         });
         return;
       }
@@ -923,6 +1022,10 @@ export function LightCanvas({
 
     switch (drag.mode) {
       case "pan": {
+        if (isAerial) {
+          fitView();
+          return;
+        }
         setView({
           scale: view.scale,
           ox: drag.ox + (e.clientX - drag.startX),
@@ -935,9 +1038,7 @@ export function LightCanvas({
         setDraftHighlight((points) => {
           if (!points?.length) return [p];
           const previous = points[points.length - 1];
-          return distance(previous, p) >= 2 / Math.max(view.scale, 0.1)
-            ? [...points, p]
-            : points;
+          return distance(previous, p) >= 2 / Math.max(view.scale, 0.1) ? [...points, p] : points;
         });
         return;
       }
@@ -1170,7 +1271,7 @@ export function LightCanvas({
   }
 
   const cursor =
-    spaceDown || panning
+    !isAerial && (spaceDown || panning)
       ? panning
         ? "grabbing"
         : "grab"
@@ -1205,11 +1306,15 @@ export function LightCanvas({
       onDrop={onPlanImageDrop}
     >
       <p id={canvasHelpId} className="sr-only">
-        Interactive lighting design canvas. Choose a fixture or tool from the left rail, then use
-        the pointer on the {isAerial ? "top-down aerial plan" : "property photo"}. Press V for
-        Select, S for Set scale, Delete to remove a selected fixture, plus or minus to zoom, and 0
-        to fit. Drop an image file onto the plan, or use{" "}
-        {isAerial ? "Add detail photo" : "Add plan image"} to place a movable reference inset.
+        Interactive lighting design canvas. Choose a fixture or tool, then use the pointer on the{" "}
+        {isAerial ? "top-down aerial plan" : "property photo"}. Press V for Select, S for Set scale,
+        and Delete to remove a selected fixture.{" "}
+        {isAerial
+          ? "Use the labeled document zoom controls to enlarge or fit the sheet. "
+          : "Press plus or minus to zoom and 0 to fit. "}
+        Drop an image file onto the plan, or use{" "}
+        {isAerial ? "Supplemental detail photo" : "Add plan image"} to place a movable reference
+        inset.
       </p>
       <input
         ref={planImageInputRef}
@@ -1228,6 +1333,10 @@ export function LightCanvas({
             : "Property photo lighting design canvas"
         }
         aria-describedby={canvasHelpId}
+        data-viewport-policy={isAerial ? "locked" : "free"}
+        data-view-scale={view.scale}
+        data-view-origin-x={view.ox}
+        data-view-origin-y={view.oy}
         style={{ cursor }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -1237,37 +1346,39 @@ export function LightCanvas({
         onContextMenu={onContextMenu}
       />
 
-      <div className="lc-overlay top-left lc-plan-actions">
-        <button
-          type="button"
-          className={`lc-chip ${calibrated ? "lc-chip-ok" : "lc-chip-warn"}`}
-          onClick={() => dispatch({ type: "SET_TOOL", tool: { type: "calibrate" } })}
-          title={
-            isAerial
-              ? "Set the aerial plan scale from a known top-down distance"
-              : "Set the photo scale from a known measurement"
-          }
-        >
-          {!calibrated ? <AlertTriangle className="lc-chip-glyph" aria-hidden="true" /> : null}
-          {calibrated && design.calibration
-            ? `Scale set: ${design.calibration.feet} ft reference`
-            : "Not to scale. Select to set scale."}
-        </button>
-        <button
-          type="button"
-          className="lc-chip"
-          disabled={(design.planImages ?? []).length >= MAX_PLAN_IMAGES}
-          onClick={() => planImageInputRef.current?.click()}
-          title={
-            isAerial
-              ? "Insert a movable detail photo over the aerial plan"
-              : "Place a movable detail or reference image on this plan"
-          }
-        >
-          <ImagePlus className="lc-chip-glyph" aria-hidden="true" />
-          {isAerial ? "Add detail photo" : "Add plan image"}
-        </button>
-      </div>
+      {!isAerial ? (
+        <div className="lc-overlay top-left lc-plan-actions">
+          <button
+            type="button"
+            className={`lc-chip ${calibrated ? "lc-chip-ok" : "lc-chip-warn"}`}
+            onClick={() => dispatch({ type: "SET_TOOL", tool: { type: "calibrate" } })}
+            title={
+              isAerial
+                ? "Set the aerial plan scale from a known top-down distance"
+                : "Set the photo scale from a known measurement"
+            }
+          >
+            {!calibrated ? <AlertTriangle className="lc-chip-glyph" aria-hidden="true" /> : null}
+            {calibrated && design.calibration
+              ? `Scale set: ${design.calibration.feet} ft reference`
+              : "Not to scale. Select to set scale."}
+          </button>
+          <button
+            type="button"
+            className="lc-chip"
+            disabled={(design.planImages ?? []).length >= MAX_PLAN_IMAGES}
+            onClick={() => planImageInputRef.current?.click()}
+            title={
+              isAerial
+                ? "Insert a movable detail photo over the aerial plan"
+                : "Place a movable detail or reference image on this plan"
+            }
+          >
+            <ImagePlus className="lc-chip-glyph" aria-hidden="true" />
+            {isAerial ? "Add detail photo" : "Add plan image"}
+          </button>
+        </div>
+      ) : null}
 
       {imageDragActive ? (
         <div className="lc-image-drop-target" aria-hidden="true">
@@ -1283,68 +1394,74 @@ export function LightCanvas({
         </div>
       ) : null}
 
-      <div className="lc-overlay top-right">
-        <button
-          type="button"
-          className={`lc-chip ${showBefore ? "lc-chip-on" : ""}`}
-          aria-pressed={showBefore}
-          onClick={() => setShowBefore((v) => !v)}
-          title={
-            isAerial ? "Show the base aerial without lighting" : "Show the untouched daylight photo"
-          }
-        >
-          <Sunrise className="lc-chip-glyph" aria-hidden="true" />
-          Before
-        </button>
-        <div className="lc-dusk">
-          <label className="lc-dusk-label" htmlFor={duskId}>
-            <Moon className="lc-chip-glyph" aria-hidden="true" />
-            Dusk
-          </label>
-          <input
-            id={duskId}
-            className="lc-dusk-slider"
-            type="range"
-            min={0}
-            max={Math.round(MAX_DUSK * 100)}
-            step={1}
-            value={duskPercent}
-            disabled={showBefore}
-            onChange={(e) => dispatch({ type: "SET_DUSK", dusk: Number(e.target.value) / 100 })}
-          />
-          <output className="lc-dusk-value" htmlFor={duskId}>
-            {duskPercent}%
-          </output>
+      {!isAerial ? (
+        <div className="lc-overlay top-right">
+          <button
+            type="button"
+            className={`lc-chip ${showBefore ? "lc-chip-on" : ""}`}
+            aria-pressed={showBefore}
+            onClick={() => setShowBefore((v) => !v)}
+            title={
+              isAerial
+                ? "Show the base aerial without lighting"
+                : "Show the untouched daylight photo"
+            }
+          >
+            <Sunrise className="lc-chip-glyph" aria-hidden="true" />
+            Before
+          </button>
+          <div className="lc-dusk">
+            <label className="lc-dusk-label" htmlFor={duskId}>
+              <Moon className="lc-chip-glyph" aria-hidden="true" />
+              Dusk
+            </label>
+            <input
+              id={duskId}
+              className="lc-dusk-slider"
+              type="range"
+              min={0}
+              max={Math.round(MAX_DUSK * 100)}
+              step={1}
+              value={duskPercent}
+              disabled={showBefore}
+              onChange={(e) => dispatch({ type: "SET_DUSK", dusk: Number(e.target.value) / 100 })}
+            />
+            <output className="lc-dusk-value" htmlFor={duskId}>
+              {duskPercent}%
+            </output>
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      <div className="lc-overlay bottom-right">
-        <button
-          type="button"
-          className="lc-zoom-btn"
-          onClick={() => zoomCenter(0.8)}
-          title="Zoom out (-)"
-        >
-          −
-        </button>
-        <span className="lc-zoom-label">{Math.round(view.scale * 100)}%</span>
-        <button
-          type="button"
-          className="lc-zoom-btn"
-          onClick={() => zoomCenter(1.25)}
-          title="Zoom in (+)"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          className="lc-zoom-btn lc-zoom-fit"
-          onClick={fitView}
-          title="Fit to screen (0)"
-        >
-          Fit
-        </button>
-      </div>
+      {!isAerial ? (
+        <div className="lc-overlay bottom-right">
+          <button
+            type="button"
+            className="lc-zoom-btn"
+            onClick={() => zoomCenter(0.8)}
+            title="Zoom out (-)"
+          >
+            −
+          </button>
+          <span className="lc-zoom-label">{Math.round(view.scale * 100)}%</span>
+          <button
+            type="button"
+            className="lc-zoom-btn"
+            onClick={() => zoomCenter(1.25)}
+            title="Zoom in (+)"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            className="lc-zoom-btn lc-zoom-fit"
+            onClick={fitView}
+            title="Fit to screen (0)"
+          >
+            Fit
+          </button>
+        </div>
+      ) : null}
 
       {hint ? (
         <div className="lc-overlay bottom-center">

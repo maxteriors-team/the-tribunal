@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
@@ -17,7 +17,7 @@ import {
   type EditorAction,
   type EditorState,
 } from "./editor-store";
-import { LightCanvas } from "./light-canvas";
+import { deterministicPhotoFit, LightCanvas } from "./light-canvas";
 
 // The glow engine is exercised in render.test.ts; jsdom has no 2D context.
 vi.mock("@/lib/estimator/render", () => ({
@@ -76,7 +76,7 @@ const UPLIGHT: Product = {
  * 1:1 onto the photo (identity transform) so a client coordinate is also an
  * image coordinate — which makes "outside the photo" easy to express.
  */
-function setup() {
+function setup(placementMarkerColor?: string) {
   let state: EditorState = {
     ...initialEditorState(),
     tool: { type: "place", productId: UPLIGHT.id },
@@ -85,7 +85,13 @@ function setup() {
     state = editorReducer(state, action);
   });
   const { container, rerender } = render(
-    <LightCanvas photo={PHOTO} products={[UPLIGHT]} state={state} dispatch={dispatch} />,
+    <LightCanvas
+      photo={PHOTO}
+      products={[UPLIGHT]}
+      state={state}
+      dispatch={dispatch}
+      placementMarkerColor={placementMarkerColor}
+    />,
   );
   const canvas = container.querySelector("canvas")!;
   // Identity mapping: canvas origin at (0,0), one client px per image px.
@@ -124,14 +130,132 @@ describe("LightCanvas — aerial plan semantics", () => {
       />,
     );
 
-    await waitFor(() =>
-      expect(screen.getByLabelText("Top-down aerial lighting plan canvas")).toBeInTheDocument(),
-    );
+    const canvas = await screen.findByLabelText("Top-down aerial lighting plan canvas");
+    expect(canvas).toHaveAttribute("data-viewport-policy", "locked");
     expect(
-      screen.getByTitle("Set the aerial plan scale from a known top-down distance"),
-    ).toBeInTheDocument();
-    expect(screen.getByTitle("Show the base aerial without lighting")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add detail photo" })).toBeInTheDocument();
+      screen.queryByTitle("Set the aerial plan scale from a known top-down distance"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Show the base aerial without lighting")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add detail photo" })).not.toBeInTheDocument();
+  });
+
+  it("computes a deterministic centered contain fit", () => {
+    expect(deterministicPhotoFit(500, 800, 1000, 800)).toEqual({
+      scale: 0.48,
+      ox: 10,
+      oy: 208,
+    });
+  });
+
+  it("refits a locked aerial after resize without letting gestures drift the drawing", async () => {
+    let notifyResize: (() => void) | null = null;
+    class ControlledResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        notifyResize = () => callback([], this as unknown as ResizeObserver);
+      }
+      observe = vi.fn();
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+    }
+    vi.stubGlobal("ResizeObserver", ControlledResizeObserver);
+
+    try {
+      let width = 1000;
+      let height = 800;
+      const dispatch = vi.fn();
+      const state: EditorState = {
+        ...initialEditorState(),
+        tool: { type: "place", productId: UPLIGHT.id },
+      };
+      const { container } = render(
+        <LightCanvas
+          photo={PHOTO}
+          products={[UPLIGHT]}
+          state={state}
+          dispatch={dispatch}
+          perspective="aerial"
+        />,
+      );
+      const wrapper = container.querySelector(".lc-wrap") as HTMLDivElement;
+      const canvas = container.querySelector("canvas")!;
+      const rect = () =>
+        ({
+          left: 0,
+          top: 0,
+          width,
+          height,
+          right: width,
+          bottom: height,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect;
+      vi.spyOn(wrapper, "getBoundingClientRect").mockImplementation(rect);
+      vi.spyOn(canvas, "getBoundingClientRect").mockImplementation(rect);
+      canvas.setPointerCapture = vi.fn();
+      canvas.releasePointerCapture = vi.fn();
+
+      await waitFor(() => expect(Number(canvas.dataset.viewScale)).toBeCloseTo(0.96));
+      expect(canvas.dataset.viewportPolicy).toBe("locked");
+      expect(Number(canvas.dataset.viewOriginX)).toBeCloseTo(20);
+      expect(Number(canvas.dataset.viewOriginY)).toBeCloseTo(16);
+
+      fireEvent.pointerDown(canvas, { pointerId: 1, clientX: 500, clientY: 400, button: 0 });
+      fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 500, clientY: 400, button: 0 });
+
+      const viewBeforeGestures = {
+        scale: canvas.dataset.viewScale,
+        x: canvas.dataset.viewOriginX,
+        y: canvas.dataset.viewOriginY,
+      };
+      const wheel = new WheelEvent("wheel", { deltaX: 80, deltaY: 120, cancelable: true });
+      canvas.dispatchEvent(wheel);
+      expect(wheel.defaultPrevented).toBe(false);
+
+      fireEvent.pointerDown(canvas, { pointerId: 2, clientX: 450, clientY: 400, button: 1 });
+      fireEvent.pointerMove(canvas, { pointerId: 2, clientX: 600, clientY: 520, button: 1 });
+      fireEvent.pointerUp(canvas, { pointerId: 2, clientX: 600, clientY: 520, button: 1 });
+
+      const touch = (pointerId: number, clientX: number, clientY: number) => ({
+        pointerId,
+        clientX,
+        clientY,
+        button: 0,
+        pointerType: "touch",
+      });
+      fireEvent.pointerDown(canvas, touch(3, 400, 400));
+      fireEvent.pointerDown(canvas, touch(4, 500, 400));
+      fireEvent.pointerMove(canvas, touch(3, 300, 350));
+      fireEvent.pointerMove(canvas, touch(4, 600, 450));
+      fireEvent.pointerUp(canvas, touch(3, 300, 350));
+      fireEvent.pointerUp(canvas, touch(4, 600, 450));
+
+      expect({
+        scale: canvas.dataset.viewScale,
+        x: canvas.dataset.viewOriginX,
+        y: canvas.dataset.viewOriginY,
+      }).toEqual(viewBeforeGestures);
+
+      width = 500;
+      height = 800;
+      act(() => notifyResize?.());
+      await waitFor(() => expect(Number(canvas.dataset.viewScale)).toBeCloseTo(0.48));
+      expect(Number(canvas.dataset.viewOriginX)).toBeCloseTo(10);
+      expect(Number(canvas.dataset.viewOriginY)).toBeCloseTo(208);
+
+      fireEvent.pointerDown(canvas, { pointerId: 5, clientX: 250, clientY: 400, button: 0 });
+      fireEvent.pointerUp(canvas, { pointerId: 5, clientX: 250, clientY: 400, button: 0 });
+      const placements = dispatch.mock.calls
+        .map(([action]) => action)
+        .filter((action) => action.type === "ADD_ITEM");
+      expect(placements).toHaveLength(2);
+      expect(placements.map((action) => action.item.at)).toEqual([
+        { x: 500, y: 400 },
+        { x: 500, y: 400 },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -142,6 +266,17 @@ describe("LightCanvas — geometry stays on the photo", () => {
     const { clickAt, placed } = setup();
     clickAt(500, 400);
     expect(placed()).toBe(1);
+  });
+
+  it("applies the shared toolbar marker color to a newly placed fixture", () => {
+    const { clickAt, dispatch } = setup("#2f80ed");
+    clickAt(500, 400);
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "ADD_ITEM",
+        item: expect.objectContaining({ markerColor: "#2f80ed" }),
+      }),
+    );
   });
 
   it("ignores clicks in the letterbox around the photo", () => {

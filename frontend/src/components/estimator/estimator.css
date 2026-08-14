@@ -3615,6 +3615,54 @@
   letter-spacing: 0.12em;
 }
 
+.ll-studio-help {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  color: #e8e6e1;
+  background: #181918;
+  border-bottom: 1px solid #4b4435;
+}
+.ll-studio-help > div {
+  display: grid;
+  gap: 2px;
+}
+.ll-studio-help strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.ll-studio-help span {
+  max-width: 760px;
+  color: #b9b6af;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.ll-studio-help button {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: #ddd9d1;
+  background: transparent;
+  border: 1px solid #44433f;
+  border-radius: 3px;
+}
+.ll-studio-help button:hover {
+  color: #fff;
+  background: #262724;
+}
+.ll-studio-help button:focus-visible {
+  outline: 2px solid #e2b35f;
+  outline-offset: 2px;
+}
+.ll-studio-help svg {
+  width: 15px;
+  height: 15px;
+}
 .ll-drafting-toolbar {
   position: relative;
   z-index: 9;
@@ -3869,10 +3917,11 @@
   display: flex;
   align-items: center;
   flex: 0 0 auto;
+  flex-wrap: wrap;
   gap: 6px;
   min-height: 38px;
   padding: 4px 12px;
-  overflow-x: auto;
+  overflow-x: visible;
   color: #d4d7d4;
   background: #191a1a;
   border-bottom: 1px solid #343636;
@@ -3908,6 +3957,144 @@
   background: #303132;
 }
 
+/* Shared document stage keeps every workflow sheet on one predictable zoom rail. */
+.ll-document-viewport,
+.ll-drawing-document-shell {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: #303132;
+}
+.ll-document-viewport-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.ll-document-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #303132;
+}
+.ll-document-stage:focus-visible {
+  outline: 2px solid #e2b35f;
+  outline-offset: -2px;
+}
+.ll-document-stage-inner {
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: max-content;
+  min-width: 100%;
+  height: max-content;
+  min-height: 100%;
+  padding: 24px;
+}
+.ll-document-scale-frame {
+  flex: 0 0 auto;
+}
+.ll-document-paper {
+  box-sizing: border-box;
+  background: #f7f6f1;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24);
+  transform-origin: top left;
+}
+.ll-document-paper > .ll-live-sheet,
+.ll-document-paper > .ll-panel-sheet,
+.ll-document-paper > .ll-workspace-panel {
+  width: 100%;
+  min-height: inherit;
+  margin: 0;
+}
+.ll-document-paper > .ll-workspace-panel {
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+}
+.ll-document-zoom {
+  display: flex;
+  flex: 0 0 54px;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 6px;
+  color: #e8e6e1;
+  background: #202120;
+  border-left: 1px solid #3d3e3d;
+}
+.ll-document-zoom button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-height: 32px;
+  gap: 3px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+.ll-document-zoom button:first-child {
+  flex-direction: column;
+  height: 42px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.ll-document-zoom button:hover {
+  color: #fff;
+  background: #2c2d2c;
+  border-color: #515250;
+}
+.ll-document-zoom button[aria-pressed="true"] {
+  color: #17140f;
+  background: #d0a153;
+  border-color: #d0a153;
+}
+.ll-document-zoom button:focus-visible,
+.ll-document-zoom input:focus-visible {
+  outline: 2px solid #f1d17c;
+  outline-offset: 2px;
+}
+.ll-document-zoom button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.ll-document-zoom svg {
+  width: 15px;
+  height: 15px;
+}
+.ll-document-zoom input[type="range"] {
+  width: 24px;
+  height: min(150px, 24vh);
+  min-height: 72px;
+  margin: 0;
+  accent-color: #d0a153;
+  direction: rtl;
+  writing-mode: vertical-lr;
+}
+.ll-document-zoom output {
+  min-width: 42px;
+  color: #d8d5ce;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.ll-document-paper .ll-panel-sheet {
+  max-width: none;
+  min-height: inherit;
+  box-shadow: none;
+}
+.ll-document-paper > .ll-live-sheet {
+  box-shadow: none;
+}
 .ll-live-sheet {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 190px;
@@ -4553,45 +4740,194 @@
   }
 }
 
+/* Keep the drawing sheet's desktop anatomy intact inside the fitted mobile thumbnail. */
+@media (max-width: 760px) {
+  .ll-document-stage-inner {
+    padding: 12px;
+  }
+
+  .ll-document-zoom {
+    flex-basis: 48px;
+    padding-inline: 5px;
+  }
+
+  .ll-document-zoom button {
+    width: 36px;
+  }
+
+  .ll-document-paper .ll-live-sheet {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 190px;
+    width: 100%;
+    min-width: 900px;
+    min-height: inherit;
+  }
+
+  .ll-document-paper .ll-live-sheet-main,
+  .ll-document-paper .ll-empty-sheet-main {
+    min-height: 600px;
+    margin: 28px 0 28px 28px;
+  }
+
+  .ll-document-paper .ll-live-sheet-main {
+    padding-top: 0;
+  }
+
+  .ll-document-paper .ll-live-sheet .ll-title-block {
+    border-top: 0;
+    border-left: 1px solid #343b38;
+  }
+
+  .ll-document-paper .ll-live-sheet .ll-title-block dl {
+    display: block;
+  }
+
+  .ll-document-paper .ll-live-sheet .ll-title-block dl > div:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .ll-document-paper .ll-live-legend {
+    width: 340px;
+    max-height: 220px;
+  }
+
+  .ll-drawing-document-shell .ll-tool-drawer {
+    position: absolute;
+    z-index: 15;
+    top: 12px;
+    right: 60px;
+    left: auto;
+    width: min(380px, calc(100% - 84px));
+    max-height: calc(100% - 24px);
+    margin: 0;
+    border-radius: 4px;
+  }
+
+  .ll-drawing-document-shell .ll-tool-drawer .tp-rail {
+    max-height: calc(100vh - 190px);
+  }
+
+  .ll-studio-help {
+    gap: 8px;
+    padding-inline: 10px;
+  }
+
+  .ll-document-actions {
+    justify-content: flex-start;
+    padding-inline: 8px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .ll-toolbar-button,
-  .ll-fixture-tool,
-  .ll-toolbar-more > summary,
-  .ll-sheet-tabs button,
-  .ll-package-options button,
-  .ll-care-options button {
-    transition-duration: 0.01ms;
+  .est-landscape-builder *,
+  .est-landscape-builder *::before,
+  .est-landscape-builder *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
 @media (forced-colors: active) {
   .ll-marker-key i,
+  .ll-marker-swatch {
+    forced-color-adjust: none;
+  }
+
   .ll-live-sheet,
+  .ll-panel-sheet,
   .ll-live-sheet-main,
   .ll-empty-sheet-main {
-    forced-color-adjust: none;
+    color: CanvasText;
+    background: Canvas;
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+
+  .ll-document-zoom,
+  .ll-document-actions,
+  .ll-studio-help {
+    color: CanvasText;
+    background: Canvas;
+    border-color: CanvasText;
+  }
+
+  .ll-document-zoom button,
+  .ll-document-actions button,
+  .ll-studio-help button {
+    color: ButtonText;
+    background: ButtonFace;
+    border: 1px solid ButtonText;
+  }
+
+  .ll-document-zoom button[aria-pressed="true"] {
+    color: HighlightText;
+    background: Highlight;
+    outline: 2px solid Highlight;
   }
 }
 
 @media print {
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+
+  .ll-project-header,
+  .ll-workflow-tabs,
   .est-landscape-builder .est-topbar,
   .est-landscape-builder .ll-builder-tabs,
   .ll-drafting-toolbar,
+  .ll-drawing-toolbar,
   .ll-sheet-tabs,
-  .ll-tool-drawer {
+  .ll-tool-drawer,
+  .ll-studio-help,
+  .ll-document-actions,
+  .ll-document-zoom {
     display: none !important;
   }
 
-  .ll-sheet-stage {
-    padding: 0;
+  .est-landscape-builder,
+  .ll-drawing-document-shell,
+  .ll-document-viewport,
+  .ll-document-viewport-body,
+  .ll-document-stage,
+  .ll-document-stage-inner {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 0;
     overflow: visible;
     background: #fff;
   }
 
-  .ll-live-sheet {
+  .ll-document-stage-inner {
+    padding: 0;
+  }
+
+  .ll-document-scale-frame {
+    width: auto !important;
+    height: auto !important;
+  }
+
+  .ll-document-paper {
+    width: 100% !important;
+    min-height: 0 !important;
+    transform: none !important;
+  }
+
+  .ll-document-paper > .ll-live-sheet,
+  .ll-document-paper > .ll-panel-sheet,
+  .ll-document-paper > .ll-workspace-panel {
     width: 100%;
     min-width: 0;
     min-height: 0;
     box-shadow: none;
+    break-inside: avoid;
+  }
+
+  .ll-document-paper .ll-live-sheet {
+    grid-template-columns: minmax(0, 1fr) 190px;
   }
 }

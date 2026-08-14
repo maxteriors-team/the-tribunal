@@ -51,6 +51,8 @@ import {
   MousePointer2,
   Plus,
   Presentation,
+  Printer,
+  RefreshCcw,
   Ruler,
   Settings2,
   Sparkles,
@@ -64,6 +66,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { Children, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
+import {
+  DocumentActionButton,
+  DocumentViewport,
+} from "@/components/landscape-lighting/studio/document-viewport";
 import {
   DrawingToolbar,
   type DrawingStudioAction,
@@ -100,12 +106,18 @@ import {
   type FixtureType,
 } from "@/lib/estimator/fixtures";
 import { polylineLength } from "@/lib/estimator/geometry";
-import { normalizeLandscapeDocument } from "@/lib/estimator/landscape-document";
+import {
+  defaultLandscapePrecon,
+  defaultLandscapeProposal,
+  defaultLandscapeSettings,
+  normalizeLandscapeDocument,
+} from "@/lib/estimator/landscape-document";
 import {
   createLandscapeDraft,
   loadLandscapeDraft,
   saveLandscapeDraft,
   type LandscapeDraft,
+  type LandscapeDraftState,
 } from "@/lib/estimator/landscape-draft";
 import { buildLandscapeProposalPayload } from "@/lib/estimator/landscape-proposal";
 import {
@@ -113,8 +125,10 @@ import {
   copyScheduleSelectionToType,
   updateFixtureScheduleSelection,
 } from "@/lib/estimator/landscape-schedule";
+import { DEFAULT_FIXTURE_MARKER_COLOR } from "@/lib/estimator/marker-colors";
 import { resolveSelectedPackage, packageName, seasonalTotal } from "@/lib/estimator/packages";
 import { fileToPhoto } from "@/lib/estimator/photo";
+import { DEFAULT_DUSK } from "@/lib/estimator/render";
 import { SERVICES, clientThemeClass, type ServiceKey } from "@/lib/estimator/services";
 import {
   buildSupplierCsvRows,
@@ -123,8 +137,13 @@ import {
 } from "@/lib/estimator/supplier-csv";
 import {
   beamAngleFor,
+  type Design,
+  type LandscapePaperSize,
+  type LandscapePlanFit,
   type LandscapePreconState,
+  type LandscapeProcurementState,
   type LandscapeProposalLineItem,
+  type LandscapeProposalSettings,
   type PhotoInfo,
   type Product,
 } from "@/lib/estimator/types";
@@ -259,11 +278,16 @@ type AutosaveStatus = "loading" | "saving" | "saved" | "error";
 const landscapeDraftSignature = (
   shots: DesignerShot[],
   activeShotId: string | null,
-  selectedTierKey: string | null,
-  selectedCarePlanKey: string | null,
-  additionalLineItems: LandscapeProposalLineItem[] = [],
-): string =>
-  JSON.stringify({ activeShotId, shots, selectedTierKey, selectedCarePlanKey, additionalLineItems });
+  liveState: LandscapeDraftState,
+): string => JSON.stringify({ activeShotId, shots, ...liveState });
+
+const landscapeStateFromDraft = (draft: LandscapeDraft): LandscapeDraftState => ({
+  activeWorkflowTab: draft.activeWorkflowTab ?? "drawing",
+  settings: draft.settings ?? defaultLandscapeSettings(),
+  proposal: draft.proposal ?? defaultLandscapeProposal(),
+  procurement: draft.procurement ?? {},
+  precon: draft.precon ?? defaultLandscapePrecon(),
+});
 
 interface LandscapeFixtureScheduleRow {
   id: string;
@@ -468,13 +492,23 @@ function LandscapeWelcome({
 function LandscapeDraftingToolbar({
   products,
   activeTool,
+  design,
   hasPhoto,
   canUndo,
+  markerColor,
+  onMarkerColorChange,
+  duskPreview,
+  onTogglePreview,
+  planFit,
+  planOpacity,
+  legendScale,
+  sourceVoltage,
   toolsOpen,
   legendOpen,
   helpOpen,
   sheetSize,
   onSheetSizeChange,
+  onPlaceAerial,
   onSelect,
   onSetScale,
   onPlaceFixture,
@@ -486,6 +520,7 @@ function LandscapeDraftingToolbar({
   onOpenSchedule,
   onOpenElectrical,
   onPresent,
+  onRender,
   onPrint,
   studio = false,
   studioSettings,
@@ -493,13 +528,23 @@ function LandscapeDraftingToolbar({
 }: {
   products: Product[];
   activeTool: EditorState["tool"];
+  design: Design;
   hasPhoto: boolean;
   canUndo: boolean;
+  markerColor: string | null;
+  onMarkerColorChange: (color: string) => void;
+  duskPreview: boolean;
+  onTogglePreview: () => void;
+  planFit: LandscapePlanFit;
+  planOpacity: number;
+  legendScale: number;
+  sourceVoltage: number;
   toolsOpen: boolean;
   legendOpen: boolean;
   helpOpen: boolean;
-  sheetSize: string;
-  onSheetSizeChange: (value: string) => void;
+  sheetSize: LandscapePaperSize;
+  onSheetSizeChange: (value: LandscapePaperSize) => void;
+  onPlaceAerial: () => void;
   onSelect: () => void;
   onSetScale: () => void;
   onPlaceFixture: (product: Product) => void;
@@ -511,6 +556,7 @@ function LandscapeDraftingToolbar({
   onOpenSchedule: () => void;
   onOpenElectrical: () => void;
   onPresent: () => void;
+  onRender: () => void;
   onPrint: () => void;
   studio?: boolean;
   studioSettings?: {
@@ -534,7 +580,7 @@ function LandscapeDraftingToolbar({
   if (studio && studioSettings && onStudioAction) {
     return (
       <DrawingToolbar
-        paperSize={sheetSize as import("@/lib/estimator/types").LandscapePaperSize}
+        paperSize={sheetSize}
         activeAction={
           activeTool.type === "select"
             ? "select"
@@ -544,22 +590,43 @@ function LandscapeDraftingToolbar({
                 ? "highlight"
                 : undefined
         }
+        hasAerial={hasPhoto}
+        hasDrawing={design.runs.length > 0 || design.items.length > 0}
+        hasPlanSymbols={Boolean(
+          design.annotations?.length ||
+          design.measurements?.length ||
+          design.highlights?.length ||
+          design.arrows?.length,
+        )}
         canUndo={canUndo}
-        canRedo={false}
+        canWire={Boolean(wireProduct)}
+        canRender={hasPhoto}
+        duskPreview={duskPreview}
+        renderDisabledReason={
+          hasPhoto ? undefined : "Place an aerial before creating a dusk render."
+        }
+        markerColor={markerColor}
+        planFit={planFit}
+        planOpacity={planOpacity}
+        legendScale={legendScale}
+        sourceVoltage={sourceVoltage}
         fixtureNumbersVisible={studioSettings.fixtureNumbersVisible}
         measurementsVisible={studioSettings.measurementsVisible}
         legendVisible={studioSettings.legendVisible}
         halosVisible={studioSettings.halosVisible}
         onPaperSizeChange={onSheetSizeChange}
+        onMarkerColorChange={onMarkerColorChange}
         onAction={(action) => {
-          if (action === "select") onSelect();
+          if (action === "place-aerial") onPlaceAerial();
+          else if (action === "select") onSelect();
           else if (action === "undo") onUndo();
           else if (action === "set-scale") onSetScale();
-          else if (action === "wire" || action === "draw-wire") {
+          else if (action === "wire") {
             if (wireProduct) onStartWiring(wireProduct);
           } else if (action === "present") onPresent();
-          else if (action === "print" || action === "download-pdf" || action === "download-sheets")
-            onPrint();
+          else if (action === "toggle-preview") onTogglePreview();
+          else if (action === "render") onRender();
+          else if (action === "download-pdf") onPrint();
           else if (action === "help") onToggleHelp();
           else onStudioAction(action);
         }}
@@ -687,7 +754,7 @@ function LandscapeDraftingToolbar({
                 <span>Sheet size</span>
                 <select
                   value={sheetSize}
-                  onChange={(event) => onSheetSizeChange(event.target.value)}
+                  onChange={(event) => onSheetSizeChange(event.target.value as LandscapePaperSize)}
                 >
                   <option value="tabloid">Tabloid, 17 × 11</option>
                   <option value="super-b">Super B, 19 × 13</option>
@@ -787,7 +854,7 @@ function LandscapeSheetBar({
       )}
       <button type="button" disabled={atShotCap} onClick={onAdd}>
         <Plus aria-hidden="true" />
-        Add aerial
+        Add sheet
       </button>
       <button type="button" disabled={!shots.length || atShotCap} onClick={onDuplicate}>
         <Copy aria-hidden="true" />
@@ -801,9 +868,26 @@ function LandscapeSheetBar({
   );
 }
 
-function LandscapeLiveLegend({ rows }: { rows: LandscapeFixtureScheduleRow[] }) {
+function LandscapeLiveLegend({
+  rows,
+  position,
+  scale,
+}: {
+  rows: LandscapeFixtureScheduleRow[];
+  position: { x: number; y: number };
+  scale: number;
+}) {
   return (
-    <div className="ll-fixture-legend ll-live-legend" aria-label="Fixture legend">
+    <div
+      className="ll-fixture-legend ll-live-legend"
+      aria-label="Fixture legend"
+      style={{
+        left: position.x,
+        bottom: position.y,
+        transform: `scale(${scale})`,
+        transformOrigin: "bottom left",
+      }}
+    >
       <div className="ll-legend-title">
         <span>Fixture legend</span>
         <span>Qty</span>
@@ -1380,7 +1464,10 @@ function LandscapeProposalPanel({
 
         <fieldset className="ll-proposal-fieldset ll-additional-lines">
           <legend>Additional line items</legend>
-          <p>Add job-specific work or materials. Each completed line is included in every package total.</p>
+          <p>
+            Add job-specific work or materials. Each completed line is included in every package
+            total.
+          </p>
           <div className="ll-additional-line-list">
             {additionalLineItems.map((line, index) => (
               <div className="ll-additional-line" key={line.id}>
@@ -1631,9 +1718,6 @@ function LandscapeProposalPanel({
               >
                 Text proposal
               </button>
-              <button className="est-btn" type="button" onClick={() => window.print()}>
-                Print / PDF
-              </button>
             </div>
             {deliveryStatus ? <p role="status">{deliveryStatus}</p> : null}
           </div>
@@ -1688,7 +1772,6 @@ function LandscapeWorkspacePanel({
   preconState,
   contractAmount,
   onPreconChange,
-  onExportSupplierCsv,
   onUpload,
 }: {
   tab: Exclude<LandscapeWorkspaceTab, "drawing">;
@@ -1729,7 +1812,6 @@ function LandscapeWorkspacePanel({
   preconState: LandscapePreconState;
   contractAmount: number | null;
   onPreconChange: (state: LandscapePreconState) => void;
-  onExportSupplierCsv: () => void;
   onUpload: () => void;
 }) {
   const fixtureCount = rows.reduce(
@@ -1783,17 +1865,6 @@ function LandscapeWorkspacePanel({
                   ? `${supplierRows.length} supplier lines`
                   : `${fixtureCount} fixtures`}
               </strong>
-              {tab === "bom" ? (
-                <button
-                  className="est-btn"
-                  type="button"
-                  disabled={!supplierRows.length}
-                  onClick={onExportSupplierCsv}
-                >
-                  <FileDown aria-hidden="true" />
-                  Supplier CSV
-                </button>
-              ) : null}
             </div>
           </header>
           {(tab === "schedule" ? scheduleRows : rows).length ? (
@@ -1925,120 +1996,214 @@ export function LightDesigner({
   const landscapeProjectName = landscapeProject?.projectName ?? "Untitled lighting project";
   const landscapeContactName = landscapeProject?.contactName ?? "Not selected";
   const landscapeOnly = focus === "landscape";
-  const [localLandscapeTab, setLocalLandscapeTab] = useState<LandscapeWorkspaceTab>("drawing");
+  const initialLandscapeSettings = projectInitialDraft?.settings ?? defaultLandscapeSettings();
+  const initialLandscapeProposal = projectInitialDraft?.proposal ?? defaultLandscapeProposal();
+  const [localLandscapeTab, setLocalLandscapeTab] = useState<LandscapeWorkspaceTab>(
+    projectInitialDraft?.activeWorkflowTab ?? "drawing",
+  );
   const landscapeTab = landscapeProject?.activeWorkflowTab ?? localLandscapeTab;
   const setLandscapeTab = (tab: LandscapeWorkspaceTab) => {
     setLocalLandscapeTab(tab);
     landscapeProject?.onActiveWorkflowTabChange?.(tab);
   };
   const [landscapeToolsOpen, setLandscapeToolsOpen] = useState(false);
-  const [landscapeLegendOpen, setLandscapeLegendOpen] = useState(true);
+  const [landscapeLegendOpen, setLandscapeLegendOpen] = useState(
+    initialLandscapeSettings.legend.visible,
+  );
   const [landscapeHelpOpen, setLandscapeHelpOpen] = useState(false);
-  const [landscapeSheetSize, setLandscapeSheetSize] = useState("tabloid");
-  const [fixtureNumbersVisible, setFixtureNumbersVisible] = useState(true);
-  const [measurementsVisible, setMeasurementsVisible] = useState(true);
-  const [halosVisible, setHalosVisible] = useState(true);
+  const [landscapeSheetSize, setLandscapeSheetSize] = useState<LandscapePaperSize>(
+    initialLandscapeSettings.paperSize,
+  );
+  const [landscapePlanFit, setLandscapePlanFit] = useState<LandscapePlanFit>(
+    initialLandscapeSettings.planFit,
+  );
+  const [landscapePlanOpacity, setLandscapePlanOpacity] = useState(
+    initialLandscapeSettings.planOpacity,
+  );
+  const [landscapeLegendPosition, setLandscapeLegendPosition] = useState(
+    initialLandscapeSettings.legend.position,
+  );
+  const [landscapeLegendScale, setLandscapeLegendScale] = useState(
+    initialLandscapeSettings.legend.scale,
+  );
+  const [landscapeSourceVoltage, setLandscapeSourceVoltage] = useState(
+    initialLandscapeSettings.sourceVoltage,
+  );
+  const [fixtureNumbersVisible, setFixtureNumbersVisible] = useState(
+    initialLandscapeSettings.fixtureNumbersVisible,
+  );
+  const [measurementsVisible, setMeasurementsVisible] = useState(
+    initialLandscapeSettings.measurementsVisible,
+  );
+  const [halosVisible, setHalosVisible] = useState(initialLandscapeSettings.halosVisible);
   const [studioNotice, setStudioNotice] = useState<string | null>(null);
+  const [newFixtureMarkerColor, setNewFixtureMarkerColor] = useState<string>(
+    DEFAULT_FIXTURE_MARKER_COLOR,
+  );
   const [planImageRequestToken, setPlanImageRequestToken] = useState(0);
   const [preconState, setPreconState] = useState<LandscapePreconState>(
-    () => projectInitialDraft?.precon ?? { responses: [], leadInstaller: "", notes: "" },
+    () => projectInitialDraft?.precon ?? defaultLandscapePrecon(),
   );
 
   const handleStudioAction = (action: DrawingStudioAction) => {
-    if (action === "fixture-numbers") setFixtureNumbersVisible((value) => !value);
-    else if (action === "measurements-visible") setMeasurementsVisible((value) => !value);
-    else if (action === "legend-visible") setLandscapeLegendOpen((value) => !value);
-    else if (action === "halos-visible") setHalosVisible((value) => !value);
-    else if (action === "import-project") {
-      projectImportRef.current?.click();
-    } else if (action === "export-project") {
-      const draft = createLandscapeDraft(
-        liveShots,
-        activeShot?.id ?? null,
-        new Date().toISOString(),
-        {
-          selectedTierKey: selectedLandscapeTierKey,
-          selectedCarePlanKey: selectedLandscapeCarePlanKey,
-          additionalLineItems: landscapeAdditionalLineItems,
-        },
-      );
-      const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
-      const href = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = href;
-      link.download = `${landscapeProjectName.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "landscape-project"}.tribunal.json`;
-      link.click();
-      URL.revokeObjectURL(href);
-      setStudioNotice("Editable Tribunal project downloaded.");
-    } else if (action === "fullscreen") {
-      const element = document.querySelector<HTMLElement>(".est-landscape-builder");
-      if (document.fullscreenElement) void document.exitFullscreen();
-      else if (element?.requestFullscreen) void element.requestFullscreen();
-    } else if (action === "clear-design") {
-      if (window.confirm("Clear all fixtures and wire runs on this sheet?")) {
-        dispatch({ type: "RESET", design: { ...state.design, runs: [], items: [] } });
-      }
-    } else if (action === "clear-symbols") {
-      dispatch({ type: "CLEAR_SYMBOLS" });
-    } else if (action === "clear-wires") {
-      dispatch({ type: "RESET", design: { ...state.design, runs: [] } });
-    } else if (action === "clear-arrows") {
-      dispatch({ type: "RESET", design: { ...state.design, arrows: [] } });
-    } else if (action === "automatic-design") {
-      setStudioNotice(
-        "Automatic design preview needs a selected price-book fixture and stays undoable.",
-      );
-    } else if (action === "fit-cover" || action === "fit-contain" || action === "plan-fade") {
-      setStudioNotice("Plan display preference saved for this project.");
-    } else if (action === "measure") {
-      dispatch({
-        type: "ADD_MEASUREMENT",
-        measurement: {
-          id: nextId("measurement"),
-          a: { x: 80, y: 80 },
-          b: { x: 260, y: 80 },
-          label: "Measurement",
-          visible: true,
-        },
-      });
-      setStudioNotice("Measurement added. Use undo to remove it.");
-    } else if (action === "highlight") {
-      if (state.tool.type === "highlight") {
+    switch (action) {
+      case "place-aerial":
+        fileRef.current?.click();
+        return;
+      case "select":
         dispatch({ type: "SET_TOOL", tool: { type: "select" } });
-        setStudioNotice("Highlight mode closed.");
-      } else {
-        dispatch({ type: "SET_TOOL", tool: { type: "highlight" } });
-        setStudioNotice("Highlight mode on. Drag across the plan to mark an area.");
+        return;
+      case "undo":
+        dispatch({ type: "UNDO" });
+        return;
+      case "wire":
+        return;
+      case "highlight":
+        if (state.tool.type === "highlight") {
+          dispatch({ type: "SET_TOOL", tool: { type: "select" } });
+          setStudioNotice("Highlight mode closed.");
+        } else {
+          dispatch({ type: "SET_TOOL", tool: { type: "highlight" } });
+          setStudioNotice("Highlight mode on. Drag across the plan to mark an area.");
+        }
+        return;
+      case "fixture-numbers":
+        setFixtureNumbersVisible((value) => !value);
+        return;
+      case "set-scale":
+        dispatch({ type: "SET_TOOL", tool: { type: "calibrate" } });
+        return;
+      case "measurements-visible":
+        setMeasurementsVisible((value) => !value);
+        return;
+      case "fit-contain":
+        setLandscapePlanFit("contain");
+        return;
+      case "fit-cover":
+        setLandscapePlanFit("cover");
+        return;
+      case "opacity-25":
+        setLandscapePlanOpacity(0.25);
+        return;
+      case "opacity-50":
+        setLandscapePlanOpacity(0.5);
+        return;
+      case "opacity-75":
+        setLandscapePlanOpacity(0.75);
+        return;
+      case "opacity-100":
+        setLandscapePlanOpacity(1);
+        return;
+      case "clear-design":
+        if (window.confirm("Clear all fixtures and wire routes on this sheet?")) {
+          dispatch({ type: "CLEAR_DESIGN" });
+        }
+        return;
+      case "clear-symbols":
+        if (
+          window.confirm("Clear all highlights, measurements, arrows, and notes on this sheet?")
+        ) {
+          dispatch({ type: "CLEAR_SYMBOLS" });
+        }
+        return;
+      case "add-photo":
+        setPlanImageRequestToken((token) => token + 1);
+        setStudioNotice("Choose a supplemental detail photo to pin onto this drawing sheet.");
+        return;
+      case "clear-wires":
+        if (window.confirm("Clear every wire route on this sheet?")) {
+          dispatch({ type: "RESET", design: { ...state.design, runs: [] } });
+        }
+        return;
+      case "source-voltage-12":
+        setLandscapeSourceVoltage(12);
+        return;
+      case "source-voltage-13":
+        setLandscapeSourceVoltage(13);
+        return;
+      case "source-voltage-15":
+        setLandscapeSourceVoltage(15);
+        return;
+      case "legend-visible":
+        setLandscapeLegendOpen((value) => !value);
+        return;
+      case "legend-left":
+        setLandscapeLegendPosition((position) => ({
+          ...position,
+          x: Math.max(0, position.x - 24),
+        }));
+        return;
+      case "legend-right":
+        setLandscapeLegendPosition((position) => ({ ...position, x: position.x + 24 }));
+        return;
+      case "legend-up":
+        setLandscapeLegendPosition((position) => ({ ...position, y: position.y + 24 }));
+        return;
+      case "legend-down":
+        setLandscapeLegendPosition((position) => ({
+          ...position,
+          y: Math.max(0, position.y - 24),
+        }));
+        return;
+      case "legend-smaller":
+        setLandscapeLegendScale((scale) => Math.max(0.6, Number((scale - 0.1).toFixed(2))));
+        return;
+      case "legend-larger":
+        setLandscapeLegendScale((scale) => Math.min(1.6, Number((scale + 0.1).toFixed(2))));
+        return;
+      case "recount":
+        setStudioNotice(
+          `${fixtureScheduleRows.length} fixture${fixtureScheduleRows.length === 1 ? "" : "s"} recounted across all sheets.`,
+        );
+        return;
+      case "halos-visible":
+        setHalosVisible((value) => !value);
+        return;
+      case "import-project":
+        projectImportRef.current?.click();
+        return;
+      case "export-project": {
+        const draft = createLandscapeDraft(
+          liveShots,
+          activeShot?.id ?? null,
+          new Date().toISOString(),
+          undefined,
+          landscapeLiveState,
+        );
+        const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = href;
+        link.download = `${landscapeProjectName.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "landscape-project"}.tribunal.json`;
+        link.click();
+        URL.revokeObjectURL(href);
+        setStudioNotice("Editable Tribunal project downloaded.");
+        return;
       }
-    } else if (action === "add-photo") {
-      setPlanImageRequestToken((token) => token + 1);
-      setStudioNotice("Choose a photo to pin onto this drawing sheet.");
-    } else if (action === "draw-arrow") {
-      dispatch({
-        type: "ADD_ARROW",
-        arrow: { id: nextId("arrow"), a: { x: 80, y: 160 }, b: { x: 260, y: 160 } },
-      });
-      setStudioNotice("Arrow added. Use undo to remove it.");
-    } else if (action.startsWith("add-")) {
-      const annotationType = action.slice(4) as "note" | "line" | "tree" | "revision";
-      dispatch({
-        type: "ADD_ANNOTATION",
-        annotation: {
-          id: nextId("annotation"),
-          type: annotationType,
-          at: { x: 120, y: 120 },
-          end: annotationType === "line" ? { x: 280, y: 120 } : undefined,
-          text: annotationType === "note" ? "New note" : undefined,
-          sizePx: annotationType === "tree" ? 18 : undefined,
-        },
-      });
-      setStudioNotice(`${annotationType} annotation added. Use undo to remove it.`);
-    } else if (action === "recount") {
-      setStudioNotice(
-        `${fixtureScheduleRows.length} fixture${fixtureScheduleRows.length === 1 ? "" : "s"} recounted across all sheets.`,
-      );
-    } else {
-      setStudioNotice("Drawing command selected.");
+      case "fullscreen": {
+        const element = document.querySelector<HTMLElement>(".est-landscape-builder");
+        const fullscreenRequest = document.fullscreenElement
+          ? document.exitFullscreen()
+          : element?.requestFullscreen();
+        void fullscreenRequest?.catch(() =>
+          setStudioNotice("Full screen could not be opened in this browser."),
+        );
+        return;
+      }
+      case "present":
+        setLandscapeTab("proposal");
+        return;
+      case "toggle-preview":
+        dispatch({ type: "SET_DUSK", dusk: dusk > 0 ? 0 : DEFAULT_DUSK });
+        return;
+      case "render":
+        if (photo) setAiOpen(true);
+        return;
+      case "download-pdf":
+        window.print();
+        return;
+      case "help":
+        setLandscapeHelpOpen((value) => !value);
     }
   };
   const [draftReady, setDraftReady] = useState(!landscapeOnly || hosted || serverBacked);
@@ -2046,15 +2211,20 @@ export function LightDesigner({
   const [autosavedAt, setAutosavedAt] = useState<string | null>(null);
   const [proposalPreviews, setProposalPreviews] = useState<Record<string, string>>({});
   const [proposalPreviewsPending, setProposalPreviewsPending] = useState(false);
+  const [landscapeProposalSettings, setLandscapeProposalSettings] =
+    useState<LandscapeProposalSettings>(initialLandscapeProposal);
   const [selectedLandscapeTierKey, setSelectedLandscapeTierKey] = useState<string | null>(
-    () => projectInitialDraft?.proposal?.selectedTierKey ?? null,
+    initialLandscapeProposal.selectedTierKey,
   );
   const [selectedLandscapeCarePlanKey, setSelectedLandscapeCarePlanKey] = useState<string | null>(
-    () => projectInitialDraft?.proposal?.selectedCarePlanKey ?? null,
+    initialLandscapeProposal.selectedCarePlanKey,
   );
   const [landscapeAdditionalLineItems, setLandscapeAdditionalLineItems] = useState<
     LandscapeProposalLineItem[]
->(() => projectInitialDraft?.proposal?.additionalLineItems ?? []);
+  >(initialLandscapeProposal.additionalLineItems ?? []);
+  const [landscapeProcurement, setLandscapeProcurement] = useState<
+    Record<string, LandscapeProcurementState>
+  >(() => projectInitialDraft?.procurement ?? {});
 
   // Every photo the rep has open, in the order they added them. The *active*
   // shot's drawing lives in the editor reducer (that's what the canvas, palette
@@ -2076,6 +2246,23 @@ export function LightDesigner({
     };
   });
   const { design, dusk } = state;
+  const selectedFixture =
+    state.selection?.kind === "item"
+      ? (design.items.find((item) => item.id === state.selection?.id) ?? null)
+      : null;
+  const toolbarMarkerColor = selectedFixture
+    ? (selectedFixture.markerColor ?? null)
+    : newFixtureMarkerColor;
+  const changeToolbarMarkerColor = (color: string) => {
+    setNewFixtureMarkerColor(color);
+    if (selectedFixture) {
+      dispatch({ type: "UPDATE_ITEM", id: selectedFixture.id, patch: { markerColor: color } });
+    }
+  };
+
+  useEffect(() => {
+    if (serverBacked && state.selection) setLandscapeToolsOpen(true);
+  }, [serverBacked, state.selection]);
 
   const activeShot = shots.find((shot) => shot.id === activeShotId) ?? shots[0] ?? null;
   const photo: PhotoInfo | null = activeShot?.photo ?? null;
@@ -2086,14 +2273,54 @@ export function LightDesigner({
     () => shots.map((shot) => (shot.id === activeShot?.id ? { ...shot, design, dusk } : shot)),
     [shots, activeShot?.id, design, dusk],
   );
-  const emittedServerDraftSignatureRef = useRef(
-    landscapeDraftSignature(
-      liveShots,
-      activeShot?.id ?? null,
-      selectedLandscapeTierKey,
-      selectedLandscapeCarePlanKey,
+  const landscapeLiveState = useMemo<LandscapeDraftState>(
+    () => ({
+      activeWorkflowTab: landscapeTab,
+      settings: {
+        paperSize: landscapeSheetSize,
+        planFit: landscapePlanFit,
+        planOpacity: landscapePlanOpacity,
+        legend: {
+          visible: landscapeLegendOpen,
+          position: landscapeLegendPosition,
+          scale: landscapeLegendScale,
+        },
+        halosVisible,
+        fixtureNumbersVisible,
+        measurementsVisible,
+        sourceVoltage: landscapeSourceVoltage,
+      },
+      proposal: {
+        ...landscapeProposalSettings,
+        selectedTierKey: selectedLandscapeTierKey,
+        selectedCarePlanKey: selectedLandscapeCarePlanKey,
+        additionalLineItems: landscapeAdditionalLineItems,
+      },
+      procurement: landscapeProcurement,
+      precon: preconState,
+    }),
+    [
+      fixtureNumbersVisible,
+      halosVisible,
       landscapeAdditionalLineItems,
-    ),
+      landscapeLegendOpen,
+      landscapeLegendPosition,
+      landscapeLegendScale,
+      landscapePlanFit,
+      landscapePlanOpacity,
+      landscapeProcurement,
+      landscapeProposalSettings,
+      landscapeSheetSize,
+      landscapeSourceVoltage,
+      landscapeTab,
+      measurementsVisible,
+      preconState,
+      selectedLandscapeCarePlanKey,
+      selectedLandscapeTierKey,
+    ],
+  );
+  const emittedServerDraftSignatureRef = useRef(
+    landscapeDraftSignature(liveShots, activeShot?.id ?? null, landscapeLiveState),
   );
   const persistedItemCountRef = useRef(
     liveShots.reduce((total, shot) => total + shot.design.items.length, 0),
@@ -2137,16 +2364,41 @@ export function LightDesigner({
       void loadLandscapeDraft(workspaceId)
         .then((draft) => {
           if (cancelled) return;
+          const restoredState = draft
+            ? landscapeStateFromDraft(draft)
+            : {
+                activeWorkflowTab: "drawing" as const,
+                settings: defaultLandscapeSettings(),
+                proposal: defaultLandscapeProposal(),
+                procurement: {},
+                precon: defaultLandscapePrecon(),
+              };
           if (draft?.shots.length) {
-            const first = draft.shots[0];
+            const restoredShot =
+              draft.shots.find((shot) => shot.id === draft.activeShotId) ?? draft.shots[0];
             setShots(draft.shots);
-            setActiveShotId(first.id);
-            dispatch({ type: "RESET", design: first.design });
-            dispatch({ type: "SET_DUSK", dusk: first.dusk });
+            setActiveShotId(restoredShot.id);
+            dispatch({ type: "RESET", design: restoredShot.design });
+            dispatch({ type: "SET_DUSK", dusk: restoredShot.dusk });
             setAutosavedAt(draft.savedAt);
           }
-          setSelectedLandscapeTierKey(draft?.proposal?.selectedTierKey ?? null);
-          setSelectedLandscapeCarePlanKey(draft?.proposal?.selectedCarePlanKey ?? null);
+          setLandscapeTab(restoredState.activeWorkflowTab);
+          setLandscapeSheetSize(restoredState.settings.paperSize);
+          setLandscapePlanFit(restoredState.settings.planFit);
+          setLandscapePlanOpacity(restoredState.settings.planOpacity);
+          setLandscapeLegendOpen(restoredState.settings.legend.visible);
+          setLandscapeLegendPosition(restoredState.settings.legend.position);
+          setLandscapeLegendScale(restoredState.settings.legend.scale);
+          setHalosVisible(restoredState.settings.halosVisible);
+          setFixtureNumbersVisible(restoredState.settings.fixtureNumbersVisible);
+          setMeasurementsVisible(restoredState.settings.measurementsVisible);
+          setLandscapeSourceVoltage(restoredState.settings.sourceVoltage);
+          setLandscapeProposalSettings(restoredState.proposal);
+          setSelectedLandscapeTierKey(restoredState.proposal.selectedTierKey);
+          setSelectedLandscapeCarePlanKey(restoredState.proposal.selectedCarePlanKey);
+          setLandscapeAdditionalLineItems(restoredState.proposal.additionalLineItems ?? []);
+          setLandscapeProcurement(restoredState.procurement);
+          setPreconState(restoredState.precon);
           setAutosaveStatus("saved");
           setDraftReady(true);
         })
@@ -2170,11 +2422,13 @@ export function LightDesigner({
       setAutosaveStatus("saving");
       void saveLandscapeDraft(
         workspaceId,
-        createLandscapeDraft(liveShots, activeShot?.id ?? null, new Date().toISOString(), {
-          selectedTierKey: selectedLandscapeTierKey,
-          selectedCarePlanKey: selectedLandscapeCarePlanKey,
-          additionalLineItems: landscapeAdditionalLineItems,
-        }),
+        createLandscapeDraft(
+          liveShots,
+          activeShot?.id ?? null,
+          new Date().toISOString(),
+          undefined,
+          landscapeLiveState,
+        ),
       )
         .then((draft) => {
           if (cancelled) return;
@@ -2193,11 +2447,9 @@ export function LightDesigner({
     activeShot?.id,
     draftReady,
     hosted,
-    landscapeAdditionalLineItems,
+    landscapeLiveState,
     landscapeOnly,
     liveShots,
-    selectedLandscapeCarePlanKey,
-    selectedLandscapeTierKey,
     serverBacked,
     workspaceId,
   ]);
@@ -2213,12 +2465,11 @@ export function LightDesigner({
       const nextActiveShot =
         projectInitialDraft.shots.find((shot) => shot.id === projectInitialDraft.activeShotId) ??
         projectInitialDraft.shots[0];
+      const restoredState = landscapeStateFromDraft(projectInitialDraft);
       emittedServerDraftSignatureRef.current = landscapeDraftSignature(
         projectInitialDraft.shots,
         nextActiveShot?.id ?? null,
-        projectInitialDraft.proposal?.selectedTierKey ?? null,
-        projectInitialDraft.proposal?.selectedCarePlanKey ?? null,
-        projectInitialDraft.proposal?.additionalLineItems ?? [],
+        restoredState,
       );
       persistedItemCountRef.current = projectInitialDraft.shots.reduce(
         (total, shot) => total + shot.design.items.length,
@@ -2227,9 +2478,23 @@ export function LightDesigner({
       setShots(projectInitialDraft.shots);
       setActiveShotId(nextActiveShot?.id ?? null);
       setProposalPreviews({});
-      setSelectedLandscapeTierKey(projectInitialDraft.proposal?.selectedTierKey ?? null);
-      setSelectedLandscapeCarePlanKey(projectInitialDraft.proposal?.selectedCarePlanKey ?? null);
-      setLandscapeAdditionalLineItems(projectInitialDraft.proposal?.additionalLineItems ?? []);
+      setLandscapeTab(restoredState.activeWorkflowTab);
+      setLandscapeSheetSize(restoredState.settings.paperSize);
+      setLandscapePlanFit(restoredState.settings.planFit);
+      setLandscapePlanOpacity(restoredState.settings.planOpacity);
+      setLandscapeLegendOpen(restoredState.settings.legend.visible);
+      setLandscapeLegendPosition(restoredState.settings.legend.position);
+      setLandscapeLegendScale(restoredState.settings.legend.scale);
+      setHalosVisible(restoredState.settings.halosVisible);
+      setFixtureNumbersVisible(restoredState.settings.fixtureNumbersVisible);
+      setMeasurementsVisible(restoredState.settings.measurementsVisible);
+      setLandscapeSourceVoltage(restoredState.settings.sourceVoltage);
+      setLandscapeProposalSettings(restoredState.proposal);
+      setSelectedLandscapeTierKey(restoredState.proposal.selectedTierKey);
+      setSelectedLandscapeCarePlanKey(restoredState.proposal.selectedCarePlanKey);
+      setLandscapeAdditionalLineItems(restoredState.proposal.additionalLineItems ?? []);
+      setLandscapeProcurement(restoredState.procurement);
+      setPreconState(restoredState.precon);
       dispatch({
         type: "RESET",
         design: nextActiveShot?.design ?? EMPTY_DESIGN,
@@ -2255,31 +2520,25 @@ export function LightDesigner({
       return;
     }
     const nextActiveShotId = activeShot?.id ?? null;
-    const signature = landscapeDraftSignature(
-      liveShots,
-      nextActiveShotId,
-      selectedLandscapeTierKey,
-      selectedLandscapeCarePlanKey,
-      landscapeAdditionalLineItems,
-    );
+    const signature = landscapeDraftSignature(liveShots, nextActiveShotId, landscapeLiveState);
     emittedServerDraftSignatureRef.current = signature;
     emitProjectDraft(
-      createLandscapeDraft(liveShots, nextActiveShotId, new Date().toISOString(), {
-        selectedTierKey: selectedLandscapeTierKey,
-        selectedCarePlanKey: selectedLandscapeCarePlanKey,
-        additionalLineItems: landscapeAdditionalLineItems,
-      }),
+      createLandscapeDraft(
+        liveShots,
+        nextActiveShotId,
+        new Date().toISOString(),
+        undefined,
+        landscapeLiveState,
+      ),
       { immediate: true },
     );
   }, [
     activeShot?.id,
     draftReady,
     emitProjectDraft,
-    landscapeAdditionalLineItems,
+    landscapeLiveState,
     landscapeOnly,
     liveShots,
-    selectedLandscapeCarePlanKey,
-    selectedLandscapeTierKey,
     serverBacked,
   ]);
 
@@ -2291,23 +2550,19 @@ export function LightDesigner({
       return;
     }
     const nextActiveShotId = activeShot?.id ?? null;
-    const signature = landscapeDraftSignature(
-      liveShots,
-      nextActiveShotId,
-      selectedLandscapeTierKey,
-      selectedLandscapeCarePlanKey,
-      landscapeAdditionalLineItems,
-    );
+    const signature = landscapeDraftSignature(liveShots, nextActiveShotId, landscapeLiveState);
     if (signature === emittedServerDraftSignatureRef.current) return;
 
     const timer = window.setTimeout(() => {
       emittedServerDraftSignatureRef.current = signature;
       emitProjectDraft(
-        createLandscapeDraft(liveShots, nextActiveShotId, new Date().toISOString(), {
-          selectedTierKey: selectedLandscapeTierKey,
-          selectedCarePlanKey: selectedLandscapeCarePlanKey,
-          additionalLineItems: landscapeAdditionalLineItems,
-        }),
+        createLandscapeDraft(
+          liveShots,
+          nextActiveShotId,
+          new Date().toISOString(),
+          undefined,
+          landscapeLiveState,
+        ),
       );
     }, 600);
     return () => window.clearTimeout(timer);
@@ -2315,11 +2570,9 @@ export function LightDesigner({
     activeShot?.id,
     draftReady,
     emitProjectDraft,
-    landscapeAdditionalLineItems,
+    landscapeLiveState,
     landscapeOnly,
     liveShots,
-    selectedLandscapeCarePlanKey,
-    selectedLandscapeTierKey,
     serverBacked,
   ]);
 
@@ -2584,7 +2837,7 @@ export function LightDesigner({
             }`,
             lengthFeet: scale.calibrated ? polylineLength(run.points) * scale.ftPerPx : null,
             wireGauge: run.wireGauge ?? 12,
-            sourceVoltage: run.sourceVoltage ?? 12,
+            sourceVoltage: run.sourceVoltage ?? landscapeSourceVoltage,
             transformerAssigned,
             fixtures,
           },
@@ -2592,7 +2845,7 @@ export function LightDesigner({
       });
     });
     return calculateLandscapeCircuits(circuitInputs);
-  }, [liveShots, productById, fixtureResolution]);
+  }, [fixtureResolution, landscapeSourceVoltage, liveShots, productById]);
   const selectedTierWireItems = useMemo(
     () =>
       new Map<10 | 12, CatalogItemResponse | null>([
@@ -3250,11 +3503,63 @@ export function LightDesigner({
     });
   };
 
+  const drawingPaperDimensions = {
+    tabloid: { width: 1240, height: 802 },
+    "super-b": { width: 1240, height: 849 },
+    letter: { width: 1080, height: 835 },
+    "arch-c": { width: 1280, height: 960 },
+    "arch-d": { width: 1280, height: 853 },
+    "ansi-d": { width: 1280, height: 828 },
+  }[landscapeSheetSize] ?? { width: 1240, height: 802 };
+  const supportingDocumentLabel =
+    LANDSCAPE_WORKSPACE_TABS.find((tab) => tab.key === landscapeTab)?.label ?? "Project";
+  const supportingDocumentActions =
+    landscapeTab === "drawing" ? null : (
+      <>
+        {landscapeTab === "bom" ? (
+          <>
+            <DocumentActionButton onClick={() => handleStudioAction("recount")}>
+              <RefreshCcw className="size-3.5" aria-hidden="true" />
+              Recount
+            </DocumentActionButton>
+            <DocumentActionButton
+              disabled={!supplierRows.length}
+              title={
+                supplierRows.length
+                  ? "Download supplier bill of materials as CSV"
+                  : "Add fixtures before exporting a supplier CSV."
+              }
+              onClick={() =>
+                downloadSupplierCsv(supplierRows, `${landscapeProjectName}-supplier-bom.csv`)
+              }
+            >
+              <FileDown className="size-3.5" aria-hidden="true" />
+              CSV
+            </DocumentActionButton>
+          </>
+        ) : null}
+        {landscapeTab !== "schedule" ? (
+          <DocumentActionButton
+            aria-label="Save active sheet as PDF using the print dialog"
+            title="Open the print dialog to save this sheet as PDF"
+            onClick={() => window.print()}
+          >
+            <FileDown className="size-3.5" aria-hidden="true" />
+            PDF
+          </DocumentActionButton>
+        ) : null}
+        <DocumentActionButton onClick={() => window.print()}>
+          <Printer className="size-3.5" aria-hidden="true" />
+          Print
+        </DocumentActionButton>
+      </>
+    );
+
   return (
     <div className={`cmp-view est-app${landscapeOnly ? " est-landscape-builder" : ""}`}>
-      <div className={`est-topbar${serverBacked ? " ll-server-actionbar" : ""}`}>
-        {landscapeOnly ? (
-          !serverBacked ? (
+      {!serverBacked ? (
+        <div className="est-topbar">
+          {landscapeOnly ? (
             <div className="ll-project-identity">
               <Link href="/landscape-lighting">
                 <ArrowLeft aria-hidden="true" />
@@ -3266,190 +3571,208 @@ export function LightDesigner({
                 <small>{workspaceName}</small>
               </span>
             </div>
-          ) : null
-        ) : (
-          <div className="cmp-brand">Light Designer</div>
-        )}
-        <div className="est-topbar-actions">
-          {landscapeOnly && !hosted && !serverBacked ? (
-            <div
-              className={`ll-autosave-status ${autosaveStatus}`}
-              role="status"
-              title="Drafts are saved automatically in this browser"
-            >
-              {autosaveStatus === "error" ? (
-                <TriangleAlert aria-hidden="true" />
-              ) : autosaveStatus === "saved" ? (
-                <CheckCircle2 aria-hidden="true" />
-              ) : (
-                <Circle aria-hidden="true" />
-              )}
-              {autosaveLabel}
-            </div>
-          ) : null}
-          {!landscapeOnly || photo ? (
-            <button
-              className="est-btn"
-              type="button"
-              disabled={atShotCap}
-              title={
-                atShotCap
-                  ? `Up to ${MAX_SHOTS} ${landscapeOnly ? "aerial plans" : "photos"} in one design`
-                  : landscapeOnly
-                    ? "Add another top-down aerial plan. Existing drawings stay in place."
-                    : "Add another photo of this job. Existing drawings stay in place."
-              }
-              onClick={() => fileRef.current?.click()}
-            >
-              <ImagePlus aria-hidden="true" />
-              {landscapeOnly
-                ? photo
-                  ? "Add aerial"
-                  : "Upload aerial plan"
-                : photo
-                  ? "Add photo"
-                  : "Upload house photo"}
-            </button>
-          ) : null}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            aria-label={landscapeOnly ? "Upload aerial plan" : "Upload house photo"}
-            hidden
-            onChange={onFile}
-          />
-          <input
-            ref={projectImportRef}
-            type="file"
-            accept="application/json,.json"
-            hidden
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (!file) return;
-              void file.text().then((text) => {
-                try {
-                  const imported = normalizeLandscapeDocument(JSON.parse(text));
-                  if (!imported) throw new Error("Invalid project file");
-                  const first =
-                    imported.shots.find((shot) => shot.id === imported.activeShotId) ??
-                    imported.shots[0];
-                  setShots(imported.shots);
-                  setActiveShotId(first?.id ?? null);
-                  dispatch({ type: "RESET", design: first?.design ?? EMPTY_DESIGN });
-                  setStudioNotice("Editable Tribunal project imported.");
-                } catch {
-                  setStudioNotice(
-                    "Project import failed. Choose a valid Tribunal version 2 JSON file.",
-                  );
-                }
-              });
-              event.currentTarget.value = "";
-            }}
-          />
-          {photo && !landscapeOnly ? (
-            <div className="est-service-toggle" role="group" aria-label="Services in this design">
-              {SERVICES.map((spec) => (
-                <button
-                  key={spec.key}
-                  type="button"
-                  className={sells(spec.key) ? "active" : ""}
-                  aria-pressed={sells(spec.key)}
-                  title={spec.summary}
-                  onClick={() => toggleService(spec.key)}
-                >
-                  {spec.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {photo && !hosted && !landscapeOnly ? (
-            <div className="est-mode-toggle" role="group" aria-label="View mode">
-              <button
-                type="button"
-                className={viewMode === "rep" ? "active" : ""}
-                aria-pressed={viewMode === "rep"}
-                onClick={() => setViewMode("rep")}
+          ) : (
+            <div className="cmp-brand">Light Designer</div>
+          )}
+          <div className="est-topbar-actions">
+            {landscapeOnly && !hosted ? (
+              <div
+                className={`ll-autosave-status ${autosaveStatus}`}
+                role="status"
+                title="Drafts are saved automatically in this browser"
               >
-                Rep view
-              </button>
-              <button
-                type="button"
-                className={viewMode === "client" ? "active" : ""}
-                aria-pressed={viewMode === "client"}
-                onClick={() => setViewMode("client")}
-              >
-                Client preview
-              </button>
-            </div>
-          ) : null}
-          {photo ? (
-            <button
-              className="est-btn"
-              type="button"
-              aria-label={serverBacked ? "AI render" : undefined}
-              disabled={!activeDesignHas}
-              title={
-                activeDesignHas
-                  ? undefined
-                  : landscapeOnly
-                    ? "Place at least one fixture before creating the aerial night render."
-                    : "Place at least one fixture before creating a photorealistic render."
-              }
-              onClick={() => setAiOpen(true)}
-            >
-              <Sparkles aria-hidden="true" />
-              {serverBacked ? "Render" : "AI render"}
-            </button>
-          ) : null}
-          {landscapeOnly && !hosted ? (
-            <button
-              className="est-btn primary"
-              type="button"
-              aria-label="Open proposal pricing"
-              onClick={() => setLandscapeTab("proposal")}
-            >
-              Quote
-            </button>
-          ) : null}
-          {proposal ? (
-            <>
-              <button
-                className="est-btn primary"
-                type="button"
-                disabled={!designHas || savingProposal}
-                title={
-                  designHas
-                    ? `Save ${drawnShots.length} design${drawnShots.length === 1 ? "" : "s"} onto the proposal`
-                    : landscapeOnly
-                      ? "Add an aerial plan and draw the design first"
-                      : "Add a photo and draw the design first"
-                }
-                onClick={() => void saveToProposal()}
-              >
-                {savingProposal
-                  ? "Saving…"
-                  : drawnShots.length > 1
-                    ? `Save ${drawnShots.length} designs to proposal`
-                    : "Save to proposal"}
-              </button>
+                {autosaveStatus === "error" ? (
+                  <TriangleAlert aria-hidden="true" />
+                ) : autosaveStatus === "saved" ? (
+                  <CheckCircle2 aria-hidden="true" />
+                ) : (
+                  <Circle aria-hidden="true" />
+                )}
+                {autosaveLabel}
+              </div>
+            ) : null}
+            {!landscapeOnly || photo ? (
               <button
                 className="est-btn"
                 type="button"
-                // Hand the drawings over on the way out so stepping back to the
-                // quote and returning resumes every photo mid-design, saved or
-                // not — the editor unmounts, and the host is where they live.
-                onClick={() => {
-                  proposal.onShotsChange(liveShots);
-                  proposal.onClose();
-                }}
+                disabled={atShotCap}
+                title={
+                  atShotCap
+                    ? `Up to ${MAX_SHOTS} ${landscapeOnly ? "aerial plans" : "photos"} in one design`
+                    : landscapeOnly
+                      ? "Add another top-down aerial plan. Existing drawings stay in place."
+                      : "Add another photo of this job. Existing drawings stay in place."
+                }
+                onClick={() => fileRef.current?.click()}
               >
-                Back to quote
+                <ImagePlus aria-hidden="true" />
+                {landscapeOnly
+                  ? photo
+                    ? "Add aerial"
+                    : "Upload aerial plan"
+                  : photo
+                    ? "Add photo"
+                    : "Upload house photo"}
               </button>
-            </>
-          ) : null}
+            ) : null}
+            {photo && !landscapeOnly ? (
+              <div className="est-service-toggle" role="group" aria-label="Services in this design">
+                {SERVICES.map((spec) => (
+                  <button
+                    key={spec.key}
+                    type="button"
+                    className={sells(spec.key) ? "active" : ""}
+                    aria-pressed={sells(spec.key)}
+                    title={spec.summary}
+                    onClick={() => toggleService(spec.key)}
+                  >
+                    {spec.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {photo && !hosted && !landscapeOnly ? (
+              <div className="est-mode-toggle" role="group" aria-label="View mode">
+                <button
+                  type="button"
+                  className={viewMode === "rep" ? "active" : ""}
+                  aria-pressed={viewMode === "rep"}
+                  onClick={() => setViewMode("rep")}
+                >
+                  Rep view
+                </button>
+                <button
+                  type="button"
+                  className={viewMode === "client" ? "active" : ""}
+                  aria-pressed={viewMode === "client"}
+                  onClick={() => setViewMode("client")}
+                >
+                  Client preview
+                </button>
+              </div>
+            ) : null}
+            {photo ? (
+              <button
+                className="est-btn"
+                type="button"
+                disabled={!activeDesignHas}
+                title={
+                  activeDesignHas
+                    ? undefined
+                    : landscapeOnly
+                      ? "Place at least one fixture before creating the aerial night render."
+                      : "Place at least one fixture before creating a photorealistic render."
+                }
+                onClick={() => setAiOpen(true)}
+              >
+                <Sparkles aria-hidden="true" />
+                AI render
+              </button>
+            ) : null}
+            {landscapeOnly && !hosted ? (
+              <button
+                className="est-btn primary"
+                type="button"
+                aria-label="Open proposal pricing"
+                onClick={() => setLandscapeTab("proposal")}
+              >
+                Quote
+              </button>
+            ) : null}
+            {proposal ? (
+              <>
+                <button
+                  className="est-btn primary"
+                  type="button"
+                  disabled={!designHas || savingProposal}
+                  title={
+                    designHas
+                      ? `Save ${drawnShots.length} design${drawnShots.length === 1 ? "" : "s"} onto the proposal`
+                      : landscapeOnly
+                        ? "Add an aerial plan and draw the design first"
+                        : "Add a photo and draw the design first"
+                  }
+                  onClick={() => void saveToProposal()}
+                >
+                  {savingProposal
+                    ? "Saving…"
+                    : drawnShots.length > 1
+                      ? `Save ${drawnShots.length} designs to proposal`
+                      : "Save to proposal"}
+                </button>
+                <button
+                  className="est-btn"
+                  type="button"
+                  // Hand the drawings over on the way out so stepping back to the
+                  // quote and returning resumes every photo mid-design, saved or
+                  // not — the editor unmounts, and the host is where they live.
+                  onClick={() => {
+                    proposal.onShotsChange(liveShots);
+                    proposal.onClose();
+                  }}
+                >
+                  Back to quote
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        aria-label={landscapeOnly ? "Upload aerial plan" : "Upload house photo"}
+        hidden
+        onChange={onFile}
+      />
+      <input
+        ref={projectImportRef}
+        type="file"
+        accept="application/json,.json"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          void file.text().then((text) => {
+            try {
+              const imported = normalizeLandscapeDocument(JSON.parse(text));
+              if (!imported) throw new Error("Invalid project file");
+              const first =
+                imported.shots.find((shot) => shot.id === imported.activeShotId) ??
+                imported.shots[0];
+              const restoredState = landscapeStateFromDraft(imported);
+              setShots(imported.shots);
+              setActiveShotId(first?.id ?? null);
+              setLandscapeTab(restoredState.activeWorkflowTab);
+              setLandscapeSheetSize(restoredState.settings.paperSize);
+              setLandscapePlanFit(restoredState.settings.planFit);
+              setLandscapePlanOpacity(restoredState.settings.planOpacity);
+              setLandscapeLegendOpen(restoredState.settings.legend.visible);
+              setLandscapeLegendPosition(restoredState.settings.legend.position);
+              setLandscapeLegendScale(restoredState.settings.legend.scale);
+              setHalosVisible(restoredState.settings.halosVisible);
+              setFixtureNumbersVisible(restoredState.settings.fixtureNumbersVisible);
+              setMeasurementsVisible(restoredState.settings.measurementsVisible);
+              setLandscapeSourceVoltage(restoredState.settings.sourceVoltage);
+              setLandscapeProposalSettings(restoredState.proposal);
+              setSelectedLandscapeTierKey(restoredState.proposal.selectedTierKey);
+              setSelectedLandscapeCarePlanKey(restoredState.proposal.selectedCarePlanKey);
+              setLandscapeAdditionalLineItems(restoredState.proposal.additionalLineItems ?? []);
+              setLandscapeProcurement(restoredState.procurement);
+              setPreconState(restoredState.precon);
+              dispatch({ type: "RESET", design: first?.design ?? EMPTY_DESIGN });
+              if (first) dispatch({ type: "SET_DUSK", dusk: first.dusk });
+              setStudioNotice("Editable Tribunal project imported.");
+            } catch {
+              setStudioNotice(
+                "Project import failed. Choose a valid Tribunal version 2 JSON file.",
+              );
+            }
+          });
+          event.currentTarget.value = "";
+        }}
+      />
 
       {landscapeOnly && !serverBacked ? (
         <LandscapeWorkspaceNav activeTab={landscapeTab} onChange={setLandscapeTab} />
@@ -3460,13 +3783,25 @@ export function LightDesigner({
           <LandscapeDraftingToolbar
             products={products}
             activeTool={state.tool}
+            design={design}
             hasPhoto={Boolean(photo)}
             canUndo={state.past.length > 0}
+            markerColor={toolbarMarkerColor}
+            onMarkerColorChange={changeToolbarMarkerColor}
+            duskPreview={dusk > 0}
+            onTogglePreview={() =>
+              dispatch({ type: "SET_DUSK", dusk: dusk > 0 ? 0 : DEFAULT_DUSK })
+            }
+            planFit={landscapePlanFit}
+            planOpacity={landscapePlanOpacity}
+            legendScale={landscapeLegendScale}
+            sourceVoltage={landscapeSourceVoltage}
             toolsOpen={landscapeToolsOpen}
             legendOpen={landscapeLegendOpen}
             helpOpen={landscapeHelpOpen}
             sheetSize={landscapeSheetSize}
             onSheetSizeChange={setLandscapeSheetSize}
+            onPlaceAerial={() => fileRef.current?.click()}
             onSelect={() => dispatch({ type: "SET_TOOL", tool: { type: "select" } })}
             onSetScale={() => dispatch({ type: "SET_TOOL", tool: { type: "calibrate" } })}
             onPlaceFixture={(product) =>
@@ -3482,6 +3817,7 @@ export function LightDesigner({
             onOpenSchedule={() => setLandscapeTab("schedule")}
             onOpenElectrical={() => setLandscapeTab("electrical")}
             onPresent={() => setLandscapeTab("proposal")}
+            onRender={() => setAiOpen(true)}
             onPrint={() => window.print()}
             studio={serverBacked}
             studioSettings={{
@@ -3492,6 +3828,24 @@ export function LightDesigner({
             }}
             onStudioAction={handleStudioAction}
           />
+          {serverBacked && landscapeHelpOpen ? (
+            <aside className="ll-studio-help" aria-label="Drawing help">
+              <div>
+                <strong>Drawing help</strong>
+                <span>
+                  Select a labeled tool, then activate the aerial where the fixture or route
+                  belongs. Use arrow keys to nudge a selected fixture and Delete to remove it.
+                </span>
+              </div>
+              <button
+                type="button"
+                aria-label="Close drawing help"
+                onClick={() => setLandscapeHelpOpen(false)}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </aside>
+          ) : null}
           {studioNotice ? (
             <div className="sr-only" role="status" aria-live="polite">
               {studioNotice}
@@ -3515,55 +3869,61 @@ export function LightDesigner({
 
       {landscapeOnly && landscapeTab !== "drawing" ? (
         <>
-          <LandscapeWorkspacePanel
-            tab={landscapeTab}
-            shots={liveShots}
-            rows={fixtureScheduleRows}
-            scheduleRows={numberedFixtureScheduleRows}
-            catalogItems={priceBook ?? []}
-            onUpdateSchedule={(itemId, update) => {
-              const next = updateFixtureScheduleSelection(liveShots, itemId, update);
-              setShots(next);
-              const nextActive = next.find((shot) => shot.id === activeShot?.id);
-              if (nextActive) dispatch({ type: "RESET", design: nextActive.design });
-            }}
-            onCopyScheduleType={(itemId) => {
-              const next = copyScheduleSelectionToType(liveShots, itemId);
-              setShots(next);
-              const nextActive = next.find((shot) => shot.id === activeShot?.id);
-              if (nextActive) dispatch({ type: "RESET", design: nextActive.design });
-            }}
-            electricalLoad={electricalLoad}
-            circuitLoads={circuitLoads}
-            previews={proposalPreviews}
-            previewsPending={proposalPreviewsPending}
-            supplierRows={supplierRows}
-            pricingTiers={landscapePricingTiers}
-            proposalDocument={landscapeProposalQuery.data}
-            selectedTierKey={effectiveLandscapeTierKey}
-            selectedCarePlanKey={selectedLandscapeCarePlanKey}
-            wireItems={selectedTierWireItems}
-            additionalLineItems={landscapeAdditionalLineItems}
-            pricingPending={landscapeProposalQuery.isFetching}
-            pricingError={landscapePricingError}
-            onRetryPricing={() => void landscapeProposalQuery.refetch()}
-            onSelectTier={setSelectedLandscapeTierKey}
-            onSelectCarePlan={setSelectedLandscapeCarePlanKey}
-            onAdditionalLineItemsChange={setLandscapeAdditionalLineItems}
-            onCreateQuote={createLandscapeQuote}
-            createQuotePending={landscapeQuoteMutation.isPending}
-            createQuoteError={landscapeCreateQuoteError}
-            createdQuote={currentSavedLandscapeQuote}
-            quoteDisabledReason={landscapeQuoteDisabledReason}
-            onDeliverQuote={(channel) => landscapeDeliveryMutation.mutate(channel)}
-            deliveryPending={landscapeDeliveryMutation.isPending}
-            deliveryStatus={landscapeDeliveryStatus}
-            preconState={preconState}
-            contractAmount={currentSavedLandscapeQuote?.total ?? null}
-            onPreconChange={setPreconState}
-            onExportSupplierCsv={() => downloadSupplierCsv(supplierRows, landscapeProjectName)}
-            onUpload={() => fileRef.current?.click()}
-          />
+          <DocumentViewport
+            label={supportingDocumentLabel}
+            paperWidth={1050}
+            minimumPaperHeight={680}
+            actions={supportingDocumentActions}
+          >
+            <LandscapeWorkspacePanel
+              tab={landscapeTab}
+              shots={liveShots}
+              rows={fixtureScheduleRows}
+              scheduleRows={numberedFixtureScheduleRows}
+              catalogItems={priceBook ?? []}
+              onUpdateSchedule={(itemId, update) => {
+                const next = updateFixtureScheduleSelection(liveShots, itemId, update);
+                setShots(next);
+                const nextActive = next.find((shot) => shot.id === activeShot?.id);
+                if (nextActive) dispatch({ type: "RESET", design: nextActive.design });
+              }}
+              onCopyScheduleType={(itemId) => {
+                const next = copyScheduleSelectionToType(liveShots, itemId);
+                setShots(next);
+                const nextActive = next.find((shot) => shot.id === activeShot?.id);
+                if (nextActive) dispatch({ type: "RESET", design: nextActive.design });
+              }}
+              electricalLoad={electricalLoad}
+              circuitLoads={circuitLoads}
+              previews={proposalPreviews}
+              previewsPending={proposalPreviewsPending}
+              supplierRows={supplierRows}
+              pricingTiers={landscapePricingTiers}
+              proposalDocument={landscapeProposalQuery.data}
+              selectedTierKey={effectiveLandscapeTierKey}
+              selectedCarePlanKey={selectedLandscapeCarePlanKey}
+              wireItems={selectedTierWireItems}
+              additionalLineItems={landscapeAdditionalLineItems}
+              pricingPending={landscapeProposalQuery.isFetching}
+              pricingError={landscapePricingError}
+              onRetryPricing={() => void landscapeProposalQuery.refetch()}
+              onSelectTier={setSelectedLandscapeTierKey}
+              onSelectCarePlan={setSelectedLandscapeCarePlanKey}
+              onAdditionalLineItemsChange={setLandscapeAdditionalLineItems}
+              onCreateQuote={createLandscapeQuote}
+              createQuotePending={landscapeQuoteMutation.isPending}
+              createQuoteError={landscapeCreateQuoteError}
+              createdQuote={currentSavedLandscapeQuote}
+              quoteDisabledReason={landscapeQuoteDisabledReason}
+              onDeliverQuote={(channel) => landscapeDeliveryMutation.mutate(channel)}
+              deliveryPending={landscapeDeliveryMutation.isPending}
+              deliveryStatus={landscapeDeliveryStatus}
+              preconState={preconState}
+              contractAmount={currentSavedLandscapeQuote?.total ?? null}
+              onPreconChange={setPreconState}
+              onUpload={() => fileRef.current?.click()}
+            />
+          </DocumentViewport>
           {closeoutQuote ? (
             <div className="mx-auto mt-4 flex max-w-3xl items-center justify-between gap-4 rounded-xl border bg-card p-4">
               <div>
@@ -3653,39 +4013,57 @@ export function LightDesigner({
           {photo ? (
             <>
               {landscapeOnly ? (
-                <div className={`ll-sheet-stage ll-sheet-size-${landscapeSheetSize}`}>
-                  <div className="ll-live-sheet">
-                    <div className="ll-live-sheet-main">
-                      <LightCanvas
-                        photo={photo}
-                        products={products}
-                        state={state}
-                        dispatch={dispatch}
-                        perspective="aerial"
-                        planImageRequestToken={planImageRequestToken}
-                        onPlanImageRequestHandled={() => setPlanImageRequestToken(0)}
-                      />
-                      {landscapeLegendOpen ? (
-                        <LandscapeLiveLegend rows={fixtureScheduleRows} />
-                      ) : null}
-                    </div>
-                    <LandscapeSheetTitleBlock
-                      fixtureCount={fixtureScheduleRows.reduce(
-                        (sum, row) => sum + (row.id === "transformer" ? 0 : row.count),
-                        0,
-                      )}
-                      calibrated={Boolean(design.calibration)}
-                      sheetNumber={
-                        Math.max(
-                          liveShots.findIndex((shot) => shot.id === activeShot?.id),
+                <div className="ll-drawing-document-shell">
+                  <DocumentViewport
+                    label="Drawing sheet"
+                    paperWidth={drawingPaperDimensions.width}
+                    minimumPaperHeight={drawingPaperDimensions.height}
+                    className={`ll-sheet-size-${landscapeSheetSize}`}
+                  >
+                    <div className="ll-live-sheet">
+                      <div className="ll-live-sheet-main">
+                        <LightCanvas
+                          photo={photo}
+                          products={products}
+                          state={state}
+                          dispatch={dispatch}
+                          perspective="aerial"
+                          placementMarkerColor={newFixtureMarkerColor}
+                          planFit={landscapePlanFit}
+                          planOpacity={landscapePlanOpacity}
+                          fixtureNumbersVisible={fixtureNumbersVisible}
+                          measurementsVisible={measurementsVisible}
+                          halosVisible={halosVisible}
+                          defaultSourceVoltage={landscapeSourceVoltage}
+                          planImageRequestToken={planImageRequestToken}
+                          onPlanImageRequestHandled={() => setPlanImageRequestToken(0)}
+                        />
+                        {landscapeLegendOpen ? (
+                          <LandscapeLiveLegend
+                            rows={fixtureScheduleRows}
+                            position={landscapeLegendPosition}
+                            scale={landscapeLegendScale}
+                          />
+                        ) : null}
+                      </div>
+                      <LandscapeSheetTitleBlock
+                        fixtureCount={fixtureScheduleRows.reduce(
+                          (sum, row) => sum + (row.id === "transformer" ? 0 : row.count),
                           0,
-                        ) + 1
-                      }
-                      workspaceName={workspaceName}
-                      projectName={landscapeProjectName}
-                      contactName={landscapeContactName}
-                    />
-                  </div>
+                        )}
+                        calibrated={Boolean(design.calibration)}
+                        sheetNumber={
+                          Math.max(
+                            liveShots.findIndex((shot) => shot.id === activeShot?.id),
+                            0,
+                          ) + 1
+                        }
+                        workspaceName={workspaceName}
+                        projectName={landscapeProjectName}
+                        contactName={landscapeContactName}
+                      />
+                    </div>
+                  </DocumentViewport>
                   {landscapeToolsOpen ? (
                     <aside className="ll-tool-drawer" aria-label="Fixture and drawing tools">
                       <header>
@@ -3854,9 +4232,7 @@ export function LightDesigner({
                               // record instead of minting a near-duplicate.
                               onSelectContact={(contact) => {
                                 editCustomer(setClientEmail)(contact.email ?? "");
-                                editCustomer(setClientPhone)(
-                                  contact.phone_number ?? "",
-                                );
+                                editCustomer(setClientPhone)(contact.phone_number ?? "");
                               }}
                             />
                             <input

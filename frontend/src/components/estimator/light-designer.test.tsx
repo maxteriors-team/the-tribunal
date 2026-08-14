@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -10,6 +11,11 @@ import type { DesignerProposalHost } from "@/components/estimator/proposal-host"
 import { estimatorApi } from "@/lib/api/estimator";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { designToEstimateInputs } from "@/lib/estimator/design";
+import {
+  defaultLandscapePrecon,
+  defaultLandscapeProposal,
+  defaultLandscapeSettings,
+} from "@/lib/estimator/landscape-document";
 import { loadLandscapeDraft, saveLandscapeDraft } from "@/lib/estimator/landscape-draft";
 import type { LinearFeetEstimateResult } from "@/types/estimate";
 
@@ -35,12 +41,13 @@ vi.mock("@/lib/api/sales-wizard", () => ({
 }));
 
 vi.mock("@/lib/estimator/landscape-draft", () => ({
-  createLandscapeDraft: vi.fn((shots, activeShotId, updatedAt, proposal) => ({
+  createLandscapeDraft: vi.fn((shots, activeShotId, updatedAt, proposal, liveState) => ({
     version: 2,
     activeShotId,
     shots,
     updatedAt: updatedAt ?? "2026-08-11T10:00:00.000Z",
-    ...(proposal ? { proposal } : {}),
+    ...liveState,
+    ...(proposal ? { proposal: { ...liveState?.proposal, ...proposal } } : {}),
   })),
   loadLandscapeDraft: vi.fn(),
   saveLandscapeDraft: vi.fn(),
@@ -262,6 +269,12 @@ function enableService(name: RegExp) {
   fireEvent.click(screen.getByRole("button", { name }));
 }
 
+async function openProposalPreview() {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Present" }));
+  await user.click(await screen.findByRole("menuitem", { name: "Open proposal preview" }));
+}
+
 describe("LightDesigner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -397,7 +410,7 @@ describe("LightDesigner", () => {
     expect(screen.getAllByText("Untitled lighting project")).not.toHaveLength(0);
     expect(screen.getByLabelText("Drawing sheet tools")).toBeInTheDocument();
     expect(screen.getByRole("combobox")).toHaveValue("tabloid");
-    expect(screen.getByRole("button", { name: /Add aerial/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Add sheet/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open proposal pricing" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Build quote/i })).not.toBeInTheDocument();
     expect(
@@ -437,7 +450,7 @@ describe("LightDesigner", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "BOM" }));
     expect(screen.getByRole("heading", { name: "Bill of Materials" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Supplier CSV" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "CSV" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Electrical" }));
     expect(screen.getByRole("heading", { name: "Electrical Plan" })).toBeInTheDocument();
@@ -1224,6 +1237,35 @@ describe("LightDesigner", () => {
           },
         ],
         updatedAt: "2026-08-11T09:00:00.000Z",
+        activeWorkflowTab: "drawing",
+        settings: {
+          ...defaultLandscapeSettings(),
+          paperSize: "arch-c",
+          planFit: "cover",
+          planOpacity: 0.5,
+          legend: { visible: false, position: { x: 72, y: 48 }, scale: 1.2 },
+          halosVisible: false,
+          fixtureNumbersVisible: false,
+          measurementsVisible: false,
+          sourceVoltage: 15,
+        },
+        proposal: {
+          ...defaultLandscapeProposal(),
+          designIntent: "Warm entry sequence",
+          showFixtureDetails: false,
+        },
+        procurement: {
+          "fixture-1": {
+            orderedQuantity: 4,
+            receivedQuantity: 2,
+            supplierNote: "ETA Friday",
+          },
+        },
+        precon: {
+          ...defaultLandscapePrecon(),
+          leadInstaller: "Jordan",
+          notes: "Protect copper roof",
+        },
       },
       onLandscapeDraftChange,
       persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
@@ -1231,24 +1273,51 @@ describe("LightDesigner", () => {
     };
 
     renderEstimator(undefined, "landscape", adapter);
-    expect(await screen.findByRole("slider", { name: "Dusk" })).toHaveValue("40");
-    expect(screen.getAllByRole("button", { name: "Add aerial" })).not.toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Open proposal pricing" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Top-down aerial lighting plan canvas")).toHaveAttribute(
+      "data-viewport-policy",
+      "locked",
+    );
+    expect(screen.getByRole("button", { name: "Replace aerial" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /sheet/i })).toHaveValue("arch-c");
+    expect(screen.getByRole("button", { name: "Fixture #: Off" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Present" })).toBeInTheDocument();
     expect(screen.queryByText("Lighting plan")).not.toBeInTheDocument();
     expect(loadLandscapeDraft).not.toHaveBeenCalled();
     expect(saveLandscapeDraft).not.toHaveBeenCalled();
     expect(onLandscapeDraftChange).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByRole("slider", { name: "Dusk" }), {
-      target: { value: "55" },
-    });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Present" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Show original aerial" }));
     await waitFor(
       () =>
         expect(onLandscapeDraftChange).toHaveBeenCalledWith(
           expect.objectContaining({
             version: 2,
             activeShotId: "server-shot",
-            shots: [expect.objectContaining({ id: "server-shot", dusk: 0.55 })],
+            shots: [expect.objectContaining({ id: "server-shot", dusk: 0 })],
+            activeWorkflowTab: "drawing",
+            settings: expect.objectContaining({
+              paperSize: "arch-c",
+              planFit: "cover",
+              planOpacity: 0.5,
+              halosVisible: false,
+              fixtureNumbersVisible: false,
+              measurementsVisible: false,
+              sourceVoltage: 15,
+              legend: { visible: false, position: { x: 72, y: 48 }, scale: 1.2 },
+            }),
+            proposal: expect.objectContaining({
+              designIntent: "Warm entry sequence",
+              showFixtureDetails: false,
+            }),
+            procurement: expect.objectContaining({
+              "fixture-1": expect.objectContaining({ orderedQuantity: 4, receivedQuantity: 2 }),
+            }),
+            precon: expect.objectContaining({
+              leadInstaller: "Jordan",
+              notes: "Protect copper roof",
+            }),
           }),
         ),
       { timeout: 1_500 },
@@ -1430,7 +1499,7 @@ describe("LightDesigner", () => {
     };
 
     renderEstimator(undefined, "landscape", adapter);
-    fireEvent.click(screen.getByRole("button", { name: "Open proposal pricing" }));
+    await openProposalPreview();
 
     expect(await screen.findByRole("button", { name: /Good.*\$950\.00/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Better.*\$1,330\.00/i })).toBeInTheDocument();
@@ -1520,7 +1589,7 @@ describe("LightDesigner", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Use L-1 as installation sheet" }));
     await waitFor(() => expect(onSelectInstallationShot).toHaveBeenCalledWith("front"));
-    fireEvent.click(screen.getByRole("button", { name: "Open proposal pricing" }));
+    await openProposalPreview();
     expect(await screen.findByText(/Select and save an installation sheet/)).toBeInTheDocument();
   });
 

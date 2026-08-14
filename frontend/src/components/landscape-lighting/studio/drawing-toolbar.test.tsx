@@ -1,102 +1,145 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Circle } from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
 
 import { DrawingToolbar } from "./drawing-toolbar";
 
-/**
- * The menu tests below open a Radix dropdown and click one item at a time, ~24
- * open/close cycles in a row. That lands at 2.5-3.8s alone but drifts past
- * vitest's 5s default when the full suite loads the machine, which reddened CI
- * on a test that was never actually broken. Timed generously so the assertion
- * that fails is a real one.
- */
 const MENU_WALK_TIMEOUT_MS = 30_000;
 
 const renderToolbar = () => {
   const onAction = vi.fn();
   const onPaperSizeChange = vi.fn();
+  const onMarkerColorChange = vi.fn();
+  const onFixtureSelect = vi.fn();
   render(
     <DrawingToolbar
       paperSize="tabloid"
+      hasAerial
+      hasDrawing
+      hasPlanSymbols
       canUndo
-      canRedo={false}
+      canWire
+      canRender
+      duskPreview={false}
+      markerColor="#eb5757"
+      planFit="contain"
+      planOpacity={1}
+      legendScale={1}
+      sourceVoltage={13}
       fixtureNumbersVisible
       measurementsVisible
       legendVisible
       halosVisible
       onPaperSizeChange={onPaperSizeChange}
+      onMarkerColorChange={onMarkerColorChange}
       onAction={onAction}
+      fixtureTools={[
+        {
+          id: "uplight",
+          label: "Uplight",
+          icon: Circle,
+          onSelect: onFixtureSelect,
+        },
+      ]}
     />,
   );
-  return { onAction, onPaperSizeChange };
+  return { onAction, onFixtureSelect, onMarkerColorChange, onPaperSizeChange };
 };
 
 const clickMenuItem = async (menu: string, item: string) => {
   const user = userEvent.setup();
-  const triggers = screen.getAllByRole("button", { name: menu });
-  await user.click(triggers.find((trigger) => trigger.hasAttribute("aria-haspopup")) ?? triggers.at(-1)!);
-  await user.click(
-    await screen.findByRole(item === "Show measurements" || item === "Show legend" || item === "Show light halos" ? "menuitemcheckbox" : item.endsWith("V source") ? "menuitemradio" : "menuitem", { name: item }),
-  );
+  await user.click(screen.getByRole("button", { name: menu }));
+  const candidate =
+    screen.queryByRole("menuitem", { name: item }) ??
+    screen.queryByRole("menuitemcheckbox", { name: item }) ??
+    screen.queryByRole("menuitemradio", { name: item });
+  expect(candidate).not.toBeNull();
+  await user.click(candidate!);
 };
 
 describe("DrawingToolbar", () => {
-  it("exercises every always-visible action and paper size", () => {
-    const { onAction, onPaperSizeChange } = renderToolbar();
-    fireEvent.change(screen.getByLabelText(/paper/i), { target: { value: "arch-d" } });
+  it("keeps the compact primary actions, physical sheet sizes, and sixteen named marker colors", () => {
+    const { onAction, onMarkerColorChange, onPaperSizeChange } = renderToolbar();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /sheet/i }), {
+      target: { value: "arch-d" },
+    });
     expect(onPaperSizeChange).toHaveBeenCalledWith("arch-d");
-    for (const label of ["Select", "Undo", "Wiring", "Highlight", "Numbers"]) {
-      fireEvent.click(screen.getAllByRole("button", { name: label })[0]);
-    }
-    expect(onAction.mock.calls.flat()).toEqual([
-      "select",
-      "undo",
-      "wire",
-      "highlight",
-      "fixture-numbers",
-    ]);
-    expect(screen.getByRole("button", { name: "Redo" })).toBeDisabled();
-  });
 
-  it("exercises every plan menu action", async () => {
-    const { onAction } = renderToolbar();
-    const actions = [
-      ["Set scale", "set-scale"],
-      ["Measure distance", "measure"],
-      ["Show measurements", "measurements-visible"],
-      ["Contain plan", "fit-contain"],
-      ["Cover plan", "fit-cover"],
-      ["Plan opacity", "plan-fade"],
-      ["Preview automatic design", "automatic-design"],
-      ["Clear fixture design", "clear-design"],
-      ["Clear plan symbols", "clear-symbols"],
-      ["Clear plan", "clear-plan"],
-    ] as const;
-    for (const [label, expected] of actions) {
-      await clickMenuItem("Plan", label);
-      expect(onAction).toHaveBeenLastCalledWith(expected);
-    }
-  }, MENU_WALK_TIMEOUT_MS);
+    const markerRadios = screen.getAllByRole("radio");
+    expect(markerRadios).toHaveLength(16);
+    expect(screen.getByRole("radio", { name: "Red" })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: "Blue" }));
+    expect(onMarkerColorChange).toHaveBeenCalledWith("#2f80ed");
 
-  it("exercises every add, wiring, legend, file, and help action", async () => {
-    const { onAction } = renderToolbar();
-    const groups: Array<[string, Array<[string, string]>]> = [
-      ["Add", [["Note", "add-note"], ["Line", "add-line"], ["Tree symbol", "add-tree"], ["Photo inset", "add-photo"], ["Revision row", "add-revision"]]],
-      ["Wiring", [["Draw named run", "draw-wire"], ["End run", "end-run"], ["Undo wire point", "undo-point"], ["Clear wire runs", "clear-wires"], ["Draw arrow", "draw-arrow"], ["Clear arrows", "clear-arrows"], ["Assign transformer zone", "assign-zone"], ["12 V source", "source-voltage"]]],
-      ["Legend", [["Show legend", "legend-visible"], ["Reposition legend", "legend-move"], ["Smaller key", "legend-smaller"], ["Larger key", "legend-larger"], ["Recount fixtures", "recount"], ["Show light halos", "halos-visible"]]],
-      ["File", [["Open editable project", "import-project"], ["Save editable project", "export-project"], ["Download all sheets", "download-sheets"], ["Print active sheet", "print"], ["Full screen", "fullscreen"]]],
-    ];
-    for (const [menu, items] of groups) {
-      for (const [item, expected] of items) {
-        await clickMenuItem(menu, item);
-        expect(onAction).toHaveBeenLastCalledWith(expected);
-      }
-    }
-    for (const [label, expected] of [["Present", "present"], ["PDF", "download-pdf"], ["Help", "help"]] as const) {
+    for (const [label, expected] of [
+      ["Replace aerial", "place-aerial"],
+      ["Select", "select"],
+      ["Undo", "undo"],
+      ["Wiring: Off", "wire"],
+      ["Highlight", "highlight"],
+      ["Fixture #: On", "fixture-numbers"],
+      ["Help", "help"],
+      ["Download PDF", "download-pdf"],
+    ] as const) {
       fireEvent.click(screen.getByRole("button", { name: label }));
       expect(onAction).toHaveBeenLastCalledWith(expected);
     }
-    expect(onAction).toHaveBeenCalledTimes(groups.reduce((total, [, items]) => total + items.length, 0) + 3);
-  }, MENU_WALK_TIMEOUT_MS);
+  });
+
+  it(
+    "moves fixture placement into Add and exposes only retained drawing commands",
+    async () => {
+      const { onAction, onFixtureSelect } = renderToolbar();
+
+      await clickMenuItem("Add", "Uplight");
+      expect(onFixtureSelect).toHaveBeenCalledOnce();
+      await clickMenuItem("Add", "Supplemental detail photo");
+      expect(onAction).toHaveBeenLastCalledWith("add-photo");
+
+      const planActions = [
+        ["Set scale", "set-scale"],
+        ["Show saved measurements", "measurements-visible"],
+        ["Cover drawing area", "fit-cover"],
+        ["50%", "opacity-50"],
+        ["Clear fixtures and wiring", "clear-design"],
+        ["Clear plan annotations", "clear-symbols"],
+      ] as const;
+      for (const [label, expected] of planActions) {
+        await clickMenuItem("Plan", label);
+        expect(onAction).toHaveBeenLastCalledWith(expected);
+      }
+    },
+    MENU_WALK_TIMEOUT_MS,
+  );
+
+  it(
+    "wires every contextual menu to a visible state change or document action",
+    async () => {
+      const { onAction } = renderToolbar();
+      const actions = [
+        ["Wiring", "Draw wire route", "wire"],
+        ["Wiring", "Clear wire routes", "clear-wires"],
+        ["Wiring", "15 V", "source-voltage-15"],
+        ["Legend", "Show legend", "legend-visible"],
+        ["Legend", "Move right", "legend-right"],
+        ["Legend", "Larger", "legend-larger"],
+        ["Legend", "Recount fixtures", "recount"],
+        ["Legend", "Show light halos", "halos-visible"],
+        ["File", "Open editable project", "import-project"],
+        ["File", "Save editable project", "export-project"],
+        ["File", "Full screen", "fullscreen"],
+        ["Present", "Show dusk plan", "toggle-preview"],
+        ["Present", "Open proposal preview", "present"],
+        ["Present", "Create dusk render", "render"],
+      ] as const;
+
+      for (const [menu, item, expected] of actions) {
+        await clickMenuItem(menu, item);
+        expect(onAction).toHaveBeenLastCalledWith(expected);
+      }
+    },
+    MENU_WALK_TIMEOUT_MS,
+  );
 });

@@ -3,9 +3,15 @@ import {
   createLandscapeDocument,
   defaultLandscapeProposal,
   normalizeLandscapeDocument,
+  type LandscapeDocumentSettings,
   type LandscapeDocumentV2,
 } from "@/lib/estimator/landscape-document";
-import type { LandscapeProposalSettings } from "@/lib/estimator/types";
+import type {
+  LandscapePreconState,
+  LandscapeProcurementState,
+  LandscapeProposalSettings,
+  LandscapeWorkflowTab,
+} from "@/lib/estimator/types";
 
 const DATABASE_NAME = "tribunal-estimator";
 const DATABASE_VERSION = 2;
@@ -18,6 +24,14 @@ export type LandscapeProposalDraft = Pick<
 > &
   Partial<Pick<LandscapeProposalSettings, "additionalLineItems">>;
 export type LandscapeDraft = LandscapeDocumentV2;
+
+export interface LandscapeDraftState {
+  activeWorkflowTab: LandscapeWorkflowTab;
+  settings: LandscapeDocumentSettings;
+  proposal: LandscapeProposalSettings;
+  procurement: Record<string, LandscapeProcurementState>;
+  precon: LandscapePreconState;
+}
 
 interface LegacyLandscapeDraft {
   schemaVersion: 1;
@@ -101,14 +115,23 @@ export function createLandscapeDraft(
   activeShotId: string | null,
   updatedAt = new Date().toISOString(),
   proposal?: LandscapeProposalDraft,
+  liveState?: LandscapeDraftState,
 ): LandscapeDraft {
   const document = createLandscapeDocument(shots, activeShotId, updatedAt);
-  return proposal
-    ? {
-        ...document,
-        proposal: { ...defaultLandscapeProposal(), ...proposal },
-      }
-    : document;
+  const normalized = normalizeLandscapeDocument({
+    ...document,
+    activeWorkflowTab: liveState?.activeWorkflowTab ?? document.activeWorkflowTab,
+    settings: liveState?.settings ?? document.settings,
+    proposal: {
+      ...defaultLandscapeProposal(),
+      ...(liveState?.proposal ?? document.proposal),
+      ...proposal,
+    },
+    procurement: liveState?.procurement ?? document.procurement,
+    precon: liveState?.precon ?? document.precon,
+  });
+  if (!normalized) throw new Error("Cannot create an invalid landscape draft");
+  return normalized;
 }
 
 export async function loadLandscapeDraft(
