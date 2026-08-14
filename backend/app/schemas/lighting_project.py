@@ -504,7 +504,7 @@ class LightingProjectDetail(LightingProjectSummary):
 
 
 class PaginatedLightingProjects(ApiSchema):
-    items: list[LightingProjectDetail]
+    items: list[LightingProjectSummary]
     total: int
     page: int
     page_size: int

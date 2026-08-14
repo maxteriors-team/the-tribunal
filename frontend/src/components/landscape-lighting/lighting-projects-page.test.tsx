@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   LightingProjectDetail,
+  LightingProjectSummary,
   PaginatedLightingProjects,
 } from "@/lib/api/lighting-projects";
 import type { LandscapeDraft } from "@/lib/estimator/landscape-draft";
@@ -87,9 +88,9 @@ const browserDraft: LandscapeDraft = {
   updatedAt: "2026-08-11T10:00:00.000Z",
 };
 
-function project(
-  overrides: Partial<LightingProjectDetail> = {},
-): LightingProjectDetail {
+function projectSummary(
+  overrides: Partial<LightingProjectSummary> = {},
+): LightingProjectSummary {
   return {
     id: PROJECT_ID,
     workspace_id: WORKSPACE_ID,
@@ -101,17 +102,27 @@ function project(
     name: "Patio lighting",
     status: "active",
     version: 2,
+    installation_shot_id: null,
     updated_by_id: 7,
     updater_name: "Morgan Manager",
     created_at: "2026-08-11T09:00:00.000Z",
     updated_at: "2026-08-11T10:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function project(
+  overrides: Partial<LightingProjectDetail> = {},
+): LightingProjectDetail {
+  return {
+    ...projectSummary(),
     created_by_id: 7,
     document: browserDraft,
     ...overrides,
   };
 }
 
-function page(items: LightingProjectDetail[] = []): PaginatedLightingProjects {
+function page(items: LightingProjectSummary[] = []): PaginatedLightingProjects {
   return {
     items,
     total: items.length,
@@ -192,8 +203,8 @@ describe("LightingProjectsPage", () => {
       (_workspaceId: string, params: { status?: string }) =>
         Promise.resolve(
           params.status === "archived"
-            ? page([project({ status: "archived", name: "Pool terrace" })])
-            : page([project()]),
+            ? page([projectSummary({ status: "archived", name: "Pool terrace" })])
+            : page([projectSummary()]),
         ),
     );
     renderPage();
@@ -285,7 +296,7 @@ describe("LightingProjectsPage", () => {
       page_size: 20,
       pages: 1,
     });
-    apiMocks.list.mockResolvedValue(page([project()]));
+    apiMocks.list.mockResolvedValue(page([projectSummary()]));
     apiMocks.create.mockRejectedValue(new Error("server unavailable"));
     apiMocks.archive.mockResolvedValue(project({ status: "archived", version: 2 }));
     renderPage();
