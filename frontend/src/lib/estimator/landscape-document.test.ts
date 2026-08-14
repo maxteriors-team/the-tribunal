@@ -42,6 +42,7 @@ describe("landscape document v2", () => {
         showCombinedTotal: true,
         showFixtureDetails: true,
       },
+      bomLineItems: [],
       procurement: {},
       precon: { responses: [], leadInstaller: "", notes: "" },
     });
@@ -90,6 +91,47 @@ describe("landscape document v2", () => {
     ]);
   });
 
+  it("normalizes manual BOM lines, bounds values, and repairs duplicate IDs", () => {
+    const document = normalizeLandscapeDocument({
+      ...createLandscapeDocument([shot], "shot-1"),
+      bomLineItems: [
+        {
+          id: "manual-1",
+          description: "Copper ground stake",
+          sku: "STAKE-CU",
+          quantity: 4,
+          unit: "each",
+        },
+        { id: "manual-1", description: "Wire", sku: "", quantity: 200_000, unit: "ft" },
+        { id: "ignored", description: "Ignored malformed row" },
+      ],
+    });
+
+    expect(document?.bomLineItems).toEqual([
+      {
+        id: "manual-1",
+        description: "Copper ground stake",
+        sku: "STAKE-CU",
+        quantity: 4,
+        unit: "each",
+      },
+      {
+        id: "manual-1-2",
+        description: "Wire",
+        sku: "",
+        quantity: 100_000,
+        unit: "ft",
+      },
+      {
+        id: "ignored",
+        description: "Ignored malformed row",
+        sku: "",
+        quantity: 1,
+        unit: "each",
+      },
+    ]);
+  });
+
   it("serializes every live document setting and workflow state", () => {
     const liveState = {
       activeWorkflowTab: "precon" as const,
@@ -113,6 +155,15 @@ describe("landscape document v2", () => {
         showCombinedTotal: false,
         additionalLineItems: [{ id: "custom-1", description: "Core drill", amount: 275 }],
       },
+      bomLineItems: [
+        {
+          id: "manual-bom-1",
+          description: "Copper ground stake",
+          sku: "STAKE-CU",
+          quantity: 4,
+          unit: "each" as const,
+        },
+      ],
       procurement: {
         "fixture-1": {
           catalogItemId: "catalog-1",
@@ -142,6 +193,7 @@ describe("landscape document v2", () => {
     expect(roundTrip?.proposal?.additionalLineItems).toEqual(
       liveState.proposal.additionalLineItems,
     );
+    expect(roundTrip?.bomLineItems).toEqual(liveState.bomLineItems);
   });
 
   it("rejects malformed image payloads and excessive sheets", () => {

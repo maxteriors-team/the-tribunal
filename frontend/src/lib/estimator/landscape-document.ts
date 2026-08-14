@@ -1,5 +1,6 @@
 import type { DesignerShot } from "@/components/estimator/proposal-host";
 import type {
+  LandscapeBomLineItem,
   LandscapeLegendSettings,
   LandscapePaperSize,
   LandscapePlanFit,
@@ -46,6 +47,7 @@ export interface LandscapeDocumentV2 {
   updatedAt: string;
   settings?: LandscapeDocumentSettings;
   proposal?: LandscapeProposalSettings;
+  bomLineItems?: LandscapeBomLineItem[];
   procurement?: Record<string, LandscapeProcurementState>;
   precon?: LandscapePreconState;
 }
@@ -225,6 +227,33 @@ const normalizeProposal = (value: unknown): LandscapeProposalSettings => {
   };
 };
 
+const normalizeBomLineItems = (value: unknown): LandscapeBomLineItem[] => {
+  if (!Array.isArray(value)) return [];
+  const usedIds = new Set<string>();
+  return value.slice(0, 100).flatMap((entry, index) => {
+    const item = record(entry);
+    if (!item) return [];
+    const fallbackId = `bom-line-${index + 1}`;
+    const baseId = (stringValue(item.id, fallbackId).trim() || fallbackId).slice(0, 250);
+    let id = baseId;
+    let suffix = 2;
+    while (usedIds.has(id)) {
+      id = `${baseId.slice(0, 240)}-${suffix}`;
+      suffix += 1;
+    }
+    usedIds.add(id);
+    return [
+      {
+        id,
+        description: stringValue(item.description).slice(0, 500),
+        sku: stringValue(item.sku).slice(0, 160),
+        quantity: finiteNumber(item.quantity, 1, 0, 100_000),
+        unit: item.unit === "ft" ? "ft" : "each",
+      },
+    ];
+  });
+};
+
 const normalizeProcurement = (value: unknown): Record<string, LandscapeProcurementState> => {
   const input = record(value);
   if (!input) return {};
@@ -280,6 +309,7 @@ export function normalizeLandscapeDocument(value: unknown): LandscapeDocumentV2 
     updatedAt: stringValue(candidate.updatedAt ?? candidate.savedAt, new Date().toISOString()),
     settings: normalizeSettings(candidate.settings),
     proposal: normalizeProposal(candidate.proposal),
+    bomLineItems: normalizeBomLineItems(candidate.bomLineItems),
     procurement: normalizeProcurement(candidate.procurement),
     precon: normalizePrecon(candidate.precon),
   };
@@ -299,6 +329,7 @@ export function createLandscapeDocument(
       updatedAt,
       settings: defaultLandscapeSettings(),
       proposal: defaultLandscapeProposal(),
+      bomLineItems: [],
       procurement: {},
       precon: defaultLandscapePrecon(),
     }

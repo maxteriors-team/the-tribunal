@@ -12514,6 +12514,32 @@ export interface components {
             /** File */
             file: string;
         };
+        /** BomLineItemSchema */
+        BomLineItemSchema: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Id */
+            id: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * Sku
+             * @default
+             */
+            sku: string;
+            /**
+             * Unit
+             * @default each
+             * @enum {string}
+             */
+            unit: "each" | "ft";
+        };
         /**
          * BookableStaffCreate
          * @description Schema for creating a bookable staff member.
@@ -19275,6 +19301,8 @@ export interface components {
             activeShotId?: string | null;
             /** Activeworkflowtab */
             activeWorkflowTab?: ("drawing" | "schedule" | "bom" | "electrical" | "proposal" | "precon") | null;
+            /** Bomlineitems */
+            bomLineItems?: components["schemas"]["BomLineItemSchema"][];
             precon?: components["schemas"]["PreconStateSchema"];
             /** Procurement */
             procurement?: {

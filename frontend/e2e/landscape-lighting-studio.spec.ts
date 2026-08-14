@@ -491,6 +491,24 @@ test.describe("landscape lighting studio", () => {
       if (tab === "BOM") {
         await expect(page.getByRole("button", { name: "Recount" })).toBeVisible();
         await expect(page.getByRole("button", { name: "CSV" })).toBeEnabled();
+        await page.getByRole("button", { name: "Add line item" }).click();
+        await page.getByLabel("BOM line item 1 description").fill("Copper ground stake");
+        await page.getByLabel("BOM line item 1 SKU").fill("STAKE-CU");
+        await page.getByLabel("BOM line item 1 quantity").fill("4");
+        await expect
+          .poll(() =>
+            updates.some((entry) => {
+              const update = entry as {
+                document?: {
+                  bomLineItems?: Array<{ description?: string; quantity?: number }>;
+                };
+              };
+              return update.document?.bomLineItems?.some(
+                (line) => line.description === "Copper ground stake" && line.quantity === 4,
+              );
+            }),
+          )
+          .toBe(true);
       }
     }
 

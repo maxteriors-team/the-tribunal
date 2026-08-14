@@ -1,4 +1,5 @@
 import { landscapeWireLabel } from "@/lib/estimator/fixtures";
+import type { LandscapeBomLineItem } from "@/lib/estimator/types";
 import type { CatalogItemResponse } from "@/types/sales-wizard";
 
 export interface SupplierFixtureInput {
@@ -38,6 +39,32 @@ function attributeText(attributes: CatalogItemResponse["attributes"], key: strin
 
 function roundQuantity(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function buildManualSupplierCsvRows(lineItems: LandscapeBomLineItem[]): SupplierCsvRow[] {
+  return lineItems.flatMap((line) => {
+    const description = line.description.trim();
+    if (!description || line.quantity <= 0) return [];
+    const sku = line.sku.trim();
+    return [
+      {
+        supplier: "",
+        manufacturer: "",
+        sku,
+        description,
+        quantity: roundQuantity(line.quantity),
+        unit: line.unit,
+        planSource: "Manual BOM",
+        status: sku ? ("Ready" as const) : ("Needs SKU" as const),
+        notes: sku ? "Added manually." : "Add a supplier SKU before ordering.",
+        needed: roundQuantity(line.quantity),
+        ordered: 0,
+        received: 0,
+        unitCost: null,
+        totalCost: null,
+      },
+    ];
+  });
 }
 
 export function buildSupplierCsvRows(

@@ -7,6 +7,7 @@ import {
   type LandscapeDocumentV2,
 } from "@/lib/estimator/landscape-document";
 import type {
+  LandscapeBomLineItem,
   LandscapePreconState,
   LandscapeProcurementState,
   LandscapeProposalSettings,
@@ -29,6 +30,7 @@ export interface LandscapeDraftState {
   activeWorkflowTab: LandscapeWorkflowTab;
   settings: LandscapeDocumentSettings;
   proposal: LandscapeProposalSettings;
+  bomLineItems: LandscapeBomLineItem[];
   procurement: Record<string, LandscapeProcurementState>;
   precon: LandscapePreconState;
 }
@@ -127,6 +129,7 @@ export function createLandscapeDraft(
       ...(liveState?.proposal ?? document.proposal),
       ...proposal,
     },
+    bomLineItems: liveState?.bomLineItems ?? document.bomLineItems,
     procurement: liveState?.procurement ?? document.procurement,
     precon: liveState?.precon ?? document.precon,
   });

@@ -5719,6 +5719,49 @@
         "title": "Body_upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post",
         "type": "object"
       },
+      "BomLineItemSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Quantity",
+            "type": "number"
+          },
+          "sku": {
+            "default": "",
+            "maxLength": 160,
+            "title": "Sku",
+            "type": "string"
+          },
+          "unit": {
+            "default": "each",
+            "enum": [
+              "each",
+              "ft"
+            ],
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "BomLineItemSchema",
+        "type": "object"
+      },
       "BookableStaffCreate": {
         "description": "Schema for creating a bookable staff member.",
         "properties": {
@@ -22778,6 +22821,14 @@
               }
             ],
             "title": "Activeworkflowtab"
+          },
+          "bomLineItems": {
+            "items": {
+              "$ref": "#/components/schemas/BomLineItemSchema"
+            },
+            "maxItems": 100,
+            "title": "Bomlineitems",
+            "type": "array"
           },
           "precon": {
             "$ref": "#/components/schemas/PreconStateSchema"

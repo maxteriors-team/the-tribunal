@@ -2438,6 +2438,103 @@
   font-size: 10px;
 }
 
+.ll-bom-lines {
+  display: grid;
+  gap: 16px;
+}
+
+.ll-bom-lines-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.ll-bom-lines-heading h3 {
+  margin: 0;
+  color: #1d2521;
+  font-size: 15px;
+}
+
+.ll-bom-lines-heading p {
+  margin: 4px 0 0;
+  color: #66706b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ll-bom-lines-heading .est-btn {
+  flex: 0 0 auto;
+}
+
+.ll-bom-table input,
+.ll-bom-table select {
+  width: 100%;
+  min-width: 110px;
+  min-height: 36px;
+  padding: 7px 9px;
+  color: #25302a;
+  font: inherit;
+  background: #fff;
+  border: 1px solid #bfc4bf;
+  border-radius: 3px;
+}
+
+.ll-bom-table input:focus-visible,
+.ll-bom-table select:focus-visible {
+  border-color: #8a651d;
+  outline: 2px solid rgba(138, 101, 29, 0.24);
+  outline-offset: 1px;
+}
+
+.ll-bom-table .ll-bom-description-input {
+  min-width: 220px;
+}
+
+.ll-bom-table .ll-bom-quantity-input {
+  min-width: 86px;
+  max-width: 110px;
+}
+
+.ll-bom-table .ll-bom-source {
+  display: inline-flex;
+  width: fit-content;
+  margin: 0;
+  padding: 3px 7px;
+  color: #57615c;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: #ecece7;
+  border-radius: 999px;
+}
+
+.ll-bom-table .ll-bom-line-remove {
+  min-height: 36px;
+  padding: 7px 9px;
+  color: #8d2e24;
+}
+
+.ll-bom-table .ll-bom-line-remove span {
+  display: inline;
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+@media (max-width: 640px) {
+  .ll-bom-lines-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ll-bom-lines-heading .est-btn {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
 .ll-panel-inline-empty,
 .ll-panel-empty {
   color: #59635e;
@@ -4929,5 +5026,19 @@
 
   .ll-document-paper .ll-live-sheet {
     grid-template-columns: minmax(0, 1fr) 190px;
+  }
+
+  .ll-bom-lines-heading .est-btn,
+  .ll-bom-table th:last-child,
+  .ll-bom-table td:last-child {
+    display: none !important;
+  }
+
+  .ll-bom-table input,
+  .ll-bom-table select {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    appearance: none;
   }
 }

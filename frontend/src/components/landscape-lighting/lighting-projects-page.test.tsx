@@ -85,6 +85,15 @@ const browserDraft: LandscapeDraft = {
       dusk: 0.35,
     },
   ],
+  bomLineItems: [
+    {
+      id: "manual-bom-1",
+      description: "Copper ground stake",
+      sku: "STAKE-CU",
+      quantity: 4,
+      unit: "each",
+    },
+  ],
   updatedAt: "2026-08-11T10:00:00.000Z",
 };
 
