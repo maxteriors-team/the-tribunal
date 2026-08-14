@@ -36,6 +36,7 @@ from app.services.appointments.booking_finalizer import finalize_booking, format
 from app.services.appointments.cancellation import cancel_upcoming_appointments
 from app.services.approval.approval_gate_service import approval_gate_service
 from app.services.leads.funnel_transitions import mark_contact_qualified
+from app.utils.meeting_urls import meeting_provider_name
 
 logger = structlog.get_logger()
 
@@ -574,15 +575,21 @@ class TextToolExecutor(BaseToolExecutor):
         self, call_label: str, formatted_time: str, email: str
     ) -> str:
         appointment = getattr(self, "_booked_appointment", None)
-        if appointment and appointment.sync_status == "synced":
-            link_copy = (
-                f" The Google Meet link is {appointment.meeting_url}."
-                if appointment.meeting_url
+        if appointment and appointment.meeting_url:
+            provider = meeting_provider_name(appointment.meeting_url)
+            invite_copy = (
+                f" A calendar invitation was sent to {email}."
+                if appointment.sync_status == "synced"
                 else ""
             )
             return (
                 f"{call_label.title()} booked for {formatted_time}. "
-                f"A calendar invitation was sent to {email}.{link_copy}"
+                f"The {provider} link is {appointment.meeting_url}.{invite_copy}"
+            )
+        if appointment and appointment.sync_status == "synced":
+            return (
+                f"{call_label.title()} booked for {formatted_time}. "
+                f"A calendar invitation was sent to {email}."
             )
         return (
             f"{call_label.title()} is saved in the CRM for {formatted_time}, but the "

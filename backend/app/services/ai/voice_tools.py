@@ -1001,7 +1001,7 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                             "enum": ["phone_call", "video_call"],
                             "description": (
                                 "Lead's explicit format choice. Phone calls use their phone; "
-                                "video calls request Google Meet from the rep's calendar."
+                                "video calls receive Zoom when configured, with Meet fallback."
                             ),
                         },
                         "duration_minutes": {

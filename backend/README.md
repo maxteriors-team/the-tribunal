@@ -26,6 +26,18 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
+### Zoom video links
+
+Create an activated **Server-to-Server OAuth** app in the Zoom Marketplace with these
+granular account scopes: `meeting:write:meeting:admin`,
+`meeting:update:meeting:admin`, and `meeting:delete:meeting:admin`. Set the app's account
+ID, client ID, client secret, and meeting-host email as `ZOOM_ACCOUNT_ID`,
+`ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, and `ZOOM_HOST_EMAIL`. The host email must
+exactly match that representative's connected Google Calendar email.
+
+Video bookings for that host receive a unique Zoom link; other representatives and
+provider failures safely fall back to Google Meet. Keep every credential backend-only.
+
 ## API Documentation
 
 When running in debug mode, API docs are available at:

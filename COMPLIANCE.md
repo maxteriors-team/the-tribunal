@@ -210,3 +210,35 @@ None for this calendar release.
 
 - This was source and automated runtime verification, not a legal certification or a manual assistive-technology audit.
 - Re-run dependency audit and authenticated calendar smoke checks for future releases; external advisories and provider behavior change.
+
+
+## Addendum — Google availability with Zoom booking links
+
+Snapshot: 12 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
+
+Scope: server-side Zoom meeting creation for video bookings assigned to the one configured Google-connected host, customer confirmation links, and Zoom lifecycle synchronization on reschedule/cancellation.
+
+- **Personal data — Minimized:** Zoom receives the configured host email, appointment start/duration/timezone, a generic workspace consultation topic, and the internal appointment ID. The API request omits lead name, email, phone, address, notes, and CRM conversation content.
+- **New processor — Confirmed:** Zoom processes meeting metadata and, when a lead joins, Zoom may process participant account/device/network and meeting-use data under the workspace's Zoom agreement and settings.
+- **Tenant/identity boundary — Fixed:** Zoom activates only when `ZOOM_HOST_EMAIL` exactly matches the assigned representative's connected Google account; other users and workspaces keep Google Meet fallback.
+- **Secrets — Fixed:** account ID, client ID, client secret, and short-lived access token remain backend-only. Partial configuration fails startup, provider errors/logs omit secrets, and the host-only `start_url` is never stored or returned.
+- **Meeting safety — Fixed:** every booking receives a unique meeting with waiting room enabled, join-before-host disabled, authentication not required for the customer, and automatic recording disabled. A passcode that is not embedded in the join URL fails closed to Google Meet.
+- **Lifecycle truth — Fixed:** provider resources are best-effort mirrors of the CRM appointment; rescheduling updates Zoom and Google, cancellation deletes both, and provider failure never rolls back the local customer booking.
+- **Customer messaging — Existing transactional path:** the Zoom link is included only in appointment confirmation/lifecycle copy and the calendar invite for that booking; this change adds no marketing send path.
+- **Data retention/deletion — Provider-dependent:** CRM cancellation deletes the Zoom meeting, but Zoom account audit/retention records remain governed by Zoom settings and contract.
+
+### Focused findings
+
+| ID | Severity | Trigger | Guard | Status |
+|---|---|---|---|---|
+| ZM-001 | BLOCKER | A global Zoom credential could create meetings for another tenant | Host email must exactly match the assigned user's Google Calendar connection | Fixed in code/tests |
+| ZM-002 | HIGH | Reusable room links can leak between leads | Create a unique meeting per booking; validate `https` and `*.zoom.us`; never store `start_url` | Fixed in code/tests |
+| ZM-003 | HIGH | A separate passcode would not reach the lead | Accept embedded-passcode URLs only when Zoom returns a passcode; otherwise fall back to Meet | Fixed in code/tests |
+| ZM-004 | HIGH | Cancellation/reschedule could leave stale live meetings | Parse only validated numeric Zoom IDs and update/delete alongside Google events | Fixed in code/tests |
+| ZM-005 | LAWYER | Leads are directed to a new video processor | Confirm the deployed privacy notice/vendor disclosure, Zoom DPA/retention settings, and jurisdictional lawful basis | Open before broader rollout |
+
+### Re-verify before broader rollout
+
+- Confirm the customer-facing privacy notice and vendor/subprocessor disclosure cover Zoom participant and meeting metadata; review the applicable Zoom DPA and account retention controls.
+- Confirm the host's Zoom plan limits, caption/accessibility settings, meeting-region settings, and required Marketplace scopes for the actual account.
+- This focused engineering review is not legal certification and does not assess Zoom's service or contract.

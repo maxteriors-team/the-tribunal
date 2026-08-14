@@ -29,9 +29,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment, AppointmentStatus
-from app.models.bookable_staff import BookableStaff
 from app.models.contact import Contact
 from app.models.workspace import Workspace
+from app.services.appointments.external_sync import delete_external_events
 from app.services.tags import TagService
 from app.utils.timezones import resolve_workspace_timezone
 
@@ -109,44 +109,16 @@ async def cancel_upcoming_appointments(
     workspace = await db.get(Workspace, workspace_id)
     tzinfo = resolve_workspace_timezone(workspace)
 
-    staff_ids = {
-        appointment.bookable_staff_id
-        for appointment in appointments
-        if appointment.bookable_staff_id is not None
-    }
-    staff_by_id: dict[uuid.UUID, BookableStaff] = {}
-    if staff_ids:
-        staff_result = await db.execute(
-            select(BookableStaff).where(BookableStaff.id.in_(staff_ids))
-        )
-        staff_by_id = {staff.id: staff for staff in staff_result.scalars().all()}
-
     cancelled: list[CancelledAppointment] = []
-    from app.services.google_calendar import GoogleCalendarError, delete_event
 
     for appointment in appointments:
         appointment.status = AppointmentStatus.CANCELLED
         appointment.notes = _append_cancellation_note(appointment.notes, reason, cancelled_by, now)
         appointment.last_synced_at = now
         appointment.sync_error = None
-        if appointment.google_calendar_event_id and appointment.bookable_staff_id:
-            staff = staff_by_id.get(appointment.bookable_staff_id)
-            if staff is not None and staff.user_id is not None:
-                try:
-                    await delete_event(
-                        db,
-                        user_id=staff.user_id,
-                        event_id=appointment.google_calendar_event_id,
-                    )
-                    appointment.sync_status = "synced"
-                except GoogleCalendarError as exc:
-                    appointment.sync_status = "failed"
-                    appointment.sync_error = str(exc)[:2000]
-            else:
-                appointment.sync_status = "failed"
-                appointment.sync_error = "Assigned calendar owner was not found"
-        else:
-            appointment.sync_status = "synced"
+        await delete_external_events(db, appointment=appointment, log=logger)
+        if appointment.sync_status != "failed":
+            appointment.sync_status = "cancelled"
 
         local_dt = appointment.scheduled_at.astimezone(tzinfo)
         # Workspace-local, matching the wording of the confirmation and reminder

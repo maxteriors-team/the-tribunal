@@ -28,6 +28,7 @@ from app.services.email_layout import (
     render_email,
 )
 from app.services.email_templates import render_template
+from app.utils.meeting_urls import meeting_provider_name
 
 if TYPE_CHECKING:
     from app.models.email_template import EmailTemplate
@@ -1209,6 +1210,11 @@ async def send_appointment_confirmation_to_attendee(
             f'<p style="{value_style}">Our team will follow up with the link.</p>'
         )
 
+    join_link = ""
+    if meeting_url:
+        provider = html_escape(meeting_provider_name(meeting_url))
+        join_link = f'<p><a href="{html_escape(meeting_url)}">Join {provider}</a></p>'
+
     html_content = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -1223,7 +1229,7 @@ async def send_appointment_confirmation_to_attendee(
     <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 24px 0;">
         {detail_rows}
     </div>
-    {f'<p><a href="{html_escape(meeting_url)}">Join Google Meet</a></p>' if meeting_url else ""}
+    {join_link}
     <p>Need to change or cancel? Just reply to the text message from
        {safe_business} and we'll take care of it.</p>
 </body>
