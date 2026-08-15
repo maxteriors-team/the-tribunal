@@ -319,7 +319,7 @@ async def deliver_booking_notifications(
 
         # Sync first so every confirmation reflects provider truth: a successful
         # video call includes its Zoom/Meet link; a failure promises follow-up.
-        await _sync_google_calendar(
+        await sync_appointment_external_events(
             db,
             appointment=appointment,
             contact=contact,
@@ -447,7 +447,7 @@ async def _send_attendee_confirmation(
         log.exception("attendee_confirmation_email_failed")
 
 
-async def _sync_google_calendar(
+async def sync_appointment_external_events(
     db: AsyncSession,
     *,
     appointment: Appointment,

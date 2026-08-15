@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
+import { AppointmentAssigneePicker } from "@/components/calendar/appointment-assignee-picker";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar-lazy";
 import { FormContactPicker } from "@/components/ui/contact-combobox";
@@ -41,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAgents } from "@/hooks/useAgents";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useCreateAppointment } from "@/hooks/useCreateAppointment";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
@@ -69,7 +71,10 @@ const timeSlots = generateTimeSlots();
 
 export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialogProps) {
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canAssignUsers = can("jobs:write");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [bookableStaffId, setBookableStaffId] = useState<string | null>(null);
 
   const { data: agentsData, isPending: agentsLoading } = useAgents(
     workspaceId ?? "",
@@ -89,6 +94,7 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
     workspaceId,
     onSuccess: () => {
       form.reset();
+      setBookableStaffId(null);
       onOpenChange(false);
     },
   });
@@ -101,6 +107,7 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
       data,
       parseInt(data.contact_id, 10),
     );
+    if (bookableStaffId) request.bookable_staff_id = bookableStaffId;
 
     createAppointmentMutation.mutate(request, {
       onSettled: () => setIsSubmitting(false),
@@ -110,13 +117,14 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       form.reset();
+      setBookableStaffId(null);
     }
     onOpenChange(open);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>New Appointment</DialogTitle>
           <DialogDescription>
@@ -285,6 +293,16 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
                 </FormItem>
               )}
             />
+
+            {canAssignUsers && workspaceId ? (
+              <AppointmentAssigneePicker
+                workspaceId={workspaceId}
+                value={bookableStaffId}
+                onValueChange={setBookableStaffId}
+                disabled={isSubmitting}
+                id="new-appointment-assignee"
+              />
+            ) : null}
 
             {/* Service Type */}
             <FormField

@@ -429,7 +429,7 @@ class TestCallTypeContract:
             )
             monkeypatch.setattr("app.services.google_calendar.create_event", create)
 
-            await booking_finalizer._sync_google_calendar(
+            await booking_finalizer.sync_appointment_external_events(
                 db,
                 appointment=appointment,
                 contact=contact,
@@ -470,7 +470,7 @@ class TestCallTypeContract:
             )
             monkeypatch.setattr("app.services.google_calendar.create_event", create)
 
-            await booking_finalizer._sync_google_calendar(
+            await booking_finalizer.sync_appointment_external_events(
                 db,
                 appointment=appointment,
                 contact=contact,
@@ -507,7 +507,7 @@ class TestCallTypeContract:
                 AsyncMock(side_effect=GoogleCalendarError("Google Calendar is not connected")),
             )
 
-            await booking_finalizer._sync_google_calendar(
+            await booking_finalizer.sync_appointment_external_events(
                 db,
                 appointment=appointment,
                 contact=contact,

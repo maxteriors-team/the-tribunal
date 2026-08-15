@@ -15,11 +15,12 @@ class AppointmentBase(BaseModel):
 
 
 class AppointmentCreate(AppointmentBase):
-    """Schema for creating an appointment."""
+    """Schema for creating an appointment and tagging a calendar user."""
 
     contact_id: int
     agent_id: str | None = None
     scheduled_at: datetime
+    bookable_staff_id: uuid.UUID | None = None
 
 
 class AppointmentUpdate(BaseModel):
@@ -30,6 +31,7 @@ class AppointmentUpdate(BaseModel):
     service_type: str | None = None
     notes: str | None = None
     business_location_id: uuid.UUID | None = None
+    bookable_staff_id: uuid.UUID | None = None
 
 
 class ContactSummary(BaseModel):

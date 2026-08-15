@@ -5,6 +5,7 @@ import { CalendarIcon, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
+import { AppointmentAssigneePicker } from "@/components/calendar/appointment-assignee-picker";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar-lazy";
 import {
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAgents } from "@/hooks/useAgents";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useCreateAppointment } from "@/hooks/useCreateAppointment";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
@@ -64,7 +66,10 @@ export function ScheduleAppointmentDialog({
   onOpenChange,
 }: ScheduleAppointmentDialogProps) {
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canAssignUsers = can("jobs:write");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [bookableStaffId, setBookableStaffId] = useState<string | null>(null);
 
   const { data: agentsData, isPending: agentsLoading } = useAgents(workspaceId ?? "", {
     active_only: true,
@@ -86,6 +91,7 @@ export function ScheduleAppointmentDialog({
     workspaceId,
     onSuccess: () => {
       form.reset();
+      setBookableStaffId(null);
       onOpenChange(false);
     },
   });
@@ -95,6 +101,7 @@ export function ScheduleAppointmentDialog({
     setIsSubmitting(true);
 
     const request = buildCreateAppointmentRequest(data, contact.id);
+    if (bookableStaffId) request.bookable_staff_id = bookableStaffId;
 
     createAppointmentMutation.mutate(request, {
       onSettled: () => setIsSubmitting(false),
@@ -103,7 +110,10 @@ export function ScheduleAppointmentDialog({
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && isSubmitting) return;
-    if (!nextOpen) form.reset();
+    if (!nextOpen) {
+      form.reset();
+      setBookableStaffId(null);
+    }
     onOpenChange(nextOpen);
   };
 
@@ -268,6 +278,16 @@ export function ScheduleAppointmentDialog({
                 </FormItem>
               )}
             />
+
+            {canAssignUsers && workspaceId ? (
+              <AppointmentAssigneePicker
+                workspaceId={workspaceId}
+                value={bookableStaffId}
+                onValueChange={setBookableStaffId}
+                disabled={isSubmitting}
+                id="contact-appointment-assignee"
+              />
+            ) : null}
 
             <FormField
               control={form.control}

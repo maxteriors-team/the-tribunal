@@ -135,8 +135,8 @@ api_router.include_router(
     prefix="/workspaces/{workspace_id}/agents/{agent_id}/staff",
     tags=["Bookable Staff"],
 )
-# The same rows seen from Settings → Team, where an admin decides who has a
-# booking calendar at all. Gated on ``members:manage``.
+# The same rows power schedule tagging and Settings → Team. Dispatch-tier users
+# may read them; only admins may enable or relink a booking calendar.
 api_router.include_router(
     bookable_staff.workspace_router,
     prefix="/workspaces/{workspace_id}/bookable-staff",

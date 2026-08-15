@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -36,6 +37,7 @@ from app.models.contact import Contact
 from app.models.field_service import Crew, Technician
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.schemas.appointment import AppointmentCreate, AppointmentUpdate
 from app.services.appointments import AppointmentService
 from app.services.jobs import JobService
 
@@ -328,6 +330,83 @@ async def test_appointment_list_unscoped_sees_everything() -> None:
 
         everything = await AppointmentService(db).list_appointments(ws.id)
         assert {item.id for item in everything.items} == {mine.id, theirs.id, unassigned.id}
+
+
+async def test_dispatch_can_tag_a_workspace_user_when_creating_an_appointment() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        user = await _user(db)
+        await _member(db, ws.id, user.id, "manager")
+        staff = await _staff(db, ws.id, user_id=user.id)
+        service = AppointmentService(db)
+
+        created = await service.create_appointment(
+            ws.id,
+            AppointmentCreate(
+                contact_id=contact.id,
+                scheduled_at=datetime.now(UTC) + timedelta(days=1),
+                duration_minutes=30,
+                bookable_staff_id=staff.id,
+            ),
+        )
+
+        assert created.bookable_staff_id == staff.id
+
+
+async def test_appointment_tag_rejects_staff_from_another_workspace() -> None:
+    async with AsyncSessionLocal() as db:
+        mine = await _workspace(db)
+        theirs = await _workspace(db)
+        contact = await _contact(db, mine.id)
+        outsider = await _user(db)
+        await _member(db, theirs.id, outsider.id, "manager")
+        outsider_staff = await _staff(db, theirs.id, user_id=outsider.id)
+
+        with pytest.raises(HTTPException) as excinfo:
+            await AppointmentService(db).create_appointment(
+                mine.id,
+                AppointmentCreate(
+                    contact_id=contact.id,
+                    scheduled_at=datetime.now(UTC) + timedelta(days=1),
+                    duration_minutes=30,
+                    bookable_staff_id=outsider_staff.id,
+                ),
+            )
+
+        assert excinfo.value.status_code == 404
+        assert excinfo.value.detail == "Booking-enabled user not found"
+
+
+async def test_reassigning_an_appointment_moves_its_calendar_event(monkeypatch) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        old_user = await _user(db)
+        new_user = await _user(db)
+        await _member(db, ws.id, old_user.id, "manager")
+        await _member(db, ws.id, new_user.id, "manager")
+        old_staff = await _staff(db, ws.id, user_id=old_user.id)
+        new_staff = await _staff(db, ws.id, user_id=new_user.id)
+        appointment = await _appointment(db, ws.id, contact.id, staff_id=old_staff.id)
+        appointment.google_calendar_event_id = "old-event"
+        delete_google_event = AsyncMock()
+        monkeypatch.setattr(
+            "app.services.appointments.appointment_service.delete_google_calendar_event",
+            delete_google_event,
+        )
+        service = AppointmentService(db)
+        service._sync_assigned_external_events = AsyncMock()  # type: ignore[method-assign]
+
+        updated = await service.update_appointment(
+            ws.id,
+            appointment.id,
+            AppointmentUpdate(bookable_staff_id=new_staff.id),
+        )
+
+        assert updated.bookable_staff_id == new_staff.id
+        delete_google_event.assert_awaited_once()
+        service._sync_assigned_external_events.assert_awaited_once()
 
 
 async def test_appointment_list_empty_for_unlinked_user() -> None:

@@ -5,8 +5,8 @@ relinking a staff row is a visibility change, not ordinary agent configuration:
 without a gate, any workspace member could point somebody else's staff row at
 their own login and read that person's appointments.
 
-The rest of the pool stays membership-gated as before — only the ``user_id``
-field carries the extra ``members:manage`` requirement.
+Dispatch-tier users may read the workspace scheduling roster, while only the
+``user_id`` field carries the extra ``members:manage`` requirement.
 
 Offline-mockable style (cf. ``test_jobs_api.py``): no real database.
 """
@@ -88,6 +88,10 @@ async def _client(service: AsyncMock, role: str) -> AsyncIterator[AsyncClient]:
         staff_module.router,
         prefix="/api/v1/workspaces/{workspace_id}/agents/{agent_id}/staff",
     )
+    app.include_router(
+        staff_module.workspace_router,
+        prefix="/api/v1/workspaces/{workspace_id}/bookable-staff",
+    )
 
     with patch.object(staff_module, "BookableStaffService", return_value=service):
         async with AsyncClient(
@@ -100,11 +104,32 @@ def _service() -> AsyncMock:
     service = AsyncMock()
     service.create_staff.return_value = _staff_row()
     service.update_staff.return_value = _staff_row()
+    service.list_workspace_staff.return_value = {"items": [], "total": 0}
     return service
 
 
 def _base(path: str = "") -> str:
     return f"/api/v1/workspaces/{WS_ID}/agents/{AGENT_ID}/staff{path}"
+
+
+class TestScheduleRosterReadGate:
+    @pytest.mark.parametrize("role", ["owner", "admin", "manager", "dispatcher"])
+    async def test_dispatch_tier_can_list_assignable_users(self, role: str) -> None:
+        service = _service()
+        async with _client(service, role) as client:
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/bookable-staff")
+
+        assert response.status_code == 200
+        service.list_workspace_staff.assert_awaited_once_with(WS_ID)
+
+    @pytest.mark.parametrize("role", ["lead_technician", "technician", "sales_rep", "member"])
+    async def test_lower_tiers_cannot_list_the_workspace_roster(self, role: str) -> None:
+        service = _service()
+        async with _client(service, role) as client:
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/bookable-staff")
+
+        assert response.status_code == 403
+        service.list_workspace_staff.assert_not_awaited()
 
 
 class TestLinkGate:

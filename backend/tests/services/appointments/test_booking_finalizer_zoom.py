@@ -12,7 +12,7 @@ from app.models.appointment import Appointment, AppointmentStatus
 from app.models.bookable_staff import BookableStaff
 from app.models.contact import Contact
 from app.models.workspace import Workspace
-from app.services.appointments.booking_finalizer import _sync_google_calendar
+from app.services.appointments.booking_finalizer import sync_appointment_external_events
 from app.services.google_calendar import GoogleEvent
 from app.services.zoom import ZoomError, ZoomMeeting
 
@@ -71,7 +71,7 @@ async def test_zoom_link_is_saved_and_google_meet_is_not_requested() -> None:
         ) as create_zoom,
         patch("app.services.google_calendar.create_event", new=create_google_event),
     ):
-        await _sync_google_calendar(
+        await sync_appointment_external_events(
             db,
             appointment=appointment,
             contact=contact,
@@ -113,7 +113,7 @@ async def test_zoom_failure_falls_back_to_google_meet() -> None:
         ),
         patch("app.services.google_calendar.create_event", new=create_google_event),
     ):
-        await _sync_google_calendar(
+        await sync_appointment_external_events(
             db,
             appointment=appointment,
             contact=contact,

@@ -33,6 +33,7 @@ export interface UpdateAppointmentRequest {
   duration_minutes?: number;
   service_type?: string;
   notes?: string;
+  bookable_staff_id?: string | null;
 }
 
 export interface CreateAppointmentRequest {
@@ -42,6 +43,7 @@ export interface CreateAppointmentRequest {
   duration_minutes?: number;
   service_type?: string;
   notes?: string;
+  bookable_staff_id?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -21,7 +21,8 @@ from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.opportunity import Opportunity
 from app.models.pipeline import Pipeline, PipelineStage
-from app.models.workspace import Workspace
+from app.models.user import User
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.opportunity import (
     OpportunityNoteCreate,
     OpportunityTaskCreate,
@@ -44,6 +45,19 @@ async def _workspace(db) -> Workspace:
     db.add(ws)
     await db.flush()
     return ws
+
+
+async def _member(db, workspace_id: uuid.UUID) -> User:
+    user = User(
+        email=f"rep-{uuid.uuid4().hex[:8]}@example.com",
+        hashed_password="not-used",
+        full_name="Jordan Lee",
+    )
+    db.add(user)
+    await db.flush()
+    db.add(WorkspaceMembership(user_id=user.id, workspace_id=workspace_id, role="member"))
+    await db.flush()
+    return user
 
 
 async def _opportunity(db, workspace_id: uuid.UUID) -> Opportunity:
@@ -157,6 +171,49 @@ class TestTasks:
             assert task.opportunity_id == opp.id
             assert task.title == "Send the quote"
             assert task.completed_at is None
+            await db.rollback()
+
+    async def test_task_can_tag_an_active_workspace_user(self) -> None:
+        async with AsyncSessionLocal() as db:
+            ws = await _workspace(db)
+            opp = await _opportunity(db, ws.id)
+            member = await _member(db, ws.id)
+            service = OpportunityService(db)
+
+            task = await service.create_task(
+                ws.id,
+                opp.id,
+                OpportunityTaskCreate(title="Call back", assigned_user_id=member.id),
+            )
+            assert task.assigned_user_id == member.id
+
+            reassigned = await service.update_task(
+                ws.id,
+                opp.id,
+                task.id,
+                OpportunityTaskUpdate(assigned_user_id=None),
+            )
+            assert reassigned.assigned_user_id is None
+            await db.rollback()
+
+    async def test_task_rejects_a_user_outside_the_workspace(self) -> None:
+        async with AsyncSessionLocal() as db:
+            mine = await _workspace(db)
+            theirs = await _workspace(db)
+            outsider = await _member(db, theirs.id)
+            opp = await _opportunity(db, mine.id)
+            service = OpportunityService(db)
+
+            with pytest.raises(Exception) as excinfo:
+                await service.create_task(
+                    mine.id,
+                    opp.id,
+                    OpportunityTaskCreate(
+                        title="Cross-tenant task", assigned_user_id=outsider.id
+                    ),
+                )
+
+            assert "active workspace member" in str(excinfo.value).lower()
             await db.rollback()
 
     async def test_tasks_appear_on_the_detail_payload(self) -> None:
