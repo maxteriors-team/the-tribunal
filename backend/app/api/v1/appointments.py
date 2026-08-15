@@ -38,7 +38,6 @@ def _calendar_scope_user_id(
     if mine:
         return user_id
     return appointment_owner_scope(membership.role, user_id)
-    return None
 
 
 @router.get("", response_model=PaginatedAppointments)
@@ -105,16 +104,22 @@ async def create_appointment(
 ) -> Any:
     """Create a new appointment.
 
-    Dispatch-tier callers create an unassigned board appointment as before.
+    Dispatch-tier callers may leave it unassigned or tag a booking-enabled user.
     Restricted callers are assigned to their active linked booking resource so
     the row remains visible on their scoped calendar; an admin must enable that
     resource in Settings → Team first.
     """
     service = AppointmentService(db)
+    visible_to_user_id = _calendar_scope_user_id(membership, current_user.id)
+    if visible_to_user_id is not None and appointment_in.bookable_staff_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dispatchers can tag another user on an appointment",
+        )
     return await service.create_appointment(
         workspace_id,
         appointment_in,
-        booked_for_user_id=_calendar_scope_user_id(membership, current_user.id),
+        booked_for_user_id=visible_to_user_id,
     )
 
 
@@ -174,11 +179,17 @@ async def update_appointment(
 ) -> Any:
     """Update an appointment within the caller's calendar scope."""
     service = AppointmentService(db)
+    visible_to_user_id = _calendar_scope_user_id(membership, current_user.id)
+    if visible_to_user_id is not None and "bookable_staff_id" in appointment_in.model_fields_set:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only dispatchers can change an appointment's tagged user",
+        )
     return await service.update_appointment(
         workspace_id,
         appointment_id,
         appointment_in,
-        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+        visible_to_user_id=visible_to_user_id,
     )
 
 

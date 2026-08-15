@@ -26,6 +26,29 @@ vi.mock("@/lib/api/opportunities", () => ({
   },
 }));
 
+vi.mock("@/components/workspaces/team-member-picker", () => ({
+  TeamMemberPicker: ({
+    value,
+    onValueChange,
+    label,
+  }: {
+    value: number | null;
+    onValueChange: (value: number | null) => void;
+    label?: string;
+  }) => (
+    <select
+      aria-label={label ?? "Team member"}
+      value={value ?? ""}
+      onChange={(event) =>
+        onValueChange(event.target.value ? Number(event.target.value) : null)
+      }
+    >
+      <option value="">Unassigned</option>
+      <option value="22">Jordan Lee</option>
+    </select>
+  ),
+}));
+
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 function makeTask(overrides: Partial<OpportunityTask> = {}): OpportunityTask {
@@ -119,7 +142,26 @@ describe("OpportunityFollowups tasks", () => {
     expect(createTaskMock).toHaveBeenCalledWith("ws-1", "opp-1", {
       title: "Call Lisa back",
       due_at: null,
+      assigned_user_id: null,
     });
+  });
+
+  it("tags a user on a scheduled task", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("tab", { name: "Task" }));
+    await user.type(screen.getByLabelText("Task title"), "Call Lisa back");
+    await user.selectOptions(screen.getByLabelText("Tag a user"), "22");
+    await user.click(screen.getByRole("button", { name: "Add task" }));
+
+    await waitFor(() =>
+      expect(createTaskMock).toHaveBeenCalledWith("ws-1", "opp-1", {
+        title: "Call Lisa back",
+        due_at: null,
+        assigned_user_id: 22,
+      }),
+    );
   });
 
   it("sends the chosen due date", async () => {

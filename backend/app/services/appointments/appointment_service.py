@@ -6,7 +6,7 @@ from typing import Any
 
 import structlog
 from fastapi import HTTPException, status
-from sqlalchemy import ColumnElement, case, func, select
+from sqlalchemy import ColumnElement, and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,7 +18,8 @@ from app.models.bookable_staff import BookableStaff
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.field_service import BusinessLocation
-from app.models.workspace import Workspace
+from app.models.user import User
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.appointment import (
     AppointmentAgentStat,
     AppointmentCampaignStat,
@@ -32,8 +33,10 @@ from app.schemas.appointment import (
 from app.services.appointments.attendance import record_attendance_outcome
 from app.services.appointments.external_sync import (
     delete_external_events,
+    delete_google_calendar_event,
     update_external_events,
 )
+from app.utils.meeting_urls import zoom_meeting_id_from_url
 
 logger = structlog.get_logger()
 
@@ -47,7 +50,7 @@ def _calc_show_up_rate(completed: int, no_show: int) -> float:
 
 
 class AppointmentService:
-    """Service for appointment CRUD and stats.
+    """Service for appointment CRUD, user assignment, sync, and stats.
 
     The local ``appointments`` table is the source of truth; Google Calendar and
     Zoom synchronization are best-effort mirrors that never block local lifecycle
@@ -78,6 +81,103 @@ class AppointmentService:
                 BookableStaff.is_active.is_(True),
             )
         )
+
+    async def _active_staff_for_user(
+        self, workspace_id: uuid.UUID, user_id: int
+    ) -> BookableStaff | None:
+        result = await self.db.execute(
+            select(BookableStaff)
+            .where(
+                BookableStaff.workspace_id == workspace_id,
+                BookableStaff.user_id == user_id,
+                BookableStaff.is_active.is_(True),
+            )
+            .order_by(BookableStaff.priority.desc(), BookableStaff.created_at.asc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def _get_assignable_staff(
+        self, workspace_id: uuid.UUID, staff_id: uuid.UUID
+    ) -> BookableStaff:
+        """Resolve an active login-backed staff row without crossing tenants."""
+        result = await self.db.execute(
+            select(BookableStaff)
+            .join(User, User.id == BookableStaff.user_id)
+            .join(
+                WorkspaceMembership,
+                and_(
+                    WorkspaceMembership.workspace_id == workspace_id,
+                    WorkspaceMembership.user_id == BookableStaff.user_id,
+                ),
+            )
+            .where(
+                BookableStaff.id == staff_id,
+                BookableStaff.workspace_id == workspace_id,
+                BookableStaff.is_active.is_(True),
+                User.is_active.is_(True),
+            )
+        )
+        staff = result.scalar_one_or_none()
+        if staff is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking-enabled user not found",
+            )
+        return staff
+
+    async def _sync_assigned_external_events(
+        self,
+        appointment: Appointment,
+        *,
+        contact: Contact,
+        staff: BookableStaff,
+    ) -> None:
+        from app.services.appointments.booking_finalizer import (
+            sync_appointment_external_events,
+        )
+
+        workspace = await self.db.get(Workspace, appointment.workspace_id)
+        await sync_appointment_external_events(
+            self.db,
+            appointment=appointment,
+            contact=contact,
+            workspace=workspace,
+            staff=staff,
+            log=self.log.bind(appointment_id=appointment.id),
+        )
+
+    async def _prepare_staff_reassignment(
+        self,
+        appointment: Appointment,
+        workspace_id: uuid.UUID,
+        update_data: dict[str, Any],
+    ) -> tuple[BookableStaff | None, bool]:
+        if "bookable_staff_id" not in update_data:
+            return None, False
+
+        next_staff_id = update_data["bookable_staff_id"]
+        assigned_staff = (
+            await self._get_assignable_staff(workspace_id, next_staff_id)
+            if next_staff_id is not None
+            else None
+        )
+        if next_staff_id == appointment.bookable_staff_id:
+            return assigned_staff, False
+
+        # A Google event belongs to its old owner's calendar. Remove only that
+        # mirror before changing owners; a workspace Zoom meeting remains valid.
+        had_google_event = appointment.google_calendar_event_id is not None
+        if had_google_event:
+            await delete_google_calendar_event(self.db, appointment=appointment, log=self.log)
+            appointment.google_calendar_event_id = None
+            appointment.google_calendar_event_url = None
+            if zoom_meeting_id_from_url(appointment.meeting_url) is None:
+                appointment.meeting_url = None
+            appointment.last_synced_at = None
+            appointment.sync_status = "pending" if assigned_staff else "not_connected"
+            appointment.sync_error = None if assigned_staff else "No booking-enabled user is tagged"
+        return assigned_staff, True
 
     async def list_appointments(
         self,
@@ -132,12 +232,11 @@ class AppointmentService:
         *,
         booked_for_user_id: int | None = None,
     ) -> Appointment:
-        """Create an appointment, optionally assigning it to the caller's staff row.
+        """Create an appointment and optionally tag a booking-enabled user.
 
-        Restricted calendar callers pass ``booked_for_user_id`` so the row they
-        create remains visible on their own server-scoped calendar. If Team has
-        not enabled a booking resource for that login, creation is refused rather
-        than writing an appointment the caller can never retrieve.
+        Restricted callers pass ``booked_for_user_id`` and are forced onto their
+        own active booking resource. Dispatch-tier callers may choose an active
+        login-backed staff row from the workspace scheduling roster.
         """
         log = self.log.bind(workspace_id=str(workspace_id), contact_id=appointment_in.contact_id)
 
@@ -157,7 +256,6 @@ class AppointmentService:
             )
 
         # Verify agent exists if provided
-        agent = None
         if appointment_in.agent_id:
             agent_result = await self.db.execute(
                 select(Agent).where(
@@ -165,28 +263,17 @@ class AppointmentService:
                     Agent.workspace_id == workspace_id,
                 )
             )
-            agent = agent_result.scalar_one_or_none()
-            if not agent:
+            if agent_result.scalar_one_or_none() is None:
                 log.warning("agent_not_found")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Agent not found",
                 )
 
-        bookable_staff_id: uuid.UUID | None = None
+        assigned_staff: BookableStaff | None = None
         if booked_for_user_id is not None:
-            staff_result = await self.db.execute(
-                select(BookableStaff.id)
-                .where(
-                    BookableStaff.workspace_id == workspace_id,
-                    BookableStaff.user_id == booked_for_user_id,
-                    BookableStaff.is_active.is_(True),
-                )
-                .order_by(BookableStaff.priority.desc(), BookableStaff.created_at.asc())
-                .limit(1)
-            )
-            bookable_staff_id = staff_result.scalar_one_or_none()
-            if bookable_staff_id is None:
+            assigned_staff = await self._active_staff_for_user(workspace_id, booked_for_user_id)
+            if assigned_staff is None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
@@ -194,18 +281,26 @@ class AppointmentService:
                         "it in Settings > Team."
                     ),
                 )
+        elif appointment_in.bookable_staff_id is not None:
+            assigned_staff = await self._get_assignable_staff(
+                workspace_id, appointment_in.bookable_staff_id
+            )
 
         appointment = Appointment(
             workspace_id=workspace_id,
             agent_id=uuid.UUID(appointment_in.agent_id) if appointment_in.agent_id else None,
-            bookable_staff_id=bookable_staff_id,
-            **appointment_in.model_dump(exclude={"agent_id"}),
+            bookable_staff_id=assigned_staff.id if assigned_staff else None,
+            **appointment_in.model_dump(exclude={"agent_id", "bookable_staff_id"}),
         )
         self.db.add(appointment)
         await self.db.commit()
         await self.db.refresh(appointment)
 
-        log.info("appointment_created", appointment_id=appointment.id)
+        log.info(
+            "appointment_created",
+            appointment_id=appointment.id,
+            bookable_staff_id=str(assigned_staff.id) if assigned_staff else None,
+        )
 
         # Re-read through the eager-loading path. ``AppointmentResponse``
         # serializes a nested contact summary, and the bare instance above
@@ -262,14 +357,16 @@ class AppointmentService:
         *,
         visible_to_user_id: int | None = None,
     ) -> Appointment:
-        """Update an appointment's fields within the caller's visibility scope."""
+        """Update an appointment and move its external event when reassigned."""
         appointment = await self.get_appointment(
             workspace_id,
             appointment_id,
             visible_to_user_id=visible_to_user_id,
         )
 
+        contact = appointment.contact
         previous_status = appointment.status
+        had_google_event = appointment.google_calendar_event_id is not None
         previous_scheduled_at = appointment.scheduled_at
         previous_duration = appointment.duration_minutes
         update_data = appointment_in.model_dump(exclude_unset=True)
@@ -285,6 +382,10 @@ class AppointmentService:
                 workspace_id,
                 detail="Business location not found",
             )
+
+        assigned_staff, assignment_changed = await self._prepare_staff_reassignment(
+            appointment, workspace_id, update_data
+        )
 
         for field, value in update_data.items():
             setattr(appointment, field, value)
@@ -327,11 +428,26 @@ class AppointmentService:
         await self.db.commit()
         await self.db.refresh(appointment)
 
+        if (
+            assignment_changed
+            and had_google_event
+            and assigned_staff is not None
+            and appointment.status != AppointmentStatus.CANCELLED
+        ):
+            await self._sync_assigned_external_events(
+                appointment, contact=contact, staff=assigned_staff
+            )
+
         self.log.info(
             "appointment_updated",
             workspace_id=str(workspace_id),
             appointment_id=appointment_id,
             status=appointment.status,
+            bookable_staff_id=(
+                str(appointment.bookable_staff_id)
+                if appointment.bookable_staff_id is not None
+                else None
+            ),
         )
 
         # When an operator marks a job completed, enqueue a review request.

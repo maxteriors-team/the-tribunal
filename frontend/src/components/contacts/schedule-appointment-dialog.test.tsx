@@ -7,6 +7,9 @@ import type { Contact } from "@/types";
 
 const { mutateMock } = vi.hoisted(() => ({ mutateMock: vi.fn() }));
 
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => ({ can: () => false }),
+}));
 vi.mock("@/hooks/useAgents", () => ({
   useAgents: () => ({ data: { items: [] }, isPending: false }),
 }));

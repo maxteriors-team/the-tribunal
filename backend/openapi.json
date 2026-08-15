@@ -3442,7 +3442,7 @@
         "type": "object"
       },
       "AppointmentCreate": {
-        "description": "Schema for creating an appointment.",
+        "description": "Schema for creating an appointment and tagging a calendar user.",
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -3454,6 +3454,18 @@
               }
             ],
             "title": "Agent Id"
+          },
+          "bookable_staff_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bookable Staff Id"
           },
           "contact_id": {
             "title": "Contact Id",
@@ -3847,6 +3859,18 @@
       "AppointmentUpdate": {
         "description": "Schema for updating an appointment.",
         "properties": {
+          "bookable_staff_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bookable Staff Id"
+          },
           "business_location_id": {
             "anyOf": [
               {
@@ -61746,7 +61770,7 @@
         ]
       },
       "post": {
-        "description": "Create a new appointment.\n\nDispatch-tier callers create an unassigned board appointment as before.\nRestricted callers are assigned to their active linked booking resource so\nthe row remains visible on their scoped calendar; an admin must enable that\nresource in Settings → Team first.",
+        "description": "Create a new appointment.\n\nDispatch-tier callers may leave it unassigned or tag a booking-enabled user.\nRestricted callers are assigned to their active linked booking resource so\nthe row remains visible on their scoped calendar; an admin must enable that\nresource in Settings → Team first.",
         "operationId": "create_appointment_api_v1_workspaces__workspace_id__appointments_post",
         "parameters": [
           {
@@ -62904,7 +62928,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/bookable-staff": {
       "get": {
-        "description": "Every bookable staff row in the workspace, across all agents.\n\nAnswers \"does this member have a booking calendar?\" on the Team screen,\nwhich has no agent context.",
+        "description": "Every booking-enabled user available for schedule tagging.\n\nDispatch-tier users may read this roster to assign appointments. Only owners\nand admins may enable, disable, or relink booking calendars.",
         "operationId": "list_workspace_bookable_staff_api_v1_workspaces__workspace_id__bookable_staff_get",
         "parameters": [
           {

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { TeamMemberPicker } from "@/components/workspaces/team-member-picker";
 import { opportunitiesApi } from "@/lib/api/opportunities";
 import { queryKeys } from "@/lib/query-keys";
 import { formatDate } from "@/lib/utils/date";
@@ -40,6 +41,7 @@ export function OpportunityFollowups({
   const [noteKind, setNoteKind] = useState<OpportunityNoteKind>("note");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDueAt, setTaskDueAt] = useState("");
+  const [taskAssigneeId, setTaskAssigneeId] = useState<number | null>(null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({
@@ -59,11 +61,15 @@ export function OpportunityFollowups({
   });
 
   const createTaskMutation = useMutation({
-    mutationFn: (input: { title: string; due_at?: string | null }) =>
-      opportunitiesApi.createTask(workspaceId, opportunityId, input),
+    mutationFn: (input: {
+      title: string;
+      due_at?: string | null;
+      assigned_user_id: number | null;
+    }) => opportunitiesApi.createTask(workspaceId, opportunityId, input),
     onSuccess: () => {
       setTaskTitle("");
       setTaskDueAt("");
+      setTaskAssigneeId(null);
       toast.success("Task added");
       refresh();
     },
@@ -77,6 +83,19 @@ export function OpportunityFollowups({
       }),
     onSuccess: () => refresh(),
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to update task")),
+  });
+
+  const assignTaskMutation = useMutation({
+    mutationFn: (input: { taskId: string; assignedUserId: number | null }) =>
+      opportunitiesApi.updateTask(workspaceId, opportunityId, input.taskId, {
+        assigned_user_id: input.assignedUserId,
+      }),
+    onSuccess: () => {
+      toast.success("Tagged user updated");
+      refresh();
+    },
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, "Failed to update tagged user")),
   });
 
   const submitNote = () => {
@@ -93,6 +112,7 @@ export function OpportunityFollowups({
       // list agree on the day.
       title,
       due_at: taskDueAt ? new Date(`${taskDueAt}T12:00:00`).toISOString() : null,
+      assigned_user_id: taskAssigneeId,
     });
   };
 
@@ -156,6 +176,15 @@ export function OpportunityFollowups({
             onChange={(event) => setTaskTitle(event.target.value)}
             placeholder="e.g. Send the revised quote"
           />
+          <TeamMemberPicker
+            workspaceId={workspaceId}
+            value={taskAssigneeId}
+            onValueChange={setTaskAssigneeId}
+            label="Tag a user"
+            triggerId="opportunity-task-assignee"
+            className="max-w-sm"
+            disabled={createTaskMutation.isPending}
+          />
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Label htmlFor="opportunity-task-due" className="text-xs text-muted-foreground">
@@ -187,9 +216,16 @@ export function OpportunityFollowups({
             <TaskRow
               key={task.id}
               task={task}
+              workspaceId={workspaceId}
               disabled={toggleTaskMutation.isPending}
+              assigning={
+                assignTaskMutation.isPending && assignTaskMutation.variables?.taskId === task.id
+              }
               onToggle={(completed) =>
                 toggleTaskMutation.mutate({ taskId: task.id, completed })
+              }
+              onAssigneeChange={(assignedUserId) =>
+                assignTaskMutation.mutate({ taskId: task.id, assignedUserId })
               }
             />
           ))}
@@ -201,12 +237,18 @@ export function OpportunityFollowups({
 
 function TaskRow({
   task,
+  workspaceId,
   disabled,
+  assigning,
   onToggle,
+  onAssigneeChange,
 }: {
   task: OpportunityTask;
+  workspaceId: string;
   disabled: boolean;
+  assigning: boolean;
   onToggle: (completed: boolean) => void;
+  onAssigneeChange: (assignedUserId: number | null) => void;
 }) {
   const isDone = !!task.completed_at;
   // Overdue only matters while the task is open -- flagging a finished task red
@@ -237,6 +279,15 @@ function TaskRow({
             {formatDate(task.due_at)}
           </p>
         ) : null}
+        <TeamMemberPicker
+          workspaceId={workspaceId}
+          value={task.assigned_user_id ?? null}
+          onValueChange={onAssigneeChange}
+          label="Tagged user"
+          triggerId={`opportunity-task-${task.id}-assignee`}
+          className="mt-2 max-w-xs"
+          disabled={isDone || assigning}
+        />
       </div>
     </li>
   );

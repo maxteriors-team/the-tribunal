@@ -134,8 +134,8 @@ export function useSetMemberOnRoster(workspaceId: string) {
 /**
  * Whether each member has a booking calendar (a linked `bookable_staff` row).
  *
- * Team-settings only: gated on `members:manage` server-side, so it is fetched
- * with `enabled` from the same check that renders the toggle.
+ * Dispatch-tier users read this roster for schedule tagging. Team-settings
+ * mutations remain gated on `members:manage` server-side.
  */
 export function useWorkspaceBookableStaff(workspaceId: string, enabled = true) {
   return useQuery<Schemas["BookableStaffList"]>({

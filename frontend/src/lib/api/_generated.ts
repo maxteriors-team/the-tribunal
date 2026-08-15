@@ -2368,7 +2368,7 @@ export interface paths {
          * Create Appointment
          * @description Create a new appointment.
          *
-         *     Dispatch-tier callers create an unassigned board appointment as before.
+         *     Dispatch-tier callers may leave it unassigned or tag a booking-enabled user.
          *     Restricted callers are assigned to their active linked booking resource so
          *     the row remains visible on their scoped calendar; an admin must enable that
          *     resource in Settings → Team first.
@@ -2686,10 +2686,10 @@ export interface paths {
         };
         /**
          * List Workspace Bookable Staff
-         * @description Every bookable staff row in the workspace, across all agents.
+         * @description Every booking-enabled user available for schedule tagging.
          *
-         *     Answers "does this member have a booking calendar?" on the Team screen,
-         *     which has no agent context.
+         *     Dispatch-tier users may read this roster to assign appointments. Only owners
+         *     and admins may enable, disable, or relink booking calendars.
          */
         get: operations["list_workspace_bookable_staff_api_v1_workspaces__workspace_id__bookable_staff_get"];
         put?: never;
@@ -11485,11 +11485,13 @@ export interface components {
         };
         /**
          * AppointmentCreate
-         * @description Schema for creating an appointment.
+         * @description Schema for creating an appointment and tagging a calendar user.
          */
         AppointmentCreate: {
             /** Agent Id */
             agent_id?: string | null;
+            /** Bookable Staff Id */
+            bookable_staff_id?: string | null;
             /** Contact Id */
             contact_id: number;
             /**
@@ -11628,6 +11630,8 @@ export interface components {
          * @description Schema for updating an appointment.
          */
         AppointmentUpdate: {
+            /** Bookable Staff Id */
+            bookable_staff_id?: string | null;
             /** Business Location Id */
             business_location_id?: string | null;
             /** Duration Minutes */

@@ -3,11 +3,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 
+import { TechnicianSelect } from "@/components/jobs/technician-select";
 import { Button } from "@/components/ui/button";
 import { FormContactPicker } from "@/components/ui/contact-combobox";
 import {
@@ -37,6 +38,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useWorkspaceTechnicians } from "@/hooks/useJobs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { servicePlansApi } from "@/lib/api/service-plans";
 import { queryKeys } from "@/lib/query-keys";
@@ -150,6 +152,9 @@ export function ServicePlanDialog({
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const isEdit = Boolean(plan);
+  const [technicianIds, setTechnicianIds] = useState<string[]>([]);
+  const { data: technicianData } = useWorkspaceTechnicians(workspaceId ?? "", open);
+  const technicians = useMemo(() => technicianData?.items ?? [], [technicianData?.items]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -173,10 +178,19 @@ export function ServicePlanDialog({
             description: plan.description ?? "",
             is_active: plan.is_active,
           }
-        : DEFAULT_VALUES
+        : DEFAULT_VALUES,
     );
+    setTechnicianIds(plan?.default_technician_ids ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, plan]);
+
+  const toggleTechnician = (technicianId: string) => {
+    setTechnicianIds((current) =>
+      current.includes(technicianId)
+        ? current.filter((id) => id !== technicianId)
+        : [...current, technicianId],
+    );
+  };
 
   const planType = form.watch("plan_type");
 
@@ -214,6 +228,7 @@ export function ServicePlanDialog({
         next_run_at: nextRunIso,
         description: values.description.trim() || undefined,
         is_active: values.is_active,
+        default_technician_ids: technicianIds,
       };
       if (plan) {
         return servicePlansApi.update(workspaceId, plan.id, common);
@@ -436,6 +451,19 @@ export function ServicePlanDialog({
                 )}
               />
             </div>
+
+            {workspaceId ? (
+              <div className="space-y-1">
+                <TechnicianSelect
+                  technicians={technicians}
+                  selectedIds={technicianIds}
+                  onToggle={toggleTechnician}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Every generated job inherits these user tags.
+                </p>
+              </div>
+            ) : null}
 
             <FormField
               control={form.control}

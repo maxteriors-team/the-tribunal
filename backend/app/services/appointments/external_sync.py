@@ -111,30 +111,45 @@ async def delete_external_events(
 
     if appointment.google_calendar_event_id:
         attempted = True
-        user_id = await _calendar_owner_user_id(db, appointment)
-        if user_id is None:
-            errors.append("Assigned staff calendar is not connected")
-        else:
-            try:
-                from app.services.google_calendar import delete_event
-
-                await delete_event(
-                    db,
-                    user_id=user_id,
-                    event_id=appointment.google_calendar_event_id,
-                )
-                log.info("google_calendar_event_deleted", appointment_id=appointment.id)
-            except GoogleCalendarError:
-                errors.append("Google Calendar event deletion failed")
-                log.warning("google_calendar_event_delete_failed", appointment_id=appointment.id)
-            except Exception:  # noqa: BLE001 - local cancellation must survive provider failure
-                errors.append("Google Calendar event deletion failed")
-                log.exception("google_calendar_event_delete_failed", appointment_id=appointment.id)
+        if error := await delete_google_calendar_event(db, appointment=appointment, log=log):
+            errors.append(error)
 
     if not attempted:
         return
     appointment.sync_status = "failed" if errors else "cancelled"
     appointment.sync_error = "; ".join(errors) if errors else None
+
+
+async def delete_google_calendar_event(
+    db: AsyncSession,
+    *,
+    appointment: Appointment,
+    log: Any,
+) -> str | None:
+    """Delete only Google Calendar, preserving any Zoom meeting on reassignment."""
+    if appointment.google_calendar_event_id is None:
+        return None
+
+    user_id = await _calendar_owner_user_id(db, appointment)
+    if user_id is None:
+        return "Assigned staff calendar is not connected"
+
+    try:
+        from app.services.google_calendar import delete_event
+
+        await delete_event(
+            db,
+            user_id=user_id,
+            event_id=appointment.google_calendar_event_id,
+        )
+        log.info("google_calendar_event_deleted", appointment_id=appointment.id)
+    except GoogleCalendarError:
+        log.warning("google_calendar_event_delete_failed", appointment_id=appointment.id)
+        return "Google Calendar event deletion failed"
+    except Exception:  # noqa: BLE001 - local reassignment must survive provider failure
+        log.exception("google_calendar_event_delete_failed", appointment_id=appointment.id)
+        return "Google Calendar event deletion failed"
+    return None
 
 
 async def _calendar_owner_user_id(db: AsyncSession, appointment: Appointment) -> int | None:

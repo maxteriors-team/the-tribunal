@@ -264,8 +264,26 @@ class TestAppointmentCreateScope:
                 },
             )
         assert response.status_code == 201
+        assert response.status_code == 201
         assert service.create_appointment.await_args.kwargs["booked_for_user_id"] == USER_ID
 
+    async def test_restricted_create_cannot_choose_another_calendar_user(self) -> None:
+        service = _appointment_service()
+        async with _client(
+            appointments_module, service, "technician", APPOINTMENTS_PREFIX
+        ) as client:
+            response = await client.post(
+                f"/api/v1/workspaces/{WS_ID}/appointments",
+                json={
+                    "contact_id": 42,
+                    "scheduled_at": datetime.now(UTC).isoformat(),
+                    "duration_minutes": 30,
+                    "bookable_staff_id": str(uuid.uuid4()),
+                },
+            )
+
+        assert response.status_code == 403
+        service.create_appointment.assert_not_awaited()
     async def test_dispatch_create_stays_unassigned(self) -> None:
         """Dispatch can still create a board appointment for later routing."""
         service = _appointment_service()
@@ -281,6 +299,27 @@ class TestAppointmentCreateScope:
                 },
             )
         assert response.status_code == 201
+        assert service.create_appointment.await_args.kwargs["booked_for_user_id"] is None
+
+    async def test_dispatch_create_forwards_the_tagged_calendar_user(self) -> None:
+        service = _appointment_service()
+        staff_id = uuid.uuid4()
+        async with _client(
+            appointments_module, service, "dispatcher", APPOINTMENTS_PREFIX
+        ) as client:
+            response = await client.post(
+                f"/api/v1/workspaces/{WS_ID}/appointments",
+                json={
+                    "contact_id": 42,
+                    "scheduled_at": datetime.now(UTC).isoformat(),
+                    "duration_minutes": 30,
+                    "bookable_staff_id": str(staff_id),
+                },
+            )
+
+        assert response.status_code == 201
+        request = service.create_appointment.await_args.args[1]
+        assert request.bookable_staff_id == staff_id
         assert service.create_appointment.await_args.kwargs["booked_for_user_id"] is None
 
 
@@ -345,6 +384,19 @@ class TestAppointmentMutationScope:
             "post": service.send_reminder,
         }[method]
         assert service_method.await_args.kwargs["visible_to_user_id"] == USER_ID
+
+    async def test_restricted_user_cannot_reassign_an_appointment(self) -> None:
+        service = _appointment_service()
+        async with _client(
+            appointments_module, service, "technician", APPOINTMENTS_PREFIX
+        ) as client:
+            response = await client.put(
+                f"/api/v1/workspaces/{WS_ID}/appointments/{APPOINTMENT_ID}",
+                json={"bookable_staff_id": str(uuid.uuid4())},
+            )
+
+        assert response.status_code == 403
+        service.update_appointment.assert_not_awaited()
 
     @pytest.mark.parametrize(
         ("method", "path", "json"),

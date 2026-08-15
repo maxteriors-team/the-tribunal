@@ -744,13 +744,19 @@ class OpportunityService:
         )
         self._enforce_owner(opportunity, restrict_to_user_id)
 
+        if task_in.assigned_user_id is not None:
+            await assert_active_workspace_member(
+                self.db,
+                workspace_id,
+                task_in.assigned_user_id,
+            )
+
         task = OpportunityTask(
             opportunity_id=opportunity_id,
             title=task_in.title.strip(),
             notes=task_in.notes,
             due_at=task_in.due_at,
-            # Unassigned follow-ups get owned by whoever booked them, so a task
-            # always has someone to chase rather than sitting in limbo.
+            # Untagged follow-ups default to whoever created them.
             assigned_user_id=task_in.assigned_user_id or user_id,
             created_by_id=user_id,
         )
@@ -784,6 +790,13 @@ class OpportunityService:
 
         fields = task_in.model_dump(exclude_unset=True)
         completed = fields.pop("completed", None)
+        assigned_user_id = fields.get("assigned_user_id")
+        if assigned_user_id is not None:
+            await assert_active_workspace_member(
+                self.db,
+                workspace_id,
+                assigned_user_id,
+            )
         for field, value in fields.items():
             setattr(task, field, value)
 

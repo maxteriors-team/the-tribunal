@@ -7,9 +7,10 @@ Two routers, because the pool is read two different ways:
 
 * ``router`` — agent configuration, mounted at
   ``/workspaces/{workspace_id}/agents/{agent_id}/staff``.
-* ``workspace_router`` — the Settings → Team view of the same rows, where an
-  admin decides whether a member has a booking calendar at all. Mounted at
-  ``/workspaces/{workspace_id}/bookable-staff`` and gated on ``members:manage``.
+* ``workspace_router`` — the scheduling roster and Settings → Team view of the
+  same rows. Dispatch-tier users can read it to tag appointments; only admins can
+  change whether a member has a booking calendar. Mounted at
+  ``/workspaces/{workspace_id}/bookable-staff``.
 """
 
 import uuid
@@ -119,6 +120,15 @@ def _assert_may_manage_members(membership: WorkspaceMembership) -> None:
         )
 
 
+def _assert_may_view_schedule_users(membership: WorkspaceMembership) -> None:
+    """Dispatchers can tag booking-enabled users without managing the roster."""
+    if not role_can(membership.role, Capability.JOBS_WRITE):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view assignable calendar users",
+        )
+
+
 @workspace_router.get("", response_model=BookableStaffList)
 async def list_workspace_bookable_staff(
     workspace_id: uuid.UUID,
@@ -127,12 +137,12 @@ async def list_workspace_bookable_staff(
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> BookableStaffList:
-    """Every bookable staff row in the workspace, across all agents.
+    """Every booking-enabled user available for schedule tagging.
 
-    Answers "does this member have a booking calendar?" on the Team screen,
-    which has no agent context.
+    Dispatch-tier users may read this roster to assign appointments. Only owners
+    and admins may enable, disable, or relink booking calendars.
     """
-    _assert_may_manage_members(membership)
+    _assert_may_view_schedule_users(membership)
     return await BookableStaffService(db).list_workspace_staff(workspace_id)
 
 
