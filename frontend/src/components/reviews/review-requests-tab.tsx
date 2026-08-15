@@ -16,7 +16,7 @@ import {
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { reviewsApi } from "@/lib/api/reviews";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 import { cn } from "@/lib/utils";
 import type { ReviewRequestStatus } from "@/types/review";
 
@@ -46,7 +46,7 @@ export function ReviewRequestsTab() {
     queryKey: queryKeys.reviews.requests(workspaceId ?? ""),
     queryFn: () => reviewsApi.listRequests(workspaceId!),
     enabled: !!workspaceId,
-    ...POLL_60S,
+    ...REALTIME,
   });
 
   if (isPending) {

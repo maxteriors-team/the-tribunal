@@ -34,6 +34,7 @@ from app.workers.experiment_evaluation_worker import _registry as experiment_eva
 from app.workers.followup_worker import _registry as followup_registry
 from app.workers.message_attachment_worker import registry as message_attachment_registry
 from app.workers.message_test_worker import _registry as message_test_registry
+from app.workers.meta_ads_spend_worker import _registry as meta_ads_spend_registry
 from app.workers.never_booked_worker import _registry as never_booked_registry
 from app.workers.noshow_reengagement_worker import _registry as noshow_reengagement_registry
 from app.workers.nudge_worker import _registry as nudge_registry
@@ -333,6 +334,13 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         dependencies=("postgres", "telnyx_media", "private_object_storage"),
         enabled=_mms_storage_enabled,
         enabled_setting="mms_storage_enabled",
+    ),
+    WorkerSpec(
+        name="meta_ads_spend_worker",
+        registry=meta_ads_spend_registry,
+        dependencies=("postgres", "meta_graph"),
+        enabled=lambda s: s.meta_ads_spend_worker_enabled,
+        enabled_setting="meta_ads_spend_worker_enabled",
     ),
 )
 

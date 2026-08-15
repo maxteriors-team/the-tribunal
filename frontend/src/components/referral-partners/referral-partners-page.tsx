@@ -50,7 +50,7 @@ import {
   type ReferralPartner,
 } from "@/lib/api/referral-partners";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatNumber } from "@/lib/utils/number";
 
@@ -107,7 +107,7 @@ export function ReferralPartnersPage() {
     ),
     queryFn: () => referralPartnersApi.scoreboard(workspaceId ?? "", scoreboardParams),
     enabled: Boolean(workspaceId) && view !== "roster",
-    ...POLL_60S,
+    ...REALTIME,
   });
 
   const rosterQuery = useQuery({

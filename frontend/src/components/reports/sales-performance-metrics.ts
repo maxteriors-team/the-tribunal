@@ -166,11 +166,14 @@ export interface SampleNoun {
   plural: string;
 }
 
-/** Denominator of average job value and attach rate: approved quotes. */
+/** Denominator of cohort breakdown averages and attach rate: approved quotes. */
 export const APPROVED_SAMPLE: SampleNoun = {
   singular: "approved",
   plural: "approved",
 };
+
+/** Denominator of headline booked revenue: canonical booking events. */
+export const BOOKED_SAMPLE: SampleNoun = { singular: "booking", plural: "bookings" };
 
 /** Volume behind a close rate: quotes issued in the window. */
 export const QUOTED_SAMPLE: SampleNoun = { singular: "quote", plural: "quotes" };

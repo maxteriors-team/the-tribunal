@@ -47,6 +47,7 @@ export function useContactStats(workspaceId: string) {
     queryKey: queryKeys.contacts.stats(workspaceId),
     queryFn: () => contactsApi.getStats(workspaceId),
     enabled: !!workspaceId,
+    ...REALTIME,
   });
 }
 

@@ -3,13 +3,12 @@
 Computes the owner-facing retention scorecard for a workspace over a date
 range. The heavy lifting is split into two layers:
 
-* :class:`ScorecardService` runs the workspace-scoped queries against
-  ``call_outcomes``, ``messages``, ``appointments``, ``opportunities`` and
-  ``contacts``, mapping each row into a small frozen dataclass.
-* The module-level ``aggregate_*`` helpers turn those dataclasses into the
-  response numbers. They are pure functions (no DB, no clock) so the metric
-  maths — answer rate, missed-call recovery, after-hours coverage, average
-  handle time, top reasons, daily new leads — can be unit-tested directly.
+* :class:`ScorecardService` runs workspace-scoped queries for calls, messages,
+  appointments, contacts, canonical booked revenue, and paid deposits.
+* The module-level ``aggregate_*`` helpers turn those values into response
+  numbers. They are pure functions (no DB, no clock) so the metric maths —
+  answer rate, missed-call recovery, after-hours coverage, average handle time,
+  top reasons, daily new leads — can be unit-tested directly.
 """
 
 from __future__ import annotations
@@ -21,7 +20,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment
@@ -33,9 +32,11 @@ from app.models.conversation import (
     MessageChannel,
     MessageDirection,
 )
-from app.models.opportunity import Opportunity
+from app.models.quote import Quote
 from app.models.workspace import Workspace
 from app.schemas.scorecard import CallReasonStat, DailyLeadCount, ReceptionistScorecard
+from app.services.reporting.booked_revenue import get_booked_revenue_totals
+from app.services.reporting.time_windows import local_date_bounds_utc
 from app.services.telephony.missed_call_textback import MISSED_CALL_OUTCOMES
 
 logger = structlog.get_logger()
@@ -105,16 +106,6 @@ class AppointmentRow:
 
     contact_id: int | None
     created_at: datetime
-
-
-@dataclass(slots=True, frozen=True)
-class OpportunityRow:
-    """An opportunity touched within the range, for booked/won revenue."""
-
-    amount: float
-    created_at: datetime
-    status: str
-    closed_date: date | None
 
 
 @dataclass(slots=True, frozen=True)
@@ -243,7 +234,8 @@ def aggregate_scorecard(
     textbacks: list[TextbackRow],
     inbound_replies: list[InboundReplyRow],
     appointments: list[AppointmentRow],
-    opportunities: list[OpportunityRow],
+    revenue_booked: float,
+    deposits_collected: float,
     leads: list[LeadRow],
     tz: ZoneInfo,
     currency: str = "USD",
@@ -284,12 +276,9 @@ def aggregate_scorecard(
         round(new_leads_total / len(new_leads_by_day), 1) if new_leads_by_day else None
     )
 
-    # --- Revenue ----------------------------------------------------------
-    revenue_booked = round(sum(o.amount for o in opportunities), 2)
-    deposits_booked = round(
-        sum(o.amount for o in opportunities if o.status == "won" and o.closed_date is not None),
-        2,
-    )
+    # Money values are queried from the canonical booking/deposit ledgers.
+    revenue_booked = round(revenue_booked, 2)
+    deposits_booked = round(deposits_collected, 2)
 
     return ReceptionistScorecard(
         start_date=start_date,
@@ -346,17 +335,13 @@ class ScorecardService:
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> ReceptionistScorecard:
-        resolved_start, resolved_end = resolve_range(start_date, end_date)
         tz = _resolve_tz(workspace)
-        # Inclusive day range → [start 00:00 UTC, end+1 00:00 UTC).
-        window_start = datetime.combine(resolved_start, time.min, tzinfo=UTC)
-        window_end = datetime.combine(resolved_end + timedelta(days=1), time.min, tzinfo=UTC)
-        # The daily lead series is bucketed by local calendar day, so it needs a
-        # window anchored to local midnight. Reusing the UTC window would clip a
-        # partial day off each end for any non-UTC workspace — an owner in
-        # UTC-5 would see the first day's evening leads missing entirely.
-        leads_window_start = datetime.combine(resolved_start, time.min, tzinfo=tz)
-        leads_window_end = datetime.combine(resolved_end + timedelta(days=1), time.min, tzinfo=tz)
+        resolved_start, resolved_end = resolve_range(
+            start_date,
+            end_date,
+            today=datetime.now(tz).date(),
+        )
+        window_start, window_end = local_date_bounds_utc(resolved_start, resolved_end, tz.key)
 
         conv_select = select(Conversation.id).where(Conversation.workspace_id == workspace.id)
 
@@ -364,8 +349,17 @@ class ScorecardService:
         textbacks = await self._fetch_textbacks(conv_select, window_start, window_end)
         replies = await self._fetch_inbound_replies(conv_select, window_start, window_end)
         appointments = await self._fetch_appointments(workspace.id, window_start, window_end)
-        opportunities = await self._fetch_opportunities(workspace.id, window_start, window_end)
-        leads = await self._fetch_leads(workspace.id, leads_window_start, leads_window_end)
+        leads = await self._fetch_leads(workspace.id, window_start, window_end)
+        booked = await get_booked_revenue_totals(
+            self.db,
+            workspace.id,
+            resolved_start,
+            resolved_end,
+            timezone_name=tz.key,
+        )
+        deposits_collected = await self._fetch_deposits_collected(
+            workspace.id, window_start, window_end
+        )
 
         return aggregate_scorecard(
             start_date=resolved_start,
@@ -374,7 +368,8 @@ class ScorecardService:
             textbacks=textbacks,
             inbound_replies=replies,
             appointments=appointments,
-            opportunities=opportunities,
+            revenue_booked=float(booked.revenue),
+            deposits_collected=deposits_collected,
             leads=leads,
             tz=tz,
         )
@@ -499,27 +494,22 @@ class ScorecardService:
         )
         return [LeadRow(created_at=row.created_at) for row in result.all()]
 
-    async def _fetch_opportunities(
+    async def _fetch_deposits_collected(
         self, workspace_id: uuid.UUID, window_start: datetime, window_end: datetime
-    ) -> list[OpportunityRow]:
-        result = await self.db.execute(
-            select(
-                Opportunity.amount,
-                Opportunity.created_at,
-                Opportunity.status,
-                Opportunity.closed_date,
-            ).where(
-                Opportunity.workspace_id == workspace_id,
-                Opportunity.created_at >= window_start,
-                Opportunity.created_at < window_end,
-            )
+    ) -> float:
+        """Sum deposits actually marked paid inside the local reporting window."""
+        deposit_value = func.coalesce(
+            Quote.deposit_amount_fixed,
+            Quote.total * Quote.deposit_percentage / 100,
+            0,
         )
-        return [
-            OpportunityRow(
-                amount=float(row.amount or 0),
-                created_at=row.created_at,
-                status=str(row.status),
-                closed_date=row.closed_date,
+        value = (
+            await self.db.execute(
+                select(func.coalesce(func.sum(deposit_value), 0)).where(
+                    Quote.workspace_id == workspace_id,
+                    Quote.deposit_paid_at >= window_start,
+                    Quote.deposit_paid_at < window_end,
+                )
             )
-            for row in result.all()
-        ]
+        ).scalar_one()
+        return float(value or 0)

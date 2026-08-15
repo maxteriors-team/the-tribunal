@@ -10,6 +10,7 @@ IntegrationType = Literal[
     "telnyx",
     "openai",
     "resend",
+    "meta_lead_ads",
     "meta_ad_library",
     "google_ads_transparency",
     "companycam",

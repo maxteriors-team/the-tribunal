@@ -58,7 +58,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { upsellApi, type UpsellJob, type UpsellQuote } from "@/lib/api/upsell";
 import { queryKeys } from "@/lib/query-keys";
-import { STATIC } from "@/lib/query-options";
+import { REALTIME, STATIC } from "@/lib/query-options";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
 import { formatPhoneNumber } from "@/lib/utils/phone";
@@ -140,6 +140,7 @@ export function UpsellPage() {
       return upsellApi.myStats(workspaceId);
     },
     enabled: !!workspaceId && !activeJob && canSell,
+    ...REALTIME,
   });
 
   const carePlanQuery = useQuery({

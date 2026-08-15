@@ -4,6 +4,7 @@ import { campaignsApi, type CreateCampaignRequest, type UpdateCampaignRequest } 
 import type { ApiClient } from "@/lib/api/create-api-client";
 import { createResourceHooks } from "@/lib/api/create-resource-hooks";
 import { queryKeys } from "@/lib/query-keys";
+import { REALTIME } from "@/lib/query-options";
 import type { Campaign } from "@/types";
 
 const {
@@ -25,5 +26,6 @@ export function useCampaignAnalytics(workspaceId: string, campaignId: string) {
     queryKey: queryKeys.campaigns.analytics(workspaceId, campaignId),
     queryFn: () => campaignsApi.getAnalytics(workspaceId, campaignId),
     enabled: !!workspaceId && !!campaignId,
+    ...REALTIME,
   });
 }

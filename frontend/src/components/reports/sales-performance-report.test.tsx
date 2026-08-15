@@ -48,6 +48,9 @@ function report(overrides: Partial<Report> = {}): Report {
     date_from: "2026-07-01",
     date_to: "2026-07-31",
     currency: "USD",
+    booked_jobs: 12,
+    booked_revenue: 51_000,
+    avg_booked_value: 4_250,
     quotes_issued: 30,
     quotes_approved: 12,
     revenue_approved: 51_000,
@@ -72,6 +75,9 @@ function report(overrides: Partial<Report> = {}): Report {
 /** An untouched workspace: nothing happened, so every rate is null. */
 function emptyReport(): Report {
   return report({
+    booked_jobs: 0,
+    booked_revenue: 0,
+    avg_booked_value: null,
     quotes_issued: 0,
     quotes_approved: 0,
     revenue_approved: 0,
@@ -152,8 +158,8 @@ describe("SalesPerformanceReport", () => {
     expect(await screen.findByText("Conversion Rate")).toBeInTheDocument();
     expect(screen.getByText("Show-up Rate")).toBeInTheDocument();
     expect(screen.getByText("Close Rate")).toBeInTheDocument();
-    expect(screen.getByText("Average Job Value")).toBeInTheDocument();
-    expect(screen.getByText("Revenue Won")).toBeInTheDocument();
+    expect(screen.getByText("Average Booked Job")).toBeInTheDocument();
+    expect(screen.getByText("Booked Revenue")).toBeInTheDocument();
     expect(screen.getByText("$51,000.00")).toBeInTheDocument();
     // Attach rate is demoted to the breakdown body, not a headline.
     expect(screen.queryByText("Attach Rate")).not.toBeInTheDocument();
@@ -240,7 +246,7 @@ describe("SalesPerformanceReport", () => {
 
     renderReport();
 
-    await screen.findByText("Average Job Value");
+    await screen.findByText("Average Booked Job");
     expect(
       salesPerformanceMock.mock.calls.some(
         ([, params]) =>
@@ -255,7 +261,7 @@ describe("SalesPerformanceReport", () => {
 
     renderReport();
 
-    await screen.findByText("Average Job Value");
+    await screen.findByText("Average Booked Job");
     await waitFor(() =>
       expect(
         salesPerformanceMock.mock.calls.some(
@@ -277,6 +283,8 @@ describe("SalesPerformanceReport", () => {
         show_up_rate: 0.6,
         avg_job_value: 3_900,
         revenue_approved: 44_000,
+        avg_booked_value: 3_900,
+        booked_revenue: 44_000,
       }),
     );
 
@@ -297,6 +305,9 @@ describe("SalesPerformanceReport", () => {
       report({
         date_from: "2026-05-31",
         date_to: "2026-06-30",
+        booked_jobs: 0,
+        booked_revenue: 0,
+        avg_booked_value: null,
         quotes_issued: 0,
         quotes_approved: 0,
         avg_job_value: null,
@@ -309,8 +320,8 @@ describe("SalesPerformanceReport", () => {
     renderReport();
 
     const notices = await screen.findAllByText("No prior-period data to compare");
-    // Conversion, show-up, close rate and average job value all lack a
-    // baseline; only revenue won has a prior number to compare against.
+    // Conversion, show-up, close rate and average booking lack a prior sample;
+    // booked revenue can still compare against a real prior-period zero.
     expect(notices.length).toBe(4);
   });
 
@@ -330,6 +341,9 @@ describe("SalesPerformanceReport", () => {
   it("still reports the funnel when the window has contacts but no quotes", async () => {
     respondWith(
       report({
+        booked_jobs: 0,
+        booked_revenue: 0,
+        avg_booked_value: null,
         quotes_issued: 0,
         quotes_approved: 0,
         revenue_approved: 0,
@@ -351,13 +365,16 @@ describe("SalesPerformanceReport", () => {
     expect(screen.getByText("20%")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument();
     expect(
-      screen.getByText(/No quotes were created in this range/),
+      screen.getByText(/No quotes were created or jobs booked in this range/),
     ).toBeInTheDocument();
   });
 
-  it("dashes out averages that have no approvals to average", async () => {
+  it("dashes out booking averages when nothing was booked", async () => {
     respondWith(
       report({
+        booked_jobs: 0,
+        booked_revenue: 0,
+        avg_booked_value: null,
         quotes_issued: 9,
         quotes_approved: 0,
         revenue_approved: 0,
@@ -374,13 +391,13 @@ describe("SalesPerformanceReport", () => {
 
     renderReport();
 
-    await screen.findByText("Average Job Value");
+    await screen.findByText("Average Booked Job");
     // A real, decided 0% close rate still shows; the undefined averages do not
     // masquerade as zero.
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/have nothing to total and show a dash rather than a zero/),
+      screen.getByText(/No approved quote or legacy unquoted win was booked/),
     ).toBeInTheDocument();
   });
 
@@ -417,10 +434,10 @@ describe("SalesPerformanceReport", () => {
     renderReport();
 
     await screen.findByText("Dana Reyes");
-    // Headline close rate is drawn from the 30 issued quotes; average job value
-    // and revenue won from the 12 approved ones.
+    // Headline close rate is drawn from the 30 issued quotes; booking value
+    // and booked revenue come from the 12 canonical booking events.
     expect(screen.getByText("30 quotes")).toBeInTheDocument();
-    expect(screen.getAllByText("12 approved").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("12 bookings").length).toBeGreaterThanOrEqual(2);
 
     // Each breakdown row carries its own denominator too.
     const closerCard = (await screen.findByText("By closer")).closest(

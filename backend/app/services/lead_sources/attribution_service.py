@@ -3,7 +3,7 @@
 Powers the "unknown attribution" queue. A contact is considered unattributed
 when it has no ``first_touch_lead_source_id``. Assigning a source backfills the
 contact's touch fields and any of its still-unattributed opportunities so the
-correction flows through to closed-won ROI.
+correction flows through to canonical booked ROI.
 """
 
 import re
@@ -11,12 +11,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.contact import Contact
-from app.models.lead_source import LeadSource, LeadSourceType
+from app.models.lead_source import LeadSource, LeadSourceCampaign, LeadSourceType
 from app.models.opportunity import Opportunity
 from app.models.phone_number import PhoneNumber
 
@@ -57,6 +57,14 @@ class _AttributionSignals:
     fbclid: str | None = None
     utm_source: str | None = None
     source: str | None = None
+
+
+@dataclass(frozen=True)
+class ResolvedWebAttribution:
+    """Validated source/campaign chosen from server-observed tracking signals."""
+
+    lead_source: LeadSource
+    campaign_id: uuid.UUID | None
 
 
 def _suggest_from_utm(utm: str) -> LeadSourceType | None:
@@ -103,6 +111,101 @@ def suggest_source_type_for_contact(contact: Contact) -> LeadSourceType | None:
             source=contact.source,
         )
     )
+
+
+async def resolve_web_attribution(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    capture_source: LeadSource,
+    requested_campaign_id: uuid.UUID | None,
+    utm_source: str | None,
+    utm_campaign: str | None,
+    fbclid: str | None,
+    gclid: str | None,
+) -> ResolvedWebAttribution:
+    """Resolve browser tracking into a workspace-owned source and campaign.
+
+    The form's owning source remains the fallback. A click id or recognizable
+    ``utm_source`` can switch a generic website form to the one unambiguous paid
+    channel, while ``utm_campaign`` maps to a configured campaign server-side.
+    Client-supplied UUIDs never cross workspace/source boundaries.
+    """
+    inferred_type = suggest_source_type(
+        _AttributionSignals(
+            gclid=gclid,
+            fbclid=fbclid,
+            utm_source=utm_source,
+            source="website",
+        )
+    )
+
+    resolved_source = capture_source
+    if inferred_type is not None and capture_source.source_type != inferred_type:
+        candidates = (
+            (
+                await db.execute(
+                    select(LeadSource)
+                    .where(
+                        LeadSource.workspace_id == workspace_id,
+                        LeadSource.source_type == inferred_type,
+                        LeadSource.enabled.is_(True),
+                    )
+                    .order_by(LeadSource.created_at.asc())
+                    .limit(2)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if len(candidates) == 1:
+            resolved_source = candidates[0]
+
+    if requested_campaign_id is not None:
+        requested = (
+            await db.execute(
+                select(LeadSourceCampaign, LeadSource)
+                .join(LeadSource, LeadSource.id == LeadSourceCampaign.lead_source_id)
+                .where(
+                    LeadSourceCampaign.id == requested_campaign_id,
+                    LeadSourceCampaign.workspace_id == workspace_id,
+                    LeadSourceCampaign.lead_source_id == resolved_source.id,
+                    LeadSource.id == resolved_source.id,
+                    LeadSource.workspace_id == workspace_id,
+                    LeadSourceCampaign.enabled.is_(True),
+                    LeadSource.enabled.is_(True),
+                )
+            )
+        ).one_or_none()
+        if requested is not None:
+            campaign, source = requested
+            return ResolvedWebAttribution(source, campaign.id)
+
+    normalized_campaign = (utm_campaign or "").strip().lower()
+    if normalized_campaign:
+        match_query = (
+            select(LeadSourceCampaign, LeadSource)
+            .join(LeadSource, LeadSource.id == LeadSourceCampaign.lead_source_id)
+            .where(
+                LeadSourceCampaign.workspace_id == workspace_id,
+                LeadSourceCampaign.lead_source_id == resolved_source.id,
+                LeadSource.id == resolved_source.id,
+                LeadSource.workspace_id == workspace_id,
+                LeadSourceCampaign.enabled.is_(True),
+                LeadSource.enabled.is_(True),
+                or_(
+                    func.lower(LeadSourceCampaign.name) == normalized_campaign,
+                    func.lower(LeadSourceCampaign.utm_campaign) == normalized_campaign,
+                    LeadSourceCampaign.platform_campaign_id == (utm_campaign or "").strip(),
+                ),
+            )
+        )
+        matches = (await db.execute(match_query.limit(2))).all()
+        if len(matches) == 1:
+            campaign, source = matches[0]
+            return ResolvedWebAttribution(source, campaign.id)
+
+    return ResolvedWebAttribution(resolved_source, None)
 
 
 @dataclass(frozen=True)
@@ -314,8 +417,8 @@ def apply_opportunity_attribution_snapshot(
     """Set an opportunity's immutable attribution snapshot when still empty.
 
     ``referral_partner_id`` rides along in the same snapshot as the lead source
-    so per-partner closed-won revenue reads off the very rows ROI reporting
-    already scans. A snapshot that already names a source *or* a partner is
+    so per-partner booked revenue uses the same immutable snapshot as
+    lead-source ROI. A snapshot that already names a source *or* a partner is
     treated as written and is never rewritten.
     """
     if opportunity.lead_source_id is not None or opportunity.referral_partner_id is not None:

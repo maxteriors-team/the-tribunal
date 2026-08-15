@@ -41,7 +41,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { inventoryApi } from "@/lib/api/inventory";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { POLL_60S, REALTIME } from "@/lib/query-options";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
 import type { InventoryItem } from "@/types/inventory";
@@ -92,7 +92,7 @@ export function InventoryList() {
     queryKey: queryKeys.inventory.reorderReport(workspaceId ?? ""),
     queryFn: () => inventoryApi.reorderReport(workspaceId ?? ""),
     enabled: Boolean(workspaceId),
-    ...POLL_60S,
+    ...REALTIME,
   });
 
   const remove = useMutation({

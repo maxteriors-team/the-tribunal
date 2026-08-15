@@ -62,8 +62,8 @@ function AttributionTable({
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
-          <TableHead className="text-right">Won</TableHead>
-          <TableHead className="text-right">Deals</TableHead>
+          <TableHead className="text-right">Booked</TableHead>
+          <TableHead className="text-right">Bookings</TableHead>
           <TableHead className="text-right">Pipeline</TableHead>
         </TableRow>
       </TableHeader>
@@ -121,7 +121,7 @@ export function RevenueRoiCard({ revenueStats, isPending }: RevenueRoiCardProps)
           Revenue &amp; ROI
         </CardTitle>
         <CardDescription>
-          Closed-won revenue traced back to the AI work that produced it
+          Booked revenue traced back to the AI work that produced it
         </CardDescription>
       </CardHeader>
 
@@ -133,7 +133,7 @@ export function RevenueRoiCard({ revenueStats, isPending }: RevenueRoiCardProps)
             {/* Headline money metrics */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <HeadlineMetric
-                label="Won this month"
+                label="Booked this month"
                 value={formatCurrency(
                   revenueStats.won_value_this_month,
                   revenueStats.currency,
@@ -176,11 +176,11 @@ export function RevenueRoiCard({ revenueStats, isPending }: RevenueRoiCardProps)
               appts this month →{" "}
               <span className="font-semibold text-success">
                 {formatCurrency(
-                  revenueStats.won_value_this_month,
+                  revenueStats.ai_attributed_won_value_this_month,
                   revenueStats.currency,
                 )}
               </span>{" "}
-              won on{" "}
+              AI-attributed booked revenue on{" "}
               <span className="font-semibold text-foreground">
                 {formatCurrency(
                   revenueStats.estimated_ai_cost_this_month,
@@ -199,14 +199,14 @@ export function RevenueRoiCard({ revenueStats, isPending }: RevenueRoiCardProps)
               )}
             </p>
 
-            {/* All-time won total */}
+            {/* All-time booked total */}
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <TrendingUp className="size-4" />
-              All-time won:{" "}
+              All-time booked:{" "}
               <span className="font-semibold text-foreground">
                 {formatCurrency(revenueStats.won_value, revenueStats.currency)}
               </span>{" "}
-              across {revenueStats.won_count} deals
+              across {revenueStats.won_count} bookings
             </div>
 
             {/* By Agent */}

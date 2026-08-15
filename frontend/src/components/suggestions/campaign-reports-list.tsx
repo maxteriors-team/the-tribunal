@@ -10,6 +10,7 @@ import {
   type CampaignReportResponse,
 } from "@/lib/api/campaign-reports";
 import { queryKeys } from "@/lib/query-keys";
+import { REALTIME } from "@/lib/query-options";
 
 import { CampaignReportCard } from "./campaign-report-card";
 
@@ -23,6 +24,7 @@ export function CampaignReportsList() {
       return campaignReportsApi.list(workspaceId, { page_size: 50 });
     },
     enabled: !!workspaceId,
+    ...REALTIME,
   });
 
   // Fetch full reports for each summary item
@@ -37,6 +39,7 @@ export function CampaignReportsList() {
       return reports;
     },
     enabled: !!workspaceId && !!data?.items.length,
+    ...REALTIME,
   });
 
   if (isPending) {

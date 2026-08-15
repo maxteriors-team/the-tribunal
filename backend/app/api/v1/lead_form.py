@@ -20,7 +20,7 @@ from app.models.campaign import CampaignContact
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.demo_request import DemoRequest
-from app.models.lead_source import LeadSource, LeadSourceCampaign
+from app.models.lead_source import LeadSource
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.lead_source import LeadSubmitRequest, LeadSubmitResponse
 from app.schemas.speed_to_lead import SpeedToLeadProofResponse
@@ -30,6 +30,7 @@ from app.services.idempotency import derive_outbound_key
 from app.services.lead_sources.attribution_service import (
     WebAttributionInput,
     apply_web_attribution,
+    resolve_web_attribution,
 )
 from app.services.notifications import notify_workspace_event
 from app.services.sla.speed_to_lead import (
@@ -474,22 +475,6 @@ def _apply_address(contact: Contact, raw_address: str | None) -> None:
         contact.address_zip = parsed.zip_code
 
 
-async def _resolve_owned_campaign_id(
-    db: DB, lead_source: LeadSource, campaign_id: uuid.UUID | None
-) -> uuid.UUID | None:
-    """Return the campaign id only if it belongs to this lead source, else None."""
-    if campaign_id is None:
-        return None
-    result = await db.execute(
-        select(LeadSourceCampaign.id).where(
-            LeadSourceCampaign.id == campaign_id,
-            LeadSourceCampaign.lead_source_id == lead_source.id,
-            LeadSourceCampaign.workspace_id == lead_source.workspace_id,
-        )
-    )
-    return campaign_id if result.scalar_one_or_none() is not None else None
-
-
 @router.post("/{public_key}", response_model=LeadSubmitResponse)
 async def submit_lead(
     public_key: str,
@@ -515,11 +500,18 @@ async def submit_lead(
     if not validate_origin(request, lead_source.allowed_domains):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Origin not allowed")
 
-    # A public submitter could pass any campaign UUID; only honor one that
-    # actually belongs to this lead source so attribution can't be poisoned
-    # with a cross-workspace campaign id.
-    attributed_campaign_id = await _resolve_owned_campaign_id(
-        db, lead_source, body.lead_source_campaign_id
+    # Resolve browser click/UTM evidence server-side. This lets one generic
+    # website form correctly attribute a Facebook/Google ad while rejecting
+    # campaign UUIDs from another workspace.
+    resolved_attribution = await resolve_web_attribution(
+        db,
+        workspace_id=lead_source.workspace_id,
+        capture_source=lead_source,
+        requested_campaign_id=body.lead_source_campaign_id,
+        utm_source=body.utm_source,
+        utm_campaign=body.utm_campaign,
+        fbclid=body.fbclid,
+        gclid=body.gclid,
     )
 
     # Rate limit
@@ -562,9 +554,9 @@ async def submit_lead(
     # confidence rollup. A known lead-source form gets the server default.
     apply_web_attribution(
         contact,
-        lead_source,
+        resolved_attribution.lead_source,
         WebAttributionInput(
-            lead_source_campaign_id=attributed_campaign_id,
+            lead_source_campaign_id=resolved_attribution.campaign_id,
             utm_source=body.utm_source,
             utm_medium=body.utm_medium,
             utm_campaign=body.utm_campaign,
@@ -593,7 +585,8 @@ async def submit_lead(
                 event_type=EVENT_LEAD_CREATED,
                 contact_id=contact.id,
                 payload={
-                    "lead_source_id": str(lead_source.id),
+                    "lead_source_id": str(resolved_attribution.lead_source.id),
+                    "capture_lead_source_id": str(lead_source.id),
                     "lead_source_public_key": lead_source.public_key,
                     "source_detail": body.source_detail,
                     "is_new_lead": True,

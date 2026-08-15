@@ -157,6 +157,11 @@ KNOWN_INTEGRATIONS = [
         "description": "AI models for agents",
     },
     {
+        "integration_type": "meta_lead_ads",
+        "display_name": "Meta Lead Ads",
+        "description": "Real-time Facebook and Instagram Instant Form leads",
+    },
+    {
         "integration_type": "lob",
         "display_name": "Lob",
         "description": "Physical card & postcard mailing",

@@ -46,7 +46,7 @@ import {
   type RevenuePace,
 } from "@/lib/api/revenue-targets";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 import { formatNumber, formatWholeCurrency } from "@/lib/utils/number";
 
 /** Where the settings tab that sets a goal lives. */
@@ -280,7 +280,7 @@ export function MonthPaceCard({ workspaceId }: MonthPaceCardProps) {
     queryKey: queryKeys.revenueTargets.pace(workspaceId),
     queryFn: () => revenueTargetsApi.getPace(workspaceId),
     enabled: !!workspaceId,
-    ...POLL_60S,
+    ...REALTIME,
     placeholderData: (prev) => prev,
   });
 

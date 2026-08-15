@@ -132,12 +132,21 @@ class SalesPerformanceReport(BaseModel):
     losses. Every rate is null instead of zero when its denominator is empty.
     """
 
-    date_from: date = Field(..., description="Inclusive start of the cohort window")
-    date_to: date = Field(..., description="Inclusive end of the cohort window")
+    date_from: date = Field(..., description="Inclusive start of the cohort/window")
+    date_to: date = Field(..., description="Inclusive end of the cohort/window")
     currency: str = Field(..., description="Currency of every money field in this report")
+    booked_jobs: int = Field(
+        ..., description="Approved quotes booked in the window plus legacy unquoted wins"
+    )
+    booked_revenue: float = Field(..., description="Canonical revenue booked in the window")
+    avg_booked_value: float | None = Field(
+        None, description="Mean canonical booking value, or null with no bookings"
+    )
     quotes_issued: int = Field(..., description="Cohort quotes that left draft")
     quotes_approved: int = Field(..., description="Cohort quotes the customer approved")
-    revenue_approved: float = Field(..., description="Summed total of the approved quotes")
+    revenue_approved: float = Field(
+        ..., description="Approved value eventually earned by the quote cohort"
+    )
     avg_job_value: float | None = Field(
         None, description="Mean approved quote total, or null with no approvals"
     )

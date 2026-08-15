@@ -110,6 +110,9 @@ describe("ScorecardPage", () => {
         new_leads_total: 0,
         new_leads_by_day: [],
         avg_new_leads_per_day: null,
+        appointments_booked: 0,
+        revenue_booked: 0,
+        deposits_booked: 0,
       }),
     );
 

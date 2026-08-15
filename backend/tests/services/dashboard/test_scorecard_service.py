@@ -13,7 +13,6 @@ from app.services.dashboard.scorecard_service import (
     CallRow,
     InboundReplyRow,
     LeadRow,
-    OpportunityRow,
     TextbackRow,
     aggregate_scorecard,
     resolve_range,
@@ -55,7 +54,8 @@ def _aggregate(**overrides):
         "textbacks": [],
         "inbound_replies": [],
         "appointments": [],
-        "opportunities": [],
+        "revenue_booked": 0.0,
+        "deposits_collected": 0.0,
         "leads": [],
         "tz": UTC_TZ,
     }
@@ -172,22 +172,8 @@ class TestAfterHours:
 
 
 class TestRevenueAndReasons:
-    def test_revenue_and_deposits(self) -> None:
-        opps = [
-            OpportunityRow(
-                amount=1000.0,
-                created_at=datetime(2026, 1, 5, tzinfo=UTC),
-                status="open",
-                closed_date=None,
-            ),
-            OpportunityRow(
-                amount=500.0,
-                created_at=datetime(2026, 1, 6, tzinfo=UTC),
-                status="won",
-                closed_date=date(2026, 1, 7),
-            ),
-        ]
-        card = _aggregate(opportunities=opps)
+    def test_revenue_and_deposits_use_canonical_ledger_totals(self) -> None:
+        card = _aggregate(revenue_booked=1500.0, deposits_collected=500.0)
         assert card.revenue_booked == 1500.0
         assert card.deposits_booked == 500.0
         assert card.currency == "USD"

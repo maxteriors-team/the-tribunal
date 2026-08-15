@@ -28,12 +28,12 @@ and returns ``None`` for that stage and everything downstream of it. A workspace
 that never entered an average job value gets "we don't know", never a
 ``ZeroDivisionError`` and never a misleading ``0``.
 
-Where the actuals come from — deliberately the same sources the rest of the app
-already reports on, so the pace card and the dashboard never disagree:
+Where the actuals come from — deliberately the same canonical sources used by
+the dashboard and ROI reports, so every surface agrees:
 
-- **sold / revenue** — closed-won :class:`~app.models.opportunity.Opportunity`
-  rows by ``closed_date``, matching ``won_value_this_month`` in
-  :mod:`app.services.dashboard.dashboard_service`.
+- **sold / revenue** — approved quotes by approval time, plus legacy/manual
+  closed-won opportunities that have no approved quote; quote-backed wins are
+  suppressed so revenue is counted once.
 - **estimates** — :class:`~app.models.quote.Quote` rows created in the month
   that left ``draft``, matching the "issued" rule in
   :mod:`app.services.reporting.sales_performance_service`.
@@ -52,8 +52,9 @@ import uuid
 from calendar import monthrange
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import structlog
 from sqlalchemy import func, select
@@ -62,7 +63,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.scope import apply_workspace_scope, select_workspace_owned
 from app.models.contact import Contact
-from app.models.opportunity import Opportunity
 from app.models.quote import Quote
 from app.models.revenue_target import UQ_WORKSPACE_MONTH, RevenueTarget
 from app.schemas.revenue_target import (
@@ -75,6 +75,11 @@ from app.schemas.revenue_target import (
     RevenueTargetUpsert,
 )
 from app.services.exceptions import NotFoundError
+from app.services.reporting.booked_revenue import get_booked_revenue_totals
+from app.services.reporting.time_windows import (
+    get_workspace_reporting_timezone,
+    local_date_bounds_utc,
+)
 
 logger = structlog.get_logger()
 
@@ -85,8 +90,6 @@ CURRENCY = "USD"
 
 # Quote status that never reached a customer, so it is not an estimate.
 _DRAFT_STATUS = "draft"
-# Opportunity status counted as sold.
-_WON_STATUS = "won"
 
 # Columns a client can set; also the ``DO UPDATE SET`` list of the upsert.
 _MUTABLE_COLUMNS = (
@@ -458,14 +461,15 @@ class RevenueTargetService:
         still reports its actuals with ``has_target: false``, so the dashboard
         can prompt "set a goal" instead of rendering an error.
         """
-        as_of = today or datetime.now(UTC).date()
+        timezone_name = await get_workspace_reporting_timezone(self.db, workspace_id)
+        as_of = today or datetime.now(ZoneInfo(timezone_name)).date()
         month = normalize_month(period_month or as_of)
 
         target = await self._load_target(workspace_id, month)
         assumptions = (
             TargetAssumptions.from_model(target) if target is not None else TargetAssumptions()
         )
-        actuals = await self._load_actuals(workspace_id, month, as_of)
+        actuals = await self._load_actuals(workspace_id, month, as_of, timezone_name=timezone_name)
         return assemble_pace(
             assumptions,
             actuals,
@@ -488,36 +492,29 @@ class RevenueTargetService:
         return result.scalar_one_or_none()
 
     async def _load_actuals(
-        self, workspace_id: uuid.UUID, period_month: date, as_of: date
+        self,
+        workspace_id: uuid.UUID,
+        period_month: date,
+        as_of: date,
+        *,
+        timezone_name: str,
     ) -> MonthActuals:
-        """Count the month's leads, estimates and sold work up to ``as_of``."""
+        """Count the month's leads, estimates and booked work up to ``as_of``."""
         first, last = month_bounds(period_month)
         if as_of < first:
             # The month has not started; nothing can have happened in it yet.
             return MonthActuals()
         through = min(as_of, last)
 
-        # Half-open [start, end) over the timestamptz columns so the whole of
-        # ``through`` counts whatever time of day a row landed.
-        start = datetime.combine(first, time.min, tzinfo=UTC)
-        end = datetime.combine(through + timedelta(days=1), time.min, tzinfo=UTC)
-
-        sold_row = (
-            await self.db.execute(
-                apply_workspace_scope(
-                    select(
-                        func.count(),
-                        func.coalesce(func.sum(Opportunity.amount), 0),
-                    ),
-                    Opportunity,
-                    workspace_id,
-                ).where(
-                    Opportunity.status == _WON_STATUS,
-                    Opportunity.closed_date >= first,
-                    Opportunity.closed_date <= through,
-                )
-            )
-        ).one()
+        # Half-open workspace-local window converted to UTC for timestamptz rows.
+        start, end = local_date_bounds_utc(first, through, timezone_name)
+        booked = await get_booked_revenue_totals(
+            self.db,
+            workspace_id,
+            first,
+            through,
+            timezone_name=timezone_name,
+        )
 
         leads = (
             await self.db.execute(
@@ -537,10 +534,9 @@ class RevenueTargetService:
             )
         ).scalar_one()
 
-        sold_count, sold_value = sold_row
         return MonthActuals(
-            revenue_sold_to_date=float(sold_value or 0),
+            revenue_sold_to_date=float(booked.revenue),
             leads=int(leads or 0),
             estimates=int(estimates or 0),
-            sold=int(sold_count or 0),
+            sold=booked.count,
         )

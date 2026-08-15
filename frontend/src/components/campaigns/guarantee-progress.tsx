@@ -15,7 +15,7 @@ import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { campaignsApi } from "@/lib/api/campaigns";
 import { voiceCampaignsApi } from "@/lib/api/voice-campaigns";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_30S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 import { formatDate } from "@/lib/utils/date";
 import type { GuaranteeProgress as GuaranteeProgressType } from "@/types";
 
@@ -37,7 +37,7 @@ export function GuaranteeProgress({ campaignId, campaignType }: GuaranteeProgres
       return campaignsApi.getGuaranteeProgress(workspaceId, campaignId);
     },
     enabled: !!workspaceId,
-    ...POLL_30S,
+    ...REALTIME,
   });
 
   if (isPending || !progress) {

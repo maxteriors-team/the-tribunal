@@ -85,6 +85,7 @@ export const stubDashboard: DashboardResponse = {
     currency: "USD",
     won_value: 0,
     won_value_this_month: 0,
+    ai_attributed_won_value_this_month: 0,
     won_count: 0,
     pipeline_value: 0,
     open_count: 0,
@@ -157,7 +158,7 @@ export const stubDashboard: DashboardResponse = {
       roi_multiple: null,
       net_revenue: 0,
       currency: "USD",
-      reason: "No closed-won jobs with attributed lead-source data yet.",
+      reason: "No booked jobs with attributed lead-source data yet.",
       attribution_confidence: {
         average_score: null,
         level: "unknown",
