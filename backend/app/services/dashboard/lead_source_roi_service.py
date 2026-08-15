@@ -1,37 +1,27 @@
 """Lead-source ROI computation for the dashboard.
 
-Ranks acquisition channels by ad spend and closed-won jobs so operators can see
-which lead source is actually winning. The four paid/organic channels (Facebook
-Ads, Google Ads, Organic, Phone/Radio) always render, even at zero, so a missing
-channel reads as "no results" rather than "not tracked". Every other channel —
-referral partners, repeat customers, truck wraps, yard signs, jobsite canvassing
-and the "other" catch-all — renders only once it has spend or a closed-won job,
-so a business that never runs yard signs is not staring at permanently empty rows.
+Ranks acquisition channels by ad spend and canonical booked jobs so operators
+can see which lead source is actually winning. A booked job is an approved quote;
+legacy/manual won opportunities without approved quotes remain included once.
+The four paid/organic channels (Facebook Ads, Google Ads, Organic, Phone/Radio)
+always render, even at zero, so a missing channel reads as "no results" rather
+than "not tracked". Other channels render once they have spend or a booking.
 
-Only channels that produced at least one closed-won job can win; ad spend with
-no attributed jobs is a loss, never a winner. Among winner-eligible channels the
-ranking dimension is chosen in priority order:
-
-1. If any eligible channel has recorded spend, rank by ROI multiple
-   (revenue / spend); a channel with jobs but no spend is treated as the most
-   efficient possible source and sorts first.
-2. Otherwise, if any eligible channel has closed-won revenue, rank by revenue.
-3. Otherwise, rank by closed-won job count.
-4. If no channel has closed-won jobs, there is no winner.
-
-Spend with no attributed jobs and jobs with no spend are both handled
-gracefully (cost-per-job and ROI stay ``None`` when undefined).
+Only channels that produced a booked job can win. Ranking uses ROI when spend is
+tracked, then revenue, then booking count. Spend without bookings and bookings
+without spend are both handled without inventing zero-cost or zero-return values.
 """
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lead_source import LeadSource, LeadSourceSpendEntry, LeadSourceType
-from app.models.opportunity import Opportunity
 from app.schemas.lead_source import (
     AttributionConfidenceLevel,
     AttributionConfidenceSummary,
@@ -39,6 +29,8 @@ from app.schemas.lead_source import (
     LeadSourceWinnerSummary,
     SourceROIRow,
 )
+from app.services.reporting.booked_revenue import get_booked_revenue_by_attribution
+from app.services.reporting.time_windows import get_workspace_reporting_timezone
 
 # Channels always surfaced in the ranked table, in display order.
 RANKED_SOURCE_TYPES: list[LeadSourceType] = [
@@ -49,7 +41,7 @@ RANKED_SOURCE_TYPES: list[LeadSourceType] = [
 ]
 
 # Every remaining channel, in enum declaration order. These render only when
-# they have spend or closed-won jobs. Derived rather than hand-listed so a new
+# they have spend or booked jobs. Derived rather than hand-listed so a new
 # ``LeadSourceType`` member starts reporting ROI without editing this module.
 ACTIVITY_GATED_SOURCE_TYPES: list[LeadSourceType] = [
     source_type for source_type in LeadSourceType if source_type not in RANKED_SOURCE_TYPES
@@ -138,41 +130,41 @@ async def compute_lead_source_roi(db: AsyncSession, workspace_id: uuid.UUID) -> 
     for source_type, total in spend_result.all():
         bucket(source_type).spend = float(total or 0)
 
-    # --- Closed-won jobs/revenue per channel ---------------------------------
-    # Attributed jobs join to a lead source; unattributed won jobs still count
-    # toward the workspace total so the confidence ratio is honest.
-    won_result = await db.execute(
-        select(
-            LeadSource.source_type,
-            func.count(),
-            func.coalesce(func.sum(Opportunity.amount), 0),
-            func.avg(Opportunity.attribution_confidence),
-            func.count(Opportunity.attribution_confidence),
+    # --- Canonical booked jobs/revenue per channel --------------------------
+    timezone_name = await get_workspace_reporting_timezone(db, workspace_id)
+    today = datetime.now(ZoneInfo(timezone_name)).date()
+    source_rows = (
+        await db.execute(
+            select(LeadSource.id, LeadSource.source_type).where(
+                LeadSource.workspace_id == workspace_id
+            )
         )
-        .join(LeadSource, LeadSource.id == Opportunity.lead_source_id)
-        .where(
-            Opportunity.workspace_id == workspace_id,
-            Opportunity.status == "won",
-        )
-        .group_by(LeadSource.source_type)
-    )
-    for source_type, count, revenue, avg_conf, conf_count in won_result.all():
-        agg = bucket(source_type)
-        agg.closed_won_jobs = int(count or 0)
-        agg.attributed_jobs = int(count or 0)
-        agg.closed_won_revenue = float(revenue or 0)
-        if avg_conf is not None and conf_count:
-            # Replay the average as N identical scores so multi-channel means
-            # stay weighted by job count without storing every row.
-            agg.confidence_scores = [float(avg_conf)] * int(conf_count)
+    ).all()
+    source_types_by_id: dict[uuid.UUID, LeadSourceType] = {}
+    for source_id, source_type in source_rows:
+        source_types_by_id[source_id] = source_type
 
-    total_won_result = await db.execute(
-        select(func.count()).where(
-            Opportunity.workspace_id == workspace_id,
-            Opportunity.status == "won",
-        )
+    bookings = await get_booked_revenue_by_attribution(
+        db,
+        workspace_id,
+        date(1900, 1, 1),
+        today,
+        timezone_name=timezone_name,
     )
-    total_closed_won_jobs = int(total_won_result.scalar() or 0)
+    total_closed_won_jobs = sum(item.count for item in bookings)
+    for item in bookings:
+        if item.lead_source_id is None:
+            continue
+        source_type = source_types_by_id.get(item.lead_source_id)
+        if source_type is None:
+            continue
+        agg = bucket(source_type)
+        agg.closed_won_jobs += item.count
+        agg.attributed_jobs += item.count
+        agg.closed_won_revenue += float(item.revenue)
+        if item.count and item.revenue:
+            average_confidence = float(item.weighted_confidence / item.revenue)
+            agg.confidence_scores.extend([average_confidence] * item.count)
 
     return assemble_roi_stats(aggregates, total_closed_won_jobs)
 
@@ -226,7 +218,7 @@ def assemble_roi_stats(
     total_jobs = sum(r.closed_won_jobs for r in rows)
 
     # --- Decide ranking dimension -------------------------------------------
-    # Only channels that actually produced closed-won jobs can win. Spend with
+    # Only channels that actually produced booked jobs can win. Spend with
     # zero jobs is a loss, never a winner, so the ranking dimension is chosen
     # from eligible channels alone.
     eligible = [r for r in rows if r.closed_won_jobs > 0]
@@ -280,7 +272,7 @@ def assemble_roi_stats(
         # Money is going out but nothing has closed yet — be explicit so the
         # card never implies a 0x channel is "winning".
         winner = LeadSourceWinnerSummary(
-            reason="Ad spend recorded, but no closed-won jobs attributed yet — no winner."
+            reason="Ad spend recorded, but no booked jobs attributed yet — no winner."
         )
     else:
         winner = LeadSourceWinnerSummary()
@@ -299,7 +291,7 @@ def assemble_roi_stats(
 def _roi_rank_value(row: SourceROIRow) -> float:
     """Sortable ROI for a winner-eligible row.
 
-    A channel with closed-won jobs but no tracked spend is the most efficient
+    A channel with booked jobs but no tracked spend is the most efficient
     possible source (free customers), so it sorts above any paid channel.
     """
     if row.closed_won_jobs > 0 and row.spend == 0:
@@ -310,10 +302,10 @@ def _roi_rank_value(row: SourceROIRow) -> float:
 def _winner_reason(row: SourceROIRow) -> str:
     """Explain why this channel won, from its own numbers."""
     if row.spend > 0 and row.roi_multiple is not None:
-        return f"Best return: {row.roi_multiple:.1f}x on {row.closed_won_jobs} closed-won job(s)."
+        return f"Best return: {row.roi_multiple:.1f}x on {row.closed_won_jobs} booked job(s)."
     if row.spend == 0 and row.closed_won_revenue > 0:
         return (
-            f"{row.closed_won_jobs} closed-won job(s) at no tracked ad spend — "
+            f"{row.closed_won_jobs} booked job(s) at no tracked ad spend — "
             "your most efficient source."
         )
-    return f"Most closed-won jobs ({row.closed_won_jobs}). Add spend to compare ROI."
+    return f"Most booked jobs ({row.closed_won_jobs}). Add spend to compare ROI."

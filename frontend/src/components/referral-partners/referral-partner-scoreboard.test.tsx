@@ -55,10 +55,10 @@ describe("ReferralPartnerScoreboard", () => {
     expect(screen.getByRole("table")).toBeInTheDocument();
     for (const header of [
       "Partner",
-      "Revenue",
+      "Booked revenue",
       "Close rate",
-      "Jobs closed",
-      "Avg job value",
+      "Booked jobs",
+      "Avg booked value",
       "Last referral",
     ]) {
       expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();

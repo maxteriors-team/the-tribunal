@@ -108,7 +108,10 @@ from app.services.exceptions import ConflictError, NotFoundError, ValidationErro
 from app.services.idempotency import derive_outbound_key
 from app.services.notifications import notify_workspace_event
 from app.services.nudges.strategies.base import dedup_exists
-from app.services.opportunities.quote_opportunity import place_quote_on_pipeline
+from app.services.opportunities.quote_opportunity import (
+    mark_quote_approved_on_pipeline,
+    place_quote_on_pipeline,
+)
 from app.services.quotes.attach_metrics import compute_attach_metrics
 from app.services.quotes.attach_rules import evaluate_attach_rules
 from app.services.quotes.attach_rules_config import get_attach_rules_config
@@ -1215,12 +1218,14 @@ class QuoteService:
             contact = await self.db.get(Contact, quote.contact_id)
             if contact is None:
                 return
-            await place_quote_on_pipeline(
+            opportunity = await place_quote_on_pipeline(
                 self.db,
                 quote.workspace_id,
                 contact,
                 quote_id=quote.id,
             )
+            if opportunity is not None and quote.opportunity_id is None:
+                quote.opportunity_id = opportunity.id
         except Exception as exc:  # noqa: BLE001 — never block a send on the board
             self.log.warning(
                 "quote_pipeline_placement_failed",
@@ -1354,6 +1359,7 @@ class QuoteService:
             raise ConflictError(f"Cannot approve a {quote.status} quote")
         quote.status = "approved"
         quote.approved_at = datetime.now(UTC)
+        await mark_quote_approved_on_pipeline(self.db, workspace_id, quote)
         await self._emit_lifecycle_event(quote, EVENT_QUOTE_APPROVED)
         # Approval is the moment the client signed up, so their Care Plan or
         # Christmas season becomes a Service Plan here, *inside* the approval

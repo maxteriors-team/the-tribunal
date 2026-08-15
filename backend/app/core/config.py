@@ -176,6 +176,18 @@ class Settings(BaseSettings):
     meta_ad_library_rate_limit_per_hour: int = 180
     meta_ad_library_request_timeout_seconds: float = 30.0
     meta_ad_library_default_country: str = "US"
+
+    # Meta Lead Ads webhook + Graph API retrieval. The page access token is
+    # encrypted per workspace; the app secret and webhook verify token remain
+    # server-only deployment secrets.
+    meta_lead_ads_app_secret: str = ""
+    meta_lead_ads_verify_token: str = ""
+    meta_lead_ads_api_version: str = "v22.0"
+    meta_lead_ads_base_url: str = "https://graph.facebook.com"
+    meta_lead_ads_request_timeout_seconds: float = 15.0
+    meta_lead_ads_max_webhook_bytes: int = 262_144
+    meta_ads_spend_worker_enabled: bool = True
+    meta_ads_spend_sync_interval_seconds: int = 300
     # Config-gated third-party fallback provider for fuller US-commercial
     # coverage (Apify / ScrapeCreators / SerpApi). Off unless a key is present.
     meta_thirdparty_enabled: bool = False

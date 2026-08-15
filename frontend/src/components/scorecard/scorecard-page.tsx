@@ -26,7 +26,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { scorecardApi, type ReceptionistScorecard } from "@/lib/api/scorecard";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 import { formatCurrency, formatNumber } from "@/lib/utils/number";
 
 const RANGE_PRESETS = [
@@ -38,7 +38,10 @@ const RANGE_PRESETS = [
 type RangePreset = (typeof RANGE_PRESETS)[number]["value"];
 
 function toIsoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function rangeFromPreset(days: number): { start_date: string; end_date: string } {
@@ -86,7 +89,7 @@ export function ScorecardPage() {
       return scorecardApi.get(workspaceId, range);
     },
     enabled: !!workspaceId,
-    ...POLL_60S,
+    ...REALTIME,
     placeholderData: (prev) => prev,
   });
 
@@ -129,10 +132,13 @@ export function ScorecardPage() {
 }
 
 function ScorecardBody({ data }: { data: ReceptionistScorecard }) {
-  // Lead intake is independent of the receptionist, so a workspace capturing
-  // leads through forms/imports with no calls yet still has a scorecard worth
-  // showing. Only fall back to the empty state when there is nothing at all.
-  if (data.calls_total === 0 && data.new_leads_total === 0) {
+  const hasActivity =
+    data.calls_total > 0 ||
+    data.new_leads_total > 0 ||
+    data.appointments_booked > 0 ||
+    data.revenue_booked > 0 ||
+    data.deposits_booked > 0;
+  if (!hasActivity) {
     return (
       <PageEmptyState
         icon={<PhoneCall className="size-8" />}
@@ -196,7 +202,7 @@ function ScorecardBody({ data }: { data: ReceptionistScorecard }) {
       label: "Revenue booked",
       icon: DollarSign,
       value: formatCurrency(data.revenue_booked, data.currency),
-      sub: `${formatCurrency(data.deposits_booked, data.currency)} deposits won`,
+      sub: `${formatCurrency(data.deposits_booked, data.currency)} deposits collected`,
       tone: "text-success",
     },
     {

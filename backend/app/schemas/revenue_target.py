@@ -176,7 +176,7 @@ class RevenuePace(BaseModel):
     currency: str = Field(description="Currency of every money field in this report")
     revenue_goal: float | None = Field(default=None, description="Null when no target is set")
     revenue_sold_to_date: float = Field(
-        description="Closed-won opportunity value with a close date inside the month so far"
+        description="Canonical booked revenue approved or closed inside the month so far"
     )
     days_elapsed: int = Field(description="Days of the month counted, including today")
     days_in_month: int

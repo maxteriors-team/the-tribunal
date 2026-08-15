@@ -2745,8 +2745,15 @@
             "type": "string"
           },
           "success_rate": {
-            "title": "Success Rate",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Rate"
           }
         },
         "required": [
@@ -18852,6 +18859,7 @@
               "telnyx",
               "openai",
               "resend",
+              "meta_lead_ads",
               "meta_ad_library",
               "google_ads_transparency",
               "companycam"
@@ -24302,7 +24310,7 @@
         "type": "object"
       },
       "LeadSourceROIStats": {
-        "description": "Dashboard payload for ranking lead sources by spend and closed-won jobs.",
+        "description": "Dashboard payload for ranking lead sources by spend and canonical booked jobs.",
         "properties": {
           "currency": {
             "default": "USD",
@@ -24736,7 +24744,7 @@
             "type": "string"
           },
           "reason": {
-            "default": "No closed-won jobs with attributed lead-source data yet.",
+            "default": "No booked jobs with attributed lead-source data yet.",
             "title": "Reason",
             "type": "string"
           },
@@ -43576,7 +43584,7 @@
         "type": "object"
       },
       "ReferralPartnerScoreboardResponse": {
-        "description": "Partner scoreboard, ranked by closed-won revenue descending.",
+        "description": "Partner scoreboard, ranked by canonical booked revenue descending.",
         "properties": {
           "currency": {
             "default": "USD",
@@ -43634,7 +43642,7 @@
         "type": "object"
       },
       "ReferralPartnerScoreboardRow": {
-        "description": "One partner's production, as the owner would read it off a whiteboard.\n\n``close_rate`` is the share of *referred leads* that produced at least one\nclosed-won job, so it is bounded at 1.0 even when a single referred customer\nbuys twice. ``jobs_closed`` and ``total_revenue`` count every closed-won job,\nwhich is why ``average_job_value`` divides by ``jobs_closed`` rather than by\nthe referral count. Both rates are ``None`` — not ``0.0`` — when their\ndenominator is zero, so \"no data yet\" never renders as a 0% failure.",
+        "description": "One partner's production, as the owner would read it off a whiteboard.\n\n``close_rate`` is the share of *referred leads* that produced at least one\nbooked job, so it is bounded at 1.0 even when a single referred customer buys\ntwice. ``jobs_closed`` and ``total_revenue`` count every canonical booking,\nwhich is why ``average_job_value`` divides by ``jobs_closed`` rather than by\nthe referral count. Both rates are ``None`` — not ``0.0`` — when their\ndenominator is zero, so \"no data yet\" never renders as a 0% failure.",
         "properties": {
           "average_job_value": {
             "anyOf": [
@@ -44923,7 +44931,7 @@
             "title": "Revenue Goal"
           },
           "revenue_sold_to_date": {
-            "description": "Closed-won opportunity value with a close date inside the month so far",
+            "description": "Canonical booked revenue approved or closed inside the month so far",
             "title": "Revenue Sold To Date",
             "type": "number"
           },
@@ -44950,8 +44958,12 @@
         "type": "object"
       },
       "RevenueStats": {
-        "description": "Dollar-denominated revenue/ROI ledger for the workspace.\n\nTraces closed-won opportunity revenue back to the AI touch chain (voice\nagent, prompt version, campaign) that booked the appointment behind the\ndeal, alongside an ROI multiple versus estimated AI cost.",
+        "description": "Dollar-denominated revenue/ROI ledger for the workspace.\n\nTraces booked revenue back to the AI touch chain (voice agent, prompt version,\ncampaign) that booked the appointment behind the deal, alongside an ROI\nmultiple versus estimated AI cost.",
         "properties": {
+          "ai_attributed_won_value_this_month": {
+            "title": "Ai Attributed Won Value This Month",
+            "type": "number"
+          },
           "appointments_booked_this_month": {
             "title": "Appointments Booked This Month",
             "type": "integer"
@@ -45029,6 +45041,7 @@
           "currency",
           "won_value",
           "won_value_this_month",
+          "ai_attributed_won_value_this_month",
           "won_count",
           "pipeline_value",
           "open_count",
@@ -46457,6 +46470,18 @@
             "description": "Mean attached-service revenue across approved quotes that actually attached something, or null when none did",
             "title": "Avg Attach Value"
           },
+          "avg_booked_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean canonical booking value, or null with no bookings",
+            "title": "Avg Booked Value"
+          },
           "avg_job_value": {
             "anyOf": [
               {
@@ -46468,6 +46493,16 @@
             ],
             "description": "Mean approved quote total, or null with no approvals",
             "title": "Avg Job Value"
+          },
+          "booked_jobs": {
+            "description": "Approved quotes booked in the window plus legacy unquoted wins",
+            "title": "Booked Jobs",
+            "type": "integer"
+          },
+          "booked_revenue": {
+            "description": "Canonical revenue booked in the window",
+            "title": "Booked Revenue",
+            "type": "number"
           },
           "by_closer": {
             "description": "Performance grouped by the user who created the quote",
@@ -46537,13 +46572,13 @@
             "type": "string"
           },
           "date_from": {
-            "description": "Inclusive start of the cohort window",
+            "description": "Inclusive start of the cohort/window",
             "format": "date",
             "title": "Date From",
             "type": "string"
           },
           "date_to": {
-            "description": "Inclusive end of the cohort window",
+            "description": "Inclusive end of the cohort/window",
             "format": "date",
             "title": "Date To",
             "type": "string"
@@ -46571,7 +46606,7 @@
             "type": "integer"
           },
           "revenue_approved": {
-            "description": "Summed total of the approved quotes",
+            "description": "Approved value eventually earned by the quote cohort",
             "title": "Revenue Approved",
             "type": "number"
           },
@@ -46592,6 +46627,8 @@
           "date_from",
           "date_to",
           "currency",
+          "booked_jobs",
+          "booked_revenue",
           "quotes_issued",
           "quotes_approved",
           "revenue_approved",
@@ -67817,7 +67854,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/lead-source": {
       "post": {
-        "description": "Manually attribute a lead source to a contact from the cleanup queue.\n\nBackfills the contact's touch fields and any still-unattributed\nopportunities so the correction flows through to closed-won ROI.",
+        "description": "Manually attribute a lead source to a contact from the cleanup queue.\n\nBackfills the contact's touch fields and any still-unattributed\nopportunities so the correction flows through to canonical booked ROI.",
         "operationId": "assign_contact_lead_source_api_v1_workspaces__workspace_id__contacts__contact_id__lead_source_post",
         "parameters": [
           {
@@ -92606,6 +92643,117 @@
           }
         },
         "summary": "Mac Relay Messages Webhook",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/webhooks/meta/leadgen": {
+      "get": {
+        "description": "Complete Meta's callback verification challenge.",
+        "operationId": "verify_meta_leadgen_webhook_webhooks_meta_leadgen_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "hub.mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hub.Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hub.verify_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hub.Verify Token"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hub.challenge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hub.Challenge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Meta Leadgen Webhook",
+        "tags": [
+          "webhooks"
+        ]
+      },
+      "post": {
+        "description": "Fetch and idempotently persist every verified ``leadgen`` change.",
+        "operationId": "ingest_meta_leadgen_webhook_webhooks_meta_leadgen_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Ingest Meta Leadgen Webhook Webhooks Meta Leadgen Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ingest Meta Leadgen Webhook",
         "tags": [
           "webhooks"
         ]

@@ -46,8 +46,8 @@ class ReceptionistScorecard(BaseModel):
 
     # --- Booking outcomes ---------------------------------------------------
     appointments_booked: int  # appointments created in the range
-    revenue_booked: float  # sum of opportunity amounts created in the range
-    deposits_booked: float  # closed-won opportunity revenue in the range
+    revenue_booked: float  # approved quotes + legacy unquoted won deals
+    deposits_booked: float  # quote deposits actually marked paid in the range
     currency: str
 
     # --- New lead intake ----------------------------------------------------

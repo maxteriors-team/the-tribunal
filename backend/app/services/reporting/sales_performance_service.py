@@ -35,13 +35,15 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from statistics import median
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from fastapi import status as http_status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.db.scope import apply_workspace_scope
 from app.models.appointment import Appointment, AppointmentStatus
@@ -51,9 +53,13 @@ from app.models.opportunity import Opportunity
 from app.models.quote import Quote
 from app.models.user import User
 from app.schemas.reporting import SalesPerformanceBreakdownRow, SalesPerformanceReport
-from app.services.dashboard.lead_source_roi_service import source_type_label
 from app.services.quotes.quote_expiry import effective_status
+from app.services.reporting.booked_revenue import get_booked_revenue_totals
 from app.services.reporting.reporting_service import _require_single_currency
+from app.services.reporting.time_windows import (
+    get_workspace_reporting_timezone,
+    local_date_bounds_utc,
+)
 
 # Report name used in the multi-currency refusal message.
 REPORT_NAME = "Sales performance"
@@ -61,6 +67,16 @@ REPORT_NAME = "Sales performance"
 # Quote lifecycle slices this report cares about (see ``QUOTE_STATUSES``).
 _DRAFT_STATUS = "draft"
 _APPROVED_STATUS = "approved"
+_SOURCE_LABELS = {
+    LeadSourceType.FACEBOOK_ADS: "Facebook Ads",
+    LeadSourceType.GOOGLE_ADS: "Google Ads",
+    LeadSourceType.PHONE_RADIO: "Phone / Radio",
+    LeadSourceType.REFERRAL_PARTNER: "Referral Partner",
+    LeadSourceType.REPEAT_CUSTOMER: "Repeat Customer",
+    LeadSourceType.TRUCK_WRAP: "Truck Wrap",
+    LeadSourceType.YARD_SIGN: "Yard Sign",
+    LeadSourceType.CANVASS_NEIGHBOR: "Jobsite Canvass",
+}
 # A customer decision was actually made. ``sent`` is deliberately absent.
 _DECIDED_STATUSES = frozenset({"approved", "declined", "expired"})
 
@@ -259,7 +275,10 @@ def _lead_source_identity(fact: QuoteFact) -> tuple[str | None, str]:
     """Group key/label for the acquisition channel behind the quote."""
     if fact.lead_source_type is None:
         return None, UNATTRIBUTED_SOURCE_LABEL
-    return fact.lead_source_type.value, source_type_label(fact.lead_source_type)
+    return fact.lead_source_type.value, _SOURCE_LABELS.get(
+        fact.lead_source_type,
+        fact.lead_source_type.value.replace("_", " ").title(),
+    )
 
 
 def _service_identity(fact: QuoteFact) -> tuple[str | None, str]:
@@ -276,6 +295,8 @@ def assemble_sales_performance(
     date_to: date,
     conversion: ConversionFacts | None = None,
     attendance: AttendanceFacts | None = None,
+    booked_jobs: int | None = None,
+    booked_revenue: float | None = None,
 ) -> SalesPerformanceReport:
     """Build the report from cohort quotes.
 
@@ -289,11 +310,20 @@ def assemble_sales_performance(
     metrics = _compute(issued)
     contact_cohort = conversion or ConversionFacts()
     appointments = attendance or AttendanceFacts()
+    resolved_booked_jobs = metrics.quotes_approved if booked_jobs is None else booked_jobs
+    resolved_booked_revenue = metrics.revenue_approved if booked_revenue is None else booked_revenue
 
     return SalesPerformanceReport(
         date_from=date_from,
         date_to=date_to,
         currency=currency,
+        booked_jobs=resolved_booked_jobs,
+        booked_revenue=round(resolved_booked_revenue, 2),
+        avg_booked_value=(
+            round(resolved_booked_revenue / resolved_booked_jobs, 2)
+            if resolved_booked_jobs
+            else None
+        ),
         quotes_issued=metrics.quotes_issued,
         quotes_approved=metrics.quotes_approved,
         revenue_approved=metrics.revenue_approved,
@@ -331,20 +361,40 @@ class SalesPerformanceService:
 
         Both edges are inclusive dates and default to the current calendar month.
         """
-        start, end = resolve_window(date_from, date_to)
-        facts = await self._load_facts(workspace_id, start, end)
-        conversion = await self._load_conversion(workspace_id, start, end)
-        attendance = await self._load_attendance(workspace_id, start, end)
+        timezone_name = await get_workspace_reporting_timezone(self.db, workspace_id)
+        local_today = datetime.now(ZoneInfo(timezone_name)).date()
+        start, end = resolve_window(date_from, date_to, today=local_today)
+        facts = await self._load_facts(workspace_id, start, end, timezone_name=timezone_name)
+        conversion = await self._load_conversion(
+            workspace_id, start, end, timezone_name=timezone_name
+        )
+        attendance = await self._load_attendance(
+            workspace_id, start, end, timezone_name=timezone_name
+        )
+        booked = await get_booked_revenue_totals(
+            self.db,
+            workspace_id,
+            start,
+            end,
+            timezone_name=timezone_name,
+        )
         return assemble_sales_performance(
             facts,
             date_from=start,
             date_to=end,
             conversion=conversion,
             attendance=attendance,
+            booked_jobs=booked.count,
+            booked_revenue=float(booked.revenue),
         )
 
     async def _load_attendance(
-        self, workspace_id: uuid.UUID, date_from: date, date_to: date
+        self,
+        workspace_id: uuid.UUID,
+        date_from: date,
+        date_to: date,
+        *,
+        timezone_name: str,
     ) -> AttendanceFacts:
         """Count attended vs missed appointments *scheduled* inside the window.
 
@@ -352,8 +402,7 @@ class SalesPerformanceService:
         marking it, so the rate answers "of the visits booked for July, how many
         happened?".
         """
-        start = datetime.combine(date_from, time.min, tzinfo=UTC)
-        end = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC)
+        start, end = local_date_bounds_utc(date_from, date_to, timezone_name)
 
         row = (
             await self.db.execute(
@@ -375,17 +424,19 @@ class SalesPerformanceService:
         return AttendanceFacts(completed=int(row[0] or 0), no_show=int(row[1] or 0))
 
     async def _load_conversion(
-        self, workspace_id: uuid.UUID, date_from: date, date_to: date
+        self,
+        workspace_id: uuid.UUID,
+        date_from: date,
+        date_to: date,
+        *,
+        timezone_name: str,
     ) -> ConversionFacts:
-        """Count the window's new contacts and how many reached a won deal.
+        """Count new contacts and how many later booked work.
 
-        One pass over ``contacts`` (workspace + created_at) with a correlated
-        ``EXISTS`` against ``opportunities.primary_contact_id`` — indexed — so
-        the subquery stops at the first won deal instead of materializing every
-        deal a contact ever had.
+        An approved quote is canonical; a legacy/manual won opportunity still
+        counts when no approved quote exists.
         """
-        start = datetime.combine(date_from, time.min, tzinfo=UTC)
-        end = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC)
+        start, end = local_date_bounds_utc(date_from, date_to, timezone_name)
 
         won_deal = (
             select(Opportunity.id)
@@ -396,12 +447,21 @@ class SalesPerformanceService:
             )
             .exists()
         )
+        approved_quote = (
+            select(Quote.id)
+            .where(
+                Quote.workspace_id == workspace_id,
+                Quote.contact_id == Contact.id,
+                Quote.status == _APPROVED_STATUS,
+            )
+            .exists()
+        )
 
         row = (
             await self.db.execute(
                 select(
                     func.count(Contact.id),
-                    func.count(Contact.id).filter(won_deal),
+                    func.count(Contact.id).filter(won_deal | approved_quote),
                 ).where(
                     Contact.workspace_id == workspace_id,
                     Contact.created_at >= start,
@@ -416,22 +476,24 @@ class SalesPerformanceService:
         )
 
     async def _load_facts(
-        self, workspace_id: uuid.UUID, date_from: date, date_to: date
+        self,
+        workspace_id: uuid.UUID,
+        date_from: date,
+        date_to: date,
+        *,
+        timezone_name: str,
     ) -> list[QuoteFact]:
-        """Load the cohort's quotes with their closer and attributed channel."""
-        # Half-open [start, end) over the timestamptz column so the whole of the
-        # final day counts, whatever time of day the quote was created.
-        start = datetime.combine(date_from, time.min, tzinfo=UTC)
-        end = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC)
+        """Load the workspace-local quote cohort and attributed channel."""
+        start, end = local_date_bounds_utc(date_from, date_to, timezone_name)
+        opportunity_source = aliased(LeadSource)
+        contact_source = aliased(LeadSource)
 
         query = (
             apply_workspace_scope(
                 select(
                     # A quote past its expiry date is a *decision*, not an
                     # undecided quote — but nothing sweeps it to ``expired``
-                    # until a quote screen is opened, so the report derives the
-                    # status rather than trusting the stored one. Counting a
-                    # lapsed quote as still-out would deflate the close rate.
+                    # until a quote screen is opened, so the report derives it.
                     effective_status().label("status"),
                     Quote.total,
                     Quote.attach_count,
@@ -440,23 +502,31 @@ class SalesPerformanceService:
                     Quote.primary_service,
                     Quote.created_by_id,
                     User.full_name,
-                    LeadSource.source_type,
+                    func.coalesce(opportunity_source.source_type, contact_source.source_type).label(
+                        "lead_source_type"
+                    ),
                 ),
                 Quote,
                 workspace_id,
             )
             .outerjoin(User, User.id == Quote.created_by_id)
-            # Same attribution path the lead-source ROI dashboard ranks on: the
-            # opportunity's snapshotted ``lead_source_id`` -> ``LeadSource``
-            # (see ``app.services.dashboard.lead_source_roi_service``). Outer
-            # joins throughout so an unattributed or unowned quote still counts
-            # toward the totals instead of vanishing from the report.
             .outerjoin(
                 Opportunity,
                 (Opportunity.id == Quote.opportunity_id)
                 & (Opportunity.workspace_id == workspace_id),
             )
-            .outerjoin(LeadSource, LeadSource.id == Opportunity.lead_source_id)
+            .outerjoin(
+                Contact,
+                (Contact.id == Quote.contact_id) & (Contact.workspace_id == workspace_id),
+            )
+            .outerjoin(
+                opportunity_source,
+                opportunity_source.id == Opportunity.lead_source_id,
+            )
+            .outerjoin(
+                contact_source,
+                contact_source.id == Contact.first_touch_lead_source_id,
+            )
             .where(Quote.created_at >= start, Quote.created_at < end)
         )
 

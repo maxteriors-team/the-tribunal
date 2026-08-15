@@ -43,7 +43,7 @@ import {
   type VersionComparisonResponse,
 } from "@/lib/api/prompt-versions";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatNumber } from "@/lib/utils/number";
@@ -111,7 +111,7 @@ function AgentExperimentSection({ agentId, agentName }: { agentId: string; agent
       return promptVersionsApi.compare(workspaceId, agentId);
     },
     enabled: !!workspaceId,
-    ...POLL_60S,
+    ...REALTIME,
   });
 
   const activateMutation = useMutation({

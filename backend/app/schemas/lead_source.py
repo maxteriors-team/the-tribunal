@@ -64,7 +64,7 @@ class LeadAttributionFields(BaseModel):
 
 
 class OpportunityLeadAttributionFields(BaseModel):
-    """Attribution snapshot copied onto closed-won jobs/opportunities."""
+    """Attribution snapshot copied onto opportunities for booked-job reporting."""
 
     lead_source_id: uuid.UUID | None = None
     lead_source_campaign_id: uuid.UUID | None = None
@@ -271,7 +271,7 @@ class LeadSourceWinnerSummary(BaseModel):
     roi_multiple: float | None = Field(default=None, ge=0.0)
     net_revenue: float = 0.0
     currency: str = Field(default="USD", min_length=3, max_length=3)
-    reason: str = "No closed-won jobs with attributed lead-source data yet."
+    reason: str = "No booked jobs with attributed lead-source data yet."
     attribution_confidence: AttributionConfidenceSummary = Field(
         default_factory=AttributionConfidenceSummary
     )
@@ -284,7 +284,7 @@ class LeadSourceWinnerSummary(BaseModel):
 
 
 class LeadSourceROIStats(BaseModel):
-    """Dashboard payload for ranking lead sources by spend and closed-won jobs."""
+    """Dashboard payload for ranking lead sources by spend and canonical booked jobs."""
 
     currency: str = Field(default="USD", min_length=3, max_length=3)
     rows: list[SourceROIRow] = Field(default_factory=list)

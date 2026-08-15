@@ -57,7 +57,7 @@ interface LeadSourceRoiCardProps {
 }
 
 /**
- * Ranks the winning acquisition channel by ad spend + closed-won jobs and
+ * Ranks the winning acquisition channel by ad spend + canonical booked jobs and
  * renders the per-source ROI table for the dashboard.
  */
 export function LeadSourceRoiCard({ stats, isPending }: LeadSourceRoiCardProps) {
@@ -69,7 +69,7 @@ export function LeadSourceRoiCard({ stats, isPending }: LeadSourceRoiCardProps) 
           Winning Lead Source
         </CardTitle>
         <CardDescription>
-          Ranked by ad spend and closed-won jobs across your channels
+          Ranked by ad spend and booked jobs across your channels
         </CardDescription>
       </CardHeader>
 
@@ -103,11 +103,11 @@ export function LeadSourceRoiCard({ stats, isPending }: LeadSourceRoiCardProps) 
                     value={formatCurrency(stats.winner.spend, stats.winner.currency)}
                   />
                   <WinnerMetric
-                    label="Closed-won jobs"
+                    label="Booked jobs"
                     value={String(stats.winner.closed_won_jobs)}
                   />
                   <WinnerMetric
-                    label="Revenue"
+                    label="Booked revenue"
                     value={formatCurrency(
                       stats.winner.closed_won_revenue,
                       stats.winner.currency,
@@ -134,7 +134,7 @@ export function LeadSourceRoiCard({ stats, isPending }: LeadSourceRoiCardProps) 
 
             {stats.rows.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">
-                No attributed closed-won jobs yet.
+                No attributed booked jobs yet.
               </p>
             ) : (
               <Table>
@@ -144,7 +144,7 @@ export function LeadSourceRoiCard({ stats, isPending }: LeadSourceRoiCardProps) 
                     <TableHead>Source</TableHead>
                     <TableHead className="text-right">Spend</TableHead>
                     <TableHead className="text-right">Jobs</TableHead>
-                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead className="text-right">Booked revenue</TableHead>
                     <TableHead className="text-right">Cost / job</TableHead>
                     <TableHead className="text-right">ROI</TableHead>
                   </TableRow>

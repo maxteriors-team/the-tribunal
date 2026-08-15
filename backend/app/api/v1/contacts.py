@@ -508,7 +508,7 @@ async def assign_contact_lead_source(
     """Manually attribute a lead source to a contact from the cleanup queue.
 
     Backfills the contact's touch fields and any still-unattributed
-    opportunities so the correction flows through to closed-won ROI.
+    opportunities so the correction flows through to canonical booked ROI.
     """
     service = AttributionCleanupService(db)
     try:
@@ -523,7 +523,7 @@ async def assign_contact_lead_source(
     except AttributionCleanupError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
-    # Backfilled opportunities change closed-won attribution — refresh ROI now.
+    # Backfilled opportunities change booked attribution — refresh ROI now.
     await invalidate_dashboard_cache(workspace_id)
 
 
