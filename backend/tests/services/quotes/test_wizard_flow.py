@@ -34,7 +34,6 @@ from app.schemas.proposal_wizard import (
     WizardFixtureQty,
     WizardPermanentSelection,
 )
-from app.schemas.quote import QuoteUpdate
 from app.services.quotes import QuoteService
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -432,13 +431,13 @@ async def test_deliver_quote_reports_a_failed_email_instead_of_ok(monkeypatch) -
         assert refreshed.public_token
 
 
-async def test_editing_a_sent_quote_lets_it_be_emailed_again(monkeypatch) -> None:
-    """Edit, then send again — the second email must not reuse the first's key.
+async def test_explicit_quote_resend_uses_a_fresh_provider_key(monkeypatch) -> None:
+    """Every deliberate delivery must create a new email.
 
-    Resend refuses a replayed idempotency key whose body changed, so keying the
-    send on the quote id alone made the corrected quote undeliverable: the
-    operator edited it, hit send, and the customer kept the stale version. The
-    key has to move when the document does.
+    Resend returns the original message when an idempotency key is replayed. The
+    quote dialog labels later clicks as "Re-send email", so reusing the
+    revision-key there reports success without putting a replacement link in
+    the customer's inbox.
     """
     keys: list[str] = []
 
@@ -459,16 +458,10 @@ async def test_editing_a_sent_quote_lets_it_be_emailed_again(monkeypatch) -> Non
         qid = uuid.UUID(str(saved.id))
 
         await svc.deliver_quote(ws.id, qid, channel="email", to=None)
-
-        # Re-sending an untouched quote is the double-click case and must stay
-        # collapsed onto the same key.
-        await svc.deliver_quote(ws.id, qid, channel="email", to=None)
-        assert keys[0] == keys[1]
-
-        await svc.update_quote(ws.id, qid, QuoteUpdate(notes="Gate code changed to 4821"))
         await svc.deliver_quote(ws.id, qid, channel="email", to=None)
 
-        assert keys[2] != keys[0], "an edited quote must send under a fresh key"
+        assert len(keys) == 2
+        assert keys[0] != keys[1], "an explicit re-send must create a new email"
 
 
 async def test_mark_sent_survives_a_failed_courtesy_email(monkeypatch) -> None:

@@ -242,3 +242,34 @@ Scope: server-side Zoom meeting creation for video bookings assigned to the one 
 - Confirm the customer-facing privacy notice and vendor/subprocessor disclosure cover Zoom participant and meeting metadata; review the applicable Zoom DPA and account retention controls.
 - Confirm the host's Zoom plan limits, caption/accessibility settings, meeting-region settings, and required Marketplace scopes for the actual account.
 - This focused engineering review is not legal certification and does not assess Zoom's service or contract.
+
+
+## Addendum — Customer quote-link recovery
+
+Snapshot: 16 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
+
+Commit reviewed: working tree based on `5a8b41dc`.
+
+Scope: transactional proposal delivery by email/SMS, recovery of still-active quotes whose prior messages used unreachable branded domains, and the explicit quote re-send path. This is a focused incident review, not a full-product legal/security audit.
+
+### Focused findings
+
+| ID | Severity | Trigger | Evidence | Control | Status / guard |
+|---|---|---|---|---|---|
+| QTL-001 | HIGH | Previously sent proposal URLs used `app.maxteriorslighting.com` or `go.maxteriorslighting.com`, which no longer resolve after the DNS move | RUNTIME: both hosts failed DNS; the Vercel proposal page and public proposal API returned 200 for an affected active quote | Production `FRONTEND_URL` and `PUBLIC_BASE_URL` use reachable provider origins; only still-active proposals were re-sent | Fixed operationally; public page/API and replacement short links were exercised |
+| QTL-002 | HIGH | The explicit **Re-send email** action reused a revision-scoped Resend idempotency key, so Resend returned the original message instead of creating a replacement | CODE/RUNTIME: repeated historical sends returned the same provider ID; the regression test now requires distinct keys for deliberate deliveries | Give each explicit delivery attempt a fresh provider key while leaving the `mark_sent` courtesy email revision-idempotent | Fixed in code; `test_explicit_quote_resend_uses_a_fresh_provider_key` |
+| QTL-003 | MEDIUM | HTML-only button styling can be removed by inbox clients, leaving the proposal URL hard to find | CODE: quote emails previously sent only HTML with the URL inside a styled button | Include a visible copy/paste URL in HTML and a plain-text MIME alternative containing the same server-generated proposal URL | Fixed in code; `test_quote_email_renders_visible_and_plain_text_proposal_links` |
+| QTL-004 | HIGH | Recovery messages could become unsolicited outreach if sent to new recipients or over new channels | RUNTIME/CODE: remediation used each quote's existing recipient and only channels previously accepted for that quote; both SMS recipients passed the existing opt-out gate | Keep recovery transactional, preserve recipient/channel, and enforce SMS opt-out before provider send | Fixed for this incident; shared `send_client_link_sms` opt-out guard remains in force |
+
+### Implemented and proved in this pass
+
+- The reachable proposal origin is `the-tribunal-two.vercel.app`; the public proposal page and API returned 200 for an affected active quote.
+- Four active proposal emails (`QUO-000015`, `QUO-000016`, `QUO-000021`, and `QUO-000023`) were accepted by Resend with fresh links. Acceptance proves provider intake, not inbox placement.
+- Replacement texts for `QUO-000016` and `QUO-000021` passed opt-out checks, were reported delivered by Telnyx, and their tracked links resolved through the Railway origin to the Vercel proposal page with HTTP 200.
+- Approved/declined quotes and inactive historical delivery channels were not re-sent.
+
+### Residual risk / re-verify
+
+- Old messages that embed the unreachable branded domains remain broken until those DNS records are restored; active customers now have replacement messages, but provider-origin URLs are the temporary continuity path.
+- Resend's production API key is send-only, so delivery/inbox placement could not be queried after provider acceptance. Customer opens and Resend webhook events remain the runtime confirmation.
+- This focused engineering review is not legal advice and does not reassess the wider product's messaging consent or retention program.
