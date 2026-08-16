@@ -227,7 +227,9 @@ async def test_quote_acceptance_receipt_is_transactional_and_itemized(
 
 
 @pytest.mark.asyncio
-async def test_quote_email_renders_view_proposal_button(fake_resend: _FakeResend) -> None:
+async def test_quote_email_renders_visible_and_plain_text_proposal_links(
+    fake_resend: _FakeResend,
+) -> None:
     key = uuid.uuid4()
 
     sent = await email.send_quote_email(
@@ -250,9 +252,12 @@ async def test_quote_email_renders_view_proposal_button(fake_resend: _FakeResend
     assert params["subject"] == "Quote QUO-000042 from Maxteriors Lighting"
     html = params["html"]
     assert "View your proposal" in html
+    assert "Button not showing?" in html
     assert "https://app.example.com/p/quotes/abc123token" in html
     assert "1,070.00 USD" in html
-    # Idempotency key forwarded so a re-send of the same quote is deduped.
+    assert "View your proposal:" in params["text"]
+    assert "https://app.example.com/p/quotes/abc123token" in params["text"]
+    # The caller-provided provider key is forwarded unchanged.
     assert call.args[1] == {"idempotency_key": str(key)}
 
 

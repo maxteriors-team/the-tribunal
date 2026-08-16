@@ -923,13 +923,19 @@ async def send_quote_email(
     view_button = ""
     if proposal_url:
         # proposal_url is built server-side from settings.frontend_url + the
-        # quote's own share token, not user input.
+        # quote's own share token, not user input. Keep the URL visible below
+        # the button because some inboxes strip button styles or HTML entirely.
+        escaped_proposal_url = html_escape(proposal_url)
         view_button = (
             '<div style="text-align: center; margin: 32px 0;">'
-            f'<a href="{html_escape(proposal_url)}" '
+            f'<a href="{escaped_proposal_url}" '
             'style="background-color: #1a1a1a; color: #ffffff; padding: 14px 28px; '
             "border-radius: 8px; text-decoration: none; font-weight: 600; "
             'display: inline-block;">View your proposal</a></div>'
+            '<p style="color: #666; font-size: 13px; text-align: center;">'
+            "Button not showing? Copy and paste this link:<br>"
+            f'<a href="{escaped_proposal_url}" style="word-break: break-all;">'
+            f"{escaped_proposal_url}</a></p>"
         )
 
     html_content = f"""<!DOCTYPE html>
@@ -958,11 +964,28 @@ async def send_quote_email(
 </body>
 </html>"""
 
+    text_rows = [
+        f"Quote {quote_number}",
+        "",
+        f"You have a new quote from {workspace_name}.",
+    ]
+    if title:
+        text_rows.append(f"For: {title}")
+    text_rows.append(f"Total: {amount_str}")
+    if expiry_date:
+        text_rows.append(f"Valid until: {expiry_date}")
+    if proposal_url:
+        text_rows.extend(["", "View your proposal:", proposal_url])
+    if notes:
+        text_rows.extend(["", notes])
+    text_rows.extend(["", f"Sent by {workspace_name} via Maxteriors"])
+
     params: dict[str, Any] = {
         "from": _from_address(),
         "to": [to_email],
         "subject": subject,
         "html": html_content,
+        "text": "\n".join(text_rows),
     }
 
     response = await _send(params, idempotency_key=idempotency_key)

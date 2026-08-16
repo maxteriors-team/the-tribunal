@@ -1269,7 +1269,11 @@ class QuoteService:
             # failure surfaces days later as "they never got back to me". The
             # SMS rail below already raises when its rail isn't ready; this
             # matches it.
-            if not await self._email_quote(quote, override_email=email_to):
+            if not await self._email_quote(
+                quote,
+                override_email=email_to,
+                delivery_attempt_id=uuid.uuid4(),
+            ):
                 raise ValidationError(
                     "Couldn't send that email — the quote is saved and still marked sent, "
                     "so you can retry or copy the client link instead."
@@ -1454,12 +1458,22 @@ class QuoteService:
         self.log.info("quote_declined", quote_id=str(quote.id), workspace_id=str(workspace_id))
         return await self._detail_response(quote)
 
-    async def _email_quote(self, quote: Quote, *, override_email: str | None = None) -> bool:
+    async def _email_quote(
+        self,
+        quote: Quote,
+        *,
+        override_email: str | None = None,
+        delivery_attempt_id: uuid.UUID | None = None,
+    ) -> bool:
         """Email the quote's proposal link. Never raises; reports whether it sent.
 
         Destination: explicit override → wizard snapshot's client email → the
         linked contact's email. Wizard proposals usually have no Contact row,
         so the snapshot fallback is what makes their sends actually deliver.
+
+        An explicit delivery gets a fresh ``delivery_attempt_id`` so clicking
+        "Re-send email" creates a new provider message. The best-effort courtesy
+        email attached to ``mark_sent`` omits it and remains revision-idempotent.
 
         Returns ``True`` only when Resend accepted the message. The caller
         decides what a ``False`` means: emailing a quote *on purpose* has to
@@ -1501,11 +1515,21 @@ class QuoteService:
                 expiry_date=expiry,
                 notes=quote.notes,
                 proposal_url=proposal_url,
-                # Keyed on the quote's revision as well as its id, so editing a
-                # sent quote and sending it again actually delivers the new
-                # version instead of colliding with the original send.
-                idempotency_key=derive_document_send_key(
-                    "quote_send", quote.id, quote.updated_at, contact_email
+                # Explicit deliveries are intentional attempts, including the
+                # "Re-send email" action, and must create a new provider message.
+                # The courtesy email on mark_sent stays revision-idempotent so a
+                # retried status transition cannot duplicate it.
+                idempotency_key=(
+                    derive_outbound_key(
+                        "quote_delivery",
+                        quote.id,
+                        delivery_attempt_id,
+                        contact_email,
+                    )
+                    if delivery_attempt_id is not None
+                    else derive_document_send_key(
+                        "quote_send", quote.id, quote.updated_at, contact_email
+                    )
                 ),
             )
         except Exception as exc:  # pragma: no cover - best-effort email
