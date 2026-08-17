@@ -27,6 +27,7 @@ from app.services.ai.contact_context_snapshot import (
     ContactContextSnapshotService,
     ContactTimelineItem,
 )
+from app.services.ai.context_observability import ContextChunk, collect_context_provenance
 
 logger = structlog.get_logger()
 
@@ -154,6 +155,7 @@ class ContactGenerationContext:
 
     prompt_block: str
     latest_inbound_intent: str
+    observation_chunks: tuple[ContextChunk, ...] = ()
 
 
 def get_latest_inbound_intent(messages: list[dict[str, str]]) -> str:
@@ -185,6 +187,7 @@ async def build_contact_generation_context(
         return ContactGenerationContext("", latest_inbound_intent)
 
     sections: list[str] = []
+    observation_chunks: list[ContextChunk] = []
     try:
         snapshot = await ContactContextSnapshotService(
             db,
@@ -199,7 +202,20 @@ async def build_contact_generation_context(
                 latest_inbound_intent=latest_inbound_intent,
             )
             snapshot = snapshot.model_copy(update={"recent_timeline": selected_timeline})
-            sections.append(snapshot.render(max_chars=MAX_LIVE_CONTACT_CONTEXT_CHARS))
+            rendered_snapshot = snapshot.render(max_chars=MAX_LIVE_CONTACT_CONTEXT_CHARS)
+            sections.append(rendered_snapshot)
+            provenance = collect_context_provenance(snapshot)
+            observation_chunks.append(
+                ContextChunk(
+                    source_type="contact_snapshot",
+                    source_ids=provenance.source_ids or (f"contact:{contact_id}",),
+                    text=rendered_snapshot,
+                    observed_at=provenance.earliest_observed_at or snapshot.observed_at,
+                    record_updated_at=(
+                        provenance.earliest_record_updated_at or snapshot.observed_at
+                    ),
+                )
+            )
     except Exception:
         logger.warning(
             "sms_contact_snapshot_load_failed",
@@ -217,8 +233,36 @@ async def build_contact_generation_context(
             memory_context,
             max_chars=MAX_DURABLE_MEMORY_CONTEXT_CHARS,
         )
-        if rendered_memory:
+        if rendered_memory and memory_context is not None:
             sections.append(rendered_memory)
+            memory_source_ids = {
+                source_id
+                for source_id in (
+                    memory_context.summary_source_event_id,
+                    *(
+                        fact.provenance_event_id or str(fact.fact_id or "")
+                        for fact in memory_context.facts
+                    ),
+                )
+                if source_id
+            }
+            observed_times = [
+                observed_at
+                for observed_at in (
+                    memory_context.summary_observed_at,
+                    *(fact.observed_at for fact in memory_context.facts),
+                )
+                if observed_at is not None
+            ]
+            observation_chunks.append(
+                ContextChunk(
+                    source_type="durable_memory",
+                    source_ids=tuple(sorted(memory_source_ids)) or (f"contact:{contact_id}",),
+                    text=rendered_memory,
+                    observed_at=min(observed_times, default=None),
+                    record_updated_at=min(observed_times, default=None),
+                )
+            )
     except Exception:
         logger.warning(
             "sms_contact_memory_load_failed",
@@ -228,7 +272,11 @@ async def build_contact_generation_context(
         )
 
     prompt_block = "\n\n".join(sections)[:MAX_CONTACT_PROMPT_CONTEXT_CHARS]
-    return ContactGenerationContext(prompt_block, latest_inbound_intent)
+    return ContactGenerationContext(
+        prompt_block,
+        latest_inbound_intent,
+        tuple(observation_chunks),
+    )
 
 
 def select_relevant_cross_channel_history(

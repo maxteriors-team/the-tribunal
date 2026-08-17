@@ -24,6 +24,7 @@ from app.services.ai.grok.event_handlers import EventContext, EventHandlerRegist
 from app.services.ai.grok.ivr_mode_controller import IVRModeConfig, IVRModeController
 from app.services.ai.grok.session_config import GrokSessionConfigBuilder
 from app.services.ai.voice_agent_base import VoiceAgentBase
+from app.services.ai.voice_prompt_builder import voice_context_requires_live_lookup
 
 if TYPE_CHECKING:
     from app.services.ai.ivr_detector import IVRMode
@@ -438,7 +439,6 @@ class GrokVoiceAgentSession(VoiceAgentBase):
             "grok_function_call_received",
             call_id=call_id,
             function_name=function_name,
-            arguments=arguments_str[:100],
         )
 
         try:
@@ -447,7 +447,7 @@ class GrokVoiceAgentSession(VoiceAgentBase):
             arguments = {}
             self.logger.warning(
                 "grok_function_call_invalid_arguments",
-                arguments=arguments_str,
+                argument_size=len(arguments_str),
             )
 
         if not self._tool_callback:
@@ -575,13 +575,21 @@ class GrokVoiceAgentSession(VoiceAgentBase):
             timezone=self._timezone,
         )
 
-        config = builder.with_instructions(
-            include_realism=True,
-            include_booking=self._enable_tools,
-            contact_info=contact_info,
-            offer_info=offer_info,
-            is_outbound=is_outbound,
-        ).build()
+        config = (
+            builder.with_instructions(
+                include_realism=True,
+                include_booking=self._enable_tools,
+                contact_info=contact_info,
+                offer_info=offer_info,
+                is_outbound=is_outbound,
+            )
+            .with_tools(
+                enable_booking=self._enable_tools,
+                ivr_detector_active=self._ivr_detector is not None,
+                require_caller_record_lookup=voice_context_requires_live_lookup(contact_info),
+            )
+            .build()
+        )
 
         try:
             await self._send_event({"type": "session.update", "session": config})

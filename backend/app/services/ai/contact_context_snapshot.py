@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Callable, Mapping
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Final, cast
 
@@ -32,6 +32,7 @@ from app.services.tags.tag_repository import get_scoped_tag_assignments_for_cont
 
 DEFAULT_TIMELINE_ITEMS: Final = 20
 MAX_TIMELINE_ITEMS: Final = 50
+MAX_TIMELINE_OFFSET: Final = 10_000
 MAX_TIMELINE_TEXT_CHARS: Final = 800
 MAX_NOTE_TEXT_CHARS: Final = 2_000
 MAX_RENDERED_CONTEXT_CHARS: Final = 12_000
@@ -252,6 +253,9 @@ class ContactContextSnapshot(_SnapshotModel):
     upcoming_appointments: tuple[ContactAppointmentContext, ...] = Field(default=(), repr=False)
     latest_appointment: ContactAppointmentContext | None = Field(default=None, repr=False)
     recent_timeline: tuple[ContactTimelineItem, ...] = Field(default=(), repr=False)
+    timeline_offset: int = 0
+    timeline_limit: int = DEFAULT_TIMELINE_ITEMS
+    timeline_has_more: bool = False
     free_form_notes: tuple[ContactFreeFormNote, ...] = Field(default=(), repr=False)
 
     def render(self, *, max_chars: int = MAX_RENDERED_CONTEXT_CHARS) -> str:
@@ -267,10 +271,12 @@ class ContactContextSnapshotService:
         db: AsyncSession,
         *,
         timeline_limit: int = DEFAULT_TIMELINE_ITEMS,
+        timeline_offset: int = 0,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._db = db
         self._timeline_limit = max(1, min(timeline_limit, MAX_TIMELINE_ITEMS))
+        self._timeline_offset = max(0, min(timeline_offset, MAX_TIMELINE_OFFSET))
         self._clock = clock or _utc_now
 
     async def get_snapshot(
@@ -297,7 +303,7 @@ class ContactContextSnapshotService:
         quotes = await self._load_active_quotes(contact, observed_at)
         invoices = await self._load_active_invoices(contact, observed_at)
         upcoming, latest = await self._load_appointments(contact, observed_at)
-        timeline = await self._load_timeline(contact, observed_at)
+        timeline, timeline_has_more = await self._load_timeline(contact, observed_at)
 
         return ContactContextSnapshot(
             workspace_id=workspace_id,
@@ -315,6 +321,9 @@ class ContactContextSnapshotService:
             upcoming_appointments=upcoming,
             latest_appointment=latest,
             recent_timeline=timeline,
+            timeline_offset=self._timeline_offset,
+            timeline_limit=self._timeline_limit,
+            timeline_has_more=timeline_has_more,
             free_form_notes=(*_contact_notes(contact, contact_provenance), *campaign_notes),
         )
 
@@ -785,15 +794,21 @@ class ContactContextSnapshotService:
         self,
         contact: Contact,
         observed_at: datetime,
-    ) -> tuple[ContactTimelineItem, ...]:
+    ) -> tuple[tuple[ContactTimelineItem, ...], bool]:
         raw_timeline = await get_contact_timeline(
             contact_id=contact.id,
             workspace_id=contact.workspace_id,
             db=self._db,
-            limit=self._timeline_limit,
+            limit=self._timeline_limit + 1,
+            offset=self._timeline_offset,
             include_attachments=False,
             include_call_outcomes=False,
         )
+        has_more = len(raw_timeline) > self._timeline_limit
+        if has_more:
+            # The repository reverses each newest-first page into chronological order,
+            # so the extra (oldest) row is first and can be dropped deterministically.
+            raw_timeline = raw_timeline[-self._timeline_limit :]
 
         items: list[ContactTimelineItem] = []
         for raw_item in raw_timeline:
@@ -831,7 +846,7 @@ class ContactContextSnapshotService:
             )
 
         items.sort(key=lambda entry: (entry.occurred_at, str(entry.message_id)))
-        return tuple(items[-self._timeline_limit :])
+        return tuple(items[-self._timeline_limit :]), has_more
 
 
 def render_contact_context_snapshot(
@@ -1370,7 +1385,11 @@ def _render_tags(snapshot: ContactContextSnapshot) -> str:
 
 
 def _render_timeline(snapshot: ContactContextSnapshot) -> str:
-    lines = ["[recent_sms_voice_chronological]"]
+    lines = [
+        "[cross_channel_timeline_chronological "
+        f"offset={snapshot.timeline_offset} limit={snapshot.timeline_limit} "
+        f"has_more={str(snapshot.timeline_has_more).lower()}]"
+    ]
     if not snapshot.recent_timeline:
         lines.append("- none")
     for item in snapshot.recent_timeline:
@@ -1381,9 +1400,12 @@ def _render_timeline(snapshot: ContactContextSnapshot) -> str:
                     f"occurred_at={_datetime_text(item.occurred_at)}",
                     f"channel={_json_text(item.channel)}",
                     f"direction={_json_text(item.direction)}",
+                    f"actor={_json_text(_timeline_actor(item))}",
                     f"status={_json_text(item.status)}",
                     f"duration_seconds={item.duration_seconds}",
                     f"is_ai={_json_text(item.is_ai)}",
+                    "freshness="
+                    f"{_json_text(_freshness_text(snapshot.observed_at, item.occurred_at))}",
                     f"content={_json_text(item.content)}",
                     _provenance_text(item.provenance),
                 )
@@ -1409,6 +1431,39 @@ def _render_notes(snapshot: ContactContextSnapshot) -> str:
     return "\n".join(lines)
 
 
+def _timeline_actor(item: ContactTimelineItem) -> str:
+    """Describe who authored an interaction without exposing internal user details."""
+    if item.direction == "inbound":
+        return "contact"
+    if item.is_ai:
+        return "ai"
+    if item.direction == "outbound":
+        return "human"
+    return "unknown"
+
+
+def _freshness_text(observed_at: datetime, updated_at: datetime | None) -> str:
+    """Label record age while preserving exact provenance timestamps."""
+    if updated_at is None:
+        return "unknown"
+    observed = _as_utc(observed_at)
+    updated = _as_utc(updated_at)
+    age = max(timedelta(0), observed - updated)
+    if age <= timedelta(minutes=5):
+        return "live"
+    if age <= timedelta(days=1):
+        return "today"
+    if age <= timedelta(days=30):
+        return "recent"
+    return "historical"
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 def _provenance_text(provenance: tuple[ContextProvenance, ...]) -> str:
     entries = ";".join(
         " ".join(
@@ -1417,6 +1472,7 @@ def _provenance_text(provenance: tuple[ContextProvenance, ...]) -> str:
                 f"id={entry.source_id}",
                 f"updated_at={_datetime_text(entry.updated_at)}",
                 f"observed_at={_datetime_text(entry.observed_at)}",
+                f"freshness={_freshness_text(entry.observed_at, entry.updated_at)}",
             )
         )
         for entry in provenance

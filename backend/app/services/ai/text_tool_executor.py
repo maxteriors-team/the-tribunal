@@ -21,7 +21,7 @@ Usage:
 import json
 import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import structlog
 from openai.types.chat import ChatCompletionMessageToolCall
@@ -38,6 +38,7 @@ from app.services.ai.contact_state_evidence import (
     build_contact_state_evidence,
     build_contact_state_not_found,
 )
+from app.services.ai.context_observability import observability_logger, observe_tool_call
 from app.services.ai.website_lead_qualification import WebsiteLeadQualificationPolicy
 from app.services.appointments.booking_finalizer import finalize_booking, format_contact_address
 from app.services.appointments.cancellation import cancel_upcoming_appointments
@@ -123,11 +124,15 @@ class TextToolExecutor(BaseToolExecutor):
                 "executing_tool_call",
                 tool_call_id=tool_call.id,
                 function_name=function_name,
-                arguments=(
-                    {"redacted": True, "keys": sorted(arguments)}
-                    if function_name == "mark_lead_qualified"
-                    else arguments
-                ),
+                argument_keys=sorted(arguments),
+            )
+            observe_tool_call(
+                observability_logger,
+                surface="sms",
+                invocation_id=str(self.conversation.id),
+                tool_call_id=tool_call.id,
+                tool_name=function_name,
+                status="requested",
             )
 
             # Read-only tools (e.g. knowledge lookups) skip the approval gate.
@@ -140,10 +145,20 @@ class TextToolExecutor(BaseToolExecutor):
                         "content": json.dumps(result),
                     }
                 )
+                success = bool(result.get("success", False))
                 self.log.info(
                     "tool_call_completed",
                     tool_call_id=tool_call.id,
-                    success=result.get("success", False),
+                    success=success,
+                )
+                observe_tool_call(
+                    observability_logger,
+                    surface="sms",
+                    invocation_id=str(self.conversation.id),
+                    tool_call_id=tool_call.id,
+                    tool_name=function_name,
+                    status="completed" if success else "failed",
+                    success=success,
                 )
                 continue
 
@@ -186,10 +201,27 @@ class TextToolExecutor(BaseToolExecutor):
                 }
             )
 
+            success = bool(result.get("success", False))
             self.log.info(
                 "tool_call_completed",
                 tool_call_id=tool_call.id,
-                success=result.get("success", False),
+                success=success,
+            )
+            status: Literal["completed", "pending_approval", "blocked", "failed"] = "completed"
+            if result.get("pending_approval"):
+                status = "pending_approval"
+            elif result.get("blocked"):
+                status = "blocked"
+            elif not success:
+                status = "failed"
+            observe_tool_call(
+                observability_logger,
+                surface="sms",
+                invocation_id=str(self.conversation.id),
+                tool_call_id=tool_call.id,
+                tool_name=function_name,
+                status=status,
+                success=success,
             )
 
         return results

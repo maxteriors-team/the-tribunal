@@ -26,6 +26,7 @@ from app.services.ai.openai_realtime_config import (
     extract_realtime_client_secret_value,
 )
 from app.services.ai.voice_agent_base import VoiceAgentBase
+from app.services.ai.voice_prompt_builder import voice_context_requires_live_lookup
 from app.services.ai.voice_tools import get_tools_from_agent_config
 
 logger = structlog.get_logger()
@@ -637,8 +638,8 @@ class VoiceAgentSession(VoiceAgentBase):
                 except json.JSONDecodeError as e:
                     self.logger.warning(
                         "invalid_json_from_openai",
-                        error=str(e),
-                        message_preview=str(message)[:100],
+                        error_type=type(e).__name__,
+                        message_size=len(message),
                     )
                     continue
 
@@ -929,6 +930,7 @@ class VoiceAgentSession(VoiceAgentBase):
             self.agent,
             enable_booking=bool(self.agent),
             timezone=self._timezone,
+            require_caller_record_lookup=voice_context_requires_live_lookup(contact_info),
         )
         session_config = build_realtime_session_config(
             model=self.model,

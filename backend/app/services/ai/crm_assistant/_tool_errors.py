@@ -12,9 +12,9 @@ Each result now carries:
 - ``message`` — one plain sentence, safe to show an operator
 - ``hint``    — the concrete next move, or ``None`` when there isn't one
 
-Stack traces and exception details stay in structlog. Nothing derived from an
-exception string is ever put in ``message``: those can carry SQL fragments,
-connection strings, or PII from a failed row.
+Telemetry receives only exception type, argument names, and code-frame locations.
+Exception strings, tool argument values, results, and locals are excluded because
+they can carry SQL fragments, connection strings, or raw PII from a failed row.
 """
 
 from __future__ import annotations

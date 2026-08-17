@@ -375,3 +375,103 @@ async def test_successful_ai_sms_reply_refreshes_contact_memory() -> None:
     )
     db.commit.assert_awaited_once()
     db.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_operator_correction_supersedes_only_the_generated_fact() -> None:
+    workspace_id = uuid.uuid4()
+    memory_id = uuid.uuid4()
+    fact = ContactAIMemoryFact(
+        id=uuid.uuid4(),
+        memory_id=memory_id,
+        workspace_id=workspace_id,
+        contact_id=42,
+        fact_type="service_interest",
+        value="Roof cleaning",
+        confidence=0.72,
+        provenance_event_id="sms:event-1",
+        source_record_type="conversation",
+        source_record_id=str(uuid.uuid4()),
+        observed_at=datetime(2026, 8, 1, tzinfo=UTC),
+        expires_at=datetime(2027, 8, 1, tzinfo=UTC),
+        supersession_state=FactSupersessionState.ACTIVE.value,
+    )
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalar_result(fact))
+    db.add = MagicMock()
+    db.flush = AsyncMock()
+    corrected_at = datetime(2026, 8, 17, 12, tzinfo=UTC)
+
+    updated = await ContactAIMemoryService(db).update_fact(
+        workspace_id=workspace_id,
+        contact_id=42,
+        fact_id=fact.id,
+        value="Gutter cleaning",
+        operator_id=7,
+        observed_at=corrected_at,
+    )
+
+    assert updated is True
+    replacement = db.add.call_args.args[0]
+    assert isinstance(replacement, ContactAIMemoryFact)
+    assert replacement.value == "Gutter cleaning"
+    assert replacement.source_record_type == "operator"
+    assert replacement.source_record_id == "7"
+    assert replacement.confidence == 1.0
+    assert fact.value == "Roof cleaning"
+    assert fact.supersession_state == FactSupersessionState.SUPERSEDED.value
+    assert fact.superseded_by_id == replacement.id
+    db.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_operator_fact_update_query_excludes_authoritative_contact_facts() -> None:
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalar_result(None))
+    db.flush = AsyncMock()
+
+    updated = await ContactAIMemoryService(db).update_fact(
+        workspace_id=uuid.uuid4(),
+        contact_id=42,
+        fact_id=uuid.uuid4(),
+        value=None,
+        operator_id=7,
+        observed_at=datetime(2026, 8, 17, 12, tzinfo=UTC),
+    )
+
+    assert updated is False
+    statement = str(db.execute.await_args.args[0])
+    assert "source_record_type IS NULL" in statement
+    assert "source_record_type !=" in statement
+    db.flush.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_operator_can_remove_generated_summary_without_mutating_contact_data() -> None:
+    workspace_id = uuid.uuid4()
+    memory = ContactAIMemory(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        contact_id=42,
+        summary="Old generated summary",
+        summary_source_event_id="sms:event-1",
+        summary_observed_at=datetime(2026, 8, 1, tzinfo=UTC),
+        last_event_at=datetime(2026, 8, 1, tzinfo=UTC),
+    )
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalar_result(memory))
+    db.flush = AsyncMock()
+
+    updated = await ContactAIMemoryService(db).update_summary(
+        workspace_id=workspace_id,
+        contact_id=42,
+        value=None,
+        operator_id=7,
+        observed_at=datetime(2026, 8, 17, 12, tzinfo=UTC),
+    )
+
+    assert updated is True
+    assert memory.summary is None
+    assert memory.summary_source_event_id is not None
+    assert memory.summary_source_event_id.startswith("operator:7:")
+    db.flush.assert_awaited_once()

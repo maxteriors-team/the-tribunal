@@ -148,6 +148,11 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
         handler=_missing_handler,
         risk_level=ToolRiskLevel.LOW,
     ),
+    "get_contact_context": CRMToolMetadata(
+        name="get_contact_context",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
     "find_contacts": CRMToolMetadata(
         name="find_contacts",
         handler=_missing_handler,

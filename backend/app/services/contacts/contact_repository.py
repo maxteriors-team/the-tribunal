@@ -432,6 +432,7 @@ async def get_contact_timeline(
     db: AsyncSession,
     limit: int = 100,
     *,
+    offset: int = 0,
     include_attachments: bool = True,
     include_call_outcomes: bool = True,
 ) -> list[dict[str, Any]]:
@@ -444,6 +445,7 @@ async def get_contact_timeline(
         workspace_id: The workspace UUID
         db: Database session
         limit: Maximum items to return
+        offset: Number of newer matching messages to skip
         include_attachments: Whether to query attachment metadata
         include_call_outcomes: Whether to query structured voice-call outcomes
 
@@ -489,11 +491,10 @@ async def get_contact_timeline(
     conversation_ids = [conv.id for conv in conversations]
 
     if conversation_ids:
-        # Fetch only the most recent `limit` messages across all of this
-        # contact's conversations. The timeline is ultimately sorted by
-        # timestamp and clipped to `limit` items, so materializing more than
-        # that in Python wastes a full table scan on every poll (this endpoint
-        # is polled every 3s by the contact viewer).
+        # Fetch one deterministic page across all of this contact's conversations.
+        # The timeline is ultimately sorted chronologically in Python. Bounding the
+        # query avoids a full table scan on every poll (the contact viewer polls
+        # this endpoint every 3s), while the ID tie-breaker keeps offset pages stable.
         message_query = (
             select(Message)
             .join(Conversation, Conversation.id == Message.conversation_id)
@@ -502,7 +503,8 @@ async def get_contact_timeline(
                 Conversation.workspace_id == workspace_id,
                 conversation_contact_filter,
             )
-            .order_by(Message.created_at.desc())
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .offset(max(0, offset))
             .limit(limit)
         )
         if include_call_outcomes:

@@ -72,9 +72,11 @@ class _FakeSession:
     def __init__(self, results: list[_Result]) -> None:
         self._results = list(results)
         self.added: list[Any] = []
+        self.statements: list[Any] = []
         self.flushed = False
 
     async def execute(self, _stmt: Any) -> _Result:
+        self.statements.append(_stmt)
         if not self._results:
             return _Result([])
         return self._results.pop(0)
@@ -223,9 +225,14 @@ class TestRetrieve:
             workspace_id=WORKSPACE_ID,
             contact_id=CONTACT_ID,
             embedder=embedder,
+            now=now,
         )
         assert [e.summary for e in entries] == ["Newest call", "Older call"]
         embedder.assert_not_called()  # no query -> no embedding spend
+        params = session.statements[0].compile().params
+        assert WORKSPACE_ID in params.values()
+        assert CONTACT_ID in params.values()
+        assert any(value == now - timedelta(days=90) for value in params.values())
 
     @pytest.mark.asyncio
     async def test_semantic_path_embeds_query(self) -> None:
@@ -328,3 +335,26 @@ class TestSummaryText:
         assert "Returning Caller" in text
         assert "Prior completed calls: 2" in text
         assert "pricing for the premium plan" in text
+        assert "source=voice_summary:unknown" in text
+        assert "freshness=" in text
+
+    def test_stale_voice_summary_is_omitted_from_live_call_context(self) -> None:
+        info = ReturningCallerInfo(
+            is_returning=True,
+            prior_call_count=1,
+            last_interaction_at=datetime(2025, 1, 1, tzinfo=UTC),
+            memories=[
+                CallerMemoryEntry(
+                    summary="The unpaid invoice was definitely cancelled.",
+                    occurred_at=datetime(2025, 1, 1, tzinfo=UTC),
+                    direction="inbound",
+                )
+            ],
+        )
+
+        text = build_returning_caller_summary(info, now=datetime(2026, 8, 17, tzinfo=UTC))
+
+        assert text is not None
+        assert "unpaid invoice was definitely cancelled" not in text
+        assert "Prior completed call: 1" in text
+        assert "freshness=historical" in text

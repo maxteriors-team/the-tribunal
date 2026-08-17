@@ -22,7 +22,13 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedError
 from app.models.agent import Agent
 from app.services.ai.elevenlabs_tts import ElevenLabsTTSSession, get_voice_id
 from app.services.ai.voice_agent_base import VoiceAgentBase
-from app.services.ai.voice_tools import GROK_BUILTIN_TOOLS, VOICE_BOOKING_TOOLS
+from app.services.ai.voice_prompt_builder import voice_context_requires_live_lookup
+from app.services.ai.voice_tools import (
+    GROK_BUILTIN_TOOLS,
+    LOOKUP_CALLER_RECORD_TOOL,
+    VOICE_BOOKING_TOOLS,
+    is_lookup_caller_record_enabled,
+)
 
 logger = structlog.get_logger()
 
@@ -323,6 +329,24 @@ class ElevenLabsVoiceAgentSession(VoiceAgentBase):
                 self.logger.exception("grok_disconnect_error", error=str(e))
             self.grok_ws = None
 
+    def _build_grok_tools(
+        self,
+        *,
+        require_caller_record_lookup: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Build Grok tools without dropping the bridge's configured capabilities."""
+        enabled_tools = self.agent.enabled_tools or [] if self.agent else []
+        tools: list[dict[str, Any]] = []
+        if "web_search" in enabled_tools:
+            tools.append(GROK_BUILTIN_TOOLS["web_search"])
+        if "x_search" in enabled_tools:
+            tools.append(GROK_BUILTIN_TOOLS["x_search"])
+        if require_caller_record_lookup or is_lookup_caller_record_enabled(self.agent):
+            tools.append(LOOKUP_CALLER_RECORD_TOOL)
+        if self._enable_tools:
+            tools.extend(VOICE_BOOKING_TOOLS)
+        return tools
+
     async def _configure_grok_session(self) -> None:
         """Configure Grok session for text output (we handle TTS separately)."""
         if not self.grok_ws:
@@ -363,26 +387,7 @@ class ElevenLabsVoiceAgentSession(VoiceAgentBase):
             },
         }
 
-        # Build tools list
-        tools: list[dict[str, Any]] = []
-
-        agent_enabled_tools = (
-            self.agent.enabled_tools if self.agent and self.agent.enabled_tools else []
-        )
-
-        if "web_search" in agent_enabled_tools:
-            tools.append(GROK_BUILTIN_TOOLS["web_search"])
-            self.logger.info("grok_web_search_enabled")
-
-        if "x_search" in agent_enabled_tools:
-            tools.append(GROK_BUILTIN_TOOLS["x_search"])
-            self.logger.info("grok_x_search_enabled")
-
-        # Add Google Calendar booking tools if enabled and configured
-        if self._enable_tools:
-            tools.extend(VOICE_BOOKING_TOOLS)
-            self.logger.info("booking_tools_enabled", tool_count=len(VOICE_BOOKING_TOOLS))
-
+        tools = self._build_grok_tools()
         if tools:
             session_config["tools"] = tools
 
@@ -779,11 +784,15 @@ class ElevenLabsVoiceAgentSession(VoiceAgentBase):
             is_outbound=is_outbound,
         )
 
+        session_update: dict[str, Any] = {"instructions": enhanced_prompt}
+        tools = self._build_grok_tools(
+            require_caller_record_lookup=voice_context_requires_live_lookup(contact_info)
+        )
+        if tools:
+            session_update["tools"] = tools
         config = {
             "type": "session.update",
-            "session": {
-                "instructions": enhanced_prompt,
-            },
+            "session": session_update,
         }
 
         try:

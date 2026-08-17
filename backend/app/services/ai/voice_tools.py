@@ -197,8 +197,9 @@ LOOKUP_CALLER_RECORD_TOOL: dict[str, Any] = {
     "name": "lookup_caller_record",
     "description": (
         "Freshly look up the CURRENT caller's own live CRM record before making any "
-        "claim about THEIR appointment, quote/proposal, invoice, qualification, status, "
-        "or deal. Returns bounded structured fields plus recent cross-channel history; "
+        "claim about THEIR opportunity/deal, appointment, quote/proposal, invoice, "
+        "qualification, or status. Returns bounded structured fields plus recent "
+        "cross-channel history; "
         "free-form notes are not factual evidence. This is READ-ONLY and only ever "
         "returns THIS caller's record. If a requested record is absent or conflicts "
         "with conversation history, do NOT guess — ask one focused question or offer "
@@ -768,6 +769,7 @@ def get_tools_from_agent_config(
     *,
     enable_booking: bool = False,
     timezone: str = "America/New_York",
+    require_caller_record_lookup: bool = False,
 ) -> list[dict[str, Any]]:
     """Build tools list from agent configuration.
 
@@ -778,12 +780,14 @@ def get_tools_from_agent_config(
         agent: Agent model with enabled_tools and tool_settings
         enable_booking: Whether Google Calendar booking is available
         timezone: Timezone for booking tools date context
+        require_caller_record_lookup: Force the caller-bound read tool when the
+            prompt contains volatile CRM context that requires fresh verification
 
     Returns:
         List of tool definitions
     """
     if not agent:
-        return []
+        return [LOOKUP_CALLER_RECORD_TOOL] if require_caller_record_lookup else []
 
     enabled_tools = agent.enabled_tools or []
     tool_settings = agent.tool_settings or {}
@@ -811,7 +815,9 @@ def get_tools_from_agent_config(
         enable_application_link_sms=application_link_sms_enabled,
         enable_transfer=is_transfer_enabled(agent),
         enable_search_knowledge=is_search_knowledge_enabled(agent),
-        enable_lookup_caller_record=is_lookup_caller_record_enabled(agent),
+        enable_lookup_caller_record=(
+            require_caller_record_lookup or is_lookup_caller_record_enabled(agent)
+        ),
         enable_take_message=is_take_message_enabled(agent),
         enable_collect_payment=is_collect_payment_enabled(agent),
         enable_save_lead_info=is_save_lead_info_enabled(agent),
