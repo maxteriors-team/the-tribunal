@@ -35080,6 +35080,19 @@
             ],
             "title": "Circuitid"
           },
+          "iconScale": {
+            "anyOf": [
+              {
+                "maximum": 1.8,
+                "minimum": 0.6,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iconscale"
+          },
           "id": {
             "maxLength": 250,
             "title": "Id",
@@ -36349,6 +36362,43 @@
             ],
             "title": "Catalogsku"
           },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "neededQuantity": {
+            "anyOf": [
+              {
+                "maximum": 100000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Neededquantity"
+          },
           "orderedQuantity": {
             "default": 0,
             "maximum": 100000.0,
@@ -36363,11 +36413,36 @@
             "title": "Receivedquantity",
             "type": "number"
           },
+          "supplier": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier"
+          },
           "supplierNote": {
             "default": "",
             "maxLength": 2000,
             "title": "Suppliernote",
             "type": "string"
+          },
+          "unitCost": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unitcost"
           }
         },
         "title": "ProcurementStateSchema",

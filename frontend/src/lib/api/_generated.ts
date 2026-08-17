@@ -23695,6 +23695,8 @@ export interface components {
             catalogSku?: string | null;
             /** Circuitid */
             circuitId?: string | null;
+            /** Iconscale */
+            iconScale?: number | null;
             /** Id */
             id: string;
             /** Lampcatalogitemid */
@@ -24177,6 +24179,12 @@ export interface components {
             catalogItemId?: string | null;
             /** Catalogsku */
             catalogSku?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /** Neededquantity */
+            neededQuantity?: number | null;
             /**
              * Orderedquantity
              * @default 0
@@ -24187,11 +24195,15 @@ export interface components {
              * @default 0
              */
             receivedQuantity: number;
+            /** Supplier */
+            supplier?: string | null;
             /**
              * Suppliernote
              * @default
              */
             supplierNote: string;
+            /** Unitcost */
+            unitCost?: number | null;
         };
         /**
          * PromptVersionActivateResponse
