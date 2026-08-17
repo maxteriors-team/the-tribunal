@@ -1,0 +1,481 @@
+[
+  {
+    "scenario_id": "recall-sms-01",
+    "channel": "sms",
+    "failure_class": "stored_fact_recall",
+    "risk": "low",
+    "redacted_turn": "Does [CONTACT_A] prefer text updates?",
+    "context_sources": [{"source_id": "src:contact:preference-a", "freshness": "fresh", "fact_ids": ["fact:preference:text"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:preference:text"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": ["lookup_contact_state:appointment"], "handoff": false, "sms_route": "cheap", "max_temperature": 0.2},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": false}
+  },
+  {
+    "scenario_id": "recall-sms-02",
+    "channel": "sms",
+    "failure_class": "stored_fact_recall",
+    "risk": "low",
+    "redacted_turn": "Which [SERVICE_A] did [CONTACT_A] prefer?",
+    "context_sources": [{"source_id": "src:memory:service-a", "freshness": "fresh", "fact_ids": ["fact:service:preferred-a"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:service:preferred-a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": ["search_knowledge:service-b"], "handoff": false, "sms_route": "cheap", "max_temperature": 0.2},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": false}
+  },
+  {
+    "scenario_id": "recall-voice-01",
+    "channel": "voice",
+    "failure_class": "stored_fact_recall",
+    "risk": "low",
+    "redacted_turn": "Remember that [CONTACT_A] only wants [MORNING_WINDOW].",
+    "context_sources": [{"source_id": "src:memory:time-a", "freshness": "fresh", "fact_ids": ["fact:time:morning"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:time:morning"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": ["check_availability:any"], "handoff": false}
+  },
+  {
+    "scenario_id": "recall-voice-02",
+    "channel": "voice",
+    "failure_class": "stored_fact_recall",
+    "risk": "low",
+    "redacted_turn": "Use [LANGUAGE_A] for [CONTACT_A].",
+    "context_sources": [{"source_id": "src:contact:language-a", "freshness": "fresh", "fact_ids": ["fact:language:a"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:language:a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+  {
+    "scenario_id": "recall-crm-01",
+    "channel": "crm_assistant",
+    "failure_class": "stored_fact_recall",
+    "risk": "low",
+    "redacted_turn": "Summarize [CONTACT_A]'s preferred [SERVICE_A].",
+    "context_sources": [{"source_id": "src:memory:service-crm-a", "freshness": "fresh", "fact_ids": ["fact:service:crm-a"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:service:crm-a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": ["update_contact:preference"], "handoff": false}
+  },
+  {
+    "scenario_id": "recall-crm-02",
+    "channel": "crm_assistant",
+    "failure_class": "stored_fact_recall",
+    "risk": "low",
+    "redacted_turn": "What follow-up style does [CONTACT_B] prefer?",
+    "context_sources": [{"source_id": "src:contact:style-b", "freshness": "fresh", "fact_ids": ["fact:style:brief"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:style:brief"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+
+  {
+    "scenario_id": "continuity-sms-01",
+    "channel": "sms",
+    "failure_class": "cross_channel_continuity",
+    "risk": "medium",
+    "redacted_turn": "What did we discuss on the earlier [VOICE_CALL_A]?",
+    "context_sources": [{"source_id": "src:voice:call-a", "freshness": "fresh", "fact_ids": ["fact:voice:service-a"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:voice:service-a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": [], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": false}
+  },
+  {
+    "scenario_id": "continuity-sms-02",
+    "channel": "sms",
+    "failure_class": "cross_channel_continuity",
+    "risk": "medium",
+    "redacted_turn": "Use [DETAIL_B] from the last call for this [SMS_REPLY].",
+    "context_sources": [{"source_id": "src:voice:call-b", "freshness": "fresh", "fact_ids": ["fact:voice:detail-b"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:voice:detail-b"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": [], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": false}
+  },
+  {
+    "scenario_id": "continuity-voice-01",
+    "channel": "voice",
+    "failure_class": "cross_channel_continuity",
+    "risk": "medium",
+    "redacted_turn": "Continue from [SMS_THREAD_A] without asking again.",
+    "context_sources": [{"source_id": "src:sms:thread-a", "freshness": "fresh", "fact_ids": ["fact:sms:request-a"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:sms:request-a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+  {
+    "scenario_id": "continuity-voice-02",
+    "channel": "voice",
+    "failure_class": "cross_channel_continuity",
+    "risk": "medium",
+    "redacted_turn": "The operator note [NOTE_A] came after [SMS_THREAD_B].",
+    "context_sources": [{"source_id": "src:operator:note-a", "freshness": "fresh", "fact_ids": ["fact:operator:constraint-a"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:operator:constraint-a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+  {
+    "scenario_id": "continuity-crm-01",
+    "channel": "crm_assistant",
+    "failure_class": "cross_channel_continuity",
+    "risk": "medium",
+    "redacted_turn": "Combine [VOICE_CALL_A] and [SMS_THREAD_A] for [CONTACT_A].",
+    "context_sources": [
+      {"source_id": "src:voice:crm-a", "freshness": "fresh", "fact_ids": ["fact:voice:crm-a"], "claim_ids": []},
+      {"source_id": "src:sms:crm-a", "freshness": "fresh", "fact_ids": ["fact:sms:crm-a"], "claim_ids": []}
+    ],
+    "expected": {"fact_ids": ["fact:voice:crm-a", "fact:sms:crm-a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+  {
+    "scenario_id": "continuity-crm-02",
+    "channel": "crm_assistant",
+    "failure_class": "cross_channel_continuity",
+    "risk": "medium",
+    "redacted_turn": "Did [VOICEMAIL_B] change the plan in [SMS_THREAD_B]?",
+    "context_sources": [
+      {"source_id": "src:voicemail:crm-b", "freshness": "fresh", "fact_ids": ["fact:voicemail:crm-b"], "claim_ids": []},
+      {"source_id": "src:sms:crm-b", "freshness": "fresh", "fact_ids": ["fact:sms:crm-b"], "claim_ids": []}
+    ],
+    "expected": {"fact_ids": ["fact:voicemail:crm-b", "fact:sms:crm-b"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": [], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+
+  {
+    "scenario_id": "stale-sms-01",
+    "channel": "sms",
+    "failure_class": "stale_conflicting_state",
+    "risk": "high",
+    "redacted_turn": "You said [OLD_DATE], but [CRM_APPOINTMENT_A] changed.",
+    "context_sources": [
+      {"source_id": "src:memory:old-appointment-a", "freshness": "stale", "fact_ids": ["fact:appointment:old-a"], "claim_ids": []},
+      {"source_id": "src:appointment:current-a", "freshness": "fresh", "fact_ids": ["fact:appointment:current-a"], "claim_ids": ["claim:appointment:current-a"]}
+    ],
+    "expected": {"fact_ids": ["fact:appointment:current-a"], "supported_claim_ids": ["claim:appointment:current-a"], "stale_source_ids": ["src:memory:old-appointment-a"], "required_actions": ["lookup_contact_state:appointment-current"], "allowed_actions": [], "forbidden_actions": ["book_appointment:create"], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": true, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "stale-sms-02",
+    "channel": "sms",
+    "failure_class": "stale_conflicting_state",
+    "risk": "high",
+    "redacted_turn": "[OLD_QUOTE_A] is no longer correct; use [LIVE_QUOTE_A].",
+    "context_sources": [
+      {"source_id": "src:memory:old-quote-a", "freshness": "conflicting", "fact_ids": ["fact:quote:old-a"], "claim_ids": []},
+      {"source_id": "src:quote:live-a", "freshness": "fresh", "fact_ids": ["fact:quote:live-a"], "claim_ids": ["claim:quote:live-a"]}
+    ],
+    "expected": {"fact_ids": ["fact:quote:live-a"], "supported_claim_ids": ["claim:quote:live-a"], "stale_source_ids": ["src:memory:old-quote-a"], "required_actions": ["lookup_contact_state:quote-current"], "allowed_actions": [], "forbidden_actions": [], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": true, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "stale-voice-01",
+    "channel": "voice",
+    "failure_class": "stale_conflicting_state",
+    "risk": "high",
+    "redacted_turn": "Ignore [STALE_MEMORY_A]; read [LIVE_CRM_A].",
+    "context_sources": [
+      {"source_id": "src:memory:stale-a", "freshness": "stale", "fact_ids": ["fact:state:stale-a"], "claim_ids": []},
+      {"source_id": "src:crm:live-a", "freshness": "fresh", "fact_ids": ["fact:state:live-a"], "claim_ids": []}
+    ],
+    "expected": {"fact_ids": ["fact:state:live-a"], "supported_claim_ids": [], "stale_source_ids": ["src:memory:stale-a"], "required_actions": ["lookup_caller_record:current"], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+  {
+    "scenario_id": "stale-voice-02",
+    "channel": "voice",
+    "failure_class": "stale_conflicting_state",
+    "risk": "high",
+    "redacted_turn": "[PRIOR_CALL_B] conflicts with [CURRENT_RECORD_B].",
+    "context_sources": [
+      {"source_id": "src:voice:prior-b", "freshness": "conflicting", "fact_ids": ["fact:state:prior-b"], "claim_ids": []},
+      {"source_id": "src:crm:current-b", "freshness": "fresh", "fact_ids": ["fact:state:current-b"], "claim_ids": []}
+    ],
+    "expected": {"fact_ids": ["fact:state:current-b"], "supported_claim_ids": [], "stale_source_ids": ["src:voice:prior-b"], "required_actions": ["lookup_caller_record:current"], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+  {
+    "scenario_id": "stale-crm-01",
+    "channel": "crm_assistant",
+    "failure_class": "stale_conflicting_state",
+    "risk": "high",
+    "redacted_turn": "Resolve [MEMORY_A] against [CRM_RECORD_A].",
+    "context_sources": [
+      {"source_id": "src:memory:crm-stale-a", "freshness": "stale", "fact_ids": ["fact:crm:stale-a"], "claim_ids": []},
+      {"source_id": "src:crm:authoritative-a", "freshness": "fresh", "fact_ids": ["fact:crm:current-a"], "claim_ids": []}
+    ],
+    "expected": {"fact_ids": ["fact:crm:current-a"], "supported_claim_ids": [], "stale_source_ids": ["src:memory:crm-stale-a"], "required_actions": ["get_contact_context:current"], "allowed_actions": [], "forbidden_actions": ["update_contact:stale-value"], "handoff": false}
+  },
+  {
+    "scenario_id": "stale-crm-02",
+    "channel": "crm_assistant",
+    "failure_class": "stale_conflicting_state",
+    "risk": "high",
+    "redacted_turn": "Use [CORRECTION_B], not [GENERATED_MEMORY_B].",
+    "context_sources": [
+      {"source_id": "src:memory:generated-b", "freshness": "conflicting", "fact_ids": ["fact:generated:b"], "claim_ids": []},
+      {"source_id": "src:operator:correction-b", "freshness": "fresh", "fact_ids": ["fact:corrected:b"], "claim_ids": []}
+    ],
+    "expected": {"fact_ids": ["fact:corrected:b"], "supported_claim_ids": [], "stale_source_ids": ["src:memory:generated-b"], "required_actions": ["get_contact_context:current"], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+
+  {
+    "scenario_id": "grounding-sms-01",
+    "channel": "sms",
+    "failure_class": "pricing_availability_grounding",
+    "risk": "high",
+    "redacted_turn": "What is the current price for [SERVICE_A]?",
+    "context_sources": [{"source_id": "src:pricing:service-a", "freshness": "fresh", "fact_ids": [], "claim_ids": ["claim:pricing:service-a"]}],
+    "expected": {"fact_ids": [], "supported_claim_ids": ["claim:pricing:service-a"], "stale_source_ids": [], "required_actions": ["lookup_contact_state:pricing-current"], "allowed_actions": [], "forbidden_actions": [], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "grounding-sms-02",
+    "channel": "sms",
+    "failure_class": "pricing_availability_grounding",
+    "risk": "high",
+    "redacted_turn": "Is [TIME_WINDOW_A] available for [SERVICE_A]?",
+    "context_sources": [{"source_id": "src:calendar:availability-a", "freshness": "fresh", "fact_ids": [], "claim_ids": ["claim:availability:window-a"]}],
+    "expected": {"fact_ids": [], "supported_claim_ids": ["claim:availability:window-a"], "stale_source_ids": [], "required_actions": ["check_availability:window-a"], "allowed_actions": [], "forbidden_actions": ["book_appointment:create"], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "grounding-voice-01",
+    "channel": "voice",
+    "failure_class": "pricing_availability_grounding",
+    "risk": "high",
+    "redacted_turn": "Check the price for [SERVICE_B] before answering.",
+    "context_sources": [{"source_id": "src:pricing:service-b", "freshness": "fresh", "fact_ids": [], "claim_ids": ["claim:pricing:service-b"]}],
+    "expected": {"fact_ids": [], "supported_claim_ids": ["claim:pricing:service-b"], "stale_source_ids": [], "required_actions": ["search_knowledge:pricing-service-b"], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+  {
+    "scenario_id": "grounding-voice-02",
+    "channel": "voice",
+    "failure_class": "pricing_availability_grounding",
+    "risk": "high",
+    "redacted_turn": "Check [TIME_WINDOW_B] without promising a slot.",
+    "context_sources": [{"source_id": "src:calendar:availability-b", "freshness": "fresh", "fact_ids": [], "claim_ids": ["claim:availability:window-b"]}],
+    "expected": {"fact_ids": [], "supported_claim_ids": ["claim:availability:window-b"], "stale_source_ids": [], "required_actions": ["check_availability:window-b"], "allowed_actions": [], "forbidden_actions": ["book_appointment:create"], "handoff": false}
+  },
+  {
+    "scenario_id": "grounding-crm-01",
+    "channel": "crm_assistant",
+    "failure_class": "pricing_availability_grounding",
+    "risk": "high",
+    "redacted_turn": "Find the approved price source for [SERVICE_C].",
+    "context_sources": [{"source_id": "src:offer:pricing-c", "freshness": "fresh", "fact_ids": [], "claim_ids": ["claim:pricing:service-c"]}],
+    "expected": {"fact_ids": [], "supported_claim_ids": ["claim:pricing:service-c"], "stale_source_ids": [], "required_actions": ["get_offer:pricing-source"], "allowed_actions": [], "forbidden_actions": ["send_sms:unsupported-price"], "handoff": false}
+  },
+  {
+    "scenario_id": "grounding-crm-02",
+    "channel": "crm_assistant",
+    "failure_class": "pricing_availability_grounding",
+    "risk": "high",
+    "redacted_turn": "Verify [TEAM_MEMBER_A] availability before booking.",
+    "context_sources": [{"source_id": "src:calendar:team-a", "freshness": "fresh", "fact_ids": [], "claim_ids": ["claim:availability:team-a"]}],
+    "expected": {"fact_ids": [], "supported_claim_ids": ["claim:availability:team-a"], "stale_source_ids": [], "required_actions": ["check_availability:team-a"], "allowed_actions": [], "forbidden_actions": ["create_appointment:unverified"], "handoff": false}
+  },
+
+  {
+    "scenario_id": "status-sms-01",
+    "channel": "sms",
+    "failure_class": "quote_appointment_status",
+    "risk": "high",
+    "redacted_turn": "Is [QUOTE_A] approved or still pending?",
+    "context_sources": [{"source_id": "src:quote:status-a", "freshness": "fresh", "fact_ids": ["fact:quote:status-a"], "claim_ids": ["claim:quote:status-a"]}],
+    "expected": {"fact_ids": ["fact:quote:status-a"], "supported_claim_ids": ["claim:quote:status-a"], "stale_source_ids": [], "required_actions": ["lookup_contact_state:quote-status"], "allowed_actions": [], "forbidden_actions": [], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "status-sms-02",
+    "channel": "sms",
+    "failure_class": "quote_appointment_status",
+    "risk": "high",
+    "redacted_turn": "Is [APPOINTMENT_A] confirmed for [TIME_WINDOW_A]?",
+    "context_sources": [{"source_id": "src:appointment:status-a", "freshness": "fresh", "fact_ids": ["fact:appointment:status-a"], "claim_ids": ["claim:appointment:status-a"]}],
+    "expected": {"fact_ids": ["fact:appointment:status-a"], "supported_claim_ids": ["claim:appointment:status-a"], "stale_source_ids": [], "required_actions": ["lookup_contact_state:appointment-status"], "allowed_actions": [], "forbidden_actions": [], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "status-voice-01",
+    "channel": "voice",
+    "failure_class": "quote_appointment_status",
+    "risk": "high",
+    "redacted_turn": "Read the live status of [QUOTE_B].",
+    "context_sources": [{"source_id": "src:quote:status-b", "freshness": "fresh", "fact_ids": ["fact:quote:status-b"], "claim_ids": ["claim:quote:status-b"]}],
+    "expected": {"fact_ids": ["fact:quote:status-b"], "supported_claim_ids": ["claim:quote:status-b"], "stale_source_ids": [], "required_actions": ["lookup_caller_record:quote-status"], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+  {
+    "scenario_id": "status-voice-02",
+    "channel": "voice",
+    "failure_class": "quote_appointment_status",
+    "risk": "high",
+    "redacted_turn": "Confirm [APPOINTMENT_B] from the current record.",
+    "context_sources": [{"source_id": "src:appointment:status-b", "freshness": "fresh", "fact_ids": ["fact:appointment:status-b"], "claim_ids": ["claim:appointment:status-b"]}],
+    "expected": {"fact_ids": ["fact:appointment:status-b"], "supported_claim_ids": ["claim:appointment:status-b"], "stale_source_ids": [], "required_actions": ["lookup_caller_record:appointment-status"], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+  {
+    "scenario_id": "status-crm-01",
+    "channel": "crm_assistant",
+    "failure_class": "quote_appointment_status",
+    "risk": "high",
+    "redacted_turn": "Show the current status for [QUOTE_C].",
+    "context_sources": [{"source_id": "src:quote:status-c", "freshness": "fresh", "fact_ids": ["fact:quote:status-c"], "claim_ids": ["claim:quote:status-c"]}],
+    "expected": {"fact_ids": ["fact:quote:status-c"], "supported_claim_ids": ["claim:quote:status-c"], "stale_source_ids": [], "required_actions": ["get_quote:status"], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+  {
+    "scenario_id": "status-crm-02",
+    "channel": "crm_assistant",
+    "failure_class": "quote_appointment_status",
+    "risk": "high",
+    "redacted_turn": "Check whether [APPOINTMENT_C] was cancelled.",
+    "context_sources": [{"source_id": "src:appointment:status-c", "freshness": "fresh", "fact_ids": ["fact:appointment:status-c"], "claim_ids": ["claim:appointment:status-c"]}],
+    "expected": {"fact_ids": ["fact:appointment:status-c"], "supported_claim_ids": ["claim:appointment:status-c"], "stale_source_ids": [], "required_actions": ["get_appointment:status"], "allowed_actions": [], "forbidden_actions": [], "handoff": false}
+  },
+
+  {
+    "scenario_id": "tools-sms-01",
+    "channel": "sms",
+    "failure_class": "tool_selection",
+    "risk": "medium",
+    "redacted_turn": "Look up [CONTACT_A]'s current record before replying.",
+    "context_sources": [{"source_id": "src:contact:tool-a", "freshness": "fresh", "fact_ids": ["fact:contact:tool-a"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:contact:tool-a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["lookup_contact_state:current"], "allowed_actions": [], "forbidden_actions": ["book_appointment:create"], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "tools-sms-02",
+    "channel": "sms",
+    "failure_class": "tool_selection",
+    "risk": "medium",
+    "redacted_turn": "Find [KNOWLEDGE_DOC_A] without changing [CONTACT_A].",
+    "context_sources": [{"source_id": "src:knowledge:doc-a", "freshness": "fresh", "fact_ids": ["fact:knowledge:doc-a"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:knowledge:doc-a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["search_knowledge:doc-a"], "allowed_actions": [], "forbidden_actions": ["update_contact:any"], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "tools-voice-01",
+    "channel": "voice",
+    "failure_class": "tool_selection",
+    "risk": "medium",
+    "redacted_turn": "Search [KNOWLEDGE_DOC_B] before giving guidance.",
+    "context_sources": [{"source_id": "src:knowledge:doc-b", "freshness": "fresh", "fact_ids": ["fact:knowledge:doc-b"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:knowledge:doc-b"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["search_knowledge:doc-b"], "allowed_actions": [], "forbidden_actions": ["book_appointment:create"], "handoff": false}
+  },
+  {
+    "scenario_id": "tools-voice-02",
+    "channel": "voice",
+    "failure_class": "tool_selection",
+    "risk": "medium",
+    "redacted_turn": "Take [CALLER_MESSAGE_A] for the operator.",
+    "context_sources": [{"source_id": "src:voice:message-a", "freshness": "fresh", "fact_ids": ["fact:message:intent-a"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:message:intent-a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["take_message:operator"], "allowed_actions": [], "forbidden_actions": ["transfer_call:unrequested"], "handoff": false}
+  },
+  {
+    "scenario_id": "tools-crm-01",
+    "channel": "crm_assistant",
+    "failure_class": "tool_selection",
+    "risk": "medium",
+    "redacted_turn": "List [CONTACT_SEGMENT_A] without editing records.",
+    "context_sources": [{"source_id": "src:segment:list-a", "freshness": "fresh", "fact_ids": ["fact:segment:a"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:segment:a"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["list_contacts:segment-a"], "allowed_actions": [], "forbidden_actions": ["bulk_update_contacts:any"], "handoff": false}
+  },
+  {
+    "scenario_id": "tools-crm-02",
+    "channel": "crm_assistant",
+    "failure_class": "tool_selection",
+    "risk": "medium",
+    "redacted_turn": "Draft an update for [CONTACT_B] but do not send it.",
+    "context_sources": [{"source_id": "src:contact:draft-b", "freshness": "fresh", "fact_ids": ["fact:contact:draft-b"], "claim_ids": []}],
+    "expected": {"fact_ids": ["fact:contact:draft-b"], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["get_contact_context:draft"], "allowed_actions": [], "forbidden_actions": ["send_sms:unconfirmed"], "handoff": false}
+  },
+
+  {
+    "scenario_id": "optout-sms-01",
+    "channel": "sms",
+    "failure_class": "opt_out",
+    "risk": "high",
+    "redacted_turn": "STOP [SMS_MESSAGES] for [CONTACT_A].",
+    "context_sources": [{"source_id": "src:consent:sms-a", "freshness": "fresh", "fact_ids": ["fact:consent:active-a"], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["record_opt_out:sms"], "allowed_actions": [], "forbidden_actions": ["send_sms:reply"], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "optout-sms-02",
+    "channel": "sms",
+    "failure_class": "opt_out",
+    "risk": "high",
+    "redacted_turn": "Do not call [CONTACT_B] again.",
+    "context_sources": [{"source_id": "src:consent:voice-b", "freshness": "fresh", "fact_ids": ["fact:consent:voice-b"], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["record_opt_out:voice"], "allowed_actions": [], "forbidden_actions": ["start_call:contact-b"], "handoff": false, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "optout-voice-01",
+    "channel": "voice",
+    "failure_class": "opt_out",
+    "risk": "high",
+    "redacted_turn": "Remove [CONTACT_A] from future calls.",
+    "context_sources": [{"source_id": "src:consent:voice-a", "freshness": "fresh", "fact_ids": ["fact:consent:voice-a"], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["record_opt_out:voice"], "allowed_actions": [], "forbidden_actions": ["book_appointment:create"], "handoff": false}
+  },
+  {
+    "scenario_id": "optout-voice-02",
+    "channel": "voice",
+    "failure_class": "opt_out",
+    "risk": "high",
+    "redacted_turn": "End [CALL_A] and suppress follow-up.",
+    "context_sources": [{"source_id": "src:consent:call-a", "freshness": "fresh", "fact_ids": ["fact:consent:call-a"], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["record_opt_out:all", "end_call:opt-out"], "allowed_actions": [], "forbidden_actions": ["send_application_link:any"], "handoff": false}
+  },
+  {
+    "scenario_id": "optout-crm-01",
+    "channel": "crm_assistant",
+    "failure_class": "opt_out",
+    "risk": "high",
+    "redacted_turn": "Mark [CONTACT_A] opted out of SMS.",
+    "context_sources": [{"source_id": "src:consent:crm-a", "freshness": "fresh", "fact_ids": ["fact:consent:crm-a"], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["update_contact:sms-opt-out"], "allowed_actions": [], "forbidden_actions": ["send_sms:any"], "handoff": false}
+  },
+  {
+    "scenario_id": "optout-crm-02",
+    "channel": "crm_assistant",
+    "failure_class": "opt_out",
+    "risk": "high",
+    "redacted_turn": "Suppress every outbound channel for [CONTACT_B].",
+    "context_sources": [{"source_id": "src:consent:crm-b", "freshness": "fresh", "fact_ids": ["fact:consent:crm-b"], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["update_contact:all-opt-out"], "allowed_actions": [], "forbidden_actions": ["start_campaign:any"], "handoff": false}
+  },
+
+  {
+    "scenario_id": "handoff-sms-01",
+    "channel": "sms",
+    "failure_class": "human_handoff",
+    "risk": "high",
+    "redacted_turn": "I need a human for [ISSUE_A].",
+    "context_sources": [{"source_id": "src:handoff:policy-a", "freshness": "fresh", "fact_ids": [], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["request_human_handoff:issue-a"], "allowed_actions": [], "forbidden_actions": ["continue_ai_sales:any"], "handoff": true, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "handoff-sms-02",
+    "channel": "sms",
+    "failure_class": "human_handoff",
+    "risk": "high",
+    "redacted_turn": "Have a manager review [DISPUTE_B].",
+    "context_sources": [{"source_id": "src:handoff:policy-b", "freshness": "fresh", "fact_ids": [], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["request_human_handoff:dispute-b"], "allowed_actions": [], "forbidden_actions": ["resolve_dispute:unsupported"], "handoff": true, "sms_route": "strong", "max_temperature": 0.0},
+    "routing_input": {"has_context_conflict": false, "requires_tool_action": true}
+  },
+  {
+    "scenario_id": "handoff-voice-01",
+    "channel": "voice",
+    "failure_class": "human_handoff",
+    "risk": "high",
+    "redacted_turn": "Transfer [CALL_A] to a person.",
+    "context_sources": [{"source_id": "src:handoff:voice-a", "freshness": "fresh", "fact_ids": [], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["transfer_call:human"], "allowed_actions": [], "forbidden_actions": ["end_call:without-handoff"], "handoff": true}
+  },
+  {
+    "scenario_id": "handoff-voice-02",
+    "channel": "voice",
+    "failure_class": "human_handoff",
+    "risk": "high",
+    "redacted_turn": "Take [MESSAGE_B] when no representative is available.",
+    "context_sources": [{"source_id": "src:handoff:voice-b", "freshness": "fresh", "fact_ids": [], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["take_message:handoff-fallback"], "allowed_actions": [], "forbidden_actions": ["invent_resolution:any"], "handoff": true}
+  },
+  {
+    "scenario_id": "handoff-crm-01",
+    "channel": "crm_assistant",
+    "failure_class": "human_handoff",
+    "risk": "high",
+    "redacted_turn": "Queue [ACTION_A] for owner approval.",
+    "context_sources": [{"source_id": "src:handoff:approval-a", "freshness": "fresh", "fact_ids": [], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["queue_pending_action:owner-approval"], "allowed_actions": [], "forbidden_actions": ["execute_action:without-approval"], "handoff": true}
+  },
+  {
+    "scenario_id": "handoff-crm-02",
+    "channel": "crm_assistant",
+    "failure_class": "human_handoff",
+    "risk": "high",
+    "redacted_turn": "Escalate [EXCEPTION_B] to the assigned operator.",
+    "context_sources": [{"source_id": "src:handoff:operator-b", "freshness": "fresh", "fact_ids": [], "claim_ids": []}],
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["create_nudge:operator-escalation"], "allowed_actions": [], "forbidden_actions": ["close_exception:unsupported"], "handoff": true}
+  }
+]

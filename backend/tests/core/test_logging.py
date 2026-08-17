@@ -5,10 +5,12 @@ from __future__ import annotations
 import pytest
 
 from app.core.logging import (
+    AI_OBSERVABILITY_ALLOWED_KEYS,
     REDACTED,
     SENSITIVE_KEYS,
     _build_processors,
     configure_logging,
+    minimize_ai_observability_context,
     redact_sensitive_keys,
 )
 
@@ -113,6 +115,7 @@ def test_all_required_keys_present_in_module() -> None:
 def test_processor_is_wired_into_pipeline() -> None:
     processors = _build_processors()
     assert redact_sensitive_keys in processors
+    assert minimize_ai_observability_context in processors
 
 
 def test_configure_logging_is_idempotent() -> None:
@@ -126,3 +129,34 @@ def test_returns_same_event_dict_object() -> None:
     event = {"password": "x"}
     result = redact_sensitive_keys(None, "info", event)
     assert result is event
+
+
+def test_ai_observability_processor_strips_bound_ids_and_bodies() -> None:
+    event = {
+        "event": "ai_context_observed",
+        "surface": "sms",
+        "invocation_ref": "ctx_safe",
+        "context_sources": [{"source_ref": "ctx_source", "token_count": 3}],
+        "workspace_id": "raw-workspace",
+        "user_id": 42,
+        "conversation_id": "raw-conversation",
+        "message_body": "raw message",
+    }
+
+    result = minimize_ai_observability_context(None, "info", event)
+
+    assert result == {
+        "event": "ai_context_observed",
+        "surface": "sms",
+        "invocation_ref": "ctx_safe",
+        "context_sources": [{"source_ref": "ctx_source", "token_count": 3}],
+    }
+    assert set(result).issubset(AI_OBSERVABILITY_ALLOWED_KEYS)
+
+
+def test_ai_observability_processor_does_not_change_other_events() -> None:
+    event = {"event": "request_completed", "workspace_id": "workspace-id"}
+
+    result = minimize_ai_observability_context(None, "info", event)
+
+    assert result == event

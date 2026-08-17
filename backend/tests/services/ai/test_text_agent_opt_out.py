@@ -29,12 +29,20 @@ class _Log:
         pass
 
 
+class _Result:
+    def __init__(self, contact: object | None) -> None:
+        self._contact = contact
+
+    def scalar_one_or_none(self) -> object | None:
+        return self._contact
+
+
 class _FakeDB:
-    """Minimal AsyncSession stand-in: resolves a contact and records commits."""
+    """Minimal AsyncSession stand-in: resolves a scoped contact and records commits."""
 
     def __init__(self, contact: object | None) -> None:
         self._contact = contact
-        self.get = AsyncMock(return_value=contact)
+        self.execute = AsyncMock(return_value=_Result(contact))
         self.commit = AsyncMock()
 
 
@@ -97,6 +105,9 @@ async def test_records_global_opt_out_and_disables_ai(
     assert contact.sms_consent_source == "sms_reply"
     assert contact.sms_consent_collected_at is not None
     assert "STOP" in contact.sms_consent_notes
+    contact_query = str(db.execute.await_args.args[0])
+    assert "contacts.id" in contact_query
+    assert "contacts.workspace_id" in contact_query
 
 
 async def test_idempotent_commit_when_already_opted_out(
@@ -137,5 +148,5 @@ async def test_no_contact_skips_consent_lookup(
     )
 
     # No contact_id -> never resolve a contact, but still record the opt-out.
-    db.get.assert_not_called()
+    db.execute.assert_not_called()
     _patched_manager.assert_awaited_once()

@@ -53,6 +53,7 @@ def test_worker_specs_preserve_existing_startup_order() -> None:
         "unsold_quote_worker",
         "prebooking_worker",
         "message_attachment",
+        "meta_ads_spend_worker",
     ]
     assert [spec.registry for spec in WORKER_SPECS] == ALL_REGISTRIES
 
@@ -75,6 +76,7 @@ def test_worker_specs_include_health_and_dependency_metadata() -> None:
     assert "openai" in by_name["transcript_analysis_worker"].dependencies
     assert "expo_push" in by_name["approval_worker"].dependencies
     assert "private_object_storage" in by_name["message_attachment"].dependencies
+    assert "meta_graph" in by_name["meta_ads_spend_worker"].dependencies
 
 
 def test_enabled_worker_specs_applies_per_spec_predicate() -> None:

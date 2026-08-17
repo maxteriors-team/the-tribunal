@@ -31,13 +31,15 @@ owns the transaction that commits the send.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
-from app.models.opportunity import Opportunity
+from app.models.opportunity import Opportunity, OpportunityActivity
 from app.models.pipeline import PipelineStage
 from app.models.workspace import Workspace
 from app.services.automations.opt_out import automation_suppressed
@@ -51,9 +53,17 @@ from app.services.opportunities.default_pipeline import (
 from app.services.opportunities.lead_opportunity import SETTINGS_KEY, opportunity_name
 from app.services.opportunities.pipeline_removal import removed_card_exists
 
+if TYPE_CHECKING:
+    from app.models.quote import Quote
+
 logger = structlog.get_logger()
 
-__all__ = ["ON_QUOTE_SENT_KEY", "on_quote_sent_enabled", "place_quote_on_pipeline"]
+__all__ = [
+    "ON_QUOTE_SENT_KEY",
+    "mark_quote_approved_on_pipeline",
+    "on_quote_sent_enabled",
+    "place_quote_on_pipeline",
+]
 
 # Settings flag under ``workspace.settings["auto_pipeline"]``.
 ON_QUOTE_SENT_KEY = "on_quote_sent"
@@ -247,5 +257,105 @@ async def _open_at_quote_sent(
         opportunity_id=str(opportunity.id),
         pipeline_id=str(pipeline.id),
         stage=target.name,
+    )
+    return opportunity
+
+
+async def mark_quote_approved_on_pipeline(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    quote: Quote,
+) -> Opportunity | None:
+    """Link an approved quote to its deal and record the canonical win.
+
+    Approval is the booking event. The quote total becomes the opportunity
+    amount, the deal closes on the approval date, and the pipeline moves to its
+    configured won stage. The caller owns the transaction.
+    """
+    opportunity: Opportunity | None = None
+    if quote.opportunity_id is not None:
+        candidate = await db.get(Opportunity, quote.opportunity_id)
+        if candidate is not None and candidate.workspace_id == workspace_id:
+            opportunity = candidate
+
+    if opportunity is None and quote.contact_id is not None:
+        opportunity = await _open_opportunity_for(db, workspace_id, quote.contact_id)
+        if opportunity is not None:
+            quote.opportunity_id = opportunity.id
+
+    if opportunity is None and quote.contact_id is not None:
+        contact = await db.get(Contact, quote.contact_id)
+        if contact is not None:
+            opportunity = await _open_at_quote_sent(
+                db,
+                workspace_id,
+                contact,
+                logger.bind(quote_id=str(quote.id)),
+            )
+            if opportunity is not None:
+                quote.opportunity_id = opportunity.id
+
+    if opportunity is None:
+        logger.info(
+            "quote_approved_without_opportunity",
+            workspace_id=str(workspace_id),
+            quote_id=str(quote.id),
+        )
+        return None
+
+    if opportunity.lead_source_id is None and quote.contact_id is not None:
+        contact = await db.get(Contact, quote.contact_id)
+        if contact is not None:
+            snapshot_contact_attribution_on_opportunity(opportunity, contact)
+
+    approved_at = quote.approved_at or datetime.now(UTC)
+    old_status = opportunity.status
+    opportunity.amount = quote.total
+    opportunity.currency = quote.currency
+    opportunity.status = "won"
+    opportunity.closed_date = approved_at.date()
+    opportunity.lost_reason = None
+
+    if old_status != "won":
+        db.add(
+            OpportunityActivity(
+                opportunity_id=opportunity.id,
+                user_id=None,
+                activity_type="status_changed",
+                old_value=old_status,
+                new_value="won",
+                description=f"Booked from approved quote {quote.number}",
+            )
+        )
+
+    won_stage = (
+        await db.execute(
+            select(PipelineStage)
+            .where(
+                PipelineStage.pipeline_id == opportunity.pipeline_id,
+                PipelineStage.stage_type == "won",
+            )
+            .order_by(PipelineStage.order.asc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if won_stage is not None and won_stage.id != opportunity.stage_id:
+        from app.services.opportunities.opportunity_service import OpportunityService
+
+        await OpportunityService(db).move_stage(
+            workspace_id,
+            opportunity.id,
+            won_stage.id,
+            user_id=None,
+            source="quote_approved",
+        )
+
+    await db.flush()
+    logger.info(
+        "quote_approval_booked",
+        workspace_id=str(workspace_id),
+        quote_id=str(quote.id),
+        opportunity_id=str(opportunity.id),
+        amount=str(quote.total),
     )
     return opportunity

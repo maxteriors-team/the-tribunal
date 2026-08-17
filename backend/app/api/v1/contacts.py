@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import or_, select
 
@@ -48,6 +48,8 @@ from app.schemas.contact import (
     BulkStatusUpdateResponse,
     ContactAgentAssignRequest,
     ContactAgentAssignResponse,
+    ContactAIKnowledgeResponse,
+    ContactAIMemoryValueUpdate,
     ContactCreate,
     ContactEngagementSummary,
     ContactIdsResponse,
@@ -65,6 +67,7 @@ from app.schemas.contact import (
     TimelineItem,
 )
 from app.schemas.lead_source import AssignLeadSourceRequest, LeadAttributionFields
+from app.services.ai.contact_ai_memory_service import ContactAIMemoryService
 from app.services.contacts import (
     ContactAIStateService,
     ContactBulkService,
@@ -73,6 +76,7 @@ from app.services.contacts import (
     ContactService,
     ContactTimelineService,
 )
+from app.services.contacts.ai_knowledge_service import ContactAIKnowledgeService
 from app.services.contacts.engagement_summary import get_engagement_summary
 from app.services.contacts.exceptions import (
     ContactNotFoundError,
@@ -344,6 +348,114 @@ async def get_contact(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
+@router.get("/{contact_id}/ai-knowledge", response_model=ContactAIKnowledgeResponse)
+async def get_contact_ai_knowledge(
+    workspace_id: uuid.UUID,
+    contact_id: int,
+    response: Response,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> ContactAIKnowledgeResponse:
+    """Return a data-minimized view instead of widening every contact response."""
+    response.headers["Cache-Control"] = "private, no-store"
+    knowledge = await ContactAIKnowledgeService(db).get_knowledge(
+        workspace_id=workspace_id,
+        contact_id=contact_id,
+    )
+    if knowledge is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    return knowledge
+
+
+@router.put("/{contact_id}/ai-knowledge/summary", response_model=ContactAIKnowledgeResponse)
+async def update_contact_ai_memory_summary(
+    workspace_id: uuid.UUID,
+    contact_id: int,
+    update_in: ContactAIMemoryValueUpdate,
+    response: Response,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteCRM,
+) -> ContactAIKnowledgeResponse:
+    """Correct or remove the generated summary; authoritative CRM fields are untouched."""
+    response.headers["Cache-Control"] = "private, no-store"
+    knowledge_service = ContactAIKnowledgeService(db)
+    existing = await knowledge_service.get_knowledge(
+        workspace_id=workspace_id,
+        contact_id=contact_id,
+    )
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    if update_in.value is None and existing.memory_summary is None:
+        return existing
+
+    updated = await ContactAIMemoryService(db).update_summary(
+        workspace_id=workspace_id,
+        contact_id=contact_id,
+        value=update_in.value,
+        operator_id=current_user.id,
+    )
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    await db.commit()
+
+    knowledge = await knowledge_service.get_knowledge(
+        workspace_id=workspace_id,
+        contact_id=contact_id,
+    )
+    if knowledge is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    return knowledge
+
+
+@router.put(
+    "/{contact_id}/ai-knowledge/facts/{fact_id}",
+    response_model=ContactAIKnowledgeResponse,
+)
+async def update_contact_ai_memory_fact(
+    workspace_id: uuid.UUID,
+    contact_id: int,
+    fact_id: uuid.UUID,
+    update_in: ContactAIMemoryValueUpdate,
+    response: Response,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteCRM,
+) -> ContactAIKnowledgeResponse:
+    """Correct or remove one generated fact under the exact workspace/contact scope."""
+    response.headers["Cache-Control"] = "private, no-store"
+    knowledge_service = ContactAIKnowledgeService(db)
+    existing = await knowledge_service.get_knowledge(
+        workspace_id=workspace_id,
+        contact_id=contact_id,
+    )
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+
+    updated = await ContactAIMemoryService(db).update_fact(
+        workspace_id=workspace_id,
+        contact_id=contact_id,
+        fact_id=fact_id,
+        value=update_in.value,
+        operator_id=current_user.id,
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Generated memory fact not found",
+        )
+    await db.commit()
+
+    knowledge = await knowledge_service.get_knowledge(
+        workspace_id=workspace_id,
+        contact_id=contact_id,
+    )
+    if knowledge is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    return knowledge
+
+
 @router.put("/{contact_id}", response_model=ContactResponse)
 async def update_contact(
     workspace_id: uuid.UUID,
@@ -508,7 +620,7 @@ async def assign_contact_lead_source(
     """Manually attribute a lead source to a contact from the cleanup queue.
 
     Backfills the contact's touch fields and any still-unattributed
-    opportunities so the correction flows through to closed-won ROI.
+    opportunities so the correction flows through to canonical booked ROI.
     """
     service = AttributionCleanupService(db)
     try:
@@ -523,7 +635,7 @@ async def assign_contact_lead_source(
     except AttributionCleanupError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
-    # Backfilled opportunities change closed-won attribution — refresh ROI now.
+    # Backfilled opportunities change booked attribution — refresh ROI now.
     await invalidate_dashboard_cache(workspace_id)
 
 

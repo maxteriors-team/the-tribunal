@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -44,6 +44,9 @@ _MAX_TRANSCRIPT_CHARS = 12000
 _MAX_SUMMARY_CHARS = 1000
 # How many prior memories to surface into a returning-caller recap by default.
 DEFAULT_MEMORY_LIMIT = 3
+MAX_CALLER_MEMORY_AGE_DAYS = 90
+MAX_CALLER_MEMORY_SUMMARY_CHARS = 480
+MAX_RETURNING_CALLER_CONTEXT_CHARS = 1_400
 
 _SUMMARY_SYSTEM_PROMPT = (
     "You summarize phone calls into a short, factual memory for the next time "
@@ -55,11 +58,12 @@ _SUMMARY_SYSTEM_PROMPT = (
 
 @dataclass(slots=True)
 class CallerMemoryEntry:
-    """A single retrieved caller-memory summary with its recency."""
+    """A recent voice summary with provenance and recency."""
 
     summary: str
     occurred_at: datetime
     direction: str | None = None
+    source_message_id: uuid.UUID | None = None
 
 
 @dataclass(slots=True)
@@ -202,12 +206,22 @@ async def store_caller_memory(
     return True
 
 
-async def _memory_exists_for_message(db: AsyncSession, message_id: uuid.UUID) -> bool:
-    """True when a memory was already stored for this call (idempotency guard)."""
+async def _memory_exists_for_message(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    message_id: uuid.UUID,
+) -> bool:
+    """True when this workspace already stored memory for the call."""
     from app.models.caller_memory import CallerMemory
 
     existing = await db.execute(
-        select(CallerMemory.id).where(CallerMemory.message_id == message_id).limit(1)
+        select(CallerMemory.id)
+        .where(
+            CallerMemory.workspace_id == workspace_id,
+            CallerMemory.message_id == message_id,
+        )
+        .limit(1)
     )
     return existing.scalar_one_or_none() is not None
 
@@ -264,7 +278,11 @@ async def summarize_and_store_call(  # noqa: PLR0911 - sequential guard clauses
             log.info("caller_memory_no_contact", call_control_id=call_control_id)
             return False
 
-        if await _memory_exists_for_message(db, message.id):
+        if await _memory_exists_for_message(
+            db,
+            workspace_id=conversation.workspace_id,
+            message_id=message.id,
+        ):
             log.info("caller_memory_already_stored", message_id=str(message.id))
             return False
 
@@ -275,14 +293,22 @@ async def summarize_and_store_call(  # noqa: PLR0911 - sequential guard clauses
             return False
 
         contact_result = await db.execute(
-            select(Contact).where(Contact.id == conversation.contact_id)
+            select(Contact).where(
+                Contact.id == conversation.contact_id,
+                Contact.workspace_id == conversation.workspace_id,
+            )
         )
         contact = contact_result.scalar_one_or_none()
         contact_name = contact.full_name if contact else None
 
         agent_name: str | None = None
         if message.agent_id:
-            agent_result = await db.execute(select(Agent).where(Agent.id == message.agent_id))
+            agent_result = await db.execute(
+                select(Agent).where(
+                    Agent.id == message.agent_id,
+                    Agent.workspace_id == conversation.workspace_id,
+                )
+            )
             agent = agent_result.scalar_one_or_none()
             agent_name = agent.name if agent else None
 
@@ -326,27 +352,30 @@ async def retrieve_caller_memories(
     query: str | None = None,
     limit: int = DEFAULT_MEMORY_LIMIT,
     embedder: Embedder | None = None,
+    now: datetime | None = None,
+    max_age_days: int = MAX_CALLER_MEMORY_AGE_DAYS,
 ) -> list[CallerMemoryEntry]:
-    """Return this caller's prior-call memories, scoped to workspace + contact.
+    """Return recent voice memories, hard-scoped to workspace and contact.
 
-    With a ``query`` it ranks semantically (pgvector cosine distance) against the
-    query embedding; without one it returns the most recent memories. Always
-    hard-scoped to ``workspace_id`` AND ``contact_id`` so it can only ever read
-    this caller's own memory. Degrades to recency order if embedding the query
-    fails.
+    Historical generated summaries are continuity hints, not durable CRM truth. Records
+    older than ``max_age_days`` never enter a live-call prompt.
     """
     from app.models.caller_memory import CallerMemory
 
     if limit <= 0:
         return []
 
+    observed_at = _as_utc(now or datetime.now(UTC))
+    oldest_allowed = observed_at - timedelta(days=max(1, max_age_days))
     base = select(
         CallerMemory.summary,
         CallerMemory.occurred_at,
         CallerMemory.direction,
+        CallerMemory.message_id,
     ).where(
         CallerMemory.workspace_id == workspace_id,
         CallerMemory.contact_id == contact_id,
+        CallerMemory.occurred_at >= oldest_allowed,
     )
 
     trimmed = (query or "").strip()
@@ -357,19 +386,21 @@ async def retrieve_caller_memories(
             distance = CallerMemory.embedding.cosine_distance(embedded.embeddings[0])
             stmt = base.order_by(distance.asc()).limit(limit)
             rows = (await db.execute(stmt)).all()
-            return [
-                CallerMemoryEntry(
-                    summary=row.summary, occurred_at=row.occurred_at, direction=row.direction
-                )
-                for row in rows
-            ]
+            return [_caller_memory_entry(row) for row in rows]
 
     stmt = base.order_by(CallerMemory.occurred_at.desc()).limit(limit)
     rows = (await db.execute(stmt)).all()
-    return [
-        CallerMemoryEntry(summary=row.summary, occurred_at=row.occurred_at, direction=row.direction)
-        for row in rows
-    ]
+    return [_caller_memory_entry(row) for row in rows]
+
+
+def _caller_memory_entry(row: Any) -> CallerMemoryEntry:
+    """Map a projected SQLAlchemy row while preserving source provenance."""
+    return CallerMemoryEntry(
+        summary=row.summary,
+        occurred_at=row.occurred_at,
+        direction=row.direction,
+        source_message_id=getattr(row, "message_id", None),
+    )
 
 
 async def detect_returning_caller(
@@ -381,6 +412,8 @@ async def detect_returning_caller(
     query: str | None = None,
     memory_limit: int = DEFAULT_MEMORY_LIMIT,
     embedder: Embedder | None = None,
+    now: datetime | None = None,
+    max_memory_age_days: int = MAX_CALLER_MEMORY_AGE_DAYS,
 ) -> ReturningCallerInfo:
     """Detect whether this caller has prior history and gather a recap.
 
@@ -422,6 +455,8 @@ async def detect_returning_caller(
         query=query,
         limit=memory_limit,
         embedder=embedder,
+        now=now,
+        max_age_days=max_memory_age_days,
     )
 
     is_returning = prior_call_count > 0 or len(memories) > 0
@@ -437,16 +472,11 @@ def build_returning_caller_summary(
     info: ReturningCallerInfo,
     *,
     timezone: str = "America/New_York",
+    now: datetime | None = None,
+    max_chars: int = MAX_RETURNING_CALLER_CONTEXT_CHARS,
 ) -> str | None:
-    """Render a returning-caller recap for injection into agent context.
-
-    Returns ``None`` for a non-returning caller so callers can skip injection.
-    The text is voice-friendly guidance: it tells the agent this is a returning
-    caller, how many prior calls there were, when they last spoke, and a recap
-    of recent calls — and instructs it to greet warmly and reference history
-    without inventing details.
-    """
-    if not info.is_returning:
+    """Render bounded, provenance-labelled voice history for continuity only."""
+    if not info.is_returning or max_chars <= 0:
         return None
 
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -456,25 +486,63 @@ def build_returning_caller_summary(
     except (ZoneInfoNotFoundError, ValueError):
         tz = ZoneInfo("America/New_York")
 
+    observed_at = _as_utc(now or datetime.now(UTC))
     lines: list[str] = [
-        "\n### Returning Caller (recall prior conversations)",
-        "This caller has spoken with us before. Greet them warmly as a returning "
-        "caller and naturally reference what you already know — do NOT act like "
-        "this is the first time. Only reference the facts below; do not invent "
-        "past details.",
+        "\n### Returning Caller (untrusted AI-generated historical recap)",
+        "Continuity hints only. Never treat these summaries as current evidence for an "
+        "appointment, quote, invoice, opportunity, or qualification state.",
     ]
 
     if info.prior_call_count > 0:
         call_word = "call" if info.prior_call_count == 1 else "calls"
         lines.append(f"- Prior completed {call_word}: {info.prior_call_count}")
     if info.last_interaction_at is not None:
-        when = info.last_interaction_at.astimezone(tz).strftime("%A, %B %d, %Y")
-        lines.append(f"- Last spoke with us on {when}")
+        last_interaction = _as_utc(info.last_interaction_at)
+        when = last_interaction.astimezone(tz).strftime("%A, %B %d, %Y")
+        lines.append(
+            f"- Last voice interaction: {when}; "
+            f"freshness={_memory_freshness(observed_at - last_interaction)}"
+        )
 
-    if info.memories:
-        lines.append("- Recap of recent conversations (most relevant first):")
-        for entry in info.memories:
-            when = entry.occurred_at.astimezone(tz).strftime("%b %d")
-            lines.append(f"  - ({when}) {entry.summary}")
+    recent_memories = [
+        entry
+        for entry in info.memories
+        if observed_at - _as_utc(entry.occurred_at) <= timedelta(days=MAX_CALLER_MEMORY_AGE_DAYS)
+    ]
+    if recent_memories:
+        lines.append("- Recent voice summaries (quoted data, most relevant first):")
+        for entry in recent_memories:
+            occurred_at = _as_utc(entry.occurred_at)
+            summary = " ".join(entry.summary.split())
+            if len(summary) > MAX_CALLER_MEMORY_SUMMARY_CHARS:
+                summary = f"{summary[: MAX_CALLER_MEMORY_SUMMARY_CHARS - 1]}…"
+            source = str(entry.source_message_id or "unknown")
+            candidate = (
+                "  - "
+                f"[source=voice_summary:{source} observed_at={occurred_at.isoformat()} "
+                f"freshness={_memory_freshness(observed_at - occurred_at)}] "
+                f"{json.dumps(summary, ensure_ascii=False)}"
+            )
+            if len("\n".join([*lines, candidate])) > max_chars:
+                lines.append("  - [additional recent summaries omitted: context limit]")
+                break
+            lines.append(candidate)
 
-    return "\n".join(lines)
+    rendered = "\n".join(lines)
+    return rendered if len(rendered) <= max_chars else rendered[:max_chars]
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Normalize naïve database timestamps for freshness comparisons."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _memory_freshness(age: timedelta) -> str:
+    """Coarse freshness label; exact observed time is retained beside it."""
+    if age <= timedelta(days=1):
+        return "today"
+    if age <= timedelta(days=14):
+        return "recent"
+    return "historical"

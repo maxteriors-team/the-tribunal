@@ -19,8 +19,9 @@ Usage:
 """
 
 import json
+import re
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import structlog
 from openai.types.chat import ChatCompletionMessageToolCall
@@ -31,6 +32,13 @@ from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.services.ai.base_tool_executor import BaseToolExecutor
+from app.services.ai.contact_context_snapshot import ContactContextSnapshotService
+from app.services.ai.contact_state_evidence import (
+    ContactEvidenceDomain,
+    build_contact_state_evidence,
+    build_contact_state_not_found,
+)
+from app.services.ai.context_observability import observability_logger, observe_tool_call
 from app.services.ai.website_lead_qualification import WebsiteLeadQualificationPolicy
 from app.services.appointments.booking_finalizer import finalize_booking, format_contact_address
 from app.services.appointments.cancellation import cancel_upcoming_appointments
@@ -40,15 +48,16 @@ from app.utils.meeting_urls import meeting_provider_name
 
 logger = structlog.get_logger()
 
-# Tools that bypass the HITL approval gate.
-#
-# ``search_knowledge`` is read-only. ``cancel_appointment`` is not, but it only
-# ever honours an explicit customer instruction, and queuing it for review
-# recreates the failure it exists to fix: the appointment stays ``scheduled``
-# while an operator sleeps, so the reminder worker keeps texting someone who
-# already cancelled. Declining to cancel is not the safe default here.
+# Read-only retrieval tools bypass the HITL approval gate. Cancellation is also exempt:
+# delaying an explicit customer cancellation leaves reminders running after they opted out
+# of the appointment.
 GATE_EXEMPT_TOOLS: frozenset[str] = frozenset(
-    {"search_knowledge", "cancel_appointment", "mark_lead_qualified"}
+    {
+        "search_knowledge",
+        "lookup_contact_state",
+        "cancel_appointment",
+        "mark_lead_qualified",
+    }
 )
 
 
@@ -100,15 +109,30 @@ class TextToolExecutor(BaseToolExecutor):
             except json.JSONDecodeError:
                 arguments = {}
 
+            scope_error = self._workspace_scope_error()
+            if scope_error is not None:
+                results.append(
+                    {
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "content": json.dumps(scope_error),
+                    }
+                )
+                continue
+
             self.log.info(
                 "executing_tool_call",
                 tool_call_id=tool_call.id,
                 function_name=function_name,
-                arguments=(
-                    {"redacted": True, "keys": sorted(arguments)}
-                    if function_name == "mark_lead_qualified"
-                    else arguments
-                ),
+                argument_keys=sorted(arguments),
+            )
+            observe_tool_call(
+                observability_logger,
+                surface="sms",
+                invocation_id=str(self.conversation.id),
+                tool_call_id=tool_call.id,
+                tool_name=function_name,
+                status="requested",
             )
 
             # Read-only tools (e.g. knowledge lookups) skip the approval gate.
@@ -121,10 +145,20 @@ class TextToolExecutor(BaseToolExecutor):
                         "content": json.dumps(result),
                     }
                 )
+                success = bool(result.get("success", False))
                 self.log.info(
                     "tool_call_completed",
                     tool_call_id=tool_call.id,
-                    success=result.get("success", False),
+                    success=success,
+                )
+                observe_tool_call(
+                    observability_logger,
+                    surface="sms",
+                    invocation_id=str(self.conversation.id),
+                    tool_call_id=tool_call.id,
+                    tool_name=function_name,
+                    status="completed" if success else "failed",
+                    success=success,
                 )
                 continue
 
@@ -167,10 +201,27 @@ class TextToolExecutor(BaseToolExecutor):
                 }
             )
 
+            success = bool(result.get("success", False))
             self.log.info(
                 "tool_call_completed",
                 tool_call_id=tool_call.id,
-                success=result.get("success", False),
+                success=success,
+            )
+            status: Literal["completed", "pending_approval", "blocked", "failed"] = "completed"
+            if result.get("pending_approval"):
+                status = "pending_approval"
+            elif result.get("blocked"):
+                status = "blocked"
+            elif not success:
+                status = "failed"
+            observe_tool_call(
+                observability_logger,
+                surface="sms",
+                invocation_id=str(self.conversation.id),
+                tool_call_id=tool_call.id,
+                tool_name=function_name,
+                status=status,
+                success=success,
             )
 
         return results
@@ -182,15 +233,24 @@ class TextToolExecutor(BaseToolExecutor):
         function_name: str,
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
-        """Execute a tool call."""
+        """Execute one workspace-bound SMS tool call."""
+        scope_error = self._workspace_scope_error()
+        if scope_error is not None:
+            return scope_error
+
         if function_name in {"book_appointment", "check_availability"}:
             qualification_error = await self._qualification_booking_error()
             if qualification_error is not None:
                 return qualification_error
         if function_name == "mark_lead_qualified":
             return await self._execute_mark_lead_qualified(arguments)
+        if function_name == "lookup_contact_state":
+            return await self._execute_lookup_contact_state(
+                arguments.get("subject"),
+                arguments.get("reference"),
+            )
         if function_name == "book_appointment":
-            return await self._execute_book_with_contact_lookup(
+            result = await self._execute_book_with_contact_lookup(
                 date_str=arguments.get("date", ""),
                 time_str=arguments.get("time", ""),
                 email=arguments.get("email"),
@@ -199,32 +259,243 @@ class TextToolExecutor(BaseToolExecutor):
                 required_skill=arguments.get("skill"),
                 call_type=arguments.get("call_type"),
             )
+            return self._attach_fresh_evidence(
+                result,
+                domains={"appointment", "availability"},
+                has_evidence=result.get("success") is True,
+            )
         if function_name == "check_availability":
             try:
-                return await self.execute_check_availability(
+                result = await self.execute_check_availability(
                     start_date_str=arguments.get("start_date", ""),
                     end_date_str=arguments.get("end_date"),
                     required_skill=arguments.get("skill"),
                     duration_minutes=arguments.get("duration_minutes", 30),
                 )
-            except Exception as e:
-                self.log.exception("availability_check_failed", error=str(e))
-                return {
+            except Exception as exc:
+                self.log.exception("availability_check_failed", error=str(exc))
+                result = {
                     "success": False,
-                    "error": f"Failed to check availability: {e!s}",
+                    "error": f"Failed to check availability: {exc!s}",
                 }
+            return self._attach_fresh_evidence(
+                result,
+                domains={"availability"},
+                has_evidence=result.get("available") is not False,
+            )
         if function_name == "cancel_appointment":
-            return await self._execute_cancel_appointment(
-                reason=arguments.get("reason"),
+            result = await self._execute_cancel_appointment(reason=arguments.get("reason"))
+            return self._attach_fresh_evidence(
+                result,
+                domains={"appointment"},
+                has_evidence=bool(result.get("cancelled_count")),
             )
         if function_name == "search_knowledge":
-            return await self._execute_search_knowledge(
+            result = await self._execute_search_knowledge(
                 query=arguments.get("query", ""),
                 top_k=arguments.get("top_k"),
+            )
+            return self._attach_fresh_evidence(
+                result,
+                domains={"pricing"},
+                has_evidence=bool(result.get("results")),
             )
 
         self.log.warning("unknown_text_tool", function_name=function_name)
         return {"success": False, "error": f"Unknown function: {function_name}"}
+
+    def _workspace_scope_error(self) -> dict[str, Any] | None:
+        """Reject mismatched agent/conversation tenants before any query or action."""
+        if self.agent.workspace_id == self.conversation.workspace_id:
+            return None
+        self.log.warning(
+            "text_tool_workspace_scope_mismatch",
+            agent_workspace_id=str(self.agent.workspace_id),
+            conversation_workspace_id=str(self.conversation.workspace_id),
+        )
+        return {
+            "success": False,
+            "blocked": True,
+            "error": "Tool scope does not match this conversation.",
+            "evidence_status": "error",
+        }
+
+    @staticmethod
+    def _attach_fresh_evidence(
+        result: dict[str, Any],
+        *,
+        domains: set[str],
+        has_evidence: bool,
+    ) -> dict[str, Any]:
+        """Mark whether this turn's tool result can support a factual claim."""
+        enriched = dict(result)
+        success = result.get("success") is True
+        enriched.update(
+            {
+                "evidence_source": "live_tool",
+                "observed_at": datetime.now(UTC).isoformat(),
+                "evidence_domains": sorted(domains),
+                "evidence_status": (
+                    "found" if success and has_evidence else "absent" if success else "error"
+                ),
+            }
+        )
+        return enriched
+
+    async def _execute_lookup_contact_state(
+        self,
+        subject: object,
+        reference: object = None,
+    ) -> dict[str, Any]:
+        """Read a fresh, tenant-scoped CRM fact for this conversation's contact."""
+        domain: ContactEvidenceDomain
+        if subject == "quote":
+            domain = "quote"
+        elif subject == "invoice":
+            domain = "invoice"
+        elif subject == "appointment":
+            domain = "appointment"
+        else:
+            return {
+                "success": False,
+                "error": "subject must be quote, invoice, or appointment",
+                "evidence_status": "error",
+            }
+
+        contact_id = self.conversation.contact_id
+        if contact_id is None:
+            return build_contact_state_not_found(domains={domain})
+
+        try:
+            snapshot = await ContactContextSnapshotService(
+                self.db,
+                timeline_limit=10,
+            ).get_snapshot(
+                workspace_id=self.conversation.workspace_id,
+                contact_id=contact_id,
+            )
+        except Exception as exc:
+            self.log.exception(
+                "lookup_contact_state_failed",
+                contact_id=contact_id,
+                subject=domain,
+                error=str(exc),
+            )
+            return {
+                "success": False,
+                "error": (
+                    "The live CRM record could not be verified. Hand off instead of "
+                    "stating a quote, invoice, or appointment fact."
+                ),
+                "evidence_domains": [domain],
+                "evidence_status": "error",
+            }
+
+        if snapshot is None:
+            return build_contact_state_not_found(domains={domain})
+        evidence = build_contact_state_evidence(
+            snapshot,
+            domains={domain},
+            timezone=self.timezone,
+        )
+        return self._narrow_contact_state_evidence(
+            evidence,
+            domain=domain,
+            reference=reference,
+        )
+
+    @staticmethod
+    def _narrow_contact_state_evidence(
+        evidence: dict[str, Any],
+        *,
+        domain: ContactEvidenceDomain,
+        reference: object,
+    ) -> dict[str, Any]:
+        """Resolve one of several current records from the customer's exact wording."""
+        if not isinstance(reference, str) or not reference.strip():
+            return evidence
+
+        ignored_tokens = {
+            "a",
+            "about",
+            "appointment",
+            "bill",
+            "booking",
+            "did",
+            "estimate",
+            "i",
+            "invoice",
+            "is",
+            "me",
+            "my",
+            "proposal",
+            "quote",
+            "see",
+            "the",
+            "you",
+        }
+        reference_tokens = {
+            token
+            for token in re.findall(r"[a-z0-9]+", reference.casefold()[:200])
+            if token not in ignored_tokens
+        }
+        if not reference_tokens:
+            return evidence
+
+        key = {
+            "quote": "active_quotes",
+            "invoice": "active_invoices",
+            "appointment": "upcoming_appointments",
+        }[domain]
+        records = list(evidence.get(key) or [])
+        latest_appointment = evidence.get("latest_appointment")
+        if (
+            domain == "appointment"
+            and latest_appointment is not None
+            and not any(
+                record.get("appointment_id") == latest_appointment.get("appointment_id")
+                for record in records
+            )
+        ):
+            records.append(latest_appointment)
+
+        scored_records = [
+            (
+                sum(
+                    token in json.dumps(record, ensure_ascii=True).casefold()
+                    for token in reference_tokens
+                ),
+                record,
+            )
+            for record in records
+        ]
+        best_score = max((score for score, _ in scored_records), default=0)
+        matches = [
+            record for score, record in scored_records if best_score > 0 and score == best_score
+        ]
+        status = "absent" if not matches else "found" if len(matches) == 1 else "conflict"
+
+        narrowed = dict(evidence)
+        narrowed["domain_status"] = {domain: status}
+        narrowed["evidence_status"] = status
+        if domain == "appointment":
+            upcoming_ids = {
+                record.get("appointment_id")
+                for record in evidence.get("upcoming_appointments") or []
+            }
+            narrowed["upcoming_appointments"] = [
+                record for record in matches if record.get("appointment_id") in upcoming_ids
+            ]
+            narrowed["latest_appointment"] = (
+                latest_appointment if latest_appointment in matches else None
+            )
+        else:
+            narrowed[key] = matches
+        narrowed["message"] = (
+            f"{evidence['message']} The customer's reference was matched only against "
+            f"live {domain} fields; evidence_status={status}."
+        )
+        return narrowed
 
     async def _qualification_booking_error(self) -> dict[str, Any] | None:
         """Block direct booking calls until persisted website-lead qualification passes."""

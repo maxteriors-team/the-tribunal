@@ -139,8 +139,15 @@ ci.frontend.deps:
 ci.env: ## Verify env templates match backend config and frontend env usage.
 	python3 scripts/dev/check_env_drift.py
 
+.PHONY: ci.context-evals
+ci.context-evals: ci.backend.deps ## Run the local/free AI context golden gate and write deterministic artifacts.
+	cd $(BACKEND_DIR) && uv run ruff check tests/evals/context_accuracy
+	cd $(BACKEND_DIR) && uv run ruff format --check tests/evals/context_accuracy
+	cd $(BACKEND_DIR) && uv run pytest tests/evals/context_accuracy -q
+	cd $(BACKEND_DIR) && uv run python -m tests.evals.context_accuracy --gate ci --output-dir .eval-artifacts/context_accuracy
+
 .PHONY: ci.backend
-ci.backend: ci.backend.deps ci.env ## Run backend CI parity: env drift, lint, format, type-check, and coverage.
+ci.backend: ci.backend.deps ci.env ci.context-evals ## Run backend CI parity: env drift, lint, format, type-check, coverage, and context evals.
 	cd $(BACKEND_DIR) && uv run ruff check app
 	cd $(BACKEND_DIR) && uv run ruff format --check app
 	cd $(BACKEND_DIR) && uv run mypy app

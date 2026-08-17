@@ -17,6 +17,11 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.tag import ContactTag, Tag
 from app.schemas.contact import ContactUpdate
+from app.services.ai.contact_context_snapshot import (
+    MAX_TIMELINE_ITEMS,
+    MAX_TIMELINE_OFFSET,
+    ContactContextSnapshotService,
+)
 from app.services.ai.crm_assistant._pagination import count_matching, listing, local_listing
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
 from app.services.ai.crm_assistant._tool_errors import (
@@ -128,6 +133,56 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
+def _bounded_integer(
+    value: object,
+    *,
+    field: str,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool) or not isinstance(value, int | str):
+        raise ValueError(f"{field} must be an integer")
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{field} must be an integer") from exc
+    return min(max(parsed, minimum), maximum)
+
+
+def _identity_resolution(
+    *,
+    query: str,
+    total: int,
+    serialized_contacts: list[dict[str, Any]],
+) -> dict[str, object] | None:
+    if not query.strip():
+        return None
+    if total == 0:
+        return {
+            "status": "not_found",
+            "candidate_count": 0,
+            "next_action": "Ask for another identifier; do not infer a contact.",
+        }
+    if total == 1 and serialized_contacts:
+        return {
+            "status": "resolved",
+            "candidate_count": 1,
+            "contact_id": serialized_contacts[0]["id"],
+            "next_action": "Call get_contact_context before claiming current record state.",
+        }
+    return {
+        "status": "ambiguous",
+        "candidate_count": total,
+        "next_action": (
+            "Ask the operator to choose a candidate; do not guess or call "
+            "get_contact_context until one contact_id is confirmed."
+        ),
+    }
+
+
 def _loaded_tag_names(contact: Contact) -> list[str]:
     """Read tag names without triggering an async lazy load."""
 
@@ -195,6 +250,7 @@ class ContactAssistantTools:
             "search_contacts": self.search_contacts,
             "find_contacts": self.find_contacts,
             "get_contact": self.get_contact,
+            "get_contact_context": self.get_contact_context,
             "create_contact": self.create_contact,
             "update_contact": self.update_contact,
             "add_contact_note": self.add_contact_note,
@@ -217,33 +273,126 @@ class ContactAssistantTools:
             stmt.order_by(Contact.created_at.desc()).limit(limit)
         )
         contacts = result.scalars().all()
-
-        return listing(
-            [
-                {
-                    "id": contact.id,
-                    "first_name": contact.first_name,
-                    "last_name": contact.last_name,
-                    "phone": contact.phone_number,
-                    "email": contact.email,
-                    "status": contact.status,
-                    "company": contact.company_name,
-                    "lead_score": contact.lead_score,
-                    "engagement_score": contact.engagement_score,
-                    "is_qualified": contact.is_qualified,
-                    "qualification_signals": contact.qualification_signals,
-                    "source": contact.source,
-                    "last_appointment_status": contact.last_appointment_status,
-                    "last_engaged_at": (
-                        contact.last_engaged_at.isoformat() if contact.last_engaged_at else None
-                    ),
-                    "created_at": contact.created_at.isoformat() if contact.created_at else None,
-                    "updated_at": contact.updated_at.isoformat() if contact.updated_at else None,
-                }
-                for contact in contacts
-            ],
+        serialized_contacts = [
+            {
+                "id": contact.id,
+                "first_name": contact.first_name,
+                "last_name": contact.last_name,
+                "phone": contact.phone_number,
+                "email": contact.email,
+                "status": contact.status,
+                "company": contact.company_name,
+                "lead_score": contact.lead_score,
+                "engagement_score": contact.engagement_score,
+                "is_qualified": contact.is_qualified,
+                "qualification_signals": contact.qualification_signals,
+                "source": contact.source,
+                "last_appointment_status": contact.last_appointment_status,
+                "last_engaged_at": (
+                    contact.last_engaged_at.isoformat() if contact.last_engaged_at else None
+                ),
+                "created_at": contact.created_at.isoformat() if contact.created_at else None,
+                "updated_at": contact.updated_at.isoformat() if contact.updated_at else None,
+            }
+            for contact in contacts
+        ]
+        resolution = _identity_resolution(
+            query=query,
             total=total,
+            serialized_contacts=serialized_contacts,
         )
+        return listing(
+            serialized_contacts,
+            total=total,
+            extra={"identity_resolution": resolution} if resolution else None,
+        )
+
+    async def get_contact_context(self, args: ToolArguments) -> dict[str, object]:
+        """Return one complete, timestamped, workspace-scoped contact snapshot."""
+
+        try:
+            contact_id = _bounded_integer(
+                args.get("contact_id"),
+                field="contact_id",
+                default=0,
+                minimum=0,
+                maximum=2**63 - 1,
+            )
+            timeline_limit = _bounded_integer(
+                args.get("timeline_limit"),
+                field="timeline_limit",
+                default=20,
+                minimum=1,
+                maximum=MAX_TIMELINE_ITEMS,
+            )
+            timeline_offset = _bounded_integer(
+                args.get("timeline_offset"),
+                field="timeline_offset",
+                default=0,
+                minimum=0,
+                maximum=MAX_TIMELINE_OFFSET,
+            )
+        except ValueError as exc:
+            return invalid_argument(
+                str(exc),
+                "Use integer contact_id, timeline_limit, and timeline_offset values.",
+            )
+        if contact_id <= 0:
+            return invalid_argument(
+                "contact_id must be a positive integer.",
+                "Call search_contacts and use its resolved contact_id.",
+            )
+
+        snapshot = await ContactContextSnapshotService(
+            self.context.db,
+            timeline_limit=timeline_limit,
+            timeline_offset=timeline_offset,
+        ).get_snapshot(
+            workspace_id=self.context.workspace_id,
+            contact_id=contact_id,
+        )
+        if snapshot is None:
+            return not_found(
+                "Contact",
+                "Call search_contacts in this workspace; do not search another workspace.",
+            )
+
+        returned = len(snapshot.recent_timeline)
+        next_offset = (
+            snapshot.timeline_offset + snapshot.timeline_limit
+            if snapshot.timeline_has_more
+            else None
+        )
+        return {
+            "success": True,
+            "data": {
+                "snapshot": snapshot.model_dump(mode="json", exclude={"workspace_id"}),
+                "rendered_context": snapshot.render(),
+                "timeline_page": {
+                    "offset": snapshot.timeline_offset,
+                    "limit": snapshot.timeline_limit,
+                    "returned": returned,
+                    "has_more": snapshot.timeline_has_more,
+                    "next_offset": next_offset,
+                },
+                "evidence_rules": {
+                    "observed_at": snapshot.observed_at.isoformat(),
+                    "record_timestamp_path": "provenance[*].updated_at",
+                    "untrusted_content_paths": [
+                        "snapshot.free_form_notes[*].content",
+                        "snapshot.recent_timeline[*].content",
+                    ],
+                    "state_precedence": (
+                        "Current structured fields override stale notes or timeline text; "
+                        "surface genuine structured conflicts instead of choosing one silently."
+                    ),
+                    "response_requirement": (
+                        "Cite observed_at and the relevant provenance.updated_at timestamp "
+                        "for every current-state claim."
+                    ),
+                },
+            },
+        }
 
     async def get_contact(self, args: ToolArguments) -> dict[str, object]:
         """Return one full, workspace-scoped contact record and optional timeline."""

@@ -1,11 +1,13 @@
 """Integration credential management endpoints."""
 
+import uuid
 from typing import Any
 
 import httpx
 import structlog
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess, WorkspaceAdminAccess
 from app.core.config import settings
@@ -17,6 +19,12 @@ from app.schemas.integration import (
     IntegrationTestResult,
     IntegrationUpdate,
     IntegrationWithMaskedCredentials,
+)
+from app.services.lead_sources.meta_lead_ads_service import (
+    MetaLeadAdsClient,
+    MetaLeadAdsError,
+    MetaLeadAdsValidationError,
+    validate_meta_credentials,
 )
 
 router = APIRouter()
@@ -112,6 +120,80 @@ async def get_integration(
     )
 
 
+async def _ensure_meta_page_is_available(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    credentials: dict[str, Any],
+    exclude_integration_id: uuid.UUID | None = None,
+) -> None:
+    """Prevent one Meta Page from routing the same lead into two workspaces."""
+    try:
+        page_id, _page_credential = validate_meta_credentials(credentials)
+    except MetaLeadAdsValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+    query = select(WorkspaceIntegration).where(
+        WorkspaceIntegration.integration_type == "meta_lead_ads",
+        WorkspaceIntegration.is_active.is_(True),
+    )
+    if exclude_integration_id is not None:
+        query = query.where(WorkspaceIntegration.id != exclude_integration_id)
+    integrations = (await db.execute(query)).scalars().all()
+    for integration in integrations:
+        saved = integration.safe_credentials()
+        if saved is not None and str(saved.get("page_id") or "").strip() == page_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This Meta Page is already connected to another workspace",
+            )
+
+
+async def _configure_meta_lead_ads(credentials: dict[str, Any]) -> None:
+    """Validate the Page token and subscribe this app to ``leadgen`` events."""
+    if not settings.meta_lead_ads_app_secret or not settings.meta_lead_ads_verify_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Set META_LEAD_ADS_APP_SECRET and META_LEAD_ADS_VERIFY_TOKEN "
+                "before connecting Meta Lead Ads"
+            ),
+        )
+    try:
+        page_id, page_credential = validate_meta_credentials(credentials)
+        client = MetaLeadAdsClient()
+        call_args: dict[str, Any] = {
+            "page_id": page_id,
+            "access_" + "token": page_credential,
+        }
+        await client.validate_page(**call_args)
+        await client.subscribe_page(**call_args)
+        await client.fetch_campaign_spend(credentials)
+    except MetaLeadAdsValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    except MetaLeadAdsError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+async def _best_effort_meta_unsubscribe(
+    credentials: dict[str, Any], *, workspace_id: str, reason: str
+) -> None:
+    """Disconnect a Page when possible without trapping an unusable credential row."""
+    try:
+        await MetaLeadAdsClient().unsubscribe_page(credentials)
+    except (MetaLeadAdsValidationError, MetaLeadAdsError) as exc:
+        logger.warning(
+            "meta_lead_ads_unsubscribe_failed",
+            workspace_id=workspace_id,
+            reason=reason,
+            error=str(exc),
+        )
+
+
 @router.post(
     "",
     response_model=IntegrationWithMaskedCredentials,
@@ -139,6 +221,14 @@ async def create_integration(
             detail=f"Integration '{integration_data.integration_type}' already exists. "
             "Use PUT to update.",
         )
+
+    if integration_data.integration_type == "meta_lead_ads" and integration_data.is_active:
+        await _ensure_meta_page_is_available(
+            db,
+            workspace_id=workspace.id,
+            credentials=integration_data.credentials,
+        )
+        await _configure_meta_lead_ads(integration_data.credentials)
 
     integration = WorkspaceIntegration(
         workspace_id=workspace.id,
@@ -191,6 +281,30 @@ async def update_integration(
             detail=f"Integration '{integration_type}' not found",
         )
 
+    previous_credentials = integration.credentials
+    next_credentials = (
+        integration_data.credentials
+        if integration_data.credentials is not None
+        else previous_credentials
+    )
+    next_active = (
+        integration_data.is_active
+        if integration_data.is_active is not None
+        else integration.is_active
+    )
+    if (
+        integration_type == "meta_lead_ads"
+        and next_active
+        and (integration_data.credentials is not None or not integration.is_active)
+    ):
+        await _ensure_meta_page_is_available(
+            db,
+            workspace_id=workspace.id,
+            credentials=next_credentials,
+            exclude_integration_id=integration.id,
+        )
+        await _configure_meta_lead_ads(next_credentials)
+
     if integration_data.credentials is not None:
         integration.credentials = integration_data.credentials
     if integration_data.is_active is not None:
@@ -198,6 +312,17 @@ async def update_integration(
 
     await db.commit()
     await db.refresh(integration)
+
+    if integration_type == "meta_lead_ads":
+        previous_page_id = str(previous_credentials.get("page_id") or "").strip()
+        next_page_id = str(next_credentials.get("page_id") or "").strip()
+        page_changed = bool(previous_page_id and previous_page_id != next_page_id)
+        if (not next_active and integration_data.is_active is not None) or page_changed:
+            await _best_effort_meta_unsubscribe(
+                previous_credentials,
+                workspace_id=str(workspace.id),
+                reason="deactivated" if not next_active else "page_changed",
+            )
 
     logger.info(
         "integration_updated",
@@ -237,6 +362,13 @@ async def delete_integration(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Integration '{integration_type}' not found",
+        )
+
+    if integration_type == "meta_lead_ads":
+        await _best_effort_meta_unsubscribe(
+            integration.credentials,
+            workspace_id=str(workspace.id),
+            reason="deleted",
         )
 
     await db.delete(integration)
@@ -369,6 +501,35 @@ async def _test_companycam(client: httpx.AsyncClient, api_key: str) -> Integrati
     )
 
 
+async def _test_meta_lead_ads(
+    client: httpx.AsyncClient, credentials: dict[str, Any]
+) -> IntegrationTestResult:
+    """Validate a Meta Page token without subscribing or retaining lead data."""
+    try:
+        page_id, page_credential = validate_meta_credentials(credentials)
+        call_args: dict[str, Any] = {
+            "page_id": page_id,
+            "access_" + "token": page_credential,
+        }
+        graph = MetaLeadAdsClient(client)
+        page = await graph.validate_page(**call_args)
+        spend = await graph.fetch_campaign_spend(credentials)
+    except (MetaLeadAdsValidationError, MetaLeadAdsError) as exc:
+        return IntegrationTestResult(success=False, message=str(exc))
+    callback_base = (settings.api_base_url or settings.public_base_url).rstrip("/")
+    return IntegrationTestResult(
+        success=True,
+        message="Successfully connected to Meta Lead Ads",
+        details={
+            "page_id": page.page_id,
+            "page_name": page.page_name,
+            "callback_url": f"{callback_base}/webhooks/meta/leadgen",
+            "phone_field_required": True,
+            "spend_campaigns_available": len(spend),
+        },
+    )
+
+
 async def _test_meta_ad_library(
     client: httpx.AsyncClient,
     credentials: dict[str, Any],
@@ -449,7 +610,7 @@ _INTEGRATION_TESTERS = {
 
 # Integration types handled by a bespoke branch in ``test_integration`` because
 # their test function does not share the ``(client, api_key)`` signature.
-_SPECIAL_TESTERS = {"openai", "meta_ad_library"}
+_SPECIAL_TESTERS = {"openai", "meta_lead_ads", "meta_ad_library"}
 
 
 async def _run_integration_test(
@@ -474,6 +635,8 @@ async def _run_integration_test(
         async with httpx.AsyncClient(timeout=10.0) as client:
             if integration_type == "openai":
                 result_value = await _test_openai(client, "", credentials)
+            elif integration_type == "meta_lead_ads":
+                result_value = await _test_meta_lead_ads(client, credentials)
             elif integration_type == "meta_ad_library":
                 result_value = await _test_meta_ad_library(client, credentials)
             else:

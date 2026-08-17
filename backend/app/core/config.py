@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     # and these defaults could not be checked against a live /v1/models call.
     openai_assistant_model: str = "gpt-5.6-terra"
     openai_assistant_summary_model: str = "gpt-5.6-luna"
+    openai_sms_simple_model: str = "gpt-5.4-nano"
+    openai_sms_routing_mode: Literal["off", "shadow", "active"] = "shadow"
+    openai_sms_simple_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    openai_sms_strong_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     openai_realtime_client_secret_ttl_seconds: int = 600
     openai_realtime_idle_timeout_ms: int | None = 6000
     openai_codex_voice_enabled: bool = False
@@ -183,6 +187,18 @@ class Settings(BaseSettings):
     meta_ad_library_rate_limit_per_hour: int = 180
     meta_ad_library_request_timeout_seconds: float = 30.0
     meta_ad_library_default_country: str = "US"
+
+    # Meta Lead Ads webhook + Graph API retrieval. The page access token is
+    # encrypted per workspace; the app secret and webhook verify token remain
+    # server-only deployment secrets.
+    meta_lead_ads_app_secret: str = ""
+    meta_lead_ads_verify_token: str = ""
+    meta_lead_ads_api_version: str = "v22.0"
+    meta_lead_ads_base_url: str = "https://graph.facebook.com"
+    meta_lead_ads_request_timeout_seconds: float = 15.0
+    meta_lead_ads_max_webhook_bytes: int = 262_144
+    meta_ads_spend_worker_enabled: bool = True
+    meta_ads_spend_sync_interval_seconds: int = 300
     # Config-gated third-party fallback provider for fuller US-commercial
     # coverage (Apify / ScrapeCreators / SerpApi). Off unless a key is present.
     meta_thirdparty_enabled: bool = False

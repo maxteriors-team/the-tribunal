@@ -148,6 +148,11 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
         handler=_missing_handler,
         risk_level=ToolRiskLevel.LOW,
     ),
+    "get_contact_context": CRMToolMetadata(
+        name="get_contact_context",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
     "find_contacts": CRMToolMetadata(
         name="find_contacts",
         handler=_missing_handler,
@@ -294,6 +299,42 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
         ),
         approved_executor=execute_approved_crm_assistant_tool,
         description_template="Delete automation {automation_id}",
+    ),
+    "create_appointment": CRMToolMetadata(
+        name="create_appointment",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.HIGH,
+        approval=ApprovalPolicy(
+            required=True,
+            requires_confirmation=True,
+            pending_message="Approval required before I schedule this calendar event.",
+        ),
+        approved_executor=execute_approved_crm_assistant_tool,
+        description_template="Schedule appointment for contact {contact_id} at {scheduled_at}",
+    ),
+    "update_appointment": CRMToolMetadata(
+        name="update_appointment",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.HIGH,
+        approval=ApprovalPolicy(
+            required=True,
+            requires_confirmation=True,
+            pending_message="Approval required before I change this calendar event.",
+        ),
+        approved_executor=execute_approved_crm_assistant_tool,
+        description_template="Update appointment {appointment_id}",
+    ),
+    "delete_appointment": CRMToolMetadata(
+        name="delete_appointment",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.HIGH,
+        approval=ApprovalPolicy(
+            required=True,
+            requires_confirmation=True,
+            pending_message="Approval required before I delete this calendar event.",
+        ),
+        approved_executor=execute_approved_crm_assistant_tool,
+        description_template="Delete appointment {appointment_id}",
     ),
     "create_agent": CRMToolMetadata(
         name="create_agent",

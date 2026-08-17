@@ -159,8 +159,8 @@ class AudioStreamManager:
         except json.JSONDecodeError as e:
             self._logger.warning(
                 "invalid_json",
-                error=str(e),
-                message_preview=str(message)[:100],
+                error_type=type(e).__name__,
+                message_size=len(message),
             )
             return None
 

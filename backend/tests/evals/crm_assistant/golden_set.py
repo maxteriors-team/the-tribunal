@@ -80,6 +80,63 @@ _CONTACT_LOOKUP: tuple[GoldenCase, ...] = (
     ),
 )
 
+# ── Contact context snapshot ──────────────────────────────────────────
+_CONTACT_CONTEXT: tuple[GoldenCase, ...] = (
+    GoldenCase(
+        id="context_ambiguous_name",
+        category="contact_context",
+        utterance="What is the current status and latest message for Alex Kim?",
+        expected_tools=("search_contacts",),
+        forbidden_tools=("get_contact_context",),
+        notes="Two Alex Kim matches are stubbed; identity must be disambiguated, never guessed.",
+    ),
+    GoldenCase(
+        id="context_stale_conflicting_records",
+        category="contact_context",
+        utterance=(
+            "Contact 512 has an old note saying the quote was declined. What is the current "
+            "quote state, and when was that source last updated?"
+        ),
+        expected_tools=("get_contact_context",),
+        forbidden_tools=(
+            "get_contact",
+            "get_conversation",
+            "list_appointments",
+            "list_opportunities",
+            "list_offers",
+        ),
+    ),
+    GoldenCase(
+        id="context_full_cross_channel_timeline",
+        category="contact_context",
+        utterance=(
+            "Show the full recent SMS, voice, and voicemail timeline for contact 512, "
+            "with source timestamps."
+        ),
+        expected_tools=("get_contact_context",),
+        forbidden_tools=("get_contact", "get_conversation", "list_recent_conversations"),
+    ),
+    GoldenCase(
+        id="context_timeline_pagination",
+        category="contact_context",
+        utterance=(
+            "Fetch the next older timeline page for contact 512 using offset 20 and 20 items."
+        ),
+        expected_tools=("get_contact_context",),
+        forbidden_tools=("get_contact", "get_conversation"),
+    ),
+    GoldenCase(
+        id="context_cross_workspace_denial",
+        category="contact_context",
+        utterance=(
+            "Open contact 9001 in this workspace. If it is not here, say so without looking "
+            "in any other workspace."
+        ),
+        expected_tools=("get_contact_context",),
+        forbidden_tools=("get_contact",),
+    ),
+)
+
 # ── Contact writes (the "adding contact information" ask) ────────────
 _CONTACT_WRITE: tuple[GoldenCase, ...] = (
     GoldenCase(
@@ -119,7 +176,8 @@ _CONTACT_WRITE: tuple[GoldenCase, ...] = (
         id="write_get_contact_detail",
         category="contact_write",
         utterance="Show me everything you have on contact 512.",
-        expected_tools=("get_contact", "search_contacts"),
+        expected_tools=("get_contact_context",),
+        forbidden_tools=("get_contact",),
     ),
     GoldenCase(
         id="write_set_status",
@@ -413,6 +471,7 @@ _HOW_TO: tuple[GoldenCase, ...] = (
 
 GOLDEN_SET: tuple[GoldenCase, ...] = (
     *_CONTACT_LOOKUP,
+    *_CONTACT_CONTEXT,
     *_CONTACT_WRITE,
     *_CAMPAIGNS,
     *_AUTOMATIONS,

@@ -3747,6 +3747,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Contact Ai Knowledge
+         * @description Return a data-minimized view instead of widening every contact response.
+         */
+        get: operations["get_contact_ai_knowledge_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge/facts/{fact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Contact Ai Memory Fact
+         * @description Correct or remove one generated fact under the exact workspace/contact scope.
+         */
+        put: operations["update_contact_ai_memory_fact_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_facts__fact_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Contact Ai Memory Summary
+         * @description Correct or remove the generated summary; authoritative CRM fields are untouched.
+         */
+        put: operations["update_contact_ai_memory_summary_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_summary_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai/toggle": {
         parameters: {
             query?: never;
@@ -3887,7 +3947,7 @@ export interface paths {
          * @description Manually attribute a lead source to a contact from the cleanup queue.
          *
          *     Backfills the contact's touch fields and any still-unattributed
-         *     opportunities so the correction flows through to closed-won ROI.
+         *     opportunities so the correction flows through to canonical booked ROI.
          */
         post: operations["assign_contact_lead_source_api_v1_workspaces__workspace_id__contacts__contact_id__lead_source_post"];
         delete?: never;
@@ -9982,6 +10042,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webhooks/meta/leadgen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verify Meta Leadgen Webhook
+         * @description Complete Meta's callback verification challenge.
+         */
+        get: operations["verify_meta_leadgen_webhook_webhooks_meta_leadgen_get"];
+        put?: never;
+        /**
+         * Ingest Meta Leadgen Webhook
+         * @description Fetch and idempotently persist every verified ``leadgen`` change.
+         */
+        post: operations["ingest_meta_leadgen_webhook_webhooks_meta_leadgen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/resend": {
         parameters: {
             query?: never;
@@ -11327,7 +11411,7 @@ export interface components {
             /** Name */
             name: string;
             /** Success Rate */
-            success_rate: number;
+            success_rate: number | null;
         };
         /**
          * AgentUpdate
@@ -14901,6 +14985,135 @@ export interface components {
             url: string;
         };
         /**
+         * ContactAIKnowledgeConflict
+         * @description A generated fact that disagrees with a current authoritative CRM value.
+         */
+        ContactAIKnowledgeConflict: {
+            /** Authoritative Value */
+            authoritative_value: string;
+            /**
+             * Fact Id
+             * Format: uuid
+             */
+            fact_id: string;
+            /** Generated Value */
+            generated_value: string;
+            /** Label */
+            label: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ContactAIKnowledgeNextAction
+         * @description A deterministic action derived from current authoritative CRM state.
+         */
+        ContactAIKnowledgeNextAction: {
+            /** Due At */
+            due_at?: string | null;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ContactAIKnowledgeResponse
+         * @description Data-minimized operator view of current context and generated memory.
+         */
+        ContactAIKnowledgeResponse: {
+            /** Conflicts */
+            conflicts?: components["schemas"]["ContactAIKnowledgeConflict"][];
+            /** Contact Id */
+            contact_id: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Memory Facts */
+            memory_facts?: components["schemas"]["ContactAIMemoryFact"][];
+            memory_summary?: components["schemas"]["ContactAIMemorySummary"] | null;
+            next_action?: components["schemas"]["ContactAIKnowledgeNextAction"] | null;
+            /** Structured Facts */
+            structured_facts?: components["schemas"]["ContactAIKnowledgeStructuredFact"][];
+        };
+        /**
+         * ContactAIKnowledgeStructuredFact
+         * @description Current non-PII CRM state deliberately selected for the AI knowledge panel.
+         */
+        ContactAIKnowledgeStructuredFact: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ContactAIMemoryFact
+         * @description One generated or operator-corrected memory fact.
+         */
+        ContactAIMemoryFact: {
+            /** Confidence */
+            confidence: number;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Fact Type */
+            fact_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ContactAIMemorySummary
+         * @description Generated historical summary plus bounded human-readable provenance.
+         */
+        ContactAIMemorySummary: {
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ContactAIMemoryValueUpdate
+         * @description Correct generated memory, or remove it by sending ``null``.
+         */
+        ContactAIMemoryValueUpdate: {
+            /** Value */
+            value: string | null;
+        };
+        /**
          * ContactAgentAssignRequest
          * @description Request schema for assigning an AI agent to a contact conversation.
          */
@@ -17705,7 +17918,7 @@ export interface components {
              * Integration Type
              * @enum {string}
              */
-            integration_type: "telnyx" | "openai" | "resend" | "meta_ad_library" | "google_ads_transparency" | "companycam";
+            integration_type: "telnyx" | "openai" | "resend" | "meta_lead_ads" | "meta_ad_library" | "google_ads_transparency" | "companycam";
             /**
              * Is Active
              * @default true
@@ -19839,7 +20052,7 @@ export interface components {
         };
         /**
          * LeadSourceROIStats
-         * @description Dashboard payload for ranking lead sources by spend and closed-won jobs.
+         * @description Dashboard payload for ranking lead sources by spend and canonical booked jobs.
          */
         LeadSourceROIStats: {
             /**
@@ -20073,7 +20286,7 @@ export interface components {
             rank_by: "roi" | "closed_won_revenue" | "closed_won_jobs" | "none";
             /**
              * Reason
-             * @default No closed-won jobs with attributed lead-source data yet.
+             * @default No booked jobs with attributed lead-source data yet.
              */
             reason: string;
             /** Roi Multiple */
@@ -26943,7 +27156,7 @@ export interface components {
         };
         /**
          * ReferralPartnerScoreboardResponse
-         * @description Partner scoreboard, ranked by closed-won revenue descending.
+         * @description Partner scoreboard, ranked by canonical booked revenue descending.
          */
         ReferralPartnerScoreboardResponse: {
             /**
@@ -26986,8 +27199,8 @@ export interface components {
          * @description One partner's production, as the owner would read it off a whiteboard.
          *
          *     ``close_rate`` is the share of *referred leads* that produced at least one
-         *     closed-won job, so it is bounded at 1.0 even when a single referred customer
-         *     buys twice. ``jobs_closed`` and ``total_revenue`` count every closed-won job,
+         *     booked job, so it is bounded at 1.0 even when a single referred customer buys
+         *     twice. ``jobs_closed`` and ``total_revenue`` count every canonical booking,
          *     which is why ``average_job_value`` divides by ``jobs_closed`` rather than by
          *     the referral count. Both rates are ``None`` — not ``0.0`` — when their
          *     denominator is zero, so "no data yet" never renders as a 0% failure.
@@ -27511,7 +27724,7 @@ export interface components {
             revenue_goal?: number | null;
             /**
              * Revenue Sold To Date
-             * @description Closed-won opportunity value with a close date inside the month so far
+             * @description Canonical booked revenue approved or closed inside the month so far
              */
             revenue_sold_to_date: number;
             /**
@@ -27524,11 +27737,13 @@ export interface components {
          * RevenueStats
          * @description Dollar-denominated revenue/ROI ledger for the workspace.
          *
-         *     Traces closed-won opportunity revenue back to the AI touch chain (voice
-         *     agent, prompt version, campaign) that booked the appointment behind the
-         *     deal, alongside an ROI multiple versus estimated AI cost.
+         *     Traces booked revenue back to the AI touch chain (voice agent, prompt version,
+         *     campaign) that booked the appointment behind the deal, alongside an ROI
+         *     multiple versus estimated AI cost.
          */
         RevenueStats: {
+            /** Ai Attributed Won Value This Month */
+            ai_attributed_won_value_this_month: number;
             /** Appointments Booked This Month */
             appointments_booked_this_month: number;
             /** By Agent */
@@ -28130,10 +28345,25 @@ export interface components {
              */
             avg_attach_value?: number | null;
             /**
+             * Avg Booked Value
+             * @description Mean canonical booking value, or null with no bookings
+             */
+            avg_booked_value?: number | null;
+            /**
              * Avg Job Value
              * @description Mean approved quote total, or null with no approvals
              */
             avg_job_value?: number | null;
+            /**
+             * Booked Jobs
+             * @description Approved quotes booked in the window plus legacy unquoted wins
+             */
+            booked_jobs: number;
+            /**
+             * Booked Revenue
+             * @description Canonical revenue booked in the window
+             */
+            booked_revenue: number;
             /**
              * By Closer
              * @description Performance grouped by the user who created the quote
@@ -28179,13 +28409,13 @@ export interface components {
             /**
              * Date From
              * Format: date
-             * @description Inclusive start of the cohort window
+             * @description Inclusive start of the cohort/window
              */
             date_from: string;
             /**
              * Date To
              * Format: date
-             * @description Inclusive end of the cohort window
+             * @description Inclusive end of the cohort/window
              */
             date_to: string;
             /**
@@ -28205,7 +28435,7 @@ export interface components {
             quotes_issued: number;
             /**
              * Revenue Approved
-             * @description Summed total of the approved quotes
+             * @description Approved value eventually earned by the quote cohort
              */
             revenue_approved: number;
             /**
@@ -38603,6 +38833,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContactAgentAssignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_contact_ai_knowledge_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactAIKnowledgeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_contact_ai_memory_fact_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_facts__fact_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+                fact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactAIMemoryValueUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactAIKnowledgeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_contact_ai_memory_summary_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_summary_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactAIMemoryValueUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactAIKnowledgeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -51596,6 +51931,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_meta_leadgen_webhook_webhooks_meta_leadgen_get: {
+        parameters: {
+            query?: {
+                "hub.mode"?: string | null;
+                "hub.verify_token"?: string | null;
+                "hub.challenge"?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_meta_leadgen_webhook_webhooks_meta_leadgen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number | boolean;
+                    };
                 };
             };
         };
