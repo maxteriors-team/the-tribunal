@@ -213,3 +213,100 @@ async def test_mark_qualified_rejects_low_score_or_incomplete_evidence(
     assert low_score["success"] is False
     assert missing["success"] is False
     qualification_executor.db.flush.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_claim_tools_return_this_turn_evidence_metadata(
+    qualification_executor: TextToolExecutor,
+) -> None:
+    qualification_executor._execute_search_knowledge = AsyncMock(  # type: ignore[method-assign]
+        return_value={"success": True, "results": [{"text": "House wash starts at $199"}]}
+    )
+
+    result = await qualification_executor.execute(
+        "search_knowledge",
+        {"query": "house wash price"},
+    )
+
+    assert result["evidence_source"] == "live_tool"
+    assert result["evidence_domains"] == ["pricing"]
+    assert result["evidence_status"] == "found"
+    assert result["observed_at"]
+
+
+@pytest.mark.asyncio
+async def test_contact_lookup_absence_never_falls_back_to_notes(
+    qualification_executor: TextToolExecutor,
+) -> None:
+    snapshot_service = MagicMock()
+    snapshot_service.get_snapshot = AsyncMock(return_value=None)
+
+    with patch(
+        "app.services.ai.text_tool_executor.ContactContextSnapshotService",
+        return_value=snapshot_service,
+    ) as service_class:
+        result = await qualification_executor.execute(
+            "lookup_contact_state",
+            {"subject": "quote"},
+        )
+
+    assert result["evidence_status"] == "absent"
+    assert "Do not use notes or prior messages as proof" in result["message"]
+    service_class.return_value.get_snapshot.assert_awaited_once_with(
+        workspace_id=qualification_executor.conversation.workspace_id,
+        contact_id=qualification_executor.conversation.contact_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_tool_executor_rejects_cross_workspace_agent_before_query() -> None:
+    executor = TextToolExecutor.__new__(TextToolExecutor)
+    executor.agent = SimpleNamespace(id=uuid.uuid4(), workspace_id=uuid.uuid4())
+    executor.conversation = SimpleNamespace(
+        id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        contact_id=44,
+    )
+    executor.db = AsyncMock()
+    executor.log = MagicMock()
+
+    with patch("app.services.ai.text_tool_executor.ContactContextSnapshotService") as service:
+        result = await executor.execute(
+            "lookup_contact_state",
+            {"subject": "appointment"},
+        )
+
+    assert result["blocked"] is True
+    assert result["evidence_status"] == "error"
+    service.assert_not_called()
+
+
+def test_customer_reference_disambiguates_accepted_and_pending_quotes() -> None:
+    evidence = {
+        "message": "Live CRM evidence.",
+        "evidence_status": "conflict",
+        "domain_status": {"quote": "conflict"},
+        "active_quotes": [
+            {
+                "number": "Q-100",
+                "title": "House wash",
+                "status": "sent",
+                "decision_state": "pending",
+            },
+            {
+                "number": "Q-101",
+                "title": "Roof wash",
+                "status": "approved",
+                "decision_state": "accepted",
+            },
+        ],
+    }
+
+    narrowed = TextToolExecutor._narrow_contact_state_evidence(
+        evidence,
+        domain="quote",
+        reference="the accepted roof wash quote",
+    )
+
+    assert narrowed["evidence_status"] == "found"
+    assert [quote["number"] for quote in narrowed["active_quotes"]] == ["Q-101"]

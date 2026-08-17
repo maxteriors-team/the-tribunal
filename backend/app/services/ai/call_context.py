@@ -153,7 +153,55 @@ async def _attach_returning_caller_context(
             memory_count=len(info.memories),
         )
     except Exception as e:  # noqa: BLE001 - recognition must never break a call
-        log.warning("returning_caller_detection_failed", error=str(e))
+        log.warning("returning_caller_detection_failed", error_type=type(e).__name__)
+
+
+async def _attach_structured_contact_context_and_memory(
+    *,
+    db: Any,
+    context: CallContext,
+    workspace_id: Any,
+    contact_id: int,
+    log: Any,
+) -> None:
+    """Attach authoritative CRM state followed by untrusted historical memory."""
+    if context.contact_info is None:
+        return
+
+    try:
+        from app.services.ai.contact_context_snapshot import ContactContextSnapshotService
+
+        snapshot = await ContactContextSnapshotService(db).get_snapshot(
+            workspace_id=workspace_id,
+            contact_id=contact_id,
+        )
+        if snapshot is not None:
+            context.contact_info["structured_context"] = snapshot.render()
+    except Exception as exc:  # noqa: BLE001 - context enrichment must not break calls
+        log.warning(
+            "contact_context_snapshot_load_failed",
+            contact_id=contact_id,
+            error_type=type(exc).__name__,
+        )
+
+    try:
+        from app.services.ai.contact_ai_memory_service import (
+            ContactAIMemoryService,
+            render_contact_ai_memory_context,
+        )
+
+        memory = await ContactAIMemoryService(db).get_context(
+            workspace_id=workspace_id,
+            contact_id=contact_id,
+        )
+        if memory is not None:
+            context.contact_info["ai_memory_context"] = render_contact_ai_memory_context(memory)
+    except Exception as exc:  # noqa: BLE001 - context enrichment must not break calls
+        log.warning(
+            "contact_ai_memory_load_failed",
+            contact_id=contact_id,
+            error_type=type(exc).__name__,
+        )
 
 
 async def lookup_call_context(
@@ -263,6 +311,13 @@ async def lookup_call_context(
                     workspace_id=conversation.workspace_id,
                     contact_id=conversation.contact_id,
                     current_message_id=message.id,
+                    log=log,
+                )
+                await _attach_structured_contact_context_and_memory(
+                    db=db,
+                    context=context,
+                    workspace_id=conversation.workspace_id,
+                    contact_id=conversation.contact_id,
                     log=log,
                 )
 

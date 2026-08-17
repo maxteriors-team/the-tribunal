@@ -330,3 +330,24 @@ Scope: production chatbot appointment finalization, Google Calendar creation, bo
 - “Delivered” here means Telnyx's signed delivery status, not proof a person read the text. Resend evidence stops at provider acceptance because direct emails are not correlated and the key is send-only.
 - Historical Cal.com events cannot be verified after their identifiers were dropped.
 - The public chatbot UI, broad authentication surface, and product-wide accessibility were not audited in this focused pass.
+
+## Focused addendum — contact AI memory (2026-08-17)
+
+Scope: backend-only durable memory derived from CRM edits and SMS/voice interactions. This is
+engineering guidance, **NOT LEGAL ADVICE**; the wider register above remains open.
+
+| ID | Severity | Trigger | Evidence (RUNTIME / CODE / DEDUCED) | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| MEM-001 | HIGH | AI-generated CRM memory can retain personal data and stale claims | CODE + RUNTIME: encrypted summary/fact columns, composite workspace scope, provenance/expiry/supersession, contact cascade deletion, and source-change invalidation trigger; local trigger exercise returned `invalidated` | Minimize access, make staleness explicit, and prevent generated text from outranking current CRM records | Implemented in this pass | Model/service/update tests, migration up→down→up, Alembic drift check, and encryption-key rotation coverage |
+| MEM-002 | MEDIUM | OpenAI processes SMS/voice text to refresh memory | CODE: existing workspace/OpenAI credential path is reused; no new processor was added | Keep privacy notice, processor terms, retention, and deletion propagation accurate | Open — factual/legal review needed | Re-verify vendor and retention disclosures before launch/reliance |
+
+### Implemented in this pass
+
+- Sensitive summary and fact values use `EncryptedString`; deduplication compares decrypted values only inside the scoped service, and both new encrypted columns are declared in the key-rotation script.
+- Prompt renderers mark summaries/facts as untrusted data, JSON-escape values, omit expired/superseded facts, and explicitly make `ContactContextSnapshot`/live CRM state authoritative.
+- Memory logs contain only workspace/contact/conversation/message identifiers plus exception type; adjacent SMS-path raw phone/email/message previews touched in this pass were removed.
+
+### Residual decisions
+
+- Confirm the product retention period for contact memory and backups. Live rows cascade-delete with the contact, but backup retention is an operational/legal policy outside this code change.
+- Re-verify that public privacy disclosures accurately describe AI processing of SMS/voice CRM data and the current OpenAI processor arrangement.

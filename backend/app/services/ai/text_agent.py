@@ -119,7 +119,7 @@ async def process_inbound_with_ai(  # noqa: PLR0911
             "ai_text_response_failed",
             reason="no_credential",
             workspace_id=str(workspace_id),
-            contact_phone=conversation.contact_phone,
+            contact_id=conversation.contact_id,
         )
         await _notify_ai_went_dark(
             db,
@@ -144,7 +144,7 @@ async def process_inbound_with_ai(  # noqa: PLR0911
     last_inbound = last_msg_result.scalar_one_or_none()
 
     if last_inbound and has_potential_opt_out_keywords(last_inbound.body):
-        log.info("potential_opt_out_detected", message_preview=last_inbound.body[:50])
+        log.info("potential_opt_out_detected", message_id=str(last_inbound.id))
 
         # Get conversation context for better classification
         messages_context = await build_message_context(conversation, db, max_messages=5)
@@ -173,7 +173,7 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         else:
             log.info(
                 "opt_out_rejected_by_ai",
-                message=last_inbound.body[:100],
+                message_id=str(last_inbound.id),
             )
             # Not a genuine opt-out - proceed with normal response
 
@@ -209,7 +209,7 @@ async def process_inbound_with_ai(  # noqa: PLR0911
             "ai_text_response_failed",
             reason="generation_failed",
             workspace_id=str(workspace_id),
-            contact_phone=conversation.contact_phone,
+            contact_id=conversation.contact_id,
         )
         await _notify_ai_went_dark(
             db,
@@ -311,7 +311,7 @@ async def _handle_quote_acceptance(
         )
         return True
     except Exception as exc:  # noqa: BLE001 - never block the nurture path
-        log.warning("quote_acceptance_intercept_failed", error=str(exc))
+        log.warning("quote_acceptance_intercept_failed", error_type=type(exc).__name__)
         return False
 
 
@@ -365,7 +365,11 @@ async def _notify_ai_went_dark(
             dedupe_key=f"ai_dark:{conversation.id}:{reason}",
         )
     except Exception as exc:  # noqa: BLE001 - notification must not break nurture
-        log.warning("ai_dark_notification_failed", error=str(exc), reason=reason)
+        log.warning(
+            "ai_dark_notification_failed",
+            error_type=type(exc).__name__,
+            reason=reason,
+        )
 
 
 # Fraction of the SLA budget the first reply is allowed to consume, leaving
@@ -422,7 +426,13 @@ async def _record_ai_confirmed_opt_out(
     conversation.ai_enabled = False
 
     if conversation.contact_id is not None:
-        contact = await db.get(Contact, conversation.contact_id)
+        contact_result = await db.execute(
+            select(Contact).where(
+                Contact.id == conversation.contact_id,
+                Contact.workspace_id == conversation.workspace_id,
+            )
+        )
+        contact = contact_result.scalar_one_or_none()
         if contact is not None:
             contact.sms_consent_status = "opted_out"
             contact.sms_consent_source = "sms_reply"
@@ -443,7 +453,7 @@ async def _record_ai_confirmed_opt_out(
 
     log.info(
         "opt_out_confirmed_by_ai",
-        message=inbound_message.body[:100],
+        message_id=str(inbound_message.id),
         global_opt_out_recorded=opt_out is not None,
     )
 
@@ -485,8 +495,9 @@ async def _send_ai_text_response_after_delay(
 
     provider_name = provider_for_conversation(current_conversation)
     sms_service = get_text_message_provider(provider_name)
+    sent_message: Message | None = None
     try:
-        await sms_service.send_message(
+        sent_message = await sms_service.send_message(
             to_number=current_conversation.contact_phone,
             from_number=current_conversation.workspace_phone,
             body=response_text,
@@ -496,6 +507,7 @@ async def _send_ai_text_response_after_delay(
         )
         log.info(
             "ai_response_sent",
+            message_id=str(sent_message.id),
             response_length=len(response_text),
             target_delay_ms=target_delay_ms,
             wait_ms=wait_ms,
@@ -507,7 +519,6 @@ async def _send_ai_text_response_after_delay(
         log.error(
             "ai_text_response_failed",
             reason="send_failed",
-            error=str(e),
             error_type=type(e).__name__,
         )
         await _notify_ai_went_dark(
@@ -518,6 +529,30 @@ async def _send_ai_text_response_after_delay(
         )
     finally:
         await sms_service.close()
+
+    if sent_message is None:
+        return
+
+    try:
+        from app.services.ai.contact_ai_memory_service import (
+            refresh_contact_ai_memory_from_sms,
+        )
+
+        updated = await refresh_contact_ai_memory_from_sms(
+            db,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            completed_message_id=sent_message.id,
+        )
+        if updated:
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001 - memory must never break a sent reply
+        await db.rollback()
+        log.warning(
+            "contact_ai_memory_sms_refresh_failed",
+            message_id=str(sent_message.id),
+            error_type=type(exc).__name__,
+        )
 
 
 async def _load_sendable_conversation(

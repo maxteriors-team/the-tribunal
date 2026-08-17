@@ -212,8 +212,12 @@ async def test_list_appointments_returns_upcoming_summaries(
                 "contact_id": 101,
                 "scheduled_at": scheduled_at.isoformat(),
                 "duration_minutes": 45,
+                "service_type": None,
                 "status": AppointmentStatus.SCHEDULED,
                 "notes": "Discovery call",
+                "meeting_url": None,
+                "calendar_event_url": None,
+                "sync_status": None,
             }
         ],
         "returned": 1,
