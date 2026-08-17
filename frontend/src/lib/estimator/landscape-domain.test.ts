@@ -1,10 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import { upsertProposalZone } from "./landscape-annotations";
-import { calculatePreconProgress, LANDSCAPE_PRECON_ITEMS, setPreconResponse } from "./landscape-precon";
-import { buildLandscapeProcurement } from "./landscape-procurement";
+import {
+  calculatePreconProgress,
+  LANDSCAPE_PRECON_ITEMS,
+  setPreconResponse,
+} from "./landscape-precon";
+import {
+  buildLandscapeProcurement,
+  procurementStateForRow,
+  recountLandscapeProcurement,
+} from "./landscape-procurement";
 import { buildLandscapeSchedule, copyScheduleSelectionToType } from "./landscape-schedule";
-import { deleteLandscapeSheet, duplicateLandscapeSheet, recountLandscapeFixtures } from "./landscape-sheets";
+import {
+  deleteLandscapeSheet,
+  duplicateLandscapeSheet,
+  recountLandscapeFixtures,
+} from "./landscape-sheets";
 import type { LandscapePreconState, Product } from "./types";
 
 const products: Product[] = [
@@ -29,7 +41,13 @@ const shot = {
     calibration: null,
     runs: [],
     items: [
-      { id: "item-1", productId: "fixture-uplight", at: { x: 1, y: 2 }, sizePx: 30, catalogItemId: "fixture" },
+      {
+        id: "item-1",
+        productId: "fixture-uplight",
+        at: { x: 1, y: 2 },
+        sizePx: 30,
+        catalogItemId: "fixture",
+      },
       { id: "item-2", productId: "fixture-uplight", at: { x: 3, y: 4 }, sizePx: 30 },
     ],
   },
@@ -106,6 +124,72 @@ describe("landscape domain modules", () => {
       unitCost: 20,
     });
     expect(procurement.some((row) => row.status === "unresolved")).toBe(true);
+  });
+
+  it("replaces a fixture's bundled lamp when a schedule lamp is assigned", () => {
+    const scheduledShot = {
+      ...shot,
+      design: {
+        ...shot.design,
+        items: shot.design.items.map((item, index) =>
+          index === 0
+            ? { ...item, lampCatalogItemId: "lamp" }
+            : { ...item, catalogItemId: "fixture" },
+        ),
+      },
+    };
+    const schedule = buildLandscapeSchedule([scheduledShot], products, catalog);
+    const procurement = buildLandscapeProcurement(schedule, catalog);
+
+    expect(procurement.find((row) => Object.is(row.key, "lamp:lamp"))).toMatchObject({
+      needed: 1,
+      name: "MR16 Lamp",
+    });
+    expect(procurement.find((row) => Object.is(row.key, "component:LAMP-1"))).toMatchObject({
+      needed: 1,
+    });
+  });
+
+  it("preserves editable order fields while recounting plan quantities", () => {
+    const schedule = buildLandscapeSchedule([shot], products, catalog);
+    const procurement = buildLandscapeProcurement(schedule, catalog, {
+      "fixture:fixture": {
+        catalogItemId: "fixture",
+        catalogSku: "CUSTOM-UP",
+        description: "Patina uplight",
+        manufacturer: "Tribunal Lighting",
+        supplier: "Regional Supply",
+        neededQuantity: 4,
+        orderedQuantity: 3,
+        receivedQuantity: 1,
+        unitCost: 82.5,
+        supplierNote: "PO-1042",
+      },
+    });
+    const fixture = procurement.find((row) => Object.is(row.key, "fixture:fixture"))!;
+
+    expect(fixture).toMatchObject({
+      name: "Patina uplight",
+      sku: "CUSTOM-UP",
+      manufacturer: "Tribunal Lighting",
+      supplier: "Regional Supply",
+      needed: 4,
+      ordered: 3,
+      received: 1,
+      unitCost: 82.5,
+      totalCost: 330,
+      supplierNote: "PO-1042",
+    });
+
+    const saved = procurementStateForRow(fixture);
+    const recounted = recountLandscapeProcurement({ [fixture.key]: saved });
+    expect(recounted[fixture.key]).not.toHaveProperty("neededQuantity");
+    expect(recounted[fixture.key]).toMatchObject({
+      orderedQuantity: 3,
+      receivedQuantity: 1,
+      unitCost: 82.5,
+      supplierNote: "PO-1042",
+    });
   });
 
   it("keeps exactly 26 canonical pre-con items and calculates completion", () => {

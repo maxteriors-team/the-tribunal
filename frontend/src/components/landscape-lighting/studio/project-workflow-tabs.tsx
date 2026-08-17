@@ -1,6 +1,7 @@
 "use client";
 
 import { ClipboardCheck, FileText, Lightbulb, ListChecks, PackageOpen, Zap } from "lucide-react";
+import { useEffect } from "react";
 
 import type { LandscapeWorkflowTab } from "@/lib/estimator/types";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,17 @@ export function ProjectWorkflowTabs({
   value: LandscapeWorkflowTab;
   onChange: (value: LandscapeWorkflowTab) => void;
 }) {
+  useEffect(() => {
+    const activeTab = document.getElementById(`landscape-tab-${value}`);
+    if (!activeTab || typeof activeTab.scrollIntoView !== "function") return;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    activeTab.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [value]);
+
   return (
     <div className="overflow-x-auto border-b border-white/10 bg-neutral-950 [scrollbar-width:thin]">
       <div

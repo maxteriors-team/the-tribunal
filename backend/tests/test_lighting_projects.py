@@ -74,6 +74,7 @@ def _document(
                             "productId": "spotlight",
                             "at": {"x": 30, "y": 40},
                             "sizePx": 32,
+                            "iconScale": 1.4,
                             "beamAngleDeg": 40,
                             "beamRotationDeg": 0,
                             "circuitId": "run-1",
@@ -105,6 +106,20 @@ def _document(
             "selectedTierKey": "better",
             "selectedCarePlanKey": "essential",
         },
+        "procurement": {
+            "fixture:catalog-1": {
+                "catalogItemId": "catalog-1",
+                "catalogSku": "UP-100",
+                "description": "Brass uplight",
+                "manufacturer": "Tribunal Lighting",
+                "supplier": "Local Supply",
+                "neededQuantity": 8,
+                "orderedQuantity": 6,
+                "receivedQuantity": 2,
+                "unitCost": 84.5,
+                "supplierNote": "PO-1042",
+            }
+        },
     }
 
 
@@ -126,8 +141,13 @@ class TestLandscapeDraftSchema:
         assert populated.shots[0].design.runs[0].wire_gauge == 12
         assert populated.shots[0].design.items[0].circuit_id == "run-1"
         assert populated.shots[0].design.items[0].marker_color == "#F2C94C"
+        assert populated.shots[0].design.items[0].icon_scale == 1.4
         assert populated.proposal.selected_tier_key == "better"
         assert populated.proposal.selected_care_plan_key == "essential"
+        procurement = populated.procurement["fixture:catalog-1"]
+        assert procurement.description == "Brass uplight"
+        assert procurement.needed_quantity == 8
+        assert procurement.unit_cost == 84.5
         assert populated.settings.paper_size == "tabloid"
         assert populated.active_workflow_tab is None
         assert populated.model_dump(mode="json", by_alias=True)["activeShotId"] == "shot-1"
@@ -153,6 +173,8 @@ class TestLandscapeDraftSchema:
             lambda document: document["shots"][0]["design"]["runs"][0].update(
                 transformerId="missing-transformer"
             ),
+            lambda document: document["shots"][0]["design"]["items"][0].update(iconScale=3),
+            lambda document: document["procurement"]["fixture:catalog-1"].update(neededQuantity=-1),
             lambda document: document.update(version=1),
             lambda document: document.update(version=3),
         ],

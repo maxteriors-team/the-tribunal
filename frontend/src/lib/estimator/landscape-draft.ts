@@ -5,7 +5,7 @@ import {
   normalizeLandscapeDocument,
   type LandscapeDocumentV2,
 } from "@/lib/estimator/landscape-document";
-import type { LandscapeProposalSettings } from "@/lib/estimator/types";
+import type { LandscapeProcurementState, LandscapeProposalSettings } from "@/lib/estimator/types";
 
 const DATABASE_NAME = "tribunal-estimator";
 const DATABASE_VERSION = 2;
@@ -101,14 +101,14 @@ export function createLandscapeDraft(
   activeShotId: string | null,
   updatedAt = new Date().toISOString(),
   proposal?: LandscapeProposalDraft,
+  procurement?: Record<string, LandscapeProcurementState>,
 ): LandscapeDraft {
   const document = createLandscapeDocument(shots, activeShotId, updatedAt);
-  return proposal
-    ? {
-        ...document,
-        proposal: { ...defaultLandscapeProposal(), ...proposal },
-      }
-    : document;
+  return {
+    ...document,
+    proposal: proposal ? { ...defaultLandscapeProposal(), ...proposal } : document.proposal,
+    procurement: procurement ?? document.procurement,
+  };
 }
 
 export async function loadLandscapeDraft(

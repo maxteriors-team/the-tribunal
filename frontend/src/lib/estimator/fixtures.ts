@@ -249,14 +249,25 @@ export function resolveTierWire(
   );
 }
 
+function isLampComponent(
+  component: NonNullable<CatalogItemResponse["components"]>[number],
+): boolean {
+  return /(^|\b)(lamp|bulb|mr\d{2}|led)(\b|$)/i.test(
+    `${component.sku ?? ""} ${component.description ?? ""}`,
+  );
+}
+
 function fixtureLampLabel(item: CatalogItemResponse | null): string | null {
   const attributes = item?.attributes ?? {};
   const lamp = attributes.lamp ?? attributes.lamp_type ?? attributes.color_temperature;
-  return typeof lamp === "string" && lamp.trim() ? lamp.trim() : null;
+  if (typeof lamp === "string" && lamp.trim()) return lamp.trim();
+  const component = (item?.components ?? []).find(isLampComponent);
+  return component?.description?.trim() || component?.sku?.trim() || null;
 }
 
 function fixtureAccessoryLabels(item: CatalogItemResponse | null): string[] {
   return (item?.components ?? []).flatMap((component) => {
+    if (isLampComponent(component)) return [];
     const description = component.description?.trim();
     const sku = component.sku?.trim();
     const label = description || sku;
@@ -292,6 +303,8 @@ export function buildFixturePalette(
       sizeFt: spec.sizeFt,
       productName: resolved.item?.name ?? null,
       sku: resolved.itemId,
+      catalogItemId: resolved.item?.id,
+      catalogSku: resolved.item?.sku ?? undefined,
       lampLabel: fixtureLampLabel(resolved.item),
       accessoryLabels: fixtureAccessoryLabels(resolved.item),
       target: { field: "landscape" as const, fixtureType: spec.type },
@@ -311,6 +324,8 @@ export function buildFixturePalette(
       sizeFt: 3,
       productName: transformer.item?.name ?? null,
       sku: transformer.itemId,
+      catalogItemId: transformer.item?.id,
+      catalogSku: transformer.item?.sku ?? undefined,
       lampLabel: null,
       accessoryLabels: fixtureAccessoryLabels(transformer.item),
       target: { field: "annotation" as const, annotationType: "transformer" as const },

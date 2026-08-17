@@ -35,12 +35,13 @@ vi.mock("@/lib/api/sales-wizard", () => ({
 }));
 
 vi.mock("@/lib/estimator/landscape-draft", () => ({
-  createLandscapeDraft: vi.fn((shots, activeShotId, updatedAt, proposal) => ({
+  createLandscapeDraft: vi.fn((shots, activeShotId, updatedAt, proposal, procurement) => ({
     version: 2,
     activeShotId,
     shots,
     updatedAt: updatedAt ?? "2026-08-11T10:00:00.000Z",
     ...(proposal ? { proposal } : {}),
+    ...(procurement ? { procurement } : {}),
   })),
   loadLandscapeDraft: vi.fn(),
   saveLandscapeDraft: vi.fn(),

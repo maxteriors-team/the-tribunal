@@ -117,32 +117,28 @@ export function beamAngleFor(style: RenderStyle, override?: number | null): numb
 }
 
 /**
- * Where a fixture is **aimed**, in degrees clockwise from the direction its type
- * throws naturally — straight up for an uplight or in-grade, straight down for a
- * downlight.
- *
- * Deliberately a *delta* from that natural axis rather than an absolute compass
- * bearing, for one reason: `0` then means "exactly what this fixture rendered
- * before aiming existed". Every design already saved has no rotation, so it
- * keeps drawing identically, and the same zero reads correctly for a downlight
- * (which points down) and an uplight (which points up) without a per-style
- * baseline to remember.
- *
- * Aim is independent of spread: this turns the cone, `beamAngleDeg` opens it.
- * Neither changes the fixture count, so nothing here can move the quote.
+ * Legacy beam orientation stored by older drawings. The editor no longer
+ * exposes an aiming control, but the renderer keeps honoring saved values so
+ * opening an existing customer plan does not silently change its appearance.
  */
 export function normalizeBeamRotation(deg: number): number {
-  // A wrap, not a clamp: a beam can point anywhere on the circle, and a rep
-  // dragging past straight-down should keep turning rather than stick. The
-  // canonical circle is [-180, 180), so a half turn reads -180 either way round
-  // and two aims that point the same direction always compare equal.
   if (!Number.isFinite(deg)) return 0;
   return ((((deg + 180) % 360) + 360) % 360) - 180;
 }
 
-/** The aim a fixture actually renders at — its override, else its natural axis. */
+/** The legacy orientation a saved fixture renders at. */
 export function beamRotationFor(override?: number | null): number {
   return normalizeBeamRotation(override ?? 0);
+}
+
+/** Fixture symbols resize independently from beam throw and quote quantity. */
+export const MIN_FIXTURE_ICON_SCALE = 0.6;
+export const MAX_FIXTURE_ICON_SCALE = 1.8;
+export const FIXTURE_ICON_SCALE_STEP = 0.2;
+
+export function fixtureIconScaleFor(override?: number | null): number {
+  if (!Number.isFinite(override)) return 1;
+  return Math.min(Math.max(override ?? 1, MIN_FIXTURE_ICON_SCALE), MAX_FIXTURE_ICON_SCALE);
 }
 
 /**
@@ -196,6 +192,9 @@ export interface Product {
    * are priced from the pricing config rather than the catalog.
    */
   sku?: string | null;
+  /** Stable live catalog references for newly placed fixtures. */
+  catalogItemId?: string;
+  catalogSku?: string;
   /**
    * The resolved product's own name (“ZDC Color Uplight”) shown under the type
    * label, so the rep can see what the package actually installs.
@@ -229,25 +228,13 @@ export interface PlacedItem {
   id: string;
   productId: string;
   at: Point;
-  /** Rendered size (diameter / height) in image pixels. */
+  /** Beam throw or pool diameter in image pixels. */
   sizePx: number;
-  /**
-   * Per-fixture beam spread in degrees, overriding the type's default lamp
-   * (see `DEFAULT_BEAM_ANGLE_DEG`). Optional so existing designs stay valid, and
-   * ignored for styles that throw no cone. Changes what the customer sees on the
-   * photo — a 15° graze up a column versus a 60° wash — and never the count, so
-   * the quantity that reaches the quote is untouched.
-   */
+  /** Drawing-sheet symbol scale; independent from beam throw. */
+  iconScale?: number;
+  /** Per-fixture beam-spread override. Missing means the fixture type's default lamp. */
   beamAngleDeg?: number;
-  /**
-   * Which way this fixture is aimed, in degrees clockwise from the direction its
-   * style throws naturally (see `normalizeBeamRotation`). Optional and absent by
-   * default, so a design drawn before aiming existed renders unchanged.
-   *
-   * Real installs are rarely straight up: an uplight is kicked toward a column,
-   * a downlight is angled off a soffit onto the path. Like the spread, this is
-   * pure rendering — the fixture is still one fixture on the quote.
-   */
+  /** Legacy saved orientation. New edits keep the fixture on its natural axis. */
   beamRotationDeg?: number;
   /** ID of the plan-only wire circuit that supplies this fixture. */
   circuitId?: string;
@@ -344,10 +331,15 @@ export interface LandscapeLegendSettings {
 }
 
 export interface LandscapeProcurementState {
-  catalogItemId?: string;
-  catalogSku?: string;
+  catalogItemId?: string | null;
+  catalogSku?: string | null;
+  description?: string;
+  manufacturer?: string;
+  supplier?: string;
+  neededQuantity?: number;
   orderedQuantity: number;
   receivedQuantity: number;
+  unitCost?: number | null;
   supplierNote: string;
 }
 

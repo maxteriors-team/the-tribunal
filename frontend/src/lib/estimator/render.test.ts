@@ -3,13 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   beamAngleAt,
   beamHandlePos,
-  beamRotationAt,
   drawPlacedItem,
   drawRunLights,
   drawScene,
   itemHit,
   resizeHandlePos,
-  rotateHandlePos,
   withRunOverrides,
 } from "./render";
 import { DEFAULT_BEAM_ANGLE_DEG, MAX_BEAM_ANGLE_DEG, MIN_BEAM_ANGLE_DEG } from "./types";
@@ -390,56 +388,21 @@ describe("landscape fixture geometry", () => {
     expect(beamHandlePos(item)).toBeNull();
   });
 
-  // ------------------------------------------------------------------ //
-  // Aim — which way the fixture points, independent of how wide it opens
-  // ------------------------------------------------------------------ //
-  describe("beam aim", () => {
+  // Legacy drawings can still carry an orientation even though the editor no
+  // longer offers an aiming control. Rendering it avoids changing saved plans.
+  describe("legacy beam orientation", () => {
     it("leaves every fixture pointing its natural way by default", () => {
-      // The guarantee for designs saved before aiming existed: no rotation
-      // field means the exact geometry these fixtures always had.
       expect(resizeHandlePos(item, uplight)).toEqual({ x: 200, y: 100 });
-      expect(beamRotationAt(item, { x: 200, y: 100 }, uplight)).toBe(0);
     });
 
-    it("swings the throw around the fixture", () => {
-      // A quarter turn clockwise from straight up points due right, and the
-      // fixture itself must not move — only the light it throws.
-      const grip = resizeHandlePos({ ...item, beamRotationDeg: 90 }, uplight);
-      expect(grip.x).toBeCloseTo(500, 5);
-      expect(grip.y).toBeCloseTo(400, 5);
-    });
-
-    it("keeps the throw length identical at every aim", () => {
-      // Aiming is a rotation, not a resize: the customer is buying this reach.
+    it("keeps the saved throw length identical at every orientation", () => {
       for (const deg of [-135, -42, 0, 30, 90, 180]) {
         const grip = resizeHandlePos({ ...item, beamRotationDeg: deg }, uplight);
         expect(Math.hypot(grip.x - 200, grip.y - 400)).toBeCloseTo(300, 5);
       }
     });
 
-    it("round-trips a dragged aim grip back to the rotation that drew it", () => {
-      for (const deg of [-135, -90, -20, 0, 45, 120, 179]) {
-        const aimed = { ...item, beamRotationDeg: deg };
-        const grip = rotateHandlePos(aimed, uplight, 1)!;
-        expect(beamRotationAt(aimed, grip, uplight)).toBeCloseTo(deg, 5);
-      }
-    });
-
-    it("reads the same aim for a downlight, which starts pointing the other way", () => {
-      // Rotation is a delta from each style's natural axis, so 0 means "down"
-      // here and "up" for an uplight — one number, correct for both.
-      const downlight: Product = { ...uplight, id: "d1", style: "downlight" };
-      expect(resizeHandlePos(item, downlight)).toEqual({ x: 200, y: 700 });
-      for (const deg of [-90, -30, 0, 60, 150]) {
-        const aimed = { ...item, beamRotationDeg: deg };
-        const grip = rotateHandlePos(aimed, downlight, 1)!;
-        expect(beamRotationAt(aimed, grip, downlight)).toBeCloseTo(deg, 5);
-      }
-    });
-
-    it("measures spread across the aimed cone, not across the photo", () => {
-      // The spread grip and the spread hit-test must agree at any aim, or
-      // grabbing the rim of a tilted beam would snap it to a different angle.
+    it("measures spread across the saved cone, not across the photo", () => {
       for (const rot of [0, 35, -80, 140]) {
         for (const deg of [10, 24, 60]) {
           const aimed = { ...item, beamRotationDeg: rot, beamAngleDeg: deg };
@@ -449,49 +412,14 @@ describe("landscape fixture geometry", () => {
       }
     });
 
-    it("floats the aim grip past the throw grip by a constant on-screen gap", () => {
-      // Constant in screen pixels so a 5° spot and a 120° flood never bunch
-      // their grips together at the moment the rep reaches for one.
-      const near = resizeHandlePos(item, uplight);
-      const far = rotateHandlePos(item, uplight, 1)!;
-      expect(Math.hypot(far.x - near.x, far.y - near.y)).toBeCloseTo(22, 5);
-      // Zoomed 2x, the same on-screen gap is half as many image pixels.
-      const zoomed = rotateHandlePos(item, uplight, 2)!;
-      expect(Math.hypot(zoomed.x - near.x, zoomed.y - near.y)).toBeCloseTo(11, 5);
-    });
-
-    it("holds the current aim when the pointer sits on the fixture", () => {
-      // No direction to read from a zero-length vector; snapping to an
-      // arbitrary bearing would fling the beam mid-drag.
-      const aimed = { ...item, beamRotationDeg: 42 };
-      expect(beamRotationAt(aimed, item.at, uplight)).toBeCloseTo(42, 5);
-    });
-
-    it("wraps past a half turn instead of sticking", () => {
-      // Dragging round the back keeps turning rather than jamming at the end of
-      // a range. Straight down from an uplight is a half turn either way, and
-      // the canonical circle is [-180, 180) — so it reads -180, not +180.
-      expect(beamRotationAt(item, { x: 200, y: 700 }, uplight)).toBeCloseTo(-180, 5);
-      expect(Math.abs(beamRotationAt(item, { x: 199, y: 700 }, uplight))).toBeGreaterThan(179);
-    });
-
-    it("offers no aim grip on fixtures with no beam to aim", () => {
-      const pathlight: Product = { ...uplight, id: "p1", style: "pathlight" };
-      expect(rotateHandlePos(item, pathlight, 1)).toBeNull();
-      expect(rotateHandlePos(item, wreath, 1)).toBeNull();
-      expect(rotateHandlePos(item, undefined, 1)).toBeNull();
-    });
-
-    it("paints the cone somewhere else once it is aimed", () => {
+    it("renders the saved orientation without exposing an editor control", () => {
       stubSpriteCanvas();
       const rotation = (beamRotationDeg?: number) => {
         const ctx = fakeCtx();
         drawPlacedItem(ctx, { ...item, beamRotationDeg }, uplight, 15, 1);
         return (ctx.rotate as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as number;
       };
-      // Straight up asks the canvas for no rotation at all...
       expect(rotation()).toBeCloseTo(0, 5);
-      // ...and an aimed fixture rotates by exactly the angle the rep set.
       expect(rotation(45)).toBeCloseTo(Math.PI / 4, 5);
     });
   });

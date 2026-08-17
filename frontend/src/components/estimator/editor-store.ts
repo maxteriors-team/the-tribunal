@@ -88,11 +88,16 @@ export type EditorAction =
           PlacedItem,
           | "at"
           | "sizePx"
+          | "iconScale"
           | "productId"
           | "beamAngleDeg"
           | "beamRotationDeg"
           | "circuitId"
           | "markerColor"
+          | "catalogItemId"
+          | "catalogSku"
+          | "lampCatalogItemId"
+          | "accessoryCatalogItemIds"
         >
       >;
       transient?: boolean;

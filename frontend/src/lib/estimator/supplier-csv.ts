@@ -1,10 +1,13 @@
 import { landscapeWireLabel } from "@/lib/estimator/fixtures";
 import type { CatalogItemResponse } from "@/types/sales-wizard";
 
+export type SupplierCsvCategory = "fixture" | "transformer" | "wire";
+
 export interface SupplierFixtureInput {
   label: string;
   quantity: number;
   item: CatalogItemResponse | null;
+  category?: Exclude<SupplierCsvCategory, "wire">;
 }
 
 export interface SupplierWireInput {
@@ -15,6 +18,8 @@ export interface SupplierWireInput {
 }
 
 export interface SupplierCsvRow {
+  category: SupplierCsvCategory;
+  catalogItemId: string | null;
   supplier: string;
   manufacturer: string;
   sku: string;
@@ -64,6 +69,8 @@ export function buildSupplierCsvRows(
     for (const component of components) {
       const sku = component.sku?.trim() ?? "";
       rows.push({
+        category: fixture.category ?? "fixture",
+        catalogItemId: item?.id ?? null,
         supplier,
         manufacturer,
         sku,
@@ -86,6 +93,8 @@ export function buildSupplierCsvRows(
     const item = wire.item ?? null;
     const sku = item?.sku?.trim() ?? "";
     rows.push({
+      category: "wire",
+      catalogItemId: item?.id ?? null,
       supplier: attributeText(item?.attributes ?? null, "supplier"),
       manufacturer: attributeText(item?.attributes ?? null, "manufacturer"),
       sku,
@@ -114,6 +123,8 @@ export function buildSupplierCsvRows(
   const grouped = new Map<string, SupplierCsvRow>();
   for (const row of rows) {
     const key = [
+      row.category,
+      row.catalogItemId ?? "",
       row.supplier,
       row.manufacturer,
       row.sku,

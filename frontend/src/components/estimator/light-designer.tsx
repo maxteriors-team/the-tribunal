@@ -51,7 +51,9 @@ import {
   MousePointer2,
   Plus,
   Presentation,
+  Printer,
   Ruler,
+  RefreshCw,
   Settings2,
   Sparkles,
   Trash2,
@@ -69,6 +71,10 @@ import {
   type DrawingStudioAction,
 } from "@/components/landscape-lighting/studio/drawing-toolbar";
 import { PreconChecklist } from "@/components/landscape-lighting/studio/precon-checklist";
+import {
+  LandscapeBomTable,
+  LandscapeFixtureScheduleTable,
+} from "@/components/landscape-lighting/studio/workflow-tables";
 import { ConvertQuoteDialog } from "@/components/quotes/convert-quote-dialog";
 import { ContactCombobox } from "@/components/ui/contact-combobox";
 import { estimatorApi } from "@/lib/api/estimator";
@@ -107,23 +113,30 @@ import {
   saveLandscapeDraft,
   type LandscapeDraft,
 } from "@/lib/estimator/landscape-draft";
+import {
+  buildLandscapeProcurement,
+  procurementRowsToSupplierCsv,
+  procurementStateForRow,
+  procurementSupplementFromSupplierRow,
+  recountLandscapeProcurement,
+  type LandscapeProcurementRow,
+  type LandscapeProcurementSupplement,
+} from "@/lib/estimator/landscape-procurement";
 import { buildLandscapeProposalPayload } from "@/lib/estimator/landscape-proposal";
 import {
   buildLandscapeSchedule as buildPerFixtureSchedule,
   copyScheduleSelectionToType,
   updateFixtureScheduleSelection,
+  type LandscapeScheduleRow,
 } from "@/lib/estimator/landscape-schedule";
 import { resolveSelectedPackage, packageName, seasonalTotal } from "@/lib/estimator/packages";
 import { fileToPhoto } from "@/lib/estimator/photo";
 import { SERVICES, clientThemeClass, type ServiceKey } from "@/lib/estimator/services";
-import {
-  buildSupplierCsvRows,
-  downloadSupplierCsv,
-  type SupplierCsvRow,
-} from "@/lib/estimator/supplier-csv";
+import { buildSupplierCsvRows, downloadSupplierCsv } from "@/lib/estimator/supplier-csv";
 import {
   beamAngleFor,
   type LandscapePreconState,
+  type LandscapeProcurementState,
   type LandscapeProposalLineItem,
   type PhotoInfo,
   type Product,
@@ -262,8 +275,16 @@ const landscapeDraftSignature = (
   selectedTierKey: string | null,
   selectedCarePlanKey: string | null,
   additionalLineItems: LandscapeProposalLineItem[] = [],
+  procurement: Record<string, LandscapeProcurementState> = {},
 ): string =>
-  JSON.stringify({ activeShotId, shots, selectedTierKey, selectedCarePlanKey, additionalLineItems });
+  JSON.stringify({
+    activeShotId,
+    shots,
+    selectedTierKey,
+    selectedCarePlanKey,
+    additionalLineItems,
+    procurement,
+  });
 
 interface LandscapeFixtureScheduleRow {
   id: string;
@@ -723,7 +744,7 @@ function LandscapeDraftingToolbar({
       {helpOpen ? (
         <div className="ll-toolbar-help" role="status">
           Set one known top-down distance, choose a fixture icon, then click the aerial to place it.
-          Select a fixture to move or aim it from above. Draft changes save automatically.
+          Select a fixture to move it or resize its plan icon. Draft changes save automatically.
         </div>
       ) : null}
     </section>
@@ -880,113 +901,6 @@ function LandscapeEmptyPanel({
         <ImagePlus aria-hidden="true" />
         Upload aerial plan
       </button>
-    </div>
-  );
-}
-
-function LandscapeFixtureTable({
-  rows,
-  mode,
-  supplierRows = [],
-  catalog = [],
-  onUpdate,
-  onCopyToType,
-}: {
-  rows: LandscapeFixtureScheduleRow[];
-  mode: "schedule" | "bom";
-  supplierRows?: SupplierCsvRow[];
-  catalog?: CatalogItemResponse[];
-  onUpdate?: (
-    itemId: string,
-    update: { lampCatalogItemId?: string; accessoryCatalogItemIds?: string[] },
-  ) => void;
-  onCopyToType?: (itemId: string) => void;
-}) {
-  return (
-    <div className="ll-data-table-wrap">
-      <table className="ll-data-table">
-        <caption className="sr-only">
-          {mode === "schedule" ? "Fixture schedule" : "Bill of materials"}
-        </caption>
-        <thead>
-          <tr>
-            {mode === "schedule" ? <th scope="col">No.</th> : null}
-            <th scope="col">Fixture</th>
-            <th scope="col">SKU</th>
-            {mode === "schedule" ? <th scope="col">Lamp / accessories</th> : null}
-            <th scope="col">Quantity</th>
-            {mode === "schedule" ? <th scope="col">Actions</th> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {mode === "bom"
-            ? supplierRows.map((row, index) => (
-                <tr key={`${row.sku}:${row.description}:${index}`}>
-                  <td>
-                    <strong>{row.description}</strong>
-                    <span>{row.manufacturer || row.supplier || "Supplier unresolved"}</span>
-                  </td>
-                  <td>{row.sku || "Not assigned"}</td>
-                  <td>{row.quantity}</td>
-                </tr>
-              ))
-            : rows.map((row) => (
-                <tr key={row.id}>
-                  {mode === "schedule" ? <td>{row.number ?? "-"}</td> : null}
-                  <td>
-                    <strong>{row.label}</strong>
-                    {row.productName ? <span>{row.productName}</span> : null}
-                  </td>
-                  <td>{row.sku ?? "Not assigned"}</td>
-                  {mode === "schedule" ? (
-                    <td>
-                      {row.itemId && onUpdate ? (
-                        <div className="grid gap-2">
-                          <label>
-                            <span className="sr-only">Lamp for fixture {row.number}</span>
-                            <select
-                              value={row.lampCatalogItemId ?? ""}
-                              onChange={(event) =>
-                                onUpdate(row.itemId!, {
-                                  lampCatalogItemId: event.target.value || undefined,
-                                })
-                              }
-                            >
-                              <option value="">Unresolved lamp</option>
-                              {catalog
-                                .filter((item) => item.is_active)
-                                .map((item) => (
-                                  <option key={item.id} value={item.id}>
-                                    {item.name}
-                                    {item.sku ? ` (${item.sku})` : ""}
-                                  </option>
-                                ))}
-                            </select>
-                          </label>
-                          <span>{row.accessories?.join(", ") || row.beam}</span>
-                        </div>
-                      ) : (
-                        row.beam
-                      )}
-                    </td>
-                  ) : null}
-                  <td>{row.count}</td>
-                  {mode === "schedule" ? (
-                    <td>
-                      <button
-                        type="button"
-                        className="est-btn ghost"
-                        disabled={!row.itemId || !onCopyToType}
-                        onClick={() => row.itemId && onCopyToType?.(row.itemId)}
-                      >
-                        Copy to type
-                      </button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-        </tbody>
-      </table>
     </div>
   );
 }
@@ -1380,7 +1294,10 @@ function LandscapeProposalPanel({
 
         <fieldset className="ll-proposal-fieldset ll-additional-lines">
           <legend>Additional line items</legend>
-          <p>Add job-specific work or materials. Each completed line is included in every package total.</p>
+          <p>
+            Add job-specific work or materials. Each completed line is included in every package
+            total.
+          </p>
           <div className="ll-additional-line-list">
             {additionalLineItems.map((line, index) => (
               <div className="ll-additional-line" key={line.id}>
@@ -1657,14 +1574,16 @@ function LandscapeWorkspacePanel({
   shots,
   rows,
   scheduleRows,
+  procurementRows,
   catalogItems,
   onUpdateSchedule,
   onCopyScheduleType,
+  onUpdateProcurement,
+  onRecountProcurement,
   electricalLoad,
   circuitLoads,
   previews,
   previewsPending,
-  supplierRows,
   pricingTiers,
   proposalDocument,
   selectedTierKey,
@@ -1694,18 +1613,23 @@ function LandscapeWorkspacePanel({
   tab: Exclude<LandscapeWorkspaceTab, "drawing">;
   shots: DesignerShot[];
   rows: LandscapeFixtureScheduleRow[];
-  scheduleRows: LandscapeFixtureScheduleRow[];
+  scheduleRows: LandscapeScheduleRow[];
+  procurementRows: LandscapeProcurementRow[];
   catalogItems: CatalogItemResponse[];
   onUpdateSchedule: (
     itemId: string,
     update: { lampCatalogItemId?: string; accessoryCatalogItemIds?: string[] },
   ) => void;
   onCopyScheduleType: (itemId: string) => void;
+  onUpdateProcurement: (
+    row: LandscapeProcurementRow,
+    patch: Partial<LandscapeProcurementRow>,
+  ) => void;
+  onRecountProcurement: () => void;
   electricalLoad: LandscapeElectricalLoad;
   circuitLoads: LandscapeCircuitLoad[];
   previews: Record<string, string>;
   previewsPending: boolean;
-  supplierRows: SupplierCsvRow[];
   pricingTiers: TierConfig[];
   proposalDocument: ProposalDocument | undefined;
   selectedTierKey: string | null;
@@ -1767,9 +1691,10 @@ function LandscapeWorkspacePanel({
   }
 
   if (tab === "schedule" || tab === "bom") {
+    const tableRows = tab === "schedule" ? scheduleRows : procurementRows;
     return (
       <section className="ll-workspace-panel" aria-labelledby={`ll-${tab}-title`}>
-        <div className="ll-panel-sheet">
+        <div className="ll-panel-sheet ll-panel-sheet-wide">
           <header className="ll-panel-heading">
             <div>
               <span>Landscape lighting project</span>
@@ -1780,31 +1705,48 @@ function LandscapeWorkspacePanel({
             <div className="ll-panel-heading-actions">
               <strong>
                 {tab === "bom"
-                  ? `${supplierRows.length} supplier lines`
-                  : `${fixtureCount} fixtures`}
+                  ? `${procurementRows.length} order lines`
+                  : `${scheduleRows.length} placed fixtures`}
               </strong>
               {tab === "bom" ? (
-                <button
-                  className="est-btn"
-                  type="button"
-                  disabled={!supplierRows.length}
-                  onClick={onExportSupplierCsv}
-                >
-                  <FileDown aria-hidden="true" />
-                  Supplier CSV
-                </button>
+                <>
+                  <button
+                    className="est-btn ghost"
+                    type="button"
+                    disabled={!procurementRows.length}
+                    onClick={onRecountProcurement}
+                  >
+                    <RefreshCw aria-hidden="true" />
+                    Recount plan
+                  </button>
+                  <button
+                    className="est-btn"
+                    type="button"
+                    disabled={!procurementRows.length}
+                    onClick={onExportSupplierCsv}
+                  >
+                    <FileDown aria-hidden="true" />
+                    Supplier CSV
+                  </button>
+                  <button className="est-btn ghost" type="button" onClick={() => window.print()}>
+                    <Printer aria-hidden="true" />
+                    Print
+                  </button>
+                </>
               ) : null}
             </div>
           </header>
-          {(tab === "schedule" ? scheduleRows : rows).length ? (
-            <LandscapeFixtureTable
-              rows={tab === "schedule" ? scheduleRows : rows}
-              mode={tab}
-              supplierRows={supplierRows}
-              catalog={catalogItems}
-              onUpdate={onUpdateSchedule}
-              onCopyToType={onCopyScheduleType}
-            />
+          {tableRows.length ? (
+            tab === "schedule" ? (
+              <LandscapeFixtureScheduleTable
+                rows={scheduleRows}
+                catalog={catalogItems}
+                onUpdate={onUpdateSchedule}
+                onCopyToType={onCopyScheduleType}
+              />
+            ) : (
+              <LandscapeBomTable rows={procurementRows} onUpdate={onUpdateProcurement} />
+            )
           ) : (
             <div className="ll-panel-inline-empty">
               Place fixtures on the Drawing Sheet to build this table automatically.
@@ -1812,11 +1754,16 @@ function LandscapeWorkspacePanel({
           )}
           {tab === "bom" ? (
             <p className="ll-panel-footnote">
-              Supplier CSV expands catalog components, includes placed transformers and traced wire,
-              and flags any line that still needs a supplier SKU or drawing scale. Wire quantities
-              use traced one-way route length rounded up to a whole foot without a waste allowance.
+              Plan quantities stay live until you edit the Needed field. Recount plan restores those
+              tallies without erasing purchase progress, prices, supplier details, or notes. Wire
+              uses traced one-way route length rounded up to a whole foot with no waste allowance.
             </p>
-          ) : null}
+          ) : (
+            <p className="ll-panel-footnote">
+              Assign lamps and accessories per fixture, then apply the selection to matching
+              fixtures when the specification repeats.
+            </p>
+          )}
         </div>
       </section>
     );
@@ -1961,6 +1908,7 @@ export function LightDesigner({
           selectedCarePlanKey: selectedLandscapeCarePlanKey,
           additionalLineItems: landscapeAdditionalLineItems,
         },
+        landscapeProcurement,
       );
       const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
       const href = URL.createObjectURL(blob);
@@ -2034,6 +1982,7 @@ export function LightDesigner({
       });
       setStudioNotice(`${annotationType} annotation added. Use undo to remove it.`);
     } else if (action === "recount") {
+      setLandscapeProcurement((current) => recountLandscapeProcurement(current));
       setStudioNotice(
         `${fixtureScheduleRows.length} fixture${fixtureScheduleRows.length === 1 ? "" : "s"} recounted across all sheets.`,
       );
@@ -2054,7 +2003,10 @@ export function LightDesigner({
   );
   const [landscapeAdditionalLineItems, setLandscapeAdditionalLineItems] = useState<
     LandscapeProposalLineItem[]
->(() => projectInitialDraft?.proposal?.additionalLineItems ?? []);
+  >(() => projectInitialDraft?.proposal?.additionalLineItems ?? []);
+  const [landscapeProcurement, setLandscapeProcurement] = useState<
+    Record<string, LandscapeProcurementState>
+  >(() => projectInitialDraft?.procurement ?? {});
 
   // Every photo the rep has open, in the order they added them. The *active*
   // shot's drawing lives in the editor reducer (that's what the canvas, palette
@@ -2093,6 +2045,7 @@ export function LightDesigner({
       selectedLandscapeTierKey,
       selectedLandscapeCarePlanKey,
       landscapeAdditionalLineItems,
+      landscapeProcurement,
     ),
   );
   const persistedItemCountRef = useRef(
@@ -2147,6 +2100,8 @@ export function LightDesigner({
           }
           setSelectedLandscapeTierKey(draft?.proposal?.selectedTierKey ?? null);
           setSelectedLandscapeCarePlanKey(draft?.proposal?.selectedCarePlanKey ?? null);
+          setLandscapeAdditionalLineItems(draft?.proposal?.additionalLineItems ?? []);
+          setLandscapeProcurement(draft?.procurement ?? {});
           setAutosaveStatus("saved");
           setDraftReady(true);
         })
@@ -2170,11 +2125,17 @@ export function LightDesigner({
       setAutosaveStatus("saving");
       void saveLandscapeDraft(
         workspaceId,
-        createLandscapeDraft(liveShots, activeShot?.id ?? null, new Date().toISOString(), {
-          selectedTierKey: selectedLandscapeTierKey,
-          selectedCarePlanKey: selectedLandscapeCarePlanKey,
-          additionalLineItems: landscapeAdditionalLineItems,
-        }),
+        createLandscapeDraft(
+          liveShots,
+          activeShot?.id ?? null,
+          new Date().toISOString(),
+          {
+            selectedTierKey: selectedLandscapeTierKey,
+            selectedCarePlanKey: selectedLandscapeCarePlanKey,
+            additionalLineItems: landscapeAdditionalLineItems,
+          },
+          landscapeProcurement,
+        ),
       )
         .then((draft) => {
           if (cancelled) return;
@@ -2194,6 +2155,7 @@ export function LightDesigner({
     draftReady,
     hosted,
     landscapeAdditionalLineItems,
+    landscapeProcurement,
     landscapeOnly,
     liveShots,
     selectedLandscapeCarePlanKey,
@@ -2219,6 +2181,7 @@ export function LightDesigner({
         projectInitialDraft.proposal?.selectedTierKey ?? null,
         projectInitialDraft.proposal?.selectedCarePlanKey ?? null,
         projectInitialDraft.proposal?.additionalLineItems ?? [],
+        projectInitialDraft.procurement ?? {},
       );
       persistedItemCountRef.current = projectInitialDraft.shots.reduce(
         (total, shot) => total + shot.design.items.length,
@@ -2230,6 +2193,8 @@ export function LightDesigner({
       setSelectedLandscapeTierKey(projectInitialDraft.proposal?.selectedTierKey ?? null);
       setSelectedLandscapeCarePlanKey(projectInitialDraft.proposal?.selectedCarePlanKey ?? null);
       setLandscapeAdditionalLineItems(projectInitialDraft.proposal?.additionalLineItems ?? []);
+      setLandscapeProcurement(projectInitialDraft.procurement ?? {});
+      setPreconState(projectInitialDraft.precon ?? { responses: [], leadInstaller: "", notes: "" });
       dispatch({
         type: "RESET",
         design: nextActiveShot?.design ?? EMPTY_DESIGN,
@@ -2246,7 +2211,7 @@ export function LightDesigner({
 
   // Fixture placement is the highest-value edit in this workflow. Queue it for
   // server persistence immediately; all other drawing edits keep the quiet-period
-  // debounce below so dragging and aiming do not flood the API.
+  // debounce below so dragging and resizing do not flood the API.
   useEffect(() => {
     const itemCount = liveShots.reduce((total, shot) => total + shot.design.items.length, 0);
     const fixtureWasAdded = itemCount > persistedItemCountRef.current;
@@ -2261,14 +2226,21 @@ export function LightDesigner({
       selectedLandscapeTierKey,
       selectedLandscapeCarePlanKey,
       landscapeAdditionalLineItems,
+      landscapeProcurement,
     );
     emittedServerDraftSignatureRef.current = signature;
     emitProjectDraft(
-      createLandscapeDraft(liveShots, nextActiveShotId, new Date().toISOString(), {
-        selectedTierKey: selectedLandscapeTierKey,
-        selectedCarePlanKey: selectedLandscapeCarePlanKey,
-        additionalLineItems: landscapeAdditionalLineItems,
-      }),
+      createLandscapeDraft(
+        liveShots,
+        nextActiveShotId,
+        new Date().toISOString(),
+        {
+          selectedTierKey: selectedLandscapeTierKey,
+          selectedCarePlanKey: selectedLandscapeCarePlanKey,
+          additionalLineItems: landscapeAdditionalLineItems,
+        },
+        landscapeProcurement,
+      ),
       { immediate: true },
     );
   }, [
@@ -2276,6 +2248,7 @@ export function LightDesigner({
     draftReady,
     emitProjectDraft,
     landscapeAdditionalLineItems,
+    landscapeProcurement,
     landscapeOnly,
     liveShots,
     selectedLandscapeCarePlanKey,
@@ -2297,17 +2270,24 @@ export function LightDesigner({
       selectedLandscapeTierKey,
       selectedLandscapeCarePlanKey,
       landscapeAdditionalLineItems,
+      landscapeProcurement,
     );
     if (signature === emittedServerDraftSignatureRef.current) return;
 
     const timer = window.setTimeout(() => {
       emittedServerDraftSignatureRef.current = signature;
       emitProjectDraft(
-        createLandscapeDraft(liveShots, nextActiveShotId, new Date().toISOString(), {
-          selectedTierKey: selectedLandscapeTierKey,
-          selectedCarePlanKey: selectedLandscapeCarePlanKey,
-          additionalLineItems: landscapeAdditionalLineItems,
-        }),
+        createLandscapeDraft(
+          liveShots,
+          nextActiveShotId,
+          new Date().toISOString(),
+          {
+            selectedTierKey: selectedLandscapeTierKey,
+            selectedCarePlanKey: selectedLandscapeCarePlanKey,
+            additionalLineItems: landscapeAdditionalLineItems,
+          },
+          landscapeProcurement,
+        ),
       );
     }, 600);
     return () => window.clearTimeout(timer);
@@ -2316,6 +2296,7 @@ export function LightDesigner({
     draftReady,
     emitProjectDraft,
     landscapeAdditionalLineItems,
+    landscapeProcurement,
     landscapeOnly,
     liveShots,
     selectedLandscapeCarePlanKey,
@@ -2495,22 +2476,6 @@ export function LightDesigner({
     () => buildPerFixtureSchedule(liveShots, products, priceBook ?? []),
     [liveShots, priceBook, products],
   );
-  const numberedFixtureScheduleRows = useMemo<LandscapeFixtureScheduleRow[]>(
-    () =>
-      perFixtureSchedule.map((row) => ({
-        id: row.itemId,
-        number: row.number,
-        itemId: row.itemId,
-        label: row.fixtureType,
-        productName: row.fixtureName,
-        sku: row.fixtureSku,
-        count: 1,
-        beam: row.unresolved.join("; ") || "Resolved",
-        lampCatalogItemId: row.lampCatalogItemId,
-        accessories: row.accessoryNames,
-      })),
-    [perFixtureSchedule],
-  );
   const fixtureScheduleRows = useMemo<LandscapeFixtureScheduleRow[]>(() => {
     const rows: LandscapeFixtureScheduleRow[] = fixtureLines.map((line) => {
       const beamLabels = new Set<string>();
@@ -2601,39 +2566,75 @@ export function LightDesigner({
       ]),
     [priceBook, pricing, tierKey],
   );
-  const supplierRows = useMemo(() => {
-    const fixtures = fixtureLines.map((line) => ({
-      label: line.label,
-      quantity: line.count,
-      item: fixtureResolution[line.type].item,
-    }));
-    if (transformerCount > 0) {
-      fixtures.push({
-        label: "Transformer",
-        quantity: transformerCount,
-        item: transformerResolution.item,
-      });
-    }
-    return buildSupplierCsvRows(
-      fixtures,
-      circuitLoads.map((circuit) => ({
-        label: circuit.label,
-        wireGauge: circuit.wireGauge,
-        lengthFeet: circuit.lengthFeet,
-        item:
-          circuit.wireGauge === 10 || circuit.wireGauge === 12
-            ? selectedTierWireItems.get(circuit.wireGauge)
-            : null,
-      })),
-    );
-  }, [
-    circuitLoads,
-    fixtureLines,
-    fixtureResolution,
-    selectedTierWireItems,
-    transformerCount,
-    transformerResolution,
-  ]);
+  const supplierRows = useMemo(
+    () =>
+      buildSupplierCsvRows(
+        [],
+        circuitLoads.map((circuit) => ({
+          label: circuit.label,
+          wireGauge: circuit.wireGauge,
+          lengthFeet: circuit.lengthFeet,
+          item:
+            circuit.wireGauge === 10 || circuit.wireGauge === 12
+              ? selectedTierWireItems.get(circuit.wireGauge)
+              : null,
+        })),
+      ),
+    [circuitLoads, selectedTierWireItems],
+  );
+  const procurementSupplements = useMemo(() => {
+    const supplements: LandscapeProcurementSupplement[] = supplierRows.flatMap((row) => {
+      const supplement = procurementSupplementFromSupplierRow(row);
+      return supplement ? [supplement] : [];
+    });
+    if (transformerCount <= 0) return supplements;
+    const item = transformerResolution.item;
+    const attributeText = (key: string) => {
+      const value = item?.attributes?.[key];
+      return typeof value === "string" && value.trim() ? value.trim() : null;
+    };
+    supplements.push({
+      key: `transformer:${item?.id ?? transformerResolution.itemId ?? "unresolved"}`,
+      category: "transformer",
+      catalogItemId: item?.id ?? null,
+      sku: item?.sku?.trim() || null,
+      name: item?.name ?? "Transformer",
+      manufacturer: attributeText("manufacturer"),
+      supplier: attributeText("supplier"),
+      needed: transformerCount,
+      unit: "each",
+      unitCost: item?.unit_price ?? null,
+      planSource: "Placed transformer symbols",
+      sourceStatus: item?.sku?.trim() ? "Ready" : "Needs SKU",
+      supplierNote: item?.sku?.trim()
+        ? ""
+        : "Assign a supplier SKU in the Tribunal catalog before ordering.",
+    });
+    return supplements;
+  }, [supplierRows, transformerCount, transformerResolution]);
+  const procurementRows = useMemo(
+    () =>
+      buildLandscapeProcurement(
+        perFixtureSchedule,
+        priceBook ?? [],
+        landscapeProcurement,
+        procurementSupplements,
+      ),
+    [landscapeProcurement, perFixtureSchedule, priceBook, procurementSupplements],
+  );
+  const updateProcurementRow = useCallback(
+    (row: LandscapeProcurementRow, patch: Partial<LandscapeProcurementRow>) => {
+      setLandscapeProcurement((current) => ({
+        ...current,
+        [row.key]: procurementStateForRow({ ...row, ...patch }),
+      }));
+    },
+    [],
+  );
+  const recountProcurement = useCallback(() => {
+    setLandscapeProcurement((current) => recountLandscapeProcurement(current));
+    setStudioNotice("Bill of materials recounted from the current plan.");
+  }, []);
   const hasLandscape = fixtureCount > 0 || transformerCount > 0 || inputs.bistro_feet > 0;
 
   const landscapeProposalPayload = useMemo<ProposalWizardPayload | null>(() => {
@@ -3336,7 +3337,15 @@ export function LightDesigner({
                     imported.shots[0];
                   setShots(imported.shots);
                   setActiveShotId(first?.id ?? null);
+                  setSelectedLandscapeTierKey(imported.proposal?.selectedTierKey ?? null);
+                  setSelectedLandscapeCarePlanKey(imported.proposal?.selectedCarePlanKey ?? null);
+                  setLandscapeAdditionalLineItems(imported.proposal?.additionalLineItems ?? []);
+                  setLandscapeProcurement(imported.procurement ?? {});
+                  setPreconState(
+                    imported.precon ?? { responses: [], leadInstaller: "", notes: "" },
+                  );
                   dispatch({ type: "RESET", design: first?.design ?? EMPTY_DESIGN });
+                  if (first) dispatch({ type: "SET_DUSK", dusk: first.dusk });
                   setStudioNotice("Editable Tribunal project imported.");
                 } catch {
                   setStudioNotice(
@@ -3519,7 +3528,8 @@ export function LightDesigner({
             tab={landscapeTab}
             shots={liveShots}
             rows={fixtureScheduleRows}
-            scheduleRows={numberedFixtureScheduleRows}
+            scheduleRows={perFixtureSchedule}
+            procurementRows={procurementRows}
             catalogItems={priceBook ?? []}
             onUpdateSchedule={(itemId, update) => {
               const next = updateFixtureScheduleSelection(liveShots, itemId, update);
@@ -3533,11 +3543,12 @@ export function LightDesigner({
               const nextActive = next.find((shot) => shot.id === activeShot?.id);
               if (nextActive) dispatch({ type: "RESET", design: nextActive.design });
             }}
+            onUpdateProcurement={updateProcurementRow}
+            onRecountProcurement={recountProcurement}
             electricalLoad={electricalLoad}
             circuitLoads={circuitLoads}
             previews={proposalPreviews}
             previewsPending={proposalPreviewsPending}
-            supplierRows={supplierRows}
             pricingTiers={landscapePricingTiers}
             proposalDocument={landscapeProposalQuery.data}
             selectedTierKey={effectiveLandscapeTierKey}
@@ -3561,7 +3572,12 @@ export function LightDesigner({
             preconState={preconState}
             contractAmount={currentSavedLandscapeQuote?.total ?? null}
             onPreconChange={setPreconState}
-            onExportSupplierCsv={() => downloadSupplierCsv(supplierRows, landscapeProjectName)}
+            onExportSupplierCsv={() =>
+              downloadSupplierCsv(
+                procurementRowsToSupplierCsv(procurementRows),
+                landscapeProjectName,
+              )
+            }
             onUpload={() => fileRef.current?.click()}
           />
           {closeoutQuote ? (
@@ -3854,9 +3870,7 @@ export function LightDesigner({
                               // record instead of minting a near-duplicate.
                               onSelectContact={(contact) => {
                                 editCustomer(setClientEmail)(contact.email ?? "");
-                                editCustomer(setClientPhone)(
-                                  contact.phone_number ?? "",
-                                );
+                                editCustomer(setClientPhone)(contact.phone_number ?? "");
                               }}
                             />
                             <input

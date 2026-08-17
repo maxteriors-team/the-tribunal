@@ -93,6 +93,8 @@ describe("supplier CSV", () => {
   it("escapes spreadsheet formulas and quotes in exported cells", () => {
     const csv = serializeSupplierCsv([
       {
+        category: "fixture",
+        catalogItemId: "item-1",
         supplier: '=HYPERLINK("bad")',
         manufacturer: "FX Luminaire",
         sku: "SKU-1",

@@ -35,13 +35,11 @@ import {
   MAX_DUSK,
   beamAngleAt,
   beamHandlePos,
-  beamRotationAt,
   drawScene,
   itemHit,
   planImageHit,
   planImageResizeHandlePos,
   resizeHandlePos,
-  rotateHandlePos,
 } from "@/lib/estimator/render";
 import { isLandscapeStyle } from "@/lib/estimator/types";
 import type { Design, PhotoInfo, Point, Product } from "@/lib/estimator/types";
@@ -61,7 +59,6 @@ type Drag =
   | { mode: "item"; itemId: string; offset: Point; before: Design }
   | { mode: "resize"; itemId: string; before: Design }
   | { mode: "beam"; itemId: string; before: Design }
-  | { mode: "aim"; itemId: string; before: Design }
   | { mode: "plan-image"; imageId: string; offset: Point; before: Design }
   | { mode: "plan-image-resize"; imageId: string; before: Design }
   | { mode: "highlight"; before: Design }
@@ -265,7 +262,11 @@ export function LightCanvas({
         ctx.stroke();
         if (measurement.label) {
           ctx.fillStyle = "#ffffff";
-          ctx.fillText(measurement.label, (measurement.a.x + measurement.b.x) / 2, (measurement.a.y + measurement.b.y) / 2 - 8);
+          ctx.fillText(
+            measurement.label,
+            (measurement.a.x + measurement.b.x) / 2,
+            (measurement.a.y + measurement.b.y) / 2 - 8,
+          );
         }
       }
       ctx.setLineDash([]);
@@ -276,9 +277,15 @@ export function LightCanvas({
         ctx.beginPath();
         ctx.moveTo(arrow.a.x, arrow.a.y);
         ctx.lineTo(arrow.b.x, arrow.b.y);
-        ctx.lineTo(arrow.b.x - 14 * Math.cos(angle - Math.PI / 6), arrow.b.y - 14 * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(
+          arrow.b.x - 14 * Math.cos(angle - Math.PI / 6),
+          arrow.b.y - 14 * Math.sin(angle - Math.PI / 6),
+        );
         ctx.moveTo(arrow.b.x, arrow.b.y);
-        ctx.lineTo(arrow.b.x - 14 * Math.cos(angle + Math.PI / 6), arrow.b.y - 14 * Math.sin(angle + Math.PI / 6));
+        ctx.lineTo(
+          arrow.b.x - 14 * Math.cos(angle + Math.PI / 6),
+          arrow.b.y - 14 * Math.sin(angle + Math.PI / 6),
+        );
         ctx.stroke();
       }
       for (const annotation of design.annotations ?? []) {
@@ -296,8 +303,16 @@ export function LightCanvas({
           ctx.lineTo(annotation.end.x, annotation.end.y);
           ctx.stroke();
         } else {
-          ctx.strokeText(annotation.text || annotation.type.toUpperCase(), annotation.at.x, annotation.at.y);
-          ctx.fillText(annotation.text || annotation.type.toUpperCase(), annotation.at.x, annotation.at.y);
+          ctx.strokeText(
+            annotation.text || annotation.type.toUpperCase(),
+            annotation.at.x,
+            annotation.at.y,
+          );
+          ctx.fillText(
+            annotation.text || annotation.type.toUpperCase(),
+            annotation.at.x,
+            annotation.at.y,
+          );
         }
       }
       ctx.restore();
@@ -778,7 +793,14 @@ export function LightCanvas({
         const sizePx = Math.max(12, activeProduct.sizeFt * pxPerFt);
         dispatch({
           type: "ADD_ITEM",
-          item: { id: nextId("item"), productId: tool.productId, at: p, sizePx },
+          item: {
+            id: nextId("item"),
+            productId: tool.productId,
+            at: p,
+            sizePx,
+            catalogItemId: activeProduct.catalogItemId,
+            catalogSku: activeProduct.catalogSku,
+          },
         });
         return;
       }
@@ -830,13 +852,6 @@ export function LightCanvas({
           const spreadGrip = item ? beamHandlePos(item, itemProduct) : null;
           if (item && spreadGrip && distance(spreadGrip, p) < slack * 1.6) {
             dragRef.current = { mode: "beam", itemId: item.id, before: design };
-            return;
-          }
-          // Aim last: it floats a constant gap beyond the throw grip, so it is
-          // never the one a rep grabs by accident reaching for the other two.
-          const aimGrip = item ? rotateHandlePos(item, itemProduct, view.scale) : null;
-          if (item && aimGrip && distance(aimGrip, p) < slack * 1.6) {
-            dragRef.current = { mode: "aim", itemId: item.id, before: design };
             return;
           }
         }
@@ -935,9 +950,7 @@ export function LightCanvas({
         setDraftHighlight((points) => {
           if (!points?.length) return [p];
           const previous = points[points.length - 1];
-          return distance(previous, p) >= 2 / Math.max(view.scale, 0.1)
-            ? [...points, p]
-            : points;
+          return distance(previous, p) >= 2 / Math.max(view.scale, 0.1) ? [...points, p] : points;
         });
         return;
       }
@@ -1061,19 +1074,6 @@ export function LightCanvas({
           type: "UPDATE_ITEM",
           id: drag.itemId,
           patch: { beamAngleDeg: beamAngleAt(item, p) },
-          transient: true,
-        });
-        return;
-      }
-      case "aim": {
-        const item = design.items.find((i) => i.id === drag.itemId);
-        if (!item) return;
-        dispatch({
-          type: "UPDATE_ITEM",
-          id: drag.itemId,
-          patch: {
-            beamRotationDeg: beamRotationAt(item, p, productById.get(item.productId)),
-          },
           transient: true,
         });
         return;

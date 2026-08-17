@@ -91,6 +91,9 @@ class PlacedItemSchema(DocumentSchema):
     size_px: Annotated[float, Field(gt=0, le=10_000)] = Field(
         validation_alias=AliasChoices("sizePx", "size_px")
     )
+    icon_scale: Annotated[float, Field(ge=0.6, le=1.8)] | None = Field(
+        default=None, validation_alias=AliasChoices("iconScale", "icon_scale")
+    )
     beam_angle_deg: Annotated[float, Field(ge=1, le=179)] | None = Field(
         default=None, validation_alias=AliasChoices("beamAngleDeg", "beam_angle_deg")
     )
@@ -397,11 +400,20 @@ class ProcurementStateSchema(DocumentSchema):
     catalog_sku: CatalogKey | None = Field(
         default=None, validation_alias=AliasChoices("catalogSku", "catalog_sku")
     )
+    description: DocumentText | None = None
+    manufacturer: ShortText | None = None
+    supplier: ShortText | None = None
+    needed_quantity: Annotated[float, Field(ge=0, le=100_000)] | None = Field(
+        default=None, validation_alias=AliasChoices("neededQuantity", "needed_quantity")
+    )
     ordered_quantity: Annotated[float, Field(ge=0, le=100_000)] = Field(
         default=0, validation_alias=AliasChoices("orderedQuantity", "ordered_quantity")
     )
     received_quantity: Annotated[float, Field(ge=0, le=100_000)] = Field(
         default=0, validation_alias=AliasChoices("receivedQuantity", "received_quantity")
+    )
+    unit_cost: Annotated[float, Field(ge=0, le=1_000_000)] | None = Field(
+        default=None, validation_alias=AliasChoices("unitCost", "unit_cost")
     )
     supplier_note: DocumentText = Field(
         default="", validation_alias=AliasChoices("supplierNote", "supplier_note")
