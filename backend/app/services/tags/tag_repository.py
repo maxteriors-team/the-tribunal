@@ -204,3 +204,28 @@ async def get_tags_for_contact(
         .order_by(Tag.name)
     )
     return list(result.scalars().all())
+
+
+async def get_scoped_tag_assignments_for_contact(
+    contact_id: int,
+    workspace_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    limit: int = 50,
+) -> list[tuple[ContactTag, Tag]]:
+    """Return a contact's tag assignments with both tenant predicates enforced."""
+    bounded_limit = max(1, min(limit, 100))
+    result = await db.execute(
+        select(ContactTag, Tag)
+        .join(Tag, Tag.id == ContactTag.tag_id)
+        .join(Contact, Contact.id == ContactTag.contact_id)
+        .where(
+            ContactTag.contact_id == contact_id,
+            Contact.id == contact_id,
+            Contact.workspace_id == workspace_id,
+            Tag.workspace_id == workspace_id,
+        )
+        .order_by(Tag.name.asc(), Tag.id.asc())
+        .limit(bounded_limit)
+    )
+    return [(assignment, tag) for assignment, tag in result.tuples().all()]

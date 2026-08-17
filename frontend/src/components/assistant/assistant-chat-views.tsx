@@ -45,7 +45,8 @@ export function buildWelcomePrompts(workspaceName: string | null): string[] {
   return [
     `Give me today's CRM briefing for ${businessName}`,
     `Find contacts at ${businessName} who need follow-up`,
-    `Show campaigns and automations at ${businessName} that need attention`,
+    `Schedule a calendar appointment for a contact at ${businessName}`,
+    `Create a follow-up workflow automation for ${businessName}`,
   ];
 }
 
@@ -199,8 +200,8 @@ export function EmptyState({
       <Sparkles className="mb-3 size-10 text-primary/60" />
       <h3 className="text-lg font-semibold text-foreground">CRM Assistant</h3>
       <p className="mt-1 max-w-sm text-sm">
-        I can help you search contacts, send messages, check campaigns, and more. Start a fresh chat
-        or pick a prior one from the sidebar.
+        I can manage contacts, calendar events, workflow automations, campaigns, messages, and more.
+        Start a fresh chat or pick a prior one from the sidebar.
       </p>
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         {welcomePrompts.map((prompt) => (

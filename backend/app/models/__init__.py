@@ -22,6 +22,11 @@ from app.models.campaign_number_pool import CampaignNumberPool
 from app.models.campaign_report import CampaignReport
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
+from app.models.contact_ai_memory import (
+    ContactAIMemory,
+    ContactAIMemoryFact,
+    FactSupersessionState,
+)
 from app.models.contact_attachment import ContactAttachment
 from app.models.conversation import Conversation, Message
 from app.models.demo_request import DemoRequest
@@ -286,6 +291,9 @@ __all__ = [
     "CallPayment",
     "CallPaymentStatus",
     "CallerMemory",
+    "ContactAIMemory",
+    "ContactAIMemoryFact",
+    "FactSupersessionState",
     "BanditDecision",
     "DecisionType",
     "Tag",

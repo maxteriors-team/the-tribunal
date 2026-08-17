@@ -1020,12 +1020,100 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_appointments",
-            "description": "Show upcoming appointments.",
+            "description": "Find calendar appointments by contact, status, or ISO 8601 date range.",
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "contact_id": {"type": "integer"},
+                    "status": {
+                        "type": "string",
+                        "enum": ["scheduled", "completed", "cancelled", "no_show"],
+                    },
+                    "date_from": {"type": "string", "description": "ISO 8601 start datetime"},
+                    "date_to": {"type": "string", "description": "ISO 8601 end datetime"},
+                    "include_past": {"type": "boolean", "description": "Include past events"},
                     "limit": {"type": "integer", "description": "Max results (default 10)"},
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_appointment",
+            "description": "Get one calendar appointment before changing or deleting it.",
+            "parameters": {
+                "type": "object",
+                "properties": {"appointment_id": {"type": "integer"}},
+                "required": ["appointment_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_appointment",
+            "description": (
+                "Schedule a calendar appointment for a CRM contact. Resolve ambiguous contacts "
+                "with find_contacts first. Requires human approval."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contact_id": {"type": "integer"},
+                    "scheduled_at": {
+                        "type": "string",
+                        "description": "ISO 8601 datetime with offset",
+                    },
+                    "duration_minutes": {"type": "integer", "minimum": 15, "maximum": 480},
+                    "service_type": {"type": "string", "maxLength": 100},
+                    "notes": {"type": "string"},
+                    "agent_id": {"type": "string", "description": "Optional agent UUID"},
+                },
+                "required": ["contact_id", "scheduled_at"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_appointment",
+            "description": (
+                "Reschedule, cancel, complete, or edit a calendar appointment after reading it. "
+                "Requires human approval."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "appointment_id": {"type": "integer"},
+                    "scheduled_at": {
+                        "type": "string",
+                        "description": "ISO 8601 datetime with offset",
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["scheduled", "completed", "cancelled", "no_show"],
+                    },
+                    "duration_minutes": {"type": "integer", "minimum": 15, "maximum": 480},
+                    "service_type": {"type": "string", "maxLength": 100},
+                    "notes": {"type": "string"},
+                },
+                "required": ["appointment_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_appointment",
+            "description": (
+                "Permanently delete a calendar appointment after reading it. "
+                "Requires human approval."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"appointment_id": {"type": "integer"}},
+                "required": ["appointment_id"],
             },
         },
     },

@@ -190,25 +190,19 @@ SEARCH_KNOWLEDGE_TOOL: dict[str, Any] = {
 }
 
 # Read-only caller account lookup tool.
-# Lets the receptionist answer account-specific questions about the *current
-# caller* ("when's my appointment?", "what's my status?") by reading only that
-# caller's own CRM record. Execution is strictly read-only and hard-scoped to the
-# call's workspace + resolved contact, so it can never read another tenant's or
-# another person's data. Takes no arguments — the caller is implicit (the active
-# call), so the model cannot point it at a different contact.
+# The caller is implicit, so the model cannot select another contact. The executor returns
+# typed live CRM fields and deliberately omits free-form notes as factual evidence.
 LOOKUP_CALLER_RECORD_TOOL: dict[str, Any] = {
     "type": "function",
     "name": "lookup_caller_record",
     "description": (
-        "Look up the CURRENT caller's own account record to answer questions "
-        "about THEIR appointments, status, or deals — e.g. 'when is my "
-        "appointment?', 'what's my status?', 'do I have anything booked?'. "
-        "Returns the caller's upcoming appointments, open opportunities/deals, "
-        "contact status and notes, and a short summary of the last interaction. "
-        "This is READ-ONLY and only ever returns THIS caller's record — you "
-        "cannot look up anyone else. If the caller is not recognized it returns "
-        "no record; in that case, do NOT invent details — offer to take their "
-        "information instead. Takes no arguments."
+        "Freshly look up the CURRENT caller's own live CRM record before making any "
+        "claim about THEIR appointment, quote/proposal, invoice, qualification, status, "
+        "or deal. Returns bounded structured fields plus recent cross-channel history; "
+        "free-form notes are not factual evidence. This is READ-ONLY and only ever "
+        "returns THIS caller's record. If a requested record is absent or conflicts "
+        "with conversation history, do NOT guess — ask one focused question or offer "
+        "a human handoff. Takes no arguments."
     ),
     "parameters": {
         "type": "object",
@@ -930,6 +924,44 @@ def get_text_search_knowledge_tool() -> dict[str, Any]:
             "name": SEARCH_KNOWLEDGE_TOOL["name"],
             "description": SEARCH_KNOWLEDGE_TOOL["description"],
             "parameters": SEARCH_KNOWLEDGE_TOOL["parameters"],
+        },
+    }
+
+
+def get_text_contact_state_tool() -> dict[str, Any]:
+    """Fresh contact-specific evidence tool for SMS agents."""
+    return {
+        "type": "function",
+        "function": {
+            "name": "lookup_contact_state",
+            "description": (
+                "Read the CURRENT SMS contact's live CRM record immediately before "
+                "claiming a quote/proposal amount or status, invoice balance or status, "
+                "or appointment existence, status, or time. This tool is read-only and "
+                "cannot select another contact or workspace. Choose the subject being "
+                "verified and copy any exact number, service, status, or date the customer "
+                "used into reference. If it returns absent/error/conflict, ask one focused "
+                "question or hand off instead of guessing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subject": {
+                        "type": "string",
+                        "enum": ["quote", "invoice", "appointment"],
+                        "description": "The customer-specific CRM fact to verify.",
+                    },
+                    "reference": {
+                        "type": "string",
+                        "description": (
+                            "Exact quote/invoice number, service, status, or appointment "
+                            "date from the latest customer message. Omit when none was given."
+                        ),
+                    },
+                },
+                "required": ["subject"],
+                "additionalProperties": False,
+            },
         },
     }
 

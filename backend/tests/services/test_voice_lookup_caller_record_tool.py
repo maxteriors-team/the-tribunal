@@ -49,7 +49,13 @@ class _Result:
     def scalar_one_or_none(self) -> Any | None:
         return self._rows[0] if self._rows else None
 
+    def one_or_none(self) -> Any | None:
+        return self._rows[0] if self._rows else None
+
     def scalars(self) -> _Result:
+        return self
+
+    def tuples(self) -> _Result:
         return self
 
     def all(self) -> list[Any]:
@@ -83,7 +89,11 @@ class _IsolatingSession:
     async def execute(self, stmt: Any, *_a: Any, **_k: Any) -> _Result:
         self.statements.append(stmt)
         entity = stmt.column_descriptions[0]["entity"]
-        values = set(stmt.compile().params.values())
+        values = {
+            value
+            for value in stmt.compile().params.values()
+            if isinstance(value, (str, int, uuid.UUID))
+        }
         name = entity.__name__
 
         if name == "Message":
@@ -103,7 +113,20 @@ class _IsolatingSession:
         if name == "Opportunity":
             return _Result(
                 [
-                    o
+                    (
+                        o.id,
+                        o.name,
+                        o.status,
+                        o.pipeline_id,
+                        "Sales Pipeline",
+                        o.stage_id,
+                        "New",
+                        o.amount,
+                        o.currency,
+                        o.probability,
+                        o.expected_close_date,
+                        o.updated_at,
+                    )
                     for o in self.opportunities
                     if o.workspace_id in values and o.primary_contact_id in values
                 ]
@@ -185,7 +208,13 @@ def _make_contact(workspace_id: uuid.UUID, contact_id: int, **overrides: Any) ->
         "last_name": "Vargas",
         "phone_number": "+15550002222",
         "status": "qualified",
+        "source": "manual",
+        "created_at": datetime(2026, 5, 1, tzinfo=UTC),
+        "engagement_score": 0,
+        "sms_consent_status": "unknown",
+        "noshow_count": 0,
         "is_qualified": True,
+        "lead_score": 50,
         "notes": "Prefers afternoon calls.",
     }
     values.update(overrides)
@@ -218,7 +247,10 @@ def _make_opportunity(workspace_id: uuid.UUID, contact_id: int) -> Opportunity:
         is_active=True,
         amount=Decimal("2500.00"),
         currency="USD",
+        probability=50,
+        expected_close_date=None,
         created_at=datetime(2026, 5, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 5, 2, tzinfo=UTC),
     )
 
 
@@ -273,13 +305,11 @@ async def test_lookup_returns_callers_own_record() -> None:
     assert result["found"] is True
     assert result["contact"]["name"] == "Dana Vargas"
     assert result["contact"]["status"] == "qualified"
-    assert result["contact"]["notes"] == "Prefers afternoon calls."
+    assert "notes" not in result["contact"]
     assert len(result["upcoming_appointments"]) == 1
     assert result["upcoming_appointments"][0]["service_type"] == "Consultation"
-    assert len(result["open_opportunities"]) == 1
-    assert result["open_opportunities"][0]["name"] == "Premium plan upgrade"
-    assert result["open_opportunities"][0]["amount"] == 2500.0
-    assert result["last_interaction"]["preview"] == "Asked about pricing"
+    assert result["evidence_source"] == "live_crm"
+    assert result["evidence_status"] == "mixed"
 
 
 # --------------------------------------------------------------------------- #
@@ -326,7 +356,7 @@ async def test_lookup_never_returns_cross_workspace_records() -> None:
 
     assert result["found"] is True
     assert result["upcoming_appointments"] == []
-    assert result["open_opportunities"] == []
+    assert result["evidence_status"] == "absent"
 
     # Defense in depth: the appointment and opportunity statements bind the
     # call's workspace id (never the foreign one).
@@ -368,12 +398,10 @@ async def test_lookup_contact_in_other_workspace_returns_no_record() -> None:
             workspace_id=workspace_id,
         ).execute("lookup_caller_record", {})
 
-    assert result == {
-        "success": True,
-        "found": False,
-        "message": result["message"],
-    }
+    assert result["success"] is True
     assert result["found"] is False
+    assert result["evidence_source"] == "live_crm"
+    assert result["evidence_status"] == "absent"
 
 
 # --------------------------------------------------------------------------- #
