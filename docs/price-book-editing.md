@@ -29,12 +29,14 @@ Two things the dialog does _not_ show, which is fine:
 ## 2. Pricing config blocks → the API (mostly)
 
 `workspace.settings["pricing"]` holds `tax`, `financing` (Wisetack),
-`cash_discount`, `commission`, `tiers` (Good/Better/Best), `care_plan`,
-`savings`, `bistro`, `christmas`, `permanent`.
+`cash_discount`, `commission`, `deposit`, `tiers` (Good/Better/Best),
+`care_plan`, `savings`, `bistro`, `christmas`, `permanent`.
 
 Settings → Pricing only exposes **seasonal (Christmas)** and **permanent
-roofline**. Everything else — including `cash_discount`, `financing`,
-`commission`, `tax`, `tiers` — has **no UI**. Use the merge endpoint:
+roofline**. Everything else—including the landscape workflow's `deposit`
+default—has **no UI**. See
+[the client-deposit flow](landscape-lighting-deposit-flow.md) before enabling it,
+then use the merge endpoint:
 
 ```bash
 curl -X PUT "$API/api/v1/settings/workspaces/$WORKSPACE_ID/pricing" \
@@ -99,10 +101,10 @@ Once real operators are editing pricing in the UI, pick one:
 
 ## Getting the SKUs to the distributor
 
-When a quote is **accepted** — by the client on the public proposal page or by
-an operator on their behalf; both funnel through `QuoteService.approve_quote` —
-the workspace gets an **"Order parts — QUO-xxxxxx"** email listing every part
-number and quantity for the accepted tier:
+When an **operator approves a quote on the client's behalf** through
+`QuoteService.approve_quote`, the workspace gets an
+**"Order parts — QUO-xxxxxx"** email listing every part number and quantity
+for the accepted tier:
 
 ```
 Parts to Order
@@ -126,7 +128,10 @@ Mechanics worth knowing:
 - Quotes with no parts (flat, non-wizard quotes) send nothing.
 
 Landscape projects also provide an editable Bill of Materials with supplier CSV
-export; accepted wizard quotes retain the fulfillment email as a second hand-off.
+export. **Client approval on the public proposal currently uses
+`QuoteService.approve_public`, which does not call this parts notifier.** Use the
+BOM/supplier CSV as the hand-off for client-accepted quotes until those approval
+paths are unified.
 
 ## Internal SKUs must never reach the client
 
