@@ -48,6 +48,9 @@ function report(overrides: Partial<Report> = {}): Report {
     date_from: "2026-07-01",
     date_to: "2026-07-31",
     currency: "USD",
+    booked_jobs: 12,
+    booked_revenue: 51_000,
+    avg_booked_value: 4_250,
     quotes_issued: 30,
     quotes_approved: 12,
     revenue_approved: 51_000,
@@ -72,6 +75,9 @@ function report(overrides: Partial<Report> = {}): Report {
 /** An untouched workspace: nothing happened, so every rate is null. */
 function emptyReport(): Report {
   return report({
+    booked_jobs: 0,
+    booked_revenue: 0,
+    avg_booked_value: null,
     quotes_issued: 0,
     quotes_approved: 0,
     revenue_approved: 0,
