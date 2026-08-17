@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent } from "react";
+import { useEffect, type KeyboardEvent } from "react";
 
 import type { LandscapeWorkflowTab } from "@/lib/estimator/types";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,17 @@ export function ProjectWorkflowTabs({
   value: LandscapeWorkflowTab;
   onChange: (value: LandscapeWorkflowTab) => void;
 }) {
+  useEffect(() => {
+    const activeTab = document.getElementById(`landscape-tab-${value}`);
+    if (!activeTab || typeof activeTab.scrollIntoView !== "function") return;
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    activeTab.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [value]);
+
   return (
     <div className="ll-workflow-tabs overflow-x-auto border-b border-[#a98336] bg-[#090909] [scrollbar-color:#a98336_#090909] [scrollbar-width:thin]">
       <div

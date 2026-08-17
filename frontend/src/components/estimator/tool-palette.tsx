@@ -29,13 +29,15 @@ import { LANDSCAPE_WIRE_GAUGES, landscapeWireLabel } from "@/lib/estimator/fixtu
 import { FIXTURE_MARKER_COLORS } from "@/lib/estimator/marker-colors";
 import { seasonalIconForStyle, tintSurface } from "@/lib/estimator/seasonal-icons";
 import {
+  FIXTURE_ICON_SCALE_STEP,
   MAX_BEAM_ANGLE_DEG,
+  MAX_FIXTURE_ICON_SCALE,
   MIN_BEAM_ANGLE_DEG,
+  MIN_FIXTURE_ICON_SCALE,
   beamAngleFor,
-  beamRotationFor,
   clampBeamAngle,
+  fixtureIconScaleFor,
   isLandscapePlanStyle,
-  normalizeBeamRotation,
 } from "@/lib/estimator/types";
 import type { Design, PlacedItem, Product, Run } from "@/lib/estimator/types";
 import { formatCurrency } from "@/lib/utils/number";
@@ -301,8 +303,7 @@ function FixtureOptions({
     (run) => products.find((candidate) => candidate.id === run.productId)?.style === "wire",
   );
   const angle = beamAngleFor(product.style, item.beamAngleDeg);
-  const rotation = beamRotationFor(item.beamRotationDeg);
-  const natural = product.style === "downlight" ? "down" : "up";
+  const iconScale = fixtureIconScaleFor(item.iconScale);
 
   const markerColorButton = (marker: (typeof FIXTURE_MARKER_COLORS)[number], index: number) => {
     const checked = item.markerColor?.toLowerCase() === marker.value.toLowerCase();
@@ -349,6 +350,10 @@ function FixtureOptions({
         beamAngleDeg: undefined,
         beamRotationDeg: undefined,
         circuitId: next.style === "transformer" ? undefined : item.circuitId,
+        catalogItemId: next.catalogItemId,
+        catalogSku: next.catalogSku,
+        lampCatalogItemId: undefined,
+        accessoryCatalogItemIds: undefined,
       },
     });
   };
@@ -425,35 +430,42 @@ function FixtureOptions({
         </div>
       </div>
 
-      <div className="tp-mt tp-fixture-size-actions" role="group" aria-label="Fixture symbol size">
-        <button
-          type="button"
-          className="tp-mini-btn"
-          aria-label="Decrease fixture symbol size"
-          onClick={() =>
-            dispatch({
-              type: "UPDATE_ITEM",
-              id: item.id,
-              patch: { sizePx: Math.max(12, item.sizePx * 0.85) },
-            })
-          }
-        >
-          Size −
-        </button>
-        <button
-          type="button"
-          className="tp-mini-btn"
-          aria-label="Increase fixture symbol size"
-          onClick={() =>
-            dispatch({
-              type: "UPDATE_ITEM",
-              id: item.id,
-              patch: { sizePx: Math.min(100_000, item.sizePx * 1.15) },
-            })
-          }
-        >
-          Size +
-        </button>
+      <div className="tp-mt">
+        <p className="tp-opt-label">Plan icon size</p>
+        <div className="tp-fixture-size-actions" role="group" aria-label="Fixture symbol size">
+          <button
+            type="button"
+            className="tp-mini-btn"
+            aria-label="Decrease fixture symbol size"
+            disabled={iconScale <= MIN_FIXTURE_ICON_SCALE}
+            onClick={() =>
+              dispatch({
+                type: "UPDATE_ITEM",
+                id: item.id,
+                patch: { iconScale: fixtureIconScaleFor(iconScale - FIXTURE_ICON_SCALE_STEP) },
+              })
+            }
+          >
+            Smaller
+          </button>
+          <output aria-live="polite">{Math.round(iconScale * 100)}%</output>
+          <button
+            type="button"
+            className="tp-mini-btn"
+            aria-label="Increase fixture symbol size"
+            disabled={iconScale >= MAX_FIXTURE_ICON_SCALE}
+            onClick={() =>
+              dispatch({
+                type: "UPDATE_ITEM",
+                id: item.id,
+                patch: { iconScale: fixtureIconScaleFor(iconScale + FIXTURE_ICON_SCALE_STEP) },
+              })
+            }
+          >
+            Larger
+          </button>
+        </div>
+        <p className="tp-opt-readout">Changes the plan marker only. Beam throw stays unchanged.</p>
       </div>
 
       {product.style !== "transformer" ? (
@@ -533,45 +545,6 @@ function FixtureOptions({
               grip on the photo, to fine-tune.
             </p>
           </div>
-          <div className="tp-mt">
-            <p className="tp-opt-label">Aim</p>
-            <input
-              className="tp-range"
-              type="range"
-              min={-180}
-              max={180}
-              step={1}
-              value={Math.round(rotation)}
-              aria-label="Beam aim in degrees"
-              aria-valuetext={aimLabel(rotation, natural)}
-              onChange={(event) =>
-                dispatch({
-                  type: "UPDATE_ITEM",
-                  id: item.id,
-                  patch: {
-                    beamRotationDeg: normalizeBeamRotation(Number(event.target.value)),
-                  },
-                })
-              }
-            />
-            <div className="tp-aim-foot">
-              <p className="tp-opt-readout">{aimLabel(rotation, natural)}</p>
-              <button
-                type="button"
-                className="tp-mini-btn"
-                disabled={Math.round(rotation) === 0}
-                onClick={() =>
-                  dispatch({
-                    type: "UPDATE_ITEM",
-                    id: item.id,
-                    patch: { beamRotationDeg: 0 },
-                  })
-                }
-              >
-                Reset
-              </button>
-            </div>
-          </div>
         </>
       ) : null}
 
@@ -602,20 +575,6 @@ function FixtureOptions({
       </div>
     </div>
   );
-}
-
-/**
- * Plain-English aim, e.g. "Straight up" or "20° clockwise".
- *
- * Deliberately "clockwise", not "left"/"right": the same rotation swings an
- * uplight's cone right and a downlight's cone left (it points the other way), so
- * a screen-side word would be wrong for half the fixtures on the photo.
- */
-function aimLabel(rotationDeg: number, natural: "up" | "down"): string {
-  const deg = Math.round(rotationDeg);
-  if (deg === 0) return natural === "down" ? "Straight down" : "Straight up";
-  if (Math.abs(deg) === 180) return `Flipped — pointing ${natural === "down" ? "up" : "down"}`;
-  return `${Math.abs(deg)}\u00b0 ${deg > 0 ? "clockwise" : "counter-clockwise"}`;
 }
 
 function RunOptions({

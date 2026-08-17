@@ -35,13 +35,11 @@ import {
   MAX_DUSK,
   beamAngleAt,
   beamHandlePos,
-  beamRotationAt,
   drawScene,
   itemHit,
   planImageHit,
   planImageResizeHandlePos,
   resizeHandlePos,
-  rotateHandlePos,
 } from "@/lib/estimator/render";
 import { isLandscapeStyle } from "@/lib/estimator/types";
 import type { Design, PhotoInfo, Point, Product } from "@/lib/estimator/types";
@@ -79,7 +77,6 @@ type Drag =
   | { mode: "item"; itemId: string; offset: Point; before: Design }
   | { mode: "resize"; itemId: string; before: Design }
   | { mode: "beam"; itemId: string; before: Design }
-  | { mode: "aim"; itemId: string; before: Design }
   | { mode: "plan-image"; imageId: string; offset: Point; before: Design }
   | { mode: "plan-image-resize"; imageId: string; before: Design }
   | { mode: "highlight"; before: Design }
@@ -877,6 +874,8 @@ export function LightCanvas({
             at: p,
             sizePx,
             ...(placementMarkerColor ? { markerColor: placementMarkerColor } : {}),
+            catalogItemId: activeProduct.catalogItemId,
+            catalogSku: activeProduct.catalogSku,
           },
         });
         return;
@@ -929,13 +928,6 @@ export function LightCanvas({
           const spreadGrip = item ? beamHandlePos(item, itemProduct) : null;
           if (item && spreadGrip && distance(spreadGrip, p) < slack * 1.6) {
             dragRef.current = { mode: "beam", itemId: item.id, before: design };
-            return;
-          }
-          // Aim last: it floats a constant gap beyond the throw grip, so it is
-          // never the one a rep grabs by accident reaching for the other two.
-          const aimGrip = item ? rotateHandlePos(item, itemProduct, view.scale) : null;
-          if (item && aimGrip && distance(aimGrip, p) < slack * 1.6) {
-            dragRef.current = { mode: "aim", itemId: item.id, before: design };
             return;
           }
         }
@@ -1162,19 +1154,6 @@ export function LightCanvas({
           type: "UPDATE_ITEM",
           id: drag.itemId,
           patch: { beamAngleDeg: beamAngleAt(item, p) },
-          transient: true,
-        });
-        return;
-      }
-      case "aim": {
-        const item = design.items.find((i) => i.id === drag.itemId);
-        if (!item) return;
-        dispatch({
-          type: "UPDATE_ITEM",
-          id: drag.itemId,
-          patch: {
-            beamRotationDeg: beamRotationAt(item, p, productById.get(item.productId)),
-          },
           transient: true,
         });
         return;

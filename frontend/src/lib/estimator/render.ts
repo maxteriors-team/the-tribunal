@@ -17,9 +17,9 @@ import {
   beamAngleFor,
   beamRotationFor,
   clampBeamAngle,
+  fixtureIconScaleFor,
   isLandscapePlanStyle,
   isLandscapeStyle,
-  normalizeBeamRotation,
 } from "./types";
 import type {
   Calibration,
@@ -416,13 +416,14 @@ function drawLandscapePlanSymbol(
   label?: string,
 ): void {
   const vs = Math.max(viewScale, 0.01);
-  const r = 11 / vs;
+  const iconScale = fixtureIconScaleFor(item.iconScale);
+  const r = (11 * iconScale) / vs;
   const color = item.markerColor ?? PLAN_SYMBOL_COLORS[style] ?? "#4fd9ff";
   ctx.save();
   ctx.translate(item.at.x, item.at.y);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.lineWidth = 1.8 / vs;
+  ctx.lineWidth = (1.8 * Math.min(iconScale, 1.35)) / vs;
   ctx.strokeStyle = color;
   ctx.fillStyle = "rgba(8, 14, 30, 0.9)";
   ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
@@ -788,15 +789,8 @@ export function drawScene(
       // the two grips can't be confused for each other mid-demo.
       const spreadGrip = beamHandlePos(item, product);
       if (spreadGrip) handleSquare(ctx, spreadGrip, 5 / vs, "#f5c842");
-      // Third, a cyan **round** grip floating past the end of the throw: aim.
-      const aimGrip = rotateHandlePos(item, product, vs);
-      if (aimGrip) {
-        const throwEnd = resizeHandlePos(item, product);
-        strokePath(ctx, [throwEnd, aimGrip], "rgba(79,217,255,0.75)", 1.2 / vs);
-        handleDot(ctx, aimGrip, 5 / vs, "#4fd9ff");
-      }
     } else if (item && product?.style === "transformer") {
-      const r = 15 / vs;
+      const r = (15 * fixtureIconScaleFor(item.iconScale)) / vs;
       ctx.save();
       ctx.strokeStyle = "rgba(245,200,66,0.95)";
       ctx.lineWidth = 1.6 / vs;
@@ -897,55 +891,6 @@ export function beamHandlePos(item: PlacedItem, product?: Product): Point | null
 }
 
 /**
- * How far past the end of the throw the aim grip floats, in **screen** pixels.
- * Constant on screen (hence the `/ vs`) rather than proportional to the beam:
- * a narrow 5° spot and a 120° flood otherwise crowd their grips together at
- * exactly the moment the rep is trying to grab one of them.
- */
-const ROTATE_GRIP_GAP_PX = 22;
-
-/**
- * Where the aim grip sits: straight out along the beam axis, just past the
- * resize grip at the end of the throw. Dragging it swings the whole cone — the
- * gesture for "no, kick it toward the chimney" — without touching how far the
- * light reaches or how wide it opens.
- *
- * `null` for anything with no cone to aim: a path light pools on the ground and
- * has no direction to argue about.
- */
-export function rotateHandlePos(
-  item: PlacedItem,
-  product: Product | undefined,
-  viewScale: number,
-): Point | null {
-  if (!product) return null;
-  const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg, item.beamRotationDeg);
-  if (!beam) return null;
-  const gap = ROTATE_GRIP_GAP_PX / Math.max(viewScale, 0.01);
-  return fromBeamSpace(item.at, { x: 0, y: beam.dir * (beam.reach + gap) }, beam.rot);
-}
-
-/**
- * The aim that points the fixture at `p`, in degrees clockwise from its natural
- * axis — i.e. drag the grip, the beam follows the pointer.
- *
- * Only the *direction* to the pointer is read, never the distance, so swinging
- * the beam around can't also stretch or shrink the throw the rep already set.
- */
-export function beamRotationAt(item: PlacedItem, p: Point, product?: Product): number {
-  const beam = product ? beamGeometry(product.style, item.sizePx, item.beamAngleDeg) : null;
-  const dir = beam?.dir ?? -1;
-  const dx = p.x - item.at.x;
-  const dy = p.y - item.at.y;
-  // Pointer exactly on the fixture: no direction to read, so hold the aim
-  // rather than snapping the beam to an arbitrary bearing.
-  if (dx === 0 && dy === 0) return beamRotationFor(item.beamRotationDeg);
-  // The natural axis points (0, dir); the delta from it is the rotation.
-  const natural = Math.atan2(dir, 0);
-  return normalizeBeamRotation(((Math.atan2(dy, dx) - natural) * 180) / Math.PI);
-}
-
-/**
  * The beam angle that puts the cone's edge under the pointer, in degrees.
  *
  * Only the sideways distance is read: the throw stays exactly where the rep set
@@ -991,7 +936,7 @@ function drawFixtureSelection(
   }
   ctx.setLineDash([]);
   ctx.beginPath();
-  ctx.arc(x, y, 7 / vs, 0, Math.PI * 2);
+  ctx.arc(x, y, (7 * fixtureIconScaleFor(item.iconScale)) / vs, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
 }

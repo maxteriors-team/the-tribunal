@@ -2,13 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import React from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import {
-  beamAngleAt,
-  beamHandlePos,
-  beamRotationAt,
-  resizeHandlePos,
-  rotateHandlePos,
-} from "@/lib/estimator/render";
+import { beamAngleAt, beamHandlePos, resizeHandlePos } from "@/lib/estimator/render";
 import type { PhotoInfo, Product } from "@/lib/estimator/types";
 
 import {
@@ -28,8 +22,6 @@ vi.mock("@/lib/estimator/render", () => ({
   resizeHandlePos: vi.fn(() => ({ x: 0, y: 0 })),
   beamHandlePos: vi.fn(() => null),
   beamAngleAt: vi.fn(() => 30),
-  rotateHandlePos: vi.fn(() => null),
-  beamRotationAt: vi.fn(() => 0),
   DEFAULT_DUSK: 0.52,
   MAX_DUSK: 0.92,
 }));
@@ -636,96 +628,5 @@ describe("LightCanvas — beam spread grip", () => {
 
     const patch = seen.find((a) => a.type === "UPDATE_ITEM");
     expect(patch && "patch" in patch ? patch.patch : {}).toHaveProperty("sizePx");
-  });
-});
-
-describe("LightCanvas — beam aim grip", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("drags the aim grip into a rotation edit, leaving throw and spread alone", () => {
-    // The aim grip floats past the end of the throw, on the beam axis.
-    vi.mocked(rotateHandlePos).mockReturnValue({ x: 400, y: 280 });
-    vi.mocked(beamRotationAt).mockReturnValue(-35);
-    const { canvas, seen, item } = setupSelectedFixture();
-
-    fireEvent.pointerDown(canvas, {
-      clientX: 400,
-      clientY: 280,
-      button: 0,
-      pointerId: 1,
-    });
-    fireEvent.pointerMove(canvas, {
-      clientX: 300,
-      clientY: 320,
-      button: 0,
-      pointerId: 1,
-    });
-    fireEvent.pointerUp(canvas, {
-      clientX: 300,
-      clientY: 320,
-      button: 0,
-      pointerId: 1,
-    });
-
-    const edits = seen.filter((a) => a.type === "UPDATE_ITEM");
-    expect(edits).toHaveLength(1);
-    expect(edits[0]).toMatchObject({
-      id: item.id,
-      patch: { beamRotationDeg: -35 },
-    });
-    // Aiming is a rotation: it must not resize the throw, reopen the cone, or
-    // walk the fixture across the photo.
-    const patch = "patch" in edits[0] ? edits[0].patch : {};
-    expect(patch).not.toHaveProperty("sizePx");
-    expect(patch).not.toHaveProperty("beamAngleDeg");
-    expect(patch).not.toHaveProperty("at");
-    // One undo step for the whole swing, not one per pointer move.
-    expect(seen.filter((a) => a.type === "COMMIT_HISTORY")).toHaveLength(1);
-  });
-
-  it("yields to the throw grip when the two crowd together", () => {
-    // Aim is hit-tested last, so a grab in the shared zone still resizes — the
-    // gesture a rep reaches for most often keeps winning.
-    vi.mocked(resizeHandlePos).mockReturnValue({ x: 400, y: 300 });
-    vi.mocked(rotateHandlePos).mockReturnValue({ x: 403, y: 300 });
-    const { canvas, seen } = setupSelectedFixture();
-
-    fireEvent.pointerDown(canvas, {
-      clientX: 401,
-      clientY: 300,
-      button: 0,
-      pointerId: 1,
-    });
-    fireEvent.pointerMove(canvas, {
-      clientX: 401,
-      clientY: 250,
-      button: 0,
-      pointerId: 1,
-    });
-
-    const patch = seen.find((a) => a.type === "UPDATE_ITEM");
-    expect(patch && "patch" in patch ? patch.patch : {}).toHaveProperty("sizePx");
-  });
-
-  it("ignores a grab nowhere near the aim grip", () => {
-    vi.mocked(rotateHandlePos).mockReturnValue({ x: 400, y: 280 });
-    const { canvas, seen } = setupSelectedFixture();
-
-    fireEvent.pointerDown(canvas, {
-      clientX: 700,
-      clientY: 100,
-      button: 0,
-      pointerId: 1,
-    });
-    fireEvent.pointerMove(canvas, {
-      clientX: 720,
-      clientY: 120,
-      button: 0,
-      pointerId: 1,
-    });
-
-    expect(
-      seen.filter((a) => a.type === "UPDATE_ITEM" && "patch" in a && "beamRotationDeg" in a.patch),
-    ).toHaveLength(0);
   });
 });

@@ -532,3 +532,50 @@ accessibility quality floor 1; motion purpose 2; content authenticity 2; visual 
 motion, and forced-colors evidence cannot substitute for the manual assistive-technology, 200%
 text-only zoom, physical touch, printer, and complete WCAG checks listed above. No required
 criterion scores zero.
+
+### Editable schedule and purchasing workflow (2026-08-17)
+
+**Design read:** this remains a desktop-led professional operations workspace for landscape-lighting
+estimators, purchasing staff, and installers. The single job is to turn placed fixtures into an
+accurate, order-ready material list without breaking the drawing as source of truth. Quantity and
+supplier mistakes have direct margin and installation-delay costs, so calculated values must remain
+traceable, editable, recoverable, and saved with the CRM project.
+
+**Behavioral evidence:** the user-supplied NiteLiteOS project URL redirected the unauthenticated
+browser to sign-in. Two existing authorized repository captures were used only to understand flow:
+`.ezcoder/screenshots/niteliteos-fixture-schedule.png` showed per-fixture lamp/accessory assignments,
+and `.ezcoder/screenshots/niteliteos-bom.png` showed plan recount, order tracking, cost, supplier,
+notes, export, and print. `.ezcoder/screenshots/maxteriors-studio-desktop.png` was the contrast and
+local source: Tribunal's black/brass drafting chrome, paper-sheet work surface, Lucide icons, and CRM
+save model remain the visual language. No competitor code, assets, wording, dimensions, or trade
+dress were copied.
+
+**Thesis and reuse:** the drawing owns base quantities; the schedule owns per-fixture specification;
+the BOM owns purchasing overrides. Recount removes only manually overridden Needed quantities, so
+ordered/received progress, cost, supplier, and notes are never destroyed. Existing workflow tabs,
+autosave, document normalization, catalog data, table surfaces, button hierarchy, focus treatment,
+CSV safeguards, and print behavior are reused. The memorable device is this visible calculated-to-
+override contract rather than a decorative motif.
+
+**Components and states:**
+
+- Fixture Schedule has one row per placed fixture, sheet/number context, an editable lamp selector,
+  removable accessories, and an explicit Apply to matching fixtures action.
+- Bill of Materials aggregates fixtures, selected lamps/accessories, catalog components,
+  transformers, and measured wire. Material, SKU, manufacturer, Needed, Ordered, Received, unit
+  cost, supplier, and notes are editable; totals and ordering status recalculate from saved state.
+- Recount plan restores live drawing quantities only. Supplier CSV and print consume the edited BOM,
+  not a parallel unedited list.
+- Missing SKU, missing catalog mapping, and unscaled wire remain plainly labeled. Empty tables point
+  back to fixture placement. Number fields accept temporary blank input, clamp negatives on commit,
+  and preserve Escape/Enter keyboard recovery.
+- Fixture symbol size is a separate 60% to 180% plan-marker scale. It does not alter beam throw,
+  fixture quantity, or price. The beam-direction control and canvas aim grip are removed; legacy
+  saved orientations still render so opening an older customer plan does not change its appearance.
+
+**Responsive and production contract:** wide technical tables use local horizontal scrolling while
+project chrome and headings reflow independently. Selects reserve inline-end arrow space; inputs and
+remove controls have visible keyboard focus; captions and labels expose table purpose and field
+identity; no emoji, hover lift, tint-on-tint status chips, `transition: all`, or ambient motion were
+introduced. Desktop and narrow rendered critique, measured contrast, 200% text zoom, and manual
+assistive-technology results are recorded after implementation rather than claimed in advance.

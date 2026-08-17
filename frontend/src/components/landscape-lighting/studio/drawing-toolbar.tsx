@@ -221,18 +221,18 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
       aria-label="Drawing toolbar"
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-2 py-2 sm:px-3">
-        <div className="flex shrink-0 items-center gap-2" role="group" aria-label="Drawing sheet">
+        <div className="flex min-w-0 flex-wrap items-center gap-2" role="group" aria-label="Drawing sheet">
           <strong className="px-1 text-[11px] font-black uppercase tracking-[0.24em] text-[#f2f0eb]">
             Maxteriors
           </strong>
-          <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#aaa69e]">
+          <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#aaa69e]">
             Sheet
             <select
               value={props.paperSize}
               onChange={(event) =>
                 props.onPaperSizeChange(event.target.value as LandscapePaperSize)
               }
-              className="h-8 max-w-48 rounded border border-white/20 bg-[#1a1a1a] ps-2 pe-8 text-[11px] normal-case tracking-normal text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e2b35f]"
+              className="h-8 min-w-0 max-w-48 rounded border border-white/20 bg-[#1a1a1a] ps-2 pe-8 text-[11px] normal-case tracking-normal text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e2b35f]"
             >
               {Object.entries(paperSizeLabels).map(([size, label]) => (
                 <option key={size} value={size}>
@@ -269,7 +269,7 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
           </ToolbarButton>
         </div>
 
-        <div className="inline-flex shrink-0 gap-1" role="group" aria-label="Plan display modes">
+        <div className="flex min-w-0 flex-wrap gap-1" role="group" aria-label="Plan display modes">
           <ToolbarButton
             icon={Cable}
             active={props.activeAction === "wire"}

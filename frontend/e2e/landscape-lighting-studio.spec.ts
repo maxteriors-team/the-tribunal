@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import { expect, test, type Page, type Request } from "@playwright/test";
 
 const WORKSPACE_ID = "0ef615a3-4fa5-43e7-bb3b-2dbfa0788a11";
@@ -210,6 +212,40 @@ const catalog = [
     updated_at: "2026-01-01T00:00:00Z",
   },
   {
+    id: "lamp-2700k",
+    workspace_id: WORKSPACE_ID,
+    name: "MR16 2700K LED Lamp",
+    description: "Five-watt warm white lamp",
+    sku: "MR16-2700-5W",
+    kind: "product",
+    unit_price: 18.5,
+    taxable: true,
+    is_active: true,
+    is_attachable: true,
+    attach_targets: ["landscape_fixture"],
+    attributes: { manufacturer: "Tribunal Lighting", supplier: "SiteOne" },
+    components: [],
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  },
+  {
+    id: "ground-stake",
+    workspace_id: WORKSPACE_ID,
+    name: "Brass Ground Stake",
+    description: "Replacement fixture stake",
+    sku: "STAKE-BRASS",
+    kind: "product",
+    unit_price: 12,
+    taxable: true,
+    is_active: true,
+    is_attachable: true,
+    attach_targets: ["landscape_fixture"],
+    attributes: { manufacturer: "Tribunal Lighting", supplier: "SiteOne" },
+    components: [],
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  },
+  {
     id: "transformer",
     workspace_id: WORKSPACE_ID,
     name: "DX 300W Transformer",
@@ -413,6 +449,8 @@ async function installStudioApi(page: Page) {
 }
 
 test.describe("landscape lighting studio", () => {
+  test.describe.configure({ mode: "serial" });
+
   test("uses every workflow, autosaves, exports, and delivers through captured providers", async ({
     page,
   }) => {
@@ -539,6 +577,117 @@ test.describe("landscape lighting studio", () => {
     expect(deliveries[0]).toMatchObject({ channel: "email" });
   });
 
+  test("edits fixture assignments and purchase-ready bill of materials", async ({ page }) => {
+    const { updates } = await installStudioApi(page);
+    await page.goto(PROJECT_URL);
+
+    await page.getByRole("tab", { name: "Fixture Schedule" }).click();
+    await expect(
+      page.getByRole("table", { name: /Fixture schedule with editable lamp and accessory/i }),
+    ).toBeVisible();
+    await page.getByLabel("Lamp for fixture 1").selectOption("lamp-2700k");
+    await page.getByLabel("Add accessory to fixture 1").selectOption("ground-stake");
+    await expect(page.getByLabel("Lamp for fixture 1")).toHaveValue("lamp-2700k");
+    await expect(
+      page.getByRole("button", { name: "Remove Brass Ground Stake from fixture 1" }),
+    ).toBeVisible();
+
+    await expect
+      .poll(() => {
+        const update = updates.at(-1) as
+          | {
+              document?: {
+                shots?: Array<{
+                  design?: {
+                    items?: Array<{
+                      id?: string;
+                      lampCatalogItemId?: string;
+                      accessoryCatalogItemIds?: string[];
+                    }>;
+                  };
+                }>;
+              };
+            }
+          | undefined;
+        return update?.document?.shots?.[0]?.design?.items?.find((item) => item.id === "fixture-1");
+      })
+      .toMatchObject({
+        lampCatalogItemId: "lamp-2700k",
+        accessoryCatalogItemIds: ["ground-stake"],
+      });
+
+    await page.getByRole("tab", { name: "BOM" }).click();
+    const description = page.getByLabel("Material description for CORA Brass Uplight");
+    await description.fill("Patina brass uplight");
+    await description.press("Tab");
+    const sku = page.getByLabel("SKU for Patina brass uplight");
+    await sku.fill("UP-CUSTOM");
+    await sku.press("Tab");
+    const manufacturer = page.getByLabel("Manufacturer for Patina brass uplight");
+    await manufacturer.fill("Tribunal Lighting");
+    await manufacturer.press("Tab");
+    const needed = page.getByLabel("Quantity needed for Patina brass uplight");
+    await needed.fill("9");
+    await needed.press("Tab");
+    const ordered = page.getByLabel("Quantity ordered for Patina brass uplight");
+    await ordered.fill("4");
+    await ordered.press("Tab");
+    const received = page.getByLabel("Quantity received for Patina brass uplight");
+    await received.fill("1");
+    await received.press("Tab");
+    const unitCost = page.getByLabel("Unit cost for Patina brass uplight");
+    await unitCost.fill("82.5");
+    await unitCost.press("Tab");
+    const supplier = page.getByLabel("Supplier for Patina brass uplight");
+    await supplier.fill("Regional Supply");
+    await supplier.press("Tab");
+    const notes = page.getByLabel("Notes for Patina brass uplight");
+    await notes.fill("PO-1042");
+    await notes.press("Tab");
+
+    await expect
+      .poll(() => {
+        const update = [...updates].reverse().find((entry) => {
+          const candidate = entry as {
+            document?: { procurement?: Record<string, Record<string, unknown>> };
+          };
+          return Object.values(candidate.document?.procurement ?? {}).some(
+            (line) => line.description === "Patina brass uplight",
+          );
+        }) as { document?: { procurement?: Record<string, Record<string, unknown>> } } | undefined;
+        return Object.values(update?.document?.procurement ?? {}).find(
+          (line) => line.description === "Patina brass uplight",
+        );
+      })
+      .toMatchObject({
+        catalogSku: "UP-CUSTOM",
+        description: "Patina brass uplight",
+        manufacturer: "Tribunal Lighting",
+        supplier: "Regional Supply",
+        neededQuantity: 9,
+        orderedQuantity: 4,
+        receivedQuantity: 1,
+        unitCost: 82.5,
+        supplierNote: "PO-1042",
+      });
+
+    const downloadStarted = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Supplier CSV" }).click();
+    const download = await downloadStarted;
+    const downloadPath = await download.path();
+    if (!downloadPath) throw new Error("Supplier CSV download did not produce a local file");
+    const csv = await readFile(downloadPath, "utf8");
+    expect(csv).toContain("Patina brass uplight");
+    expect(csv).toContain("UP-CUSTOM");
+    expect(csv).toContain("Regional Supply");
+    expect(csv).toContain("PO-1042");
+
+    await page.getByRole("button", { name: "Recount plan" }).click();
+    await expect(needed).toHaveValue("2");
+    await expect(ordered).toHaveValue("4");
+    await expect(unitCost).toHaveValue("82.5");
+  });
+
   test("keeps complete geometry at desktop, laptop, mobile, reduced motion, and forced colors", async ({
     page,
   }) => {
@@ -567,6 +716,7 @@ test.describe("landscape lighting studio", () => {
       { width: 1280, height: 800 },
       { width: 768, height: 1024 },
       { width: 390, height: 844 },
+      { width: 320, height: 568 },
     ]) {
       await page.setViewportSize(viewport);
       await expect(page.getByRole("tab", { name: "Pre-Con" })).toBeAttached();
@@ -592,10 +742,24 @@ test.describe("landscape lighting studio", () => {
     const drawing = page.getByRole("tab", { name: "Drawing Sheet" });
     await drawing.focus();
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByRole("tab", { name: "Fixture Schedule" })).toHaveAttribute(
-      "aria-selected",
-      "true",
+    const fixtureScheduleTab = page.getByRole("tab", { name: "Fixture Schedule" });
+    await expect(fixtureScheduleTab).toHaveAttribute("aria-selected", "true");
+    await fixtureScheduleTab.focus();
+    await page.keyboard.press("ArrowRight");
+    const bomTab = page.getByRole("tab", { name: "BOM" });
+    await expect(bomTab).toHaveAttribute("aria-selected", "true");
+    await expect(bomTab).toBeInViewport({ ratio: 1 });
+
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = "200%";
+    });
+    await expect(page.getByRole("heading", { name: "Bill of Materials" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Recount plan" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Bill of materials table" })).toBeVisible();
+    const pageHasHorizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
     );
+    expect(pageHasHorizontalOverflow).toBe(false);
   });
 
   test("captures every document at desktop, tablet, and mobile", async ({ page }) => {

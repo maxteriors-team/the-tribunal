@@ -102,10 +102,36 @@ const stringValue = (value: unknown, fallback = ""): string =>
 const booleanValue = (value: unknown, fallback: boolean): boolean =>
   typeof value === "boolean" ? value : fallback;
 
-const finiteNumber = (value: unknown, fallback: number, minimum: number, maximum: number): number =>
+const finiteNumber = (
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number =>
   typeof value === "number" && Number.isFinite(value)
     ? Math.min(maximum, Math.max(minimum, value))
     : fallback;
+
+const optionalFiniteNumber = (
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): number | undefined =>
+  typeof value === "number" && Number.isFinite(value)
+    ? Math.min(maximum, Math.max(minimum, value))
+    : undefined;
+
+const normalizePlacedItem = (value: unknown): unknown => {
+  const item = record(value);
+  if (!item) return value;
+  const normalized = { ...item };
+  if ("iconScale" in normalized) {
+    const iconScale = optionalFiniteNumber(normalized.iconScale, 0.6, 1.8);
+    if (iconScale === undefined) delete normalized.iconScale;
+    else normalized.iconScale = iconScale;
+  }
+  return normalized;
+};
 
 const normalizedShots = (value: unknown): DesignerShot[] => {
   if (!Array.isArray(value)) return [];
@@ -134,6 +160,10 @@ const normalizedShots = (value: unknown): DesignerShot[] => {
     return [
       {
         ...(shot as unknown as DesignerShot),
+        design: {
+          ...(shot.design as DesignerShot["design"]),
+          items: design.items.map(normalizePlacedItem),
+        } as DesignerShot["design"],
         sheet: {
           label: stringValue(sheet?.label, `Aerial plan ${index + 1}`),
           drawingTitle: stringValue(sheet?.drawingTitle, "Aerial landscape lighting plan"),
@@ -171,10 +201,7 @@ const normalizeSettings = (value: unknown): LandscapeDocumentSettings => {
       settings?.fixtureNumbersVisible,
       defaults.fixtureNumbersVisible,
     ),
-    measurementsVisible: booleanValue(
-      settings?.measurementsVisible,
-      defaults.measurementsVisible,
-    ),
+    measurementsVisible: booleanValue(settings?.measurementsVisible, defaults.measurementsVisible),
     sourceVoltage: finiteNumber(settings?.sourceVoltage, defaults.sourceVoltage, 10, 24),
   };
 };
@@ -261,14 +288,25 @@ const normalizeProcurement = (value: unknown): Record<string, LandscapeProcureme
     Object.entries(input).flatMap(([key, entry]) => {
       const item = record(entry);
       if (!item) return [];
+      const neededQuantity = optionalFiniteNumber(item.neededQuantity, 0, 100_000);
+      const unitCost = optionalFiniteNumber(item.unitCost, 0, 1_000_000);
       return [
         [
           key,
           {
             catalogItemId: stringOrNull(item.catalogItemId) ?? undefined,
             catalogSku: stringOrNull(item.catalogSku) ?? undefined,
+            ...(typeof item.description === "string" ? { description: item.description } : {}),
+            ...(typeof item.manufacturer === "string" ? { manufacturer: item.manufacturer } : {}),
+            ...(typeof item.supplier === "string" ? { supplier: item.supplier } : {}),
+            ...(neededQuantity === undefined ? {} : { neededQuantity }),
             orderedQuantity: finiteNumber(item.orderedQuantity, 0, 0, 100_000),
             receivedQuantity: finiteNumber(item.receivedQuantity, 0, 0, 100_000),
+            ...(item.unitCost === null
+              ? { unitCost: null }
+              : unitCost === undefined
+                ? {}
+                : { unitCost }),
             supplierNote: stringValue(item.supplierNote),
           },
         ],
@@ -293,11 +331,17 @@ export function normalizeLandscapeDocument(value: unknown): LandscapeDocumentV2 
   const candidate = record(value);
   if (!candidate) return null;
   const shots = normalizedShots(candidate.shots);
-  if (!Array.isArray(candidate.shots) || shots.length !== candidate.shots.length || shots.length > 6) {
+  if (
+    !Array.isArray(candidate.shots) ||
+    shots.length !== candidate.shots.length ||
+    shots.length > 6
+  ) {
     return null;
   }
   const activeShot = stringOrNull(candidate.activeShotId);
-  const activeShotId = shots.some((shot) => shot.id === activeShot) ? activeShot : (shots[0]?.id ?? null);
+  const activeShotId = shots.some((shot) => shot.id === activeShot)
+    ? activeShot
+    : (shots[0]?.id ?? null);
   const tab = LANDSCAPE_WORKFLOW_TABS.includes(candidate.activeWorkflowTab as LandscapeWorkflowTab)
     ? (candidate.activeWorkflowTab as LandscapeWorkflowTab)
     : "drawing";

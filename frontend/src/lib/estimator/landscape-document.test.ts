@@ -74,6 +74,52 @@ describe("landscape document v2", () => {
     });
   });
 
+  it("normalizes fixture icon scale and editable procurement values", () => {
+    const document = normalizeLandscapeDocument({
+      ...createLandscapeDocument(
+        [
+          {
+            ...shot,
+            design: {
+              ...shot.design,
+              items: [
+                {
+                  id: "fixture-1",
+                  productId: "fixture-uplight",
+                  at: { x: 20, y: 30 },
+                  sizePx: 40,
+                  iconScale: 9,
+                },
+              ],
+            },
+          },
+        ],
+        "shot-1",
+      ),
+      procurement: {
+        "fixture:fixture-1": {
+          description: "Patina uplight",
+          manufacturer: "Tribunal Lighting",
+          supplier: "Regional Supply",
+          neededQuantity: 4,
+          orderedQuantity: 3,
+          receivedQuantity: 1,
+          unitCost: 82.5,
+          supplierNote: "PO-1042",
+        },
+      },
+    });
+
+    expect(document?.shots[0]?.design.items[0]?.iconScale).toBe(1.8);
+    expect(document?.procurement?.["fixture:fixture-1"]).toMatchObject({
+      description: "Patina uplight",
+      manufacturer: "Tribunal Lighting",
+      supplier: "Regional Supply",
+      neededQuantity: 4,
+      unitCost: 82.5,
+    });
+  });
+
   it("normalizes persisted additional proposal line items", () => {
     const document = normalizeLandscapeDocument({
       ...createLandscapeDocument([shot], "shot-1"),
