@@ -82,19 +82,19 @@ export function ReferralPartnerScoreboard({
       {/* `<caption>` is only valid as the table's first child; the table's
           `caption-bottom` still renders it underneath. */}
       <TableCaption className="px-2 text-left text-xs">
-        Revenue and jobs count closed-won work only. Close rate is the share of a
-        partner&apos;s referred leads that produced at least one closed job, so a
-        repeat customer cannot push it past 100%; average job value divides that
-        revenue by jobs. A partner counts as quiet after {quietAfterDays} days
+        Booked revenue and jobs use approved quotes plus legacy unquoted wins.
+        Close rate is the share of a partner&apos;s referred leads that produced at
+        least one booking, so a repeat customer cannot push it past 100%; average
+        booked value divides that revenue by bookings. A partner counts as quiet after {quietAfterDays} days
         with no new referral.
       </TableCaption>
       <TableHeader>
         <TableRow>
           <TableHead>Partner</TableHead>
-          <TableHead className="text-right">Revenue</TableHead>
+          <TableHead className="text-right">Booked revenue</TableHead>
           <TableHead className="text-right">Close rate</TableHead>
-          <TableHead className="text-right">Jobs closed</TableHead>
-          <TableHead className="text-right">Avg job value</TableHead>
+          <TableHead className="text-right">Booked jobs</TableHead>
+          <TableHead className="text-right">Avg booked value</TableHead>
           <TableHead className="text-right">Last referral</TableHead>
         </TableRow>
       </TableHeader>

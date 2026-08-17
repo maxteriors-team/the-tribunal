@@ -108,7 +108,7 @@ function emptyStats(): LeadSourceRoiStats {
       roi_multiple: null,
       net_revenue: 0,
       currency: "USD",
-      reason: "No closed-won jobs with attributed lead-source data yet.",
+      reason: "No booked jobs with attributed lead-source data yet.",
       attribution_confidence: {
         average_score: null,
         level: "unknown",
@@ -156,10 +156,10 @@ describe("LeadSourceRoiCard", () => {
 
     expect(screen.getByText("No winning source yet")).toBeInTheDocument();
     expect(
-      screen.getByText("No closed-won jobs with attributed lead-source data yet."),
+      screen.getByText("No booked jobs with attributed lead-source data yet."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("No attributed closed-won jobs yet."),
+      screen.getByText("No attributed booked jobs yet."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });

@@ -50,7 +50,7 @@ import { Switch } from "@/components/ui/switch";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { messageTestsApi } from "@/lib/api/message-tests";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_30S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatNumber } from "@/lib/utils/number";
 import type { VariantAnalytics } from "@/types";
@@ -100,7 +100,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
       return messageTestsApi.getAnalytics(workspaceId, testId);
     },
     enabled: !!workspaceId && !!testId,
-    ...POLL_30S,
+    ...REALTIME,
   });
 
   const selectWinnerMutation = useMutation({

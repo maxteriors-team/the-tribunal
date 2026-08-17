@@ -25,6 +25,7 @@ import {
   type SpeedToLeadSettings,
 } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
+import { REALTIME } from "@/lib/query-options";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 
 function formatSeconds(value: number | null | undefined): string {
@@ -44,6 +45,7 @@ export function SpeedToLeadSettingsTab() {
     queryKey: queryKeys.settings.speedToLeadMetrics(workspaceId ?? ""),
     queryFn: () => settingsApi.getSpeedToLeadMetrics(workspaceId!),
     enabled: !!workspaceId,
+    ...REALTIME,
   });
 
   const { data: textback, isPending: textbackPending } = useQuery({

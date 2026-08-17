@@ -14,6 +14,7 @@ import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { campaignReportsApi } from "@/lib/api/campaign-reports";
 import { improvementSuggestionsApi } from "@/lib/api/improvement-suggestions";
 import { queryKeys } from "@/lib/query-keys";
+import { REALTIME } from "@/lib/query-options";
 
 export default function SuggestionsPage() {
   const workspaceId = useWorkspaceId();
@@ -27,6 +28,7 @@ export default function SuggestionsPage() {
       return improvementSuggestionsApi.getPendingCount(workspaceId);
     },
     enabled: !!workspaceId,
+    ...REALTIME,
   });
 
   const { data: reportCount } = useQuery({
@@ -36,6 +38,7 @@ export default function SuggestionsPage() {
       return campaignReportsApi.getCount(workspaceId);
     },
     enabled: !!workspaceId,
+    ...REALTIME,
   });
 
   const { data: suggestionStats, isPending: statsLoading } = useQuery({
@@ -45,6 +48,7 @@ export default function SuggestionsPage() {
       return improvementSuggestionsApi.getStats(workspaceId);
     },
     enabled: !!workspaceId,
+    ...REALTIME,
   });
 
   return (

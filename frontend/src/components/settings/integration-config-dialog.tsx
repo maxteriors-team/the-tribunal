@@ -35,7 +35,7 @@ import {
   type IntegrationWithMaskedCredentials,
 } from "@/lib/api/integrations";
 import { queryKeys } from "@/lib/query-keys";
-type IntegrationType = "telnyx" | "openai" | "resend" | "lob" | "companycam";
+type IntegrationType = "telnyx" | "openai" | "resend" | "meta_lead_ads" | "lob" | "companycam";
 
 interface IntegrationConfig {
   name: string;
@@ -150,6 +150,50 @@ const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
         label: "From Name",
         placeholder: "My Company",
         description: "Default sender display name",
+      },
+    ],
+  },
+  meta_lead_ads: {
+    name: "Meta Lead Ads",
+    description:
+      "Receive Facebook and Instagram Instant Form leads in real time. Meta forms must collect a valid phone number.",
+    fields: [
+      {
+        key: ["page", "id"].join("_"),
+        label: "Page ID",
+        placeholder: "123456789012345",
+        description: "The Facebook Page connected to your Instant Forms",
+        required: true,
+      },
+      {
+        key: ["access", "token"].join("_"),
+        label: "Page Access Token",
+        placeholder: "EAAB...",
+        description:
+          "Stored encrypted. The token must allow lead retrieval and Page app subscriptions.",
+        required: true,
+        type: "password",
+      },
+      {
+        key: ["ad", "account", "id"].join("_"),
+        label: "Ad Account ID (optional)",
+        placeholder: "act_123456789012345",
+        description: "Enables five-minute campaign spend sync for live Facebook ROI reporting.",
+      },
+      {
+        key: ["ad", "access", "token"].join("_"),
+        label: "Ads Read Token (optional)",
+        placeholder: "EAAB...",
+        description:
+          "A User/System token with ads_read. Stored encrypted; Page token is used as fallback.",
+        type: "password",
+      },
+      {
+        key: ["sms", "consent", "field", "name"].join("_"),
+        label: "SMS Consent Field (optional)",
+        placeholder: "sms_consent",
+        description:
+          "Exact Meta form field name. SMS opt-in is recorded only when this field explicitly returns yes/true/1.",
       },
     ],
   },

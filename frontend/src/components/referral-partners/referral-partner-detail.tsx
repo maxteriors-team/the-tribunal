@@ -13,6 +13,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { referralPartnersApi } from "@/lib/api/referral-partners";
 import { queryKeys } from "@/lib/query-keys";
+import { REALTIME } from "@/lib/query-options";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatNumber } from "@/lib/utils/number";
 
@@ -77,6 +78,7 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
     queryKey: queryKeys.referralPartners.detail(workspaceId ?? "", partnerId),
     queryFn: () => referralPartnersApi.get(workspaceId ?? "", partnerId),
     enabled: Boolean(workspaceId),
+    ...REALTIME,
   });
 
   // The scoreboard is the only source of a partner's production, so the detail
@@ -90,6 +92,7 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
     ),
     queryFn: () => referralPartnersApi.scoreboard(workspaceId ?? "", scoreboardParams),
     enabled: Boolean(workspaceId),
+    ...REALTIME,
   });
 
   const backLink = (
@@ -174,7 +177,7 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
         ) : (
           <dl className="grid grid-cols-2 gap-x-6 gap-y-5 rounded-lg border p-4 sm:grid-cols-3 lg:grid-cols-5">
             <Stat
-              label="Revenue closed"
+              label="Booked revenue"
               value={formatMoney(row?.total_revenue ?? 0, currency)}
               emphasis
             />
@@ -194,11 +197,11 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
               }
             />
             <Stat
-              label="Jobs closed"
+              label="Booked jobs"
               value={formatNumber(row?.jobs_closed ?? 0)}
               sample={
                 row?.average_job_value !== null && row?.average_job_value !== undefined
-                  ? `${formatMoney(row.average_job_value, currency)} avg`
+                  ? `${formatMoney(row.average_job_value, currency)} avg booked`
                   : undefined
               }
             />

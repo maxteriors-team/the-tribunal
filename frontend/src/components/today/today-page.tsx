@@ -25,7 +25,7 @@ import {
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { dashboardApi, type TodayQueueKind } from "@/lib/api/dashboard";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 
 const KIND_ICONS: Record<TodayQueueKind, LucideIcon> = {
   replies_waiting: MessageCircleReply,
@@ -62,7 +62,7 @@ export function TodayPage() {
       return dashboardApi.getTodayQueue(workspaceId);
     },
     enabled: !!workspaceId,
-    ...POLL_60S,
+    ...REALTIME,
   });
 
   return (

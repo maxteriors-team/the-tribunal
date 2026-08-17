@@ -32,7 +32,7 @@ import { useIsMounted } from "@/hooks/useMounted";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { reportingApi } from "@/lib/api/reporting";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S, STATIC } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type {
@@ -46,7 +46,7 @@ import {
   type BreakdownMetric,
 } from "./sales-performance-breakdown-table";
 import {
-  APPROVED_SAMPLE,
+  BOOKED_SAMPLE,
   CONTACT_SAMPLE,
   currentMonthRange,
   describeDelta,
@@ -244,7 +244,8 @@ function SalesPerformanceBody({
   if (
     data.quotes_issued === 0 &&
     data.contacts_created === 0 &&
-    markedAppointments === 0
+    markedAppointments === 0 &&
+    data.booked_jobs === 0
   ) {
     return (
       <PageEmptyState
@@ -306,52 +307,49 @@ function SalesPerformanceBody({
           sampleNoun={QUOTED_SAMPLE}
         />
         <HeadlineCard
-          label="Average Job Value"
+          label="Average Booked Job"
           icon={DollarSign}
-          value={formatMoney(data.avg_job_value, currency)}
+          value={formatMoney(data.avg_booked_value, currency)}
           delta={describeDelta(
-            data.avg_job_value,
-            previous?.avg_job_value,
+            data.avg_booked_value,
+            previous?.avg_booked_value,
             "currency",
             currency,
           )}
-          sampleSize={data.quotes_approved}
-          sampleNoun={APPROVED_SAMPLE}
+          sampleSize={data.booked_jobs}
+          sampleNoun={BOOKED_SAMPLE}
         />
         <HeadlineCard
-          label="Revenue Won"
+          label="Booked Revenue"
           icon={Banknote}
-          value={formatMoney(data.revenue_approved, currency)}
+          value={formatMoney(data.booked_revenue, currency)}
           delta={describeDelta(
-            data.revenue_approved,
-            previous?.revenue_approved,
+            data.booked_revenue,
+            previous?.booked_revenue,
             "currency",
             currency,
           )}
-          sampleSize={data.quotes_approved}
-          sampleNoun={APPROVED_SAMPLE}
+          sampleSize={data.booked_jobs}
+          sampleNoun={BOOKED_SAMPLE}
         />
       </div>
 
-      {data.quotes_issued === 0 ? (
+      {data.quotes_issued === 0 && data.booked_jobs === 0 ? (
         <Card>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              No quotes were created in this range, so close rate, average job
-              value and revenue won have nothing to compute from and show a dash
-              rather than a zero.
+              No quotes were created or jobs booked in this range. Cohort close
+              rate and booked revenue will populate as activity arrives.
             </p>
           </CardContent>
         </Card>
-      ) : data.quotes_approved === 0 ? (
+      ) : data.booked_jobs === 0 ? (
         <Card>
-          {/* `Card` already supplies py-6; no extra top padding needed. */}
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              None of the {data.quotes_issued} quotes in this range have been
-              approved yet, so average job value and revenue won have nothing to
-              total and show a dash rather than a zero. Close rate still counts
-              every quote the customer has decided on.
+              No approved quote or legacy unquoted win was booked in this range,
+              so booked revenue and average booked job show a dash rather than a
+              false zero.
             </p>
           </CardContent>
         </Card>
@@ -376,7 +374,7 @@ function SalesPerformanceBody({
           groupLabel="Lead source"
           metrics={["closeRate", "avgJobValue"]}
           emptyTitle="No lead-source attribution yet"
-          emptyDescription="Quotes in this range are not linked to an opportunity with a lead source."
+          emptyDescription="Quotes in this cohort have no opportunity or contact first-touch source."
         />
       </div>
 
@@ -413,9 +411,8 @@ export function SalesPerformanceReport() {
 
 function SalesPerformanceReportContent() {
   const workspaceId = useWorkspaceId();
-  // The default window depends on today's date, which the server (UTC) and the
-  // browser (local) can disagree about. Waiting for mount keeps the rendered
-  // range identical on both sides instead of hydrating a different month.
+  // Wait for mount because the default picker window follows the operator's
+  // browser calendar; the API then interprets those dates in workspace time.
   const mounted = useIsMounted();
   const [range, setRange] = useState<DateRange>(() => currentMonthRange());
   const comparisonRange = previousRange(range);
@@ -428,7 +425,7 @@ function SalesPerformanceReportContent() {
         date_to: range.to,
       }),
     enabled: Boolean(workspaceId) && mounted,
-    ...POLL_60S,
+    ...REALTIME,
     placeholderData: (previous) => previous,
   });
 
@@ -440,12 +437,12 @@ function SalesPerformanceReportContent() {
         date_to: range.to,
       }),
     enabled: Boolean(workspaceId) && mounted,
-    ...POLL_60S,
+    ...REALTIME,
     placeholderData: (prev) => prev,
   });
 
-  // The comparison window is historical, so it does not need the 60s poll the
-  // live window gets.
+  // Historical cohorts can still change after late approvals or corrections, so
+  // every comparison stays synchronized with the canonical booking ledger.
   const previousQuery = useQuery({
     queryKey: queryKeys.reports.salesPerformance(
       workspaceId ?? "",
@@ -457,7 +454,7 @@ function SalesPerformanceReportContent() {
         date_to: comparisonRange.to,
       }),
     enabled: Boolean(workspaceId) && mounted,
-    ...STATIC,
+    ...REALTIME,
   });
 
   return (

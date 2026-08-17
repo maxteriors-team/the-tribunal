@@ -67,6 +67,7 @@ export interface RevenueStats {
   currency: string;
   won_value: number;
   won_value_this_month: number;
+  ai_attributed_won_value_this_month: number;
   won_count: number;
   pipeline_value: number;
   open_count: number;
@@ -144,7 +145,7 @@ export interface KnowledgeBaseStats {
 }
 
 // ---------------------------------------------------------------------------
-// Lead-source ROI: ranks winning channels by ad spend + closed-won jobs.
+// Lead-source ROI: ranks winning channels by ad spend + canonical booked jobs.
 // ---------------------------------------------------------------------------
 
 export type AttributionConfidenceLevel =

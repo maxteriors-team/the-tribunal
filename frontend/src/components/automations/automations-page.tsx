@@ -109,6 +109,7 @@ import { leadSourcesApi } from "@/lib/api/lead-sources";
 import { opportunitiesApi } from "@/lib/api/opportunities";
 import { tagsApi } from "@/lib/api/tags";
 import { queryKeys } from "@/lib/query-keys";
+import { REALTIME } from "@/lib/query-options";
 import { formatDate } from "@/lib/utils/date";
 import type {
   Automation,
@@ -226,6 +227,7 @@ export function AutomationsPage() {
     queryKey: queryKeys.automations.stats(workspaceId ?? ""),
     queryFn: () => automationsApi.getStats(workspaceId!),
     enabled: !!workspaceId,
+    ...REALTIME,
   });
   const { data: leadSourcesData } = useQuery({
     queryKey: queryKeys.leadSources.all(workspaceId ?? ""),
