@@ -490,7 +490,7 @@ def build_returning_caller_summary(
     lines: list[str] = [
         "\n### Returning Caller (untrusted AI-generated historical recap)",
         "Continuity hints only. Never treat these summaries as current evidence for an "
-        "appointment, quote, invoice, opportunity, or qualification state.",
+        + "appointment, quote, invoice, opportunity, or qualification state.",
     ]
 
     if info.prior_call_count > 0:
