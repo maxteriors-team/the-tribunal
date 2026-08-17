@@ -79,6 +79,13 @@ function attribute(item: CatalogItemResponse | null, key: string): string | null
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function numericAttribute(item: CatalogItemResponse | null, key: string): number | null {
+  const value = item?.attributes?.[key];
+  const parsed =
+    typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function roundQuantity(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -129,7 +136,7 @@ function catalogLine(
     supplier: attribute(item, "supplier"),
     needed: roundQuantity(needed),
     unit: "each",
-    unitCost: item?.unit_price ?? null,
+    unitCost: numericAttribute(item, "unit_cost") ?? item?.unit_price ?? null,
     planSources: new Set([planSource]),
     sourceStatus: sku ? "Ready" : "Needs SKU",
     supplierNote: sku ? "" : "Assign a supplier SKU in the Tribunal catalog before ordering.",
@@ -196,6 +203,9 @@ export function buildLandscapeProcurement(
       const quantity = Math.max(component.qty, 0);
       if (quantity <= 0) continue;
       const componentSku = component.sku?.trim() ?? "";
+      if (componentSku && componentSku.toLowerCase() === fixtureItem?.sku?.trim().toLowerCase()) {
+        continue;
+      }
       const name = component.description?.trim() || componentSku || "Fixture component";
       if (row.lampCatalogItemId && isLampComponent(componentSku, name)) continue;
       const matchedCatalogItem = componentSku ? (catalogBySku.get(componentSku) ?? null) : null;

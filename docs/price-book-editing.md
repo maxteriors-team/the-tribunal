@@ -4,8 +4,9 @@ How to change fixture prices and sales-pricing settings for a lighting workspace
 after the initial seed. Three surfaces, in order of how often you'll want them.
 
 Reference workspace: `default` / **Maxteriors Lighting** /
-`ba0e0e99-c7c9-45ec-9625-567d54d6e9c2` (production), seeded 2026-07-27 with 20
-catalog items from `backend/scripts/demo/seed_lighting_workspace.py`.
+`ba0e0e99-c7c9-45ec-9625-567d54d6e9c2` (production), updated 2026-08-17 with
+22 fixture products plus two bistro services from
+`backend/scripts/demo/seed_lighting_workspace.py`.
 
 ## 1. Fixture prices and names → the Price Book UI
 
@@ -13,11 +14,11 @@ Sidebar → **Price Book** (`/catalog`, `frontend/src/app/catalog/page.tsx`).
 Edit name, kind, unit price, SKU, description, taxable, active. Requires the
 `billing:write` permission. No deploy, no script — this is the day-to-day path.
 
-Two things the dialog does *not* show, which is fine:
+Two things the dialog does _not_ show, which is fine:
 
-- **`attributes.transformer`** (the flag marking the 3 transformers) and
-  **`components`** (the internal SKU bill-of-materials for the fulfillment
-  sheet) have no form fields. Saving from the UI does **not** wipe them —
+- **Fixture attributes** such as `transformer`, `fixture_type`, and `unit_cost`
+  plus **`components`** (the internal SKU bill-of-materials for fulfillment)
+  have no form fields. Saving from the UI does **not** wipe them —
   `CatalogService.update_item` only writes fields present in the request
   (`backend/app/services/catalog/catalog_service.py`). To change those, use the
   API or the seed script.
@@ -42,7 +43,7 @@ curl -X PUT "$API/api/v1/settings/workspaces/$WORKSPACE_ID/pricing" \
 ```
 
 `PUT .../pricing` does a **shallow merge per top-level block**: send only the
-block you're changing and the others round-trip untouched. A block you *do*
+block you're changing and the others round-trip untouched. A block you _do_
 send is replaced whole, so include all of its keys.
 
 ## 3. Bulk changes, BOM, transformer flags → re-run the seed
@@ -65,8 +66,20 @@ Two gotchas in that invocation, both required:
 - Railway hands out a plain `postgresql://` scheme; SQLAlchemy async needs
   `postgresql+asyncpg://`.
 
-Catalog upsert is idempotent, matched on `sku` — a second run reports
-`0 created, 20 updated`.
+Catalog upsert is idempotent, matched on `sku` — a second full-seed run reports
+`0 created, 24 updated`.
+
+### Targeted specialty-fixture updates
+
+For approved wall/underwater fixtures, use the preserving operation instead of
+the wholesale seed. It dry-runs by default and changes only SKUs `59306832`,
+`59407330`, and Premier's `Specialty Fixtures` section:
+
+```bash
+cd backend
+uv run python -m scripts.ops.upsert_fx_specialty_fixtures --workspace default
+uv run python -m scripts.ops.upsert_fx_specialty_fixtures --workspace default --apply
+```
 
 ## ⚠️ The trap: the seed overwrites operator pricing edits
 
@@ -112,8 +125,8 @@ Mechanics worth knowing:
   and never rolls back the approval.
 - Quotes with no parts (flat, non-wizard quotes) send nothing.
 
-There is still **no CSV/PO export and no parts-list UI** — the email is the
-whole hand-off today.
+Landscape projects also provide an editable Bill of Materials with supplier CSV
+export; accepted wizard quotes retain the fulfillment email as a second hand-off.
 
 ## Internal SKUs must never reach the client
 

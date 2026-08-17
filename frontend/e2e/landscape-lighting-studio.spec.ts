@@ -212,6 +212,51 @@ const catalog = [
     updated_at: "2026-01-01T00:00:00Z",
   },
   {
+    id: "fixture-wall",
+    workspace_id: WORKSPACE_ID,
+    name: "FX PO ZD Round Core-Drilled Wall Light — Black",
+    description: "Recessed Luxor ZD wall light",
+    sku: "59306832",
+    kind: "product",
+    unit_price: 775,
+    taxable: true,
+    is_active: true,
+    is_attachable: true,
+    attributes: {
+      fixture_type: "walllight",
+      fixture_watts: 2,
+      unit_cost: 166.76,
+      manufacturer: "FX Luminaire",
+      supplier: "SiteOne",
+    },
+    components: [],
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  },
+  {
+    id: "fixture-underwater",
+    workspace_id: WORKSPACE_ID,
+    name: "FX LL ZDC Underwater Light — Brass",
+    description: "Submersible Luxor ZDC water-feature light",
+    sku: "59407330",
+    kind: "product",
+    unit_price: 1295,
+    taxable: true,
+    is_active: true,
+    is_attachable: true,
+    attributes: {
+      fixture_type: "underwater",
+      fixture_watts: 9.1,
+      unit_cost: 374.37,
+      list_price: 664.95,
+      manufacturer: "FX Luminaire",
+      supplier: "SiteOne",
+    },
+    components: [],
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  },
+  {
     id: "lamp-2700k",
     workspace_id: WORKSPACE_ID,
     name: "MR16 2700K LED Lamp",
@@ -279,7 +324,12 @@ const pricing = {
       label: "Premier lighting",
       tab: "Best",
       points: ["Premium brass fixtures", "Transformer zoning"],
-      sections: [{ title: "Fixtures", item_ids: ["UP-100", "PATH-200", "TX-300"] }],
+      sections: [
+        {
+          title: "Fixtures",
+          item_ids: ["UP-100", "PATH-200", "59306832", "59407330", "TX-300"],
+        },
+      ],
     },
   ],
   landscape: { perks: ["Professional aiming and commissioning"] },
@@ -481,6 +531,10 @@ test.describe("landscape lighting studio", () => {
     await page.locator('label[title="Blue"]').click();
     await expect(page.getByRole("radio", { name: "Blue" })).toBeChecked();
     await page.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(page.getByRole("menuitem", { name: "Wall light" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Underwater" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
     await page.getByRole("menuitem", { name: "Uplight" }).click();
     await canvas.click({ position: { x: canvasBox.width / 2, y: canvasBox.height / 2 } });
     await expect
@@ -575,6 +629,45 @@ test.describe("landscape lighting studio", () => {
     await page.getByRole("button", { name: "Email proposal" }).click();
     await expect.poll(() => deliveries.length).toBe(1);
     expect(deliveries[0]).toMatchObject({ channel: "email" });
+  });
+
+  test("places the approved wall and underwater specialty fixtures", async ({ page }) => {
+    const { updates } = await installStudioApi(page);
+    await page.goto(PROJECT_URL);
+
+    const canvas = page.getByLabel("Top-down aerial lighting plan canvas");
+    const canvasBox = await canvas.boundingBox();
+    if (!canvasBox) throw new Error("Top-down aerial lighting plan canvas did not render");
+
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Wall light" }).click();
+    await canvas.click({ position: { x: canvasBox.width * 0.42, y: canvasBox.height * 0.52 } });
+
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Underwater" }).click();
+    await canvas.click({ position: { x: canvasBox.width * 0.72, y: canvasBox.height * 0.68 } });
+
+    await expect
+      .poll(() =>
+        updates.some((entry) => {
+          const document = entry as {
+            document?: {
+              shots?: Array<{ design?: { items?: Array<{ catalogSku?: string }> } }>;
+            };
+          };
+          const skus =
+            document.document?.shots?.flatMap((shot) =>
+              (shot.design?.items ?? []).map((item) => item.catalogSku),
+            ) ?? [];
+          return skus.includes("59306832") && skus.includes("59407330");
+        }),
+      )
+      .toBe(true);
+
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/fx-specialty-fixtures.png",
+      fullPage: true,
+    });
   });
 
   test("edits fixture assignments and purchase-ready bill of materials", async ({ page }) => {

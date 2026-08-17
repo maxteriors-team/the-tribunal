@@ -43,6 +43,7 @@ const PRICING = {
       tab: "Best",
       sections: [
         { title: "Fixtures", item_ids: ["best-up", "shared-path"] },
+        { title: "Specialty Fixtures", item_ids: ["59306832", "59407330"] },
         { title: "Wire", item_ids: ["best-wire-12", "best-wire-10"] },
       ],
     },
@@ -62,6 +63,14 @@ const CATALOG = [
   item("best-up", "ZDC Uplight"),
   item("good-up", "EVO Uplight"),
   item("shared-path", "Path Light"),
+  item("59306832", "FX PO ZD Round Core-Drilled Wall Light — Black", {
+    unit_price: 775,
+    attributes: { fixture_type: "walllight", unit_cost: 166.76 },
+  }),
+  item("59407330", "FX LL ZDC Underwater Light — Brass", {
+    unit_price: 1295,
+    attributes: { fixture_type: "underwater", unit_cost: 374.37 },
+  }),
   item("best-wire-12", "12/2 Landscape Wire", { unit_price: 1.25 }),
   item("best-wire-10", "10/2 Landscape Wire", { unit_price: 1.85 }),
   item("good-wire-12", "12/2 Standard Cable", { unit_price: 0.95 }),
@@ -101,6 +110,22 @@ describe("landscape proposal pricing payload", () => {
       ]),
     );
     expect((quantities ?? []).filter((line) => line.item_id === "shared-path")).toHaveLength(1);
+  });
+
+  it("quotes the approved specialty products without substituting another fixture type", () => {
+    const quantities = buildLandscapeProposalQuantities(
+      PRICING,
+      CATALOG,
+      { walllight: 2, underwater: 3 },
+      [],
+    );
+
+    expect(quantities).toEqual([
+      { item_id: "59306832", quantity: 2 },
+      { item_id: "59407330", quantity: 3 },
+    ]);
+    expect(CATALOG.find((catalogItem) => catalogItem.sku === "59306832")?.unit_price).toBe(775);
+    expect(CATALOG.find((catalogItem) => catalogItem.sku === "59407330")?.unit_price).toBe(1295);
   });
 
   it("includes valid additional line items in server-priced package totals", () => {

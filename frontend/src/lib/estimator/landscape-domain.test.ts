@@ -66,8 +66,11 @@ const catalog = [
     taxable: true,
     is_active: true,
     is_attachable: false,
-    components: [{ sku: "LAMP-1", qty: 1, description: "MR16 lamp" }],
-    attributes: { manufacturer: "Maxteriors", supplier: "Local Supply" },
+    components: [
+      { sku: "UP-1", qty: 1, description: "Brass Uplight" },
+      { sku: "LAMP-1", qty: 1, description: "MR16 lamp" },
+    ],
+    attributes: { manufacturer: "Maxteriors", supplier: "Local Supply", unit_cost: 40 },
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   },
@@ -115,7 +118,7 @@ describe("landscape domain modules", () => {
     expect(procurement.find((row) => row.key === "fixture:fixture")).toMatchObject({
       needed: 1,
       ordered: 1,
-      unitCost: 100,
+      unitCost: 40,
       supplier: "Local Supply",
       status: "ordered",
     });
@@ -123,6 +126,7 @@ describe("landscape domain modules", () => {
       needed: 1,
       unitCost: 20,
     });
+    expect(procurement.some((row) => row.key === "component:UP-1")).toBe(false);
     expect(procurement.some((row) => row.status === "unresolved")).toBe(true);
   });
 

@@ -5,8 +5,8 @@
  *
  * The rep uploads a house photo, sets the scale from a known measurement, then
  * draws the job: landscape fixtures from the workspace price book (uplights,
- * spots, path lights, wall washes, bistro), glowing C9 roofline, mini-lights on
- * bushes and trees, and wreaths. Dusk is a slider, so the customer watches their
+ * path lights, wall lights, underwater lights), glowing C9 roofline, mini-lights
+ * on bushes and trees, and wreaths. Dusk is a slider, so the customer watches
  * own house light up.
  *
  * A job is rarely one photo. The rep adds as many shots as the house needs
@@ -45,6 +45,7 @@ import {
   Footprints,
   HelpCircle,
   ImagePlus,
+  LampWallDown,
   Layers3,
   Mail,
   MessageSquareText,
@@ -59,6 +60,7 @@ import {
   Trash2,
   TriangleAlert,
   Undo2,
+  Waves,
   X,
   Zap,
 } from "lucide-react";
@@ -269,6 +271,20 @@ const LANDSCAPE_LEGEND = [
     detail: "2700 K",
     color: "#4b9a70",
     Icon: CircleDot,
+  },
+  {
+    id: "walllight",
+    label: "Wall light",
+    detail: "Core-drilled",
+    color: "#d56f4f",
+    Icon: LampWallDown,
+  },
+  {
+    id: "underwater",
+    label: "Underwater",
+    detail: "Submersible",
+    color: "#238eae",
+    Icon: Waves,
   },
   {
     id: "transformer",

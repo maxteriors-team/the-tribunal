@@ -282,7 +282,7 @@ function beamGeometry(
   return {
     reach: sizePx,
     topW: sizePx * spread,
-    dir: style === "downlight" ? 1 : -1,
+    dir: style === "downlight" || style === "walllight" ? 1 : -1,
     rot: (beamRotationFor(beamRotationDeg) * Math.PI) / 180,
   };
 }
@@ -404,6 +404,8 @@ const PLAN_SYMBOL_COLORS: Partial<Record<RenderStyle, string>> = {
   pathlight: "#d7a33e",
   downlight: "#477bb8",
   ingrade: "#4b9a70",
+  walllight: "#d56f4f",
+  underwater: "#238eae",
   transformer: "#9b7ad1",
 };
 
@@ -484,6 +486,26 @@ function drawLandscapePlanSymbol(
     ctx.quadraticCurveTo(0, -r * 0.62, r * 0.52, -r * 0.08);
     ctx.moveTo(-r * 0.52, -r * 0.08);
     ctx.lineTo(r * 0.52, -r * 0.08);
+    ctx.stroke();
+  } else if (style === "walllight") {
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.58, -r * 0.38);
+    ctx.lineTo(r * 0.58, -r * 0.38);
+    ctx.moveTo(-r * 0.28, -r * 0.18);
+    ctx.lineTo(r * 0.28, -r * 0.18);
+    ctx.moveTo(-r * 0.34, r * 0.35);
+    ctx.lineTo(0, r * 0.04);
+    ctx.lineTo(r * 0.34, r * 0.35);
+    ctx.stroke();
+  } else if (style === "underwater") {
+    ctx.beginPath();
+    ctx.arc(0, -r * 0.36, r * 0.12, 0, Math.PI * 2);
+    ctx.moveTo(-r * 0.62, -r * 0.02);
+    ctx.quadraticCurveTo(-r * 0.31, -r * 0.28, 0, -r * 0.02);
+    ctx.quadraticCurveTo(r * 0.31, r * 0.24, r * 0.62, -r * 0.02);
+    ctx.moveTo(-r * 0.62, r * 0.32);
+    ctx.quadraticCurveTo(-r * 0.31, r * 0.06, 0, r * 0.32);
+    ctx.quadraticCurveTo(r * 0.31, r * 0.58, r * 0.62, r * 0.32);
     ctx.stroke();
   } else {
     const direction = style === "downlight" ? 1 : -1;
@@ -744,6 +766,8 @@ export function drawScene(
     ingrade: "IG",
     pathlight: "PL",
     downlight: "DL",
+    walllight: "WL",
+    underwater: "UW",
     transformer: "T",
   };
   for (const item of design.items) {

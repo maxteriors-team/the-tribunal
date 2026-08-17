@@ -5,9 +5,9 @@ per-workspace data model:
 
   * ``workspace.settings["pricing"]`` — tax, Wisetack financing, cash/check
     pricing, commission, Good/Better/Best tiers, Care Plan, savings, bistro.
-  * ``catalog_items`` — the price book: the 20 fixtures (keyed by the wizard's
-    stable fixture ids, stored as ``sku``, each carrying its ``transformer``
-    attribute and internal SKU bill-of-materials) plus the two per-linear-foot
+  * ``catalog_items`` — the price book: the 22 fixtures (keyed by stable ids or
+    manufacturer SKUs, stored as ``sku``, each carrying electrical/procurement
+    attributes and any internal bill-of-materials) plus the two per-linear-foot
     bistro string-lighting services from the wizard's ``CONFIG.bistro``.
 
     Both are seeded ``is_attachable`` so a crew lead can sell them from the
@@ -16,9 +16,9 @@ per-workspace data model:
     that menu. The flag is set on **create only** (see the upsert), so an
     operator can retire an item from the field menu for good.
 
-    Prices here are **net**. Every client-facing surface (the wizard, the
-    estimators, and the field upsell screen) grosses them up by the back-end
-    buffer at quote time; nothing should ever charge ``unit_price`` raw.
+    ``unit_price`` is the final installed selling price for price-book quotes.
+    Procurement cost belongs in ``attributes.unit_cost``; the landscape BOM
+    prefers that value so customer price and dealer cost are never conflated.
 
 Idempotent: re-running updates catalog items in place (matched by sku) and
 overwrites the ``pricing`` settings block. Nothing else in the workspace is
@@ -52,8 +52,8 @@ from app.models.workspace import Workspace
 from app.schemas.pricing import PricingSettings
 from app.services.quotes.pricing_config import SETTINGS_KEY
 
-# ─── Fixture catalog (net prices — the engine grosses up at quote time) ──────
-# name, net price, transformer?, [(sku, description, qty), ...]
+# ─── Fixture catalog (installed selling prices) ────────────────────────────────
+# name, installed price, transformer?, [(component sku, description, qty), ...]
 FIXTURES: dict[str, dict] = {
     "best-luxor": {
         "name": "Luxor Smart 300W Transformer",
@@ -132,6 +132,47 @@ FIXTURES: dict[str, dict] = {
             ("59308530", "MR16 Lamp", 1),
         ],
     },
+    "59306832": {
+        "name": "FX PO ZD Round Core-Drilled Wall Light — Black",
+        "description": (
+            "Recessed 2W PO ZD wall light with round faceplate in flat black; "
+            "vertical-wall downlighting with Luxor zoning and dimming."
+        ),
+        "price": 775,
+        "parts": [("59306832", "PO-ZD-1LED-RD-FB Wall Light", 1)],
+        "attributes": {
+            "fixture_type": "walllight",
+            "drawable": True,
+            "manufacturer": "FX Luminaire",
+            "unit_cost": 166.76,
+            "core_drill_required": True,
+            "control": "ZD",
+            "faceplate": "RD",
+            "finish": "FB",
+            "installation": "recessed vertical wall; downlighting position",
+        },
+    },
+    "59407330": {
+        "name": "FX LL ZDC Underwater Light — Brass",
+        "description": (
+            "Submersible 9.1W LL ZDC brass light with 30 ft lead, Luxor color, "
+            "zoning, and dimming for ponds, fountains, and water features."
+        ),
+        "price": 1295,
+        "parts": [("59407330", "LL-ZDC-BS Underwater Light", 1)],
+        "attributes": {
+            "fixture_type": "underwater",
+            "drawable": True,
+            "manufacturer": "FX Luminaire",
+            "unit_cost": 374.37,
+            "list_price": 664.95,
+            "control": "ZDC",
+            "finish": "BS",
+            "max_depth_ft": 6,
+            "cable_length_ft": 30,
+            "ip_rating": "IP67",
+        },
+    },
     "better-dx": {
         "name": "DX 300W Transformer",
         "price": 1072,
@@ -199,6 +240,8 @@ ELECTRICAL_SPECS: dict[str, dict[str, float]] = {
     "best-zd-path": {"fixture_watts": 2.2, "input_voltage": 12},
     "best-zd-down": {"fixture_watts": 5, "input_voltage": 12},
     "best-cora-in-grade": {"fixture_watts": 5, "input_voltage": 12},
+    "59306832": {"fixture_watts": 2, "input_voltage": 12},
+    "59407330": {"fixture_watts": 9.1, "input_voltage": 12},
     "better-dx": {"transformer_capacity_watts": 300},
     "better-well": {"fixture_watts": 5, "input_voltage": 12},
     "better-accent": {"fixture_watts": 5, "input_voltage": 12},
@@ -342,6 +385,10 @@ PRICING: dict = {
                         "best-zd-down",
                         "best-cora-in-grade",
                     ],
+                },
+                {
+                    "title": "Specialty Fixtures",
+                    "item_ids": ["59306832", "59407330"],
                 },
             ],
         },
@@ -649,7 +696,8 @@ async def seed(workspace_ref: str) -> None:
             components = [
                 {"sku": sku, "description": desc, "qty": qty} for sku, desc, qty in fx["parts"]
             ]
-            attributes = dict(ELECTRICAL_SPECS.get(key, {}))
+            attributes = dict(fx.get("attributes", {}))
+            attributes.update(ELECTRICAL_SPECS.get(key, {}))
             if fx.get("transformer"):
                 attributes["transformer"] = True
             item = existing.get(key)
@@ -658,6 +706,7 @@ async def seed(workspace_ref: str) -> None:
                     CatalogItem(
                         workspace_id=workspace.id,
                         name=fx["name"],
+                        description=fx.get("description"),
                         sku=key,
                         kind="product",
                         unit_price=fx["price"],
@@ -675,6 +724,7 @@ async def seed(workspace_ref: str) -> None:
                 created += 1
             else:
                 item.name = fx["name"]
+                item.description = fx.get("description")
                 item.kind = "product"
                 item.unit_price = fx["price"]
                 item.is_active = True

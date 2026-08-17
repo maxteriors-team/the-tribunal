@@ -54,6 +54,10 @@ function pricing(): PricingSettings {
             title: "Fixtures",
             item_ids: ["best-zdc-up", "best-zdc-down", "best-zdc-path", "best-cora-in-grade"],
           },
+          {
+            title: "Specialty Fixtures",
+            item_ids: ["59306832", "59407330"],
+          },
           { title: "Wire", item_ids: ["best-wire-12", "best-wire-10"] },
         ],
       },
@@ -79,6 +83,16 @@ const CATALOG = [
   item("best-zdc-down", "ZDC Down Light", { unit_price: 963 }),
   item("best-zdc-path", "ZDC Modern Path Light", { unit_price: 511 }),
   item("best-cora-in-grade", "In-Grade Uplight", { unit_price: 447 }),
+  item("59306832", "FX PO ZD Round Core-Drilled Wall Light — Black", {
+    attributes: { fixture_type: "walllight" },
+    components: [{ sku: "59306832", description: "PO-ZD-1LED-RD-FB Wall Light", qty: 1 }],
+    unit_price: 775,
+  }),
+  item("59407330", "FX LL ZDC Underwater Light — Brass", {
+    attributes: { fixture_type: "underwater" },
+    components: [{ sku: "59407330", description: "LL-ZDC-BS Underwater Light", qty: 1 }],
+    unit_price: 1295,
+  }),
   item("ess-ex", "EX 150W Transformer", { attributes: { transformer: true } }),
   item("ess-accent", "EVO Accent Uplight", { unit_price: 172 }),
   item("ess-path", "Pathway Light", { unit_price: 376 }),
@@ -88,13 +102,15 @@ const CATALOG = [
 ];
 
 describe("classifyFixture", () => {
-  it("reads the four fixture types from the operator's own product names", () => {
+  it("reads all six fixture types from price-book names", () => {
     expect(classifyFixture({ name: "ZDC Color Uplight" })).toBe("uplight");
     expect(classifyFixture({ name: "EVO Accent Uplight" })).toBe("uplight");
     expect(classifyFixture({ name: "ZD Modern Path Light" })).toBe("pathlight");
     expect(classifyFixture({ name: "Pathway Light" })).toBe("pathlight");
     expect(classifyFixture({ name: "ZDC Down Light" })).toBe("downlight");
     expect(classifyFixture({ name: "Hardscape Wash" })).toBe("downlight");
+    expect(classifyFixture({ name: "Core-Drilled Wall Light" })).toBe("walllight");
+    expect(classifyFixture({ name: "Submersible Pond Light" })).toBe("underwater");
   });
 
   it("keeps in-ground fixtures out of the generic uplight bucket", () => {
@@ -122,16 +138,20 @@ describe("resolveTierFixtures", () => {
     expect(best.downlight.itemId).toBe("best-zdc-down");
     expect(best.pathlight.itemId).toBe("best-zdc-path");
     expect(best.ingrade.itemId).toBe("best-cora-in-grade");
+    expect(best.walllight.itemId).toBe("59306832");
+    expect(best.underwater.itemId).toBe("59407330");
   });
 
   it("re-resolves the same drawing when the package changes", () => {
     const good = resolveTierFixtures(pricing(), CATALOG, "essential");
     expect(good.uplight.itemId).toBe("ess-accent");
     expect(good.pathlight.itemId).toBe("ess-path");
-    // The Good package sells no downlight or in-grade — reported as unsold
-    // rather than quietly substituting the Best package's hardware.
+    // The Good package sells no downlight, in-grade, wall, or underwater light —
+    // reported as unsold rather than substituting the Best package's hardware.
     expect(good.downlight.itemId).toBeNull();
     expect(good.ingrade.itemId).toBeNull();
+    expect(good.walllight.itemId).toBeNull();
+    expect(good.underwater.itemId).toBeNull();
   });
 
   it("never resolves a type to a transformer or other non-fixture", () => {
@@ -171,13 +191,27 @@ describe("buildFixturePalette", () => {
       resolveTierFixtures(pricing(), CATALOG, "best"),
       resolveTierTransformer(pricing(), CATALOG, "best"),
     );
-    expect(palette).toHaveLength(6);
+    expect(palette).toHaveLength(8);
     const uplight = palette.find((p) => p.id === "fixture-uplight");
     expect(uplight?.name).toBe("Uplight");
     expect(uplight?.productName).toBe("ZDC Color Uplight");
     expect(uplight?.sku).toBe("best-zdc-up");
     expect(uplight?.price).toBe(785);
     expect(uplight?.target).toEqual({ field: "landscape", fixtureType: "uplight" });
+    expect(palette.find((p) => p.id === "fixture-walllight")).toMatchObject({
+      productName: "FX PO ZD Round Core-Drilled Wall Light — Black",
+      sku: "59306832",
+      style: "walllight",
+      lampLabel: null,
+      accessoryLabels: [],
+    });
+    expect(palette.find((p) => p.id === "fixture-underwater")).toMatchObject({
+      productName: "FX LL ZDC Underwater Light — Brass",
+      sku: "59407330",
+      style: "underwater",
+      lampLabel: null,
+      accessoryLabels: [],
+    });
     expect(palette.find((p) => p.id === "landscape-wire")).toMatchObject({
       name: "Wire circuit",
       kind: "linear",

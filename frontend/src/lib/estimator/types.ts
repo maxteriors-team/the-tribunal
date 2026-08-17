@@ -24,7 +24,7 @@ export type Mode = "seasonal" | "permanent" | "landscape";
  * How a product is rendered on the canvas.
  *
  * The first block is holiday strand/decor work; the second is landscape
- * lighting. The four fixture styles throw visible light, while `transformer` is
+ * lighting. The six fixture styles throw visible light, while `transformer` is
  * plan equipment: it gets a drafting symbol but intentionally emits no glow.
  */
 export type RenderStyle =
@@ -39,6 +39,8 @@ export type RenderStyle =
   | "ingrade"
   | "pathlight"
   | "downlight"
+  | "walllight"
+  | "underwater"
   | "transformer"
   | "wire"
   | "bistro";
@@ -49,6 +51,8 @@ export const LANDSCAPE_STYLES = [
   "ingrade",
   "pathlight",
   "downlight",
+  "walllight",
+  "underwater",
 ] as const satisfies readonly RenderStyle[];
 
 /** Drafting symbols that stay visible over the editable plan. */
@@ -76,6 +80,8 @@ export const BEAM_STYLES = [
   "uplight",
   "ingrade",
   "downlight",
+  "walllight",
+  "underwater",
 ] as const satisfies readonly RenderStyle[];
 
 export type BeamStyle = (typeof BEAM_STYLES)[number];
@@ -90,6 +96,8 @@ export const DEFAULT_BEAM_ANGLE_DEG: Record<BeamStyle, number> = {
   ingrade: 15,
   uplight: 30,
   downlight: 36,
+  walllight: 35,
+  underwater: 43,
 };
 
 /** Spread limits: narrower than a pinspot / wider than a wall wash is not a lamp. */
