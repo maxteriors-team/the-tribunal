@@ -85,7 +85,7 @@ def test_dry_run_prints_after_rollback_expires_workspace(
 
         def __getattribute__(self, name: str) -> object:
             if name in {"name", "slug"} and object.__getattribute__(self, "expired"):
-                raise AssertionError(f"expired workspace field accessed: {name}")
+                raise AttributeError(f"expired workspace field accessed: {name}")
             return object.__getattribute__(self, name)
 
     workspace = WorkspaceStub()
