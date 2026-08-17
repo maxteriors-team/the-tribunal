@@ -18,9 +18,9 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
-from app.services.knowledge.product_help import ProductHelpError
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
 from app.core import build_info
+from app.services.knowledge.product_help import ProductHelpError
 from app.websockets.voice_bridge import router as voice_bridge_router
 from app.websockets.voice_test import router as voice_test_router
 
