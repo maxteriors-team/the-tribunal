@@ -143,8 +143,16 @@ ci.env: ## Verify env templates match backend config and frontend env usage.
 ci.context-evals: ci.backend.deps ## Run the local/free AI context golden gate and write deterministic artifacts.
 	cd $(BACKEND_DIR) && uv run ruff check tests/evals/context_accuracy
 	cd $(BACKEND_DIR) && uv run ruff format --check tests/evals/context_accuracy
-	cd $(BACKEND_DIR) && uv run pytest tests/evals/context_accuracy -q
-	cd $(BACKEND_DIR) && uv run python -m tests.evals.context_accuracy --gate ci --output-dir .eval-artifacts/context_accuracy
+	cd $(BACKEND_DIR) && \
+		SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" \
+		ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)" \
+		OPENAI_API_KEY="$(CI_PYTEST_OPENAI_API_KEY)" \
+		uv run pytest tests/evals/context_accuracy -q
+	cd $(BACKEND_DIR) && \
+		SECRET_KEY="$(CI_PYTEST_SECRET_KEY)" \
+		ENCRYPTION_KEY="$(CI_PYTEST_ENCRYPTION_KEY)" \
+		OPENAI_API_KEY="$(CI_PYTEST_OPENAI_API_KEY)" \
+		uv run python -m tests.evals.context_accuracy --gate ci --output-dir .eval-artifacts/context_accuracy
 
 .PHONY: ci.backend
 ci.backend: ci.backend.deps ci.env ci.context-evals ## Run backend CI parity: env drift, lint, format, type-check, coverage, and context evals.
