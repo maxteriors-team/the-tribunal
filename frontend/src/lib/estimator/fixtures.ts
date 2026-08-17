@@ -1,17 +1,17 @@
 /**
- * Landscape fixture **types** — the four things a rep actually draws.
+ * Landscape fixture **types** — the six things a rep actually draws.
  *
- * A rep standing in a driveway thinks "uplight the columns, path the walk," not
- * "ZDC Modern Color Path Light Black." Drawing by type keeps the palette to four
- * choices; the customer's chosen **package** (Good / Better / Best) then decides
+ * A rep standing in a driveway thinks "uplight the columns, path the walk, wall
+ * lights at the steps," not a manufacturer configuration string. Drawing by
+ * type keeps the palette concise; the customer's chosen **package** then decides
  * which real price-book product each type resolves to, which is what carries the
  * SKU into the quote, inventory, and the technician's parts list.
  *
  * Consequences worth stating plainly:
  * - Switching package re-resolves every drawn fixture. Four uplights become four
  *   of the Best uplight or four of the Good uplight without redrawing anything.
- * - A package that doesn't sell a type (the Good package has no downlight) can't
- *   resolve it. That is surfaced, never silently dropped or substituted.
+ * - A package that doesn't sell a type can't resolve it. That is surfaced, never
+ *   silently dropped or substituted.
  *
  * Pure data + string matching: no canvas, no React, no money.
  */
@@ -21,8 +21,14 @@ import type { CatalogItemResponse } from "@/types/sales-wizard";
 import { COLOR_PRESETS } from "./catalog";
 import type { Product, RenderStyle } from "./types";
 
-/** The four landscape fixture types the palette offers. */
-export type FixtureType = "uplight" | "ingrade" | "pathlight" | "downlight";
+/** The six landscape fixture types the palette offers. */
+export type FixtureType =
+  | "uplight"
+  | "ingrade"
+  | "pathlight"
+  | "downlight"
+  | "walllight"
+  | "underwater";
 
 export interface FixtureTypeSpec {
   type: FixtureType;
@@ -58,6 +64,18 @@ export const FIXTURE_TYPES: readonly FixtureTypeSpec[] = [
     blurb: "Mounted high, washes light down over hardscape or planting",
     sizeFt: 12,
   },
+  {
+    type: "walllight",
+    label: "Wall light",
+    blurb: "Recessed into a wall or step for glare-free transition lighting",
+    sizeFt: 8,
+  },
+  {
+    type: "underwater",
+    label: "Underwater",
+    blurb: "Submersible accent for ponds, fountains, and water features",
+    sizeFt: 10,
+  },
 ] as const;
 
 /** Each type renders as its own throw shape on the canvas. */
@@ -66,6 +84,8 @@ const TYPE_STYLE: Record<FixtureType, RenderStyle> = {
   ingrade: "ingrade",
   pathlight: "pathlight",
   downlight: "downlight",
+  walllight: "walllight",
+  underwater: "underwater",
 };
 
 const SPEC_BY_TYPE = new Map(FIXTURE_TYPES.map((spec) => [spec.type, spec]));
@@ -80,7 +100,7 @@ function isTransformer(item: CatalogItemResponse): boolean {
   return item.attributes?.transformer === true || /\btransformer\b/.test(item.name.toLowerCase());
 }
 
-/** Hardware that is not one of the four light-emitting fixture types. */
+/** Hardware that is not one of the six light-emitting fixture types. */
 function isDrawableFixture(item: CatalogItemResponse): boolean {
   if (isTransformer(item)) return false;
   if (item.attributes?.drawable === false) return false;
@@ -89,7 +109,7 @@ function isDrawableFixture(item: CatalogItemResponse): boolean {
 }
 
 /**
- * Classify a price-book fixture into one of the four types.
+ * Classify a price-book fixture into one of the six types.
  *
  * Matching reads the operator's own product names, so no new per-item config is
  * required to adopt this. An explicit `attributes.fixture_type` always wins —
@@ -104,6 +124,8 @@ export function classifyFixture(item: {
     return explicit as FixtureType;
   }
   const name = item.name.toLowerCase();
+  if (/\b(underwater|submersible|pond|fountain)\b/.test(name)) return "underwater";
+  if (/\b(wall\s?light|walllight|core[-\s]?drill)\b/.test(name)) return "walllight";
   // In-grade first: a "well light" is an in-ground fixture that also aims up,
   // so it must not be swept into the generic uplight bucket.
   if (/\b(in-?grade|well)\b/.test(name)) return "ingrade";
@@ -257,17 +279,28 @@ function isLampComponent(
   );
 }
 
+function isSelfComponent(
+  item: CatalogItemResponse | null,
+  component: NonNullable<CatalogItemResponse["components"]>[number],
+): boolean {
+  const itemSku = item?.sku?.trim().toLowerCase();
+  const componentSku = component.sku?.trim().toLowerCase();
+  return Boolean(itemSku && componentSku && itemSku === componentSku);
+}
+
 function fixtureLampLabel(item: CatalogItemResponse | null): string | null {
   const attributes = item?.attributes ?? {};
   const lamp = attributes.lamp ?? attributes.lamp_type ?? attributes.color_temperature;
   if (typeof lamp === "string" && lamp.trim()) return lamp.trim();
-  const component = (item?.components ?? []).find(isLampComponent);
+  const component = (item?.components ?? []).find(
+    (candidate) => !isSelfComponent(item, candidate) && isLampComponent(candidate),
+  );
   return component?.description?.trim() || component?.sku?.trim() || null;
 }
 
 function fixtureAccessoryLabels(item: CatalogItemResponse | null): string[] {
   return (item?.components ?? []).flatMap((component) => {
-    if (isLampComponent(component)) return [];
+    if (isSelfComponent(item, component) || isLampComponent(component)) return [];
     const description = component.description?.trim();
     const sku = component.sku?.trim();
     const label = description || sku;
@@ -281,7 +314,7 @@ export function hasLandscapeFixtures(resolution: FixtureResolution): boolean {
 }
 
 /**
- * The landscape palette: four light-emitting fixture types plus a transformer
+ * The landscape palette: six light-emitting fixture types plus a transformer
  * plan symbol. Prices are display hints only; transformer placement is an
  * annotation and does not alter quote quantities.
  */

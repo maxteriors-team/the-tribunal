@@ -15,6 +15,8 @@ const STYLE_BY_PRODUCT: Record<string, RenderStyle> = {
   ingrade: "ingrade",
   pathlight: "pathlight",
   downlight: "downlight",
+  walllight: "walllight",
+  underwater: "underwater",
   transformer: "transformer",
   wire: "wire",
 };

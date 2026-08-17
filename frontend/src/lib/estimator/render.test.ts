@@ -103,6 +103,22 @@ const uplight: Product = {
   target: { field: "landscape", fixtureType: "uplight" },
 };
 
+const walllight: Product = {
+  ...uplight,
+  id: "fixture-walllight",
+  name: "Wall light",
+  style: "walllight",
+  target: { field: "landscape", fixtureType: "walllight" },
+};
+
+const underwater: Product = {
+  ...uplight,
+  id: "fixture-underwater",
+  name: "Underwater",
+  style: "underwater",
+  target: { field: "landscape", fixtureType: "underwater" },
+};
+
 const transformer: Product = {
   ...wreath,
   id: "fixture-transformer",
@@ -183,6 +199,8 @@ describe("drawScene", () => {
       ],
       items: [
         { id: "up", productId: uplight.id, at: { x: 200, y: 200 }, sizePx: 120 },
+        { id: "wall", productId: walllight.id, at: { x: 260, y: 200 }, sizePx: 80 },
+        { id: "water", productId: underwater.id, at: { x: 320, y: 200 }, sizePx: 100 },
         { id: "tx", productId: transformer.id, at: { x: 400, y: 200 }, sizePx: 30 },
       ],
       planImages: [
@@ -198,6 +216,8 @@ describe("drawScene", () => {
     };
     const products = new Map<string, Product>([
       [uplight.id, uplight],
+      [walllight.id, walllight],
+      [underwater.id, underwater],
       [transformer.id, transformer],
       [wire.id, wire],
     ]);
@@ -213,6 +233,8 @@ describe("drawScene", () => {
     expect(planCtx.arcTo).toHaveBeenCalled();
     expect(planCtx.fillText).toHaveBeenCalledWith("C1", expect.any(Number), expect.any(Number));
     expect(planCtx.fillText).toHaveBeenCalledWith("UP1", 0, expect.any(Number));
+    expect(planCtx.fillText).toHaveBeenCalledWith("WL1", 0, expect.any(Number));
+    expect(planCtx.fillText).toHaveBeenCalledWith("UW1", 0, expect.any(Number));
     expect(planCtx.fillText).toHaveBeenCalledWith("T1", 0, expect.any(Number));
 
     const duskCtx = fakeCtx();
