@@ -17,6 +17,7 @@ from app.models.workspace import Workspace, WorkspaceIntegration
 from app.services.lead_sources.meta_lead_ads_service import (
     MetaCampaignSpend,
     MetaLeadAdsClient,
+    MetaLeadAdsValidationError,
     sync_meta_campaign_spend,
 )
 
@@ -80,16 +81,30 @@ async def test_fetch_campaign_spend_is_optional_without_ad_account() -> None:
     assert rows == []
 
 
+@pytest.mark.parametrize(
+    "object_id",
+    [
+        "//attacker.example/lead",
+        "../me",
+        "123/insights/../me",
+        "123?fields=access_token",
+    ],
+)
+def test_meta_graph_url_rejects_untrusted_paths(object_id: str) -> None:
+    with pytest.raises(MetaLeadAdsValidationError, match="Invalid Meta Graph object identifier"):
+        MetaLeadAdsClient()._url(object_id)
+
+
 async def test_unsubscribe_removes_the_page_leadgen_subscription() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "DELETE"
-        assert request.url.path.endswith("/page-1/subscribed_apps")
+        assert request.url.path.endswith("/page1/subscribed_apps")
         return httpx.Response(200, json={"success": True})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         await MetaLeadAdsClient(http_client).unsubscribe_page(
             {
-                "page_id": "page-1",
+                "page_id": "page1",
                 "access_" + "token": "page-token",
             }
         )

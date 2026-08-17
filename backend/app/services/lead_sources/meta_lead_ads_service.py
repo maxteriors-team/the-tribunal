@@ -94,10 +94,30 @@ class MetaLeadAdsClient:
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client
 
-    def _url(self, object_id: str) -> str:
+    def _url(
+        self,
+        object_id: str,
+        endpoint: Literal["subscribed_apps", "insights"] | None = None,
+    ) -> str:
+        prefix = ""
+        identifier = object_id
+        if identifier.startswith("act_"):
+            prefix = "act_"
+            identifier = identifier.removeprefix("act_")
+        if not identifier.isalnum() or len(identifier) > 128:
+            raise MetaLeadAdsValidationError("Invalid Meta Graph object identifier")
+
+        safe_object_id = f"{prefix}{identifier}"
+        endpoint_path = (
+            "/subscribed_apps"
+            if endpoint == "subscribed_apps"
+            else "/insights"
+            if endpoint == "insights"
+            else ""
+        )
         base = settings.meta_lead_ads_base_url.rstrip("/")
         version = settings.meta_lead_ads_api_version.strip("/")
-        return f"{base}/{version}/{object_id}"
+        return f"{base}/{version}/{safe_object_id}{endpoint_path}"
 
     async def _request(
         self,
@@ -105,13 +125,18 @@ class MetaLeadAdsClient:
         object_id: str,
         *,
         params: dict[str, str],
+        endpoint: Literal["subscribed_apps", "insights"] | None = None,
     ) -> dict[str, Any]:
         owns_client = self._client is None
         client = self._client or httpx.AsyncClient(
             timeout=settings.meta_lead_ads_request_timeout_seconds
         )
         try:
-            response = await client.request(method, self._url(object_id), params=params)
+            response = await client.request(
+                method,
+                self._url(object_id, endpoint),
+                params=params,
+            )
         except httpx.HTTPError as exc:
             raise MetaLeadAdsError("Meta Graph API request failed") from exc
         finally:
@@ -126,6 +151,7 @@ class MetaLeadAdsClient:
                 if isinstance(error, dict):
                     error_code = error.get("code")
             except ValueError:
+                # Meta can return HTML/plain text errors; the HTTP status is still actionable.
                 pass
             raise MetaLeadAdsError(
                 f"Meta Graph API returned HTTP {response.status_code}"
@@ -158,8 +184,9 @@ class MetaLeadAdsClient:
     async def subscribe_page(self, *, page_id: str, access_token: str) -> None:
         payload = await self._request(
             "POST",
-            f"{page_id}/subscribed_apps",
+            page_id,
             params={"subscribed_fields": "leadgen", "access_token": access_token},
+            endpoint="subscribed_apps",
         )
         if payload.get("success") is not True:
             raise MetaLeadAdsError("Meta did not confirm the Page leadgen subscription")
@@ -169,8 +196,9 @@ class MetaLeadAdsClient:
         page_id, page_credential = validate_meta_credentials(credentials)
         payload = await self._request(
             "DELETE",
-            f"{page_id}/subscribed_apps",
+            page_id,
             params={"access_" + "token": page_credential},
+            endpoint="subscribed_apps",
         )
         if payload.get("success") is not True:
             raise MetaLeadAdsError("Meta did not confirm the Page unsubscribe")
@@ -197,7 +225,7 @@ class MetaLeadAdsClient:
         account_object = account_id if account_id.startswith("act_") else f"act_{account_id}"
         payload = await self._request(
             "GET",
-            f"{account_object}/insights",
+            account_object,
             params={
                 "fields": ("account_currency,campaign_id,campaign_name,date_start,date_stop,spend"),
                 "level": "campaign",
@@ -206,6 +234,7 @@ class MetaLeadAdsClient:
                 "limit": "5000",
                 "access_" + "token": page_credential,
             },
+            endpoint="insights",
         )
         raw_rows = payload.get("data")
         if not isinstance(raw_rows, list):
