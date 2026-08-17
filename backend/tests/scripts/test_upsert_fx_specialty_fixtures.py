@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import copy
+import uuid
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from scripts.demo.seed_lighting_workspace import PRICING
+from scripts.ops import upsert_fx_specialty_fixtures as specialty_upsert
 from scripts.ops.upsert_fx_specialty_fixtures import (
     SPECIALTY_SECTION_TITLE,
     SPECIALTY_SKUS,
@@ -65,3 +70,49 @@ def test_merge_requires_an_existing_premier_tier() -> None:
 
     with pytest.raises(ValueError, match="Premier"):
         merge_premier_specialty_section(pricing)
+
+
+def test_dry_run_prints_after_rollback_expires_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class WorkspaceStub:
+        id = uuid.uuid4()
+        name = "Default Workspace"
+        slug = "default"
+        settings = {specialty_upsert.SETTINGS_KEY: copy.deepcopy(PRICING)}
+        expired = False
+
+        def __getattribute__(self, name: str) -> object:
+            if name in {"name", "slug"} and object.__getattribute__(self, "expired"):
+                raise AssertionError(f"expired workspace field accessed: {name}")
+            return object.__getattribute__(self, name)
+
+    workspace = WorkspaceStub()
+    workspace_result = MagicMock()
+    workspace_result.scalar_one_or_none.return_value = workspace
+    catalog_result = MagicMock()
+    catalog_result.scalars.return_value.all.return_value = []
+    db = MagicMock()
+    db.execute = AsyncMock(side_effect=[workspace_result, catalog_result])
+
+    async def expire_workspace() -> None:
+        workspace.expired = True
+
+    db.rollback = AsyncMock(side_effect=expire_workspace)
+    db.commit = AsyncMock()
+
+    @asynccontextmanager
+    async def fake_session():
+        yield db
+
+    monkeypatch.setattr(specialty_upsert, "AsyncSessionLocal", fake_session)
+
+    asyncio.run(specialty_upsert.upsert(str(workspace.id), apply=False))
+
+    output = capsys.readouterr().out
+    assert "DRY RUN for workspace 'Default Workspace' (default)" in output
+    assert "create 59306832" in output
+    assert "create 59407330" in output
+    db.rollback.assert_awaited_once()
+    db.commit.assert_not_awaited()

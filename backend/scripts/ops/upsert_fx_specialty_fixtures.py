@@ -110,6 +110,8 @@ async def upsert(workspace_ref: str, *, apply: bool) -> None:
         workspace = (await db.execute(select(Workspace).where(or_(*clauses)))).scalar_one_or_none()
         if workspace is None:
             raise SystemExit(f"Workspace not found: {workspace_ref!r}")
+        workspace_name = workspace.name
+        workspace_slug = workspace.slug
 
         pricing = (workspace.settings or {}).get(SETTINGS_KEY)
         if not isinstance(pricing, dict):
@@ -173,7 +175,7 @@ async def upsert(workspace_ref: str, *, apply: bool) -> None:
             await db.rollback()
 
         mode = "APPLIED" if apply else "DRY RUN"
-        print(f"{mode} for workspace '{workspace.name}' ({workspace.slug})")
+        print(f"{mode} for workspace '{workspace_name}' ({workspace_slug})")
         for action in actions:
             print(f"- {action}")
 
