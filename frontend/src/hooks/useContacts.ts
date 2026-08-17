@@ -10,7 +10,7 @@ import {
 import type { ApiClient } from "@/lib/api/create-api-client";
 import { createResourceHooks } from "@/lib/api/create-resource-hooks";
 import { queryKeys } from "@/lib/query-keys";
-import { REALTIME } from "@/lib/query-options";
+import { POLL_30S, REALTIME } from "@/lib/query-options";
 import type { Contact, ContactStatus } from "@/types";
 
 const {
@@ -47,6 +47,45 @@ export function useContactStats(workspaceId: string) {
     queryKey: queryKeys.contacts.stats(workspaceId),
     queryFn: () => contactsApi.getStats(workspaceId),
     enabled: !!workspaceId,
+    ...REALTIME,
+  });
+}
+
+/**
+ * Fetch the data-minimized ContactContextSnapshot projection for operators.
+ */
+export function useContactAIKnowledge(workspaceId: string, contactId: number) {
+  return useQuery({
+    queryKey: queryKeys.contacts.aiKnowledge(workspaceId, contactId),
+    queryFn: () => contactsApi.getAIKnowledge(workspaceId, contactId),
+    enabled: !!workspaceId && contactId > 0,
+    ...POLL_30S,
+  });
+}
+
+export function useUpdateContactAIMemorySummary(workspaceId: string, contactId: number) {
+  const queryClient = useQueryClient();
+  const queryKey = queryKeys.contacts.aiKnowledge(workspaceId, contactId);
+
+  return useMutation({
+    mutationFn: (value: string | null) =>
+      contactsApi.updateAIMemorySummary(workspaceId, contactId, value),
+    onSuccess: (knowledge) => {
+      queryClient.setQueryData(queryKey, knowledge);
+    },
+  });
+}
+
+export function useUpdateContactAIMemoryFact(workspaceId: string, contactId: number) {
+  const queryClient = useQueryClient();
+  const queryKey = queryKeys.contacts.aiKnowledge(workspaceId, contactId);
+
+  return useMutation({
+    mutationFn: ({ factId, value }: { factId: string; value: string | null }) =>
+      contactsApi.updateAIMemoryFact(workspaceId, contactId, factId, value),
+    onSuccess: (knowledge) => {
+      queryClient.setQueryData(queryKey, knowledge);
+    },
   });
 }
 

@@ -41,6 +41,13 @@ export type ContactsListResponse = ContactListResponse;
 export type ContactStatsResponse = Schemas["ContactStatsResponse"];
 export type ContactIdsResponse = Schemas["ContactIdsResponse"];
 export type ContactEngagementSummary = Schemas["ContactEngagementSummary"];
+export type ContactAIKnowledgeResponse = Schemas["ContactAIKnowledgeResponse"];
+export type ContactAIKnowledgeStructuredFact = Schemas["ContactAIKnowledgeStructuredFact"];
+export type ContactAIKnowledgeNextAction = Schemas["ContactAIKnowledgeNextAction"];
+export type ContactAIMemorySummary = Schemas["ContactAIMemorySummary"];
+export type ContactAIMemoryFact = Schemas["ContactAIMemoryFact"];
+export type ContactAIKnowledgeConflict = Schemas["ContactAIKnowledgeConflict"];
+export type ContactAIMemoryValueUpdate = Schemas["ContactAIMemoryValueUpdate"];
 export type BulkDeleteResponse = Schemas["BulkDeleteResponse"];
 export type BulkUpdateStatusResponse = Schemas["BulkStatusUpdateResponse"];
 export type AIToggleResponse = Schemas["AIToggleResponse"];
@@ -293,6 +300,51 @@ export const contactsApi = {
       "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/engagement-summary",
       {
         path: { workspace_id: workspaceId, contact_id: contactId },
+      },
+    );
+  },
+
+  getAIKnowledge: async (
+    workspaceId: string,
+    contactId: number,
+  ): Promise<ContactAIKnowledgeResponse> => {
+    return apiClient.get(
+      "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge",
+      {
+        path: { workspace_id: workspaceId, contact_id: contactId },
+      },
+    );
+  },
+
+  updateAIMemorySummary: async (
+    workspaceId: string,
+    contactId: number,
+    value: string | null,
+  ): Promise<ContactAIKnowledgeResponse> => {
+    return apiClient.put(
+      "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge/summary",
+      {
+        path: { workspace_id: workspaceId, contact_id: contactId },
+        body: { value },
+      },
+    );
+  },
+
+  updateAIMemoryFact: async (
+    workspaceId: string,
+    contactId: number,
+    factId: string,
+    value: string | null,
+  ): Promise<ContactAIKnowledgeResponse> => {
+    return apiClient.put(
+      "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge/facts/{fact_id}",
+      {
+        path: {
+          workspace_id: workspaceId,
+          contact_id: contactId,
+          fact_id: factId,
+        },
+        body: { value },
       },
     );
   },
