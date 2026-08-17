@@ -12,6 +12,7 @@ Usage:
         print(f"Agent: {context.agent.name}")
 """
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -22,14 +23,23 @@ from app.db.session import AsyncSessionLocal
 from app.models.agent import Agent
 from app.services.ai.bandit_arm_selector import BanditArmSelector
 from app.services.ai.bandit_context import build_decision_context
+from app.services.ai.context_observability import (
+    ContextChunk,
+    collect_context_provenance,
+    observability_logger,
+    observe_context,
+)
 
 logger = structlog.get_logger()
+
+CALL_CONTEXT_ENRICHMENT_TIMEOUT_SECONDS = 1.0
 
 
 async def _select_prompt_version_for_call(
     db: Any,
     agent_id: Any,
     message_id: Any,
+    workspace_id: Any,
     contact_id: int | None,
     log: Any,
 ) -> str | None:
@@ -49,6 +59,7 @@ async def _select_prompt_version_for_call(
         db=db,
         contact_id=contact_id,
         agent_id=agent_id,
+        workspace_id=workspace_id,
         call_time=datetime.now(UTC),
     )
 
@@ -153,7 +164,244 @@ async def _attach_returning_caller_context(
             memory_count=len(info.memories),
         )
     except Exception as e:  # noqa: BLE001 - recognition must never break a call
-        log.warning("returning_caller_detection_failed", error=str(e))
+        log.warning("returning_caller_detection_failed", error_type=type(e).__name__)
+
+
+async def _attach_structured_contact_context_and_memory(
+    *,
+    db: Any,
+    context: CallContext,
+    workspace_id: Any,
+    contact_id: int,
+    log: Any,
+) -> None:
+    """Attach authoritative CRM state followed by untrusted historical memory."""
+    if context.contact_info is None:
+        return
+
+    observation_chunks: list[ContextChunk] = []
+    try:
+        from app.services.ai.contact_context_snapshot import ContactContextSnapshotService
+        from app.services.ai.voice_prompt_builder import (
+            render_voice_contact_snapshot,
+            render_voice_recent_interactions,
+        )
+
+        snapshot = await ContactContextSnapshotService(db, timeline_limit=20).get_snapshot(
+            workspace_id=workspace_id,
+            contact_id=contact_id,
+        )
+        if snapshot is not None:
+            structured_context = render_voice_contact_snapshot(snapshot)
+            context.contact_info["structured_context"] = structured_context
+            recent_interactions = render_voice_recent_interactions(snapshot)
+            if recent_interactions:
+                context.contact_info["recent_interaction_context"] = recent_interactions
+            context.metadata["contact_snapshot_observed_at"] = snapshot.observed_at.isoformat()
+            provenance = collect_context_provenance(snapshot)
+            source_ids = provenance.source_ids or (f"contact:{contact_id}",)
+            observation_chunks.append(
+                ContextChunk(
+                    source_type="contact_snapshot",
+                    source_ids=source_ids,
+                    text=structured_context,
+                    observed_at=provenance.earliest_observed_at or snapshot.observed_at,
+                    record_updated_at=(
+                        provenance.earliest_record_updated_at or snapshot.observed_at
+                    ),
+                )
+            )
+            if recent_interactions:
+                observation_chunks.append(
+                    ContextChunk(
+                        source_type="cross_channel_history",
+                        source_ids=source_ids,
+                        text=recent_interactions,
+                        observed_at=provenance.earliest_observed_at or snapshot.observed_at,
+                        record_updated_at=(
+                            provenance.earliest_record_updated_at or snapshot.observed_at
+                        ),
+                    )
+                )
+    except Exception as exc:  # noqa: BLE001 - context enrichment must not break calls
+        log.warning(
+            "contact_context_snapshot_load_failed",
+            contact_id=contact_id,
+            error_type=type(exc).__name__,
+        )
+
+    try:
+        from app.services.ai.contact_ai_memory_service import ContactAIMemoryService
+        from app.services.ai.voice_prompt_builder import render_voice_durable_memory
+
+        memory = await ContactAIMemoryService(db).get_context(
+            workspace_id=workspace_id,
+            contact_id=contact_id,
+        )
+        if memory is not None:
+            memory_context = render_voice_durable_memory(memory)
+            if memory_context:
+                context.contact_info["ai_memory_context"] = memory_context
+                memory_source_ids = {
+                    source_id
+                    for source_id in (
+                        memory.summary_source_event_id,
+                        *(
+                            fact.provenance_event_id or str(fact.fact_id or "")
+                            for fact in memory.facts
+                        ),
+                    )
+                    if source_id
+                }
+                observed_times = [
+                    observed_at
+                    for observed_at in (
+                        memory.summary_observed_at,
+                        *(fact.observed_at for fact in memory.facts),
+                    )
+                    if observed_at is not None
+                ]
+                observation_chunks.append(
+                    ContextChunk(
+                        source_type="durable_memory",
+                        source_ids=tuple(sorted(memory_source_ids)) or (f"contact:{contact_id}",),
+                        text=memory_context,
+                        observed_at=min(observed_times, default=None),
+                        record_updated_at=min(observed_times, default=None),
+                    )
+                )
+    except Exception as exc:  # noqa: BLE001 - context enrichment must not break calls
+        log.warning(
+            "contact_ai_memory_load_failed",
+            contact_id=contact_id,
+            error_type=type(exc).__name__,
+        )
+
+    if observation_chunks:
+        observe_context(
+            observability_logger,
+            surface="voice",
+            invocation_id=context.conversation_id or f"contact:{contact_id}",
+            chunks=tuple(observation_chunks),
+        )
+
+
+async def _attach_bounded_cross_channel_context(
+    *,
+    db: Any,
+    context: CallContext,
+    workspace_id: Any,
+    contact_id: int,
+    current_message_id: Any,
+    log: Any,
+    timeout_seconds: float = CALL_CONTEXT_ENRICHMENT_TIMEOUT_SECONDS,
+) -> None:
+    """Best-effort enrichment with one hard latency budget for all memory reads."""
+    if context.contact_info is None:
+        return
+
+    context.contact_info["requires_live_crm_lookup"] = True
+    context.metadata["contact_context_status"] = "loading"
+    try:
+        async with asyncio.timeout(max(0.01, timeout_seconds)):
+            await _attach_structured_contact_context_and_memory(
+                db=db,
+                context=context,
+                workspace_id=workspace_id,
+                contact_id=contact_id,
+                log=log,
+            )
+            await _attach_returning_caller_context(
+                db=db,
+                context=context,
+                workspace_id=workspace_id,
+                contact_id=contact_id,
+                current_message_id=current_message_id,
+                log=log,
+            )
+        context.metadata["contact_context_status"] = "complete"
+    except TimeoutError:
+        context.metadata["contact_context_status"] = "timed_out"
+        log.warning(
+            "contact_context_enrichment_timed_out",
+            contact_id=contact_id,
+            timeout_seconds=timeout_seconds,
+        )
+
+
+async def _attach_campaign_and_offer_context(
+    *,
+    db: Any,
+    context: CallContext,
+    conversation: Any,
+    log: Any,
+) -> None:
+    """Load current-call campaign and offer through the conversation's workspace."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.models.campaign import Campaign, CampaignContact
+    from app.models.offer import Offer
+
+    result = await db.execute(
+        select(CampaignContact)
+        .join(Campaign, Campaign.id == CampaignContact.campaign_id)
+        .options(selectinload(CampaignContact.campaign))
+        .where(
+            CampaignContact.conversation_id == conversation.id,
+            Campaign.workspace_id == conversation.workspace_id,
+        )
+        .limit(1)
+    )
+    enrollment = result.scalar_one_or_none()
+    if enrollment is None or enrollment.campaign is None:
+        return
+
+    campaign = enrollment.campaign
+    if context.contact_info is not None:
+        context.contact_info["campaign_info"] = {
+            "campaign_id": str(campaign.id),
+            "enrollment_id": str(enrollment.id),
+            "source": f"campaigns:{campaign.id}",
+            "observed_at": datetime.now(UTC),
+            "record_updated_at": campaign.updated_at,
+            "freshness": "live",
+            "name": campaign.name,
+            "description": campaign.description,
+            "type": campaign.campaign_type,
+            "status": campaign.status,
+            "enrollment_status": enrollment.status,
+            "qualification_criteria": campaign.qualification_criteria,
+            "initial_message": campaign.initial_message,
+        }
+    if campaign.offer_id is None:
+        return
+
+    offer_result = await db.execute(
+        select(Offer).where(
+            Offer.id == campaign.offer_id,
+            Offer.workspace_id == conversation.workspace_id,
+        )
+    )
+    offer = offer_result.scalar_one_or_none()
+    if offer is None:
+        return
+
+    context.offer_info = {
+        "source": f"offers:{offer.id}",
+        "observed_at": datetime.now(UTC),
+        "record_updated_at": offer.updated_at,
+        "freshness": "live",
+        "name": offer.name,
+        "description": offer.description,
+        "discount_type": offer.discount_type,
+        "discount_value": float(offer.discount_value),
+        "terms": offer.terms,
+        "is_active": offer.is_active,
+        "valid_from": offer.valid_from,
+        "valid_until": offer.valid_until,
+    }
+    log.info("found_offer_for_call", offer_id=str(offer.id), offer_name=offer.name)
 
 
 async def lookup_call_context(
@@ -175,10 +423,8 @@ async def lookup_call_context(
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
 
-    from app.models.campaign import CampaignContact
     from app.models.contact import Contact
     from app.models.conversation import Message
-    from app.models.offer import Offer
     from app.models.workspace import Workspace
 
     if log is None:
@@ -215,7 +461,12 @@ async def lookup_call_context(
         # Priority: conversation.assigned_agent_id > message.agent_id
         agent_id = conversation.assigned_agent_id or message.agent_id
         if agent_id:
-            agent_result = await db.execute(select(Agent).where(Agent.id == agent_id))
+            agent_result = await db.execute(
+                select(Agent).where(
+                    Agent.id == agent_id,
+                    Agent.workspace_id == conversation.workspace_id,
+                )
+            )
             context.agent = agent_result.scalar_one_or_none()
             if context.agent:
                 log.info(
@@ -230,6 +481,7 @@ async def lookup_call_context(
                     db=db,
                     agent_id=context.agent.id,
                     message_id=message.id,
+                    workspace_id=conversation.workspace_id,
                     contact_id=conversation.contact_id,
                     log=log,
                 )
@@ -237,13 +489,18 @@ async def lookup_call_context(
         # Look up contact info
         if conversation.contact_id:
             contact_result = await db.execute(
-                select(Contact).where(Contact.id == conversation.contact_id)
+                select(Contact).where(
+                    Contact.id == conversation.contact_id,
+                    Contact.workspace_id == conversation.workspace_id,
+                )
             )
             contact = contact_result.scalar_one_or_none()
             if contact:
                 context.contact_info = {
-                    # Internal prompt-control metadata; PromptBuilder does not
-                    # render this key to the model as customer profile text.
+                    # Internal prompt-control metadata; VoicePromptBuilder does not
+                    # render these keys as customer profile text.
+                    "contact_id": contact.id,
+                    "requires_live_crm_lookup": True,
                     "lead_source_known": contact.first_touch_lead_source_id is not None,
                     "name": f"{contact.first_name} {contact.last_name or ''}".strip(),
                     "phone": contact.phone_number,
@@ -254,49 +511,30 @@ async def lookup_call_context(
                 }
                 log.info("found_contact_for_call", contact_id=str(contact.id))
 
-                # Returning-caller recognition: detect prior calls / stored
-                # caller memories for this contact and inject a recap so the
-                # agent greets them as a returning caller instead of cold.
-                await _attach_returning_caller_context(
-                    db=db,
-                    context=context,
-                    workspace_id=conversation.workspace_id,
-                    contact_id=conversation.contact_id,
-                    current_message_id=message.id,
-                    log=log,
-                )
-
         # Unknown inbound callers have no Contact yet. Keep an explicit false
         # flag so the prompt still asks before save_lead_info creates the row.
         if context.contact_info is None:
             context.contact_info = {"lead_source_known": False}
 
-        # Look up offer info from campaign if applicable
-        campaign_contact_result = await db.execute(
-            select(CampaignContact)
-            .options(selectinload(CampaignContact.campaign))
-            .where(CampaignContact.conversation_id == conversation.id)
+        await _attach_campaign_and_offer_context(
+            db=db,
+            context=context,
+            conversation=conversation,
+            log=log,
         )
-        campaign_contact = campaign_contact_result.scalar_one_or_none()
 
-        if campaign_contact and campaign_contact.campaign:
-            campaign = campaign_contact.campaign
-            if campaign.offer_id:
-                offer_result = await db.execute(select(Offer).where(Offer.id == campaign.offer_id))
-                offer = offer_result.scalar_one_or_none()
-                if offer:
-                    context.offer_info = {
-                        "name": offer.name,
-                        "description": offer.description,
-                        "discount_type": offer.discount_type,
-                        "discount_value": float(offer.discount_value),
-                        "terms": offer.terms,
-                    }
-                    log.info(
-                        "found_offer_for_call",
-                        offer_id=str(offer.id),
-                        offer_name=offer.name,
-                    )
+        # Campaign/offer and routing context are already available if optional CRM
+        # enrichment reaches its latency budget. Unknown contacts skip all memory reads.
+        resolved_contact_id = (context.contact_info or {}).get("contact_id")
+        if isinstance(resolved_contact_id, int):
+            await _attach_bounded_cross_channel_context(
+                db=db,
+                context=context,
+                workspace_id=conversation.workspace_id,
+                contact_id=resolved_contact_id,
+                current_message_id=message.id,
+                log=log,
+            )
 
     return context
 

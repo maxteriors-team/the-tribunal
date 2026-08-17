@@ -282,12 +282,12 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "search_contacts",
             "description": (
-                "Search contacts, newest first. Name and company match on partial "
-                "text; phone and email must be the complete value (any format) "
-                "because they are stored encrypted and only match exactly. "
-                "Returns dated status, qualification, engagement, source, "
-                "and appointment evidence. "
-                "Use an empty query to list the newest contacts."
+                "Resolve contact identity before any contact-specific state or history lookup. "
+                "Name and company match partial text; encrypted phone/email require the complete "
+                "value. The result includes identity_resolution: resolved, ambiguous, or "
+                "not_found. If ambiguous, ask the operator to choose; never guess. Once resolved, "
+                "call get_contact_context with that contact_id. Use an empty query only to list "
+                "the newest contacts."
             ),
             "parameters": {
                 "type": "object",
@@ -322,9 +322,9 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "get_contact",
             "description": (
-                "Get one contact by id with full profile, tags, notes, qualification, "
-                "and engagement fields. Set include_timeline to see recent messages/calls. "
-                "Use after an appointment, opportunity, or conversation returns a contact id."
+                "Legacy narrow contact-row lookup for mutation preparation. Do not use it to "
+                "answer questions about a contact's current state or history; after resolving "
+                "identity, use get_contact_context instead."
             ),
             "parameters": {
                 "type": "object",
@@ -339,6 +339,48 @@ CRM_TOOLS: list[dict[str, Any]] = [
                         "minimum": 1,
                         "maximum": 50,
                         "description": "Timeline rows when included (default 20)",
+                    },
+                },
+                "required": ["contact_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_contact_context",
+            "description": (
+                "Read-only authoritative snapshot for one resolved contact_id in this workspace. "
+                "In one call it returns identity, lifecycle and consent, qualification, tags, "
+                "attribution, campaign enrollments, open opportunities, active quotes/invoices, "
+                "appointments, notes, and a bounded chronological SMS/voice/voicemail timeline. "
+                "Resolve names, phone numbers, or email addresses with search_contacts first; "
+                "never choose among ambiguous matches. Use timeline_offset with next_offset to "
+                "page older events. Base current-state claims on the structured snapshot, not "
+                "workspace context, notes, or message text, and cite observed_at plus the relevant "
+                "provenance.updated_at timestamp in the answer."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contact_id": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Resolved workspace contact id",
+                    },
+                    "timeline_limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "description": "Cross-channel events in this page (default 20, max 50)",
+                    },
+                    "timeline_offset": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000,
+                        "description": (
+                            "Newer events to skip when paging backward; use the prior next_offset"
+                        ),
                     },
                 },
                 "required": ["contact_id"],
@@ -990,8 +1032,9 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "get_conversation",
             "description": (
-                "Read dated recent messages and conversation metadata for a contact. "
-                "Use this before making communication or follow-up claims."
+                "Legacy narrow message lookup for conversation operations. For any question about "
+                "one contact's communication history or follow-up state, use get_contact_context "
+                "so SMS, voice, voicemail, and current CRM state arrive together."
             ),
             "parameters": {
                 "type": "object",
@@ -1020,12 +1063,103 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_appointments",
-            "description": "Show upcoming appointments.",
+            "description": (
+                "Workspace-wide calendar filtering by contact, status, or ISO 8601 date range. "
+                "For a resolved contact's complete current state, use get_contact_context."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "contact_id": {"type": "integer"},
+                    "status": {
+                        "type": "string",
+                        "enum": ["scheduled", "completed", "cancelled", "no_show"],
+                    },
+                    "date_from": {"type": "string", "description": "ISO 8601 start datetime"},
+                    "date_to": {"type": "string", "description": "ISO 8601 end datetime"},
+                    "include_past": {"type": "boolean", "description": "Include past events"},
                     "limit": {"type": "integer", "description": "Max results (default 10)"},
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_appointment",
+            "description": "Get one calendar appointment before changing or deleting it.",
+            "parameters": {
+                "type": "object",
+                "properties": {"appointment_id": {"type": "integer"}},
+                "required": ["appointment_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_appointment",
+            "description": (
+                "Schedule a calendar appointment for a CRM contact. Resolve ambiguous contacts "
+                "with find_contacts first. Requires human approval."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contact_id": {"type": "integer"},
+                    "scheduled_at": {
+                        "type": "string",
+                        "description": "ISO 8601 datetime with offset",
+                    },
+                    "duration_minutes": {"type": "integer", "minimum": 15, "maximum": 480},
+                    "service_type": {"type": "string", "maxLength": 100},
+                    "notes": {"type": "string"},
+                    "agent_id": {"type": "string", "description": "Optional agent UUID"},
+                },
+                "required": ["contact_id", "scheduled_at"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_appointment",
+            "description": (
+                "Reschedule, cancel, complete, or edit a calendar appointment after reading it. "
+                "Requires human approval."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "appointment_id": {"type": "integer"},
+                    "scheduled_at": {
+                        "type": "string",
+                        "description": "ISO 8601 datetime with offset",
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["scheduled", "completed", "cancelled", "no_show"],
+                    },
+                    "duration_minutes": {"type": "integer", "minimum": 15, "maximum": 480},
+                    "service_type": {"type": "string", "maxLength": 100},
+                    "notes": {"type": "string"},
+                },
+                "required": ["appointment_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_appointment",
+            "description": (
+                "Permanently delete a calendar appointment after reading it. "
+                "Requires human approval."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"appointment_id": {"type": "integer"}},
+                "required": ["appointment_id"],
             },
         },
     },
@@ -1076,7 +1210,10 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_opportunities",
-            "description": "Pipeline opportunities/deals.",
+            "description": (
+                "List pipeline opportunities/deals across the workspace. For one resolved "
+                "contact's open opportunities and surrounding state, use get_contact_context."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1089,7 +1226,10 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_offers",
-            "description": "List offer drafts and active offers for outbound campaigns.",
+            "description": (
+                "List workspace offer definitions for outbound campaigns; this is not evidence "
+                "of a specific contact's quote or current state. Use get_contact_context for that."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {

@@ -262,9 +262,34 @@ class ConversationService:
                 db=self.db,
                 workspace_id=workspace_id,
             )
-            return message
         finally:
             await sms_service.close()
+
+        # A successful human outbound reply completes the current SMS exchange.
+        # Memory is best-effort and must never turn a delivered message into a 500.
+        try:
+            from app.services.ai.contact_ai_memory_service import (
+                refresh_contact_ai_memory_from_sms,
+            )
+
+            updated = await refresh_contact_ai_memory_from_sms(
+                self.db,
+                workspace_id=workspace_id,
+                conversation_id=conversation_id,
+                completed_message_id=message.id,
+            )
+            if updated:
+                await self.db.commit()
+        except Exception as exc:  # noqa: BLE001 - post-send enrichment must degrade safely
+            await self.db.rollback()
+            self.log.warning(
+                "contact_ai_memory_sms_refresh_failed",
+                workspace_id=str(workspace_id),
+                conversation_id=str(conversation_id),
+                message_id=str(message.id),
+                error_type=type(exc).__name__,
+            )
+        return message
 
     async def toggle_ai(
         self,

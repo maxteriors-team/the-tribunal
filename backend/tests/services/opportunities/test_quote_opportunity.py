@@ -13,6 +13,7 @@ Pins the contract of :mod:`app.services.opportunities.quote_opportunity`:
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import func, select
@@ -22,6 +23,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.contact import Contact
 from app.models.opportunity import Opportunity, OpportunityActivity
 from app.models.pipeline import PipelineStage
+from app.models.quote import Quote
 from app.models.workspace import Workspace
 from app.services.opportunities.default_pipeline import (
     QUOTE_SENT_STAGE_NAME,
@@ -29,6 +31,7 @@ from app.services.opportunities.default_pipeline import (
 )
 from app.services.opportunities.pipeline_removal import remove_from_pipeline
 from app.services.opportunities.quote_opportunity import (
+    mark_quote_approved_on_pipeline,
     on_quote_sent_enabled,
     place_quote_on_pipeline,
 )
@@ -181,6 +184,93 @@ async def test_existing_open_deal_is_advanced_not_duplicated() -> None:
         )
         assert len(activities) == 1
         assert activities[0].new_value == QUOTE_SENT_STAGE_NAME
+
+        await db.rollback()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_approved_quote_closes_and_values_its_linked_opportunity() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        opportunity = await place_quote_on_pipeline(db, ws.id, contact)
+        assert opportunity is not None
+        approved_at = datetime.now(UTC)
+        quote = Quote(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            opportunity_id=opportunity.id,
+            number=f"QUO-{uuid.uuid4().hex[:8]}",
+            status="approved",
+            approved_at=approved_at,
+            total=2_500,
+            currency="USD",
+        )
+        db.add(quote)
+        await db.flush()
+
+        booked = await mark_quote_approved_on_pipeline(db, ws.id, quote)
+
+        assert booked is not None
+        assert booked.id == opportunity.id
+        assert booked.status == "won"
+        assert float(booked.amount) == 2_500
+        assert booked.closed_date == approved_at.date()
+        won_stage = await _stage(db, booked.pipeline_id, "Won")
+        assert booked.stage_id == won_stage.id
+        assert quote.opportunity_id == booked.id
+
+        status_activity = (
+            await db.execute(
+                select(OpportunityActivity).where(
+                    OpportunityActivity.opportunity_id == booked.id,
+                    OpportunityActivity.activity_type == "status_changed",
+                    OpportunityActivity.new_value == "won",
+                )
+            )
+        ).scalar_one()
+        assert quote.number in (status_activity.description or "")
+
+        await db.rollback()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_approval_creates_a_won_opportunity_when_none_exists() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        approved_at = datetime(2026, 8, 14, 16, 0, tzinfo=UTC)
+        quote = Quote(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            number=f"Q-{uuid.uuid4().hex[:8]}",
+            status="approved",
+            currency="USD",
+            total=875,
+            approved_at=approved_at,
+        )
+        db.add(quote)
+        await db.flush()
+
+        booked = await mark_quote_approved_on_pipeline(db, ws.id, quote)
+
+        assert booked is not None
+        assert quote.opportunity_id == booked.id
+        assert booked.status == "won"
+        assert float(booked.amount) == 875
+        won_stage = await _stage(db, booked.pipeline_id, "Won")
+        assert booked.stage_id == won_stage.id
+        assert booked.primary_contact_id == contact.id
+        count = (
+            await db.execute(
+                select(func.count())
+                .select_from(Opportunity)
+                .where(Opportunity.primary_contact_id == contact.id)
+            )
+        ).scalar_one()
+        assert count == 1
 
         await db.rollback()
 

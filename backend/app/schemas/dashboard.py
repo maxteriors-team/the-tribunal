@@ -50,7 +50,7 @@ class AgentStat(BaseModel):
     name: str
     calls: int
     messages: int
-    success_rate: int
+    success_rate: int | None  # successful / classified call outcomes
 
 
 class TodayOverview(BaseModel):
@@ -76,23 +76,24 @@ class RevenueAttributionStat(BaseModel):
 
     id: str
     name: str
-    won_value: float  # closed-won revenue traced to this attribution key
+    won_value: float  # booked revenue traced to this attribution key
     pipeline_value: float  # open pipeline value traced to this attribution key
-    won_count: int  # number of closed-won opportunities
+    won_count: int  # number of bookings traced to this attribution key
 
 
 class RevenueStats(BaseModel):
     """Dollar-denominated revenue/ROI ledger for the workspace.
 
-    Traces closed-won opportunity revenue back to the AI touch chain (voice
-    agent, prompt version, campaign) that booked the appointment behind the
-    deal, alongside an ROI multiple versus estimated AI cost.
+    Traces booked revenue back to the AI touch chain (voice agent, prompt version,
+    campaign) that booked the appointment behind the deal, alongside an ROI
+    multiple versus estimated AI cost.
     """
 
     currency: str
     # Money rollups (all amounts in ``currency``)
-    won_value: float  # all-time closed-won revenue
-    won_value_this_month: float  # closed-won revenue this calendar month
+    won_value: float  # all-time canonical booked revenue
+    won_value_this_month: float  # canonical booked revenue this calendar month
+    ai_attributed_won_value_this_month: float  # month's bookings with an AI touch
     won_count: int
     pipeline_value: float  # sum of open opportunity amounts
     open_count: int
@@ -101,7 +102,7 @@ class RevenueStats(BaseModel):
     # ROI inputs
     appointments_booked_this_month: int  # AI-attributed appointments this month
     estimated_ai_cost_this_month: float  # estimated AI spend this month
-    roi_multiple: float | None  # won_value_this_month / cost; null when cost is 0
+    roi_multiple: float | None  # AI-attributed booked revenue / cost; null at zero cost
     # Attribution breakdowns (top contributors, sorted by won then pipeline)
     by_agent: list[RevenueAttributionStat]
     by_campaign: list[RevenueAttributionStat]

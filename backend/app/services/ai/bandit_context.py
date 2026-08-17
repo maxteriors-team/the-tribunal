@@ -43,6 +43,7 @@ async def build_decision_context(
     contact_id: int | None,
     agent_id: uuid.UUID,
     call_time: datetime,
+    workspace_id: uuid.UUID | None = None,
 ) -> dict[str, object]:
     """Build context snapshot for bandit arm selection.
 
@@ -54,6 +55,7 @@ async def build_decision_context(
         contact_id: Contact ID (optional for inbound calls without contact match)
         agent_id: Agent ID making the call
         call_time: Time of the call
+        workspace_id: Tenant boundary for contact/conversation feature reads
 
     Returns:
         Context dictionary with categorized features
@@ -65,8 +67,8 @@ async def build_decision_context(
         "agent_id": str(agent_id),
     }
 
-    if contact_id is None:
-        # Inbound call without contact match
+    if contact_id is None or workspace_id is None:
+        # Inbound call without a contact match or a safe tenant boundary.
         context["contact_segment"] = "unknown"
         context["prior_contact_count"] = 0
         context["lead_score_bucket"] = "unknown"
@@ -74,7 +76,12 @@ async def build_decision_context(
         return context
 
     # Fetch contact data
-    contact_result = await db.execute(select(Contact).where(Contact.id == contact_id))
+    contact_result = await db.execute(
+        select(Contact).where(
+            Contact.id == contact_id,
+            Contact.workspace_id == workspace_id,
+        )
+    )
     contact = contact_result.scalar_one_or_none()
 
     if contact is None:
@@ -86,7 +93,10 @@ async def build_decision_context(
 
     # Count prior conversations with this contact (across all agents for this contact)
     prior_count_result = await db.execute(
-        select(func.count(Conversation.id)).where(Conversation.contact_id == contact_id)
+        select(func.count(Conversation.id)).where(
+            Conversation.contact_id == contact_id,
+            Conversation.workspace_id == workspace_id,
+        )
     )
     prior_contact_count = prior_count_result.scalar() or 0
 

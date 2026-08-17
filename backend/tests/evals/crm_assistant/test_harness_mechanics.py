@@ -11,7 +11,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-from tests.evals.crm_assistant.golden_set import GoldenCase
+from tests.evals.crm_assistant.golden_set import GoldenCase, cases_for_category
 from tests.evals.crm_assistant.harness import CRMAssistantEvalHarness, EvalConfig
 from tests.evals.crm_assistant.stub_handlers import stub_tool_result
 
@@ -225,6 +225,35 @@ class TestStubHandlers:
         result = stub_tool_result("search_contacts", {})
         assert result["success"] is True
         assert result["total"] == result["returned"]
+
+    def test_ambiguous_identity_stops_before_snapshot_lookup(self) -> None:
+        result = stub_tool_result("search_contacts", {"query": "Alex Kim"})
+
+        assert result["identity_resolution"]["status"] == "ambiguous"
+        assert result["returned"] == 2
+
+    def test_contact_context_stub_supports_timeline_pagination(self) -> None:
+        result = stub_tool_result(
+            "get_contact_context",
+            {"contact_id": 512, "timeline_limit": 2, "timeline_offset": 0},
+        )
+
+        page = result["data"]["timeline_page"]
+        assert page == {
+            "offset": 0,
+            "limit": 2,
+            "returned": 2,
+            "has_more": True,
+            "next_offset": 2,
+        }
+        assert len(cases_for_category("contact_context")) == 5
+
+    def test_contact_context_stub_denies_foreign_workspace_contact_generically(self) -> None:
+        result = stub_tool_result("get_contact_context", {"contact_id": 9001})
+
+        assert result["success"] is False
+        assert result["code"] == "not_found"
+        assert "workspace" not in result["message"].lower()
 
     def test_unknown_tool_still_returns_parseable_success(self) -> None:
         result = stub_tool_result("some_future_tool", {"a": 1})

@@ -143,6 +143,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
     from app.models.agent_training_example import AgentTrainingExample
     from app.models.caller_memory import CallerMemory
     from app.models.contact import Contact
+    from app.models.contact_ai_memory import ContactAIMemory, ContactAIMemoryFact
     from app.models.conversation import Conversation, Message
     from app.models.demo_request import DemoRequest
     from app.models.field_service import ServiceLocation
@@ -234,6 +235,8 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
         RotationTarget(GlobalOptOut, ("phone_number",), {"phone_number": "phone_hash"}),
         RotationTarget(DemoRequest, ("phone_number",), {"phone_number": "phone_hash"}),
         RotationTarget(CallerMemory, ("summary",)),
+        RotationTarget(ContactAIMemory, ("summary",)),
+        RotationTarget(ContactAIMemoryFact, ("value",)),
         RotationTarget(
             AgentTrainingExample,
             ("customer_message", "ai_response", "ideal_response", "operator_note"),

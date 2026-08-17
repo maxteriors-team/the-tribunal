@@ -39,11 +39,12 @@ from app.models.workspace import Workspace
 
 logger = structlog.get_logger()
 
-# Framing for the live-context block: these facts are fresh, but they are a
-# summary — a claim about one specific record still needs a tool call.
+# The workspace block is navigation context only. It must never be mistaken for
+# evidence about one person's mutable CRM state.
 _CONTEXT_PREAMBLE = (
-    "Live facts about this workspace. Prefer these over assumptions, but "
-    "still call a tool before making a claim about a specific record."
+    "Live workspace-level navigation facts only. This shallow context does not establish "
+    "any individual contact's identity, state, or history. Resolve identity, then call "
+    "get_contact_context before making a contact-specific claim."
 )
 
 # Per-list cap. Enough to be useful for name resolution, small enough that the

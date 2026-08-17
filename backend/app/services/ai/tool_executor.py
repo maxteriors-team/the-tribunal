@@ -16,12 +16,17 @@ import asyncio
 import uuid
 from datetime import UTC, datetime
 from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 
 from app.core.config import settings
 from app.services.ai.base_tool_executor import BaseToolExecutor
+from app.services.ai.contact_context_snapshot import ContactContextSnapshotService
+from app.services.ai.contact_state_evidence import (
+    build_contact_state_evidence,
+    build_contact_state_not_found,
+)
+from app.services.ai.context_observability import observability_logger, observe_tool_call
 from app.services.approval.approval_gate_service import approval_gate_service
 
 logger = structlog.get_logger()
@@ -65,11 +70,6 @@ GATE_EXEMPT_TOOLS: frozenset[str] = frozenset(
 
 _ALLOWED_MESSAGE_URGENCIES: frozenset[str] = frozenset({"low", "medium", "high"})
 
-# Caps on how much of the caller's own record we read back into the live call.
-# Bounded so a chatty record can't blow up latency or the prompt window.
-MAX_LOOKUP_APPOINTMENTS = 5
-MAX_LOOKUP_OPPORTUNITIES = 5
-MAX_LOOKUP_NOTES_CHARS = 500
 
 PRESTYJ_APPLICATION_URL = "https://prestyj.com/founding-cohort"
 PRESTYJ_APPLICATION_SMS_BODY = (
@@ -162,7 +162,7 @@ class VoiceToolExecutor(BaseToolExecutor):
         self.log.info(
             "executing_voice_tool",
             function_name=function_name,
-            arguments=arguments,
+            argument_keys=sorted(arguments),
         )
 
         if function_name == "check_availability":
@@ -1035,37 +1035,19 @@ class VoiceToolExecutor(BaseToolExecutor):
             )
 
     async def _execute_lookup_caller_record(self) -> dict[str, Any]:
-        """Read the CURRENT caller's own CRM record for account-specific answers.
+        """Read the current caller's bounded structured CRM snapshot.
 
-        Strictly read-only. Every query is hard-scoped to BOTH the call's
-        ``workspace_id`` AND the resolved ``contact_id``, so the receptionist can
-        only ever read this one caller's record — never another contact's and
-        never another workspace's. Unknown callers (no resolvable contact) get a
-        safe ``found: False`` response so the model can gracefully say it has no
-        record rather than inventing one.
-
-        Returns the caller's upcoming appointments, open opportunities, contact
-        status/notes, and a short last-interaction summary.
+        The call-control message resolves the contact implicitly. Both its conversation
+        workspace and contact id are then required by ``ContactContextSnapshotService``;
+        model arguments can never select another record.
         """
-        from sqlalchemy import or_, select
+        from sqlalchemy import select
         from sqlalchemy.orm import selectinload
 
         from app.db.session import AsyncSessionLocal
-        from app.models.appointment import Appointment, AppointmentStatus
-        from app.models.contact import Contact
         from app.models.conversation import Message as MessageModel
-        from app.models.opportunity import Opportunity, opportunity_contact_table
 
-        not_found = {
-            "success": True,
-            "found": False,
-            "message": (
-                "No account record was found for this caller. Do NOT make up any "
-                "appointment, status, or deal details — let them know you don't "
-                "have a record on file and offer to take their information."
-            ),
-        }
-
+        not_found = build_contact_state_not_found()
         if not self.call_control_id:
             self.log.warning("lookup_caller_record_no_call_control_id")
             return not_found
@@ -1085,73 +1067,55 @@ class VoiceToolExecutor(BaseToolExecutor):
                 return not_found
 
             conversation = call_message.conversation
-            # Workspace scope comes from the call itself, never from the model.
             workspace_id = self.workspace_id or conversation.workspace_id
             contact_id = conversation.contact_id
-            if workspace_id is None or contact_id is None:
+            if (
+                workspace_id is None
+                or contact_id is None
+                or workspace_id != conversation.workspace_id
+            ):
+                self.log.warning(
+                    "lookup_caller_record_scope_mismatch",
+                    call_workspace_id=str(conversation.workspace_id),
+                    executor_workspace_id=str(self.workspace_id),
+                )
                 return not_found
 
-            # Load the contact scoped to BOTH workspace and id (defense in depth):
-            # a contact row only matches if it belongs to this call's workspace.
-            contact_result = await db.execute(
-                select(Contact).where(
-                    Contact.id == contact_id,
-                    Contact.workspace_id == workspace_id,
+            try:
+                snapshot = await ContactContextSnapshotService(
+                    db,
+                    timeline_limit=10,
+                ).get_snapshot(
+                    workspace_id=workspace_id,
+                    contact_id=contact_id,
                 )
-            )
-            contact = contact_result.scalar_one_or_none()
-            if contact is None:
+            except Exception as exc:
+                self.log.exception(
+                    "lookup_caller_record_snapshot_failed",
+                    contact_id=str(contact_id),
+                    workspace_id=str(workspace_id),
+                    error=str(exc),
+                )
+                return {
+                    "success": False,
+                    "found": False,
+                    "evidence_source": "live_crm",
+                    "evidence_status": "error",
+                    "message": (
+                        "The caller's live CRM state could not be verified. Ask one "
+                        "focused question or offer a human handoff; do not infer a fact."
+                    ),
+                }
+            if snapshot is None:
                 self.log.warning(
                     "lookup_caller_record_contact_not_in_workspace",
                     contact_id=str(contact_id),
                     workspace_id=str(workspace_id),
                 )
                 return not_found
-
-            now = datetime.now(UTC)
-
-            # Upcoming appointments: workspace + contact scoped, future + scheduled.
-            appt_result = await db.execute(
-                select(Appointment)
-                .where(
-                    Appointment.workspace_id == workspace_id,
-                    Appointment.contact_id == contact_id,
-                    Appointment.scheduled_at >= now,
-                    Appointment.status == AppointmentStatus.SCHEDULED,
-                )
-                .order_by(Appointment.scheduled_at.asc())
-                .limit(MAX_LOOKUP_APPOINTMENTS)
-            )
-            appointments = list(appt_result.scalars().all())
-
-            # Open opportunities: workspace scoped, still open + active, and linked
-            # to this caller either as primary contact or via the m2m table.
-            opp_result = await db.execute(
-                select(Opportunity)
-                .outerjoin(
-                    opportunity_contact_table,
-                    opportunity_contact_table.c.opportunity_id == Opportunity.id,
-                )
-                .where(
-                    Opportunity.workspace_id == workspace_id,
-                    Opportunity.status == "open",
-                    Opportunity.is_active.is_(True),
-                    or_(
-                        Opportunity.primary_contact_id == contact_id,
-                        opportunity_contact_table.c.contact_id == contact_id,
-                    ),
-                )
-                .order_by(Opportunity.created_at.desc())
-                .distinct()
-                .limit(MAX_LOOKUP_OPPORTUNITIES)
-            )
-            opportunities = list(opp_result.scalars().all())
-
-            record = self._format_caller_record(
-                contact=contact,
-                appointments=appointments,
-                opportunities=opportunities,
-                conversation=conversation,
+            record = build_contact_state_evidence(
+                snapshot,
+                timezone=self.timezone,
             )
 
         self.log.info(
@@ -1160,78 +1124,10 @@ class VoiceToolExecutor(BaseToolExecutor):
             contact_id=str(contact_id),
             workspace_id=str(workspace_id),
             appointment_count=len(record["upcoming_appointments"]),
-            opportunity_count=len(record["open_opportunities"]),
+            quote_count=len(record["active_quotes"]),
+            invoice_count=len(record["active_invoices"]),
         )
         return record
-
-    def _format_caller_record(
-        self,
-        *,
-        contact: Any,
-        appointments: list[Any],
-        opportunities: list[Any],
-        conversation: Any,
-    ) -> dict[str, Any]:
-        """Shape a caller's own record into a safe, voice-friendly tool response."""
-        try:
-            tz = ZoneInfo(self.timezone)
-        except (ZoneInfoNotFoundError, ValueError):
-            tz = ZoneInfo("America/New_York")
-
-        appt_list = [
-            {
-                "when": appt.scheduled_at.astimezone(tz).strftime("%A, %B %d at %I:%M %p"),
-                "iso": appt.scheduled_at.astimezone(tz).isoformat(),
-                "duration_minutes": appt.duration_minutes,
-                "status": str(appt.status),
-                "service_type": appt.service_type,
-            }
-            for appt in appointments
-        ]
-
-        opp_list = [
-            {
-                "name": opp.name,
-                "status": opp.status,
-                "amount": float(opp.amount) if opp.amount is not None else None,
-                "currency": opp.currency,
-            }
-            for opp in opportunities
-        ]
-
-        notes = contact.notes
-        if notes and len(notes) > MAX_LOOKUP_NOTES_CHARS:
-            notes = notes[:MAX_LOOKUP_NOTES_CHARS].rstrip() + "…"
-
-        last_interaction: dict[str, Any] | None = None
-        if conversation.last_message_at is not None:
-            last_interaction = {
-                "when": conversation.last_message_at.astimezone(tz).strftime(
-                    "%A, %B %d at %I:%M %p"
-                ),
-                "direction": conversation.last_message_direction,
-                "preview": conversation.last_message_preview,
-                "channel": conversation.channel,
-            }
-
-        return {
-            "success": True,
-            "found": True,
-            "contact": {
-                "name": contact.full_name,
-                "status": contact.status,
-                "is_qualified": contact.is_qualified,
-                "notes": notes,
-            },
-            "upcoming_appointments": appt_list,
-            "open_opportunities": opp_list,
-            "last_interaction": last_interaction,
-            "message": (
-                "This is the caller's own account record. Use ONLY these details "
-                "to answer their account questions, and do not reveal information "
-                "about anyone else."
-            ),
-        }
 
     async def _execute_take_message(
         self,
@@ -2070,18 +1966,36 @@ def create_tool_callback(
             "tool_callback_invoked",
             call_id=call_id,
             function_name=function_name,
-            arguments=arguments,
+            argument_keys=sorted(arguments),
+        )
+        observe_tool_call(
+            observability_logger,
+            surface="voice",
+            invocation_id=call_control_id or call_id,
+            tool_call_id=call_id,
+            tool_name=function_name,
+            status="requested",
         )
 
         # Read-only tools (e.g. knowledge lookups) skip the approval gate so a
         # live call never stalls waiting for operator sign-off on a retrieval.
         if function_name in GATE_EXEMPT_TOOLS:
             result = await executor.execute(function_name, arguments)
+            success = bool(result.get("success", False))
             log.info(
                 "tool_callback_completed",
                 call_id=call_id,
                 function_name=function_name,
-                result=result,
+                success=success,
+            )
+            observe_tool_call(
+                observability_logger,
+                surface="voice",
+                invocation_id=call_control_id or call_id,
+                tool_call_id=call_id,
+                tool_name=function_name,
+                status="completed" if success else "failed",
+                success=success,
             )
             return result
 
@@ -2100,7 +2014,16 @@ def create_tool_callback(
             log.info(
                 "action_pending_approval",
                 function_name=function_name,
-                gate_result=gate_result,
+                pending_action_created=bool(gate_result),
+            )
+            observe_tool_call(
+                observability_logger,
+                surface="voice",
+                invocation_id=call_control_id or call_id,
+                tool_call_id=call_id,
+                tool_name=function_name,
+                status="pending_approval",
+                success=False,
             )
             return {
                 "success": False,
@@ -2112,6 +2035,15 @@ def create_tool_callback(
             }
         if decision == "blocked":
             log.info("action_blocked", function_name=function_name)
+            observe_tool_call(
+                observability_logger,
+                surface="voice",
+                invocation_id=call_control_id or call_id,
+                tool_call_id=call_id,
+                tool_name=function_name,
+                status="blocked",
+                success=False,
+            )
             return {
                 "success": False,
                 "blocked": True,
@@ -2120,11 +2052,21 @@ def create_tool_callback(
 
         # decision == "auto" — proceed with normal execution
         result = await executor.execute(function_name, arguments)
+        success = bool(result.get("success", False))
         log.info(
             "tool_callback_completed",
             call_id=call_id,
             function_name=function_name,
-            result=result,
+            success=success,
+        )
+        observe_tool_call(
+            observability_logger,
+            surface="voice",
+            invocation_id=call_control_id or call_id,
+            tool_call_id=call_id,
+            tool_name=function_name,
+            status="completed" if success else "failed",
+            success=success,
         )
         return result
 

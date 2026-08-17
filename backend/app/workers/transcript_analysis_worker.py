@@ -13,6 +13,9 @@ from sqlalchemy.orm import selectinload
 from app.db.session import AsyncSessionLocal
 from app.models.call_outcome import CallOutcome
 from app.models.conversation import Message
+from app.services.ai.contact_ai_memory_service import (
+    refresh_contact_ai_memory_from_voice_analysis,
+)
 from app.services.ai.transcript_analysis import analyze_transcript
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -44,7 +47,10 @@ class TranscriptAnalysisWorker(RetryableWorker, BaseWorker):
             result = await db.execute(
                 select(Message)
                 .join(CallOutcome, CallOutcome.message_id == Message.id)
-                .options(selectinload(Message.call_outcome))
+                .options(
+                    selectinload(Message.call_outcome),
+                    selectinload(Message.conversation),
+                )
                 .where(
                     Message.channel == "voice",
                     Message.transcript.is_not(None),
@@ -72,13 +78,36 @@ class TranscriptAnalysisWorker(RetryableWorker, BaseWorker):
             for (msg, outcome, _), analysis in zip(items, analyses, strict=True):
                 log = self.logger.bind(message_id=str(msg.id))
                 current: dict[str, object] = dict(outcome.signals or {})
+                memory_analysis: dict[str, object] = {}
                 if isinstance(analysis, BaseException):
-                    log.exception("transcript_analysis_failed", exc_info=analysis)
+                    log.error(
+                        "transcript_analysis_failed",
+                        error_type=type(analysis).__name__,
+                    )
                     current["analyzed"] = "error"
                 else:
                     current.update(analysis)
                     current["analyzed"] = True
+                    memory_analysis.update(analysis)
                     log.info("transcript_analyzed", sentiment=analysis.get("sentiment"))
+                memory_analysis["call_outcome"] = str(
+                    getattr(outcome.outcome_type, "value", outcome.outcome_type)
+                )
+                try:
+                    async with db.begin_nested():
+                        await refresh_contact_ai_memory_from_voice_analysis(
+                            db,
+                            workspace_id=msg.conversation.workspace_id,
+                            message_id=msg.id,
+                            analysis=memory_analysis,
+                            provenance_event_id=f"call-outcome:{outcome.id}",
+                        )
+                except Exception as exc:  # noqa: BLE001 - outcome must still persist
+                    log.warning(
+                        "contact_ai_memory_voice_refresh_failed",
+                        outcome_id=str(outcome.id),
+                        error_type=type(exc).__name__,
+                    )
                 outcome.signals = current
 
             await db.commit()

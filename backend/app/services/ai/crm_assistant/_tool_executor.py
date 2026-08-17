@@ -35,6 +35,28 @@ from app.services.approval.approval_gate_service import approval_gate_service
 _APPROVAL_FLAG_KEYS = frozenset({"confirmed", "user_confirmed"})
 
 
+def _safe_traceback_frames(exc: BaseException) -> list[dict[str, object]]:
+    """Return code locations without exception text, arguments, results, or locals.
+
+    Tool payloads can contain names, phones, emails, addresses, and message bodies.
+    Logging exception strings or locals can therefore turn telemetry into a PII sink.
+    """
+
+    frames: list[dict[str, object]] = []
+    traceback = exc.__traceback__
+    while traceback is not None:
+        code = traceback.tb_frame.f_code
+        frames.append(
+            {
+                "file": code.co_filename.rsplit("/", 1)[-1],
+                "function": code.co_name,
+                "line": traceback.tb_lineno,
+            }
+        )
+        traceback = traceback.tb_next
+    return frames[-8:]
+
+
 class CRMToolExecutor:
     """Execute CRM tool calls on behalf of the assistant."""
 
@@ -171,24 +193,36 @@ class CRMToolExecutor:
                 return await self._queue_pending_action(metadata, arguments)
             return await metadata.handler(arguments)
         except (KeyError, TypeError, ValueError) as exc:
-            # Bad tool arguments: the model can fix these itself, so name the
-            # offending field. Exception text is logged, never returned.
+            # Log shape and code location only. Exception text can echo raw tool PII.
             self.log.warning(
                 "tool_argument_error",
                 function_name=function_name,
+                argument_keys=sorted(arguments),
                 error_type=type(exc).__name__,
-                exc_info=True,
+                traceback_frames=_safe_traceback_frames(exc),
             )
             return invalid_argument(
                 f"{function_name} rejected the arguments it was given.",
                 "Check the required parameters in the tool schema and call it again.",
             )
-        except SQLAlchemyError:
-            self.log.exception("tool_database_error", function_name=function_name)
+        except SQLAlchemyError as exc:
+            self.log.error(
+                "tool_database_error",
+                function_name=function_name,
+                argument_keys=sorted(arguments),
+                error_type=type(exc).__name__,
+                traceback_frames=_safe_traceback_frames(exc),
+            )
             return unavailable(
                 "The database is not reachable right now.",
                 "Tell the operator to try again shortly; do not retry automatically.",
             )
-        except Exception:
-            self.log.exception("tool_execution_failed", function_name=function_name)
+        except Exception as exc:
+            self.log.error(
+                "tool_execution_failed",
+                function_name=function_name,
+                argument_keys=sorted(arguments),
+                error_type=type(exc).__name__,
+                traceback_frames=_safe_traceback_frames(exc),
+            )
             return internal_error(function_name)

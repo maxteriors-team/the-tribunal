@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.schemas.lead_source import LeadAttributionFields
 from app.schemas.tag import TagResponse
@@ -316,6 +316,85 @@ class ContactEngagementSummary(BaseModel):
     events_last_30d: int
     last_activity_at: datetime | None
     channels_used: list[str]
+
+
+class ContactAIKnowledgeStructuredFact(BaseModel):
+    """Current non-PII CRM state deliberately selected for the AI knowledge panel."""
+
+    key: str
+    label: str
+    value: str
+    source: str
+    observed_at: datetime
+
+
+class ContactAIKnowledgeNextAction(BaseModel):
+    """A deterministic action derived from current authoritative CRM state."""
+
+    value: str
+    due_at: datetime | None = None
+    source: str
+    observed_at: datetime
+
+
+class ContactAIMemorySummary(BaseModel):
+    """Generated historical summary plus bounded human-readable provenance."""
+
+    value: str = Field(max_length=1000)
+    source: str
+    observed_at: datetime
+    expires_at: datetime | None = None
+
+
+class ContactAIMemoryFact(BaseModel):
+    """One generated or operator-corrected memory fact."""
+
+    id: uuid.UUID
+    fact_type: str
+    label: str
+    value: str = Field(max_length=1000)
+    confidence: float = Field(ge=0.0, le=1.0)
+    source: str
+    observed_at: datetime
+    expires_at: datetime | None = None
+
+
+class ContactAIKnowledgeConflict(BaseModel):
+    """A generated fact that disagrees with a current authoritative CRM value."""
+
+    fact_id: uuid.UUID
+    label: str
+    generated_value: str
+    authoritative_value: str
+    message: str
+
+
+class ContactAIKnowledgeResponse(BaseModel):
+    """Data-minimized operator view of current context and generated memory."""
+
+    contact_id: int
+    generated_at: datetime
+    structured_facts: list[ContactAIKnowledgeStructuredFact] = Field(default_factory=list)
+    next_action: ContactAIKnowledgeNextAction | None = None
+    memory_summary: ContactAIMemorySummary | None = None
+    memory_facts: list[ContactAIMemoryFact] = Field(default_factory=list)
+    conflicts: list[ContactAIKnowledgeConflict] = Field(default_factory=list)
+
+
+class ContactAIMemoryValueUpdate(BaseModel):
+    """Correct generated memory, or remove it by sending ``null``."""
+
+    value: str | None = Field(..., min_length=1, max_length=1000)
+
+    @field_validator("value")
+    @classmethod
+    def _strip_non_blank_value(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("value cannot be blank")
+        return stripped
 
 
 class ImportResult(BaseModel):

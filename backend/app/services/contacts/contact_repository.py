@@ -1,6 +1,7 @@
 """Contact repository - data access layer for contact operations."""
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -282,6 +283,18 @@ async def update_contact(
             names=tag_names,
         )
 
+    if update_data:
+        from app.services.ai.contact_ai_memory_service import ContactAIMemoryService
+
+        observed_at = datetime.now(UTC)
+        await ContactAIMemoryService(db).record_contact_edit(
+            workspace_id=contact.workspace_id,
+            contact_id=contact.id,
+            changed_fields=update_data,
+            provenance_event_id=f"contact-edit:{uuid.uuid4()}",
+            observed_at=observed_at,
+        )
+
     await db.commit()
     return await get_contact_by_id(contact.id, contact.workspace_id, db) or contact
 
@@ -384,7 +397,7 @@ async def bulk_update_status(
         if contact_id not in found_ids:
             errors.append(f"Contact {contact_id} not found")
 
-    # Bulk update all found contacts in one statement
+    # Bulk update all found contacts in one statement.
     if found_ids:
         await db.execute(
             update(Contact)
@@ -394,6 +407,19 @@ async def bulk_update_status(
             )
             .values(status=new_status)
         )
+
+        from app.services.ai.contact_ai_memory_service import ContactAIMemoryService
+
+        memory_service = ContactAIMemoryService(db)
+        observed_at = datetime.now(UTC)
+        for contact_id in found_ids:
+            await memory_service.record_contact_edit(
+                workspace_id=workspace_id,
+                contact_id=contact_id,
+                changed_fields={"status": new_status},
+                provenance_event_id=f"contact-edit:{uuid.uuid4()}",
+                observed_at=observed_at,
+            )
 
     await db.commit()
 
@@ -405,6 +431,10 @@ async def get_contact_timeline(
     workspace_id: uuid.UUID,
     db: AsyncSession,
     limit: int = 100,
+    *,
+    offset: int = 0,
+    include_attachments: bool = True,
+    include_call_outcomes: bool = True,
 ) -> list[dict[str, Any]]:
     """Get the conversation timeline for a contact.
 
@@ -415,6 +445,9 @@ async def get_contact_timeline(
         workspace_id: The workspace UUID
         db: Database session
         limit: Maximum items to return
+        offset: Number of newer matching messages to skip
+        include_attachments: Whether to query attachment metadata
+        include_call_outcomes: Whether to query structured voice-call outcomes
 
     Returns:
         List of timeline items (dicts)
@@ -433,25 +466,23 @@ async def get_contact_timeline(
         normalize_phone_safe(contact.phone_number) if contact.phone_number else None
     )
 
-    # Get conversations for this contact (by contact_id or phone number)
-    conv_query = select(Conversation).where(
-        Conversation.workspace_id == workspace_id,
-    )
-
+    # Get conversations for this contact (by contact_id or legacy phone hash).
+    conversation_contact_filter = Conversation.contact_id == contact_id
     if contact.phone_number and normalized_contact_phone:
         # ``contact_phone`` is Fernet-encrypted; match on the deterministic
         # lookup hash. The raw and normalized forms usually hash identically
         # (``hash_phone`` strips formatting), collapsing this to one value.
-        conv_query = conv_query.where(
-            or_(
-                Conversation.contact_id == contact_id,
-                Conversation.contact_phone_hash.in_(
-                    sorted({hash_phone(contact.phone_number), hash_phone(normalized_contact_phone)})
-                ),
-            )
+        conversation_contact_filter = or_(
+            conversation_contact_filter,
+            Conversation.contact_phone_hash.in_(
+                sorted({hash_phone(contact.phone_number), hash_phone(normalized_contact_phone)})
+            ),
         )
-    else:
-        conv_query = conv_query.where(Conversation.contact_id == contact_id)
+
+    conv_query = select(Conversation).where(
+        Conversation.workspace_id == workspace_id,
+        conversation_contact_filter,
+    )
 
     conv_result = await db.execute(conv_query)
     conversations = conv_result.scalars().all()
@@ -460,27 +491,39 @@ async def get_contact_timeline(
     conversation_ids = [conv.id for conv in conversations]
 
     if conversation_ids:
-        # Fetch only the most recent `limit` messages across all of this
-        # contact's conversations. The timeline is ultimately sorted by
-        # timestamp and clipped to `limit` items, so materializing more than
-        # that in Python wastes a full table scan on every poll (this endpoint
-        # is polled every 3s by the contact viewer).
-        msg_result = await db.execute(
+        # Fetch one deterministic page across all of this contact's conversations.
+        # The timeline is ultimately sorted chronologically in Python. Bounding the
+        # query avoids a full table scan on every poll (the contact viewer polls
+        # this endpoint every 3s), while the ID tie-breaker keeps offset pages stable.
+        message_query = (
             select(Message)
-            .where(Message.conversation_id.in_(conversation_ids))
-            .options(selectinload(Message.call_outcome))
-            .order_by(Message.created_at.desc())
+            .join(Conversation, Conversation.id == Message.conversation_id)
+            .where(
+                Message.conversation_id.in_(conversation_ids),
+                Conversation.workspace_id == workspace_id,
+                conversation_contact_filter,
+            )
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .offset(max(0, offset))
             .limit(limit)
         )
+        if include_call_outcomes:
+            message_query = message_query.options(selectinload(Message.call_outcome))
+
+        msg_result = await db.execute(message_query)
         recent_messages = msg_result.scalars().all()
         message_ids = [message.id for message in recent_messages]
         attachments_by_message: dict[uuid.UUID, list[MessageAttachment]] = {}
-        if message_ids:
+        if include_attachments and message_ids:
             attachment_result = await db.execute(
                 select(MessageAttachment)
+                .join(Message, Message.id == MessageAttachment.message_id)
+                .join(Conversation, Conversation.id == Message.conversation_id)
                 .where(
                     MessageAttachment.workspace_id == workspace_id,
                     MessageAttachment.message_id.in_(message_ids),
+                    Conversation.workspace_id == workspace_id,
+                    conversation_contact_filter,
                 )
                 .order_by(
                     MessageAttachment.message_id,
@@ -500,8 +543,9 @@ async def get_contact_timeline(
                 item_type = msg.channel
 
             signals: dict[str, Any] | None = None
-            if msg.call_outcome is not None and msg.call_outcome.signals:
-                signals = dict(msg.call_outcome.signals)
+            call_outcome = msg.call_outcome if include_call_outcomes else None
+            if call_outcome is not None and call_outcome.signals:
+                signals = dict(call_outcome.signals)
 
             timeline_items.append(
                 {

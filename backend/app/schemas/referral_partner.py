@@ -67,8 +67,8 @@ class ReferralPartnerScoreboardRow(BaseModel):
     """One partner's production, as the owner would read it off a whiteboard.
 
     ``close_rate`` is the share of *referred leads* that produced at least one
-    closed-won job, so it is bounded at 1.0 even when a single referred customer
-    buys twice. ``jobs_closed`` and ``total_revenue`` count every closed-won job,
+    booked job, so it is bounded at 1.0 even when a single referred customer buys
+    twice. ``jobs_closed`` and ``total_revenue`` count every canonical booking,
     which is why ``average_job_value`` divides by ``jobs_closed`` rather than by
     the referral count. Both rates are ``None`` — not ``0.0`` — when their
     denominator is zero, so "no data yet" never renders as a 0% failure.
@@ -92,7 +92,7 @@ class ReferralPartnerScoreboardRow(BaseModel):
 
 
 class ReferralPartnerScoreboardResponse(BaseModel):
-    """Partner scoreboard, ranked by closed-won revenue descending."""
+    """Partner scoreboard, ranked by canonical booked revenue descending."""
 
     items: list[ReferralPartnerScoreboardRow]
     total: int

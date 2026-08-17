@@ -3,7 +3,7 @@
 The scoreboard answers the two questions a home-service owner actually has about
 their referral network:
 
-1. **Who sends work?** Rank partners by closed-won revenue, with the referral
+1. **Who sends work?** Rank partners by canonical booked revenue, with the referral
    count, close rate, and average job value behind it.
 2. **Who went quiet?** A partner with real history who has sent nothing in the
    last N days is not a statistic — it is today's call list. That filter is the
@@ -12,9 +12,9 @@ their referral network:
 
 Both read the attribution that already exists: referrals come from
 :attr:`app.models.contact.Contact.referral_partner_id` (the lead the partner
-sent) and closed-won production from
-:attr:`app.models.opportunity.Opportunity.referral_partner_id` (the immutable
-snapshot ROI reporting already scans). There is no second attribution path.
+sent) and booked production from the canonical quote/legacy-opportunity ledger,
+using each opportunity snapshot before the contact fallback. There is no second
+revenue definition.
 
 Aggregation is split into two grouped queries and one pure assembly function
 (:func:`build_scoreboard`), mirroring
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import distinct, func, select
@@ -37,7 +37,6 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.contact import Contact
-from app.models.opportunity import Opportunity
 from app.models.referral_partner import ReferralPartner, ReferralPartnerType
 from app.schemas.referral_partner import (
     DEFAULT_QUIET_AFTER_DAYS,
@@ -51,9 +50,6 @@ from app.services.lead_sources.exceptions import (
     ReferralPartnerNameConflictError,
     ReferralPartnerNotFoundError,
 )
-
-# Only this status counts as work won, matching the lead-source ROI service.
-_WON_STATUS = "won"
 
 SECONDS_PER_DAY = 86_400
 
@@ -69,12 +65,12 @@ class PartnerReferralAggregate:
         partner_type: Relationship kind, for grouping.
         is_active: Whether the partner is still in the active roster.
         referrals_sent: Leads the partner sent (referred contacts).
-        referrals_closed: Referred leads that produced at least one closed-won
-            job. Bounded by ``referrals_sent`` when assembled, which is what
-            keeps ``close_rate`` a real rate.
-        jobs_closed: Closed-won jobs credited to the partner. Can exceed
+        referrals_closed: Referred leads that produced at least one booked job.
+            Bounded by ``referrals_sent`` when assembled, which keeps
+            ``close_rate`` a real rate.
+        jobs_closed: Booked jobs credited to the partner. Can exceed
             ``referrals_closed`` when one referred customer buys twice.
-        total_revenue: Closed-won revenue credited to the partner.
+        total_revenue: Canonical booked revenue credited to the partner.
         last_referral_at: When the most recent referred lead arrived.
     """
 
@@ -120,7 +116,7 @@ def build_scoreboard_row(
     """
     referrals_sent = max(aggregate.referrals_sent, 0)
     jobs_closed = max(aggregate.jobs_closed, 0)
-    # A won job whose contact link was severed cannot be traced back to a
+    # A booked job whose contact link was severed cannot be traced back to a
     # specific referred lead, so it still counts in jobs/revenue but can never
     # push the rate past 100%.
     referrals_closed = min(max(aggregate.referrals_closed, 0), referrals_sent)
@@ -163,7 +159,7 @@ def build_scoreboard(
     Pure function (no I/O) so the ranking, rate denominators, and gone-quiet
     boundary can be tested with fabricated aggregates.
 
-    Ranked by closed-won revenue descending. Ties break on referral volume then
+    Ranked by booked revenue descending. Ties break on referral volume then
     name, so the order is deterministic instead of shuffling between requests.
     ``gone_quiet_only`` narrows the result to the call list — partners with at
     least one historical referral and nothing inside the window. Totals always
@@ -297,23 +293,29 @@ class ReferralPartnerService:
             if partner_id is not None
         }
 
-    async def _won_counters(
+    async def _booked_counters(
         self, workspace_id: uuid.UUID
     ) -> dict[uuid.UUID, tuple[int, float, int]]:
-        """Closed-won jobs, revenue, and converted-lead counts, per partner."""
+        """Canonical booked jobs, revenue, and converted leads, per partner."""
+        # Local import avoids the eager reporting package import cycle through
+        # quote/opportunity services during application startup.
+        from app.services.reporting.booked_revenue import booked_revenue_events_query
+
+        events = booked_revenue_events_query(
+            workspace_id,
+            date(1900, 1, 1),
+            date(9998, 12, 31),
+            timezone_name="UTC",
+        ).subquery("referral_partner_bookings")
         result = await self.db.execute(
             select(
-                Opportunity.referral_partner_id,
-                func.count(),
-                func.coalesce(func.sum(Opportunity.amount), 0),
-                func.count(distinct(Opportunity.primary_contact_id)),
+                events.c.referral_partner_id,
+                func.count(events.c.event_id),
+                func.coalesce(func.sum(events.c.amount), 0),
+                func.count(distinct(events.c.contact_id)),
             )
-            .where(
-                Opportunity.workspace_id == workspace_id,
-                Opportunity.status == _WON_STATUS,
-                Opportunity.referral_partner_id.is_not(None),
-            )
-            .group_by(Opportunity.referral_partner_id)
+            .where(events.c.referral_partner_id.is_not(None))
+            .group_by(events.c.referral_partner_id)
         )
         return {
             partner_id: (int(jobs or 0), float(revenue or 0), int(converted or 0))
@@ -331,7 +333,7 @@ class ReferralPartnerService:
         partner_type: ReferralPartnerType | None = None,
         now: datetime | None = None,
     ) -> ReferralPartnerScoreboardResponse:
-        """Per-partner production, ranked by closed-won revenue descending.
+        """Per-partner production, ranked by canonical booked revenue descending.
 
         Every partner in scope appears (at zero) unless ``gone_quiet_only``
         narrows the view, so a partner who has never referred is visible as
@@ -353,12 +355,12 @@ class ReferralPartnerService:
         )
 
         referrals = await self._referral_counters(workspace_id)
-        won = await self._won_counters(workspace_id)
+        booked = await self._booked_counters(workspace_id)
 
         aggregates = []
         for partner in partners:
             sent, last_at = referrals.get(partner.id, (0, None))
-            jobs, revenue, converted = won.get(partner.id, (0, 0.0, 0))
+            jobs, revenue, converted = booked.get(partner.id, (0, 0.0, 0))
             aggregates.append(
                 PartnerReferralAggregate(
                     partner_id=partner.id,
