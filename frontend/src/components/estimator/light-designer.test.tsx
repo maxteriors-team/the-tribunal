@@ -450,7 +450,7 @@ describe("LightDesigner", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "BOM" }));
     expect(screen.getByRole("heading", { name: "Bill of Materials" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "CSV" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Supplier CSV" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Electrical" }));
     expect(screen.getByRole("heading", { name: "Electrical Plan" })).toBeInTheDocument();
@@ -1342,8 +1342,8 @@ describe("LightDesigner", () => {
     renderEstimator(undefined, "landscape", adapter);
 
     const user = userEvent.setup();
-    expect(screen.getByText(/No materials yet/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "CSV" })).toBeDisabled();
+    expect(screen.getByText(/No additional materials yet/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Supplier CSV" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Add line item" }));
     await user.type(
@@ -1355,7 +1355,7 @@ describe("LightDesigner", () => {
     await user.type(screen.getByLabelText("BOM line item 1 quantity"), "4");
     await user.selectOptions(screen.getByLabelText("BOM line item 1 unit"), "each");
 
-    expect(screen.getByRole("button", { name: "CSV" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Supplier CSV" })).toBeEnabled();
     await waitFor(() => {
       const latestDraft = onLandscapeDraftChange.mock.calls.at(-1)?.[0];
       expect(latestDraft?.bomLineItems).toEqual([

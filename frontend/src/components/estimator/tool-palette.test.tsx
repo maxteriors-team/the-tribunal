@@ -109,12 +109,15 @@ describe("FixtureOptions beam slider", () => {
       patch: { markerColor: "#f2c94c" },
     });
 
+    expect(screen.getByText("100%")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Increase fixture symbol size" }));
     expect(dispatch).toHaveBeenCalledWith({
       type: "UPDATE_ITEM",
       id: "item-1",
-      patch: { sizePx: 46 },
+      patch: { iconScale: 1.2 },
     });
+    expect(screen.getByText(/Beam throw stays unchanged/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Beam aim in degrees/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Duplicate fixture" }));
     expect(dispatch).toHaveBeenCalledWith({
@@ -206,6 +209,10 @@ describe("FixtureOptions beam slider", () => {
         beamAngleDeg: undefined,
         beamRotationDeg: undefined,
         circuitId: undefined,
+        catalogItemId: undefined,
+        catalogSku: undefined,
+        lampCatalogItemId: undefined,
+        accessoryCatalogItemIds: undefined,
       },
     });
   });
@@ -293,101 +300,5 @@ describe("landscape wire circuit controls", () => {
       id: "circuit-1",
       patch: { sourceVoltage: 13 },
     });
-  });
-});
-
-describe("FixtureOptions aim slider", () => {
-  const aim = () => screen.getByLabelText(/Beam aim in degrees/i);
-
-  it("starts every fixture pointing its natural way", () => {
-    // No stored rotation is the pre-aiming default, and it must read as
-    // "straight" rather than an arbitrary bearing.
-    renderPalette(placed());
-
-    expect(aim()).toHaveValue("0");
-    expect(screen.getByText("Straight up")).toBeInTheDocument();
-  });
-
-  it("names the natural direction per fixture type", () => {
-    // Aim is a delta from each style's own axis: zero points a downlight down.
-    const downlight: Product = {
-      ...UPLIGHT,
-      id: "down",
-      name: "Downlight",
-      style: "downlight",
-    };
-    renderPalette(placed({ productId: "down" }), [downlight]);
-
-    expect(screen.getByText("Straight down")).toBeInTheDocument();
-  });
-
-  it("swings the beam without touching its spread", () => {
-    const dispatch = renderPalette(placed({ beamAngleDeg: 24 }));
-
-    fireEvent.change(aim(), { target: { value: "-35" } });
-
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "UPDATE_ITEM",
-      id: "item-1",
-      patch: { beamRotationDeg: -35 },
-    });
-  });
-
-  it("reads out which way the cone turned", () => {
-    // "Clockwise", never "left"/"right": the same rotation swings an uplight's
-    // cone one way and a downlight's the other, so a screen-side word would be
-    // wrong for half the fixtures on the photo.
-    renderPalette(placed({ beamRotationDeg: 20 }));
-    expect(screen.getByText("20\u00b0 clockwise")).toBeInTheDocument();
-  });
-
-  it("reads out a counter-clockwise aim", () => {
-    renderPalette(placed({ beamRotationDeg: -90 }));
-    expect(screen.getByText("90\u00b0 counter-clockwise")).toBeInTheDocument();
-  });
-
-  it("stores a half turn on one canonical end of the circle", () => {
-    // The slider spans a full turn, so its ends meet: +180 and -180 point the
-    // same way. Normalizing to a single value keeps two identical aims equal
-    // rather than sometimes-equal, which is what a naive clamp would give.
-    const dispatch = renderPalette(placed());
-
-    fireEvent.change(aim(), { target: { value: "180" } });
-
-    expect(dispatch).toHaveBeenLastCalledWith(
-      expect.objectContaining({ patch: { beamRotationDeg: -180 } }),
-    );
-  });
-
-  it("says plainly when a fixture has been turned all the way round", () => {
-    // An uplight aimed a half turn is pointing at the ground — almost always a
-    // slip of the grip, so the readout should say so rather than print "180°".
-    renderPalette(placed({ beamRotationDeg: -180 }));
-
-    expect(screen.getByText(/Flipped — pointing down/)).toBeInTheDocument();
-  });
-
-  it("puts an aimed fixture back to straight in one click", () => {
-    const dispatch = renderPalette(placed({ beamRotationDeg: 47 }));
-
-    fireEvent.click(screen.getByRole("button", { name: /Reset/i }));
-
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "UPDATE_ITEM",
-      id: "item-1",
-      patch: { beamRotationDeg: 0 },
-    });
-  });
-
-  it("disables Reset on a fixture that is already straight", () => {
-    renderPalette(placed());
-
-    expect(screen.getByRole("button", { name: /Reset/i })).toBeDisabled();
-  });
-
-  it("shows no aim control for a fixture with no beam to aim", () => {
-    renderPalette(placed({ productId: "path" }), [PATH_LIGHT]);
-
-    expect(screen.queryByLabelText(/Beam aim in degrees/i)).toBeNull();
   });
 });

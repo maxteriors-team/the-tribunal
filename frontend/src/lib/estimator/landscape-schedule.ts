@@ -9,6 +9,7 @@ export interface LandscapeScheduleRow {
   shotId: string;
   itemId: string;
   productId: string;
+  sheetLabel: string;
   fixtureType: string;
   fixtureName: string;
   fixtureCatalogItemId: string | null;
@@ -20,8 +21,15 @@ export interface LandscapeScheduleRow {
   unresolved: string[];
 }
 
-const activeCatalogIndex = (catalog: readonly CatalogItemResponse[]) =>
-  new Map(catalog.filter((item) => item.is_active).map((item) => [item.id, item]));
+const activeCatalogIndexes = (catalog: readonly CatalogItemResponse[]) => {
+  const active = catalog.filter((item) => item.is_active);
+  return {
+    byId: new Map(active.map((item) => [item.id, item])),
+    bySku: new Map(
+      active.flatMap((item) => (item.sku?.trim() ? [[item.sku.trim(), item] as const] : [])),
+    ),
+  };
+};
 
 export function buildLandscapeSchedule(
   shots: readonly DesignerShot[],
@@ -29,32 +37,49 @@ export function buildLandscapeSchedule(
   catalog: readonly CatalogItemResponse[],
 ): LandscapeScheduleRow[] {
   const productsById = new Map(products.map((product) => [product.id, product]));
-  const catalogById = activeCatalogIndex(catalog);
+  const catalogIndexes = activeCatalogIndexes(catalog);
+  const shotsById = new Map(shots.map((shot) => [shot.id, shot]));
   const numbered = recountLandscapeFixtures(shots, (productId) => {
     const product = productsById.get(productId);
     return Boolean(product?.target.field === "landscape");
   });
   const items = new Map(
-    shots.flatMap((shot) => shot.design.items.map((item) => [`${shot.id}:${item.id}`, item] as const)),
+    shots.flatMap((shot) =>
+      shot.design.items.map((item) => [`${shot.id}:${item.id}`, item] as const),
+    ),
   );
   return numbered.map((entry) => {
     const item = items.get(`${entry.shotId}:${entry.itemId}`)!;
     const product = productsById.get(entry.productId);
-    const fixture = item.catalogItemId ? catalogById.get(item.catalogItemId) : undefined;
-    const lamp = item.lampCatalogItemId ? catalogById.get(item.lampCatalogItemId) : undefined;
+    const fixtureCatalogItemId = item.catalogItemId ?? product?.catalogItemId;
+    const fixtureCatalogSku = item.catalogSku ?? product?.catalogSku;
+    const fixture =
+      (fixtureCatalogItemId ? catalogIndexes.byId.get(fixtureCatalogItemId) : undefined) ??
+      (fixtureCatalogSku ? catalogIndexes.bySku.get(fixtureCatalogSku) : undefined) ??
+      (product?.sku ? catalogIndexes.byId.get(product.sku) : undefined) ??
+      (product?.sku ? catalogIndexes.bySku.get(product.sku) : undefined);
+    const lamp = item.lampCatalogItemId
+      ? catalogIndexes.byId.get(item.lampCatalogItemId)
+      : undefined;
     const accessories = (item.accessoryCatalogItemIds ?? []).flatMap((id) => {
-      const catalogItem = catalogById.get(id);
+      const catalogItem = catalogIndexes.byId.get(id);
       return catalogItem ? [catalogItem] : [];
     });
     const unresolved: string[] = [];
-    if (item.catalogItemId && !fixture) unresolved.push("Fixture catalog item is inactive or missing");
-    if (item.lampCatalogItemId && !lamp) unresolved.push("Lamp catalog item is inactive or missing");
+    if (item.catalogItemId && !fixture)
+      unresolved.push("Fixture catalog item is inactive or missing");
+    if (item.lampCatalogItemId && !lamp)
+      unresolved.push("Lamp catalog item is inactive or missing");
     if (accessories.length !== (item.accessoryCatalogItemIds?.length ?? 0)) {
       unresolved.push("One or more accessories are inactive or missing");
     }
     if (!item.catalogItemId && !product?.sku) unresolved.push("Fixture has no price-book mapping");
     return {
       ...entry,
+      sheetLabel:
+        shotsById.get(entry.shotId)?.sheet?.drawingNumber ??
+        shotsById.get(entry.shotId)?.sheet?.label ??
+        "Drawing sheet",
       fixtureType:
         product?.target.field === "landscape" ? product.target.fixtureType : "unresolved",
       fixtureName: fixture?.name ?? product?.productName ?? product?.name ?? "Unresolved fixture",
@@ -95,7 +120,9 @@ export function copyScheduleSelectionToType(
   shots: readonly DesignerShot[],
   sourceItemId: string,
 ): DesignerShot[] {
-  const source = shots.flatMap((shot) => shot.design.items).find((item) => item.id === sourceItemId);
+  const source = shots
+    .flatMap((shot) => shot.design.items)
+    .find((item) => item.id === sourceItemId);
   if (!source) return [...shots];
   return shots.map((shot) => ({
     ...shot,
