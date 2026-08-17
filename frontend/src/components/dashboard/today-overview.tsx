@@ -34,7 +34,7 @@ import {
 import type { TodayOverview } from "@/lib/api/dashboard";
 import { nudgesApi } from "@/lib/api/nudges";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 
 interface TodayOverviewCardProps {
   overview: TodayOverview | undefined;
@@ -173,7 +173,7 @@ export const NudgesCard = memo(function NudgesCard({ workspaceId }: NudgesCardPr
     queryKey: queryKeys.nudges.stats(workspaceId ?? ""),
     queryFn: () => nudgesApi.getStats(workspaceId!),
     enabled: !!workspaceId,
-    ...POLL_60S,
+    ...REALTIME,
   });
 
   const pending = nudgeStats?.pending ?? 0;

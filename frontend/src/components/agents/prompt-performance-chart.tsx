@@ -10,6 +10,7 @@ import {
   type PromptVersionResponse,
 } from "@/lib/api/prompt-versions";
 import { queryKeys } from "@/lib/query-keys";
+import { REALTIME } from "@/lib/query-options";
 import { formatNumber } from "@/lib/utils/number";
 
 interface PromptPerformanceChartProps {
@@ -26,6 +27,7 @@ export function PromptPerformanceChart({ agentId }: PromptPerformanceChartProps)
       return promptVersionsApi.list(workspaceId, agentId, { page_size: 20 });
     },
     enabled: !!workspaceId,
+    ...REALTIME,
   });
 
   if (isPending) {

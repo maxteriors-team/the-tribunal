@@ -267,9 +267,9 @@ export const AgentsCard = memo(function AgentsCard({
               </div>
               <div className="text-right">
                 <p className="font-medium text-success">
-                  {agent.success_rate}%
+                  {agent.success_rate === null ? "—" : `${agent.success_rate}%`}
                 </p>
-                <p className="text-xs text-muted-foreground">success</p>
+                <p className="text-xs text-muted-foreground">classified calls</p>
               </div>
             </div>
           ))

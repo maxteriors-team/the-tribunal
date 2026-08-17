@@ -27,7 +27,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { reportingApi } from "@/lib/api/reporting";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
 
@@ -37,7 +37,7 @@ function ARAgingCard() {
     queryKey: queryKeys.reports.arAging(workspaceId ?? ""),
     queryFn: () => reportingApi.arAging(workspaceId ?? ""),
     enabled: Boolean(workspaceId),
-    ...POLL_60S,
+    ...REALTIME,
   });
 
   return (
@@ -144,7 +144,7 @@ function COGSCard() {
     queryKey: queryKeys.reports.cogs(workspaceId ?? ""),
     queryFn: () => reportingApi.cogs(workspaceId ?? ""),
     enabled: Boolean(workspaceId),
-    ...POLL_60S,
+    ...REALTIME,
   });
 
   const data = query.data;
@@ -232,7 +232,7 @@ function JobPnLCard() {
     queryKey: queryKeys.reports.jobPnl(workspaceId ?? ""),
     queryFn: () => reportingApi.jobPnl(workspaceId ?? ""),
     enabled: Boolean(workspaceId),
-    ...POLL_60S,
+    ...REALTIME,
   });
 
   const data = query.data;

@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { reviewsApi } from "@/lib/api/reviews";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 
 export function ReviewsPage() {
   const workspaceId = useWorkspaceId();
@@ -27,7 +27,7 @@ export function ReviewsPage() {
     queryKey: queryKeys.reviews.summary(workspaceId ?? ""),
     queryFn: () => reviewsApi.getSummary(workspaceId!),
     enabled: !!workspaceId,
-    ...POLL_60S,
+    ...REALTIME,
   });
 
   return (

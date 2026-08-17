@@ -26,7 +26,7 @@ import type {
   AppointmentStatsResponse,
 } from "@/lib/api/appointments";
 import { queryKeys } from "@/lib/query-keys";
-import { POLL_60S } from "@/lib/query-options";
+import { REALTIME } from "@/lib/query-options";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -187,8 +187,8 @@ export function AppointmentPerformanceCard({
     queryKey: queryKeys.appointments.stats(workspaceId ?? ""),
     queryFn: () => appointmentsApi.getStats(workspaceId),
     enabled: !!workspaceId,
-    // Stats don't change fast; standard 1-min polling is plenty
-    ...POLL_60S,
+    // Keep dashboard results synchronized while the operator is watching.
+    ...REALTIME,
     placeholderData: (prev) => prev,
   });
 
