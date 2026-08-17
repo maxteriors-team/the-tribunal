@@ -35,6 +35,43 @@ SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
         "webhook_secret",
     }
 )
+AI_OBSERVABILITY_EVENTS: Final[frozenset[str]] = frozenset(
+    {
+        "ai_context_observed",
+        "ai_tool_call_observed",
+        "ai_model_route_observed",
+        "ai_human_correction_observed",
+    }
+)
+AI_OBSERVABILITY_ALLOWED_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "event",
+        "surface",
+        "invocation_ref",
+        "source_count",
+        "context_token_count",
+        "context_sources",
+        "model",
+        "temperature",
+        "tool_call_ref",
+        "tool_name",
+        "status",
+        "success",
+        "workspace_ref",
+        "contact_ref",
+        "operator_ref",
+        "correction_ref",
+        "correction_kind",
+        "action",
+        "mode",
+        "recommended_tier",
+        "recommended_model",
+        "recommended_temperature",
+        "selected_model",
+        "selected_temperature",
+        "reason_codes",
+    }
+)
 
 
 def _redact(value: Any) -> Any:
@@ -84,9 +121,25 @@ def redact_sensitive_keys(
     return event_dict
 
 
+def minimize_ai_observability_context(
+    _logger: WrappedLogger,
+    _method_name: str,
+    event_dict: EventDict,
+) -> EventDict:
+    """Strip caller-bound/contextvar fields from body-free AI telemetry events."""
+
+    if event_dict.get("event") not in AI_OBSERVABILITY_EVENTS:
+        return event_dict
+    for key in tuple(event_dict):
+        if key not in AI_OBSERVABILITY_ALLOWED_KEYS:
+            event_dict.pop(key, None)
+    return event_dict
+
+
 def _build_processors() -> list[Processor]:
     return [
         structlog.contextvars.merge_contextvars,
+        minimize_ai_observability_context,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         redact_sensitive_keys,

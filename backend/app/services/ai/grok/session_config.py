@@ -19,11 +19,13 @@ from app.services.ai.grok.constants import (
     DEFAULT_VOICE,
     GROK_VOICES,
 )
-from app.services.ai.prompt_builder import VoicePromptBuilder
+from app.services.ai.voice_prompt_builder import VoicePromptBuilder
 from app.services.ai.voice_tools import (
     DTMF_TOOL,
     GROK_BUILTIN_TOOLS,
+    LOOKUP_CALLER_RECORD_TOOL,
     get_booking_tools,
+    is_lookup_caller_record_enabled,
 )
 
 logger = structlog.get_logger()
@@ -144,12 +146,14 @@ class GrokSessionConfigBuilder:
         self,
         enable_booking: bool = False,
         ivr_detector_active: bool = False,
+        require_caller_record_lookup: bool = False,
     ) -> "GrokSessionConfigBuilder":
         """Configure tools for the session.
 
         Args:
             enable_booking: Enable Google Calendar booking tools
             ivr_detector_active: Whether IVR detector is active (auto-enables DTMF)
+            require_caller_record_lookup: Force live caller CRM evidence for this prompt
 
         Returns:
             Self for chaining
@@ -173,6 +177,10 @@ class GrokSessionConfigBuilder:
             self._tools.append(DTMF_TOOL)
             dtmf_reason = "ivr_detector_active" if ivr_detector_active else "explicit_config"
             self._logger.info("grok_dtmf_tool_enabled", reason=dtmf_reason)
+
+        # The prompt requires this caller-bound read whenever volatile CRM data is present.
+        if require_caller_record_lookup or is_lookup_caller_record_enabled(self._agent):
+            self._tools.append(LOOKUP_CALLER_RECORD_TOOL)
 
         # Add Google Calendar booking tools if enabled
         if enable_booking:

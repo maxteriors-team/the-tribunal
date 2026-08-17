@@ -26,6 +26,7 @@ from app.services.ai.contact_state_evidence import (
     build_contact_state_evidence,
     build_contact_state_not_found,
 )
+from app.services.ai.context_observability import observability_logger, observe_tool_call
 from app.services.approval.approval_gate_service import approval_gate_service
 
 logger = structlog.get_logger()
@@ -161,7 +162,7 @@ class VoiceToolExecutor(BaseToolExecutor):
         self.log.info(
             "executing_voice_tool",
             function_name=function_name,
-            arguments=arguments,
+            argument_keys=sorted(arguments),
         )
 
         if function_name == "check_availability":
@@ -1965,18 +1966,36 @@ def create_tool_callback(
             "tool_callback_invoked",
             call_id=call_id,
             function_name=function_name,
-            arguments=arguments,
+            argument_keys=sorted(arguments),
+        )
+        observe_tool_call(
+            observability_logger,
+            surface="voice",
+            invocation_id=call_control_id or call_id,
+            tool_call_id=call_id,
+            tool_name=function_name,
+            status="requested",
         )
 
         # Read-only tools (e.g. knowledge lookups) skip the approval gate so a
         # live call never stalls waiting for operator sign-off on a retrieval.
         if function_name in GATE_EXEMPT_TOOLS:
             result = await executor.execute(function_name, arguments)
+            success = bool(result.get("success", False))
             log.info(
                 "tool_callback_completed",
                 call_id=call_id,
                 function_name=function_name,
-                result=result,
+                success=success,
+            )
+            observe_tool_call(
+                observability_logger,
+                surface="voice",
+                invocation_id=call_control_id or call_id,
+                tool_call_id=call_id,
+                tool_name=function_name,
+                status="completed" if success else "failed",
+                success=success,
             )
             return result
 
@@ -1995,7 +2014,16 @@ def create_tool_callback(
             log.info(
                 "action_pending_approval",
                 function_name=function_name,
-                gate_result=gate_result,
+                pending_action_created=bool(gate_result),
+            )
+            observe_tool_call(
+                observability_logger,
+                surface="voice",
+                invocation_id=call_control_id or call_id,
+                tool_call_id=call_id,
+                tool_name=function_name,
+                status="pending_approval",
+                success=False,
             )
             return {
                 "success": False,
@@ -2007,6 +2035,15 @@ def create_tool_callback(
             }
         if decision == "blocked":
             log.info("action_blocked", function_name=function_name)
+            observe_tool_call(
+                observability_logger,
+                surface="voice",
+                invocation_id=call_control_id or call_id,
+                tool_call_id=call_id,
+                tool_name=function_name,
+                status="blocked",
+                success=False,
+            )
             return {
                 "success": False,
                 "blocked": True,
@@ -2015,11 +2052,21 @@ def create_tool_callback(
 
         # decision == "auto" — proceed with normal execution
         result = await executor.execute(function_name, arguments)
+        success = bool(result.get("success", False))
         log.info(
             "tool_callback_completed",
             call_id=call_id,
             function_name=function_name,
-            result=result,
+            success=success,
+        )
+        observe_tool_call(
+            observability_logger,
+            surface="voice",
+            invocation_id=call_control_id or call_id,
+            tool_call_id=call_id,
+            tool_name=function_name,
+            status="completed" if success else "failed",
+            success=success,
         )
         return result
 

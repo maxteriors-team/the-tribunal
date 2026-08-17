@@ -3747,6 +3747,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Contact Ai Knowledge
+         * @description Return a data-minimized view instead of widening every contact response.
+         */
+        get: operations["get_contact_ai_knowledge_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge/facts/{fact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Contact Ai Memory Fact
+         * @description Correct or remove one generated fact under the exact workspace/contact scope.
+         */
+        put: operations["update_contact_ai_memory_fact_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_facts__fact_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Contact Ai Memory Summary
+         * @description Correct or remove the generated summary; authoritative CRM fields are untouched.
+         */
+        put: operations["update_contact_ai_memory_summary_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_summary_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai/toggle": {
         parameters: {
             query?: never;
@@ -14893,6 +14953,135 @@ export interface components {
             token: string;
             /** Url */
             url: string;
+        };
+        /**
+         * ContactAIKnowledgeConflict
+         * @description A generated fact that disagrees with a current authoritative CRM value.
+         */
+        ContactAIKnowledgeConflict: {
+            /** Authoritative Value */
+            authoritative_value: string;
+            /**
+             * Fact Id
+             * Format: uuid
+             */
+            fact_id: string;
+            /** Generated Value */
+            generated_value: string;
+            /** Label */
+            label: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ContactAIKnowledgeNextAction
+         * @description A deterministic action derived from current authoritative CRM state.
+         */
+        ContactAIKnowledgeNextAction: {
+            /** Due At */
+            due_at?: string | null;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ContactAIKnowledgeResponse
+         * @description Data-minimized operator view of current context and generated memory.
+         */
+        ContactAIKnowledgeResponse: {
+            /** Conflicts */
+            conflicts?: components["schemas"]["ContactAIKnowledgeConflict"][];
+            /** Contact Id */
+            contact_id: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Memory Facts */
+            memory_facts?: components["schemas"]["ContactAIMemoryFact"][];
+            memory_summary?: components["schemas"]["ContactAIMemorySummary"] | null;
+            next_action?: components["schemas"]["ContactAIKnowledgeNextAction"] | null;
+            /** Structured Facts */
+            structured_facts?: components["schemas"]["ContactAIKnowledgeStructuredFact"][];
+        };
+        /**
+         * ContactAIKnowledgeStructuredFact
+         * @description Current non-PII CRM state deliberately selected for the AI knowledge panel.
+         */
+        ContactAIKnowledgeStructuredFact: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ContactAIMemoryFact
+         * @description One generated or operator-corrected memory fact.
+         */
+        ContactAIMemoryFact: {
+            /** Confidence */
+            confidence: number;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Fact Type */
+            fact_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ContactAIMemorySummary
+         * @description Generated historical summary plus bounded human-readable provenance.
+         */
+        ContactAIMemorySummary: {
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ContactAIMemoryValueUpdate
+         * @description Correct generated memory, or remove it by sending ``null``.
+         */
+        ContactAIMemoryValueUpdate: {
+            /** Value */
+            value: string | null;
         };
         /**
          * ContactAgentAssignRequest
@@ -38564,6 +38753,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContactAgentAssignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_contact_ai_knowledge_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactAIKnowledgeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_contact_ai_memory_fact_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_facts__fact_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+                fact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactAIMemoryValueUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactAIKnowledgeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_contact_ai_memory_summary_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_summary_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactAIMemoryValueUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactAIKnowledgeResponse"];
                 };
             };
             /** @description Validation Error */

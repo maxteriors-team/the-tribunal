@@ -11356,6 +11356,296 @@
         "title": "ComparisonShareResult",
         "type": "object"
       },
+      "ContactAIKnowledgeConflict": {
+        "description": "A generated fact that disagrees with a current authoritative CRM value.",
+        "properties": {
+          "authoritative_value": {
+            "title": "Authoritative Value",
+            "type": "string"
+          },
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "generated_value": {
+            "title": "Generated Value",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact_id",
+          "label",
+          "generated_value",
+          "authoritative_value",
+          "message"
+        ],
+        "title": "ContactAIKnowledgeConflict",
+        "type": "object"
+      },
+      "ContactAIKnowledgeNextAction": {
+        "description": "A deterministic action derived from current authoritative CRM state.",
+        "properties": {
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "source",
+          "observed_at"
+        ],
+        "title": "ContactAIKnowledgeNextAction",
+        "type": "object"
+      },
+      "ContactAIKnowledgeResponse": {
+        "description": "Data-minimized operator view of current context and generated memory.",
+        "properties": {
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/ContactAIKnowledgeConflict"
+            },
+            "title": "Conflicts",
+            "type": "array"
+          },
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "memory_facts": {
+            "items": {
+              "$ref": "#/components/schemas/ContactAIMemoryFact"
+            },
+            "title": "Memory Facts",
+            "type": "array"
+          },
+          "memory_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContactAIMemorySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContactAIKnowledgeNextAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "structured_facts": {
+            "items": {
+              "$ref": "#/components/schemas/ContactAIKnowledgeStructuredFact"
+            },
+            "title": "Structured Facts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "contact_id",
+          "generated_at"
+        ],
+        "title": "ContactAIKnowledgeResponse",
+        "type": "object"
+      },
+      "ContactAIKnowledgeStructuredFact": {
+        "description": "Current non-PII CRM state deliberately selected for the AI knowledge panel.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "value",
+          "source",
+          "observed_at"
+        ],
+        "title": "ContactAIKnowledgeStructuredFact",
+        "type": "object"
+      },
+      "ContactAIMemoryFact": {
+        "description": "One generated or operator-corrected memory fact.",
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "fact_type": {
+            "title": "Fact Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 1000,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "fact_type",
+          "label",
+          "value",
+          "confidence",
+          "source",
+          "observed_at"
+        ],
+        "title": "ContactAIMemoryFact",
+        "type": "object"
+      },
+      "ContactAIMemorySummary": {
+        "description": "Generated historical summary plus bounded human-readable provenance.",
+        "properties": {
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 1000,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "source",
+          "observed_at"
+        ],
+        "title": "ContactAIMemorySummary",
+        "type": "object"
+      },
+      "ContactAIMemoryValueUpdate": {
+        "description": "Correct generated memory, or remove it by sending ``null``.",
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "ContactAIMemoryValueUpdate",
+        "type": "object"
+      },
       "ContactAgentAssignRequest": {
         "description": "Request schema for assigning an AI agent to a contact conversation.",
         "properties": {
@@ -67487,6 +67777,210 @@
           }
         ],
         "summary": "Assign Contact Agent",
+        "tags": [
+          "Contacts"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge": {
+      "get": {
+        "description": "Return a data-minimized view instead of widening every contact response.",
+        "operationId": "get_contact_ai_knowledge_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactAIKnowledgeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Contact Ai Knowledge",
+        "tags": [
+          "Contacts"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge/facts/{fact_id}": {
+      "put": {
+        "description": "Correct or remove one generated fact under the exact workspace/contact scope.",
+        "operationId": "update_contact_ai_memory_fact_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_facts__fact_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Fact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactAIMemoryValueUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactAIKnowledgeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Contact Ai Memory Fact",
+        "tags": [
+          "Contacts"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge/summary": {
+      "put": {
+        "description": "Correct or remove the generated summary; authoritative CRM fields are untouched.",
+        "operationId": "update_contact_ai_memory_summary_api_v1_workspaces__workspace_id__contacts__contact_id__ai_knowledge_summary_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactAIMemoryValueUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactAIKnowledgeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Contact Ai Memory Summary",
         "tags": [
           "Contacts"
         ]

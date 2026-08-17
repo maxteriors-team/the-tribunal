@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     # and these defaults could not be checked against a live /v1/models call.
     openai_assistant_model: str = "gpt-5.6-terra"
     openai_assistant_summary_model: str = "gpt-5.6-luna"
+    openai_sms_simple_model: str = "gpt-5.4-nano"
+    openai_sms_routing_mode: Literal["off", "shadow", "active"] = "shadow"
+    openai_sms_simple_temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    openai_sms_strong_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     openai_realtime_client_secret_ttl_seconds: int = 600
     openai_realtime_idle_timeout_ms: int | None = 6000
     openai_codex_voice_enabled: bool = False

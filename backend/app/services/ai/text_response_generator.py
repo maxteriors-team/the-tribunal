@@ -17,9 +17,16 @@ from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation
+from app.services.ai.context_observability import (
+    ContextChunk,
+    observability_logger,
+    observe_context,
+    observe_model_route,
+)
 from app.services.ai.message_context_builder import (
     build_contact_generation_context,
     build_message_context,
@@ -32,6 +39,7 @@ from app.services.ai.openai_credentials import (
     OpenAICredentialContext,
     build_async_openai_client,
 )
+from app.services.ai.sms_model_router import route_sms_turn
 from app.services.ai.text_prompt_builder import (
     FOLLOWUP_SYSTEM_PROMPT,
     build_booking_instructions,
@@ -640,6 +648,67 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
             has_booking_tools and should_require_booking_tools(latest_inbound_intent.casefold())
         )
         force_booking_next_round = False
+
+        route_decision = route_sms_turn(
+            latest_inbound_intent,
+            simple_model=settings.openai_sms_simple_model,
+            strong_model=settings.openai_assistant_model,
+            simple_temperature=settings.openai_sms_simple_temperature,
+            strong_temperature=settings.openai_sms_strong_temperature,
+            requires_tool_action=bool(required_domains) or force_initial_booking_tool,
+        )
+        routing_mode = settings.openai_sms_routing_mode
+        if routing_mode == "active":
+            selected_model = route_decision.model
+            selected_temperature = route_decision.temperature
+        else:
+            selected_model = settings.openai_sms_simple_model
+            selected_temperature = float(agent.temperature)
+        observe_model_route(
+            observability_logger,
+            invocation_id=str(conversation.id),
+            mode=routing_mode,
+            recommended_tier=route_decision.tier,
+            recommended_model=route_decision.model,
+            recommended_temperature=route_decision.temperature,
+            selected_model=selected_model,
+            selected_temperature=selected_temperature,
+            reason_codes=route_decision.reason_codes,
+        )
+
+        context_source_ids = [f"agent:{agent.id}"]
+        context_observed_times = []
+        context_record_times = []
+        for chunk in contact_generation_context.observation_chunks:
+            context_source_ids.extend(chunk.source_ids)
+            if chunk.observed_at is not None:
+                context_observed_times.append(chunk.observed_at)
+            if chunk.record_updated_at is not None:
+                context_record_times.append(chunk.record_updated_at)
+        observed_now = datetime.now(UTC)
+        observe_context(
+            observability_logger,
+            surface="sms",
+            invocation_id=str(conversation.id),
+            chunks=(
+                ContextChunk(
+                    source_type="sms_system_context",
+                    source_ids=tuple(sorted(set(context_source_ids))),
+                    text=system_prompt,
+                    observed_at=min(context_observed_times, default=observed_now),
+                    record_updated_at=min(context_record_times, default=observed_now),
+                ),
+                ContextChunk(
+                    source_type="conversation_history",
+                    source_ids=(f"conversation:{conversation.id}",),
+                    text="\n".join(message.get("content", "") for message in messages),
+                    observed_at=observed_now,
+                    record_updated_at=observed_now,
+                ),
+            ),
+            model=selected_model,
+            temperature=selected_temperature,
+        )
         tool_executor = TextToolExecutor(
             agent=agent,
             conversation=conversation,
@@ -650,11 +719,13 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
 
         for tool_round in range(MAX_TEXT_TOOL_ROUNDS + 1):
             api_params: dict[str, Any] = {
-                "model": "gpt-5.4-nano",
+                "model": selected_model,
                 "messages": api_messages,
-                "temperature": agent.temperature,
+                "temperature": selected_temperature,
                 "max_completion_tokens": 500,
             }
+            if routing_mode == "active" and route_decision.tier == "strong":
+                api_params["reasoning_effort"] = "none"
             if active_tools:
                 api_params["tools"] = active_tools
                 api_params["tool_choice"] = _tool_choice_for_claims(
@@ -909,12 +980,12 @@ Recent conversation:
     try:
         response = await asyncio.wait_for(
             client.chat.completions.create(
-                model="gpt-5.4-nano",
+                model=settings.openai_sms_simple_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                temperature=0.7,
+                temperature=settings.openai_sms_simple_temperature,
                 max_completion_tokens=200,
             ),
             timeout=30.0,

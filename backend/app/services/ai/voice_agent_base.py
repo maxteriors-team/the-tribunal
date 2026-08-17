@@ -35,11 +35,11 @@ from app.services.ai.ivr_detector import (
     IVRStatus,
 )
 from app.services.ai.live_sentiment import LiveSentimentScorer, SentimentUpdate
-from app.services.ai.prompt_builder import VoicePromptBuilder
 from app.services.ai.protocols import (
     InterruptibleProtocol,
     VoiceAgentProtocol,
 )
+from app.services.ai.voice_prompt_builder import VoicePromptBuilder
 
 logger = structlog.get_logger()
 

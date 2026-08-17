@@ -13,10 +13,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.services.ai.contact_context_snapshot import ContactContextSnapshot
 
-type ContactEvidenceDomain = Literal["quote", "invoice", "appointment"]
+type ContactEvidenceDomain = Literal["opportunity", "quote", "invoice", "appointment"]
 
 ALL_CONTACT_EVIDENCE_DOMAINS: Final[frozenset[ContactEvidenceDomain]] = frozenset(
-    {"quote", "invoice", "appointment"}
+    {"opportunity", "quote", "invoice", "appointment"}
 )
 _MAX_HISTORY_ITEMS: Final = 8
 
@@ -31,6 +31,26 @@ def build_contact_state_evidence(
     requested = frozenset(domains or ALL_CONTACT_EVIDENCE_DOMAINS)
     zone = _timezone(timezone)
 
+    opportunities = [
+        {
+            "opportunity_id": str(opportunity.opportunity_id),
+            "name": opportunity.name,
+            "status": opportunity.status,
+            "pipeline_id": str(opportunity.pipeline_id),
+            "pipeline_name": opportunity.pipeline_name,
+            "stage_id": str(opportunity.stage_id) if opportunity.stage_id else None,
+            "stage_name": opportunity.stage_name,
+            "amount": str(opportunity.amount),
+            "currency": opportunity.currency,
+            "probability": opportunity.probability,
+            "expected_close_date": (
+                opportunity.expected_close_date.isoformat()
+                if opportunity.expected_close_date
+                else None
+            ),
+        }
+        for opportunity in getattr(snapshot, "open_opportunities", ())
+    ]
     quotes = [
         {
             "quote_id": str(quote.quote_id),
@@ -69,6 +89,8 @@ def build_contact_state_evidence(
     )
 
     domain_status: dict[str, str] = {}
+    if "opportunity" in requested:
+        domain_status["opportunity"] = _record_status(len(opportunities))
     if "quote" in requested:
         domain_status["quote"] = _record_status(len(quotes))
     if "invoice" in requested:
@@ -116,6 +138,8 @@ def build_contact_state_evidence(
             "or hand off; do not infer which record or value the customer means."
         ),
     }
+    if "opportunity" in requested:
+        result["current_opportunities"] = opportunities
     if "quote" in requested:
         result["active_quotes"] = quotes
     if "invoice" in requested:
@@ -142,7 +166,8 @@ def build_contact_state_not_found(
         "evidence_status": "absent",
         "message": (
             "No live CRM record was found for this contact. Do not use notes or prior "
-            "messages as proof of a price, quote, invoice, or appointment. Ask one "
+            "messages as proof of an opportunity, qualification, price, quote, invoice, "
+            "or appointment. Ask one "
             "focused question or hand off to a human."
         ),
     }

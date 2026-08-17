@@ -333,21 +333,33 @@ Scope: production chatbot appointment finalization, Google Calendar creation, bo
 
 ## Focused addendum — contact AI memory (2026-08-17)
 
-Scope: backend-only durable memory derived from CRM edits and SMS/voice interactions. This is
-engineering guidance, **NOT LEGAL ADVICE**; the wider register above remains open.
+Scope: durable contact memory derived from CRM/SMS/voice interactions plus its operator-facing
+review and correction surface. This is engineering guidance, **NOT LEGAL ADVICE**; the wider
+register above remains open.
 
 | ID | Severity | Trigger | Evidence (RUNTIME / CODE / DEDUCED) | Obligation | Status | Guard |
 |---|---|---|---|---|---|---|
 | MEM-001 | HIGH | AI-generated CRM memory can retain personal data and stale claims | CODE + RUNTIME: encrypted summary/fact columns, composite workspace scope, provenance/expiry/supersession, contact cascade deletion, and source-change invalidation trigger; local trigger exercise returned `invalidated` | Minimize access, make staleness explicit, and prevent generated text from outranking current CRM records | Implemented in this pass | Model/service/update tests, migration up→down→up, Alembic drift check, and encryption-key rotation coverage |
 | MEM-002 | MEDIUM | OpenAI processes SMS/voice text to refresh memory | CODE: existing workspace/OpenAI credential path is reused; no new processor was added | Keep privacy notice, processor terms, retention, and deletion propagation accurate | Open — factual/legal review needed | Re-verify vendor and retention disclosures before launch/reliance |
+| MEM-003 | HIGH | Realtime voice prompts combine CRM, SMS, human-authored messages, and generated voice summaries | CODE: workspace predicates on contact/campaign/offer/memory reads; live-tool-first authority; free text marked as data; stale summaries excluded; caller context capped at 21,000 characters and optional enrichment capped at 1 second | Prevent cross-tenant disclosure, prompt-injection precedence, stale financial/calendar claims, and unnecessary call-start exposure | Implemented in this pass | Returning caller, cross-channel, reschedule, accepted quote, stale memory, missing contact, tenant-scope, prompt-cap, timeout, and three-provider tool-bridge tests |
+| MEM-004 | HIGH | The CRM assistant can retrieve consolidated contact PII and historical communications | CODE + TEST: `get_contact_context` resolves a workspace-scoped `ContactContextSnapshot`, rejects foreign-workspace IDs without disclosure, labels notes/timeline as non-authoritative, requires source timestamps, and logs argument names/code locations without values | Prevent cross-tenant disclosure, stale-state claims, ambiguous-person selection, and PII leakage into telemetry | Implemented in this pass | Ambiguous identity, conflicting state, 50-item cross-channel page, pagination, cross-workspace denial, approval-gate, prompt, schema, and telemetry regression tests |
+| MEM-005 | HIGH | Operators can view and correct AI-inferred contact memory | CODE + TEST: a private/no-store, `crm:read` endpoint returns a bounded projection without identity, address, raw timeline, notes, record IDs, or financial amounts; `crm:write` mutations can only supersede generated facts and exclude contact-sourced authoritative facts | Minimize operator-visible PII, explain provenance/freshness/conflicts, and prevent a memory correction from silently changing CRM records | Implemented in this pass | Role/workspace authorization tests, projection minimization tests, generated-fact guard tests, typed API tests, and keyboard/label/focus component tests |
+| MEM-006 | HIGH | SMS, voice, and CRM context/tool telemetry can copy message bodies, tool arguments/results, or directly identifying record IDs into logs | CODE + TEST: shared observability emits only HMAC-pseudonymous source/invocation refs, freshness/age, token counts, fixed route reason codes, allowlisted tool name/status, and correction category/action; touched SMS/voice raw body/argument/result logs were removed | Minimize telemetry, retain enough provenance to investigate stale/unsupported AI claims, and keep production bodies/PII out of eval artifacts | Implemented in this pass | Privacy payload/source-regression tests, strict body-free observation schema, 48-scenario local golden gate, and shadow-mode default |
 
 ### Implemented in this pass
 
 - Sensitive summary and fact values use `EncryptedString`; deduplication compares decrypted values only inside the scoped service, and both new encrypted columns are declared in the key-rotation script.
-- Prompt renderers mark summaries/facts as untrusted data, JSON-escape values, omit expired/superseded facts, and explicitly make `ContactContextSnapshot`/live CRM state authoritative.
+- Prompt renderers mark summaries/facts as untrusted data, JSON-escape values, omit expired/superseded facts, and explicitly make `ContactContextSnapshot`/current-turn CRM tool results authoritative.
+- Voice prompt assembly preserves current campaign/offer framing while separately labelling live CRM, recent SMS/human interactions, durable memory, and legacy voice summaries with provenance/freshness.
+- Known-caller realtime sessions force the read-only, caller-bound `lookup_caller_record` tool; OpenAI, Grok, and ElevenLabs/Grok bridge tests pin this behavior.
 - Memory logs contain only workspace/contact/conversation/message identifiers plus exception type; adjacent SMS-path raw phone/email/message previews touched in this pass were removed.
+- The CRM assistant resolves contact identity before loading the consolidated snapshot, cites `observed_at`/`provenance.updated_at`, keeps mutating tools on their existing confirmation path, and excludes raw tool values/results/exception text from telemetry.
+- The operator panel separates read-only CRM facts from generated memory, displays provenance/freshness and authoritative conflicts, and returns keyboard focus after correction/removal dialogs.
+- AI context/tool/correction events HMAC-pseudonymize identifiers and record metadata/counts only; the local eval schema rejects message-body fields and keeps factual, unsupported-claim, stale-state, tool/action, and handoff metrics separate.
 
 ### Residual decisions
 
 - Confirm the product retention period for contact memory and backups. Live rows cascade-delete with the contact, but backup retention is an operational/legal policy outside this code change.
 - Re-verify that public privacy disclosures accurately describe AI processing of SMS/voice CRM data and the current OpenAI processor arrangement.
+- The voice-context controls are CODE + automated-test evidence, not a live provider call. Runtime dashboard-added prompts/tools and provider-side retention were not inspected in this focused pass.
+- SMS model routing remains in metadata-only `shadow` mode until the documented golden and reviewed-production gates pass; enabling `active` changes model cost and requires an operational rollout decision.

@@ -120,7 +120,7 @@ async def classify_opt_out_intent(
     Returns:
         True if the message is a genuine opt-out request, False otherwise
     """
-    log = logger.bind(message_preview=message[:50] if message else "")
+    log = logger.bind(message_char_count=len(message) if message else 0)
 
     api_key = (credential.bearer_token if credential is not None else openai_api_key) or (
         get_openai_bearer_token()

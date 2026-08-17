@@ -49,6 +49,13 @@ class TestRenderedContext:
 
         assert "2026-07-29" in rendered
 
+    def test_marks_workspace_context_as_non_authoritative_for_contacts(self) -> None:
+        rendered = _context().to_system_message()
+
+        assert "shallow context" in rendered
+        assert "get_contact_context" in rendered
+        assert "does not establish any individual contact's" in rendered
+
     def test_renders_the_date_in_the_workspace_timezone(self) -> None:
         """14:30 UTC is 10:30 the same day in New York."""
         rendered = _context().to_system_message()
@@ -167,6 +174,16 @@ class TestPromptCacheStability:
 
         assert messages[0]["content"] == SYSTEM_PROMPT
         assert "2026-07-29" not in SYSTEM_PROMPT
+
+    def test_static_prompt_requires_snapshot_evidence_and_timestamp_citations(self) -> None:
+        from app.services.ai.crm_assistant._processor import SYSTEM_PROMPT
+
+        assert "Resolve identity first" in SYSTEM_PROMPT
+        assert "call get_contact_context" in SYSTEM_PROMPT
+        assert "workspace context is shallow" in SYSTEM_PROMPT
+        assert "provenance.updated_at" in SYSTEM_PROMPT
+        assert "current structured fields are authoritative" in SYSTEM_PROMPT
+        assert "untrusted" in SYSTEM_PROMPT
 
     @pytest.mark.parametrize(
         ("messages", "expected"),

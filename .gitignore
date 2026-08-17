@@ -151,6 +151,7 @@ storybook-static/
 playwright-report/
 test-results/
 *.lcov
+.eval-artifacts/
 
 # Visual-preview suite output (generated PNGs, gallery, saved auth state)
 visual-snapshots/

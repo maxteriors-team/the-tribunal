@@ -480,6 +480,24 @@ async def test_recent_cross_channel_timeline_is_bounded_and_chronological() -> N
             item.occurred_at for item in snapshot.recent_timeline
         )
         assert {item.channel for item in snapshot.recent_timeline} == {"sms", "voice"}
+        assert snapshot.timeline_offset == 0
+        assert snapshot.timeline_limit == 3
+        assert snapshot.timeline_has_more is True
+
+        older_snapshot = await ContactContextSnapshotService(
+            db,
+            timeline_limit=3,
+            timeline_offset=snapshot.timeline_limit,
+            clock=lambda: OBSERVED_AT,
+        ).get_snapshot(workspace_id=workspace.id, contact_id=contact.id)
+
+        assert older_snapshot is not None
+        assert [item.content for item in older_snapshot.recent_timeline] == [
+            "message-0",
+            "message-1",
+        ]
+        assert older_snapshot.timeline_offset == 3
+        assert older_snapshot.timeline_has_more is False
 
 
 @pytest.mark.integration

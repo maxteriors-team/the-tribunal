@@ -83,6 +83,23 @@ class TestEnums:
         assert payload.count('"enum"') >= 10
 
 
+class TestContactContextSnapshot:
+    def test_requires_a_resolved_contact_id_and_bounds_timeline_pages(self) -> None:
+        parameters = _TOOLS["get_contact_context"]["parameters"]
+
+        assert parameters["required"] == ["contact_id"]
+        assert _schema("get_contact_context", "contact_id")["minimum"] == 1
+        assert _schema("get_contact_context", "timeline_limit")["maximum"] == 50
+        assert _schema("get_contact_context", "timeline_offset")["maximum"] == 10_000
+
+    def test_description_requires_identity_resolution_and_timestamp_citations(self) -> None:
+        description = _TOOLS["get_contact_context"]["description"]
+
+        assert "search_contacts" in description
+        assert "provenance.updated_at" in description
+        assert "workspace context" in description
+
+
 class TestStrictSchemas:
     def test_closed_objects_forbid_unknown_keys(self) -> None:
         for tool in get_crm_tools():

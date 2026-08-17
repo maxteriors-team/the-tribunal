@@ -33,6 +33,10 @@ from app.models.conversation import (
     MessageDirection,
     MessageStatus,
 )
+from app.services.ai.context_observability import (
+    observability_logger,
+    observe_human_correction,
+)
 
 logger = structlog.get_logger()
 
@@ -108,6 +112,8 @@ class ContactMemoryFactContext:
     provenance_message_id: uuid.UUID | None
     observed_at: datetime
     expires_at: datetime | None
+    fact_id: uuid.UUID | None = None
+    source_record_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -540,6 +546,134 @@ class ContactAIMemoryService:
         )
         await self._db.flush()
 
+    async def update_summary(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        contact_id: int,
+        value: str | None,
+        operator_id: int,
+        observed_at: datetime | None = None,
+    ) -> bool:
+        """Correct or clear generated summary text without touching the CRM contact."""
+
+        observed_at = _as_utc(observed_at or _utc_now())
+        cleaned_value = value.strip()[:SUMMARY_MAX_CHARS] if value is not None else None
+        if value is not None and not cleaned_value:
+            raise ValueError("summary correction cannot be blank")
+
+        if cleaned_value is None:
+            memory_result = await self._db.execute(
+                select(ContactAIMemory)
+                .where(
+                    ContactAIMemory.workspace_id == workspace_id,
+                    ContactAIMemory.contact_id == contact_id,
+                )
+                .with_for_update()
+            )
+            memory = memory_result.scalar_one_or_none()
+            if memory is None:
+                return False
+        else:
+            memory = await self._get_or_create_scoped_memory(
+                workspace_id=workspace_id,
+                contact_id=contact_id,
+                now=observed_at,
+            )
+            if memory is None:
+                return False
+
+        memory.summary = cleaned_value
+        memory.summary_source_event_id = f"operator:{operator_id}:{uuid.uuid4()}"
+        memory.summary_observed_at = observed_at
+        memory.updated_at = observed_at
+        await self._db.flush()
+        observe_human_correction(
+            observability_logger,
+            workspace_id=str(workspace_id),
+            contact_id=str(contact_id),
+            operator_id=str(operator_id),
+            correction_id=f"summary:{memory.id}:{observed_at.isoformat()}",
+            correction_kind="summary",
+            action="removed" if cleaned_value is None else "replaced",
+        )
+        return True
+
+    async def update_fact(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        contact_id: int,
+        fact_id: uuid.UUID,
+        value: str | None,
+        operator_id: int,
+        observed_at: datetime | None = None,
+    ) -> bool:
+        """Correct or remove one generated fact; authoritative contact facts are excluded."""
+
+        observed_at = _as_utc(observed_at or _utc_now())
+        cleaned_value = value.strip()[:FACT_VALUE_MAX_CHARS] if value is not None else None
+        if value is not None and not cleaned_value:
+            raise ValueError("fact correction cannot be blank")
+
+        fact_result = await self._db.execute(
+            select(ContactAIMemoryFact)
+            .where(
+                ContactAIMemoryFact.id == fact_id,
+                ContactAIMemoryFact.workspace_id == workspace_id,
+                ContactAIMemoryFact.contact_id == contact_id,
+                ContactAIMemoryFact.supersession_state == FactSupersessionState.ACTIVE.value,
+                or_(
+                    ContactAIMemoryFact.expires_at.is_(None),
+                    ContactAIMemoryFact.expires_at > observed_at,
+                ),
+                or_(
+                    ContactAIMemoryFact.source_record_type.is_(None),
+                    ContactAIMemoryFact.source_record_type != "contact",
+                ),
+            )
+            .with_for_update()
+        )
+        fact = fact_result.scalar_one_or_none()
+        if fact is None:
+            return False
+
+        fact.superseded_at = observed_at
+        fact.updated_at = observed_at
+        if cleaned_value is None:
+            fact.supersession_state = FactSupersessionState.INVALIDATED.value
+        else:
+            replacement = ContactAIMemoryFact(
+                id=uuid.uuid4(),
+                memory_id=fact.memory_id,
+                workspace_id=workspace_id,
+                contact_id=contact_id,
+                fact_type=fact.fact_type,
+                value=cleaned_value,
+                confidence=1.0,
+                provenance_event_id=f"operator:{operator_id}:{uuid.uuid4()}",
+                source_record_type="operator",
+                source_record_id=str(operator_id),
+                observed_at=observed_at,
+                expires_at=fact.expires_at,
+                supersession_state=FactSupersessionState.ACTIVE.value,
+            )
+            fact.supersession_state = FactSupersessionState.SUPERSEDED.value
+            fact.superseded_by_id = replacement.id
+            self._db.add(replacement)
+
+        await self._db.flush()
+        observe_human_correction(
+            observability_logger,
+            workspace_id=str(workspace_id),
+            contact_id=str(contact_id),
+            operator_id=str(operator_id),
+            correction_id=f"fact:{fact.id}:{observed_at.isoformat()}",
+            correction_kind="fact",
+            action="removed" if cleaned_value is None else "replaced",
+        )
+        return True
+
     async def get_context(
         self,
         *,
@@ -585,6 +719,8 @@ class ContactAIMemoryService:
                 provenance_message_id=fact.provenance_message_id,
                 observed_at=fact.observed_at,
                 expires_at=fact.expires_at,
+                fact_id=fact.id,
+                source_record_type=fact.source_record_type,
             )
             for fact in facts_result.scalars().all()
         )

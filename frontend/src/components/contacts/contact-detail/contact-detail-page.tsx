@@ -15,6 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { OutboundCallDialog } from "@/components/calls/outbound-call-dialog";
+import { ContactAIKnowledge } from "@/components/contacts/contact-detail/contact-ai-knowledge";
 import { ContactHistory } from "@/components/contacts/contact-detail/contact-history";
 import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import { ContactFilesMedia } from "@/components/contacts/contact-sidebar/contact-files-media";
@@ -32,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Separator } from "@/components/ui/separator";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { contactQueryKeys, useContact } from "@/hooks/useContacts";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { leadSourcesApi } from "@/lib/api/lead-sources";
@@ -101,6 +103,7 @@ function ContactLeadSourceCorrection({
  */
 export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
   const [editOpen, setEditOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
@@ -256,12 +259,21 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
           </Card>
         </div>
 
-        {/* History */}
-        <Card className="min-w-0">
-          <CardContent>
-            <ContactHistory workspaceId={workspaceId} contactId={contact.id} />
-          </CardContent>
-        </Card>
+        {/* AI context and history */}
+        <div className="min-w-0 space-y-6">
+          {workspaceId ? (
+            <ContactAIKnowledge
+              workspaceId={workspaceId}
+              contactId={contact.id}
+              canEditMemory={can("crm:write")}
+            />
+          ) : null}
+          <Card>
+            <CardContent>
+              <ContactHistory workspaceId={workspaceId} contactId={contact.id} />
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <ContactFormDialog

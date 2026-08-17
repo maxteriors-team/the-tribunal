@@ -152,6 +152,12 @@ async def test_search_contacts_returns_contact_summaries(
         "returned": 1,
         "total": 1,
         "has_more": False,
+        "identity_resolution": {
+            "status": "resolved",
+            "candidate_count": 1,
+            "contact_id": 101,
+            "next_action": "Call get_contact_context before claiming current record state.",
+        },
     }
 
 
