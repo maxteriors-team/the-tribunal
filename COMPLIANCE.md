@@ -211,7 +211,6 @@ None for this calendar release.
 - This was source and automated runtime verification, not a legal certification or a manual assistive-technology audit.
 - Re-run dependency audit and authenticated calendar smoke checks for future releases; external advisories and provider behavior change.
 
-
 ## Addendum — Google availability with Zoom booking links
 
 Snapshot: 12 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
@@ -379,3 +378,156 @@ Scope: production chatbot appointment finalization, Google Calendar creation, bo
 - “Delivered” here means Telnyx's signed delivery status, not proof a person read the text. Resend evidence stops at provider acceptance because direct emails are not correlated and the key is send-only.
 - Historical Cal.com events cannot be verified after their identifiers were dropped.
 - The public chatbot UI, broad authentication surface, and product-wide accessibility were not audited in this focused pass.
+
+## Addendum — Customer invoice-link DNS incident
+
+Snapshot: 14 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
+
+- **RUNTIME — Fixed for new and resent invoices:** production generated customer email targets with `https://app.maxteriorslighting.com` and SMS short links with `https://go.maxteriorslighting.com`; neither hostname had a traffic DNS record. Railway `FRONTEND_URL` now uses the reachable Vercel origin and `PUBLIC_BASE_URL` the reachable Railway origin.
+- **RUNTIME — Verified:** the configuration deployment completed successfully at commit `83aebb43`; backend readiness and six deployment smoke tests passed, both frontend deployment smoke tests passed, the public invoice page served 200, and an unknown public invoice token returned the expected 404.
+- **Payment control — Unchanged:** invoice amounts remain server-derived and card entry remains on hosted Stripe Checkout; no card data or new payment processor was introduced.
+- **RUNTIME — Customer remediation completed:** three actionable invoices had customer links affected by the DNS move. Replacement emails for `INV-000007` and `INV-000008` were accepted by Resend; replacement texts for `INV-000004` and `INV-000008` were confirmed delivered by Telnyx. Every replacement targets the verified fallback frontend, and the texts use the verified Railway short-link origin. No opted-out contact was messaged, and SMS was not introduced as a new channel for any contact.
+- **RUNTIME — Independent re-verification:** fail-fast reads reconfirmed both Railway origins, both exact email links against the public invoice API and rendered frontend route, and both corrected SMS rows as `delivered` with the right targets. All six backend and two frontend production smoke tests passed. The production Resend key is intentionally send-only, so provider delivery events cannot be read back; evidence for email stops at provider acceptance and exact-link validity, not inbox delivery.
+- **RUNTIME — Live payment verified:** the public pay action for an outstanding production invoice created a hosted Stripe Checkout Session with `livemode=true`, `status=open`, and `payment_status=unpaid`. Stripe's amount matched the server-computed invoice balance, the hosted checkout loaded, and success/cancel URLs return to the reachable invoice page. No PaymentIntent or charge was created by the verification.
+- **RUNTIME — Payment webhook verified:** Stripe reports enabled live webhook endpoints at the reachable Railway billing route with `checkout.session.completed` enabled, and a harmless event signed with the deployed webhook secret returned 200. The invoice return route also reconciled the open session as unpaid without mutating payment state.
+- **RUNTIME — Operator-requested resend:** Marc Sheffman's `INV-000007` and Greg Bartelt's `INV-000008` were resent through their established channels after the live-payment proof. Resend accepted both emails; Telnyx confirmed Greg's SMS as `delivered`, targeting the reachable invoice origin. The SMS contact was not opted out, and no new messaging channel was introduced.
+- **Residual infrastructure issue:** previously delivered branded links remain dead because the authoritative Cloudflare nameservers changed to a different zone; the stored edit token is scoped to the old zone, which Cloudflare reports as `moved`. New and replacement links work, but current-zone DNS access is still required before the branded origins can be restored.
+
+## Addendum — Chatbot appointment booking and reminder delivery
+
+Snapshot: 16 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
+
+Commit reviewed: deployed backend `e229d64584be7cfae81613d1f19ef630a9e1eb81`.
+
+Scope: production chatbot appointment finalization, Google Calendar creation, booking notifications, automatic/manual appointment reminders, Telnyx/Resend delivery reconciliation, and the minimum messaging/privacy controls attached to those paths. This is a focused workflow audit, not a product-wide certification.
+
+### Assumed exposure profile
+
+- **Reach — Confirmed:** deployed public chatbot/SMS surfaces plus authenticated operator UI.
+- **Jurisdictions — Assumed:** reachable worldwide; US and EU/UK duties may apply unless access is technically limited.
+- **Personal data — Confirmed:** customer name, phone, email, conversation, appointment time/location, and calendar attendee data.
+- **Third parties — Confirmed:** OpenAI, Google Calendar, Telnyx, and Resend process workflow data.
+- **Messaging — Confirmed:** transactional calendar invitation, email, and automated SMS reminders; production reminders are configured SMS-only.
+- **AI — Confirmed:** the appointment is booked through an AI text-agent tool.
+- **Minors — Assumed possible, no technical age gate:** the home-services product is not directed to children, but its public surface is reachable without age verification.
+- **Entity — Assumed commercial operator:** exact legal entity and contracting disclosures were not re-reviewed.
+
+### Focused coverage ledger
+
+| # | Checklist item | fail / pass / n-a | Evidence |
+|---|---|---|---|
+| 1 | Committed secrets and ignore gaps | pass | CODE: `.env*`, credential files, dumps, logs, probe output, and backups are ignored; only example env files are tracked. A dedicated secret-scanner binary was unavailable in this checkout, so this is not a fresh history scan. |
+| 2 | Row-level security / equivalent | n-a | CODE: browsers do not access the database directly; FastAPI/SQLAlchemy is the only data path. |
+| 3 | Admin/service key in browser | pass | CODE: Google, Telnyx, Resend, database, and encryption credentials remain backend-only. |
+| 4 | Object authorization at server/data layer | pass | CODE: booking operates on the already workspace-scoped contact/agent; calendar ownership resolves through the assigned login-linked staff record. Existing calendar scope controls are recorded under CAL-001/CAL-004. |
+| 4a | Access-granting defaults | pass | CODE: a missing login-linked staff/calendar produces `not_connected`; it does not grant another user's calendar. |
+| 4b | Multi-tenant isolation | pass | CODE: booking staff resolution is constrained by the agent workspace; reminder queries load each appointment's own workspace/contact. No cross-tenant production data was returned by the aggregate audit. |
+| 5 | Mass assignment | pass | CODE: tool arguments are explicitly validated/mapped; provider event IDs and sync state are server-written. |
+| 6 | String-built queries | pass | CODE: SQLAlchemy expressions are used; the fixed `_mark_offset_sent` column comes from a server-owned channel map. |
+| 7 | Unauthenticated internal endpoint | n-a | Booking finalization is an internal agent tool; the scoped audit added no new route. Existing public chat/webhook boundary controls were not re-audited. |
+| 8 | Public writable/listable storage | n-a | No file or bucket storage in this workflow. |
+| 9 | Expensive/abusable provider call | pass | CODE: duplicate booking has a database uniqueness guard and manual reminders retain the existing route limiter. Public chatbot rate limits were not re-audited. |
+| 10 | Password hashing | n-a | No password path in scope. |
+| 11 | Session cookie/token storage | pass | CODE: Google OAuth refresh/access tokens use encrypted backend storage; no browser provider token. |
+| 12 | JWT verification | n-a | No JWT path changed or reviewed. |
+| 13 | Credentialed wildcard CORS | n-a | No CORS change; product-wide policy not re-reviewed. |
+| 14 | Payment data | n-a | Appointment booking/reminders do not collect card data. |
+| 14b | Cleartext high-value identifiers | pass | CODE: Google tokens and customer contact fields use existing encrypted storage; provider IDs are not credentials. |
+| 15 | Personal data in logs | fail | CODE/RUNTIME: reminder/booking/email logs bind full phone, from-number, and recipient email fields. See LOG-001. |
+| 16 | Transport security | pass | RUNTIME: production API and Google/Telnyx/Resend calls use HTTPS. |
+| 17 | SSRF | n-a | No user-supplied server fetch URL; provider endpoints are fixed. |
+| 18 | Backup/restore | pass | Existing encrypted backup workflow applies. Any proposed appointment backfill must use the production backup/migration release procedure. |
+| U1 | Privacy notice, deletion, vendor list | fail | DEDUCED: Google/Telnyx/Resend/OpenAI process appointment data; this pass did not verify that the current privacy notice names purposes, processors, retention, and deletion propagation. See PRIV-001. |
+| U2 | Third-party scripts consent | n-a | No browser tracking script reviewed or added. |
+| U3 | Account security baseline | n-a | Broad authentication/session security is outside this focused workflow audit. |
+| U4 | Public-page accessibility | n-a | The audit exercised backend/provider behavior and did not alter or manually audit the public chatbot UI. Accessibility conclusions must not be inferred from this pass. |
+| U5 | Email/SMS duties | fail | RUNTIME/CODE: automatic SMS sends consumed reminders with failed/missing delivery; all inspected contacts recorded consent as `unknown`; the worker checks opt-out but not consent or quiet hours. See REM-001, REM-002, OBS-001, and MSG-001. |
+| U6 | Contact-form privacy | n-a | The booking data-entry disclosure shown before the conversation was outside runtime scope; no new form was added. |
+| U7 | Error handling / logging | fail | CODE/RUNTIME: calendar side effects are non-durable background tasks; reminder provider failures are swallowed and marked sent; no reminder failures reached the dead-letter table. See BOOK-001 and REM-001. |
+| U8 | Personal-liability/entity review | n-a | Exact operating entity was not established. |
+| A1 | Image alternatives | n-a | No image UI reviewed or changed. |
+| A2 | Form labels | n-a | No form UI reviewed or changed. |
+| A3 | Keyboard operability | n-a | No UI interaction audit was performed. |
+| A4 | Colour contrast | n-a | No literal UI colors were reviewed. |
+| A5 | Focus visibility | n-a | No UI interaction audit was performed. |
+| A6 | Media controls/captions | n-a | No audio/video surface was in the tested text-booking flow. |
+| A7 | Page language | n-a | No document shell was reviewed or changed. |
+| C1-US | Consumer contract duties | n-a | This scoped booking flow does not take payment or form the service contract by itself. |
+| C1-EU/UK | Consumer pre-contract/withdrawal duties | n-a | Same scope reason; existing proposal/payment duties remain tracked elsewhere. |
+| P1-US | Platform/user-content duties | n-a | Customers do not publish hosted content to other users through this workflow. |
+| P1-EU/UK | Platform/user-content duties | n-a | Same scope reason. |
+| M1 | Minors | fail | DEDUCED: the public chatbot has no technical age gate. The service is not child-directed, but terms alone would not prevent use. See MIN-001. |
+| AI1 | Bot identity and AI disclosure | fail | DEDUCED: no source-enforced first-turn AI disclosure was found in the scoped text-agent path; a database prompt may contain one, but the behavior is not guarded. See AI-001. |
+
+### Findings
+
+| ID | Severity | Trigger | Evidence (RUNTIME / CODE / DEDUCED) | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| BOOK-001 | HIGH | Local booking commits before Google/email/SMS work starts in an in-memory task | CODE + RUNTIME: the one live post-connection event exists, but no durable outbox, restart replay, shutdown drain, or pending/failed sync worker exists | Make promised calendar/notification side effects durable and observable | Open | Add transaction-outbox tests including process death and transient Google failure |
+| REM-001 | HIGH | Failed automatic/manual SMS can be recorded and reported as sent | RUNTIME: only 7 of 11 automatic markers correlate to delivered reminder copy; 3 correlate to failed messages and 1 to no message. CODE: callers do not inspect returned `Message.status` | Do not represent a failed provider request as delivery; retry/dead-letter it | Open | Regression for `MessageStatus.FAILED` across automatic, manual, and value-reinforcement paths |
+| REM-002 | HIGH | Existing failed idempotency rows are skipped rather than retried | CODE: resolver skips every status except `queued` | Preserve duplicate safety while allowing retryable failed attempts to resume with the same provider key | Open | Idempotency test for failed → provider retry → sent/delivered and permanent-failure stop |
+| REM-003 | HIGH | Global `LIMIT 20` runs before unsent-offset filtering | CODE: fully consumed appointments can occupy the entire batch | Prevent silent tenant/row starvation | Open | 21 consumed rows followed by one due row must process the due row |
+| CAL-005 | MEDIUM | Cal.com→Google migration dropped legacy provider IDs but retained `sync_status='synced'` | RUNTIME: 4 historical synced rows have no event ID | Make calendar state truthful and support deletion/correction | Open | Backfill `legacy_unlinked`; reject future synced-without-provider-ID rows |
+| OBS-001 | HIGH | Direct booking/reminder emails are not correlated to Resend webhook records | RUNTIME/CODE: provider acceptance IDs exist, but send-only key blocks read-back and no `Message` row can receive webhook status | Distinguish accepted, delivered, bounced, and failed | Open | Persist delivery attempts and replay signed delivered/bounced fixtures |
+| MSG-001 | HIGH | Automated reminders have unknown recorded consent and no quiet-hours gate | RUNTIME/CODE: inspected contacts are `sms_consent_status='unknown'`; only opt-out is enforced | Retain demonstrable consent scope and enforce applicable send windows | Open — legal policy needed | Shared outbound gate test for unknown/withdrawn consent and local quiet hours |
+| LOG-001 | MEDIUM | Customer phone/email values are bound into operational logs | CODE + RUNTIME | Minimize personal data in logs and retention scope | Open | Log-capture tests rejecting raw email/E.164 destinations |
+| PRIV-001 | MEDIUM | Four external processors receive appointment/conversation data | DEDUCED: current public privacy notice/vendor disclosures were not re-verified | Accurately disclose purposes, processors, retention, rights, and deletion propagation | Open — legal/factual review needed | Release checklist plus reviewed privacy-register entry |
+| MIN-001 | MEDIUM | Internet-reachable chatbot without technical age gate | DEDUCED | Decide intended audience and a defensible minors path | Open — product/legal decision needed | Age/audience test only if minors are excluded by design |
+| AI-001 | MEDIUM | AI text agent can interact and book without a code-enforced identity disclosure | DEDUCED; production prompt disclosure was not inspected | Make bot identity clear where required and avoid relying on editable prompt luck | Open — re-verify current jurisdiction rules | First-turn disclosure contract test |
+
+### Implemented in this pass
+
+- No production message or calendar mutation was made. The audit used aggregate database reads, a Google event read, redacted logs, and provider-status records.
+- One live post-connection chatbot booking was proved to exist on the connected owner's primary Google Calendar with matching timing and attendee metadata.
+- The functional report and acceptance criteria are in `docs/appointment-booking-reminder-audit-2026-08-16.md`; redacted machine evidence is in the gitignored `.ezcoder/eyes/out/appointment-delivery-audit-2026-08-16.json`.
+
+### Open — needs an engineering decision
+
+1. Use one durable delivery-attempt/outbox model for calendar, email, SMS, and reminder touchpoints rather than adding more marker arrays.
+2. Backfill four legacy calendar rows only after the required production appointment-table backup.
+3. Define the transactional SMS consent/quiet-hours policy before wiring the shared send gate.
+
+### Needs a lawyer
+
+- Confirm the consent evidence and send-window policy for automated appointment reminders in the places customers are served.
+- Confirm the required chatbot AI disclosure and public-surface minors position; rules and effective dates are jurisdiction-specific and must be re-verified before relying on this snapshot.
+- Review actual privacy notice/vendor/retention facts; do not infer them from this engineering register.
+
+### Re-verify before relying
+
+- “Delivered” here means Telnyx's signed delivery status, not proof a person read the text. Resend evidence stops at provider acceptance because direct emails are not correlated and the key is send-only.
+- Historical Cal.com events cannot be verified after their identifiers were dropped.
+- The public chatbot UI, broad authentication surface, and product-wide accessibility were not audited in this focused pass.
+
+## Focused addendum — contact AI memory (2026-08-17)
+
+Scope: durable contact memory derived from CRM/SMS/voice interactions plus its operator-facing
+review and correction surface. This is engineering guidance, **NOT LEGAL ADVICE**; the wider
+register above remains open.
+
+| ID | Severity | Trigger | Evidence (RUNTIME / CODE / DEDUCED) | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| MEM-001 | HIGH | AI-generated CRM memory can retain personal data and stale claims | CODE + RUNTIME: encrypted summary/fact columns, composite workspace scope, provenance/expiry/supersession, contact cascade deletion, and source-change invalidation trigger; local trigger exercise returned `invalidated` | Minimize access, make staleness explicit, and prevent generated text from outranking current CRM records | Implemented in this pass | Model/service/update tests, migration up→down→up, Alembic drift check, and encryption-key rotation coverage |
+| MEM-002 | MEDIUM | OpenAI processes SMS/voice text to refresh memory | CODE: existing workspace/OpenAI credential path is reused; no new processor was added | Keep privacy notice, processor terms, retention, and deletion propagation accurate | Open — factual/legal review needed | Re-verify vendor and retention disclosures before launch/reliance |
+| MEM-003 | HIGH | Realtime voice prompts combine CRM, SMS, human-authored messages, and generated voice summaries | CODE: workspace predicates on contact/campaign/offer/memory reads; live-tool-first authority; free text marked as data; stale summaries excluded; caller context capped at 21,000 characters and optional enrichment capped at 1 second | Prevent cross-tenant disclosure, prompt-injection precedence, stale financial/calendar claims, and unnecessary call-start exposure | Implemented in this pass | Returning caller, cross-channel, reschedule, accepted quote, stale memory, missing contact, tenant-scope, prompt-cap, timeout, and three-provider tool-bridge tests |
+| MEM-004 | HIGH | The CRM assistant can retrieve consolidated contact PII and historical communications | CODE + TEST: `get_contact_context` resolves a workspace-scoped `ContactContextSnapshot`, rejects foreign-workspace IDs without disclosure, labels notes/timeline as non-authoritative, requires source timestamps, and logs argument names/code locations without values | Prevent cross-tenant disclosure, stale-state claims, ambiguous-person selection, and PII leakage into telemetry | Implemented in this pass | Ambiguous identity, conflicting state, 50-item cross-channel page, pagination, cross-workspace denial, approval-gate, prompt, schema, and telemetry regression tests |
+| MEM-005 | HIGH | Operators can view and correct AI-inferred contact memory | CODE + TEST: a private/no-store, `crm:read` endpoint returns a bounded projection without identity, address, raw timeline, notes, record IDs, or financial amounts; `crm:write` mutations can only supersede generated facts and exclude contact-sourced authoritative facts | Minimize operator-visible PII, explain provenance/freshness/conflicts, and prevent a memory correction from silently changing CRM records | Implemented in this pass | Role/workspace authorization tests, projection minimization tests, generated-fact guard tests, typed API tests, and keyboard/label/focus component tests |
+| MEM-006 | HIGH | SMS, voice, and CRM context/tool telemetry can copy message bodies, tool arguments/results, or directly identifying record IDs into logs | CODE + TEST: shared observability emits only HMAC-pseudonymous source/invocation refs, freshness/age, token counts, fixed route reason codes, allowlisted tool name/status, and correction category/action; touched SMS/voice raw body/argument/result logs were removed | Minimize telemetry, retain enough provenance to investigate stale/unsupported AI claims, and keep production bodies/PII out of eval artifacts | Implemented in this pass | Privacy payload/source-regression tests, strict body-free observation schema, 48-scenario local golden gate, and shadow-mode default |
+
+### Implemented in this pass
+
+- Sensitive summary and fact values use `EncryptedString`; deduplication compares decrypted values only inside the scoped service, and both new encrypted columns are declared in the key-rotation script.
+- Prompt renderers mark summaries/facts as untrusted data, JSON-escape values, omit expired/superseded facts, and explicitly make `ContactContextSnapshot`/current-turn CRM tool results authoritative.
+- Voice prompt assembly preserves current campaign/offer framing while separately labelling live CRM, recent SMS/human interactions, durable memory, and legacy voice summaries with provenance/freshness.
+- Known-caller realtime sessions force the read-only, caller-bound `lookup_caller_record` tool; OpenAI, Grok, and ElevenLabs/Grok bridge tests pin this behavior.
+- Memory logs contain only workspace/contact/conversation/message identifiers plus exception type; adjacent SMS-path raw phone/email/message previews touched in this pass were removed.
+- The CRM assistant resolves contact identity before loading the consolidated snapshot, cites `observed_at`/`provenance.updated_at`, keeps mutating tools on their existing confirmation path, and excludes raw tool values/results/exception text from telemetry.
+- The operator panel separates read-only CRM facts from generated memory, displays provenance/freshness and authoritative conflicts, and returns keyboard focus after correction/removal dialogs.
+- AI context/tool/correction events HMAC-pseudonymize identifiers and record metadata/counts only; the local eval schema rejects message-body fields and keeps factual, unsupported-claim, stale-state, tool/action, and handoff metrics separate.
+
+### Residual decisions
+
+- Confirm the product retention period for contact memory and backups. Live rows cascade-delete with the contact, but backup retention is an operational/legal policy outside this code change.
+- Re-verify that public privacy disclosures accurately describe AI processing of SMS/voice CRM data and the current OpenAI processor arrangement.
+- The voice-context controls are CODE + automated-test evidence, not a live provider call. Runtime dashboard-added prompts/tools and provider-side retention were not inspected in this focused pass.
+- SMS model routing remains in metadata-only `shadow` mode until the documented golden and reviewed-production gates pass; enabling `active` changes model cost and requires an operational rollout decision.
