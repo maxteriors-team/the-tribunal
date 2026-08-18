@@ -547,7 +547,7 @@ register above remains open.
 
 Snapshot: 18 August 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
 
-Commit reviewed: working tree based on `359defe8` (generated-artifact checkpoint); unrelated concurrent password-reset source work was not reviewed here.
+Commit reviewed: release working tree based on `2ec46f09`; password-reset controls are reviewed separately in the addendum above.
 
 Scope: authenticated full-wizard quote edits/revisions, revision lineage, customer-link continuity, customer approval versioning, deposit/payment locks, and changed sales-wizard controls. This focused engineering gate is not a certification or a full-product accessibility/legal review.
 
