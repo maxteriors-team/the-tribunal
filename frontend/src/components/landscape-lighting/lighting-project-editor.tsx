@@ -213,6 +213,15 @@ function ActiveProjectEditor({
     },
     [autosave, queryClient, workspaceId],
   );
+  const openQuoteBuilder = useCallback(() => {
+    setWorkflowTab("proposal");
+    window.requestAnimationFrame(() => {
+      const quoteBuilder = document.getElementById("landscape-quote-builder");
+      if (!quoteBuilder) return;
+      quoteBuilder.focus({ preventScroll: true });
+      quoteBuilder.scrollIntoView({ block: "start", inline: "nearest" });
+    });
+  }, []);
 
   if (!autosave.isReady) {
     return (
@@ -255,7 +264,8 @@ function ActiveProjectEditor({
             size="sm"
             variant="outline"
             className="h-8 shrink-0 rounded-md border-[#d8d1c5] bg-transparent px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[#1b1a18] hover:bg-black/[0.04]"
-            onClick={() => setWorkflowTab("proposal")}
+            aria-controls="landscape-quote-builder"
+            onClick={openQuoteBuilder}
           >
             Send proposal
           </Button>
