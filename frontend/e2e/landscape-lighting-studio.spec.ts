@@ -362,6 +362,8 @@ async function installStudioApi(page: Page) {
   let serverDocument = structuredClone(projectDocument);
   let installationShotId: string | null = null;
   const updates: unknown[] = [];
+  const previews: Array<Record<string, unknown>> = [];
+  const quotes: Array<Record<string, unknown>> = [];
   const deliveries: unknown[] = [];
 
   await page.route("**/api/v1/**", async (route) => {
@@ -457,6 +459,7 @@ async function installStudioApi(page: Page) {
       return;
     }
     if (method === "POST" && pathname.endsWith("/quotes/wizard/preview")) {
+      previews.push(parseRequestBody(request));
       await route.fulfill(
         json({
           tiers: [],
@@ -470,6 +473,7 @@ async function installStudioApi(page: Page) {
       return;
     }
     if (method === "POST" && pathname.endsWith("/quotes/wizard")) {
+      quotes.push(parseRequestBody(request));
       await route.fulfill(json({ id: "quote-1", number: "Q-1042", status: "draft", total: 2199 }));
       return;
     }
@@ -495,11 +499,92 @@ async function installStudioApi(page: Page) {
     await route.fulfill(json({ detail: `Unexpected ${method} ${pathname}` }, 404));
   });
 
-  return { updates, deliveries };
+  return { updates, previews, quotes, deliveries };
 }
 
 test.describe("landscape lighting studio", () => {
   test.describe.configure({ mode: "serial" });
+
+  test("opens the quote builder at its package choices every time Send proposal is used", async ({
+    page,
+  }) => {
+    const { previews, quotes, deliveries } = await installStudioApi(page);
+    await page.goto(PROJECT_URL);
+
+    const sendProposal = page.getByRole("button", { name: "Send proposal" });
+    const quoteBuilder = page.locator("#landscape-quote-builder");
+    const packageOptions = page.getByRole("group", { name: "Fixture package" });
+    const configuredPackage = packageOptions.getByRole("button", { name: /Best/i });
+    await expect(sendProposal).toHaveAttribute("aria-controls", "landscape-quote-builder");
+
+    await sendProposal.click();
+
+    await expect(page.getByRole("tab", { name: "Proposal" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(
+      page.getByRole("heading", { name: "Landscape Lighting Quote Builder" }),
+    ).toBeVisible();
+    await expect(quoteBuilder).toBeFocused();
+    await expect(packageOptions).toBeInViewport();
+    await expect(configuredPackage).toBeInViewport();
+    await expect(page.getByTitle("Edit project name")).toHaveValue("Hawthorne Residence");
+    await expect
+      .poll(() => previews.at(-1))
+      .toMatchObject({
+        contact_id: 42,
+        lighting_project_id: PROJECT_ID,
+        title: "Hawthorne Residence",
+        selected_tier: "best",
+        quantities: expect.arrayContaining([
+          { item_id: "UP-100", quantity: 2 },
+          { item_id: "PATH-200", quantity: 1 },
+        ]),
+      });
+
+    const quoteBuilderViewport = page.getByRole("region", {
+      name: "Proposal scrollable document",
+    });
+    await page.getByRole("slider", { name: "Proposal zoom percentage" }).fill("100");
+    await quoteBuilderViewport.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect(packageOptions).not.toBeInViewport();
+
+    await sendProposal.click();
+
+    await expect(quoteBuilder).toBeFocused();
+    await expect(packageOptions).toBeInViewport();
+    expect(quotes).toHaveLength(0);
+    expect(deliveries).toHaveLength(0);
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/landscape-quote-builder-send-desktop.png",
+      animations: "disabled",
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await sendProposal.click();
+
+    await expect(quoteBuilder).toBeFocused();
+    await expect(packageOptions).toBeInViewport();
+    await expect(configuredPackage).toBeInViewport();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+    ).toBe(true);
+    expect(quotes).toHaveLength(0);
+    expect(deliveries).toHaveLength(0);
+
+    await page.getByRole("button", { name: "Fit document" }).click();
+    await sendProposal.click();
+    await expect(quoteBuilder).toBeFocused();
+    await expect(packageOptions).toBeInViewport();
+    await expect(configuredPackage).toBeInViewport();
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/landscape-quote-builder-send-mobile.png",
+      animations: "disabled",
+    });
+  });
 
   test("uses every workflow, autosaves, exports, and delivers through captured providers", async ({
     page,

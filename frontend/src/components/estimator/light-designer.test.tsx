@@ -1346,10 +1346,7 @@ describe("LightDesigner", () => {
     expect(screen.getByRole("button", { name: "Supplier CSV" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Add line item" }));
-    await user.type(
-      screen.getByLabelText("BOM line item 1 description"),
-      "Copper ground stake",
-    );
+    await user.type(screen.getByLabelText("BOM line item 1 description"), "Copper ground stake");
     await user.type(screen.getByLabelText("BOM line item 1 SKU"), "STAKE-CU");
     await user.clear(screen.getByLabelText("BOM line item 1 quantity"));
     await user.type(screen.getByLabelText("BOM line item 1 quantity"), "4");
@@ -1376,6 +1373,35 @@ describe("LightDesigner", () => {
       const latestDraft = onLandscapeDraftChange.mock.calls.at(-1)?.[0];
       expect(latestDraft?.bomLineItems).toEqual([]);
     });
+  });
+
+  it("keeps an empty proposal focusable and guides the operator to add an aerial", async () => {
+    const onLandscapeDraftChange = vi.fn();
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        activeShotId: null,
+        activeWorkflowTab: "proposal",
+        shots: [],
+        updatedAt: "2026-08-14T12:00:00.000Z",
+      },
+      onLandscapeDraftChange,
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      resetKey: 0,
+    };
+    renderEstimator(undefined, "landscape", adapter);
+
+    await waitFor(() => expect(onLandscapeDraftChange).toHaveBeenCalled(), { timeout: 1_500 });
+    const quoteBuilder = screen.getByRole("region", {
+      name: "Landscape Lighting Quote Builder",
+    });
+    expect(quoteBuilder).toHaveAttribute("id", "landscape-quote-builder");
+    expect(quoteBuilder).toHaveAttribute("tabindex", "-1");
+    expect(
+      screen.getByRole("heading", { name: "Landscape Lighting Quote Builder" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload aerial plan" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Create draft quote" })).not.toBeInTheDocument();
   });
 
   it("prices Good, Better, and Best fixtures with a care plan and creates the quote here", async () => {
@@ -1545,6 +1571,8 @@ describe("LightDesigner", () => {
       projectName: "Patio lighting",
       contactName: "Pat Lee",
       contactId: 42,
+      opportunityId: "opportunity-1",
+      serviceLocationId: "service-location-1",
       installationShotId: "server-shot",
       onSelectInstallationShot: vi.fn().mockResolvedValue(undefined),
       flushBeforeProposal: vi.fn().mockResolvedValue(undefined),
@@ -1571,6 +1599,17 @@ describe("LightDesigner", () => {
       expect(salesWizardApi.preview).toHaveBeenLastCalledWith(
         "ws_1",
         expect.objectContaining({
+          contact_id: 42,
+          opportunity_id: "opportunity-1",
+          service_location_id: "service-location-1",
+          lighting_project_id: "project-1",
+          title: "Patio lighting",
+          quantities: expect.arrayContaining([
+            expect.objectContaining({ item_id: "best-zd-up", quantity: 2 }),
+          ]),
+          selected_tier: "good",
+          care_plan_tier: null,
+          care_count_manual: 2,
           additional_charges: [
             expect.objectContaining({
               description: "Core drill through masonry",
@@ -1592,7 +1631,13 @@ describe("LightDesigner", () => {
         expect.objectContaining({
           pricing_source: "price_book",
           contact_id: 42,
+          opportunity_id: "opportunity-1",
+          service_location_id: "service-location-1",
           lighting_project_id: "project-1",
+          title: "Patio lighting",
+          quantities: expect.arrayContaining([
+            expect.objectContaining({ item_id: "best-zd-up", quantity: 2 }),
+          ]),
           selected_tier: "better",
           care_plan_tier: "essential",
           care_count_manual: 2,

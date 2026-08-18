@@ -1407,12 +1407,17 @@ function LandscapeProposalPanel({
   const quoteFixtureRows = rows.filter((row) => row.id !== "transformer");
 
   return (
-    <section className="ll-workspace-panel" aria-labelledby="ll-proposal-title">
+    <section
+      id="landscape-quote-builder"
+      className="ll-workspace-panel"
+      aria-labelledby="ll-proposal-title"
+      tabIndex={-1}
+    >
       <div className="ll-panel-sheet ll-proposal-preview">
         <header className="ll-panel-heading">
           <div>
-            <span>Client presentation and pricing</span>
-            <h2 id="ll-proposal-title">Landscape Lighting Proposal</h2>
+            <span>Current design, customer, and CRM pricing</span>
+            <h2 id="ll-proposal-title">Landscape Lighting Quote Builder</h2>
           </div>
           {selectedTier ? <strong>{formatCurrency(selectedTier.pricing.cash_total)}</strong> : null}
         </header>
@@ -1931,10 +1936,20 @@ function LandscapeWorkspacePanel({
   ];
 
   if (!shots.length && tab !== "bom") {
+    const isEmptyProposal = tab === "proposal";
     return (
-      <section className="ll-workspace-panel" aria-label={`${tab} workspace`}>
+      <section
+        id={isEmptyProposal ? "landscape-quote-builder" : undefined}
+        className="ll-workspace-panel"
+        aria-label={isEmptyProposal ? "Landscape Lighting Quote Builder" : `${tab} workspace`}
+        tabIndex={isEmptyProposal ? -1 : undefined}
+      >
         <LandscapeEmptyPanel
-          title={`Start the ${LANDSCAPE_WORKSPACE_TABS.find((item) => item.key === tab)?.label ?? tab}`}
+          title={
+            isEmptyProposal
+              ? "Landscape Lighting Quote Builder"
+              : `Start the ${LANDSCAPE_WORKSPACE_TABS.find((item) => item.key === tab)?.label ?? tab}`
+          }
           description="Add the first top-down aerial to connect this section to a real lighting plan."
           onUpload={onUpload}
         />
