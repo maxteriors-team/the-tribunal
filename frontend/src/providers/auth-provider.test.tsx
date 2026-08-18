@@ -133,6 +133,25 @@ describe("AuthProvider redirects", () => {
     });
   });
 
+  it.each([
+    "/forgot-password",
+    "/reset-password?token=public-recovery-route-test-token-0000",
+  ])("keeps the password recovery page public at %s", async (url) => {
+    const pathname = url.split("?")[0];
+    pathnameMock.mockReturnValue(pathname);
+    setUrl(url);
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("auth").textContent).toBe("no"));
+    expect(getCurrentUserMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
   it("does not append a redirect for the root path", async () => {
     getCurrentUserMock.mockRejectedValue(new Error("401"));
     pathnameMock.mockReturnValue("/");

@@ -31,6 +31,7 @@ interface LoginOptions {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const PUBLIC_PATHS = ["/login", "/register"];
+const PASSWORD_RECOVERY_PATHS = ["/forgot-password", "/reset-password"];
 // Customer-facing Stripe Checkout return pages. Public like PUBLIC_PATHS, but
 // deliberately not in that list: signed-in operators testing a payment should
 // see the page too, not get bounced to "/".
@@ -40,6 +41,7 @@ const PUBLIC_PATH_PREFIXES = ["/invite/", "/p/"];
 function isPublicPathname(pathname: string): boolean {
   return (
     PUBLIC_PATHS.includes(pathname) ||
+    PASSWORD_RECOVERY_PATHS.includes(pathname) ||
     CUSTOMER_PATHS.includes(pathname) ||
     PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   );
@@ -87,8 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = user !== null;
 
   const fetchUser = useCallback(async () => {
-    // Public surfaces (login/register, /invite/, and all /p/ pages such as the
-    // review rating-gate and offer landing pages) are visited by anonymous
+    // Public surfaces (auth entry/recovery, /invite/, and all /p/ pages such as
+    // the review rating-gate and offer landing pages) are visited by anonymous
     // users. Probing /auth/me there would 401 and trip the axios interceptor's
     // hard redirect to /login, breaking those public flows. Skip the probe and
     // resolve to signed-out so the public page renders.
