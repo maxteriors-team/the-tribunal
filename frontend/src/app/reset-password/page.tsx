@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { confirmPasswordReset } from "@/lib/api/auth";
 
@@ -37,7 +37,7 @@ function ResetPasswordForm() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Choose a new password</CardTitle>
+        <h1 className="text-2xl font-semibold leading-none">Choose a new password</h1>
         <CardDescription>The link works once and expires after 30 minutes.</CardDescription>
       </CardHeader>
       <CardContent>

@@ -37,4 +37,13 @@ test.describe("Deployment smoke @smoke", () => {
     // a server error or unstyled white screen would not contain it.
     await expect(page.getByText(/welcome back/i)).toBeVisible();
   });
+
+  test("password recovery route stays public", async ({ page }) => {
+    const response = await page.goto("/forgot-password");
+
+    expect(response, "no HTTP response for /forgot-password").not.toBeNull();
+    expect(response!.status()).toBeLessThan(400);
+    await expect(page).toHaveURL(/\/forgot-password$/);
+    await expect(page.getByRole("heading", { name: /reset your password/i })).toBeVisible();
+  });
 });

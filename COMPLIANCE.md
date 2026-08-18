@@ -107,6 +107,7 @@ Snapshot: 18 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL 
 - **Session containment — Fixed (CODE/tests):** successful redemption applies Argon2id through the existing password helper, clears browser auth cookies, and revokes every refresh token for that user.
 - **Abuse control — Fixed (CODE):** request and confirmation endpoints use the existing persistent IP authentication limiter; responses and logs omit reset tokens and email addresses.
 - **Transactional email — Fixed (CODE):** the reset message has no marketing content or tracking requirement and tells recipients how long the link works and how to ignore an unsolicited request.
+- **Public recovery access — Fixed (CODE/tests):** forgot/reset routes bypass the signed-in dashboard guard, retain semantic page headings and labelled fields, and are pinned by provider plus deployment-smoke regression tests.
 - **Residual risk:** email inbox compromise still permits account takeover during the 30-minute window; production must keep `FRONTEND_URL` on HTTPS and secure the Resend account/domain. Runtime provider delivery was not exercised in this pass.
 - Local Mailpit exercised the exact assignment email renderer/idempotency-key path and proved one recipient plus no imagery/token leakage; it does not prove Resend delivery or inbox placement.
 
