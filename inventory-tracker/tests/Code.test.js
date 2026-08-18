@@ -60,6 +60,17 @@ function loadApp(initialSheets = {}) {
   return { context, sheets, lockEvents };
 }
 
+test('getCatalog creates an empty Products sheet on first use', () => {
+  const { context, sheets, lockEvents } = loadApp();
+
+  const result = context.getCatalog();
+
+  assert.deepEqual(JSON.parse(JSON.stringify(result.products)), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(sheets.Products.appended[0])), ['SKU', 'Product Name', 'Price']);
+  assert.equal(sheets.Products.frozenRows, 1);
+  assert.deepEqual(lockEvents, [['wait', 30000], ['release']]);
+});
+
 test('getCatalog maps accepted headers and ignores incomplete rows', () => {
   const products = makeSheet({
     displayValues: [

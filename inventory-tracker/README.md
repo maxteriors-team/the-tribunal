@@ -4,19 +4,19 @@ A standalone Google Apps Script web app. It reads product names, SKUs, and price
 
 ## Sheet setup
 
-1. Create a Google Sheet with a tab named **Products**.
-2. Add headers in row 1. Supported headers:
-   - SKU: `SKU`, `Item Number`, or `Item #`
-   - Product: `Product Name`, `Product`, `Item Name`, or `Description`
-   - Price: `Price`, `Unit Price`, or `List Price`
-3. Add one product per row. Example:
+The first web-app load creates a **Products** tab with these headers:
 
-| SKU | Product Name | Price |
-| --- | --- | ---: |
-| PW-100 | Pressure washer hose, 100 ft | $129.00 |
-| TIP-040 | Rotary turbo nozzle | $74.50 |
+- `SKU`
+- `Product Name`
+- `Price`
 
-The app creates an **Inventory Log** tab on the first save with timestamp, warehouse, counter, SKU, product name, price, and quantity columns.
+Add one real inventory item per row before logging counts. Accepted alternatives are
+`Item Number` or `Item #` for SKU, `Product`/`Item Name`/`Description` for the
+name, and `Unit Price`/`List Price` for price. Do not use example or test products
+in the live sheet.
+
+The app creates an **Inventory Log** tab on the first save with timestamp,
+warehouse, counter, SKU, product name, price, and quantity columns.
 
 ## Deploy
 

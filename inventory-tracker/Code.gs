@@ -16,7 +16,7 @@ function doGet() {
 }
 
 function getCatalog() {
-  const sheet = getRequiredSheet_(CONFIG.productsSheet);
+  const sheet = getOrCreateProductsSheet_();
   const values = sheet.getDataRange().getDisplayValues();
 
   if (values.length < 2) {
@@ -102,12 +102,26 @@ function saveInventory(payload) {
   return { saved: rows.length, submittedAt: submittedAt.toISOString() };
 }
 
-function getRequiredSheet_(name) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
-  if (!sheet) {
-    throw new Error(`Missing required sheet: ${name}.`);
+function getOrCreateProductsSheet_() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = spreadsheet.getSheetByName(CONFIG.productsSheet);
+  if (sheet) {
+    return sheet;
   }
-  return sheet;
+
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    sheet = spreadsheet.getSheetByName(CONFIG.productsSheet);
+    if (!sheet) {
+      sheet = spreadsheet.insertSheet(CONFIG.productsSheet);
+      sheet.appendRow(['SKU', 'Product Name', 'Price']);
+      sheet.setFrozenRows(1);
+    }
+    return sheet;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function getOrCreateLogSheet_() {
