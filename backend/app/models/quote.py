@@ -84,6 +84,23 @@ class Quote(Base):
             f"deposit_payment_method IN {DEPOSIT_PAYMENT_METHODS}",
             name="ck_quotes_deposit_payment_method",
         ),
+        CheckConstraint("proposal_version >= 1", name="ck_quotes_proposal_version_positive"),
+        CheckConstraint("revision_number >= 1", name="ck_quotes_revision_number_positive"),
+        CheckConstraint(
+            "(revision_of_quote_id IS NULL AND revision_root_quote_id IS NULL "
+            "AND revision_number = 1) OR "
+            "(revision_of_quote_id IS NOT NULL AND revision_root_quote_id IS NOT NULL "
+            "AND revision_number > 1)",
+            name="ck_quotes_revision_lineage_complete",
+        ),
+        CheckConstraint(
+            "revision_of_quote_id IS NULL OR revision_of_quote_id <> id",
+            name="ck_quotes_revision_not_self",
+        ),
+        CheckConstraint(
+            "revision_root_quote_id IS NULL OR revision_root_quote_id <> id",
+            name="ck_quotes_revision_root_not_self",
+        ),
         Index("ix_quotes_workspace_lighting_project", "workspace_id", "lighting_project_id"),
     )
 
@@ -236,13 +253,40 @@ class Quote(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     terms: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Structured snapshot of the sales-wizard's collected state: selected tiers,
-    # per-tier fixture lines, financing terms, cash pricing, Care Plan choice,
-    # savings, and add-ons. The canonical ``line_items`` above stay the trusted,
-    # server-computed totals for the accepted headline tier; this JSONB holds the
-    # richer multi-tier presentation the public page renders. Nullable — a plain
-    # quote created outside the wizard never sets it.
+    # Structured snapshot of the priced, customer-facing proposal. This remains
+    # the historical rendering contract and never trusts client-submitted totals.
     proposal_document: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
+    # Lossless, server-validated wizard input used to reopen and reprice the full
+    # builder. ``attach_dismissal`` is deliberately omitted: dismissals are audit
+    # events on ``attach_dismissals``, not sticky defaults for a later revision.
+    proposal_input: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    proposal_input_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Changes only when customer-facing terms change. Public approval submits the
+    # version it rendered so a racing in-place edit cannot accept unseen prices.
+    proposal_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
+    # Revision lineage is append-only for protected proposals. The immediate
+    # Revision lineage is append-only for protected proposals. The immediate
+    # source and root both use RESTRICT so a revised customer/payment record cannot
+    # later be deleted out from under its audit chain.
+    revision_of_quote_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quotes.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    revision_root_quote_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("quotes.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    revision_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
 
     # Public client-proposal token (unguessable, indexed for O(1) lookup). Null
     # until the quote is first sent; the public ``/p/quotes/{token}`` page and

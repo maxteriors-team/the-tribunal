@@ -92,6 +92,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/password-reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Password Reset
+         * @description Consume a user-bound one-time token and revoke existing sessions.
+         */
+        post: operations["confirm_password_reset_api_v1_auth_password_reset_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password-reset/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Password Reset
+         * @description Issue a reset link while returning the same response for every email.
+         */
+        post: operations["request_password_reset_api_v1_auth_password_reset_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/refresh": {
         parameters: {
             query?: never;
@@ -839,7 +879,7 @@ export interface paths {
          *
          *     An optional ``selected_tier`` names the package they chose; the server
          *     re-derives that package's lines, totals, and deposit from the saved snapshot
-         *     before approving. Omitting the body accepts the package already on the quote.
+         *     before approving. The rendered proposal version is required to prevent accepting stale terms.
          */
         post: operations["approve_public_proposal_api_v1_p_quotes__token__approve_post"];
         delete?: never;
@@ -8262,6 +8302,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revise Wizard Proposal
+         * @description Create a separately numbered draft from a protected wizard quote.
+         */
+        post: operations["revise_wizard_proposal_api_v1_workspaces__workspace_id__quotes__quote_id__revisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/send": {
         parameters: {
             query?: never;
@@ -8317,6 +8377,26 @@ export interface paths {
          * @description Remove a service previously added to a quote and reprice it.
          */
         delete: operations["remove_service_api_v1_workspaces__workspace_id__quotes__quote_id__services__service_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/wizard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Wizard Proposal
+         * @description Reprice an unpaid draft/sent wizard quote without replacing its link.
+         */
+        put: operations["update_wizard_proposal_api_v1_workspaces__workspace_id__quotes__quote_id__wizard_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -23289,6 +23369,27 @@ export interface components {
              */
             type: "paragraph";
         };
+        /**
+         * PasswordResetConfirm
+         * @description Redeem a one-time reset token.
+         */
+        PasswordResetConfirm: {
+            /** New Password */
+            new_password: string;
+            /** Token */
+            token: string;
+        };
+        /**
+         * PasswordResetRequest
+         * @description Request a reset without revealing whether the account exists.
+         */
+        PasswordResetRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+        };
         /** PaymentMilestoneSchema */
         PaymentMilestoneSchema: {
             /** Id */
@@ -25622,6 +25723,11 @@ export interface components {
             proposal_document?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Proposal Version
+             * @default 1
+             */
+            proposal_version: number;
             /** Status */
             status: string;
             /** Subtotal */
@@ -25661,13 +25767,19 @@ export interface components {
         };
         /**
          * PublicProposalApprove
-         * @description The client's acceptance, optionally naming the package they picked.
+         * @description The client's acceptance of one exact rendered proposal version.
          *
          *     Only the package *key* crosses the wire: the server re-derives the lines and
          *     totals from the saved snapshot, so a client can never talk their own price
-         *     down. Omitting it accepts the package the quote already sits on.
+         *     down. ``proposal_version`` closes the edit/approve race: if the operator
+         *     changed customer-facing terms after this page loaded, acceptance stops and the
+         *     client must review the refreshed proposal. It is optional only for the brief
+         *     old-frontend/new-backend deployment window; the service accepts omission solely
+         *     while the quote is still version 1 (terms have never changed).
          */
         PublicProposalApprove: {
+            /** Proposal Version */
+            proposal_version?: number | null;
             /** Selected Tier */
             selected_tier?: string | null;
         };
@@ -26236,6 +26348,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Wizard Quote
+             * @default false
+             */
+            is_wizard_quote: boolean;
             /** Issue Date */
             issue_date?: string | null;
             /** Last Viewed At */
@@ -26256,8 +26373,25 @@ export interface components {
             proposal_document?: {
                 [key: string]: unknown;
             } | null;
+            proposal_input?: components["schemas"]["ProposalWizardPayload"] | null;
+            /** Proposal Input Version */
+            proposal_input_version?: number | null;
+            /**
+             * Proposal Version
+             * @default 1
+             */
+            proposal_version: number;
             /** Public Token */
             public_token?: string | null;
+            /**
+             * Revision Number
+             * @default 1
+             */
+            revision_number: number;
+            /** Revision Of Quote Id */
+            revision_of_quote_id?: string | null;
+            /** Revision Root Quote Id */
+            revision_root_quote_id?: string | null;
             /** Sent At */
             sent_at?: string | null;
             /** Service Location Id */
@@ -26289,6 +26423,8 @@ export interface components {
              * @default 0
              */
             view_count: number;
+            /** Wizard Edit Mode */
+            wizard_edit_mode?: ("update" | "revise") | null;
             /**
              * Workspace Id
              * Format: uuid
@@ -26528,6 +26664,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Wizard Quote
+             * @default false
+             */
+            is_wizard_quote: boolean;
             /** Issue Date */
             issue_date?: string | null;
             /** Last Viewed At */
@@ -26542,8 +26683,22 @@ export interface components {
             opportunity_id?: string | null;
             /** Primary Service */
             primary_service?: string | null;
+            /**
+             * Proposal Version
+             * @default 1
+             */
+            proposal_version: number;
             /** Public Token */
             public_token?: string | null;
+            /**
+             * Revision Number
+             * @default 1
+             */
+            revision_number: number;
+            /** Revision Of Quote Id */
+            revision_of_quote_id?: string | null;
+            /** Revision Root Quote Id */
+            revision_root_quote_id?: string | null;
             /** Sent At */
             sent_at?: string | null;
             /** Service Location Id */
@@ -26573,6 +26728,8 @@ export interface components {
              * @default 0
              */
             view_count: number;
+            /** Wizard Edit Mode */
+            wizard_edit_mode?: ("update" | "revise") | null;
             /**
              * Workspace Id
              * Format: uuid
@@ -31469,6 +31626,76 @@ export interface operations {
             };
         };
     };
+    confirm_password_reset_api_v1_auth_password_reset_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetConfirm"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_password_reset_api_v1_auth_password_reset_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     refresh_token_api_v1_auth_refresh_post: {
         parameters: {
             query?: never;
@@ -32614,9 +32841,9 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": components["schemas"]["PublicProposalApprove"] | null;
+                "application/json": components["schemas"]["PublicProposalApprove"];
             };
         };
         responses: {
@@ -48260,6 +48487,42 @@ export interface operations {
             };
         };
     };
+    revise_wizard_proposal_api_v1_workspaces__workspace_id__quotes__quote_id__revisions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalWizardPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     send_quote_api_v1_workspaces__workspace_id__quotes__quote_id__send_post: {
         parameters: {
             query?: never;
@@ -48340,6 +48603,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_wizard_proposal_api_v1_workspaces__workspace_id__quotes__quote_id__wizard_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalWizardPayload"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

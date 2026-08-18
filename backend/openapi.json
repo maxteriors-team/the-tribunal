@@ -33690,6 +33690,44 @@
         "title": "ParagraphBlockSchema",
         "type": "object"
       },
+      "PasswordResetConfirm": {
+        "description": "Redeem a one-time reset token.",
+        "properties": {
+          "new_password": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "New Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 256,
+            "minLength": 32,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "new_password"
+        ],
+        "title": "PasswordResetConfirm",
+        "type": "object"
+      },
+      "PasswordResetRequest": {
+        "description": "Request a reset without revealing whether the account exists.",
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "PasswordResetRequest",
+        "type": "object"
+      },
       "PaymentMilestoneSchema": {
         "additionalProperties": false,
         "properties": {
@@ -40017,6 +40055,12 @@
             ],
             "title": "Proposal Document"
           },
+          "proposal_version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Proposal Version",
+            "type": "integer"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -40115,8 +40159,20 @@
         "type": "object"
       },
       "PublicProposalApprove": {
-        "description": "The client's acceptance, optionally naming the package they picked.\n\nOnly the package *key* crosses the wire: the server re-derives the lines and\ntotals from the saved snapshot, so a client can never talk their own price\ndown. Omitting it accepts the package the quote already sits on.",
+        "description": "The client's acceptance of one exact rendered proposal version.\n\nOnly the package *key* crosses the wire: the server re-derives the lines and\ntotals from the saved snapshot, so a client can never talk their own price\ndown. ``proposal_version`` closes the edit/approve race: if the operator\nchanged customer-facing terms after this page loaded, acceptance stops and the\nclient must review the refreshed proposal. It is optional only for the brief\nold-frontend/new-backend deployment window; the service accepts omission solely\nwhile the quote is still version 1 (terms have never changed).",
         "properties": {
+          "proposal_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Version"
+          },
           "selected_tier": {
             "anyOf": [
               {
@@ -41513,6 +41569,11 @@
             "title": "Id",
             "type": "string"
           },
+          "is_wizard_quote": {
+            "default": false,
+            "title": "Is Wizard Quote",
+            "type": "boolean"
+          },
           "issue_date": {
             "anyOf": [
               {
@@ -41606,6 +41667,33 @@
             ],
             "title": "Proposal Document"
           },
+          "proposal_input": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalWizardPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposal_input_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Input Version"
+          },
+          "proposal_version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Proposal Version",
+            "type": "integer"
+          },
           "public_token": {
             "anyOf": [
               {
@@ -41616,6 +41704,36 @@
               }
             ],
             "title": "Public Token"
+          },
+          "revision_number": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision Number",
+            "type": "integer"
+          },
+          "revision_of_quote_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Of Quote Id"
+          },
+          "revision_root_quote_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Root Quote Id"
           },
           "sent_at": {
             "anyOf": [
@@ -41702,6 +41820,21 @@
             "default": 0,
             "title": "View Count",
             "type": "integer"
+          },
+          "wizard_edit_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "update",
+                  "revise"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wizard Edit Mode"
           },
           "workspace_id": {
             "format": "uuid",
@@ -42371,6 +42504,11 @@
             "title": "Id",
             "type": "string"
           },
+          "is_wizard_quote": {
+            "default": false,
+            "title": "Is Wizard Quote",
+            "type": "boolean"
+          },
           "issue_date": {
             "anyOf": [
               {
@@ -42445,6 +42583,12 @@
             ],
             "title": "Primary Service"
           },
+          "proposal_version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Proposal Version",
+            "type": "integer"
+          },
           "public_token": {
             "anyOf": [
               {
@@ -42455,6 +42599,36 @@
               }
             ],
             "title": "Public Token"
+          },
+          "revision_number": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision Number",
+            "type": "integer"
+          },
+          "revision_of_quote_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Of Quote Id"
+          },
+          "revision_root_quote_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Root Quote Id"
           },
           "sent_at": {
             "anyOf": [
@@ -42534,6 +42708,21 @@
             "default": 0,
             "title": "View Count",
             "type": "integer"
+          },
+          "wizard_edit_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "update",
+                  "revise"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wizard Edit Mode"
           },
           "workspace_id": {
             "format": "uuid",
@@ -54473,6 +54662,98 @@
         ]
       }
     },
+    "/api/v1/auth/password-reset/confirm": {
+      "post": {
+        "description": "Consume a user-bound one-time token and revoke existing sessions.",
+        "operationId": "confirm_password_reset_api_v1_auth_password_reset_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetConfirm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Confirm Password Reset Api V1 Auth Password Reset Confirm Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Password Reset",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/password-reset/request": {
+      "post": {
+        "description": "Issue a reset link while returning the same response for every email.",
+        "operationId": "request_password_reset_api_v1_auth_password_reset_request_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Request Password Reset Api V1 Auth Password Reset Request Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Password Reset",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
     "/api/v1/auth/refresh": {
       "post": {
         "description": "Refresh access token using the refresh_token httpOnly cookie.",
@@ -56085,7 +56366,7 @@
     },
     "/api/v1/p/quotes/{token}/approve": {
       "post": {
-        "description": "Client approves their proposal (idempotent; expired/declined rejected).\n\nAn optional ``selected_tier`` names the package they chose; the server\nre-derives that package's lines, totals, and deposit from the saved snapshot\nbefore approving. Omitting the body accepts the package already on the quote.",
+        "description": "Client approves their proposal (idempotent; expired/declined rejected).\n\nAn optional ``selected_tier`` names the package they chose; the server\nre-derives that package's lines, totals, and deposit from the saved snapshot\nbefore approving. The rendered proposal version is required to prevent accepting stale terms.",
         "operationId": "approve_public_proposal_api_v1_p_quotes__token__approve_post",
         "parameters": [
           {
@@ -56102,18 +56383,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/PublicProposalApprove"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Payload"
+                "$ref": "#/components/schemas/PublicProposalApprove"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -86447,6 +86721,75 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/revisions": {
+      "post": {
+        "description": "Create a separately numbered draft from a protected wizard quote.",
+        "operationId": "revise_wizard_proposal_api_v1_workspaces__workspace_id__quotes__quote_id__revisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalWizardPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Revise Wizard Proposal",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/send": {
       "post": {
         "description": "Mark a quote as sent and email it to the quote-to contact.",
@@ -86638,6 +86981,75 @@
           }
         ],
         "summary": "Remove Service",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/wizard": {
+      "put": {
+        "description": "Reprice an unpaid draft/sent wizard quote without replacing its link.",
+        "operationId": "update_wizard_proposal_api_v1_workspaces__workspace_id__quotes__quote_id__wizard_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalWizardPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Wizard Proposal",
         "tags": [
           "Quotes"
         ]

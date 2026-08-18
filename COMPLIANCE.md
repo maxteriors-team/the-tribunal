@@ -97,6 +97,17 @@ None for this approved implementation.
 - PCI DSS hosted-checkout eligibility and payment-page script obligations with Stripe for the actual deployed checkout mode.
 - US/EU/UK consumer contract, withdrawal, transactional-email, privacy, and accessibility requirements before launch in each served jurisdiction.
 - Notification provider and Stripe data-processing/retention terms.
+
+## Addendum — Password reset
+
+Snapshot: 18 August 2026 · Reviewed by: EZ Coder compliance-guard · NOT LEGAL ADVICE
+
+- **Account enumeration — Fixed (CODE):** reset requests always return the same accepted response for unknown, inactive, and active accounts; provider delivery runs after the response.
+- **Token security — Fixed (CODE):** each reset uses 256 bits of opaque randomness, stores only a SHA-256 hash, binds the record to one user, expires after 30 minutes, invalidates prior links, and locks the row during one-time redemption.
+- **Session containment — Fixed (CODE/tests):** successful redemption applies Argon2id through the existing password helper, clears browser auth cookies, and revokes every refresh token for that user.
+- **Abuse control — Fixed (CODE):** request and confirmation endpoints use the existing persistent IP authentication limiter; responses and logs omit reset tokens and email addresses.
+- **Transactional email — Fixed (CODE):** the reset message has no marketing content or tracking requirement and tells recipients how long the link works and how to ignore an unsolicited request.
+- **Residual risk:** email inbox compromise still permits account takeover during the 30-minute window; production must keep `FRONTEND_URL` on HTTPS and secure the Resend account/domain. Runtime provider delivery was not exercised in this pass.
 - Local Mailpit exercised the exact assignment email renderer/idempotency-key path and proved one recipient plus no imagery/token leakage; it does not prove Resend delivery or inbox placement.
 
 
@@ -531,3 +542,89 @@ register above remains open.
 - Re-verify that public privacy disclosures accurately describe AI processing of SMS/voice CRM data and the current OpenAI processor arrangement.
 - The voice-context controls are CODE + automated-test evidence, not a live provider call. Runtime dashboard-added prompts/tools and provider-side retention were not inspected in this focused pass.
 - SMS model routing remains in metadata-only `shadow` mode until the documented golden and reviewed-production gates pass; enabling `active` changes model cost and requires an operational rollout decision.
+
+## Focused addendum — quote revisions (2026-08-18)
+
+Snapshot: 18 August 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
+
+Commit reviewed: working tree based on `359defe8` (generated-artifact checkpoint); unrelated concurrent password-reset source work was not reviewed here.
+
+Scope: authenticated full-wizard quote edits/revisions, revision lineage, customer-link continuity, customer approval versioning, deposit/payment locks, and changed sales-wizard controls. This focused engineering gate is not a certification or a full-product accessibility/legal review.
+
+### Assumed exposure profile
+
+- **Reach — Confirmed:** authenticated staff quote builder plus the existing public proposal acceptance surface.
+- **Personal data — Confirmed:** saved hydration state includes customer/contact, service-location, opportunity, pricing, notes, and terms; it remains authenticated-only.
+- **Money — Confirmed:** quotes may require hosted Stripe or manually recorded deposits; no card/bank data or money movement was added.
+- **Jurisdictions — Assumed:** internet-reachable worldwide, so US and EU/UK consumer duties may apply unless technically limited.
+- **Minors — Assumed possible, no technical age gate:** home-service proposals are not child-directed, but the public route does not prove age.
+- **Third parties/messaging — Unchanged:** this pass adds no processor, tracker, or automatic message; delivery remains an explicit staff action.
+
+### Focused coverage ledger
+
+| # | Checklist item | fail / pass / n-a | Evidence |
+|---|---|---|---|
+| 1 | Secrets in client/repo | pass | CODE: no credential or provider key added; hydration state stays in authenticated JSON, not URLs/logs. |
+| 2 | Row-level security / equivalent | n-a | CODE: no direct browser database SDK; FastAPI/SQLAlchemy remains the only data path. |
+| 3 | Admin/service key in browser | pass | CODE: generated client contains contracts only; payment/provider secrets remain backend-only. |
+| 4 | Object authorization at server/data layer | pass | RUNTIME/tests: write routes require billing-write membership and every source lookup includes `workspace_id`; foreign workspace service mutation remains 404. |
+| 4a | Access-granting defaults | pass | CODE: revision/input fields grant no role, token, or public access; new revisions start draft without a public token. |
+| 4b | Tenant isolation from membership | pass | CODE/tests: authenticated routes derive membership server-side and lineage writes use the source workspace. |
+| 5 | Mass assignment | pass | CODE: `ProposalWizardPayload` validates input and the service explicitly rebuilds every amount server-side. |
+| 6 | String-built queries | pass | CODE: SQLAlchemy expressions/bound values only. |
+| 7 | Unauthenticated internal endpoint | pass | CODE/tests: update/revise/detail routes remain authenticated; the existing public approval route accepts only token, selected package key, and rendered proposal version. |
+| 8 | Public writable/listable storage | n-a | No storage or upload changed. |
+| 9 | Expensive/abusable endpoint rate limit | n-a | Repricing is bounded local database computation; no new provider call or spend surface. |
+| 10 | Password hashing | n-a | Authentication implementation not changed in this quote scope. |
+| 11 | Session cookie/token storage | n-a | Session implementation not changed. |
+| 12 | JWT verification | n-a | Token verification not changed. |
+| 13 | Credentialed wildcard CORS | n-a | CORS not changed. |
+| 14 | Card data reaches Tribunal | pass | CODE: deposit identifiers/timestamps are locks only; card entry remains hosted Stripe Checkout. |
+| 14b | Cleartext financial/identity identifiers | pass | CODE: no PAN, CVV, bank, tax, government-ID, or payout field added. |
+| 15 | PII/financial terms in logs | pass | CODE: changed logs contain quote/workspace IDs, status, selected tier, and totals—not hydration payloads, customer data, token, or payment-provider IDs. |
+| 16 | Transport security / mixed content | pass | CODE: no new remote origin or asset; existing HTTPS deployment control applies. |
+| 17 | SSRF | n-a | No server-side URL fetch added. |
+| 18 | Backup/restore | pass | CODE/RUNTIME: reversible local migration adds nullable JSON/lineage plus version defaults; existing encrypted production backup procedure remains required before release. |
+| U1 | Privacy notice/deletion/vendor list | n-a | No new data class/processor; proposal input follows the quote lifecycle. Existing product-wide disclosure/retention duties remain open. |
+| U2 | Third-party script consent | n-a | No script, pixel, analytics, or replay added. |
+| U3 | Account security baseline | pass | Existing authenticated workspace capability gate reused; auth was not re-audited here. |
+| U4 | Public-page accessibility | pass | CODE/tests: approval stays a native button; stale acceptance refreshes instead of silently succeeding; no new public visual component. |
+| U5 | Email/SMS duties | pass | CODE: editing never auto-resends; email/SMS delivery remains an explicit native-button action through existing transactional paths. |
+| U6 | Contact-form privacy | n-a | No intake form added. |
+| U7 | Error/log handling | pass | CODE/tests: stale versions return a generic conflict; invalid/foreign objects do not disclose another workspace. |
+| U8 | Personal-liability/entity review | n-a | Exact contracting entity unchanged and outside this engineering scope. |
+| A1 | Image alternatives | n-a | No image element added; restored mockup URLs use the existing labelled presentation path. |
+| A2 | Form labels | pass | CODE: the client-link input has `aria-label`; retry/save/send controls have explicit text. |
+| A3 | Keyboard operability | pass | RUNTIME/tests: native/Radix actions open and activate by keyboard, including edit/revise and public approval. |
+| A4 | Colour contrast | pass | CODE/computed: warning body `#d0d0d0` on blended `#1a1710` is 11.60:1; strong text is 11.87:1; focus `#edd080` on `#0a0a0a` is 13.14:1. |
+| A5 | Focus visibility | pass | CODE/test: all wizard buttons, links, inputs, selects, and textareas receive a 3px gold `:focus-visible` outline. |
+| A6 | Media controls/captions | n-a | No audio/video element added. |
+| A7 | Page language | pass | CODE: changed routes inherit the existing root `lang="en"`. |
+| C1-US | Consumer contract duties | fail | DEDUCED: revisions may change consumer price/deposit terms; cancellation, refund, tax, and contract disclosures still require jurisdiction-specific legal review. |
+| C1-EU/UK | Consumer pre-contract/withdrawal duties | fail | DEDUCED: worldwide reach remains possible; withdrawal/pre-contract information and any early-service waiver were not reviewed. |
+| M1 | Minors | fail | DEDUCED: public proposal acceptance has no technical age gate; this home-services flow is not child-directed, but that is not an enforced exclusion. |
+
+### Findings
+
+| ID | Severity | Trigger | Evidence (RUNTIME / CODE / DEDUCED) | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| QR-001 | BLOCKER | Repricing an approved, converted, or payment-touched quote could rewrite the record supporting a customer decision or deposit | RUNTIME/tests: decided/payment-touched sources remain byte/amount/status-stable while a separately numbered draft receives the changed input; payment identifiers are not copied | Keep accepted/payment evidence immutable and auditable | Fixed | Row locks, status/payment/conversion guards, RESTRICT lineage FKs, revision tests |
+| QR-002 | BLOCKER | A customer could click approve against terms rendered before an in-place sent-quote edit | RUNTIME/tests: monotonic `proposal_version` is rendered and submitted; a stale acceptance returns `proposal_changed`, while the current version approves | Bind acceptance to the exact customer-facing terms rendered | Fixed | Locked approval, version comparison before/after package selection, API/frontend regression tests |
+| QR-003 | HIGH | Reopening a quote could silently drop contact links, raw quantities, deposit choice, seasonal selections, or add-on edits | RUNTIME/tests: versioned validated `proposal_input` hydrates all fields and repeated saves target the same revision; basic deposit/service edits sync the input | Preserve price inputs losslessly and warn when legacy data cannot be exact | Fixed for new input; legacy warning retained | Typed input snapshot, hydration/save tests, visible legacy warning |
+| QR-004 | HIGH | Full-builder actions could be mouse-only or unusable at mobile widths | RUNTIME/CODE/tests: keyboard menu/approval activation passes; visible focus ring and 44px stacked mobile controls are source-guarded | Provide keyboard operation, visible focus, and reflow without horizontal control clipping | Fixed | Component keyboard tests and `theme.test.ts` |
+| QR-005 | LAWYER | Revised public proposals can form consumer contracts and request deposits | CODE/DEDUCED: server-derived prices and immutable acceptance evidence are implemented, but actual disclosures/withdrawal/refund terms were not reviewed | Confirm deployed terms for every served jurisdiction | Open | Legal review of actual public proposal copy and business policies |
+| QR-006 | MEDIUM | Public proposal acceptance is reachable without technical age assurance | DEDUCED: no age gate exists; service is home-improvement rather than child-directed | Decide and document the intended age/contract-capacity policy with counsel | Open | Product/legal decision; no code assumption invented |
+
+### Implemented and proved in this pass
+
+- Protected records fork into draft revisions with immediate/root lineage; the source public token, decision, deposit, and conversion remain unchanged.
+- Mutable draft/sent quotes update in place at the same customer URL; proposal versions make stale approval fail closed.
+- Exact authenticated hydration state is separate from the public rendered document; `attach_dismissal` remains an audit event rather than a sticky revision default.
+- Quote-list actions distinguish full repricing from basic details and preserve manual deposit, customer-link, service, send, and conversion workflows.
+- Changed controls use native/Radix semantics, a visible focus ring, and stacked 44px mobile actions.
+
+### Needs a lawyer / residual decisions
+
+- Confirm cancellation, refund, tax, contract-capacity, and US/EU/UK pre-contract/withdrawal wording on the actual deployed proposal before relying on this feature legally.
+- Decide whether public proposals need an age/capacity attestation; no legal age threshold was invented in code.
+- This evidence covers source plus automated local runtime tests. It does not certify accessibility, replace assistive-technology/manual mobile review, or inspect dashboard-injected scripts/provider behavior.

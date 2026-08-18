@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -90,7 +91,15 @@ export function LoginForm({ className }: LoginFormProps) {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Password</FormLabel>
+                <div className="flex items-center justify-between">
+                  <FormLabel>Password</FormLabel>
+                  <Link
+                    className="text-sm underline-offset-4 hover:underline"
+                    href="/forgot-password"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
                 <FormControl>
                   <Input
                     type="password"
@@ -104,9 +113,7 @@ export function LoginForm({ className }: LoginFormProps) {
               </FormItem>
             )}
           />
-          {error && (
-            <div className="text-destructive text-sm text-center">{error}</div>
-          )}
+          {error && <div className="text-destructive text-sm text-center">{error}</div>}
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Sign In

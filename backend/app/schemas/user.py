@@ -186,6 +186,19 @@ class CallForwardingUpdate(BaseModel):
     mode: str | None = None
 
 
+class PasswordResetRequest(BaseModel):
+    """Request a reset without revealing whether the account exists."""
+
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    """Redeem a one-time reset token."""
+
+    token: str = Field(..., min_length=32, max_length=256)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
 # Change Password schema
 class ChangePasswordRequest(BaseModel):
     """Schema for changing password."""

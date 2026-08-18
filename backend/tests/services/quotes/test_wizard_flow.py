@@ -14,12 +14,14 @@ import uuid
 from collections.abc import AsyncIterator
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
 from app.models.lighting_project import LightingProject
+from app.models.quote import Quote
 from app.models.workspace import Workspace
 from app.schemas.pricing import MAINTENANCE_THROUGH_TOKEN
 from app.schemas.proposal_wizard import (
@@ -34,6 +36,8 @@ from app.schemas.proposal_wizard import (
     WizardFixtureQty,
     WizardPermanentSelection,
 )
+from app.schemas.quote import QuoteUpdate
+from app.services.exceptions import ConflictError
 from app.services.quotes import QuoteService
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -906,7 +910,9 @@ async def test_client_package_choice_repoints_quote_lines_totals_and_deposit() -
         before = await svc.get_public_proposal(token)
         good = next(p for p in before.packages if p.key == "good")
 
-        result = await svc.approve_public(token, selected_tier="good")
+        result = await svc.approve_public(
+            token, proposal_version=before.proposal_version, selected_tier="good"
+        )
         assert result.status == "approved"
         assert result.deposit_required is True
         assert result.deposit_amount == good.deposit_amount
@@ -936,7 +942,7 @@ async def test_client_cannot_invent_a_package() -> None:
         token = await _sent_wizard_quote(svc, ws.id)
 
         with pytest.raises(ValidationError):
-            await svc.approve_public(token, selected_tier="platinum")
+            await svc.approve_public(token, proposal_version=1, selected_tier="platinum")
 
         # The proposal is untouched and still acceptable.
         public = await svc.get_public_proposal(token)
@@ -952,12 +958,12 @@ async def test_package_switch_is_refused_after_the_quote_is_decided() -> None:
         svc = QuoteService(db)
         token = await _sent_wizard_quote(svc, ws.id)
 
-        await svc.approve_public(token, selected_tier="good")
+        await svc.approve_public(token, proposal_version=1, selected_tier="good")
         approved = await svc.get_public_proposal(token)
         assert approved.proposal_document["selected_tier"] == "good"
 
         # Re-approving with a different package is idempotent, not a rewrite.
-        await svc.approve_public(token, selected_tier="best")
+        await svc.approve_public(token, proposal_version=1, selected_tier="best")
         again = await svc.get_public_proposal(token)
         assert again.proposal_document["selected_tier"] == "good"
         assert again.total == approved.total
@@ -979,3 +985,170 @@ async def test_single_package_proposal_offers_no_choice() -> None:
 
         public = await svc.get_public_proposal(sent.public_token)
         assert public.packages == []
+
+
+async def test_wizard_update_reprices_sent_quote_in_place_and_preserves_link() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        saved = await svc.save_from_wizard(ws.id, _payload(), created_by_id=None)
+        sent = await svc.mark_sent(ws.id, uuid.UUID(str(saved.id)))
+        token = sent.public_token
+        original_total = sent.total
+
+        changed = _payload()
+        changed.title = "Updated lighting plan"
+        changed.quantities[1].quantity = 20
+        changed.deposit = WizardDepositSelection(mode="fixed", value=875)
+        updated = await svc.update_from_wizard(ws.id, uuid.UUID(str(sent.id)), changed)
+
+        assert updated.id == sent.id
+        assert updated.number == sent.number
+        assert updated.status == "sent"
+        assert updated.public_token == token
+        assert updated.total > original_total
+        assert updated.proposal_version == sent.proposal_version + 1
+        assert updated.proposal_input is not None
+        assert updated.proposal_input.title == "Updated lighting plan"
+        assert updated.proposal_input.quantities[1].quantity == 20
+        assert updated.proposal_input.deposit is not None
+        assert updated.proposal_input.deposit.value == 875
+
+        public = await svc.get_public_proposal(token)
+        assert public.proposal_version == updated.proposal_version
+        assert public.total == updated.total
+
+
+@pytest.mark.parametrize("source_status", ["approved", "declined", "expired"])
+async def test_decided_wizard_quotes_fork_with_auditable_lineage(
+    source_status: str,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        saved = await svc.save_from_wizard(ws.id, _payload(), created_by_id=None)
+        source = await db.get(Quote, uuid.UUID(str(saved.id)))
+        assert source is not None
+        source.status = source_status
+        await db.commit()
+        original_document = source.proposal_document
+        original_total = source.total
+
+        changed = _payload()
+        changed.quantities[1].quantity = 18
+        revision = await svc.revise_from_wizard(ws.id, source.id, changed, created_by_id=None)
+        await db.refresh(source)
+
+        assert source.status == source_status
+        assert source.total == original_total
+        assert source.proposal_document == original_document
+        assert revision.id != source.id
+        assert revision.status == "draft"
+        assert revision.public_token is None
+        assert revision.revision_of_quote_id == source.id
+        assert revision.revision_root_quote_id == source.id
+        assert revision.revision_number == 2
+        assert revision.proposal_input is not None
+        assert revision.proposal_input.quantities[1].quantity == 18
+
+
+async def test_payment_touched_quote_cannot_change_and_revision_copies_no_payment() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        saved = await svc.save_from_wizard(ws.id, _payload(), created_by_id=None)
+        sent = await svc.mark_sent(ws.id, uuid.UUID(str(saved.id)))
+        source = await db.get(Quote, uuid.UUID(str(sent.id)))
+        assert source is not None
+        source.deposit_checkout_session_id = "cs_locked_terms"
+        await db.commit()
+
+        with pytest.raises(ConflictError) as exc_info:
+            await svc.update_from_wizard(ws.id, source.id, _payload())
+        assert exc_info.value.code == "quote_revision_required"
+
+        changed = _payload()
+        changed.quantities[1].quantity = 16
+        revision = await svc.revise_from_wizard(ws.id, source.id, changed, created_by_id=None)
+
+        assert source.deposit_checkout_session_id == "cs_locked_terms"
+        assert revision.status == "draft"
+        assert revision.deposit_paid_at is None
+        persisted = await db.get(Quote, uuid.UUID(str(revision.id)))
+        assert persisted is not None
+        assert persisted.deposit_checkout_session_id is None
+        assert persisted.deposit_payment_intent_id is None
+
+
+async def test_basic_edit_syncs_deposit_input_then_payment_locks_further_edits() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        saved = await svc.save_from_wizard(ws.id, _payload(), created_by_id=None)
+
+        edited = await svc.update_quote(
+            ws.id,
+            uuid.UUID(str(saved.id)),
+            QuoteUpdate(title="Pool courtyard", deposit_amount_fixed=625),
+        )
+        assert edited.proposal_input is not None
+        assert edited.proposal_input.title == "Pool courtyard"
+        assert edited.proposal_input.deposit is not None
+        assert edited.proposal_input.deposit.mode == "fixed"
+        assert edited.proposal_input.deposit.value == 625
+
+        source = await db.get(Quote, uuid.UUID(str(saved.id)))
+        assert source is not None
+        source.deposit_payment_intent_id = "pi_locked_terms"
+        await db.commit()
+        with pytest.raises(ConflictError):
+            await svc.update_quote(
+                ws.id, source.id, QuoteUpdate(title="Must not overwrite paid terms")
+            )
+
+
+async def test_public_approval_rejects_the_version_rendered_before_an_edit() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        token = await _sent_wizard_quote(svc, ws.id)
+        rendered = await svc.get_public_proposal(token)
+
+        changed = _payload()
+        changed.quantities[1].quantity = 19
+        source_result = await db.execute(select(Quote).where(Quote.public_token == token))
+        source = source_result.scalar_one()
+        await svc.update_from_wizard(ws.id, source.id, changed)
+
+        with pytest.raises(ConflictError) as exc_info:
+            await svc.approve_public(token, proposal_version=rendered.proposal_version)
+        assert exc_info.value.code == "proposal_changed"
+        with pytest.raises(ConflictError) as legacy_info:
+            await svc.approve_public(token, proposal_version=None)
+        assert legacy_info.value.code == "proposal_version_required"
+
+        current = await svc.get_public_proposal(token)
+        assert current.status == "sent"
+        approved = await svc.approve_public(token, proposal_version=current.proposal_version)
+        assert approved.status == "approved"
+
+
+async def test_untouched_version_one_proposal_accepts_old_frontend_payload() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        token = await _sent_wizard_quote(svc, ws.id)
+
+        approved = await svc.approve_public(token, proposal_version=None)
+
+        assert approved.status == "approved"
+
+
+async def test_conversion_marker_requires_revision_even_if_status_looks_open() -> None:
+    quote = Quote(
+        workspace_id=uuid.uuid4(),
+        number="Q-TEST",
+        status="sent",
+        converted_job_id=uuid.uuid4(),
+    )
+    assert QuoteService._wizard_quote_requires_revision(quote) is True

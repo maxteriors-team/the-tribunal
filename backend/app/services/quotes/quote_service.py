@@ -81,6 +81,8 @@ from app.schemas.proposal import (
 from app.schemas.proposal_wizard import (
     ProposalDocument,
     ProposalWizardPayload,
+    WizardCharge,
+    WizardDepositSelection,
     client_safe_document,
 )
 from app.schemas.quote import (
@@ -141,6 +143,8 @@ from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProv
 from app.services.workspaces.membership import assert_active_workspace_member
 
 logger = structlog.get_logger()
+
+WIZARD_INPUT_VERSION = 1
 
 
 # Generic over the concrete package type (bound to the presentation contract) so
@@ -523,10 +527,19 @@ class QuoteService:
             return PricingSettings()
         return get_pricing_config(workspace)
 
+    @classmethod
+    def _decorate_wizard_edit_state(cls, response: QuoteResponse, quote: Quote) -> None:
+        response.is_wizard_quote = quote.proposal_document is not None
+        if response.is_wizard_quote:
+            response.wizard_edit_mode = (
+                "revise" if cls._wizard_quote_requires_revision(quote) else "update"
+            )
+
     async def _detail_response(self, quote: Quote) -> QuoteDetailResponse:
         if "assignee" not in quote.__dict__:
             await self.db.refresh(quote, ["assignee"])
         response = QuoteDetailResponse.model_validate(quote)
+        self._decorate_wizard_edit_state(response, quote)
         config = await self._pricing_config_for_quote(quote)
         response.financing = self._financing_for_quote(quote, config)
         response.services = self._services_for(quote)
@@ -576,6 +589,7 @@ class QuoteService:
     @classmethod
     def _summary_response(cls, quote: Quote, config: PricingSettings) -> QuoteResponse:
         response = QuoteResponse.model_validate(quote)
+        cls._decorate_wizard_edit_state(response, quote)
         response.financing = cls._financing_for_quote(quote, config)
         return response
 
@@ -1040,16 +1054,8 @@ class QuoteService:
         quote_id: uuid.UUID,
         quote_in: QuoteUpdate,
     ) -> QuoteDetailResponse:
-        """Update quote header fields. Totals are re-derived, not set."""
-        quote = await get_or_404(
-            self.db,
-            Quote,
-            quote_id,
-            workspace_id=workspace_id,
-            options=[selectinload(Quote.line_items), selectinload(Quote.assignee)],
-        )
-        if quote.status in _LOCKED_STATUSES:
-            raise ConflictError(f"Cannot edit a {quote.status} quote")
+        """Update mutable quote headers and keep wizard hydration metadata aligned."""
+        quote = await self._get_mutable_quote(workspace_id, quote_id)
 
         await self._validate_refs(
             workspace_id,
@@ -1085,6 +1091,33 @@ class QuoteService:
             quote.deposit_amount_fixed = None
 
         self._recompute_totals(quote)
+        stored_input = self._stored_proposal_input(quote)
+        if stored_input is not None:
+            deposit = None
+            if quote.deposit_amount_fixed is not None:
+                deposit = WizardDepositSelection(
+                    mode="fixed", value=float(quote.deposit_amount_fixed)
+                )
+            elif quote.deposit_percentage is not None:
+                deposit = WizardDepositSelection(
+                    mode="percentage", value=float(quote.deposit_percentage)
+                )
+            stored_input = stored_input.model_copy(
+                update={
+                    "contact_id": quote.contact_id,
+                    "service_location_id": quote.service_location_id,
+                    "opportunity_id": quote.opportunity_id,
+                    "title": quote.title,
+                    "notes": quote.notes,
+                    "terms": quote.terms,
+                    "deposit": deposit,
+                }
+            )
+            quote.proposal_input = stored_input.model_dump(
+                mode="json", exclude={"attach_dismissal"}
+            )
+        if quote_in.model_fields_set:
+            quote.proposal_version += 1
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         return await self._detail_response(quote)
@@ -1116,10 +1149,29 @@ class QuoteService:
         workspace_id: uuid.UUID,
         quote_id: uuid.UUID,
     ) -> None:
-        """Delete a draft/sent quote. Decided or expired quotes are kept."""
+        """Delete only an unprotected draft/sent quote with no revision descendants."""
         quote = await get_or_404(self.db, Quote, quote_id, workspace_id=workspace_id)
         if quote.status in _LOCKED_STATUSES:
             raise ConflictError(f"Cannot delete a {quote.status} quote")
+        if (
+            quote.deposit_paid_at is not None
+            or quote.deposit_checkout_session_id is not None
+            or quote.deposit_payment_intent_id is not None
+            or quote.converted_job_id is not None
+            or quote.converted_invoice_id is not None
+        ):
+            raise ConflictError("Cannot delete a quote with payment or conversion history")
+        descendant_id = await self.db.scalar(
+            select(Quote.id)
+            .where(
+                Quote.workspace_id == workspace_id,
+                (Quote.revision_of_quote_id == quote_id)
+                | (Quote.revision_root_quote_id == quote_id),
+            )
+            .limit(1)
+        )
+        if descendant_id is not None:
+            raise ConflictError("Cannot delete a quote that anchors a revision history")
         await self.db.delete(quote)
         await self.db.commit()
 
@@ -1347,18 +1399,36 @@ class QuoteService:
         self,
         workspace_id: uuid.UUID,
         quote_id: uuid.UUID,
+        *,
+        expected_proposal_version: int | None = None,
     ) -> QuoteDetailResponse:
-        """Operator approves a quote on the customer's behalf."""
+        """Approve once while serializing against any customer-facing edit."""
         await self._expire_overdue(workspace_id)
-        quote = await get_or_404(
-            self.db,
-            Quote,
-            quote_id,
-            workspace_id=workspace_id,
-            options=[selectinload(Quote.line_items)],
+        result = await self.db.execute(
+            select(Quote)
+            .where(Quote.id == quote_id, Quote.workspace_id == workspace_id)
+            .options(selectinload(Quote.line_items))
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
+        quote = result.scalar_one_or_none()
+        if quote is None:
+            raise NotFoundError("Quote not found")
+        if (
+            expected_proposal_version is not None
+            and quote.proposal_version != expected_proposal_version
+        ):
+            raise ConflictError(
+                "This proposal changed after you opened it. Refresh and review the new terms.",
+                code="proposal_changed",
+            )
         if quote.status == "approved":
             return await self._detail_response(quote)
+        if expected_proposal_version is not None and quote.status != "sent":
+            raise ConflictError(
+                "This proposal is no longer awaiting customer approval",
+                code="proposal_not_approvable",
+            )
         if quote.status not in {"draft", "sent"}:
             raise ConflictError(f"Cannot approve a {quote.status} quote")
         quote.status = "approved"
@@ -1546,13 +1616,13 @@ class QuoteService:
     # Public client proposal (no auth, token-keyed)
     # ------------------------------------------------------------------
 
-    async def _load_by_token(self, token: str) -> Quote:
+    async def _load_by_token(self, token: str, *, for_update: bool = False) -> Quote:
         """Load a sent quote by its public token, or raise ``NotFoundError``.
 
         Drafts have no token and never resolve; an unknown token 404s. Expiry is
         applied lazily so a lapsed proposal reads (and behaves) truthfully.
         """
-        result = await self.db.execute(
+        statement = (
             select(Quote)
             .where(Quote.public_token == token)
             .options(
@@ -1561,6 +1631,9 @@ class QuoteService:
                 selectinload(Quote.workspace),
             )
         )
+        if for_update:
+            statement = statement.with_for_update().execution_options(populate_existing=True)
+        result = await self.db.execute(statement)
         quote = result.scalar_one_or_none()
         if quote is None or quote.status == "draft":
             raise NotFoundError("Proposal not found")
@@ -1601,6 +1674,7 @@ class QuoteService:
             number=quote.number,
             title=quote.title,
             status=quote.status,
+            proposal_version=quote.proposal_version or 1,
             currency=quote.currency,
             subtotal=float(quote.subtotal or 0),
             tax_amount=float(quote.tax_amount or 0),
@@ -1724,7 +1798,7 @@ class QuoteService:
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 
-        await self._persist_repriced_document(quote, updated, line_items)
+        await self._persist_repriced_document(quote, updated, line_items, increment_version=False)
         self.log.info(
             "quote_package_selected_by_client",
             quote_id=str(quote.id),
@@ -1738,6 +1812,8 @@ class QuoteService:
         quote: Quote,
         document: ProposalDocument,
         line_items: list[QuoteLineItemCreate],
+        *,
+        increment_version: bool = True,
     ) -> None:
         """Write a repriced snapshot and the lines it derives, as one commit.
 
@@ -1754,6 +1830,8 @@ class QuoteService:
             quote.line_items.append(self._build_line_item(item, categories))
         quote.proposal_document = document.model_dump(mode="json")
         self._recompute_totals(quote)
+        if increment_version:
+            quote.proposal_version += 1
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
 
@@ -1792,6 +1870,23 @@ class QuoteService:
                 )
             except ValueError as exc:
                 raise ValidationError(str(exc)) from exc
+            stored_input = self._stored_proposal_input(quote)
+            if stored_input is not None:
+                stored_input = stored_input.model_copy(
+                    update={
+                        "additional_charges": [
+                            *stored_input.additional_charges,
+                            WizardCharge(
+                                description=payload.name,
+                                net_amount=payload.amount,
+                                catalog_item_id=payload.catalog_item_id,
+                            ),
+                        ]
+                    }
+                )
+                quote.proposal_input = stored_input.model_dump(
+                    mode="json", exclude={"attach_dismissal"}
+                )
             catalog = await self._resolve_wizard_catalog(workspace_id)
             repriced, line_items = reprice_document(updated, config=config, catalog=catalog)
             await self._persist_repriced_document(quote, repriced, line_items)
@@ -1833,11 +1928,28 @@ class QuoteService:
 
         if quote.proposal_document:
             document = self._parse_document(quote)
+            charge_index = next(
+                (
+                    index
+                    for index, charge in enumerate(document.additional_charges)
+                    if charge.id == service_id
+                ),
+                None,
+            )
             config = await self._config_for_edit(quote)
             try:
                 updated = remove_charge(document, service_id)
             except ValueError as exc:
                 raise NotFoundError(str(exc)) from exc
+            stored_input = self._stored_proposal_input(quote)
+            if stored_input is not None and charge_index is not None:
+                charges = list(stored_input.additional_charges)
+                if charge_index < len(charges):
+                    charges.pop(charge_index)
+                    stored_input = stored_input.model_copy(update={"additional_charges": charges})
+                    quote.proposal_input = stored_input.model_dump(
+                        mode="json", exclude={"attach_dismissal"}
+                    )
             catalog = await self._resolve_wizard_catalog(workspace_id)
             repriced, line_items = reprice_document(updated, config=config, catalog=catalog)
             await self._persist_repriced_document(quote, repriced, line_items)
@@ -1864,6 +1976,20 @@ class QuoteService:
             total_after=float(quote.total or 0),
         )
         return await self._detail_response(quote)
+
+    def _stored_proposal_input(self, quote: Quote) -> ProposalWizardPayload | None:
+        """Parse optional hydration state without breaking unrelated basic edits."""
+        if quote.proposal_input is None:
+            return None
+        try:
+            return ProposalWizardPayload.model_validate(quote.proposal_input)
+        except ValueError:
+            self.log.warning(
+                "quote_proposal_input_invalid",
+                quote_id=str(quote.id),
+                proposal_input_version=quote.proposal_input_version,
+            )
+            return None
 
     def _parse_document(self, quote: Quote) -> ProposalDocument:
         """Parse a quote's snapshot, as a 422 rather than a 500 when it is bad."""
@@ -1895,7 +2021,11 @@ class QuoteService:
         return get_pricing_config(workspace)
 
     async def approve_public(
-        self, token: str, *, selected_tier: str | None = None
+        self,
+        token: str,
+        *,
+        proposal_version: int | None,
+        selected_tier: str | None = None,
     ) -> PublicProposalActionResult:
         """Client approves their proposal via the public token (idempotent).
 
@@ -1906,13 +2036,33 @@ class QuoteService:
         Reuses the operator approve path so the same lifecycle guards and
         automation event fire; an expired/declined proposal is rejected there.
         """
-        quote = await self._load_by_token(token)
-        should_send_receipt = quote.status in {"draft", "sent"}
+        quote = await self._load_by_token(token, for_update=True)
+        expected_version = proposal_version
+        if expected_version is None:
+            # Keep deployment order backward-compatible without weakening edited
+            # quotes: the prior frontend omitted this field, and only an untouched
+            # version-1 proposal is guaranteed to still match what it rendered.
+            if quote.proposal_version != 1:
+                raise ConflictError(
+                    "This proposal changed after you opened it. Refresh and review the new terms.",
+                    code="proposal_version_required",
+                )
+            expected_version = 1
+        if quote.proposal_version != expected_version:
+            raise ConflictError(
+                "This proposal changed after you opened it. Refresh and review the new terms.",
+                code="proposal_changed",
+            )
+        should_send_receipt = quote.status == "sent"
         # Re-pointing an already-decided quote would rewrite a signed agreement,
         # so the lifecycle guard runs first and a late package switch is ignored.
         if selected_tier and quote.status in {"draft", "sent"}:
             await self._apply_client_package(quote, selected_tier)
-        result = await self.approve_quote(quote.workspace_id, quote.id)
+        result = await self.approve_quote(
+            quote.workspace_id,
+            quote.id,
+            expected_proposal_version=expected_version,
+        )
         # Surface any unpaid deposit so the client page can hand off to checkout.
         from app.services.payments.quote_deposit_service import deposit_amount as resolve_amount
 
@@ -2164,18 +2314,49 @@ class QuoteService:
             present_categories=[line.service_category for line in lines],
         )
 
-    async def save_from_wizard(
-        self,
-        workspace_id: uuid.UUID,
-        payload: ProposalWizardPayload,
-        *,
-        created_by_id: int | None = None,
-    ) -> QuoteDetailResponse:
-        """Persist a wizard proposal: a draft quote whose headline-tier lines are
-        recomputed server-side, plus the rich multi-tier snapshot on
-        ``proposal_document``. Client totals are never trusted.
+    @staticmethod
+    def _wizard_quote_requires_revision(quote: Quote) -> bool:
+        """Return whether repricing must preserve ``quote`` as an audit record.
+
+        A decided or converted quote is already a customer-approved/accounting
+        record. Any payment provider id also freezes the quote: an unpaid Stripe
+        Checkout Session still names an amount, so changing that amount in place
+        could let the old session settle against different proposal terms.
         """
-        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        return (
+            quote.status not in {"draft", "sent"}
+            or quote.deposit_paid_at is not None
+            or quote.deposit_checkout_session_id is not None
+            or quote.deposit_payment_intent_id is not None
+            or quote.converted_job_id is not None
+            or quote.converted_invoice_id is not None
+        )
+
+    async def _wizard_quote_for_write(self, workspace_id: uuid.UUID, quote_id: uuid.UUID) -> Quote:
+        result = await self.db.execute(
+            select(Quote)
+            .where(Quote.id == quote_id, Quote.workspace_id == workspace_id)
+            .options(selectinload(Quote.line_items))
+            .with_for_update()
+        )
+        quote = result.scalar_one_or_none()
+        if quote is None:
+            raise NotFoundError("Quote not found")
+        if quote.proposal_document is None:
+            raise ConflictError(
+                "Only a sales-wizard quote can be reopened in the quote builder",
+                code="wizard_quote_required",
+            )
+        return quote
+
+    async def _apply_wizard_payload(
+        self,
+        quote: Quote,
+        workspace: Workspace,
+        payload: ProposalWizardPayload,
+    ) -> tuple[ProposalDocument, AttachWarning | None]:
+        """Rebuild every customer-facing price from one trusted wizard input."""
+        workspace_id = workspace.id
         config = get_pricing_config(workspace)
         catalog = await self._resolve_wizard_catalog(workspace_id)
         document, line_items = build_proposal_document(config, catalog, payload)
@@ -2193,7 +2374,8 @@ class QuoteService:
         contact_id = payload.contact_id
         if contact_id is None:
             contact_id = await self._resolve_wizard_contact(workspace_id, payload)
-        lighting_project = None
+
+        lighting_project_id = None
         if payload.lighting_project_id is not None:
             if contact_id is None:
                 raise ValidationError("A lighting project quote requires a linked contact")
@@ -2204,37 +2386,33 @@ class QuoteService:
                 service_location_id=payload.service_location_id,
                 opportunity_id=payload.opportunity_id,
             )
-        assigned_user_id = await self._default_assignee_id(
-            workspace_id,
-            opportunity_id=payload.opportunity_id,
-            created_by_id=created_by_id,
-        )
-        quote = Quote(
-            workspace_id=workspace_id,
-            contact_id=contact_id,
-            service_location_id=payload.service_location_id,
-            opportunity_id=payload.opportunity_id,
-            assigned_user_id=assigned_user_id,
-            lighting_project_id=lighting_project.id if lighting_project else None,
-            number=await self._next_quote_number(workspace_id),
-            title=payload.title or self._wizard_title(document),
-            currency="USD",
-            notes=payload.notes,
-            terms=payload.terms,
-            status="draft",
-            proposal_document=document.model_dump(mode="json"),
-            created_by_id=created_by_id,
-        )
-        # Fixture lines carry the price-book id the builder resolved them from,
-        # so a wizard quote is categorized exactly like a picker-built one and
-        # reports a real ``primary_service`` for attach metrics and attach rules.
+            lighting_project_id = lighting_project.id
+
+        quote.contact_id = contact_id
+        quote.service_location_id = payload.service_location_id
+        quote.opportunity_id = payload.opportunity_id
+        quote.lighting_project_id = lighting_project_id
+        quote.title = payload.title or self._wizard_title(document)
+        quote.notes = payload.notes
+        quote.terms = payload.terms
+        quote.currency = "USD"
+        quote.tax_amount = 0
+        quote.discount_amount = 0
+        quote.proposal_document = document.model_dump(mode="json")
+        stored_payload = payload.model_copy(update={"contact_id": contact_id, "title": quote.title})
+        quote.proposal_input = stored_payload.model_dump(mode="json", exclude={"attach_dismissal"})
+        quote.proposal_input_version = WIZARD_INPUT_VERSION
+
+        # Replacing the relationship lets delete-orphan remove stale priced lines
+        # in the same transaction; no old price can survive a wizard reprice.
         categories = await self._catalog_categories(workspace_id, line_items)
-        for item in line_items:
-            quote.line_items.append(self._build_line_item(item, categories))
+        quote.line_items = [self._build_line_item(item, categories) for item in line_items]
         self._recompute_totals(quote)
-        # Before the insert, so a blocking attach rule rejects the save.
-        attach_warning = self._apply_attach_rules(quote, workspace, payload.attach_dismissal)
-        # Persist the resolved deposit selection onto the quote (one column only).
+
+        # Re-resolve the deposit after the total, clearing whichever old mode was
+        # present first so percentage and fixed values can never coexist.
+        quote.deposit_percentage = None
+        quote.deposit_amount_fixed = None
         selection = self._wizard_deposit_selection(payload, config)
         if selection is not None:
             mode, value = selection
@@ -2242,6 +2420,32 @@ class QuoteService:
                 quote.deposit_amount_fixed = round(value, 2)
             else:
                 quote.deposit_percentage = min(100.0, round(value, 2))
+
+        attach_warning = self._apply_attach_rules(quote, workspace, payload.attach_dismissal)
+        return document, attach_warning
+
+    async def save_from_wizard(
+        self,
+        workspace_id: uuid.UUID,
+        payload: ProposalWizardPayload,
+        *,
+        created_by_id: int | None = None,
+    ) -> QuoteDetailResponse:
+        """Persist a new server-priced wizard proposal as a draft quote."""
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        assigned_user_id = await self._default_assignee_id(
+            workspace_id,
+            opportunity_id=payload.opportunity_id,
+            created_by_id=created_by_id,
+        )
+        quote = Quote(
+            workspace_id=workspace_id,
+            assigned_user_id=assigned_user_id,
+            number=await self._next_quote_number(workspace_id),
+            status="draft",
+            created_by_id=created_by_id,
+        )
+        document, attach_warning = await self._apply_wizard_payload(quote, workspace, payload)
         self.db.add(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
@@ -2254,6 +2458,82 @@ class QuoteService:
             selected_tier=document.selected_tier,
         )
         response = await self._detail_response(quote)
+        response.attach_warning = attach_warning
+        return response
+
+    async def update_from_wizard(
+        self,
+        workspace_id: uuid.UUID,
+        quote_id: uuid.UUID,
+        payload: ProposalWizardPayload,
+    ) -> QuoteDetailResponse:
+        """Reopen an unpaid draft/sent quote in place, preserving its public token."""
+        quote = await self._wizard_quote_for_write(workspace_id, quote_id)
+        if self._wizard_quote_requires_revision(quote):
+            raise ConflictError(
+                "This quote is protected; create a revision instead",
+                code="quote_revision_required",
+                details={"quote_id": str(quote.id), "recommended_action": "revise"},
+            )
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        document, attach_warning = await self._apply_wizard_payload(quote, workspace, payload)
+        # Keep a sent proposal live at the same URL. Its monotonic version makes a
+        # customer approval rendered before this commit fail safely instead of
+        # accepting the new prices sight unseen.
+        quote.proposal_version += 1
+        await self.db.commit()
+        await self.db.refresh(quote, ["line_items"])
+        self.log.info(
+            "quote_updated_from_wizard",
+            quote_id=str(quote.id),
+            workspace_id=str(workspace_id),
+            status=quote.status,
+            selected_tier=document.selected_tier,
+        )
+        response = await self._detail_response(quote)
+        response.attach_warning = attach_warning
+        return response
+
+    async def revise_from_wizard(
+        self,
+        workspace_id: uuid.UUID,
+        quote_id: uuid.UUID,
+        payload: ProposalWizardPayload,
+        *,
+        created_by_id: int | None = None,
+    ) -> QuoteDetailResponse:
+        """Copy a protected wizard quote into a separately numbered draft."""
+        source = await self._wizard_quote_for_write(workspace_id, quote_id)
+        if not self._wizard_quote_requires_revision(source):
+            raise ConflictError(
+                "This quote can still be updated in place",
+                code="quote_update_allowed",
+                details={"quote_id": str(source.id), "recommended_action": "update"},
+            )
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        revision = Quote(
+            workspace_id=workspace_id,
+            assigned_user_id=source.assigned_user_id,
+            number=await self._next_quote_number(workspace_id),
+            status="draft",
+            issue_date=date.today(),
+            revision_of_quote_id=source.id,
+            revision_root_quote_id=source.revision_root_quote_id or source.id,
+            revision_number=source.revision_number + 1,
+            created_by_id=created_by_id,
+        )
+        document, attach_warning = await self._apply_wizard_payload(revision, workspace, payload)
+        self.db.add(revision)
+        await self.db.commit()
+        await self.db.refresh(revision, ["line_items"])
+        self.log.info(
+            "quote_revised_from_wizard",
+            source_quote_id=str(source.id),
+            revision_quote_id=str(revision.id),
+            workspace_id=str(workspace_id),
+            selected_tier=document.selected_tier,
+        )
+        response = await self._detail_response(revision)
         response.attach_warning = attach_warning
         return response
 
@@ -3212,6 +3492,7 @@ class QuoteService:
         categories = await self._catalog_categories(workspace_id, [item_in])
         quote.line_items.append(self._build_line_item(item_in, categories))
         self._recompute_totals(quote)
+        quote.proposal_version += 1
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         return await self._detail_response(quote)
@@ -3249,6 +3530,7 @@ class QuoteService:
         )
 
         self._recompute_totals(quote)
+        quote.proposal_version += 1
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         return await self._detail_response(quote)
@@ -3272,6 +3554,7 @@ class QuoteService:
         quote.line_items.remove(line_item)
         await self.db.delete(line_item)
         self._recompute_totals(quote)
+        quote.proposal_version += 1
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         return await self._detail_response(quote)
@@ -3281,19 +3564,29 @@ class QuoteService:
         workspace_id: uuid.UUID,
         quote_id: uuid.UUID,
     ) -> Quote:
-        """Load a quote (with line items) and reject edits once decided/expired.
-
-        The message reaches an operator verbatim through ``ServiceErrorRoute``,
-        and this guard now covers services as well as line items, so it names the
-        quote's state rather than one of the two things that might be edited.
-        """
-        quote = await get_or_404(
-            self.db,
-            Quote,
-            quote_id,
-            workspace_id=workspace_id,
-            options=[selectinload(Quote.line_items)],
+        """Lock and load a quote whose customer/payment terms may still change."""
+        result = await self.db.execute(
+            select(Quote)
+            .where(Quote.id == quote_id, Quote.workspace_id == workspace_id)
+            .options(selectinload(Quote.line_items))
+            .with_for_update()
         )
+        quote = result.scalar_one_or_none()
+        if quote is None:
+            # Preserve the established tenant-safe 404 shape used by every quote
+            # mutation while the successful path still gets a database row lock.
+            await get_or_404(self.db, Quote, quote_id, workspace_id=workspace_id)
+            raise NotFoundError("Quote not found")
         if quote.status in _LOCKED_STATUSES:
             raise ConflictError(f"This quote is {quote.status} and can no longer be changed")
+        if (
+            quote.deposit_paid_at is not None
+            or quote.deposit_checkout_session_id is not None
+            or quote.deposit_payment_intent_id is not None
+            or quote.converted_job_id is not None
+            or quote.converted_invoice_id is not None
+        ):
+            raise ConflictError(
+                "This quote has payment or conversion history and can no longer be changed"
+            )
         return quote

@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +21,8 @@ from app.models.user import User
 from app.models.workspace import WorkspaceMembership
 from app.schemas.user import (
     ChangePasswordRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     Token,
     UserCreate,
     UserResponse,
@@ -35,11 +37,13 @@ from app.services.auth import (
     AuthCookieService,
     AuthIpRateLimitService,
     PasswordChangeService,
+    PasswordResetService,
     TokenRotationService,
     UsernameLockoutService,
     WebSocketTicketService,
     hash_username,
 )
+from app.services.email import send_password_reset_email
 from app.services.rate_limiting.auth_limiter import (
     enforce_change_password_rate_limit,
     enforce_ws_ticket_rate_limit,
@@ -268,6 +272,43 @@ async def logout(
 
     _cookie_service.clear_auth_cookies(response)
     return {"message": "Logged out successfully"}
+
+
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_password_reset(
+    body: PasswordResetRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: DB,
+) -> dict[str, str]:
+    """Issue a reset link while returning the same response for every email."""
+    client_ip = get_client_ip(request, settings.trusted_proxies)
+    await _check_auth_rate_limit(db, client_ip, "password-reset-request")
+    issued = await PasswordResetService(db).issue(str(body.email))
+    if issued is not None:
+        user, token = issued
+        reset_url = f"{settings.frontend_url.rstrip('/')}/reset-password?token={token}"
+        background_tasks.add_task(send_password_reset_email, user.email, reset_url)
+    return {"message": "If an active account matches that email, a reset link will be sent."}
+
+
+@router.post("/password-reset/confirm", status_code=status.HTTP_200_OK)
+async def confirm_password_reset(
+    body: PasswordResetConfirm,
+    request: Request,
+    response: Response,
+    db: DB,
+) -> dict[str, str]:
+    """Consume a user-bound one-time token and revoke existing sessions."""
+    client_ip = get_client_ip(request, settings.trusted_proxies)
+    await _check_auth_rate_limit(db, client_ip, "password-reset-confirm")
+    if not await PasswordResetService(db).reset(body.token, body.new_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset link",
+        )
+    _cookie_service.clear_auth_cookies(response)
+    return {"message": "Password updated successfully"}
 
 
 @router.post("/change-password", status_code=status.HTTP_200_OK)
