@@ -129,11 +129,15 @@ async def test_added_service_survives_the_client_switching_packages() -> None:
         sent = await svc.mark_sent(ws.id, quote_id)
         assert sent.public_token
 
-        await svc.add_service(
+        updated = await svc.add_service(
             ws.id, quote_id, QuoteServiceCreate(name="Gutter cleaning", amount=600.0)
         )
 
-        await svc.approve_public(sent.public_token, selected_tier="good")
+        await svc.approve_public(
+            sent.public_token,
+            proposal_version=updated.proposal_version,
+            selected_tier="good",
+        )
 
         after = await svc.get_public_proposal(sent.public_token)
         assert "Gutter cleaning" in [li.name for li in after.line_items]

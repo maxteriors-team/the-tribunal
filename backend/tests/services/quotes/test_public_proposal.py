@@ -221,14 +221,14 @@ async def test_public_approve_flips_status_and_is_idempotent(
         svc = QuoteService(db)
         token, _ = await _sent_quote(svc, ws.id, contact.id)
 
-        first = await svc.approve_public(token)
+        first = await svc.approve_public(token, proposal_version=1)
         assert first.status == "approved"
         receipt.assert_awaited_once()
         assert receipt.await_args.kwargs["to_email"] == contact.email
         assert receipt.await_args.kwargs["quote_title"] == "Backyard lighting install"
 
         # Idempotent: approving again stays approved without a duplicate receipt.
-        second = await svc.approve_public(token)
+        second = await svc.approve_public(token, proposal_version=1)
         assert second.status == "approved"
         receipt.assert_awaited_once()
 
@@ -249,7 +249,7 @@ async def test_public_decline_records_reason() -> None:
 
         # A declined proposal cannot then be approved by the client.
         with pytest.raises(ConflictError):
-            await svc.approve_public(token)
+            await svc.approve_public(token, proposal_version=1)
 
 
 async def test_expired_proposal_is_rejected() -> None:
@@ -268,7 +268,7 @@ async def test_expired_proposal_is_rejected() -> None:
 
         # And the client can no longer approve it.
         with pytest.raises(ConflictError):
-            await svc.approve_public(token)
+            await svc.approve_public(token, proposal_version=1)
 
 
 async def test_public_payload_leaks_no_internal_ids_or_costs() -> None:

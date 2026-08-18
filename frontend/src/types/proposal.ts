@@ -51,6 +51,8 @@ export interface PublicProposal {
   number: string;
   title?: string | null;
   status: PublicProposalStatus;
+  /** Monotonic customer-facing terms version submitted with acceptance. */
+  proposal_version: number;
   currency: string;
   subtotal: number;
   tax_amount: number;

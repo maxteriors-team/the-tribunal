@@ -21,9 +21,11 @@ from pydantic import (
 
 from app.schemas.attach_rules import AttachDismissal, AttachDismissalRequest, AttachWarning
 from app.schemas.pricing import FinancingEstimate
+from app.schemas.proposal_wizard import ProposalWizardPayload
 from app.schemas.user import AssigneeSummary
 
 QuoteStatus = Literal["draft", "sent", "approved", "declined", "expired"]
+WizardEditMode = Literal["update", "revise"]
 DepositPaymentMethod = Literal["card", "cash", "check", "other"]
 ManualDepositPaymentMethod = Literal["cash", "check", "other"]
 
@@ -289,8 +291,14 @@ class QuoteResponse(BaseModel):
     opportunity_id: uuid.UUID | None = None
     assigned_user_id: int | None = None
     assignee: AssigneeSummary | None = None
-    # Authenticated linkage only. PublicProposal has no corresponding field.
+    # Authenticated linkage only. PublicProposal has no corresponding fields.
     lighting_project_id: uuid.UUID | None = None
+    revision_of_quote_id: uuid.UUID | None = None
+    revision_root_quote_id: uuid.UUID | None = None
+    revision_number: int = Field(default=1, ge=1)
+    proposal_version: int = Field(default=1, ge=1)
+    is_wizard_quote: bool = False
+    wizard_edit_mode: WizardEditMode | None = None
     number: str
     title: str | None = None
     status: QuoteStatus
@@ -334,6 +342,11 @@ class QuoteResponse(BaseModel):
     attach_value: float = 0.0
     # Recorded dismissals of the attach prompt, oldest first. Server-written.
     attach_dismissals: list[AttachDismissal] = Field(default_factory=list)
+
+    @field_validator("revision_number", "proposal_version", mode="before")
+    @classmethod
+    def _null_version_is_one(cls, value: object) -> object:
+        return 1 if value is None else value
 
     @field_validator("view_count", "attach_count", "attach_value", mode="before")
     @classmethod
@@ -409,6 +422,10 @@ class QuoteDetailResponse(QuoteResponse):
     services: list[QuoteServiceResponse] = Field(default_factory=list)
     # Multi-tier sales-wizard snapshot; null for quotes created outside the wizard.
     proposal_document: dict[str, Any] | None = None
+    # Exact validated builder input. Staff-only; public proposal responses expose
+    # only the safe rendered document and never this contact-rich hydration state.
+    proposal_input: ProposalWizardPayload | None = None
+    proposal_input_version: int | None = None
     # The cross-sell prompt this save earned, when an advisory attach rule
     # matched and nothing was attached. Transient: computed per save from the
     # workspace's attach-rule config, never stored on the quote and therefore

@@ -293,9 +293,16 @@ export function CalculatorScreen({
   const attach = useAttachPromptActions(wizard);
 
   const handleSave = async () => {
+    const wasRevision = wizard.editMode === "revise";
     try {
       const quote = await wizard.save();
-      toast.success("Proposal saved — client link ready");
+      toast.success(
+        wasRevision
+          ? `Revision ${quote.number} saved as a draft — original unchanged`
+          : wizard.editingQuoteId
+            ? "Quote changes saved"
+            : "Proposal saved — client link ready",
+      );
       return quote;
     } catch (err) {
       // A blocking attach rule is not a failure to retry blindly: the prompt
@@ -352,13 +359,33 @@ export function CalculatorScreen({
             <div className="calc-wordmark-line" />
           </div>
           <div className="calc-title">
-            <em>Quote</em>{" "}Builder
+            {wizard.editingQuoteId ? (
+              <>
+                <em>{wizard.editMode === "revise" ? "Revise" : "Edit"}</em>{" "}Quote
+              </>
+            ) : (
+              <>
+                <em>Quote</em>{" "}Builder
+              </>
+            )}
           </div>
           <div className="calc-rule" />
           <div className="calc-sub">
-            Build the quote, price every line, then preview or send
+            {wizard.editingQuoteId
+              ? wizard.editMode === "revise"
+                ? "Build a new draft while the accepted or paid original stays untouched"
+                : "Reprice every selection without replacing the customer link"
+              : "Build the quote, price every line, then preview or send"}
           </div>
         </div>
+
+        {wizard.hydrationSource === "snapshot" ? (
+          <div className="wizard-legacy-warning" role="status">
+            <strong>Review this legacy quote before saving.</strong> The prior
+            customer document restored the available selections, but older
+            snapshots did not retain every raw net add-on or seasonal item.
+          </div>
+        ) : null}
 
         <div
           className="wizard-progress"
@@ -722,8 +749,11 @@ export function CalculatorScreen({
                 <em>Send</em>{" "}to the Customer
               </div>
               <div className="wizard-copy">
-                Save the quote to mint the client link, then text or email it.
-                Both go to the details captured in step 1.
+                {wizard.editingQuoteId
+                  ? wizard.editMode === "revise"
+                    ? "Save a separate draft revision. The original customer link, decision, deposit, and conversion stay unchanged."
+                    : "Save these changes in place. A sent quote keeps the same customer link; delivery only happens when you choose it below."
+                  : "Save the quote to mint the client link, then text or email it. Both go to the details captured in step 1."}
               </div>
             </div>
 
@@ -740,22 +770,31 @@ export function CalculatorScreen({
               <button
                 type="button"
                 className="email-btn"
-                disabled={wizard.isSaving}
+                disabled={wizard.isSaving || wizard.isDelivering}
                 onClick={() => void handleSave()}
               >
-                {wizard.isSaving ? "Saving…" : "\u2605 Save & Get Client Link"}
+                {wizard.isSaving
+                  ? "Saving…"
+                  : wizard.editingQuoteId
+                    ? wizard.editMode === "revise"
+                      ? "★ Save Draft Revision"
+                      : "★ Save Changes"
+                    : "★ Save & Get Client Link"}
               </button>
             </div>
 
-            {shareLink ? (
-              <div className="share-link">
-                <div className="share-link-label">Client proposal link</div>
+            <div className="share-link">
+              <div className="share-link-label">
+                {shareLink ? "Client proposal link" : "Send when ready"}
+              </div>
+              {shareLink ? (
                 <div className="share-link-row">
                   <input
+                    aria-label="Client proposal link"
                     className="share-link-input"
                     readOnly
                     value={shareLink}
-                    onFocus={(e) => e.currentTarget.select()}
+                    onFocus={(event) => event.currentTarget.select()}
                   />
                   <button
                     type="button"
@@ -765,40 +804,36 @@ export function CalculatorScreen({
                     Copy
                   </button>
                 </div>
-                <div className="share-link-row">
-                  <button
-                    type="button"
-                    className="share-send-btn"
-                    disabled={wizard.isDelivering || !wizard.client.email}
-                    title={
-                      wizard.client.email
-                        ? undefined
-                        : "Add a customer email in step 1"
-                    }
-                    onClick={() => void handleDeliver("email")}
-                  >
-                    {wizard.isDelivering
-                      ? "Sending…"
-                      : `✉ Email to ${wizard.client.email || "client"}`}
-                  </button>
-                  <button
-                    type="button"
-                    className="share-send-btn"
-                    disabled={wizard.isDelivering || !wizard.client.phone}
-                    title={
-                      wizard.client.phone
-                        ? undefined
-                        : "Add a customer phone in step 1"
-                    }
-                    onClick={() => void handleDeliver("sms")}
-                  >
-                    {wizard.isDelivering
-                      ? "Sending…"
-                      : `☎ Text to ${wizard.client.phone || "client"}`}
-                  </button>
-                </div>
+              ) : null}
+              <div className="share-link-row">
+                <button
+                  type="button"
+                  className="share-send-btn"
+                  disabled={wizard.isSaving || wizard.isDelivering || !wizard.client.email}
+                  title={
+                    wizard.client.email ? undefined : "Add a customer email in step 1"
+                  }
+                  onClick={() => void handleDeliver("email")}
+                >
+                  {wizard.isDelivering
+                    ? "Saving & sending…"
+                    : `✉ Email to ${wizard.client.email || "client"}`}
+                </button>
+                <button
+                  type="button"
+                  className="share-send-btn"
+                  disabled={wizard.isSaving || wizard.isDelivering || !wizard.client.phone}
+                  title={
+                    wizard.client.phone ? undefined : "Add a customer phone in step 1"
+                  }
+                  onClick={() => void handleDeliver("sms")}
+                >
+                  {wizard.isDelivering
+                    ? "Saving & sending…"
+                    : `☎ Text to ${wizard.client.phone || "client"}`}
+                </button>
               </div>
-            ) : null}
+            </div>
 
             <div className="wizard-nav">
               <button type="button" className="wizard-nav-btn secondary" onClick={goPrev}>

@@ -125,6 +125,7 @@ from app.models.outbound_sequence import (
     SequenceStepAttemptStatus,
     SequenceStepChannel,
 )
+from app.models.password_reset_token import PasswordResetToken
 from app.models.pending_action import PendingAction
 from app.models.phone_message import (
     PhoneMessage,
@@ -211,6 +212,7 @@ __all__ = [
     "PhoneNumberProvider",
     "PhoneNumberDailyStats",
     "GlobalOptOut",
+    "PasswordResetToken",
     "OutboundActionAuditLog",
     "OutboundMission",
     "MissionStatus",

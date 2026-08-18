@@ -32,6 +32,12 @@ export interface Quote {
   assigned_user_id?: number | null;
   assignee?: AssigneeSummary | null;
   lighting_project_id?: string | null;
+  revision_of_quote_id?: string | null;
+  revision_root_quote_id?: string | null;
+  revision_number?: number;
+  proposal_version?: number;
+  is_wizard_quote?: boolean;
+  wizard_edit_mode?: "update" | "revise" | null;
   number: string;
   title?: string | null;
   status: QuoteStatus;
@@ -87,10 +93,12 @@ export interface Quote {
   services?: QuoteService[];
   /**
    * Sales-wizard snapshot; null/absent on a plain quote. Detail responses only —
-   * a list row never carries it. Its presence is what marks a quote as priced by
-   * the wizard: the document *is* the price, and line items are derived from it.
+   * a list row uses `is_wizard_quote` instead of carrying this large document.
    */
   proposal_document?: Record<string, unknown> | null;
+  /** Exact validated builder input; authenticated detail responses only. */
+  proposal_input?: components["schemas"]["ProposalWizardPayload"] | null;
+  proposal_input_version?: number | null;
 }
 
 /**

@@ -41,6 +41,20 @@ export async function register(data: RegisterData): Promise<User> {
   return apiPost<User>("/api/v1/auth/register", data);
 }
 
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  return apiPost<{ message: string }>("/api/v1/auth/password-reset/request", { email });
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<{ message: string }> {
+  return apiPost<{ message: string }>("/api/v1/auth/password-reset/confirm", {
+    token,
+    new_password: newPassword,
+  });
+}
+
 export async function getCurrentUser(): Promise<User> {
   return apiGet<User>("/api/v1/auth/me");
 }

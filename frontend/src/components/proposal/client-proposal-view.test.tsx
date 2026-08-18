@@ -80,9 +80,10 @@ const PACKAGES: PublicProposalPackage[] = [
 
 function proposal(overrides: Partial<PublicProposal> = {}): PublicProposal {
   return {
-    token: "tok-1",
+    token: "proposal-token",
     number: "Q-1001",
     status: "sent",
+    proposal_version: 1,
     currency: "USD",
     subtotal: 16782,
     tax_amount: 0,

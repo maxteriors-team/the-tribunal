@@ -734,6 +734,15 @@ export function ClientProposalView({
                   type="button"
                   className="cta-btn-primary"
                   disabled={busy}
+                  aria-label={
+                    busy
+                      ? "Approving"
+                      : ctaDeposit && ctaDeposit > 0
+                        ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} and pay ${fmt(ctaDeposit)}`
+                        : chosenLabel
+                          ? `Accept ${chosenLabel}`
+                          : "Approve Proposal"
+                  }
                   onClick={() => onApprove(selectedTier)}
                 >
                   {busy ? (

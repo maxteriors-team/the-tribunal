@@ -7,7 +7,7 @@
  * No money is ever computed here — every figure rendered by the wizard comes
  * from that document, exactly like the saved snapshot the client later sees.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { DesignerShot } from "@/components/estimator/proposal-host";
@@ -21,6 +21,7 @@ import type {
   AttachWarning,
   CatalogItemResponse,
   PricingSettings,
+  ProposalDocument,
   ProposalLine,
   ProposalWizardPayload,
   QuoteDetail,
@@ -289,6 +290,187 @@ function toWizardClient(draft: ClientDraft): WizardClient {
   };
 }
 
+type EditableQuoteDetail = QuoteDetail & {
+  contact_id?: number | null;
+  service_location_id?: string | null;
+  opportunity_id?: string | null;
+  lighting_project_id?: string | null;
+  title?: string | null;
+  notes?: string | null;
+  terms?: string | null;
+  proposal_document?: Record<string, unknown> | null;
+  proposal_input?: ProposalWizardPayload | null;
+  proposal_input_version?: number | null;
+  wizard_edit_mode?: "update" | "revise" | null;
+};
+
+export type WizardHydrationSource = "input" | "snapshot";
+
+interface WizardHydration {
+  payload: ProposalWizardPayload;
+  source: WizardHydrationSource;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function records(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.map(record).filter((row): row is Record<string, unknown> => row !== null)
+    : [];
+}
+
+function finiteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function withCurrentQuoteLinks(
+  payload: ProposalWizardPayload,
+  quote: EditableQuoteDetail,
+ ): ProposalWizardPayload {
+  return {
+    ...payload,
+    attach_dismissal: null,
+    contact_id: quote.contact_id ?? payload.contact_id ?? null,
+    service_location_id: quote.service_location_id ?? payload.service_location_id ?? null,
+    opportunity_id: quote.opportunity_id ?? payload.opportunity_id ?? null,
+    lighting_project_id: quote.lighting_project_id ?? payload.lighting_project_id ?? null,
+    title: quote.title ?? payload.title ?? null,
+    notes: quote.notes ?? payload.notes ?? null,
+    terms: quote.terms ?? payload.terms ?? null,
+  };
+}
+
+/**
+ * Recover the builder's raw selection. Versioned `proposal_input` is exact; the
+ * document fallback exists for pre-migration quotes and is visibly labelled in
+ * the UI because rendered snapshots cannot recover every historical net add-on.
+ */
+export function hydrationForQuote(quote: EditableQuoteDetail): WizardHydration {
+  if (quote.proposal_input) {
+    return {
+      payload: withCurrentQuoteLinks(quote.proposal_input, quote),
+      source: "input",
+    };
+  }
+
+  const document = record(quote.proposal_document);
+  if (!document) throw new Error("This quote was not created in the quote builder.");
+
+  const quantityByItem = new Map<string, number>();
+  for (const tier of records(document.tiers)) {
+    for (const line of records(tier.lines)) {
+      const itemId = nullableString(line.item_id);
+      const quantity = finiteNumber(line.quantity);
+      if (itemId && quantity > 0) quantityByItem.set(itemId, quantity);
+    }
+  }
+
+  const categories = Array.isArray(document.categories)
+    ? document.categories.filter(
+        (key): key is CategoryKey =>
+          typeof key === "string" && CATEGORY_KEYS.includes(key as CategoryKey),
+      )
+    : [];
+  const bistro = record(document.bistro);
+  const carePlan = record(document.care_plan);
+  const nightPreview = record(document.night_preview);
+  const sectionByKey = new Map(
+    records(document.category_sections).map((section) => [section.key, section]),
+  );
+
+  const permanentSection = sectionByKey.get("permanent");
+  const permanentLines = records(permanentSection?.lines);
+  const roofline = permanentLines.find((line) =>
+    nullableString(line.label)?.toLowerCase().includes("roofline"),
+  );
+  const controller = permanentLines.find((line) =>
+    nullableString(line.label)?.toLowerCase().includes("controller"),
+  );
+  const includedChannels = nullableString(controller?.detail)?.match(/includes (\d+)/i);
+  const extraChannels = permanentLines.find((line) =>
+    nullableString(line.label)?.toLowerCase().includes("additional zone"),
+  );
+
+  const christmasSection = sectionByKey.get("christmas");
+  const christmasLines = records(christmasSection?.lines);
+  const christmasRoofline = christmasLines.find((line) =>
+    nullableString(line.label)?.toLowerCase().includes("roofline"),
+  );
+
+  const pricingSource =
+    document.pricing_source === "price_book" ? "price_book" : "workspace_rules";
+  const payload: ProposalWizardPayload = {
+    pricing_source: pricingSource,
+    client: record(document.client) as WizardClient | null,
+    quantities: Array.from(quantityByItem, ([item_id, quantity]) => ({
+      item_id,
+      quantity,
+    })),
+    additional_charges: records(document.additional_charges)
+      .map((charge) => ({
+        description: nullableString(charge.description),
+        // Exact only for price-book quotes. The legacy warning tells the rep to
+        // review these values before saving a workspace-rules snapshot.
+        net_amount: finiteNumber(charge.amount),
+        catalog_item_id: nullableString(charge.catalog_item_id),
+        tier_key: nullableString(charge.tier_key),
+      }))
+      .filter((charge) => charge.net_amount > 0),
+    selected_tier: nullableString(document.selected_tier),
+    care_plan_tier: nullableString(carePlan?.selected),
+    categories: categories.length ? categories : ["landscape"],
+    bistro: bistro
+      ? {
+          product: bistro.product === "classic" ? "classic" : "color",
+          tier: nullableString(bistro.tier) ?? "",
+          feet: finiteNumber(bistro.feet),
+        }
+      : null,
+    permanent: permanentSection
+      ? {
+          feet: finiteNumber(roofline?.quantity),
+          channels:
+            Number.parseInt(includedChannels?.[1] ?? "0", 10) +
+            finiteNumber(extraChannels?.quantity),
+        }
+      : null,
+    christmas: christmasSection
+      ? {
+          roofline_feet: finiteNumber(christmasRoofline?.quantity),
+          items: {},
+          takedown: christmasSection.takedown === true,
+          storage: christmasSection.storage === true,
+          selected_package: null,
+        }
+      : null,
+    night_preview: nightPreview,
+    mockups: records(document.mockups)
+      .map((mockup) => ({
+        image: nullableString(mockup.image) ?? "",
+        caption: nullableString(mockup.caption),
+      }))
+      .filter((mockup) => mockup.image),
+    deposit:
+      (document.deposit_mode === "fixed" || document.deposit_mode === "percentage") &&
+      finiteNumber(document.deposit_value) > 0
+        ? {
+            mode: document.deposit_mode,
+            value: finiteNumber(document.deposit_value),
+          }
+        : null,
+  };
+
+  return { payload: withCurrentQuoteLinks(payload, quote), source: "snapshot" };
+}
+
 export interface UseSalesWizardReturn {
   /** Workspace this quote belongs to (scopes client lookups to its own CRM). */
   workspaceId: string;
@@ -371,6 +553,13 @@ export interface UseSalesWizardReturn {
   attachWarning: AttachWarning | null;
   /** Skip the prompt, recording the reason on the quote when it is saved. */
   dismissAttach: (reason: string | null) => void;
+  /** Existing quote being edited or copied, null for a new proposal. */
+  editingQuoteId: string | null;
+  editMode: "update" | "revise" | null;
+  hydrationSource: WizardHydrationSource | null;
+  isLoadingQuote: boolean;
+  quoteLoadError: boolean;
+  reloadQuote: () => void;
   // Deliver flow (server emails/texts the client link)
   deliver: (channel: "email" | "sms") => Promise<{ to: string }>;
   isDelivering: boolean;
@@ -384,7 +573,10 @@ export function useSalesWizard(
    * landscape, the previous behavior.
    */
   initialService: ServiceKey = "landscape",
+  /** Existing wizard quote to hydrate and update/revise. */
+  editingQuoteId: string | null = null,
 ): UseSalesWizardReturn {
+  const queryClient = useQueryClient();
   const pricingQuery = useQuery({
     queryKey: queryKeys.salesWizard.pricing(workspaceId),
     queryFn: () => salesWizardApi.getPricing(workspaceId),
@@ -392,6 +584,11 @@ export function useSalesWizard(
   const catalogQuery = useQuery({
     queryKey: queryKeys.salesWizard.catalog(workspaceId),
     queryFn: () => salesWizardApi.listCatalog(workspaceId),
+  });
+  const quoteQuery = useQuery({
+    queryKey: queryKeys.quotes.detail(workspaceId, editingQuoteId ?? "new"),
+    queryFn: () => salesWizardApi.getQuote(workspaceId, editingQuoteId ?? ""),
+    enabled: Boolean(workspaceId && editingQuoteId),
   });
 
   const pricing = pricingQuery.data;
@@ -435,6 +632,18 @@ export function useSalesWizard(
   const [depositInput, setDepositInput] = useState<string>("");
   const depositValue = Math.max(0, Number.parseFloat(depositInput) || 0);
 
+  const [editMode, setEditMode] = useState<"update" | "revise" | null>(null);
+  const [hydrationSource, setHydrationSource] =
+    useState<WizardHydrationSource | null>(null);
+  const [hydratedQuoteId, setHydratedQuoteId] = useState<string | null>(null);
+  const [hydrationError, setHydrationError] = useState<Error | null>(null);
+  const editTargetRef = useRef<{
+    quoteId: string;
+    mode: "update" | "revise";
+  } | null>(null);
+  const [hydratedMetadata, setHydratedMetadata] =
+    useState<Partial<ProposalWizardPayload>>({});
+
   // Defaults derive from loaded config/preview instead of effect-synced state,
   // so first render is already correct and no cascading setState is needed.
   const activeTier =
@@ -443,15 +652,18 @@ export function useSalesWizard(
     pricing?.tiers?.[0]?.key ||
     "";
   const bistro = useMemo<BistroDraft>(() => {
+    const bistroTiers = pricing?.bistro?.tiers ?? [];
+    // Do not silently replace a historical saved tier while hydrating. If pricing
+    // has since changed, the preview can report it and the rep can choose openly.
+    if (hydrationSource && bistroState.tier) return bistroState;
     if (
-      bistroState.tier &&
-      (pricing?.bistro?.tiers ?? []).some((t) => t.key === bistroState.tier)
+      !bistroTiers.length ||
+      bistroTiers.some((tier) => tier.key === bistroState.tier)
     ) {
       return bistroState;
     }
-    const firstBistro = pricing?.bistro?.tiers?.[0]?.key ?? "";
-    return { ...bistroState, tier: firstBistro };
-  }, [bistroState, pricing]);
+    return { ...bistroState, tier: bistroTiers[0]?.key ?? "" };
+  }, [bistroState, hydrationSource, pricing]);
   // Care plan defaults to the "popular" option from the priced document until
   // the rep explicitly picks one (derived — no effect-synced state).
   const [document, setDocument] = useState<WizardDocument | null>(null);
@@ -461,6 +673,140 @@ export function useSalesWizard(
     if (!options.length) return null;
     return (options.find((o) => o.popular) ?? options[0]).key;
   }, [carePlanTierState, document]);
+
+  /* eslint-disable react-hooks/set-state-in-effect -- The component gates rendering
+     until this one-time async query snapshot has hydrated the controlled form. */
+  useEffect(() => {
+    if (!editingQuoteId || !quoteQuery.data || hydratedQuoteId === editingQuoteId) return;
+
+    try {
+      const quote = quoteQuery.data as EditableQuoteDetail;
+      const hydration = hydrationForQuote(quote);
+      const input = hydration.payload;
+      const savedClient = input.client;
+      const nextCategories = (input.categories ?? []).filter(
+        (key): key is CategoryKey => CATEGORY_KEYS.includes(key as CategoryKey),
+      );
+
+      setClient({
+        first_name: savedClient?.first_name ?? "",
+        last_name: savedClient?.last_name ?? "",
+        email: savedClient?.email ?? "",
+        phone: savedClient?.phone ?? "",
+        rep_name: savedClient?.rep_name ?? "",
+        street: savedClient?.street ?? "",
+        city: savedClient?.city ?? "",
+        state: savedClient?.state ?? "",
+        zip: savedClient?.zip ?? "",
+      });
+      setLinkedContactId(typeof input.contact_id === "number" ? input.contact_id : null);
+      setQuantities(
+        Object.fromEntries(
+          (input.quantities ?? []).map((row) => [row.item_id, row.quantity]),
+        ),
+      );
+      setCharges(
+        input.additional_charges?.length
+          ? input.additional_charges.map((charge) => ({
+              description: charge.description ?? "",
+              amount: String(charge.net_amount),
+              catalogItemId: charge.catalog_item_id ?? null,
+              tierKey: charge.tier_key ?? null,
+            }))
+          : [{ description: "", amount: "" }],
+      );
+      setActiveTier(input.selected_tier ?? "");
+      setCarePlanTierState(input.care_plan_tier ?? null);
+      setCareCountManual(input.care_count_manual ?? null);
+      setCategories(
+        nextCategories.length
+          ? nextCategories
+          : [SERVICE_CATEGORIES[initialService][0]],
+      );
+      setBistroState(
+        input.bistro
+          ? {
+              product: input.bistro.product === "classic" ? "classic" : "color",
+              tier: input.bistro.tier,
+              feet: String(input.bistro.feet),
+            }
+          : { product: "color", tier: "", feet: "" },
+      );
+      setPermanentState(
+        input.permanent
+          ? {
+              feet: String(input.permanent.feet),
+              channels: String(input.permanent.channels),
+            }
+          : { feet: "", channels: "" },
+      );
+      setChristmasState(
+        input.christmas
+          ? {
+              roofline_feet: String(input.christmas.roofline_feet),
+              items: Object.fromEntries(
+                Object.entries(input.christmas.items ?? {}).map(([category, rows]) => [
+                  category,
+                  Object.fromEntries((rows ?? []).map((row) => [row.key, row.quantity])),
+                ]),
+              ),
+              takedown: input.christmas.takedown,
+              storage: input.christmas.storage,
+              selected_package: input.christmas.selected_package ?? "",
+            }
+          : EMPTY_CHRISTMAS,
+      );
+      const savedNight = record(input.night_preview);
+      const savedImages = Array.isArray(savedNight?.images)
+        ? savedNight.images.filter((image): image is string => typeof image === "string")
+        : nullableString(savedNight?.image)
+          ? [String(savedNight?.image)]
+          : [];
+      setNightState({
+        images: savedImages,
+        shots: [],
+        services: Array.isArray(savedNight?.services)
+          ? (savedNight.services.filter(
+              (service): service is string => typeof service === "string",
+            ) as DesignerServiceKey[])
+          : [],
+      });
+      setMockups(
+        (input.mockups ?? []).map((mockup) => ({
+          image: mockup.image,
+          caption: mockup.caption ?? "",
+        })),
+      );
+      setDepositMode(input.deposit?.mode ?? "percentage");
+      setDepositInput(input.deposit ? String(input.deposit.value) : "");
+      setDocument(
+        quote.proposal_document
+          ? normalizeDocument(quote.proposal_document as ProposalDocument)
+          : null,
+      );
+
+      setHydratedMetadata({
+        pricing_source: input.pricing_source,
+        service_location_id: input.service_location_id ?? null,
+        opportunity_id: input.opportunity_id ?? null,
+        lighting_project_id: input.lighting_project_id ?? null,
+        title: input.title ?? null,
+        notes: input.notes ?? null,
+        terms: input.terms ?? null,
+      });
+      const mode = quote.wizard_edit_mode ?? "revise";
+      editTargetRef.current = { quoteId: String(quote.id), mode };
+      setEditMode(mode);
+      setHydrationSource(hydration.source);
+      setHydrationError(null);
+      setHydratedQuoteId(String(quote.id));
+    } catch (error) {
+      setHydrationError(
+        error instanceof Error ? error : new Error("The saved quote could not be loaded."),
+      );
+    }
+  }, [editingQuoteId, hydratedQuoteId, initialService, quoteQuery.data]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const setClientField = useCallback(
     (key: keyof ClientDraft, value: string) => {
@@ -656,7 +1002,8 @@ export function useSalesWizard(
     const hasChristmas = categories.includes("christmas");
     const permFeet = Number.parseFloat(permanent.feet) || 0;
     return {
-      pricing_source: "workspace_rules",
+      ...hydratedMetadata,
+      pricing_source: hydratedMetadata.pricing_source ?? "workspace_rules",
       // Linked customer wins over the server's email/phone lookup, so re-quoting
       // an existing client files on their record instead of creating a twin.
       contact_id: linkedContactId,
@@ -710,6 +1057,7 @@ export function useSalesWizard(
         depositValue > 0 ? { mode: depositMode, value: depositValue } : null,
     };
   }, [
+    hydratedMetadata,
     client,
     linkedContactId,
     quantities,
@@ -733,6 +1081,7 @@ export function useSalesWizard(
 
   useEffect(() => {
     if (!pricing) return;
+    if (editingQuoteId && hydratedQuoteId !== editingQuoteId) return;
     const generation = ++generationRef.current;
     const timer = setTimeout(() => {
       setIsPreviewing(true);
@@ -755,7 +1104,7 @@ export function useSalesWizard(
         });
     }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [workspaceId, payload, pricing]);
+  }, [editingQuoteId, hydratedQuoteId, payload, pricing, workspaceId]);
 
   // ── Lookups ──
   const tierView = useCallback(
@@ -810,14 +1159,14 @@ export function useSalesWizard(
     [liveWarning],
   );
 
-  // ── Save flow (draft quote + snapshot, then mark sent for the share token) ──
+  // ── Save flow (new quotes mint a link; edits preserve their lifecycle) ──────
   const [isSaving, setIsSaving] = useState(false);
   const [savedQuote, setSavedQuote] = useState<QuoteDetail | null>(null);
   const save = useCallback(
     async (): Promise<QuoteDetail> => {
       setIsSaving(true);
       try {
-        const quote = await salesWizardApi.save(workspaceId, {
+        const savePayload: ProposalWizardPayload = {
           ...payload,
           // Only sent once the rep explicitly skips the prompt, and only the
           // reason crosses the wire — the server resolves which categories were
@@ -826,10 +1175,41 @@ export function useSalesWizard(
           attach_dismissal: attachDismissal
             ? { reason: attachDismissal.reason }
             : null,
+        };
+
+        const target = editTargetRef.current;
+        let persisted: QuoteDetail;
+        if (target?.mode === "revise") {
+          persisted = await salesWizardApi.revise(
+            workspaceId,
+            target.quoteId,
+            savePayload,
+          );
+        } else if (target) {
+          persisted = await salesWizardApi.update(
+            workspaceId,
+            target.quoteId,
+            savePayload,
+          );
+        } else {
+          const draft = await salesWizardApi.save(workspaceId, savePayload);
+          persisted = await salesWizardApi.send(workspaceId, String(draft.id));
+        }
+
+        const persistedId = String(persisted.id);
+        // Every successful save becomes the mutable target. This prevents both a
+        // second new quote and a sibling revision when the rep saves twice.
+        editTargetRef.current = { quoteId: persistedId, mode: "update" };
+        if (target) setEditMode("update");
+        queryClient.setQueryData(
+          queryKeys.quotes.detail(workspaceId, persistedId),
+          persisted,
+        );
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.quotes.all(workspaceId),
         });
-        const sent = await salesWizardApi.send(workspaceId, String(quote.id));
-        setSavedQuote(sent);
-        return sent;
+        setSavedQuote(persisted);
+        return persisted;
       } catch (error) {
         // A blocking rule rejects the save carrying the same warning shape the
         // preview returns, so the builder offers the identical Add / Skip
@@ -842,7 +1222,7 @@ export function useSalesWizard(
         setIsSaving(false);
       }
     },
-    [workspaceId, payload, attachDismissal],
+    [workspaceId, payload, attachDismissal, queryClient],
   );
 
   // ── Deliver flow (server emails/texts the client link) ──
@@ -852,19 +1232,39 @@ export function useSalesWizard(
     async (channel: "email" | "sms"): Promise<{ to: string }> => {
       setIsDelivering(true);
       try {
-        // Reuse the saved quote; save first if the rep skipped that step.
-        const quote = savedQuote ?? (await save());
-        return await salesWizardApi.deliver(
+        // Always save first. The current session targets the same quote after its
+        // first save, so this persists last-second edits without creating copies.
+        const quote = await save();
+        const result = await salesWizardApi.deliver(
           workspaceId,
           String(quote.id),
           channel,
         );
+        const sent = await salesWizardApi.getQuote(workspaceId, String(quote.id));
+        setSavedQuote(sent);
+        queryClient.setQueryData(
+          queryKeys.quotes.detail(workspaceId, String(quote.id)),
+          sent,
+        );
+        return result;
       } finally {
         setIsDelivering(false);
       }
     },
-    [workspaceId, savedQuote, save],
+    [queryClient, save, workspaceId],
   );
+
+  const isLoadingQuote = Boolean(
+    editingQuoteId &&
+      !hydrationError &&
+      (quoteQuery.isPending || hydratedQuoteId !== editingQuoteId),
+  );
+  const quoteLoadError = quoteQuery.isError || hydrationError !== null;
+  const reloadQuote = () => {
+    setHydrationError(null);
+    setHydratedQuoteId(null);
+    void quoteQuery.refetch();
+  };
 
   return {
     workspaceId,
@@ -924,6 +1324,12 @@ export function useSalesWizard(
     savedQuote,
     attachWarning,
     dismissAttach,
+    editingQuoteId,
+    editMode,
+    hydrationSource,
+    isLoadingQuote,
+    quoteLoadError,
+    reloadQuote,
     deliver,
     isDelivering,
   };

@@ -13,6 +13,7 @@ function proposal(overrides: Partial<PublicProposal> = {}): PublicProposal {
     number: "QUO-1001",
     title: "Roof replacement",
     status: "sent",
+    proposal_version: 1,
     currency: "USD",
     subtotal: 9000,
     tax_amount: 0,
