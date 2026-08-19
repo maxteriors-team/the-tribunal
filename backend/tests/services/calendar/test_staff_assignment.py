@@ -291,6 +291,32 @@ async def test_single_strategy_query_includes_own_and_shared_staff() -> None:
 
 
 @pytest.mark.asyncio
+async def test_connected_calendar_filter_is_opt_in_and_query_enforced() -> None:
+    from sqlalchemy.dialects import postgresql
+
+    class CapturingSession(_FakeSession):
+        query: Any = None
+
+        async def execute(self, query: Any) -> _FakeResult:
+            self.query = query
+            return _FakeResult([])
+
+    capture = CapturingSession([])
+    await resolve_staff_for_booking(
+        capture,
+        agent=_agent(STRATEGY_ROUND_ROBIN),
+        record=False,
+        require_calendar_connection=True,
+    )
+    sql = str(
+        capture.query.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "google_calendar_connections" in sql
+    assert "bookable_staff.user_id IN" in sql
+
+
+@pytest.mark.asyncio
 async def test_resolve_round_robin_bumps_counters() -> None:
     pool = [FakeStaff("Alice", assignment_count=0), FakeStaff("Bob", assignment_count=2)]
     session = _FakeSession(pool)

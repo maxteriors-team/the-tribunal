@@ -629,3 +629,19 @@ Scope: authenticated full-wizard quote edits/revisions, revision lineage, custom
 - Confirm cancellation, refund, tax, contract-capacity, and US/EU/UK pre-contract/withdrawal wording on the actual deployed proposal before relying on this feature legally.
 - Decide whether public proposals need an age/capacity attestation; no legal age threshold was invented in code.
 - This evidence covers source plus automated local runtime tests. It does not certify accessibility, replace assistive-technology/manual mobile review, or inspect dashboard-injected scripts/provider behavior.
+
+## Appointment-delivery hardening addendum — 18 August 2026
+
+Scope: AI-routed Google Calendar bookings, Zoom/Google video metadata, and transactional appointment reminders only. This is engineering guidance, **NOT LEGAL ADVICE**.
+
+### Controls implemented and proved
+
+- **CODE/tests:** AI availability and booking routing requires a linked per-user Google Calendar row; the generated query and AI call-site flag are regression-tested, and no new customer-data surface or provider was added.
+- **RUNTIME/integration test with provider fakes:** text bookings commit the CRM appointment before awaiting Zoom/Google, then return the provider-result meeting URL or existing truthful failure state; no fabricated URL is emitted.
+- **RUNTIME/tests with provider fakes:** video-call SMS/email reminders include the correct Zoom/Google URL, custom templates support `{meeting_url}`, and reminder email HTML safely linkifies it.
+- **CODE/tests:** existing reminder enablement, configured-channel, email-presence, and SMS opt-out gates remain unchanged; this pass adds no send and no marketing purpose.
+
+### Residual risk
+
+- `BOOK-001` remains open for separate fire-and-forget confirmation/rep-email delivery and non-text booking paths; synchronous text-booking provider sync only narrows that risk.
+- `MSG-001` remains open: adding the meeting URL does not prove the underlying reminder consent basis or quiet-hours policy.

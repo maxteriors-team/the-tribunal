@@ -46,13 +46,20 @@ def _appointment(agent=None, workspace=None, **overrides):
         "agent": agent,
         "workspace": workspace or _workspace(),
         "contact": SimpleNamespace(
-            id=3, email="dana@example.com", full_name="Dana Reyes", first_name="Dana"
+            id=3,
+            email="dana@example.com",
+            full_name="Dana Reyes",
+            first_name="Dana",
+            last_name="Reyes",
         ),
         "scheduled_at": NOW + timedelta(minutes=30),
         "created_at": NOW - timedelta(days=1),
         "reminders_sent": [],
         "reminders_sent_email": [],
         "reminder_sent_at": None,
+        "service_type": "phone_call",
+        "meeting_url": None,
+        "sync_status": "pending",
     }
     fields.update(overrides)
     return SimpleNamespace(**fields)
@@ -90,6 +97,63 @@ class TestAgentlessOffsets:
     )
     def test_ignores_unusable_configuration(self, blob) -> None:
         assert _agentless_offsets(_workspace(settings=blob)) == _AGENTLESS_DEFAULT_OFFSETS
+
+
+class TestReminderRendering:
+    @pytest.mark.parametrize(
+        ("meeting_url", "provider"),
+        [
+            ("https://meet.google.com/abc-defg-hij", "Google Meet"),
+            ("https://zoom.us/j/123456789", "Zoom"),
+        ],
+    )
+    def test_video_reminder_includes_provider_link(self, meeting_url: str, provider: str) -> None:
+        appointment = _appointment(
+            service_type="video_call",
+            meeting_url=meeting_url,
+            sync_status="synced",
+        )
+
+        body = ReminderWorker()._render_reminder_body(
+            None,
+            appointment.contact,
+            appointment,
+            appointment.workspace,
+            None,
+        )
+
+        assert f"Join {provider}: {meeting_url}" in body
+
+    def test_meeting_url_placeholder_is_not_duplicated(self) -> None:
+        appointment = _appointment(
+            service_type="video_call",
+            meeting_url="https://meet.google.com/abc-defg-hij",
+            sync_status="synced",
+        )
+
+        body = ReminderWorker()._render_reminder_body(
+            "Join here: {meeting_url}",
+            appointment.contact,
+            appointment,
+            appointment.workspace,
+            None,
+        )
+
+        assert body == "Join here: https://meet.google.com/abc-defg-hij"
+
+    def test_video_reminder_without_link_requests_follow_up(self) -> None:
+        appointment = _appointment(service_type="video_call", sync_status="failed")
+
+        body = ReminderWorker()._render_reminder_body(
+            None,
+            appointment.contact,
+            appointment,
+            appointment.workspace,
+            None,
+        )
+
+        assert "link needs team follow-up" in body
+        assert "meet.google.com" not in body
 
 
 class TestDueCollection:
@@ -158,9 +222,7 @@ class TestEmailSend:
         # The SMS column is untouched, so an SMS reminder can still fire.
         assert appt.reminders_sent == []
 
-    async def test_provider_rejection_leaves_the_offset_unsent_for_retry(
-        self, monkeypatch
-    ) -> None:
+    async def test_provider_rejection_leaves_the_offset_unsent_for_retry(self, monkeypatch) -> None:
         monkeypatch.setattr(
             "app.workers.reminder_worker.send_appointment_reminder_email",
             AsyncMock(return_value=False),

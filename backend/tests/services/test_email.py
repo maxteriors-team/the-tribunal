@@ -399,3 +399,22 @@ def test_safe_logo_url_accepts_absolute_https() -> None:
     logo_url = "https://go.example.com/static/brand/maxteriors-logo.png"
 
     assert email._safe_logo_url(logo_url) == logo_url
+
+
+@pytest.mark.asyncio
+async def test_appointment_reminder_linkifies_meeting_url(fake_resend: _FakeResend) -> None:
+    meeting_url = "https://zoom.us/j/123456789"
+
+    sent = await email.send_appointment_reminder_email(
+        to_email="customer@example.com",
+        contact_name="Dana Reyes",
+        business_name="Sparkle Exteriors",
+        body_text=f"Join Zoom: {meeting_url}",
+        appointment_time=email.datetime(2026, 8, 20, 14, 30, tzinfo=email.UTC),
+        timezone="America/New_York",
+    )
+
+    assert sent is True
+    params = fake_resend.Emails.send_async.await_args.args[0]
+    assert f'href="{meeting_url}"' in params["html"]
+    assert params["html"].count(meeting_url) == 2

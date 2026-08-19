@@ -1344,7 +1344,7 @@ async def send_appointment_reminder_email(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="{body_style}">
-    <p>{html_escape(body_text).replace(chr(10), "<br>")}</p>
+    <p>{_escape_and_linkify(body_text).replace(chr(10), "<br>")}</p>
     <p style="color: #666; font-size: 13px;">
         {html_escape(formatted_time)} &middot; {html_escape(business_name or "")}
     </p>
