@@ -33,6 +33,7 @@ const REMINDER_VARIABLES = [
   { name: "{appointment_date}", description: "Date of the appointment (e.g. March 22, 2026)" },
   { name: "{appointment_time}", description: "Time of the appointment (e.g. 2:30 PM)" },
   { name: "{reschedule_link}", description: "Link for the contact to reschedule" },
+  { name: "{meeting_url}", description: "Zoom or Google Meet link for video calls" },
 ];
 
 export function RemindersSection({ control }: RemindersSectionProps) {
