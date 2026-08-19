@@ -2838,9 +2838,8 @@ export function LightDesigner({
       const { ftPerPx } = designScale(shot.design, shot.photo.width);
       for (const run of shot.design.runs) {
         const product = productById.get(run.productId);
-        if (product?.target.field !== "roofline") continue;
-        totals[run.permanentComplexity ?? "standard"] +=
-          polylineLength(run.points) * ftPerPx;
+        if (product?.category !== "permanent") continue;
+        totals[run.permanentComplexity ?? "standard"] += polylineLength(run.points) * ftPerPx;
       }
     }
     return totals;
@@ -2849,7 +2848,7 @@ export function LightDesigner({
     state.selection?.kind === "run"
       ? (design.runs.find((run) => {
           if (run.id !== state.selection?.id) return false;
-          return productById.get(run.productId)?.target.field === "roofline";
+          return productById.get(run.productId)?.category === "permanent";
         }) ?? null)
       : null;
   /** Anything drawn on the photo that's on screen (gates the AI render). */
