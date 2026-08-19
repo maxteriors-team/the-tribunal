@@ -56251,6 +56251,44 @@
               "schema": {
                 "$ref": "#/components/schemas/app__schemas__lead_source__LeadSubmitRequest"
               }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "Address": {
+                    "type": "string"
+                  },
+                  "Email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "Full Name": {
+                    "type": "string"
+                  },
+                  "Message": {
+                    "type": "string"
+                  },
+                  "Page URL": {
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "Phone": {
+                    "type": "string"
+                  },
+                  "Referrer": {
+                    "format": "uri",
+                    "type": "string"
+                  },
+                  "SMS Consent": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "Full Name",
+                  "Phone"
+                ],
+                "type": "object"
+              }
             }
           },
           "required": true
