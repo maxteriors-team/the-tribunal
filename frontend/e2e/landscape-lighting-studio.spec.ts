@@ -908,15 +908,18 @@ test.describe("landscape lighting studio", () => {
     expect(
       await toolbar.evaluate((element) => element.scrollWidth <= element.clientWidth + 1),
     ).toBe(true);
-    const fitted = await page.locator(".ll-document-viewport").evaluate((viewport) => {
-      const stage = viewport.querySelector<HTMLElement>(".ll-document-stage");
-      const frame = viewport.querySelector<HTMLElement>(".ll-document-scale-frame");
-      if (!stage || !frame) return false;
-      const stageRect = stage.getBoundingClientRect();
-      const frameRect = frame.getBoundingClientRect();
-      return frameRect.width <= stageRect.width + 1 && frameRect.height <= stageRect.height + 1;
-    });
-    expect(fitted).toBe(true);
+    await expect
+      .poll(async () => {
+        return page.locator(".ll-document-viewport").evaluate((viewport) => {
+          const stage = viewport.querySelector<HTMLElement>(".ll-document-stage");
+          const frame = viewport.querySelector<HTMLElement>(".ll-document-scale-frame");
+          if (!stage || !frame) return false;
+          const stageRect = stage.getBoundingClientRect();
+          const frameRect = frame.getBoundingClientRect();
+          return frameRect.width <= stageRect.width + 1 && frameRect.height <= stageRect.height + 1;
+        });
+      })
+      .toBe(true);
     const drawing = page.getByRole("tab", { name: "Drawing Sheet" });
     await drawing.focus();
     await page.keyboard.press("ArrowRight");

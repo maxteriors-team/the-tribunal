@@ -73,7 +73,12 @@ async function settleOnboarding(page: Page): Promise<void> {
   }
 }
 
-interface CreatedContact {
+interface CreatedApiResource {
+  id: number;
+  collectionUrl: string;
+}
+
+interface CreatedContact extends CreatedApiResource {
   fullName: string;
   /** Contact search ILIKEs each column separately, so only a single-column
    *  term (last name) matches server-side — a full name never does. */
@@ -100,14 +105,32 @@ async function createContact(page: Page): Promise<CreatedContact> {
   const phoneTail = Date.now().toString().slice(-7);
   await dialog.getByLabel(/phone number/i).fill(`+1555${phoneTail}`);
 
+  const createResponsePromise = page.waitForResponse(
+    (response) =>
+      /\/contacts\/manual$/.test(response.url()) && response.request().method() === "POST",
+    { timeout: 20_000 },
+  );
   await dialog.getByRole("button", { name: /^create contact$/i }).click();
+  const response = await createResponsePromise;
+  expect(response.status(), "contact POST should succeed").toBeLessThan(300);
+  const contact = (await response.json()) as { id: number };
   await expect(dialog).toBeHidden({ timeout: 15_000 });
 
-  return { fullName: `${firstName} ${lastName}`, lastName };
+  return {
+    id: contact.id,
+    collectionUrl: response.url().replace(/\/manual$/, ""),
+    fullName: `${firstName} ${lastName}`,
+    lastName,
+  };
 }
 
 test.describe("Calendar — book a contact onto the schedule", () => {
+  let appointmentToDelete: CreatedApiResource | null = null;
+  let contactToDelete: CreatedApiResource | null = null;
+
   test.beforeEach(async ({ page }) => {
+    appointmentToDelete = null;
+    contactToDelete = null;
     test.skip(
       !hasTestUser() && !ALLOW_PROVISIONING,
       "Set E2E_USER_EMAIL/E2E_USER_PASSWORD, or E2E_ALLOW_PROVISIONING=1 for a throwaway account",
@@ -120,11 +143,21 @@ test.describe("Calendar — book a contact onto the schedule", () => {
     }
   });
 
+  test.afterEach(async ({ page }) => {
+    for (const resource of [appointmentToDelete, contactToDelete]) {
+      if (!resource) continue;
+      const response = await page.request.delete(`${resource.collectionUrl}/${resource.id}`);
+      expect(response.status(), `cleanup DELETE ${resource.collectionUrl}`).toBe(204);
+    }
+  });
+
   test("books an appointment and shows it on the calendar", async ({ page }) => {
     // Registration + contact creation + booking + reload is a long flow.
     test.setTimeout(120_000);
 
-    const { fullName: contactName, lastName } = await createContact(page);
+    const contact = await createContact(page);
+    contactToDelete = contact;
+    const { fullName: contactName, lastName } = contact;
 
     // Step 1 — open the scheduler.
     await page.goto("/calendar");
@@ -181,10 +214,10 @@ test.describe("Calendar — book a contact onto the schedule", () => {
     await page.keyboard.press("Escape");
     await expect(dayGrid).toBeHidden({ timeout: 5_000 });
 
-    // Step 5 — pick a time slot.
+    // Step 5 — pick a time slot. The UI exposes localized 12-hour labels.
     const timeSelect = dialog.getByRole("combobox").nth(1);
     await timeSelect.click();
-    await page.getByRole("option", { name: "14:00", exact: true }).click();
+    await page.getByRole("option", { name: "2:00 PM", exact: true }).click();
 
     // Step 6 — set the duration.
     const durationSelect = dialog.getByRole("combobox").nth(2);
@@ -213,6 +246,8 @@ test.describe("Calendar — book a contact onto the schedule", () => {
 
     const response = await createResponse;
     expect(response.status(), "appointment POST should succeed").toBeLessThan(300);
+    const appointment = (await response.json()) as { id: number };
+    appointmentToDelete = { id: appointment.id, collectionUrl: response.url() };
 
     // Step 9 — the dialog closes on success.
     await expect(dialog).toBeHidden({ timeout: 15_000 });

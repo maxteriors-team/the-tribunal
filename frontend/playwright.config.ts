@@ -12,13 +12,18 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 const isCI = !!process.env.CI;
+const usesSharedTestUser = Boolean(
+  process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD,
+);
 
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
-  workers: isCI ? 1 : undefined,
+  // A single seeded account has one rotating refresh-token session. Running
+  // authenticated specs in parallel makes workers invalidate each other.
+  workers: isCI || usesSharedTestUser ? 1 : undefined,
   reporter: isCI ? [["github"], ["html", { open: "never" }]] : "list",
 
   use: {
