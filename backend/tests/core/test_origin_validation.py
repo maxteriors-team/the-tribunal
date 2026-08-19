@@ -15,8 +15,7 @@ from app.core.origin_validation import validate_origin
 def _make_request(headers: dict[str, str]) -> Request:
     """Build a minimal ASGI ``Request`` carrying the given headers."""
     encoded = [
-        (key.lower().encode("latin-1"), value.encode("latin-1"))
-        for key, value in headers.items()
+        (key.lower().encode("latin-1"), value.encode("latin-1")) for key, value in headers.items()
     ]
     scope = {
         "type": "http",
@@ -40,6 +39,10 @@ class TestOriginHeaderRequired:
 
     def test_origin_header_mismatch_rejected(self) -> None:
         request = _make_request({"origin": "https://evil.com"})
+        assert validate_origin(request, ["example.com"]) is False
+
+    def test_non_http_origin_scheme_rejected(self) -> None:
+        request = _make_request({"origin": "javascript://example.com"})
         assert validate_origin(request, ["example.com"]) is False
 
     def test_missing_origin_rejected(self) -> None:

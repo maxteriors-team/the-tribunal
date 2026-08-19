@@ -32688,6 +32688,19 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["app__schemas__lead_source__LeadSubmitRequest"];
+                "application/x-www-form-urlencoded": {
+                    Address?: string;
+                    /** Format: email */
+                    Email?: string;
+                    "Full Name": string;
+                    Message?: string;
+                    /** Format: uri */
+                    "Page URL"?: string;
+                    Phone: string;
+                    /** Format: uri */
+                    Referrer?: string;
+                    "SMS Consent"?: string;
+                };
             };
         };
         responses: {

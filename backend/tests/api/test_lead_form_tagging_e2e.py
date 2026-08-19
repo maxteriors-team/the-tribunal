@@ -325,6 +325,74 @@ async def test_returning_contact_updates_consent_without_restarting_funnel() -> 
             await db.commit()
 
 
+async def test_native_elementor_webhook_creates_the_contact() -> None:
+    """The exact WordPress payload reaches validation, origin checks, and storage."""
+    domain = "maxteriors.example.com"
+    phone = "+15550100006"
+    async with AsyncSessionLocal() as db:
+        workspace = Workspace(
+            id=uuid.uuid4(),
+            name="Elementor Co",
+            slug=f"elementor-{uuid.uuid4().hex[:8]}",
+        )
+        db.add(workspace)
+        await db.flush()
+        public_key = f"ls_{uuid.uuid4().hex[:8]}"
+        db.add(
+            LeadSource(
+                workspace_id=workspace.id,
+                name="Website Quote Form",
+                public_key=public_key,
+                allowed_domains=[domain],
+                enabled=True,
+            )
+        )
+        await db.commit()
+        workspace_id = workspace.id
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            response = await client.post(
+                f"/api/v1/p/leads/{public_key}",
+                headers={"User-Agent": f"WordPress/7.0.4; https://{domain}"},
+                data={
+                    "Full Name": "Ellie Elementor",
+                    "Phone": phone,
+                    "Email": "ellie@example.com",
+                    "Address": "14040 Pernell Dr, Sterling Heights, MI 48313",
+                    "Message": "Interested in permanent roofline lighting.",
+                    "SMS Consent": "on",
+                },
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+        assert "access-control-allow-origin" not in response.headers
+
+        async with AsyncSessionLocal() as db:
+            contact = await db.scalar(
+                select(Contact).where(
+                    Contact.workspace_id == workspace_id,
+                    Contact.phone_hash == hash_phone(phone),
+                )
+            )
+            assert contact is not None
+            assert contact.first_name == "Ellie"
+            assert contact.last_name == "Elementor"
+            assert contact.email == "ellie@example.com"
+            assert contact.address_line1 == "14040 Pernell Dr"
+            assert contact.address_city == "Sterling Heights"
+            assert contact.address_state == "MI"
+            assert contact.address_zip == "48313"
+            assert contact.notes == "Interested in permanent roofline lighting."
+            assert contact.sms_consent_status == "opted_in"
+    finally:
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(Workspace).where(Workspace.id == workspace_id))
+            await db.commit()
+
+
 async def test_lead_form_without_automation_creates_untagged_lead() -> None:
     """A form with no tagging automation still captures the lead — just untagged.
 

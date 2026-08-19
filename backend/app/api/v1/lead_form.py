@@ -10,6 +10,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DB
+from app.api.v1.elementor_webhook import (
+    ELEMENTOR_REQUEST_BODY_OPENAPI,
+    ElementorLeadFormRoute,
+    validate_elementor_webhook_origin,
+)
 from app.core.config import settings
 from app.core.encryption import hash_phone, hash_value, hash_value_or_none
 from app.core.origin_validation import validate_origin
@@ -43,7 +48,7 @@ from app.services.telephony.telnyx_voice import TelnyxVoiceService
 
 logger = structlog.get_logger()
 
-router = APIRouter()
+router = APIRouter(route_class=ElementorLeadFormRoute)
 
 
 async def _check_lead_form_rate_limit(db: DB, client_ip: str) -> None:
@@ -475,7 +480,11 @@ def _apply_address(contact: Contact, raw_address: str | None) -> None:
         contact.address_zip = parsed.zip_code
 
 
-@router.post("/{public_key}", response_model=LeadSubmitResponse)
+@router.post(
+    "/{public_key}",
+    response_model=LeadSubmitResponse,
+    openapi_extra=ELEMENTOR_REQUEST_BODY_OPENAPI,
+)
 async def submit_lead(
     public_key: str,
     body: LeadSubmitRequest,
@@ -496,8 +505,15 @@ async def submit_lead(
     if not lead_source.enabled:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Lead source is disabled")
 
-    # Validate origin
-    if not validate_origin(request, lead_source.allowed_domains):
+    # Browser submissions use Origin. Elementor's server-side webhook has no
+    # Origin, so its normalized WordPress site URL must match the same allowlist.
+    if not validate_origin(request, lead_source.allowed_domains) and not (
+        validate_elementor_webhook_origin(
+            request,
+            lead_source.allowed_domains,
+            landing_page=body.landing_page,
+        )
+    ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Origin not allowed")
 
     # Resolve browser click/UTM evidence server-side. This lets one generic
@@ -612,8 +628,10 @@ async def submit_lead(
     demo_record.status = "initiated"
     await db.commit()
 
-    # Build response with CORS header
-    origin = request.headers.get("origin", "")
+    # Browser responses echo the validated Origin; server-to-server webhooks
+    # omit CORS entirely rather than emitting an empty header value.
+    origin = request.headers.get("origin")
+    response_headers = {"Access-Control-Allow-Origin": origin} if origin else {}
     response_data = LeadSubmitResponse(
         success=True,
         message="Thank you! Your information has been received.",
@@ -622,5 +640,5 @@ async def submit_lead(
     return Response(
         content=response_data.model_dump_json(),
         media_type="application/json",
-        headers={"Access-Control-Allow-Origin": origin},
+        headers=response_headers,
     )

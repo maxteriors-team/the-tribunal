@@ -645,3 +645,29 @@ Scope: AI-routed Google Calendar bookings, Zoom/Google video metadata, and trans
 
 - `BOOK-001` remains open for separate fire-and-forget confirmation/rep-email delivery and non-text booking paths; synchronous text-booking provider sync only narrows that risk.
 - `MSG-001` remains open: adding the meeting URL does not prove the underlying reminder consent basis or quiet-hours policy.
+
+## Elementor website-lead webhook addendum — 19 August 2026
+
+Scope: the Maxteriors Elementor test form and Tribunal's public lead-ingestion boundary only. This is engineering guidance, **NOT LEGAL ADVICE**; no live form or automated SMS campaign was enabled in this pass.
+
+### Findings
+
+| ID | Severity | Trigger | Evidence (RUNTIME / CODE / DEDUCED) | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| WEB-001 | HIGH | Elementor posts label-keyed URL-encoded data, while Tribunal previously accepted JSON only | RUNTIME: the production test returned 422 and created zero leads/messages; the local exact-payload probe now returns 200 and persisted normalized contact/address/notes/consent fields | Preserve valid quote requests without breaking the form-success event used by ad attribution | Fixed in code; production rollout pending | Unit normalization/origin/OpenAPI tests plus database integration test and headless HTTP probe |
+| WEB-002 | HIGH | Automatic follow-up could start without demonstrable, purpose-specific SMS permission | RUNTIME: the isolated test page now has an optional, unchecked `sms_consent` acceptance field with STOP/HELP, rates, frequency, no-purchase-condition, privacy, and terms copy; no live form or send automation was enabled | Record affirmative consent before any automated text and preserve opt-out enforcement | Test page fixed; live rollout blocked until the same control is reviewed and copied | Integration assertion persists `opted_in` only when Elementor sends the checked field |
+| WEB-003 | MEDIUM | Elementor's native webhook cannot sign requests or set a custom authorization header | CODE: server-side posts require the source-specific public key, the standard WordPress site URL, the existing domain allowlist, and database-backed rate limiting; these are not a cryptographic provider signature | Limit spoofing and spend abuse at the public ingestion boundary | Mitigated; residual risk accepted for the isolated test | Rejection tests for mismatched WordPress/page origins, non-HTTP origins, malformed input, field count, and 64 KiB body cap |
+
+### Implemented and proved in this pass
+
+- Tribunal preserves its typed JSON contract and additionally documents/accepts Elementor's native `application/x-www-form-urlencoded` contract.
+- Only the Elementor POST is normalized; browser JSON still requires its validated `Origin`, and server webhook responses no longer emit an empty CORS header.
+- The exact runtime payload was exercised through the headless HTTP probe, returning HTTP 200 with the canonical success shape; local database integration verified encrypted contact fields and affirmative consent state.
+- Desktop/mobile runtime screenshots confirm the consent checkbox is visible, unchecked, keyboard-native, and readable; the 72% black panel gives worst-case 9.29:1 white-copy and 5.93:1 gold-link contrast over a white image.
+- The WordPress change is confined to the non-indexed test page. Google Ads tags, live forms, and live webhook actions were not changed.
+
+### Residual decisions before live use
+
+- Copy the optional unchecked consent field and Advanced Data setting to each live form, then prove the webhook returns 2xx before reconnecting it.
+- Do not enable automated SMS follow-up until its automation requires `sms_consent_status='opted_in'`, honors STOP, and has an approved send-window policy; `MSG-001` remains open.
+- Have counsel review the exact consent wording and privacy/terms disclosures for the jurisdictions Maxteriors serves.
