@@ -61,6 +61,7 @@ async def test_sent_proposal_returns_safe_payload(monkeypatch: pytest.MonkeyPatc
         number="QUO-000001",
         title="Backyard lighting",
         status="sent",
+        proposal_version=1,
         currency="USD",
         subtotal=720.0,
         tax_amount=0.0,
@@ -91,24 +92,32 @@ async def test_sent_proposal_returns_safe_payload(monkeypatch: pytest.MonkeyPatc
         assert leaked not in body
 
 
-async def test_approve_returns_action_result(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: dict[str, str | None] = {}
+async def test_approve_requires_and_forwards_rendered_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, str | int | None] = {}
 
     async def _approve(
-        self: object, token: str, *, selected_tier: str | None = None
+        self: object,
+        token: str,
+        *,
+        proposal_version: int,
+        selected_tier: str | None = None,
     ) -> PublicProposalActionResult:
         seen["token"] = token
+        seen["proposal_version"] = proposal_version
         seen["selected_tier"] = selected_tier
-        return PublicProposalActionResult(token=token, status="approved", message="Thank you!")
+        return PublicProposalActionResult(token="tok", status="approved", message="Thank you!")
 
     monkeypatch.setattr(quotes_module.QuoteService, "approve_public", _approve)
     async with await _client() as ac:
-        resp = await ac.post("/api/v1/p/quotes/tok/approve")
+        missing = await ac.post("/api/v1/p/quotes/tok/approve")
+        resp = await ac.post("/api/v1/p/quotes/tok/approve", json={"proposal_version": 7})
 
+    assert missing.status_code == 422
     assert resp.status_code == 200
     assert resp.json()["status"] == "approved"
-    # A bodyless approve still works (accepts the package already on the quote).
-    assert seen == {"token": "tok", "selected_tier": None}
+    assert seen == {"token": "tok", "proposal_version": 7, "selected_tier": None}
 
 
 async def test_approve_forwards_the_clients_package_choice(
@@ -116,14 +125,19 @@ async def test_approve_forwards_the_clients_package_choice(
 ) -> None:
     """The package key the client picked must reach the service — it's what
     re-derives the totals and the deposit they're about to be charged."""
-    seen: dict[str, str | None] = {}
+    seen: dict[str, str | int | None] = {}
 
     async def _approve(
-        self: object, token: str, *, selected_tier: str | None = None
+        self: object,
+        token: str,
+        *,
+        proposal_version: int,
+        selected_tier: str | None = None,
     ) -> PublicProposalActionResult:
+        seen["proposal_version"] = proposal_version
         seen["selected_tier"] = selected_tier
         return PublicProposalActionResult(
-            token=token,
+            token="tok",
             status="approved",
             message="Thank you!",
             deposit_required=True,
@@ -133,9 +147,10 @@ async def test_approve_forwards_the_clients_package_choice(
     monkeypatch.setattr(quotes_module.QuoteService, "approve_public", _approve)
     async with await _client() as ac:
         resp = await ac.post(
-            "/api/v1/p/quotes/tok/approve", json={"selected_tier": "good"}
+            "/api/v1/p/quotes/tok/approve",
+            json={"proposal_version": 4, "selected_tier": "good"},
         )
 
     assert resp.status_code == 200
-    assert seen["selected_tier"] == "good"
+    assert seen == {"proposal_version": 4, "selected_tier": "good"}
     assert resp.json()["deposit_amount"] == 1055.0

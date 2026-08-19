@@ -44,10 +44,16 @@ export default function PublicProposalPage({
   }, [token]);
 
   const approveMutation = useMutation({
-    // The client's package choice travels as a key; the server re-derives the
-    // lines, totals, and deposit for it before approving.
-    mutationFn: (selectedTier: string | null) =>
-      publicProposalsApi.approve(token, selectedTier),
+    // The client submits the terms version rendered on this page. A racing seller
+    // edit gets a 409 and a refetch instead of accepting prices they never saw.
+    mutationFn: (selectedTier: string | null) => {
+      if (!data) throw new Error("Proposal is still loading");
+      return publicProposalsApi.approve(
+        token,
+        data.proposal_version,
+        selectedTier,
+      );
+    },
     onSuccess: (result) => {
       queryClient.setQueryData<PublicProposal | undefined>(
         queryKeys.publicProposals.byToken(token),
@@ -59,6 +65,11 @@ export default function PublicProposalPage({
       // Accept = pay: when a deposit is owed, roll straight into Stripe so the
       // customer never has to hunt for a second button.
       if (result.deposit_required) void payDeposit();
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.publicProposals.byToken(token),
+      });
     },
   });
 

@@ -60,14 +60,37 @@ export const salesWizardApi = {
       payload,
     ),
 
-  /** Save the proposal as a draft quote + snapshot; returns the quote (token). */
+  /** Load the authenticated quote detail used to hydrate an existing builder. */
+  getQuote: (workspaceId: string, quoteId: string): Promise<QuoteDetail> =>
+    apiGet<QuoteDetail>(`${base(workspaceId)}/quotes/${quoteId}`),
+
+  /** Save a new proposal as a draft quote + snapshot. */
   save: (
     workspaceId: string,
     payload: ProposalWizardPayload,
   ): Promise<QuoteDetail> =>
     apiPost<QuoteDetail>(`${base(workspaceId)}/quotes/wizard`, payload),
 
-  /** Mark the saved quote sent (allocates the public token) so it can be shared. */
+  /** Reprice an unpaid draft/sent quote in place, preserving its public link. */
+  update: (
+    workspaceId: string,
+    quoteId: string,
+    payload: ProposalWizardPayload,
+  ): Promise<QuoteDetail> =>
+    apiPut<QuoteDetail>(`${base(workspaceId)}/quotes/${quoteId}/wizard`, payload),
+
+  /** Fork protected customer/payment terms into a separately numbered draft. */
+  revise: (
+    workspaceId: string,
+    quoteId: string,
+    payload: ProposalWizardPayload,
+  ): Promise<QuoteDetail> =>
+    apiPost<QuoteDetail>(
+      `${base(workspaceId)}/quotes/${quoteId}/revisions`,
+      payload,
+    ),
+
+  /** Mark a new saved quote sent (allocates a public token) so it can be shared. */
   send: (workspaceId: string, quoteId: string): Promise<QuoteDetail> =>
     apiPost<QuoteDetail>(`${base(workspaceId)}/quotes/${quoteId}/send`),
 

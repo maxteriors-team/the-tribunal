@@ -394,3 +394,22 @@ def test_safe_logo_url_accepts_absolute_https() -> None:
     logo_url = "https://go.example.com/static/brand/maxteriors-logo.png"
 
     assert email._safe_logo_url(logo_url) == logo_url
+
+
+@pytest.mark.asyncio
+async def test_appointment_reminder_linkifies_meet_url(fake_resend: _FakeResend) -> None:
+    meet_url = "https://meet.google.com/abc-defg-hij"
+
+    sent = await email.send_appointment_reminder_email(
+        to_email="customer@example.com",
+        contact_name="Dana Reyes",
+        business_name="Sparkle Exteriors",
+        body_text=f"Join Google Meet: {meet_url}",
+        appointment_time=email.datetime(2026, 8, 20, 14, 30, tzinfo=email.UTC),
+        timezone="America/New_York",
+    )
+
+    assert sent is True
+    params = fake_resend.Emails.send_async.await_args.args[0]
+    assert f'href="{meet_url}"' in params["html"]
+    assert params["html"].count(meet_url) == 2

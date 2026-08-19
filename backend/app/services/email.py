@@ -181,6 +181,36 @@ def _escape_and_linkify(text: str) -> str:
     return "".join(parts)
 
 
+async def send_password_reset_email(to_email: str, reset_url: str) -> bool:
+    """Send a transactional password-reset link without logging its secret."""
+    rendered = render_email(
+        category=EmailCategory.TRANSACTIONAL,
+        heading="Reset your password",
+        blocks=[
+            Paragraph("We received a request to reset your password."),
+            Button("Reset password", reset_url),
+            Paragraph(
+                "This link expires in 30 minutes and can only be used once. "
+                "If you did not request it, you can ignore this email."
+            ),
+        ],
+        brand=_brand(),
+    )
+    response = await _send(
+        {
+            "from": _from_address(),
+            "to": [to_email],
+            "subject": "Reset your password",
+            "html": rendered.html,
+            "text": rendered.text,
+        }
+    )
+    if response is None:
+        return False
+    logger.info("password_reset_email_sent", email_id=response.get("id"))
+    return True
+
+
 async def send_event_notification_email(
     to_email: str,
     subject: str,
@@ -1285,7 +1315,7 @@ async def send_appointment_reminder_email(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="{body_style}">
-    <p>{html_escape(body_text).replace(chr(10), "<br>")}</p>
+    <p>{_escape_and_linkify(body_text).replace(chr(10), "<br>")}</p>
     <p style="color: #666; font-size: 13px;">
         {html_escape(formatted_time)} &middot; {html_escape(business_name or "")}
     </p>

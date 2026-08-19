@@ -16,6 +16,7 @@ import type { Contact } from "@/types";
 
 import {
   SERVICE_CATEGORIES,
+  hydrationForQuote,
   serviceForCategories,
   serviceForCategory,
   useSalesWizard,
@@ -29,7 +30,10 @@ vi.mock("@/lib/api/sales-wizard", () => ({
     getPricing: vi.fn().mockResolvedValue({}),
     listCatalog: vi.fn().mockResolvedValue([]),
     preview: vi.fn().mockResolvedValue({}),
+    getQuote: vi.fn(),
     save: vi.fn(),
+    update: vi.fn(),
+    revise: vi.fn(),
     send: vi.fn(),
     deliver: vi.fn(),
   },
@@ -42,8 +46,8 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-function renderWizard(service?: ServiceKey) {
-  return renderHook(() => useSalesWizard("ws-1", service), { wrapper });
+function renderWizard(service?: ServiceKey, quoteId: string | null = null) {
+  return renderHook(() => useSalesWizard("ws-1", service, quoteId), { wrapper });
 }
 
 const SAVED_CLIENT = {
@@ -219,5 +223,205 @@ describe("useSalesWizard service selection", () => {
 
     act(() => result.current.toggleCategory("bistro"));
     expect(result.current.categories).toEqual(["landscape"]);
+  });
+});
+
+describe("useSalesWizard quote hydration and revision saves", () => {
+  const proposalInput = {
+    pricing_source: "workspace_rules" as const,
+    contact_id: 42,
+    service_location_id: "location-1",
+    opportunity_id: "opportunity-1",
+    lighting_project_id: "project-1",
+    title: "Saved design",
+    notes: "Keep the oak lit",
+    terms: "Thirty days",
+    client: {
+      first_name: "Sarah",
+      last_name: "Henderson",
+      email: "sarah@example.com",
+      phone: "+12485550100",
+      rep_name: "Max",
+      street: "123 Oak",
+      city: "Birmingham",
+      state: "MI",
+      zip: "48009",
+    },
+    quantities: [{ item_id: "fixture-1", quantity: 12 }],
+    additional_charges: [
+      {
+        description: "Core drilling",
+        net_amount: 500,
+        catalog_item_id: null,
+        tier_key: "best",
+      },
+    ],
+    selected_tier: "best",
+    care_plan_tier: "premier",
+    care_count_manual: 14,
+    categories: ["landscape", "bistro"],
+    bistro: { product: "color" as const, tier: "medium", feet: 120 },
+    permanent: null,
+    christmas: null,
+    night_preview: {
+      images: ["https://cdn.example/night.jpg"],
+      services: ["landscape"],
+    },
+    mockups: [{ image: "https://cdn.example/mock.jpg", caption: "Front walk" }],
+    deposit: { mode: "fixed" as const, value: 875 },
+  };
+
+  function editableQuote(
+    overrides: Record<string, unknown> = {},
+  ): Awaited<ReturnType<typeof salesWizardApi.getQuote>> {
+    return {
+      id: "source-quote",
+      workspace_id: "ws-1",
+      number: "QUO-001",
+      title: "Saved design",
+      status: "approved",
+      subtotal: 1000,
+      tax_amount: 0,
+      discount_amount: 0,
+      total: 1000,
+      currency: "USD",
+      line_items: [],
+      proposal_document: null,
+      proposal_input: proposalInput,
+      proposal_input_version: 1,
+      is_wizard_quote: true,
+      wizard_edit_mode: "revise",
+      revision_number: 1,
+      proposal_version: 1,
+      created_at: "2026-08-18T00:00:00Z",
+      updated_at: "2026-08-18T00:00:00Z",
+      ...overrides,
+    } as unknown as Awaited<ReturnType<typeof salesWizardApi.getQuote>>;
+  }
+
+  it("hydrates every saved selection and preserves linked metadata on revision", async () => {
+    vi.mocked(salesWizardApi.getQuote).mockResolvedValue(editableQuote());
+    vi.mocked(salesWizardApi.revise).mockResolvedValue(
+      editableQuote({
+        id: "revision-quote",
+        number: "QUO-002",
+        status: "draft",
+        wizard_edit_mode: "update",
+        revision_number: 2,
+      }),
+    );
+    vi.mocked(salesWizardApi.update).mockResolvedValue(
+      editableQuote({
+        id: "revision-quote",
+        number: "QUO-002",
+        status: "draft",
+        wizard_edit_mode: "update",
+        revision_number: 2,
+      }),
+    );
+
+    const { result } = renderWizard(undefined, "source-quote");
+    await waitFor(() => expect(result.current.hydrationSource).toBe("input"));
+
+    expect(result.current.client).toMatchObject({
+      first_name: "Sarah",
+      email: "sarah@example.com",
+      street: "123 Oak",
+    });
+    expect(result.current.linkedContactId).toBe(42);
+    expect(result.current.quantities).toEqual({ "fixture-1": 12 });
+    expect(result.current.charges[0]).toMatchObject({
+      description: "Core drilling",
+      amount: "500",
+      tierKey: "best",
+    });
+    expect(result.current.categories).toEqual(["landscape", "bistro"]);
+    expect(result.current.bistro).toEqual({
+      product: "color",
+      tier: "medium",
+      feet: "120",
+    });
+    expect(result.current.depositMode).toBe("fixed");
+    expect(result.current.depositInput).toBe("875");
+    expect(result.current.mockups).toEqual([
+      { image: "https://cdn.example/mock.jpg", caption: "Front walk" },
+    ]);
+
+    act(() => result.current.setQty("fixture-1", 18));
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(salesWizardApi.revise).toHaveBeenCalledWith(
+      "ws-1",
+      "source-quote",
+      expect.objectContaining({
+        contact_id: 42,
+        service_location_id: "location-1",
+        opportunity_id: "opportunity-1",
+        lighting_project_id: "project-1",
+        title: "Saved design",
+        notes: "Keep the oak lit",
+        terms: "Thirty days",
+        quantities: [{ item_id: "fixture-1", quantity: 18 }],
+      }),
+    );
+
+    await act(async () => {
+      await result.current.save();
+    });
+    expect(salesWizardApi.update).toHaveBeenCalledWith(
+      "ws-1",
+      "revision-quote",
+      expect.any(Object),
+    );
+  });
+
+  it("surfaces quote loading failures and retries into hydrated state", async () => {
+    vi.mocked(salesWizardApi.getQuote)
+      .mockRejectedValueOnce(new Error("not found"))
+      .mockResolvedValueOnce(
+        editableQuote({ status: "sent", wizard_edit_mode: "update" }),
+      );
+
+    const { result } = renderWizard(undefined, "source-quote");
+    expect(result.current.isLoadingQuote).toBe(true);
+    await waitFor(() => expect(result.current.quoteLoadError).toBe(true));
+
+    act(() => result.current.reloadQuote());
+    await waitFor(() => expect(result.current.quoteLoadError).toBe(false));
+    await waitFor(() => expect(result.current.hydrationSource).toBe("input"));
+    expect(result.current.editMode).toBe("update");
+  });
+
+  it("recovers legacy snapshot quantities and flags the hydration as lossy", () => {
+    const hydration = hydrationForQuote(
+      editableQuote({
+        proposal_input: null,
+        proposal_document: {
+          pricing_source: "price_book",
+          categories: ["landscape"],
+          selected_tier: "best",
+          client: { first_name: "Legacy" },
+          tiers: [
+            {
+              key: "best",
+              lines: [{ item_id: "fixture-old", quantity: 7 }],
+            },
+          ],
+          additional_charges: [
+            { description: "Trenching", amount: 200, tier_key: "best" },
+          ],
+        },
+      }),
+    );
+
+    expect(hydration.source).toBe("snapshot");
+    expect(hydration.payload.quantities).toEqual([
+      { item_id: "fixture-old", quantity: 7 },
+    ]);
+    expect((hydration.payload.additional_charges ?? [])[0]).toMatchObject({
+      description: "Trenching",
+      net_amount: 200,
+    });
   });
 });

@@ -390,6 +390,38 @@ async def save_wizard_proposal(
     return await service.save_from_wizard(workspace_id, payload, created_by_id=current_user.id)
 
 
+@router.put("/{quote_id}/wizard", response_model=QuoteDetailResponse)
+async def update_wizard_proposal(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    payload: ProposalWizardPayload,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> QuoteDetailResponse:
+    """Reprice an unpaid draft/sent wizard quote without replacing its link."""
+    return await QuoteService(db).update_from_wizard(workspace_id, quote_id, payload)
+
+
+@router.post(
+    "/{quote_id}/revisions",
+    response_model=QuoteDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def revise_wizard_proposal(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    payload: ProposalWizardPayload,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> QuoteDetailResponse:
+    """Create a separately numbered draft from a protected wizard quote."""
+    return await QuoteService(db).revise_from_wizard(
+        workspace_id, quote_id, payload, created_by_id=current_user.id
+    )
+
+
 # Roofline estimator: price permanent vs seasonal for a measured linear-feet
 # figure. Feet is the only client input; every dollar is server-computed.
 @router.post("/estimate", response_model=LinearFeetEstimateResult)
@@ -588,16 +620,19 @@ async def get_public_proposal(token: str, db: DB) -> PublicProposal:
 async def approve_public_proposal(
     token: str,
     db: DB,
-    payload: PublicProposalApprove | None = None,
+    payload: PublicProposalApprove,
 ) -> PublicProposalActionResult:
     """Client approves their proposal (idempotent; expired/declined rejected).
 
     An optional ``selected_tier`` names the package they chose; the server
     re-derives that package's lines, totals, and deposit from the saved snapshot
-    before approving. Omitting the body accepts the package already on the quote.
+    before approving. The rendered proposal version is required to prevent accepting stale terms.
     """
-    selected_tier = payload.selected_tier if payload else None
-    return await QuoteService(db).approve_public(token, selected_tier=selected_tier)
+    return await QuoteService(db).approve_public(
+        token,
+        proposal_version=payload.proposal_version,
+        selected_tier=payload.selected_tier,
+    )
 
 
 @public_router.post("/{token}/decline", response_model=PublicProposalActionResult)

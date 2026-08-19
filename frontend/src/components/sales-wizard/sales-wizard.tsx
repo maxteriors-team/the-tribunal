@@ -37,14 +37,17 @@ interface SalesWizardProps {
   brandName: string;
   /** Service branch to start on (deep-linked from the Quotes hub). */
   service?: ServiceKey;
+  /** Existing quote opened from the quote list. */
+  quoteId?: string | null;
 }
 
 export function SalesWizard({
   workspaceId,
   brandName,
   service = "landscape",
+  quoteId = null,
 }: SalesWizardProps) {
-  const wizard = useSalesWizard(workspaceId, service);
+  const wizard = useSalesWizard(workspaceId, service, quoteId);
   const [screen, setScreen] = useState<Screen>("calc");
 
   const show = (next: Screen) => {
@@ -133,14 +136,28 @@ export function SalesWizard({
 
   return (
     <div className={`sales-wizard ${salesWizardFontVars}`}>
-      {wizard.isLoadingConfig ? (
-        <div className="screen active">
+      {wizard.isLoadingConfig || wizard.isLoadingQuote ? (
+        <div className="screen active" aria-live="polite" aria-busy="true">
           <div className="present-body">
-            <div className="wizard-review-intro">Loading pricing…</div>
+            <div className="wizard-review-intro">
+              {wizard.isLoadingQuote ? "Loading saved quote…" : "Loading pricing…"}
+            </div>
+          </div>
+        </div>
+      ) : wizard.quoteLoadError ? (
+        <div className="screen active" role="alert">
+          <div className="present-body">
+            <div className="wizard-review-intro">
+              This quote could not be reopened. It may have been removed, or it
+              may not be a sales-wizard quote.
+            </div>
+            <button type="button" className="btn-back" onClick={wizard.reloadQuote}>
+              Retry loading quote
+            </button>
           </div>
         </div>
       ) : wizard.configError ? (
-        <div className="screen active">
+        <div className="screen active" role="alert">
           <div className="present-body">
             <div className="wizard-review-intro">
               Could not load the pricing configuration for this workspace.

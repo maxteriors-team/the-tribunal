@@ -7,6 +7,7 @@ import {
   Copy,
   Eye,
   ExternalLink,
+  FilePenLine,
   FileText,
   Mail,
   MessageSquare,
@@ -327,6 +328,9 @@ export function QuotesList() {
                     quote={quote}
                     busy={busy}
                     onAssign={() => openAssignment(quote)}
+                    onOpenBuilder={() =>
+                      router.push(`/sales-wizard?quote=${encodeURIComponent(quote.id)}`)
+                    }
                     onEdit={() => setEditing(quote)}
                     onSend={() => sendMutation.mutate(quote.id)}
                     onDeliver={(channel) => deliverMutation.mutate({ id: quote.id, channel })}
@@ -482,6 +486,7 @@ interface RowActionsProps {
   quote: Quote;
   busy: boolean;
   onAssign: () => void;
+  onOpenBuilder: () => void;
   onEdit: () => void;
   onSend: () => void;
   onDeliver: (channel: QuoteDeliverChannel) => void;
@@ -505,6 +510,7 @@ function RowActions({
   quote,
   busy,
   onAssign,
+  onOpenBuilder,
   onEdit,
   onSend,
   onDeliver,
@@ -518,6 +524,11 @@ function RowActions({
   onDelete,
 }: RowActionsProps) {
   const isOpen = quote.status === "draft" || quote.status === "sent";
+  const canChangeTerms = Boolean(
+    isOpen &&
+      !quote.deposit_paid &&
+      (!quote.is_wizard_quote || quote.wizard_edit_mode === "update"),
+  );
   const isApproved = quote.status === "approved";
   const alreadyConverted = Boolean(quote.converted_job_id && quote.converted_invoice_id);
   const canConvert = isApproved && !alreadyConverted;
@@ -535,6 +546,17 @@ function RowActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {quote.is_wizard_quote && (
+          <>
+            <DropdownMenuItem onClick={onOpenBuilder}>
+              <FilePenLine className="mr-2 h-4 w-4" />
+              {quote.wizard_edit_mode === "revise"
+                ? "Create revised quote"
+                : "Edit in quote builder"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuItem onClick={onAssign}>
           <UserRound className="mr-2 h-4 w-4" />
           Assign owner
@@ -548,20 +570,22 @@ function RowActions({
         {(isOpen || canConvert || hasClientLink || canRecordDeposit) && <DropdownMenuSeparator />}
         {isOpen && (
           <>
-            {/* Changing the quote leads, because a sent quote is the one an
-                operator actually needs to change: extend the expiry, fix a
-                typo, move the deposit, or add the work the customer asked for
-                after reading it. Both land on the link they already have, so
-                neither needs a re-send. */}
-            <DropdownMenuItem onClick={onEdit}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit quote
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onAddServices}>
-              <Wrench className="mr-2 h-4 w-4" />
-              Add services
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
+            {canChangeTerms && (
+              <>
+                {/* Header/date/deposit copy remains available separately from
+                    the full priced-selection builder. Both preserve the live
+                    link only while its customer/payment terms remain mutable. */}
+                <DropdownMenuItem onClick={onEdit}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit basic details
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onAddServices}>
+                  <Wrench className="mr-2 h-4 w-4" />
+                  Add services
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             {/* Emailing and texting come next: they are what "send it to them"
                 actually means to a rep. Both work straight from a draft — the
                 server marks the quote sent and mints its client link on the way
@@ -607,7 +631,7 @@ function RowActions({
             <DropdownMenuItem onClick={onConvert}>Convert to job &amp; invoice</DropdownMenuItem>
           </>
         )}
-        {isOpen && (
+        {canChangeTerms && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onDelete}>

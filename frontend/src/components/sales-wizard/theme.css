@@ -102,6 +102,9 @@
   .calc-title em { font-style: italic; color: var(--gold-l); }
   .calc-rule { width: 1px; height: 28px; background: linear-gradient(180deg, transparent, var(--gold), transparent); margin: 14px auto; }
   .calc-sub { font-size: 11px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--t3); }
+  .wizard-legacy-warning { margin: -22px 0 22px; border: 1px solid rgba(212, 175, 90, 0.42); border-left: 3px solid var(--gold); background: rgba(212, 175, 90, 0.08); color: var(--t2); padding: 13px 15px; font-size: 12px; line-height: 1.6; }
+  .wizard-legacy-warning strong { color: var(--gold-l); }
+  .sales-wizard :is(button, a, input, select, textarea):focus-visible { outline: 3px solid var(--gold-l); outline-offset: 3px; }
 
   /* Wizard */
   .wizard-progress { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; background: var(--bdr); margin-bottom: 18px; animation: sw-up 0.6s var(--ease) 0.04s both; }
@@ -363,7 +366,15 @@
   .share-send-btn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: transparent; border: 1px solid var(--bdr-g); color: var(--gold-d); font-family: var(--font-montserrat), sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; padding: 11px 12px; cursor: pointer; transition: all 0.2s; }
   .share-send-btn:hover { background: var(--gold-g); color: var(--gold); }
   .share-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  @media (max-width: 520px) {
+    .share-link { padding: 14px; }
+    .share-link-row { flex-direction: column; }
+    .share-link-copy, .share-send-btn { width: 100%; min-height: 44px; padding: 12px; white-space: normal; }
+    .share-link-input { width: 100%; min-height: 44px; }
+    .wizard-legacy-warning { margin-top: -26px; }
+  }
 
+  /* Toast */
   /* Toast */
   .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(8px); background: var(--s2); border: 1px solid var(--bdr-g); color: var(--t1); padding: 10px 22px; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; opacity: 0; transition: all 0.3s; pointer-events: none; z-index: 999; white-space: nowrap; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }

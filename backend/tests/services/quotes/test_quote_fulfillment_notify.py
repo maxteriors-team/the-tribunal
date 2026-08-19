@@ -48,6 +48,14 @@ def _quote(document: dict[str, Any] | None) -> Quote:
     )
 
 
+class _FakeResult:
+    def __init__(self, quote: Quote | None) -> None:
+        self.quote = quote
+
+    def scalar_one_or_none(self) -> Quote | None:
+        return self.quote
+
+
 class _FakeDb:
     """Minimal session stand-in for the response-building path.
 
@@ -58,7 +66,11 @@ class _FakeDb:
 
     def __init__(self, workspace: Workspace | None) -> None:
         self.workspace = workspace
+        self.quote: Quote | None = None
         self.get_calls = 0
+
+    async def execute(self, statement: object) -> _FakeResult:
+        return _FakeResult(self.quote)
 
     async def get(self, model: type[Any], pk: Any) -> Any:
         self.get_calls += 1
@@ -207,6 +219,7 @@ async def test_approve_quote_fires_the_parts_notification(
     monkeypatch.setattr(quote_service_module, "get_or_404", _get)
 
     db = _FakeDb(_workspace(quote))
+    db.quote = quote
     await QuoteService(db=db).approve_quote(quote.workspace_id, quote.id)  # type: ignore[arg-type]
 
     assert notified == [quote]
@@ -235,7 +248,9 @@ async def test_already_approved_quote_does_not_reorder(
     monkeypatch.setattr(QuoteService, "_notify_fulfillment_parts", _track)
     monkeypatch.setattr(quote_service_module, "get_or_404", _get)
 
-    await QuoteService(db=_FakeDb(_workspace(quote))).approve_quote(  # type: ignore[arg-type]
+    db = _FakeDb(_workspace(quote))
+    db.quote = quote
+    await QuoteService(db=db).approve_quote(  # type: ignore[arg-type]
         quote.workspace_id,
         quote.id,
     )

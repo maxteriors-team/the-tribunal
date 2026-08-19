@@ -133,6 +133,8 @@ class PublicProposal(BaseModel):
     number: str
     title: str | None = None
     status: str
+    # Submitted back on acceptance; rejects a click made against superseded terms.
+    proposal_version: int = Field(default=1, ge=1)
     currency: str
     subtotal: float
     tax_amount: float
@@ -178,13 +180,18 @@ class PublicProposalDecline(BaseModel):
 
 
 class PublicProposalApprove(BaseModel):
-    """The client's acceptance, optionally naming the package they picked.
+    """The client's acceptance of one exact rendered proposal version.
 
     Only the package *key* crosses the wire: the server re-derives the lines and
     totals from the saved snapshot, so a client can never talk their own price
-    down. Omitting it accepts the package the quote already sits on.
+    down. ``proposal_version`` closes the edit/approve race: if the operator
+    changed customer-facing terms after this page loaded, acceptance stops and the
+    client must review the refreshed proposal. It is optional only for the brief
+    old-frontend/new-backend deployment window; the service accepts omission solely
+    while the quote is still version 1 (terms have never changed).
     """
 
+    proposal_version: int | None = Field(default=None, ge=1)
     selected_tier: str | None = Field(default=None, max_length=60)
 
 

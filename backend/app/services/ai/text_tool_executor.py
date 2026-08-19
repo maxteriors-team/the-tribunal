@@ -869,7 +869,7 @@ class TextToolExecutor(BaseToolExecutor):
         duration_minutes: int,
         notes: str | None,
     ) -> None:
-        """Create the Appointment record and fire its downstream notifications."""
+        """Create the Appointment and wait for calendar metadata needed by this reply."""
         self.log.info("booking_created")
 
         contact = self._contact
@@ -891,6 +891,9 @@ class TextToolExecutor(BaseToolExecutor):
             # The assistant's reply confirms the booking in this same SMS turn.
             # Suppress the generic lifecycle confirmation to avoid double-texting.
             send_customer_sms=False,
+            # Google must return before formatting so video confirmations include
+            # the real Meet URL rather than promising an in-memory follow-up task.
+            sync_calendar_before_return=True,
         )
 
         self._booked_appointment = appointment

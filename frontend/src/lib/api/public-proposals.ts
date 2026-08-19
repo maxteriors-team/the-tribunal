@@ -12,15 +12,16 @@ export const publicProposalsApi = {
     apiGet<PublicProposal>(`/api/v1/p/quotes/${token}`),
 
   /**
-   * Accept the proposal. `selectedTier` names the package the client picked;
-   * only the key travels, and the server re-derives that package's lines,
-   * totals, and deposit from the saved snapshot before approving.
+   * Accept the exact rendered proposal version. `selectedTier` only names a
+   * package; the server still re-derives every line and amount.
    */
   approve: (
     token: string,
+    proposalVersion: number,
     selectedTier?: string | null,
   ): Promise<PublicProposalActionResult> =>
     apiPost<PublicProposalActionResult>(`/api/v1/p/quotes/${token}/approve`, {
+      proposal_version: proposalVersion,
       selected_tier: selectedTier ?? null,
     }),
 

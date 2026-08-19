@@ -7,6 +7,7 @@ from app.services.auth.ip_rate_limit_service import (
     AuthIpRateLimitService,
 )
 from app.services.auth.password_change_service import PasswordChangeService
+from app.services.auth.password_reset_service import PasswordResetService
 from app.services.auth.token_rotation_service import AuthTokenPair, TokenRotationService
 from app.services.auth.username_lockout_service import (
     LOGIN_FAILED_ENDPOINT,
@@ -27,6 +28,7 @@ __all__ = [
     "AuthIpRateLimitService",
     "AuthTokenPair",
     "PasswordChangeService",
+    "PasswordResetService",
     "TokenRotationService",
     "UsernameLockoutService",
     "WebSocketTicketService",

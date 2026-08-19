@@ -26,8 +26,10 @@ function LoadingWorkspace() {
 
 function SalesWizardHost() {
   const { currentWorkspace, currentWorkspaceId, isPending } = useWorkspace();
+  const searchParams = useSearchParams();
   // A quote covers one service; the Quotes hub deep-links which branch to start.
-  const service = toService(useSearchParams().get("service"));
+  const service = toService(searchParams.get("service"));
+  const quoteId = searchParams.get("quote");
 
   return (
     <div className="h-full overflow-y-auto">
@@ -38,6 +40,7 @@ function SalesWizardHost() {
           workspaceId={currentWorkspaceId}
           brandName={currentWorkspace?.workspace.name ?? "LL Design"}
           service={service}
+          quoteId={quoteId}
         />
       )}
     </div>

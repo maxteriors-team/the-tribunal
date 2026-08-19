@@ -138,7 +138,12 @@ class TestCorpus:
             for document in load_help_documents()
             for route in re.findall(r"`(/[^`\s]+)`", document.content)
         }
-        intentionally_not_product_help = {"/", "/dev/components"}
+        intentionally_not_product_help = {
+            "/",
+            "/dev/components",
+            "/forgot-password",
+            "/reset-password",
+        }
 
         missing = sorted(page_routes - documented_routes - intentionally_not_product_help)
         assert missing == []
