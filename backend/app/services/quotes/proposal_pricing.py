@@ -508,10 +508,15 @@ def price_permanent(
 ) -> PermanentPricing:
     """Round footage to kits and weight the COGS multiplier by measured runs."""
     p = config.permanent
+    # Complexity names are an ordering guarantee: malformed or legacy saved
+    # settings must never make Easy cost more than Complex.
+    easy_markup, standard_markup, complex_markup = sorted(
+        (p.easy_markup, p.standard_markup, p.complex_markup)
+    )
     markups = {
-        "easy": p.easy_markup,
-        "standard": p.standard_markup,
-        "complex": p.complex_markup,
+        "easy": easy_markup,
+        "standard": standard_markup,
+        "complex": complex_markup,
     }
     markup = markups.get(complexity, p.standard_markup)
     measured_complexity_feet = {
