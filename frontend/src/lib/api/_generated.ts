@@ -15030,6 +15030,16 @@ export interface components {
             label?: string | null;
             /** Per Ft Override */
             per_ft_override?: number | null;
+            /**
+             * Permanent Complexity
+             * @default standard
+             * @enum {string}
+             */
+            permanent_complexity: "easy" | "standard" | "complex";
+            /** Permanent Complexity Feet */
+            permanent_complexity_feet?: {
+                [key: string]: number;
+            };
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -17081,6 +17091,16 @@ export interface components {
             label?: string | null;
             /** Per Ft Override */
             per_ft_override?: number | null;
+            /**
+             * Permanent Complexity
+             * @default standard
+             * @enum {string}
+             */
+            permanent_complexity: "easy" | "standard" | "complex";
+            /** Permanent Complexity Feet */
+            permanent_complexity_feet?: {
+                [key: string]: number;
+            };
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -20562,6 +20582,16 @@ export interface components {
             feet: number;
             /** Per Ft Override */
             per_ft_override?: number | null;
+            /**
+             * Permanent Complexity
+             * @default standard
+             * @enum {string}
+             */
+            permanent_complexity: "easy" | "standard" | "complex";
+            /** Permanent Complexity Feet */
+            permanent_complexity_feet?: {
+                [key: string]: number;
+            };
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -23600,19 +23630,27 @@ export interface components {
         };
         /**
          * PermanentConfig
-         * @description Permanent LED roofline priced per linear foot plus a controller/hub.
+         * @description Permanent LED roofline priced by the smallest kit that covers the job.
          *
-         *     Placeholder rates ship so a workspace prices before customization; the
-         *     operator tunes ``per_ft`` / controller / channel rates in Settings → Pricing
-         *     (the operator's standalone tool was not provided, so these are sane defaults).
-         *     All values are *net*; the engine grosses them up like every other price.
+         *     Package costs are COGS. ``markup`` converts COGS to the net installed sale
+         *     price before the standard cash/financing gross-up is applied.
          */
         PermanentConfig: {
             /**
+             * Complex Markup
+             * @default 3.5
+             */
+            complex_markup: number;
+            /**
              * Controller Base
-             * @default 299
+             * @default 0
              */
             controller_base: number;
+            /**
+             * Easy Markup
+             * @default 2.5
+             */
+            easy_markup: number;
             /**
              * Enabled
              * @default false
@@ -23620,7 +23658,7 @@ export interface components {
             enabled: boolean;
             /**
              * Included Channels
-             * @default 1
+             * @default 0
              */
             included_channels: number;
             /**
@@ -23629,35 +23667,38 @@ export interface components {
              */
             label: string;
             /**
+             * Markup
+             * @default 3.5
+             */
+            markup: number;
+            /**
              * Minimum
              * @default 0
              */
             minimum: number;
+            /** Packages */
+            packages?: components["schemas"]["PermanentPackage"][];
             /**
              * Per Channel
-             * @default 45
+             * @default 0
              */
             per_channel: number;
             /**
              * Per Ft
-             * @default 32
+             * @default 0
              */
             per_ft: number;
             /** Perks */
             perks?: string[];
+            /**
+             * Standard Markup
+             * @default 3
+             */
+            standard_markup: number;
         };
         /**
          * PermanentEstimate
-         * @description Permanent-lighting side of the estimate (rep view — includes per_ft).
-         *
-         *     ``roofline_cost`` is the track-only component of ``total`` (no controller or
-         *     zone hardware), so it can be compared like-for-like against the seasonal
-         *     roofline cost — standalone lines are deliberately excluded from it for the
-         *     same reason.
-         *
-         *     ``custom_total`` is the part of ``total`` contributed by the rep's standalone
-         *     lines, broken out so a caller pricing a *package* (whose total excludes them)
-         *     can add them back without re-deriving the arithmetic.
+         * @description Permanent-lighting estimate using the kit that covers measured footage.
          */
         PermanentEstimate: {
             /**
@@ -23667,7 +23708,25 @@ export interface components {
             custom_total: number;
             /** Enabled */
             enabled: boolean;
-            /** Per Ft */
+            /**
+             * Markup
+             * @default 0
+             */
+            markup: number;
+            /**
+             * Package Cogs
+             * @default 0
+             */
+            package_cogs: number;
+            /**
+             * Package Feet
+             * @default 0
+             */
+            package_feet: number;
+            /**
+             * Per Ft
+             * @default 0
+             */
             per_ft: number;
             /**
              * Roofline Cost
@@ -23676,6 +23735,16 @@ export interface components {
             roofline_cost: number;
             /** Total */
             total: number;
+        };
+        /**
+         * PermanentPackage
+         * @description One supplier kit used to cover a measured roofline.
+         */
+        PermanentPackage: {
+            /** Cost */
+            cost: number;
+            /** Feet */
+            feet: number;
         };
         /**
          * PersonResult

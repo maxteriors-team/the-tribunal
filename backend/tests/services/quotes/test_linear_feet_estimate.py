@@ -43,10 +43,11 @@ def _config(**overrides) -> PricingSettings:
         "financing": FinancingConfig(enabled=True, fee_buffer=0.0),
         "permanent": PermanentConfig(
             enabled=True,
-            per_ft=30,
-            controller_base=300,
-            per_channel=0,
-            included_channels=1,
+            packages=[{"feet": 100, "cost": 3300}],
+            easy_markup=1,
+            standard_markup=1,
+            complex_markup=1,
+            markup=1,
             minimum=0,
         ),
         "christmas": ChristmasConfig(
@@ -71,10 +72,10 @@ def _estimate(config: PricingSettings, feet: float, **kw):
 def test_both_services_priced_from_feet() -> None:
     result = _estimate(_config(), 100)
 
-    # Permanent: 100ft * $30 + $300 controller = $3,300.
+    # Permanent: the configured 100-ft package is $3,300.
     assert result.permanent.enabled is True
     assert result.permanent.total == 3300
-    assert result.permanent.per_ft == 30
+    assert result.permanent.package_feet == 100
     # Christmas: 100ft * $6 = $600.
     assert result.christmas.enabled is True
     assert result.christmas.total == 600
@@ -165,19 +166,14 @@ def test_permanent_minimum_applied() -> None:
     assert result.permanent.total == 5000
 
 
-def test_internal_per_ft_override_adjusts_permanent_only() -> None:
+def test_legacy_per_ft_override_does_not_bypass_package_pricing() -> None:
     config = _config()
     standard = _estimate(config, 100)
     overridden = _estimate(config, 100, per_ft_override=45)
 
-    # Permanent bills the internal rate: 100ft * $45 + $300 controller = $4,800.
-    assert overridden.permanent.per_ft == 45
-    assert overridden.permanent.total == 4800
-    # Seasonal roofline is untouched by the permanent linear-ft override.
+    assert overridden.permanent.total == standard.permanent.total == 3300
+    assert overridden.permanent.package_feet == 100
     assert overridden.christmas.total == standard.christmas.total == 600
-    # The workspace's customer-facing rate is never mutated by the override.
-    assert config.permanent.per_ft == 30
-    assert standard.permanent.total == 3300
 
 
 def test_per_ft_override_none_uses_configured_rate() -> None:
@@ -200,11 +196,11 @@ def test_internal_christmas_per_ft_override_adjusts_seasonal_only() -> None:
     assert standard.christmas.total == 600
 
 
-def test_both_per_ft_overrides_apply_independently() -> None:
+def test_seasonal_override_does_not_change_permanent_package() -> None:
     result = _estimate(_config(), 100, per_ft_override=45, christmas_per_ft_override=9)
-    assert result.permanent.total == 4800  # 100*45 + 300
+    assert result.permanent.total == 3300
     assert result.christmas.total == 900  # 100*9
-    assert result.permanent.per_ft == 45
+    assert result.permanent.package_feet == 100
     assert result.christmas.per_ft == 9
 
 
@@ -363,14 +359,14 @@ def test_roofline_comparison_compares_roofline_to_roofline_when_enabled() -> Non
     block = build_public_roofline_comparison(config, computed)
 
     assert block is not None
-    # Permanent roofline track only: 100ft * $30 = $3,000 (no $300 controller).
-    assert block.permanent_total == 3000
+    # Permanent complete-kit price includes all package hardware.
+    assert block.permanent_total == 3300
     # Seasonal roofline only: 100ft * $6 = $600 (the $520 of trees is excluded).
     assert block.seasonal_total == 600
     assert computed.christmas.total == 1120  # headline still includes the decor
     # Projected over the configured horizon: $600 * 5 = $3,000, dead even here.
     assert block.seasonal_multi_year == 3000
-    assert block.savings == 0
+    assert block.savings == -300
 
 
 def test_roofline_comparison_savings_follow_the_horizon() -> None:
@@ -379,7 +375,7 @@ def test_roofline_comparison_savings_follow_the_horizon() -> None:
 
     assert block is not None
     assert block.seasonal_multi_year == 6000  # 600 * 10
-    assert block.savings == 3000  # 6000 - 3000 permanent roofline
+    assert block.savings == 2700  # 6000 - 3300 permanent package
 
 
 def test_roofline_comparison_uses_a_la_carte_not_the_package_roofline() -> None:
@@ -484,12 +480,11 @@ def _lines_sum(line_items) -> float:
 
 def test_convert_permanent_lines_sum_to_permanent_total() -> None:
     title, pricing, lines = _convert(_config(), "permanent", 100)
-    # 100ft * $30 + $300 controller = $3,300, split across itemized lines.
     assert pricing.total == 3300
+    assert pricing.package_feet == 100
     assert title == "Permanent Holiday Lighting"
     names = [li.name for li in lines]
-    assert "100 ft permanent roofline" in names
-    assert any("Controller" in n for n in names)
+    assert "Permanent lighting package — covers 100 ft" in names
     # The summed quote total equals the estimate exactly (no per-unit drift).
     assert _lines_sum(lines) == 3300
 
@@ -532,7 +527,7 @@ def test_convert_reconciles_job_minimum_with_a_line() -> None:
     _title, pricing, lines = _convert(config, "permanent", 100)
     # 100 * 30 = 3000 raw, lifted to the $5,000 minimum via a reconciliation line.
     assert pricing.total == 5000
-    assert any(li.name == "Job minimum" and li.unit_price == 2000 for li in lines)
+    assert any(li.name == "Job minimum" and li.unit_price == 1253 for li in lines)
     assert _lines_sum(lines) == 5000
 
 
@@ -545,11 +540,11 @@ def test_convert_all_lines_are_quantity_one_at_component_total() -> None:
     assert lines and all(li.quantity == 1 for li in lines)
 
 
-def test_convert_permanent_override_flows_into_quote() -> None:
+def test_convert_legacy_permanent_override_keeps_package_price() -> None:
     _title, pricing, lines = _convert(_config(), "permanent", 100, per_ft_override=45)
-    # Internal rate bills 100*45 + 300 = 4800 on the quote.
-    assert pricing.total == 4800
-    assert _lines_sum(lines) == 4800
+    assert pricing.total == 3300
+    assert pricing.package_feet == 100
+    assert _lines_sum(lines) == 3300
 
 
 def test_convert_disabled_permanent_side_raises() -> None:
@@ -649,7 +644,7 @@ def test_custom_lines_stay_out_of_the_roofline_comparison() -> None:
 
     assert block is not None
     assert block.seasonal_total == 600
-    assert block.permanent_total == 3000
+    assert block.permanent_total == 3300
     assert computed.christmas.roofline_cost == 600
 
 
@@ -818,7 +813,7 @@ def test_scoped_custom_line_stays_out_of_the_roofline_comparison() -> None:
     # Like-for-like stays like-for-like: same run of lights, both ways.
     assert block is not None
     assert block.seasonal_total == 600
-    assert block.permanent_total == 3000
+    assert block.permanent_total == 3300
 
 
 def test_convert_carries_a_scoped_line_onto_that_package_quote_once() -> None:
@@ -882,5 +877,5 @@ def test_custom_line_tops_up_a_job_that_hit_the_minimum() -> None:
     )
 
     assert pricing.total == 5250
-    assert any(li.name == "Job minimum" and li.unit_price == 2000 for li in lines)
+    assert any(li.name == "Job minimum" and li.unit_price == 1253 for li in lines)
     assert _lines_sum(lines) == 5250

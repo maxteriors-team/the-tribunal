@@ -256,6 +256,8 @@ const CATALOG_PARAMS: LinearFeetEstimateRequest = {
   channels: 0,
   takedown: false,
   storage: false,
+  permanent_complexity: "standard",
+  permanent_complexity_feet: {},
   per_ft_override: null,
   christmas_per_ft_override: null,
   christmas_items: {},
@@ -2710,9 +2712,6 @@ export function LightDesigner({
   // null = no explicit pick yet; the resolver falls back to the most-inclusive
   // package, matching the server so the preview and the shared page agree.
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
-  // Internal-only per-linear-foot rate overrides for this estimate. null = use
-  // the workspace's standard configured rate. Never shown to the client.
-  const [perFtOverride, setPerFtOverride] = useState<number | null>(null);
   const [christmasPerFtOverride, setChristmasPerFtOverride] = useState<number | null>(null);
   // Standalone lines the rep typed for work the price book doesn't carry. Held
   // as raw drafts; only complete rows are priced (see `toEstimateCustomLines`).
@@ -2833,6 +2832,26 @@ export function LightDesigner({
     [liveShots, productById],
   );
   const feet = inputs.feet;
+  const permanentComplexityFeet = useMemo(() => {
+    const totals = { easy: 0, standard: 0, complex: 0 };
+    for (const shot of liveShots) {
+      const { ftPerPx } = designScale(shot.design, shot.photo.width);
+      for (const run of shot.design.runs) {
+        const product = productById.get(run.productId);
+        if (product?.target.field !== "roofline") continue;
+        totals[run.permanentComplexity ?? "standard"] +=
+          polylineLength(run.points) * ftPerPx;
+      }
+    }
+    return totals;
+  }, [liveShots, productById]);
+  const selectedPermanentRun =
+    state.selection?.kind === "run"
+      ? (design.runs.find((run) => {
+          if (run.id !== state.selection?.id) return false;
+          return productById.get(run.productId)?.target.field === "roofline";
+        }) ?? null)
+      : null;
   /** Anything drawn on the photo that's on screen (gates the AI render). */
   const activeDesignHas = hasDesign(design);
   /** Anything drawn anywhere (gates the save — every drawn shot goes across). */
@@ -3191,7 +3210,9 @@ export function LightDesigner({
       channels: 0,
       takedown,
       storage,
-      per_ft_override: perFtOverride,
+      permanent_complexity: "standard",
+      permanent_complexity_feet: permanentComplexityFeet,
+      per_ft_override: null,
       christmas_per_ft_override: christmasPerFtOverride,
       christmas_items: inputs.christmas_items,
       selected_package: selectedPackage,
@@ -3201,7 +3222,7 @@ export function LightDesigner({
       feet,
       takedown,
       storage,
-      perFtOverride,
+      permanentComplexityFeet,
       christmasPerFtOverride,
       inputs.christmas_items,
       selectedPackage,
@@ -3371,7 +3392,6 @@ export function LightDesigner({
       if (!shots.length) {
         setTakedown(false);
         setStorage(false);
-        setPerFtOverride(null);
         setChristmasPerFtOverride(null);
         setSelectedPackage(null);
         setCustomLines([]);
@@ -3518,7 +3538,6 @@ export function LightDesigner({
     const n = Number(raw);
     setRate(raw === "" || Number.isNaN(n) ? null : Math.max(0, n));
   };
-  const onPermanentRateChange = makeRateHandler(setPerFtOverride);
   const onChristmasRateChange = makeRateHandler(setChristmasPerFtOverride);
 
   // The AI render prompt follows what was actually drawn: a landscape design
@@ -4332,21 +4351,37 @@ export function LightDesigner({
                             Include off-season storage
                           </label>
                           {estimate?.permanent.enabled ? (
-                            <label className="est-opt-rate">
-                              <span>Permanent $/ft</span>
-                              <input
-                                className="est-input"
-                                type="number"
-                                min={0}
-                                step={1}
-                                inputMode="decimal"
-                                value={perFtOverride ?? ""}
-                                placeholder={String(estimate.permanent.per_ft)}
-                                onChange={(e) => onPermanentRateChange(e.target.value)}
-                                aria-label="Internal permanent linear-foot rate override"
-                              />
-                              <span className="est-internal-badge">Internal</span>
-                            </label>
+                            selectedPermanentRun ? (
+                              <label className="est-opt-rate">
+                                <span>Selected run complexity</span>
+                                <select
+                                  className="est-input"
+                                  value={selectedPermanentRun.permanentComplexity ?? "standard"}
+                                  onChange={(event) =>
+                                    dispatch({
+                                      type: "UPDATE_RUN",
+                                      id: selectedPermanentRun.id,
+                                      patch: {
+                                        permanentComplexity: event.target.value as
+                                          | "easy"
+                                          | "standard"
+                                          | "complex",
+                                      },
+                                    })
+                                  }
+                                  aria-label="Selected permanent run complexity"
+                                >
+                                  <option value="easy">Easy</option>
+                                  <option value="standard">Standard</option>
+                                  <option value="complex">Complex</option>
+                                </select>
+                                <span className="est-internal-badge">Internal</span>
+                              </label>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">
+                                Select a permanent-lighting run to set its install complexity.
+                              </p>
+                            )
                           ) : null}
                           {estimate?.christmas.enabled ? (
                             <label className="est-opt-rate">

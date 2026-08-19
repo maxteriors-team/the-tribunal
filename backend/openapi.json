@@ -11360,6 +11360,30 @@
             ],
             "title": "Per Ft Override"
           },
+          "permanent_complexity": {
+            "default": "standard",
+            "enum": [
+              "easy",
+              "standard",
+              "complex"
+            ],
+            "title": "Permanent Complexity",
+            "type": "string"
+          },
+          "permanent_complexity_feet": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "enum": [
+                "easy",
+                "standard",
+                "complex"
+              ]
+            },
+            "title": "Permanent Complexity Feet",
+            "type": "object"
+          },
           "selected_package": {
             "anyOf": [
               {
@@ -17052,6 +17076,30 @@
               }
             ],
             "title": "Per Ft Override"
+          },
+          "permanent_complexity": {
+            "default": "standard",
+            "enum": [
+              "easy",
+              "standard",
+              "complex"
+            ],
+            "title": "Permanent Complexity",
+            "type": "string"
+          },
+          "permanent_complexity_feet": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "enum": [
+                "easy",
+                "standard",
+                "complex"
+              ]
+            },
+            "title": "Permanent Complexity Feet",
+            "type": "object"
           },
           "selected_package": {
             "anyOf": [
@@ -25702,6 +25750,30 @@
             ],
             "title": "Per Ft Override"
           },
+          "permanent_complexity": {
+            "default": "standard",
+            "enum": [
+              "easy",
+              "standard",
+              "complex"
+            ],
+            "title": "Permanent Complexity",
+            "type": "string"
+          },
+          "permanent_complexity_feet": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "enum": [
+                "easy",
+                "standard",
+                "complex"
+              ]
+            },
+            "title": "Permanent Complexity Feet",
+            "type": "object"
+          },
           "selected_package": {
             "anyOf": [
               {
@@ -34329,12 +34401,24 @@
         "type": "object"
       },
       "PermanentConfig": {
-        "description": "Permanent LED roofline priced per linear foot plus a controller/hub.\n\nPlaceholder rates ship so a workspace prices before customization; the\noperator tunes ``per_ft`` / controller / channel rates in Settings → Pricing\n(the operator's standalone tool was not provided, so these are sane defaults).\nAll values are *net*; the engine grosses them up like every other price.",
+        "description": "Permanent LED roofline priced by the smallest kit that covers the job.\n\nPackage costs are COGS. ``markup`` converts COGS to the net installed sale\nprice before the standard cash/financing gross-up is applied.",
         "properties": {
+          "complex_markup": {
+            "default": 3.5,
+            "exclusiveMinimum": 0.0,
+            "title": "Complex Markup",
+            "type": "number"
+          },
           "controller_base": {
-            "default": 299,
+            "default": 0,
             "minimum": 0.0,
             "title": "Controller Base",
+            "type": "number"
+          },
+          "easy_markup": {
+            "default": 2.5,
+            "exclusiveMinimum": 0.0,
+            "title": "Easy Markup",
             "type": "number"
           },
           "enabled": {
@@ -34343,7 +34427,7 @@
             "type": "boolean"
           },
           "included_channels": {
-            "default": 1,
+            "default": 0,
             "minimum": 0.0,
             "title": "Included Channels",
             "type": "integer"
@@ -34353,20 +34437,34 @@
             "title": "Label",
             "type": "string"
           },
+          "markup": {
+            "default": 3.5,
+            "exclusiveMinimum": 0.0,
+            "title": "Markup",
+            "type": "number"
+          },
           "minimum": {
             "default": 0,
             "minimum": 0.0,
             "title": "Minimum",
             "type": "number"
           },
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/PermanentPackage"
+            },
+            "minItems": 1,
+            "title": "Packages",
+            "type": "array"
+          },
           "per_channel": {
-            "default": 45,
+            "default": 0,
             "minimum": 0.0,
             "title": "Per Channel",
             "type": "number"
           },
           "per_ft": {
-            "default": 32,
+            "default": 0,
             "minimum": 0.0,
             "title": "Per Ft",
             "type": "number"
@@ -34377,13 +34475,19 @@
             },
             "title": "Perks",
             "type": "array"
+          },
+          "standard_markup": {
+            "default": 3,
+            "exclusiveMinimum": 0.0,
+            "title": "Standard Markup",
+            "type": "number"
           }
         },
         "title": "PermanentConfig",
         "type": "object"
       },
       "PermanentEstimate": {
-        "description": "Permanent-lighting side of the estimate (rep view — includes per_ft).\n\n``roofline_cost`` is the track-only component of ``total`` (no controller or\nzone hardware), so it can be compared like-for-like against the seasonal\nroofline cost — standalone lines are deliberately excluded from it for the\nsame reason.\n\n``custom_total`` is the part of ``total`` contributed by the rep's standalone\nlines, broken out so a caller pricing a *package* (whose total excludes them)\ncan add them back without re-deriving the arithmetic.",
+        "description": "Permanent-lighting estimate using the kit that covers measured footage.",
         "properties": {
           "custom_total": {
             "default": 0,
@@ -34394,7 +34498,23 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "markup": {
+            "default": 0,
+            "title": "Markup",
+            "type": "number"
+          },
+          "package_cogs": {
+            "default": 0,
+            "title": "Package Cogs",
+            "type": "number"
+          },
+          "package_feet": {
+            "default": 0,
+            "title": "Package Feet",
+            "type": "integer"
+          },
           "per_ft": {
+            "default": 0,
             "title": "Per Ft",
             "type": "number"
           },
@@ -34410,10 +34530,30 @@
         },
         "required": [
           "enabled",
-          "total",
-          "per_ft"
+          "total"
         ],
         "title": "PermanentEstimate",
+        "type": "object"
+      },
+      "PermanentPackage": {
+        "description": "One supplier kit used to cover a measured roofline.",
+        "properties": {
+          "cost": {
+            "minimum": 0.0,
+            "title": "Cost",
+            "type": "number"
+          },
+          "feet": {
+            "exclusiveMinimum": 0.0,
+            "title": "Feet",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feet",
+          "cost"
+        ],
+        "title": "PermanentPackage",
         "type": "object"
       },
       "PersonResult": {

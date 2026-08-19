@@ -69,6 +69,7 @@ export type EditorAction =
           | "spacingIn"
           | "colors"
           | "bulbScale"
+          | "permanentComplexity"
           | "circuitLabel"
           | "transformerId"
           | "wireGauge"

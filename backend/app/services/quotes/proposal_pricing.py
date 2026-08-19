@@ -21,6 +21,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
 from app.schemas.pricing import (
     DEFAULT_FINANCING_DISCLAIMER,
@@ -502,27 +503,42 @@ def price_permanent(
     *,
     feet: float,
     channels: int = 0,
+    complexity: str = "standard",
+    complexity_feet: Mapping[Any, float] | None = None,
 ) -> PermanentPricing:
-    """Price a permanent-roofline job: grossed per-ft footage + controller + zones.
-
-    Each component is grossed up individually (like bistro) so every displayed
-    line total is authoritative and the lines sum exactly to ``raw_total``.
-    """
+    """Round footage to kits and weight the COGS multiplier by measured runs."""
     p = config.permanent
-    per_ft = _d(p.per_ft)
+    markups = {
+        "easy": p.easy_markup,
+        "standard": p.standard_markup,
+        "complex": p.complex_markup,
+    }
+    markup = markups.get(complexity, p.standard_markup)
+    measured_complexity_feet = {
+        key: max(0.0, float(value))
+        for key, value in (complexity_feet or {}).items()
+        if key in markups
+    }
+    allocated_feet = sum(measured_complexity_feet.values())
+    if allocated_feet > 0:
+        markup = (
+            sum(
+                measured_feet * markups[key]
+                for key, measured_feet in measured_complexity_feet.items()
+            )
+            / allocated_feet
+        )
     ft = max(0.0, feet or 0.0)
     ch = max(0, int(channels or 0))
-    extra = max(0, ch - int(p.included_channels))
     gross_minimum = gross_up_price(_d(p.minimum), config)
 
     if ft <= 0:
         return PermanentPricing(
             feet=0,
             channels=ch,
-            per_ft=float(per_ft),
-            roofline_cost=0,
-            controller_cost=0,
-            channels_cost=0,
+            package_feet=0,
+            package_cogs=0,
+            markup=markup,
             minimum=float(gross_minimum),
             raw_total=0,
             total=0,
@@ -530,39 +546,46 @@ def price_permanent(
             lines=[],
         )
 
-    roofline_cost = gross_up_price(_d(ft) * per_ft, config)
-    controller_cost = gross_up_price(_d(p.controller_base), config)
-    channels_cost = gross_up_price(_d(extra) * _d(p.per_channel), config)
+    packages = sorted(p.packages, key=lambda package: package.feet)
+    if not packages:
+        raise ValueError("Permanent lighting requires at least one package")
 
-    lines: list[CategoryLine] = [
+    selected = []
+    remaining = ft
+    largest = packages[-1]
+    while remaining > largest.feet:
+        selected.append(largest)
+        remaining -= largest.feet
+    if remaining > 0:
+        selected.append(next(package for package in packages if package.feet >= remaining))
+
+    package_feet = sum(package.feet for package in selected)
+    package_cogs = sum((_d(package.cost) for package in selected), _ZERO)
+    raw_total = gross_up_price(package_cogs * _d(markup), config)
+    total = max(raw_total, gross_minimum)
+    counts: dict[int, int] = {}
+    for package in selected:
+        counts[package.feet] = counts.get(package.feet, 0) + 1
+    package_detail = " + ".join(
+        f"{count} × {size}-ft kit" if count > 1 else f"{size}-ft kit"
+        for size, count in sorted(counts.items(), reverse=True)
+    )
+    lines = [
         _category_line(
-            f"{ft:g} ft permanent roofline",
-            ft,
-            roofline_cost,
-            detail="Permanent LED track, installed",
+            f"Permanent lighting package — covers {package_feet} ft",
+            1,
+            raw_total,
+            detail=f"{ft:g} ft measured; {package_detail}",
         )
     ]
-    if controller_cost > 0:
-        lines.append(
-            _category_line(
-                "Controller & app control",
-                1,
-                controller_cost,
-                detail=f"Includes {p.included_channels} zone(s)" if p.included_channels else None,
-            )
-        )
-    if extra > 0 and channels_cost > 0:
-        lines.append(_category_line(f"{extra} additional zone(s)", extra, channels_cost))
 
-    raw_total = roofline_cost + controller_cost + channels_cost
-    total = max(raw_total, gross_minimum) if raw_total > 0 else _ZERO
     return PermanentPricing(
         feet=ft,
         channels=ch,
-        per_ft=float(per_ft),
-        roofline_cost=float(roofline_cost),
-        controller_cost=float(controller_cost),
-        channels_cost=float(channels_cost),
+        package_feet=package_feet,
+        package_cogs=float(package_cogs),
+        markup=markup,
+        roofline_cost=float(raw_total),
         minimum=float(gross_minimum),
         raw_total=float(raw_total),
         total=float(total),
