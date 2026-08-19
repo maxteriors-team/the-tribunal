@@ -44,20 +44,43 @@ test.describe("Ad Library prospecting", () => {
 
     // --- SEARCH -------------------------------------------------------------
     await page.getByLabel(/keyword/i).first().fill("roofing");
-    await page
-      .getByRole("button", { name: /search ad library/i })
-      .click();
+    const searchResponsePromise = page.waitForResponse(
+      (response) =>
+        /\/ad-library\/search$/.test(response.url()) &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: /search ad library/i }).click();
+    const searchResponse = await searchResponsePromise;
+
+    // Missing provider credentials are an actionable setup state. The form and
+    // the rest of the module must remain usable instead of hitting the route
+    // error boundary.
+    if (searchResponse.status() === 503) {
+      await expect(searchResponse.json()).resolves.toMatchObject({
+        code: "ad_library_provider_unavailable",
+      });
+      await expect(page.getByText("Ad Library needs a provider token")).toBeVisible();
+      await expect(page.getByRole("link", { name: "Open Settings" })).toHaveAttribute(
+        "href",
+        "/settings?tab=integrations",
+      );
+      await expect(page.getByRole("heading", { name: "Ad Library", exact: true })).toBeVisible();
+      await expect(page.getByText(/saved monitors/i)).toBeVisible();
+      return;
+    }
+
+    expect(searchResponse.status(), "ad-library search should start").toBeLessThan(300);
 
     // A job-status banner appears once the search is enqueued (pending/running
     // or a terminal state). We assert on the status card region.
-    await expect(
-      page.getByText(/pending|running|succeeded|failed/i).first(),
-    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/pending|running|succeeded|failed/i).first()).toBeVisible({
+      timeout: 20_000,
+    });
 
     // The advertiser results toolbar renders the tracked-advertiser count.
-    await expect(
-      page.getByText(/\d+\s+advertisers/i).first(),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/\d+\s+advertisers/i).first()).toBeVisible({
+      timeout: 15_000,
+    });
 
     // The results section renders deterministically as EITHER the ranked
     // table (when advertisers are seeded) or the empty state (when not).
