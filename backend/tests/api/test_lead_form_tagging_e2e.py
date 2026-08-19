@@ -325,8 +325,8 @@ async def test_returning_contact_updates_consent_without_restarting_funnel() -> 
             await db.commit()
 
 
-async def test_native_elementor_webhook_creates_the_contact() -> None:
-    """The exact WordPress payload reaches validation, origin checks, and storage."""
+async def test_native_elementor_advanced_webhook_creates_the_contact() -> None:
+    """Advanced Data reaches validation, origin checks, and encrypted storage."""
     domain = "maxteriors.example.com"
     phone = "+15550100006"
     async with AsyncSessionLocal() as db:
@@ -357,12 +357,22 @@ async def test_native_elementor_webhook_creates_the_contact() -> None:
                 f"/api/v1/p/leads/{public_key}",
                 headers={"User-Agent": f"WordPress/7.0.4; https://{domain}"},
                 data={
-                    "Full Name": "Ellie Elementor",
-                    "Phone": phone,
-                    "Email": "ellie@example.com",
-                    "Address": "14040 Pernell Dr, Sterling Heights, MI 48313",
-                    "Message": "Interested in permanent roofline lighting.",
-                    "SMS Consent": "on",
+                    "form[id]": "1c1d394",
+                    "form[name]": "Test Form",
+                    "fields[name][title]": "Full Name",
+                    "fields[name][value]": "Ellie Elementor",
+                    "fields[phone][title]": "Phone",
+                    "fields[phone][value]": phone,
+                    "fields[email][title]": "Email",
+                    "fields[email][value]": "ellie@example.com",
+                    "fields[address][title]": "Address",
+                    "fields[address][value]": "14040 Pernell Dr, Sterling Heights, MI 48313",
+                    "fields[message][title]": "Message",
+                    "fields[message][value]": "Interested in permanent roofline lighting.",
+                    "fields[sms_consent][title]": "SMS Consent",
+                    "fields[sms_consent][value]": "on",
+                    "meta[page_url][title]": "Page URL",
+                    "meta[page_url][value]": f"https://{domain}/quote/",
                 },
             )
 

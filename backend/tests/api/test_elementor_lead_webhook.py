@@ -73,6 +73,51 @@ async def test_native_elementor_payload_is_normalized(client: AsyncClient) -> No
 
 
 @pytest.mark.asyncio
+async def test_elementor_advanced_data_payload_is_normalized(client: AsyncClient) -> None:
+    response = await client.post(
+        "/lead",
+        headers={"User-Agent": WORDPRESS_USER_AGENT},
+        data={
+            "form[id]": "1c1d394",
+            "form[name]": "Test Form",
+            "fields[name][id]": "name",
+            "fields[name][type]": "text",
+            "fields[name][title]": "Full Name",
+            "fields[name][value]": "Alex Advanced",
+            "fields[name][raw_value]": "Alex Advanced",
+            "fields[phone][id]": "phone",
+            "fields[phone][type]": "tel",
+            "fields[phone][title]": "Phone",
+            "fields[phone][value]": "586-555-0107",
+            "fields[email][title]": "Email",
+            "fields[email][value]": "alex@example.com",
+            "fields[address][title]": "Address",
+            "fields[address][value]": "14040 Pernell Dr, Sterling Heights, MI 48313",
+            "fields[message][title]": "Message",
+            "fields[message][value]": "Advanced webhook payload.",
+            "fields[sms_consent][title]": "SMS Consent",
+            "fields[sms_consent][value]": "on",
+            "meta[page_url][title]": "Page URL",
+            "meta[page_url][value]": "https://maxteriorslighting.com/1-test-page/",
+            "meta[referer_url][title]": "Referrer",
+            "meta[referer_url][value]": "https://www.google.com/",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["first_name"] == "Alex"
+    assert body["last_name"] == "Advanced"
+    assert body["phone_number"] == "+15865550107"
+    assert body["email"] == "alex@example.com"
+    assert body["address"] == "14040 Pernell Dr, Sterling Heights, MI 48313"
+    assert body["notes"] == "Advanced webhook payload."
+    assert body["sms_consent"] is True
+    assert body["landing_page"] == "https://maxteriorslighting.com/1-test-page/"
+    assert body["referrer"] == "https://www.google.com/"
+
+
+@pytest.mark.asyncio
 async def test_checked_consent_and_advanced_page_metadata_are_preserved(
     client: AsyncClient,
 ) -> None:
@@ -151,7 +196,7 @@ async def test_too_many_elementor_fields_are_rejected(client: AsyncClient) -> No
     response = await client.post(
         "/lead",
         headers={"User-Agent": WORDPRESS_USER_AGENT},
-        data={f"Field {index}": "value" for index in range(51)},
+        data={f"Field {index}": "value" for index in range(101)},
     )
 
     assert response.status_code == 422

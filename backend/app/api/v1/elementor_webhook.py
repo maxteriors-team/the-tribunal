@@ -1,8 +1,9 @@
 """Compatibility layer for Elementor Pro's server-side form webhooks.
 
 Elementor sends ``application/x-www-form-urlencoded`` fields keyed by their
-human-readable labels. The public lead endpoint otherwise uses a typed JSON
-contract. This route adapter normalizes Elementor's payload before FastAPI
+human-readable labels or, in Advanced Data mode, nested ``fields``/``meta``
+records. The public lead endpoint otherwise uses a typed JSON contract. This
+route adapter normalizes Elementor's payload before FastAPI
 performs normal Pydantic validation, so the endpoint keeps one canonical model
 and one OpenAPI operation.
 """
@@ -10,6 +11,7 @@ and one OpenAPI operation.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Coroutine, Mapping
 from typing import Any
 from urllib.parse import parse_qsl, urlparse
@@ -23,7 +25,10 @@ from app.core.origin_validation import is_allowed_origin
 
 ELEMENTOR_FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
 MAX_ELEMENTOR_BODY_BYTES = 64 * 1024
-MAX_ELEMENTOR_FIELDS = 50
+MAX_ELEMENTOR_FIELDS = 100
+_ELEMENTOR_ADVANCED_PART = re.compile(
+    r"^(fields|meta)\[([^\[\]]+)\]\[(title|value|raw_value)\](?:\[\])?$"
+)
 
 ELEMENTOR_REQUEST_BODY_OPENAPI: dict[str, Any] = {
     "requestBody": {
@@ -69,9 +74,32 @@ def _checked(value: str | None) -> bool:
     return value.strip().casefold() not in {"", "0", "false", "no", "off", "unchecked"}
 
 
+def _flatten_elementor_fields(form_fields: Mapping[str, str]) -> dict[str, str]:
+    """Flatten Elementor Basic and Advanced Data into label-keyed values."""
+    flat_fields: dict[str, str] = {}
+    advanced_parts: dict[tuple[str, str], dict[str, str]] = {}
+
+    for key, value in form_fields.items():
+        match = _ELEMENTOR_ADVANCED_PART.fullmatch(key)
+        if match:
+            section, item_id, part = match.groups()
+            advanced_parts.setdefault((section, item_id), {})[part] = value
+        elif "[" not in key:
+            flat_fields[key] = value
+
+    for parts in advanced_parts.values():
+        title = parts.get("title")
+        field_value = parts.get("value", parts.get("raw_value"))
+        if title and field_value is not None:
+            flat_fields[title] = field_value
+
+    return flat_fields
+
+
 def normalize_elementor_payload(form_fields: Mapping[str, str]) -> dict[str, Any]:
     """Map Elementor field labels to the canonical public lead JSON contract."""
-    fields = {_field_key(label): value for label, value in form_fields.items()}
+    flattened = _flatten_elementor_fields(form_fields)
+    fields = {_field_key(label): value for label, value in flattened.items()}
     payload: dict[str, Any] = {}
 
     first_name = _field_value(fields, "First Name", "First")
