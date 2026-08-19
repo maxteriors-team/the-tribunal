@@ -101,6 +101,9 @@ export function AdLibraryClient() {
       if (!workspaceId) throw new Error("No workspace");
       return adLibraryApi.search(workspaceId, toSearchRequest(values));
     },
+    // Search failures are handled below without discarding the user's form or
+    // the rest of the module. Override the global 5xx route-boundary behavior.
+    throwOnError: false,
     onSuccess: (created) => {
       setNotConfigured(false);
       setJob(created);
