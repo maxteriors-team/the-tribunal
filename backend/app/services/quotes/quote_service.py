@@ -2683,7 +2683,14 @@ class QuoteService:
         perm_custom = QuoteService._price_custom_lines(req.custom_lines, "permanent")
         xmas_custom = QuoteService._price_custom_lines(req.custom_lines, "seasonal")
         perm = QuoteService._with_custom_lines(
-            price_permanent(perm_config, feet=req.feet, channels=req.channels), perm_custom
+            price_permanent(
+                perm_config,
+                feet=req.feet,
+                channels=req.channels,
+                complexity=req.permanent_complexity,
+                complexity_feet=req.permanent_complexity_feet,
+            ),
+            perm_custom,
         )
         xmas = QuoteService._with_custom_lines(
             price_christmas(
@@ -2753,7 +2760,10 @@ class QuoteService:
             permanent=PermanentEstimate(
                 enabled=perm_enabled,
                 total=perm_total,
-                per_ft=float(perm.per_ft),
+                package_feet=perm.package_feet if perm_enabled else 0,
+                package_cogs=perm.package_cogs if perm_enabled else 0.0,
+                markup=perm.markup if perm_enabled else 0.0,
+                per_ft=0,
                 roofline_cost=float(perm.roofline_cost) if perm_enabled else 0.0,
                 custom_total=(
                     round(sum(line.amount for line in perm_custom), 2) if perm_enabled else 0.0
@@ -2837,7 +2847,13 @@ class QuoteService:
                 raise ValidationError("Permanent lighting isn't enabled for this workspace.")
             perm_config = self._permanent_config_with_override(config, req.per_ft_override)
             pricing: PermanentPricing | ChristmasPricing = self._with_custom_lines(
-                price_permanent(perm_config, feet=req.feet, channels=req.channels), custom
+                price_permanent(
+                    perm_config,
+                    feet=req.feet,
+                    channels=req.channels,
+                    complexity=req.permanent_complexity,
+                ),
+                custom,
             )
             return config.permanent.label, pricing
 

@@ -1,15 +1,5 @@
 "use client";
 
-/**
- * Settings → Pricing: the Permanent Holiday Lighting editor (operator self-serve).
- *
- * Permanent LED roofline is priced per linear foot plus a controller/hub that
- * carries a number of channels. This card lets a non-technical operator switch
- * the offering on and tune every rate — the per-linear-foot rate is the headline
- * knob the rep sees in the roofline estimator. Saving PUTs the whole `permanent`
- * block back (the endpoint replaces blocks wholesale), so `perks` and every
- * other pricing field round-trip untouched. No developer or deploy needed.
- */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -33,48 +23,47 @@ import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { PermanentConfig } from "@/types/sales-wizard";
 
-// Editable working copy. Numbers are held as strings so a half-typed value never
-// snaps to 0 mid-edit; they're parsed and validated on save.
+interface DraftPackage {
+  feet: string;
+  cost: string;
+}
+
 interface DraftFields {
   enabled: boolean;
   label: string;
-  perFt: string;
-  controllerBase: string;
-  perChannel: string;
-  includedChannels: string;
+  easyMarkup: string;
+  standardMarkup: string;
+  complexMarkup: string;
   minimum: string;
+  packages: DraftPackage[];
 }
 
-function toDraft(cfg: PermanentConfig): DraftFields {
+function toDraft(config: PermanentConfig): DraftFields {
   return {
-    enabled: cfg.enabled,
-    label: cfg.label ?? "Permanent Holiday Lighting",
-    perFt: String(cfg.per_ft ?? 0),
-    controllerBase: String(cfg.controller_base ?? 0),
-    perChannel: String(cfg.per_channel ?? 0),
-    includedChannels: String(cfg.included_channels ?? 0),
-    minimum: String(cfg.minimum ?? 0),
+    enabled: config.enabled,
+    label: config.label ?? "Permanent Holiday Lighting",
+    easyMarkup: String(config.easy_markup ?? 2.5),
+    standardMarkup: String(config.standard_markup ?? 3),
+    complexMarkup: String(config.complex_markup ?? 3.5),
+    minimum: String(config.minimum ?? 0),
+    packages: (config.packages ?? []).map((kit) => ({
+      feet: String(kit.feet),
+      cost: String(kit.cost),
+    })),
   };
 }
 
 export function PermanentPricingSettingsCard() {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
-
   const { data: pricing, isPending } = useQuery({
     queryKey: queryKeys.salesWizard.pricing(workspaceId ?? ""),
     queryFn: () => salesWizardApi.getPricing(workspaceId!),
     enabled: !!workspaceId,
-    // Shared with the seasonal editor by key (React Query dedupes the fetch).
-    // Keep it stable so a background refetch can't wipe unsaved edits — this card
-    // writes the cache directly on save.
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
-
   const [draft, setDraft] = useState<DraftFields | null>(null);
-  // Snapshot of the server block so save preserves `perks` (and any future field
-  // this editor doesn't expose). Same identity-guard pattern as the seasonal tab.
   const [serverPermanent, setServerPermanent] = useState<PermanentConfig | null>(
     null,
   );
@@ -92,56 +81,78 @@ export function PermanentPricingSettingsCard() {
         queryKeys.salesWizard.pricing(workspaceId ?? ""),
         updated,
       );
-      toast.success("Permanent lighting pricing saved");
+      toast.success("Permanent lighting package pricing saved");
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to save permanent pricing")),
+    onError: (error: unknown) =>
+      toast.error(getApiErrorMessage(error, "Failed to save permanent pricing")),
   });
 
   const disabled = mutation.isPending || !serverPermanent || !draft;
+  const patch = (fields: Partial<DraftFields>) =>
+    setDraft((current) => (current ? { ...current, ...fields } : current));
 
-  const patch = (p: Partial<DraftFields>) =>
-    setDraft((prev) => (prev ? { ...prev, ...p } : prev));
+  const patchPackage = (index: number, fields: Partial<DraftPackage>) =>
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            packages: current.packages.map((kit, kitIndex) =>
+              kitIndex === index ? { ...kit, ...fields } : kit,
+            ),
+          }
+        : current,
+    );
 
   const save = () => {
     if (!serverPermanent || !draft) return;
-
-    const perFt = Number.parseFloat(draft.perFt);
-    const controllerBase = Number.parseFloat(draft.controllerBase);
-    const perChannel = Number.parseFloat(draft.perChannel);
-    const includedChannels = Number.parseInt(draft.includedChannels, 10);
+    const easyMarkup = Number.parseFloat(draft.easyMarkup);
+    const standardMarkup = Number.parseFloat(draft.standardMarkup);
+    const complexMarkup = Number.parseFloat(draft.complexMarkup);
     const minimum = Number.parseFloat(draft.minimum);
-    const label = draft.label.trim();
-
-    const numeric: Array<[string, number]> = [
-      ["Per-foot rate", perFt],
-      ["Controller base price", controllerBase],
-      ["Per-channel rate", perChannel],
-      ["Included channels", includedChannels],
-      ["Job minimum", minimum],
-    ];
-    for (const [name, value] of numeric) {
-      if (!Number.isFinite(value) || value < 0) {
-        toast.error(`${name} must be a number ≥ 0`);
-        return;
-      }
+    const packages = draft.packages.map((kit) => ({
+      feet: Number.parseInt(kit.feet, 10),
+      cost: Number.parseFloat(kit.cost),
+    }));
+    if (
+      [easyMarkup, standardMarkup, complexMarkup].some(
+        (value) => !Number.isFinite(value) || value <= 0,
+      )
+    ) {
+      toast.error("Every complexity multiplier must be greater than 0");
+      return;
     }
+    if (!Number.isFinite(minimum) || minimum < 0) {
+      toast.error("Job minimum must be a number ≥ 0");
+      return;
+    }
+    if (
+      packages.length === 0 ||
+      packages.some(
+        (kit) =>
+          !Number.isInteger(kit.feet) ||
+          kit.feet <= 0 ||
+          !Number.isFinite(kit.cost) ||
+          kit.cost < 0,
+      )
+    ) {
+      toast.error("Every kit needs positive footage and a valid COGS amount");
+      return;
+    }
+    const label = draft.label.trim();
     if (!label) {
       toast.error("Give the offering a name");
       return;
     }
-
-    // Spread the server snapshot first so unexposed fields (perks) survive the
-    // block-replace save; then apply the edited values.
     mutation.mutate({
       ...serverPermanent,
       enabled: draft.enabled,
       label,
-      per_ft: perFt,
-      controller_base: controllerBase,
-      per_channel: perChannel,
-      included_channels: includedChannels,
+      easy_markup: easyMarkup,
+      standard_markup: standardMarkup,
+      complex_markup: complexMarkup,
+      markup: complexMarkup,
       minimum,
+      packages,
     });
   };
 
@@ -162,57 +173,56 @@ export function PermanentPricingSettingsCard() {
           <div className="space-y-1.5">
             <CardTitle>Permanent Holiday Lighting</CardTitle>
             <CardDescription>
-              Year-round LED roofline priced per linear foot plus a controller.
-              Turn it on to offer it in the roofline estimator and the
-              permanent-vs-seasonal comparison.
+              Measured footage rounds up to the smallest Minleon kit that covers
+              the job. Customer price equals kit COGS multiplied by your markup.
             </CardDescription>
           </div>
           <Switch
             checked={draft.enabled}
-            onCheckedChange={(v) => patch({ enabled: v })}
+            onCheckedChange={(enabled) => patch({ enabled })}
             disabled={disabled}
             aria-label="Offer permanent holiday lighting"
           />
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-2 max-w-xs">
-          <Label htmlFor="perm-per-ft">Price per linear foot ($)</Label>
-          <Input
-            id="perm-per-ft"
-            type="number"
-            min={0}
-            step="0.01"
-            inputMode="decimal"
-            value={draft.perFt}
-            onChange={(e) => patch({ perFt: e.target.value })}
-            disabled={disabled}
-          />
-          <p className="text-xs text-muted-foreground">
-            The headline rate for the permanent LED roofline run.
-          </p>
-        </div>
-
-        <Separator />
-
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="perm-controller">Controller base price ($)</Label>
+            <Label htmlFor="perm-easy-markup">Easy multiplier</Label>
             <Input
-              id="perm-controller"
+              id="perm-easy-markup"
               type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              value={draft.controllerBase}
-              onChange={(e) => patch({ controllerBase: e.target.value })}
+              min={0.01}
+              step="0.1"
+              value={draft.easyMarkup}
+              onChange={(event) => patch({ easyMarkup: event.target.value })}
               disabled={disabled}
             />
-            <p className="text-xs text-muted-foreground">
-              One-time hub that drives the lights.
-            </p>
           </div>
-
+          <div className="space-y-2">
+            <Label htmlFor="perm-standard-markup">Standard multiplier</Label>
+            <Input
+              id="perm-standard-markup"
+              type="number"
+              min={0.01}
+              step="0.1"
+              value={draft.standardMarkup}
+              onChange={(event) => patch({ standardMarkup: event.target.value })}
+              disabled={disabled}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="perm-complex-markup">Complex multiplier</Label>
+            <Input
+              id="perm-complex-markup"
+              type="number"
+              min={0.01}
+              step="0.1"
+              value={draft.complexMarkup}
+              onChange={(event) => patch({ complexMarkup: event.target.value })}
+              disabled={disabled}
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="perm-minimum">Job minimum ($)</Label>
             <Input
@@ -220,65 +230,69 @@ export function PermanentPricingSettingsCard() {
               type="number"
               min={0}
               step="0.01"
-              inputMode="decimal"
               value={draft.minimum}
-              onChange={(e) => patch({ minimum: e.target.value })}
+              onChange={(event) => patch({ minimum: event.target.value })}
               disabled={disabled}
             />
-            <p className="text-xs text-muted-foreground">
-              Floor price for any permanent job. 0 = no minimum.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="perm-per-channel">Price per channel ($)</Label>
-            <Input
-              id="perm-per-channel"
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              value={draft.perChannel}
-              onChange={(e) => patch({ perChannel: e.target.value })}
-              disabled={disabled}
-            />
-            <p className="text-xs text-muted-foreground">
-              Charged for each channel beyond those included.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="perm-included-channels">Included channels</Label>
-            <Input
-              id="perm-included-channels"
-              type="number"
-              min={0}
-              step="1"
-              inputMode="numeric"
-              value={draft.includedChannels}
-              onChange={(e) => patch({ includedChannels: e.target.value })}
-              disabled={disabled}
-            />
-            <p className="text-xs text-muted-foreground">
-              Channels bundled into the controller base price.
-            </p>
           </div>
         </div>
+
+        <Separator />
+
+        <div className="space-y-3">
+          <div>
+            <h3 className="font-medium">Minleon complete kits</h3>
+            <p className="text-xs text-muted-foreground">
+              Enter supplier COGS. A 165-ft measurement selects the 200-ft kit.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {draft.packages.map((kit, index) => (
+              <div className="grid grid-cols-2 gap-2" key={index}>
+                <div className="space-y-1">
+                  <Label htmlFor={`perm-kit-feet-${index}`}>Kit footage</Label>
+                  <Input
+                    id={`perm-kit-feet-${index}`}
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={kit.feet}
+                    onChange={(event) =>
+                      patchPackage(index, { feet: event.target.value })
+                    }
+                    disabled={disabled}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`perm-kit-cost-${index}`}>COGS ($)</Label>
+                  <Input
+                    id={`perm-kit-cost-${index}`}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={kit.cost}
+                    onChange={(event) =>
+                      patchPackage(index, { cost: event.target.value })
+                    }
+                    disabled={disabled}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Separator />
 
         <div className="space-y-2 max-w-md">
           <Label htmlFor="perm-label">Offering name</Label>
           <Input
             id="perm-label"
             value={draft.label}
-            onChange={(e) => patch({ label: e.target.value })}
+            onChange={(event) => patch({ label: event.target.value })}
             disabled={disabled}
           />
-          <p className="text-xs text-muted-foreground">
-            Shown to customers on the comparison and proposal.
-          </p>
         </div>
-
-        <Separator />
 
         <div className="flex justify-end">
           <Button type="button" onClick={save} disabled={disabled}>

@@ -11,7 +11,7 @@ function estimate(
 ): LinearFeetEstimateResult {
   return {
     feet: 0,
-    permanent: { enabled: false, total: 0, per_ft: 32, roofline_cost: 0, custom_total: 0 },
+    permanent: { enabled: false, total: 0, per_ft: 0, package_feet: 0, package_cogs: 0, markup: 3.5, roofline_cost: 0, custom_total: 0 },
     christmas: {
       enabled: true,
       total: 0,
@@ -77,16 +77,16 @@ describe("buildCatalog permanent roofline", () => {
   it("omits the permanent roofline when permanent lighting is disabled", () => {
     const catalog = buildCatalog(
       estimate({
-        permanent: { enabled: false, total: 0, per_ft: 32, roofline_cost: 0, custom_total: 0 },
+        permanent: { enabled: false, total: 0, per_ft: 0, package_feet: 0, package_cogs: 0, markup: 3.5, roofline_cost: 0, custom_total: 0 },
       }),
     );
     expect(catalog.find((p) => p.id === "roofline-permanent")).toBeUndefined();
   });
 
-  it("adds a permanent roofline priced per foot when enabled", () => {
+  it("adds a permanent roofline using a package-derived display hint", () => {
     const catalog = buildCatalog(
       estimate({
-        permanent: { enabled: true, total: 0, per_ft: 40, roofline_cost: 0, custom_total: 0 },
+        permanent: { enabled: true, total: 4371.5, per_ft: 0, package_feet: 100, package_cogs: 1249, markup: 3.5, roofline_cost: 4371.5, custom_total: 0 },
       }),
     );
     const perm = catalog.find((p) => p.id === "roofline-permanent");
@@ -94,7 +94,7 @@ describe("buildCatalog permanent roofline", () => {
     expect(perm?.kind).toBe("linear");
     expect(perm?.style).toBe("permanent");
     expect(perm?.category).toBe("permanent");
-    expect(perm?.price).toBe(40);
+    expect(perm?.price).toBe(43.715);
     expect(perm?.bulbScale).toBe(1);
     // Shares the measured roofline feet — it's another visual for the one run.
     expect(perm?.target).toEqual({ field: "roofline" });

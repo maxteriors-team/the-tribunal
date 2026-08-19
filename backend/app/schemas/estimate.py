@@ -100,7 +100,11 @@ class LinearFeetEstimateRequest(BaseModel):
     channels: int = Field(default=0, ge=0)  # permanent zones
     takedown: bool = False  # christmas post-season takedown
     storage: bool = False  # christmas off-season storage
-    per_ft_override: float | None = Field(default=None, ge=0)  # INTERNAL permanent rate
+    permanent_complexity: Literal["easy", "standard", "complex"] = "standard"
+    permanent_complexity_feet: dict[Literal["easy", "standard", "complex"], float] = Field(
+        default_factory=dict
+    )
+    per_ft_override: float | None = Field(default=None, ge=0)  # deprecated, ignored
     christmas_per_ft_override: float | None = Field(default=None, ge=0)  # INTERNAL seasonal rate
     # Seasonal decor selection: category key -> {option key -> value}. Value is a
     # count for ``each`` items (trees/bushes/wreaths) and linear feet for
@@ -120,21 +124,15 @@ class LinearFeetEstimateRequest(BaseModel):
 
 
 class PermanentEstimate(BaseModel):
-    """Permanent-lighting side of the estimate (rep view — includes per_ft).
-
-    ``roofline_cost`` is the track-only component of ``total`` (no controller or
-    zone hardware), so it can be compared like-for-like against the seasonal
-    roofline cost — standalone lines are deliberately excluded from it for the
-    same reason.
-
-    ``custom_total`` is the part of ``total`` contributed by the rep's standalone
-    lines, broken out so a caller pricing a *package* (whose total excludes them)
-    can add them back without re-deriving the arithmetic.
-    """
+    """Permanent-lighting estimate using the kit that covers measured footage."""
 
     enabled: bool
     total: float
-    per_ft: float
+    package_feet: int = 0
+    package_cogs: float = 0
+    markup: float = 0
+    # Deprecated response field retained for older estimator clients.
+    per_ft: float = 0
     roofline_cost: float = 0
     custom_total: float = 0
 
