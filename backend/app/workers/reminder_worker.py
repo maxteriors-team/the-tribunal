@@ -42,6 +42,7 @@ from app.services.email import send_appointment_reminder_email
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
+from app.utils.meeting_urls import meeting_provider_name
 from app.utils.timezones import resolve_workspace_timezone, workspace_timezone_name
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -550,13 +551,14 @@ class ReminderWorker(RetryableWorker, BaseWorker):
         workspace: Workspace,
         agent: Agent | None,
     ) -> str:
-        """Build the SMS body for a reminder.
+        """Build the shared SMS/email body for a reminder.
 
         If agent.reminder_template is set, render it with placeholders:
           {first_name}, {last_name}, {appointment_date}, {appointment_time},
-          {appointment_datetime}, {reschedule_link}
+          {appointment_datetime}, {reschedule_link}, {meeting_url}
 
-        Falls back to the original hardcoded message when no template is set.
+        Video reminders always include either the real provider URL or truthful
+        follow-up copy. Falls back to the original message when no template is set.
 
         Times are formatted in the workspace timezone — the zone the appointment
         was booked in, so a reminder cannot contradict the confirmation.
@@ -570,41 +572,54 @@ class ReminderWorker(RetryableWorker, BaseWorker):
 
         first_name = contact.first_name or "there"
 
-        # Keep the fallback channel-neutral: not every booking is a video call,
-        # and an email provider failure should never make the SMS lie about a link.
         if not template:
-            return (
+            message = (
                 f"Hi {first_name}, a quick reminder about your appointment "
                 f"{datetime_str}. Reply here if you need to reschedule."
             )
+        else:
+            # Scheduling is self-contained: there is no external reschedule URL, so
+            # ``{reschedule_link}`` renders empty and templates fall back to the
+            # "reply to reschedule" copy.
+            reschedule_link = ""
 
-        # Scheduling is self-contained: there is no external reschedule URL, so
-        # ``{reschedule_link}`` renders empty and templates fall back to the
-        # "reply to reschedule" copy.
-        reschedule_link = ""
+            replacements: dict[str, str] = {
+                "first_name": contact.first_name or "",
+                "last_name": contact.last_name or "",
+                "appointment_date": date_str,
+                "appointment_time": time_str,
+                "appointment_datetime": datetime_str,
+                "reschedule_link": reschedule_link,
+                "meeting_url": appointment.meeting_url or "",
+            }
 
-        replacements: dict[str, str] = {
-            "first_name": contact.first_name or "",
-            "last_name": contact.last_name or "",
-            "appointment_date": date_str,
-            "appointment_time": time_str,
-            "appointment_datetime": datetime_str,
-            "reschedule_link": reschedule_link,
-        }
+            message = template
+            for placeholder, value in replacements.items():
+                try:
+                    pattern = re.compile(rf"\{{{placeholder}\}}", re.IGNORECASE)
+                    message = pattern.sub(value, message)
+                except Exception:
+                    self.logger.warning(
+                        "Placeholder replacement failed in reminder template",
+                        placeholder=placeholder,
+                        appointment_id=appointment.id,
+                    )
 
-        message = template
-        for placeholder, value in replacements.items():
-            try:
-                pattern = re.compile(rf"\{{{placeholder}\}}", re.IGNORECASE)
-                message = pattern.sub(value, message)
-            except Exception:
-                self.logger.warning(
-                    "Placeholder replacement failed in reminder template",
-                    placeholder=placeholder,
-                    appointment_id=appointment.id,
-                )
+        return self._append_video_call_details(message, appointment)
 
-        return message
+    @staticmethod
+    def _append_video_call_details(message: str, appointment: Appointment) -> str:
+        """Append the provider-issued meeting URL once, never a fabricated link."""
+        if appointment.service_type != "video_call":
+            return message
+
+        if appointment.meeting_url:
+            if appointment.meeting_url in message:
+                return message
+            provider = meeting_provider_name(appointment.meeting_url)
+            return f"{message}\nJoin {provider}: {appointment.meeting_url}"
+
+        return f"{message}\nVideo-call link needs team follow-up. Reply here for help."
 
     def _render_value_reinforcement_body(
         self,

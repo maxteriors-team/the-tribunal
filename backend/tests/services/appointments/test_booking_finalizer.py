@@ -442,6 +442,45 @@ class TestCallTypeContract:
             assert appointment.sync_status == "synced"
             assert create.await_args.kwargs["conference"] is True
 
+    async def test_inline_external_sync_returns_video_link_to_caller(
+        self, workspace_id, monkeypatch
+    ) -> None:
+        async with AsyncSessionLocal() as db:
+            await _workspace(db, workspace_id)
+            contact = await _contact(db, workspace_id)
+            agent = await _agent(db, workspace_id)
+            owner = await _owner(db, workspace_id)
+            staff = await _staff(db, workspace_id, agent.id, user_id=owner.id)
+            create = AsyncMock(
+                return_value=GoogleEvent(
+                    event_id="event-inline",
+                    html_link="https://calendar.google.com/event-inline",
+                    meet_link="https://meet.google.com/inline-link",
+                )
+            )
+            monkeypatch.setattr("app.services.google_calendar.create_event", create)
+            monkeypatch.setattr(
+                "app.services.zoom.zoom_configured_for_user",
+                AsyncMock(return_value=False),
+            )
+
+            appointment = await finalize_booking(
+                db,
+                workspace_id=workspace_id,
+                contact=contact,
+                agent=agent,
+                scheduled_at=datetime(2099, 6, 10, 14, 0, tzinfo=NEW_YORK),
+                duration_minutes=30,
+                service_type="video_call",
+                assigned_staff_id=staff.id,
+                notify=False,
+                sync_external_events_before_return=True,
+            )
+
+            assert appointment.sync_status == "synced"
+            assert appointment.meeting_url == "https://meet.google.com/inline-link"
+            assert create.await_args.kwargs["conference"] is True
+
     async def test_phone_call_never_requests_conference_or_meet(
         self, workspace_id, monkeypatch
     ) -> None:

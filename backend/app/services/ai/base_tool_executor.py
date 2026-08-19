@@ -75,8 +75,9 @@ class BaseToolExecutor:
         """Assign a staff member for this booking attempt.
 
         Every agent selects from its own pool plus workspace-level Team resources.
-        A selected login-backed row determines whose Google Calendar is checked
-        and receives the confirmed event; its id is persisted on the appointment.
+        Only staff with a linked Google Calendar are eligible; the selected login
+        determines whose conflicts are checked and where the confirmed event lands.
+        The staff id is persisted on the appointment.
 
         ``record`` controls whether the selection consumes a round-robin turn.
         Bookings record (default); availability checks pass ``record=False`` so
@@ -98,6 +99,7 @@ class BaseToolExecutor:
                     required_skill=required_skill,
                     commit=True,
                     record=record,
+                    require_calendar_connection=True,
                 )
                 if staff:
                     self.assigned_staff = staff_to_assignment_dict(staff)

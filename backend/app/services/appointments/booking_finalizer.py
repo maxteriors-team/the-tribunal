@@ -15,9 +15,10 @@ Everything that must happen when a booking succeeds lives here:
 4. **Calendar invite to the rep** — an ``.ics`` attachment so the appointment
    shows up in the calendar they actually watch.
 
-Notifications run *after* commit and are fire-and-forget: a texting or email
-outage must never roll back a confirmed booking, and we must never text a
-customer about an appointment whose transaction was rolled back.
+Provider work always runs *after* commit: callers that need calendar/video metadata
+may await external sync, while the remaining notifications stay fire-and-forget.
+A messaging or provider outage must never roll back a confirmed booking, and we
+must never message a customer about an appointment whose transaction rolled back.
 """
 
 from __future__ import annotations
@@ -75,6 +76,7 @@ async def finalize_booking(
     required_skill: str | None = None,
     notify: bool = True,
     send_customer_sms: bool = True,
+    sync_external_events_before_return: bool = False,
 ) -> Appointment:
     """Persist a booked appointment and trigger its downstream notifications.
 
@@ -88,7 +90,9 @@ async def finalize_booking(
     the customer was offered.
 
     Commits, because the notifications that follow must never describe an
-    appointment that a later rollback erases.
+    appointment that a later rollback erases. Set
+    ``sync_external_events_before_return`` when a caller needs provider metadata
+    in its immediate response; provider I/O still begins only after the CRM commit.
     """
     if scheduled_at.tzinfo is None:
         msg = "scheduled_at must be timezone-aware; a naive value loses the customer's timezone"
@@ -108,6 +112,8 @@ async def finalize_booking(
             contact_id=contact_id,
             scheduled_at=scheduled_at.isoformat(),
         )
+        if sync_external_events_before_return:
+            await _sync_external_events_before_return(db, existing)
         if notify and existing.sync_status != "synced":
             spawn_background_task(
                 deliver_booking_notifications(
@@ -179,6 +185,8 @@ async def finalize_booking(
             contact_id=contact_id,
             scheduled_at=scheduled_at.isoformat(),
         )
+        if sync_external_events_before_return:
+            await _sync_external_events_before_return(db, winner)
         return winner
     await db.refresh(appointment)
 
@@ -191,6 +199,9 @@ async def finalize_booking(
         scheduled_at=appointment.scheduled_at.isoformat(),
     )
 
+    if sync_external_events_before_return:
+        await _sync_external_events_before_return(db, appointment)
+
     if notify:
         spawn_background_task(
             deliver_booking_notifications(appointment.id, send_customer_sms=send_customer_sms),
@@ -198,6 +209,31 @@ async def finalize_booking(
         )
 
     return appointment
+
+
+async def _sync_external_events_before_return(db: AsyncSession, appointment: Appointment) -> None:
+    """Populate provider event state after CRM commit but before tool return."""
+    contact = await db.get(Contact, appointment.contact_id)
+    workspace = await db.get(Workspace, appointment.workspace_id)
+    staff = (
+        await db.get(BookableStaff, appointment.bookable_staff_id)
+        if appointment.bookable_staff_id is not None
+        else None
+    )
+    if contact is None or workspace is None:
+        appointment.sync_status = "failed"
+        appointment.sync_error = "Booking context missing for external event sync"
+        await db.commit()
+        return
+
+    await sync_appointment_external_events(
+        db,
+        appointment=appointment,
+        contact=contact,
+        workspace=workspace,
+        staff=staff,
+        log=logger.bind(appointment_id=appointment.id),
+    )
 
 
 async def _cancel_acquisition_funnel_executions(

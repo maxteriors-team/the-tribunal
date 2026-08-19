@@ -2,8 +2,8 @@
 
 Decides which bookable staff member an AI-driven booking should land on.
 Booking is local (CRM-backed); any active staff member in the agent's pool or
-in the workspace-wide Team pool is eligible. Two strategies are supported on
-top of the default single-assignee behavior:
+workspace-wide Team pool is eligible unless the caller requires a linked Google calendar.
+Two strategies are supported on top of the default single-assignee behavior:
 
 - ``round_robin``: distribute bookings evenly across the agent's active staff
   pool, preferring whoever has the fewest assignments (ties broken by who was
@@ -28,6 +28,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bookable_staff import BookableStaff
+from app.models.google_calendar_connection import GoogleCalendarConnection
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -131,12 +132,14 @@ async def resolve_staff_for_booking(
     required_skill: str | None = None,
     commit: bool = True,
     record: bool = True,
+    require_calendar_connection: bool = False,
 ) -> BookableStaff | None:
     """Resolve and (optionally) record the staff member for a booking.
 
     Returns ``None`` when there is no eligible staff member or no staff matches
     a requested skill. Login-backed staff carry the user whose Google Calendar
-    should be checked and receive the event.
+    should be checked and receive the event. Set ``require_calendar_connection``
+    for AI availability/booking calls so a disconnected rep cannot be selected.
 
     When ``record`` is True (the default, used for an actual booking) the
     chosen member's round-robin counters are bumped (``assignment_count`` +1,
@@ -171,6 +174,9 @@ async def resolve_staff_for_booking(
         # the event can land on that rep's own Google Calendar.
         BookableStaff.user_id.is_not(None),
     )
+    if require_calendar_connection:
+        connected_user_ids = select(GoogleCalendarConnection.user_id)
+        query = query.where(BookableStaff.user_id.in_(connected_user_ids))
     if record:
         query = query.with_for_update()
     result = await db.execute(query)

@@ -34,6 +34,29 @@ def test_booking_success_tells_model_exactly_what_was_queued() -> None:
     assert "calendar invitation was sent" in result["message"]
 
 
+def test_video_booking_success_returns_provider_meeting_link() -> None:
+    executor = TextToolExecutor.__new__(TextToolExecutor)
+    executor._appointment_datetime = datetime.fromisoformat("2026-08-12T13:30:00-04:00")
+    executor._pending_call_type = "video_call"
+    executor._booked_appointment = SimpleNamespace(
+        sync_status="synced",
+        meeting_url="https://zoom.us/j/123456789",
+    )
+
+    result = executor.format_booking_success(
+        SimpleNamespace(booking_uid="book-123"),
+        contact_name="Scott McKenzie",
+        date_str="2026-08-12",
+        time_str="13:30",
+        email="Scottpmckenzie@aol.com",
+        duration_minutes=30,
+    )
+
+    assert result["invitation_sent"] is True
+    assert result["meeting_url"] == "https://zoom.us/j/123456789"
+    assert "The Zoom link is https://zoom.us/j/123456789" in result["message"]
+
+
 @pytest.mark.asyncio
 async def test_live_sms_booking_suppresses_generic_confirmation() -> None:
     executor = TextToolExecutor.__new__(TextToolExecutor)
@@ -62,6 +85,34 @@ async def test_live_sms_booking_suppresses_generic_confirmation() -> None:
 
     assert finalize.await_args.kwargs["send_customer_sms"] is False
     assert finalize.await_args.kwargs["service_type"] == "video_call"
+    assert finalize.await_args.kwargs["sync_external_events_before_return"] is True
+
+
+@pytest.mark.asyncio
+async def test_ai_staff_routing_requires_connected_google_calendar() -> None:
+    class SessionContext:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, *_args):
+            return None
+
+    executor = TextToolExecutor.__new__(TextToolExecutor)
+    executor.agent = SimpleNamespace(id="agent")
+    executor.log = MagicMock()
+    resolver = AsyncMock(return_value=None)
+
+    with (
+        patch("app.db.session.AsyncSessionLocal", return_value=SessionContext()),
+        patch(
+            "app.services.calendar.staff_assignment.resolve_staff_for_booking",
+            resolver,
+        ),
+    ):
+        await executor._resolve_assigned_staff(None, record=False)
+
+    assert resolver.await_args.kwargs["record"] is False
+    assert resolver.await_args.kwargs["require_calendar_connection"] is True
 
 
 @pytest.fixture
