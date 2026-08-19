@@ -35,7 +35,7 @@ test.describe("Contacts CRUD", () => {
 
     await page.goto("/contacts");
     await expect(
-      page.getByRole("heading", { name: "Contacts" }),
+      page.getByRole("heading", { name: "Contacts", exact: true }),
     ).toBeVisible();
 
     // --- CREATE -------------------------------------------------------------
