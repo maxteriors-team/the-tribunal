@@ -389,20 +389,20 @@ class OpportunityService:
         *,
         user_id: int | None = None,
         source: str = "automation",
+        emit_event: bool = True,
     ) -> Opportunity | None:
-        """Move an opportunity to ``stage_id`` — the single source of truth for a
-        stage change.
+        """Move an opportunity to ``stage_id`` — the stage-change chokepoint.
 
-        Runs the full side-effect block: a ``stage_changed``
-        :class:`OpportunityActivity` (``user_id`` may be ``None`` for an
-        automation-driven move), a probability + ``stage_changed_at`` update, and
-        an :data:`EVENT_DEAL_STAGE_CHANGED` emission. ``source`` labels who moved
-        the deal (``"manual"`` for API callers, ``"automation"`` for the worker).
+        Records a ``stage_changed`` :class:`OpportunityActivity`, updates
+        probability + ``stage_changed_at``, and emits
+        :data:`EVENT_DEAL_STAGE_CHANGED` when ``emit_event`` is true. The
+        automation worker disables that derived event so conflicting stage rules
+        cannot create an unbounded event chain; human and domain-service moves keep
+        the event by default.
 
         Idempotent: when ``stage_id`` already equals the opportunity's current
-        stage this is a no-op — no activity, no probability change, and **no
-        event** — so a ``move -> deal_stage_changed -> move`` cycle terminates
-        after one hop. Callers own the transaction (no commit here).
+        stage this is a no-op — no activity, probability change, or event.
+        Callers own the transaction (no commit here).
 
         Returns the opportunity, or ``None`` when it does not exist in
         ``workspace_id`` (callers treat that as skip, not error).
@@ -441,20 +441,21 @@ class OpportunityService:
         opportunity.probability = stage.probability
         opportunity.stage_changed_at = datetime.now(UTC)
 
-        await emit_automation_event(
-            self.db,
-            workspace_id=workspace_id,
-            event_type=EVENT_DEAL_STAGE_CHANGED,
-            contact_id=opportunity.primary_contact_id,
-            payload={
-                "opportunity_id": str(opportunity.id),
-                "name": opportunity.name,
-                "old_stage": old_stage.name if old_stage else None,
-                "stage": stage.name,
-                "probability": stage.probability,
-                "source": source,
-            },
-        )
+        if emit_event:
+            await emit_automation_event(
+                self.db,
+                workspace_id=workspace_id,
+                event_type=EVENT_DEAL_STAGE_CHANGED,
+                contact_id=opportunity.primary_contact_id,
+                payload={
+                    "opportunity_id": str(opportunity.id),
+                    "name": opportunity.name,
+                    "old_stage": old_stage.name if old_stage else None,
+                    "stage": stage.name,
+                    "probability": stage.probability,
+                    "source": source,
+                },
+            )
         self.log.info(
             "opportunity_stage_moved",
             opportunity_id=str(opportunity.id),

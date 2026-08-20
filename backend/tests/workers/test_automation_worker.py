@@ -3,13 +3,10 @@
 Two layers:
 
 * **Unit** (default CI, mocked sessions) — dispatch wiring, opportunity
-  resolution order, and the validation/skip branches of
-  ``AutomationWorker._action_move_to_stage``.
+  resolution order, validation/skip branches, and contact-only deal creation.
 * **Integration** (``-m integration``, real Postgres) — an event carrying an
-  ``opportunity_id`` actually advances a deal, contact-based resolution works,
-  the move is idempotent (no second ``deal_stage_changed`` event when the deal
-  is already in the target stage), and an out-of-workspace stage is skipped
-  without raising.
+  ``opportunity_id`` advances a deal, contact-based resolution works, a missing
+  deal is created, moves are idempotent, and out-of-workspace stages are skipped.
 
 The unit layer runs in ``make ci.backend`` (which excludes ``integration``); the
 integration layer is the end-to-end proof, run with ``pytest -m integration``.
@@ -265,7 +262,7 @@ async def test_action_skips_stage_not_in_workspace(monkeypatch: pytest.MonkeyPat
     automation = _automation("deal_stage_changed", [])
 
     stage_check = MagicMock()
-    stage_check.first.return_value = None  # stage not found in workspace
+    stage_check.scalar_one_or_none.return_value = None  # stage not found in workspace
     db = MagicMock()
     db.execute = AsyncMock(return_value=stage_check)
 
@@ -285,7 +282,10 @@ async def test_action_happy_path_invokes_move_stage(monkeypatch: pytest.MonkeyPa
     oid = uuid.uuid4()
 
     stage_check = MagicMock()
-    stage_check.first.return_value = (stage_id,)  # stage lives in the workspace
+    pipeline_id = uuid.uuid4()
+    stage_check.scalar_one_or_none.return_value = SimpleNamespace(
+        id=stage_id, pipeline_id=pipeline_id, name="Qualified", probability=40
+    )
     resolve = MagicMock()
     resolve.scalar_one_or_none.return_value = oid
     db = MagicMock()
@@ -302,6 +302,53 @@ async def test_action_happy_path_invokes_move_stage(monkeypatch: pytest.MonkeyPa
     assert args[2] == stage_id
     assert kwargs["user_id"] is None
     assert kwargs["source"] == "automation"
+    assert kwargs["emit_event"] is False
+
+
+async def test_action_creates_open_opportunity_when_contact_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker = AutomationWorker()
+    move_stage = _patch_service(monkeypatch)
+    automation = _automation("lead_created", [])
+    contact = _contact()
+    contact.workspace_id = automation.workspace_id
+    contact.company_name = ""
+    contact.source = "lead_form"
+    stage_id = uuid.uuid4()
+    pipeline_id = uuid.uuid4()
+    target_stage = SimpleNamespace(
+        id=stage_id, pipeline_id=pipeline_id, name="New Leads", probability=10
+    )
+
+    stage_check = MagicMock()
+    stage_check.scalar_one_or_none.return_value = target_stage
+    no_opportunity = MagicMock()
+    no_opportunity.scalar_one_or_none.return_value = None
+    db = MagicMock()
+    db.execute = AsyncMock(side_effect=[stage_check, no_opportunity])
+    db.flush = AsyncMock()
+
+    snapshot = MagicMock()
+    monkeypatch.setattr(automation_worker, "snapshot_contact_attribution_on_opportunity", snapshot)
+
+    await worker._action_move_to_stage(
+        automation,
+        contact,
+        {"stage_id": str(stage_id), "pipeline_id": str(pipeline_id)},
+        {},
+        db,
+    )
+
+    created = db.add.call_args.args[0]
+    assert created.workspace_id == automation.workspace_id
+    assert created.pipeline_id == pipeline_id
+    assert created.stage_id == stage_id
+    assert created.primary_contact_id == contact.id
+    assert created.status == "open"
+    assert created.source == "lead_form"
+    snapshot.assert_called_once_with(created, contact)
+    move_stage.assert_not_awaited()
 
 
 # --------------------------------------------------------------------------- #
@@ -500,16 +547,46 @@ async def test_move_to_stage_via_contact_resolution(_fresh_engine_pool) -> None:
 
 
 @pytest.mark.integration
-async def test_move_to_stage_emits_then_is_idempotent(_fresh_engine_pool) -> None:
-    """A real move emits one deal_stage_changed event; re-moving to the same stage
-    emits nothing and logs no new activity (loop brake)."""
+async def test_move_to_stage_creates_deal_for_contact_without_one(_fresh_engine_pool) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact_row(db, ws.id)
+        pipeline, _lead, scheduled = await _pipeline_with_stages(db, ws.id)
+        await db.commit()
+
+        await AutomationWorker()._action_move_to_stage(
+            _automation_ns(ws.id),
+            contact,
+            {"stage_id": str(scheduled.id), "pipeline_id": str(pipeline.id)},
+            {},
+            db,
+        )
+        await db.commit()
+
+        created = (
+            await db.execute(
+                select(Opportunity).where(
+                    Opportunity.workspace_id == ws.id,
+                    Opportunity.primary_contact_id == contact.id,
+                )
+            )
+        ).scalar_one()
+        assert created.pipeline_id == pipeline.id
+        assert created.stage_id == scheduled.id
+        assert created.status == "open"
+        assert created.probability == scheduled.probability
+
+
+@pytest.mark.integration
+async def test_move_to_stage_records_activity_without_derived_event(_fresh_engine_pool) -> None:
+    """Automation moves retain history but never emit a chainable stage event."""
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
         contact = await _contact_row(db, ws.id)
         pipeline, lead, scheduled = await _pipeline_with_stages(db, ws.id)
         opp = await _opportunity(db, ws.id, pipeline.id, lead.id, contact.id)
 
-        # An active listener so the move's emit is actually persisted.
+        # An active listener proves suppression even when an event would be consumed.
         db.add(
             Automation(
                 workspace_id=ws.id,
@@ -527,18 +604,18 @@ async def test_move_to_stage_emits_then_is_idempotent(_fresh_engine_pool) -> Non
         config = {"stage_id": str(scheduled.id)}
         payload = {"opportunity_id": str(opp.id)}
 
-        # First move: real advance -> one queued deal_stage_changed + one activity.
+        # First move: real advance -> one activity, but no derived automation event.
         await worker._action_move_to_stage(automation, contact, config, payload, db)
         await db.commit()
-        assert await _pending_stage_events(db, ws.id) == 1
+        assert await _pending_stage_events(db, ws.id) == 0
         assert await _stage_changed_activities(db, opp.id) == 1
         await db.refresh(opp)
         assert opp.stage_id == scheduled.id
 
-        # Second move to the same stage: idempotent no-op, nothing new emitted.
+        # Second move to the same stage remains an idempotent no-op.
         await worker._action_move_to_stage(automation, contact, config, payload, db)
         await db.commit()
-        assert await _pending_stage_events(db, ws.id) == 1
+        assert await _pending_stage_events(db, ws.id) == 0
         assert await _stage_changed_activities(db, opp.id) == 1
 
 
