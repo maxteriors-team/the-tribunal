@@ -5,10 +5,8 @@ import { Suspense } from "react";
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SalesWizard } from "@/components/sales-wizard/sales-wizard";
-import {
-  SERVICE_KEYS,
-  type ServiceKey,
-} from "@/components/sales-wizard/use-sales-wizard";
+import { SERVICE_KEYS, type ServiceKey } from "@/components/sales-wizard/use-sales-wizard";
+import { resolveWorkspaceBrand } from "@/lib/brand";
 import { useWorkspace } from "@/providers/workspace-provider";
 
 /** Resolve `?service=` to a service branch, defaulting to landscape. */
@@ -26,6 +24,7 @@ function LoadingWorkspace() {
 
 function SalesWizardHost() {
   const { currentWorkspace, currentWorkspaceId, isPending } = useWorkspace();
+  const workspaceBrand = resolveWorkspaceBrand(currentWorkspace?.workspace);
   const searchParams = useSearchParams();
   // A quote covers one service; the Quotes hub deep-links which branch to start.
   const service = toService(searchParams.get("service"));
@@ -38,7 +37,8 @@ function SalesWizardHost() {
       ) : (
         <SalesWizard
           workspaceId={currentWorkspaceId}
-          brandName={currentWorkspace?.workspace.name ?? "LL Design"}
+          brandName={workspaceBrand.businessName}
+          brandLogoUrl={workspaceBrand.logoUrl}
           service={service}
           quoteId={quoteId}
         />

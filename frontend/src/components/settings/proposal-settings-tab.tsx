@@ -1,20 +1,19 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   proposalTemplateApi,
   type UpdateProposalTemplateRequest,
 } from "@/lib/api/proposal-template";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 
 export function ProposalSettingsTab() {
   const workspaceId = useWorkspaceId();
@@ -26,15 +25,14 @@ export function ProposalSettingsTab() {
     enabled: !!workspaceId,
   });
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (data: UpdateProposalTemplateRequest) =>
       proposalTemplateApi.update(workspaceId!, data),
+    successMessage: "Proposal settings are up to date.",
+    errorMessage: "We couldn't save proposal settings. Check your connection and try again.",
     onSuccess: (updated) => {
       queryClient.setQueryData(queryKeys.proposalTemplate.settings(workspaceId ?? ""), updated);
-      toast.success("Proposal settings saved");
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to save proposal settings")),
   });
 
   const update = (data: UpdateProposalTemplateRequest) => mutation.mutate(data);
@@ -63,7 +61,7 @@ export function ProposalSettingsTab() {
             <Label htmlFor="business-name">Business name</Label>
             <Input
               id="business-name"
-              placeholder="Maxteriors Lighting"
+              placeholder="Your business name"
               defaultValue={settings.business_name ?? ""}
               onBlur={(e) => update({ business_name: e.target.value || null })}
               disabled={disabled}
@@ -180,7 +178,7 @@ export function ProposalSettingsTab() {
               <Label htmlFor="business-email">Email</Label>
               <Input
                 id="business-email"
-                placeholder="hello@maxteriors.com"
+                placeholder="hello@example.com"
                 defaultValue={settings.business_email ?? ""}
                 onBlur={(e) => update({ business_email: e.target.value || null })}
                 disabled={disabled}

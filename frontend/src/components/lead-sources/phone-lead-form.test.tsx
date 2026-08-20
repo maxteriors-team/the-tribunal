@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PhoneLeadForm } from "@/components/lead-sources/phone-lead-form";
 import type { LeadSource } from "@/lib/api/lead-sources";
+import { clickOption, openSelect, selectOption } from "@/test/select-option";
 
 const { listMock, listCampaignsMock, createContactMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
@@ -65,44 +66,38 @@ beforeEach(() => {
 
 describe("PhoneLeadForm", () => {
   it("only offers Phone/Radio sources and requires name, phone, and a source", async () => {
+    const user = userEvent.setup();
     renderForm();
 
     const submit = screen.getByRole("button", { name: "Add phone lead" });
     expect(submit).toBeDisabled();
 
-    await userEvent.type(screen.getByLabelText("First name"), "Dana");
-    await userEvent.type(screen.getByLabelText("Phone number"), "(555) 867-5309");
+    await user.type(screen.getByLabelText("First name"), "Dana");
+    await user.type(screen.getByLabelText("Phone number"), "(555) 867-5309");
     expect(submit).toBeDisabled(); // still no source
 
-    await userEvent.click(
-      await screen.findByRole("combobox", { name: "Lead source" }),
-    );
-    expect(
-      await screen.findByRole("option", { name: "WXYZ 102.5 Spot" }),
-    ).toBeInTheDocument();
+    await openSelect(await screen.findByRole("combobox", { name: "Lead source" }));
+    expect(await screen.findByRole("option", { name: "WXYZ 102.5 Spot" })).toBeInTheDocument();
     // Facebook source is filtered out of the phone_radio picker.
-    expect(
-      screen.queryByRole("option", { name: "Facebook Ads" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Facebook Ads" })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("option", { name: "WXYZ 102.5 Spot" }));
+    await clickOption("WXYZ 102.5 Spot");
     expect(submit).toBeEnabled();
   });
 
   it("creates a contact stamped with the phone/radio source attribution", async () => {
+    const user = userEvent.setup();
     createContactMock.mockResolvedValue({ id: 42, first_name: "Dana" });
     const { onCreated } = renderForm();
 
-    await userEvent.type(screen.getByLabelText("First name"), "Dana");
-    await userEvent.type(screen.getByLabelText("Phone number"), "(555) 867-5309");
-    await userEvent.click(
+    await user.type(screen.getByLabelText("First name"), "Dana");
+    await user.type(screen.getByLabelText("Phone number"), "(555) 867-5309");
+    await selectOption(
       await screen.findByRole("combobox", { name: "Lead source" }),
-    );
-    await userEvent.click(
-      await screen.findByRole("option", { name: "WXYZ 102.5 Spot" }),
+      "WXYZ 102.5 Spot",
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Add phone lead" }));
+    await user.click(screen.getByRole("button", { name: "Add phone lead" }));
 
     await waitFor(() =>
       expect(createContactMock).toHaveBeenCalledWith(
@@ -117,8 +112,6 @@ describe("PhoneLeadForm", () => {
         }),
       ),
     );
-    await waitFor(() =>
-      expect(onCreated).toHaveBeenCalledWith({ id: 42, first_name: "Dana" }),
-    );
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith({ id: 42, first_name: "Dana" }));
   });
 });

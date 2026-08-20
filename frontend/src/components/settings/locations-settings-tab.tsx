@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   businessLocationsApi,
@@ -96,18 +97,22 @@ function LocationDialog({
       queryKey: queryKeys.locations.all(workspaceId),
     });
 
-  const createMutation = useMutation({
+  const createMutation = useSettingsSaveMutation({
     mutationFn: (data: BusinessLocationCreateRequest) =>
       businessLocationsApi.create(workspaceId, data),
+    successMessage: "The location was added.",
+    errorMessage: "We couldn't add the location. Check your connection and try again.",
     onSuccess: () => {
       invalidate();
       onOpenChange(false);
     },
   });
 
-  const updateMutation = useMutation({
+  const updateMutation = useSettingsSaveMutation({
     mutationFn: (data: BusinessLocationUpdateRequest) =>
       businessLocationsApi.update(workspaceId, location!.id, data),
+    successMessage: "The location is up to date.",
+    errorMessage: "We couldn't save the location. Check your connection and try again.",
     onSuccess: () => {
       invalidate();
       onOpenChange(false);
@@ -267,9 +272,12 @@ export function LocationsSettingsTab() {
     },
   });
 
-  const toggleMutation = useMutation({
+  const toggleMutation = useSettingsSaveMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       businessLocationsApi.update(workspaceId!, id, { is_active: isActive }),
+    successMessage: (_updated, variables) =>
+      variables.isActive ? "The location was activated." : "The location was deactivated.",
+    errorMessage: "We couldn't update the location. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.locations.all(workspaceId ?? ""),

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Manrope } from "next/font/google";
 
 import { Spotlight } from "@/components/effects/spotlight";
+import { PRODUCT_BRAND } from "@/lib/brand";
 import { Providers } from "@/providers/providers";
 import "./globals.css";
 
@@ -19,8 +20,7 @@ const manrope = Manrope({
 
 export const metadata: Metadata = {
   title: "AI CRM - Unified Customer Communications",
-  description:
-    "AI-powered CRM for managing customer relationships through voice, SMS, and email",
+  description: "AI-powered CRM for managing customer relationships through voice, SMS, and email",
   // This is a private CRM: nothing here should ever land in a search index.
   // Every route inherits this unless it explicitly overrides `robots`.
   robots: { index: false, follow: false, nocache: true },
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Maxteriors",
+    title: PRODUCT_BRAND.name,
   },
 };
 

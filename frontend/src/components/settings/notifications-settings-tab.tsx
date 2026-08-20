@@ -1,11 +1,12 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { settingsApi, type NotificationSettings } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
 export function NotificationsSettingsTab() {
@@ -18,8 +19,10 @@ export function NotificationsSettingsTab() {
   });
 
   // Notifications mutation
-  const notificationsMutation = useMutation({
+  const notificationsMutation = useSettingsSaveMutation({
     mutationFn: settingsApi.updateNotifications,
+    successMessage: "Notification preferences are up to date.",
+    errorMessage: "We couldn't save notification preferences. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings.notifications() });
     },

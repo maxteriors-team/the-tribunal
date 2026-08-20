@@ -2,7 +2,6 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SetupGate } from "@/components/onboarding/setup-gate";
-import type { Capability } from "@/lib/permissions";
 
 const { replaceMock, setupStatusMock, capabilitiesMock } = vi.hoisted(() => ({
   replaceMock: vi.fn(),
@@ -27,9 +26,9 @@ vi.mock("@/hooks/useCapabilities", () => ({
 const NEEDS_SETUP = { isLoading: false, needsSetup: true, workspaceId: "ws-1" };
 
 /** Owner/admin: may configure the workspace. */
-const OWNER = { tier: "admin" as const, can: (_c: Capability) => true };
+const OWNER = { tier: "admin" as const, can: () => true };
 /** Field technician: operational-only, no workspace:manage. */
-const TECHNICIAN = { tier: "field" as const, can: (_c: Capability) => false };
+const TECHNICIAN = { tier: "field" as const, can: () => false };
 
 beforeEach(() => {
   vi.clearAllMocks();

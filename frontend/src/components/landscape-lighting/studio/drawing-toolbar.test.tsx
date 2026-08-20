@@ -14,6 +14,7 @@ const renderToolbar = () => {
   const onFixtureSelect = vi.fn();
   render(
     <DrawingToolbar
+      workspaceName="Northstar Outdoor Lighting"
       paperSize="tabloid"
       hasAerial
       hasDrawing
@@ -59,6 +60,13 @@ const clickMenuItem = async (menu: string, item: string) => {
 };
 
 describe("DrawingToolbar", () => {
+  it("uses the active workspace brand with the drawing controls", () => {
+    renderToolbar();
+
+    expect(screen.getByText("Northstar Outdoor Lighting")).toBeInTheDocument();
+    expect(screen.queryByText(/maxteriors/i)).not.toBeInTheDocument();
+  });
+
   it("keeps the compact primary actions, physical sheet sizes, and sixteen named marker colors", () => {
     const { onAction, onMarkerColorChange, onPaperSizeChange } = renderToolbar();
 

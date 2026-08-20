@@ -2,7 +2,6 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -28,6 +27,7 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   integrationsApi,
@@ -307,8 +307,10 @@ export function IntegrationConfigDialog({
   // Derive effective test result - null when dialog is closed
   const effectiveTestResult = open ? testResult : null;
 
-  const createMutation = useMutation({
+  const createMutation = useSettingsSaveMutation({
     mutationFn: (data: CreateIntegrationRequest) => integrationsApi.create(workspaceId!, data),
+    successMessage: `${config.name} is connected.`,
+    errorMessage: `We couldn't connect ${config.name}. Verify the credentials and try again.`,
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.integrations(workspaceId ?? ""),
@@ -316,22 +318,18 @@ export function IntegrationConfigDialog({
       queryClient.invalidateQueries({
         queryKey: queryKeys.integrations.all(workspaceId ?? ""),
       });
-      toast.success(`${config.name} connected successfully!`);
       onOpenChange(false);
-    },
-    onError: (error: Error) => {
-      const axiosError = error as AxiosError<{ detail?: string }>;
-      const message = axiosError.response?.data?.detail || `Failed to connect ${config.name}`;
-      toast.error(message);
     },
     onSettled: () => {
       setIsSubmitting(false);
     },
   });
 
-  const updateMutation = useMutation({
+  const updateMutation = useSettingsSaveMutation({
     mutationFn: (credentials: Record<string, string>) =>
       integrationsApi.update(workspaceId!, integrationType, { credentials }),
+    successMessage: `${config.name} credentials are up to date.`,
+    errorMessage: `We couldn't update ${config.name}. Verify the credentials and try again.`,
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.integrations(workspaceId ?? ""),
@@ -339,13 +337,7 @@ export function IntegrationConfigDialog({
       queryClient.invalidateQueries({
         queryKey: queryKeys.integrations.all(workspaceId ?? ""),
       });
-      toast.success(`${config.name} updated successfully!`);
       onOpenChange(false);
-    },
-    onError: (error: Error) => {
-      const axiosError = error as AxiosError<{ detail?: string }>;
-      const message = axiosError.response?.data?.detail || `Failed to update ${config.name}`;
-      toast.error(message);
     },
     onSettled: () => {
       setIsSubmitting(false);

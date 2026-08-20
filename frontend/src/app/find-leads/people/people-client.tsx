@@ -5,17 +5,14 @@ import { Loader2, Mail, Phone, Search, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { ProviderNotConfiguredBanner } from "@/components/shared/provider-not-configured-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Select,
   SelectContent,
@@ -40,7 +37,11 @@ import {
   type PersonResult,
 } from "@/lib/api/people";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
+import {
+  getApiErrorMessage,
+  isProviderConfigurationError,
+  shouldThrowProviderError,
+} from "@/lib/utils/errors";
 
 const SIGNAL_CHIPS: { value: string; label: string }[] = [
   { value: "running_ads", label: "Running ads" },
@@ -81,6 +82,7 @@ export function PeopleSearchClient() {
   const [discoveryInput, setDiscoveryInput] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [missionId, setMissionId] = useState<string>("");
+  const [providerNotConfigured, setProviderNotConfigured] = useState(false);
 
   const toggleSignal = (value: string) => {
     setSignalTypes((prev) => {
@@ -120,9 +122,7 @@ export function PeopleSearchClient() {
   const missionsQuery = useQuery({
     queryKey: queryKeys.people.missions(workspaceId ?? ""),
     queryFn: () =>
-      apiGet<{ items: MissionOption[] }>(
-        `/api/v1/workspaces/${workspaceId}/outbound-missions`,
-      ),
+      apiGet<{ items: MissionOption[] }>(`/api/v1/workspaces/${workspaceId}/outbound-missions`),
     enabled: Boolean(workspaceId),
   });
   const missions = missionsQuery.data?.items ?? [];
@@ -139,12 +139,20 @@ export function PeopleSearchClient() {
         max_results: 25,
       });
     },
+    throwOnError: shouldThrowProviderError,
     onSuccess: () => {
+      setProviderNotConfigured(false);
       toast.success("People crawl started — results appear as enrichment runs.");
       setDiscoveryInput("");
     },
-    onError: (error) =>
-      toast.error(getApiErrorMessage(error, "Couldn't start the people crawl")),
+    onError: (error) => {
+      if (isProviderConfigurationError(error)) {
+        setProviderNotConfigured(true);
+        return;
+      }
+      setProviderNotConfigured(false);
+      toast.error(getApiErrorMessage(error, "Couldn't start the people crawl"));
+    },
   });
 
   const revealMutation = useMutation({
@@ -219,11 +227,19 @@ export function PeopleSearchClient() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">People Search</h1>
         <p className="text-sm text-muted-foreground">
-          Find named decision-makers at companies, see their buying signals
-          (already running ads, ad-tech installed), reveal verified emails, and
-          push them into an outbound mission.
+          Find named decision-makers at companies, see their buying signals (already running ads,
+          ad-tech installed), reveal verified emails, and push them into an outbound mission.
         </p>
       </div>
+
+      {providerNotConfigured ? (
+        <ProviderNotConfiguredBanner
+          title="People discovery needs a search provider"
+          description="Connect the people-search provider in Settings, then retry discovery."
+          restrictedDescription="Ask a workspace owner or admin to connect the people-search provider."
+          settingsLabel="Set up people search"
+        />
+      ) : null}
 
       {/* Discovery launcher */}
       <Card>
@@ -327,9 +343,7 @@ export function PeopleSearchClient() {
       {selectedIds.size > 0 && (
         <Card>
           <CardContent className="flex flex-wrap items-center gap-3 pt-6">
-            <span className="text-sm font-medium">
-              {selectedIds.size} selected
-            </span>
+            <span className="text-sm font-medium">{selectedIds.size} selected</span>
             <Select value={missionId} onValueChange={setMissionId}>
               <SelectTrigger className="w-64">
                 <SelectValue placeholder="Add to mission…" />
@@ -346,9 +360,7 @@ export function PeopleSearchClient() {
               onClick={() => addToMissionMutation.mutate()}
               disabled={!missionId || addToMissionMutation.isPending}
             >
-              {addToMissionMutation.isPending && (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              )}
+              {addToMissionMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Add to mission
             </Button>
           </CardContent>
@@ -369,10 +381,7 @@ export function PeopleSearchClient() {
         ) : searchQuery.isLoading ? (
           <PageLoadingState message="Searching people…" />
         ) : searchQuery.isError ? (
-          <PageErrorState
-            message="Couldn't search people."
-            onRetry={() => searchQuery.refetch()}
-          />
+          <PageErrorState message="Couldn't search people." onRetry={() => searchQuery.refetch()} />
         ) : people.length === 0 ? (
           <PageEmptyState
             title="No people match"
@@ -404,14 +413,10 @@ export function PeopleSearchClient() {
                       selected={selectedIds.has(person.id)}
                       onToggle={() => toggleSelect(person.id)}
                       onReveal={() => revealMutation.mutate(person.id)}
-                      revealing={
-                        revealMutation.isPending &&
-                        revealMutation.variables === person.id
-                      }
+                      revealing={revealMutation.isPending && revealMutation.variables === person.id}
                       onRevealPhone={() => revealPhoneMutation.mutate(person.id)}
                       revealingPhone={
-                        revealPhoneMutation.isPending &&
-                        revealPhoneMutation.variables === person.id
+                        revealPhoneMutation.isPending && revealPhoneMutation.variables === person.id
                       }
                     />
                   ))}
@@ -449,9 +454,7 @@ function PersonRow({
       </TableCell>
       <TableCell>
         <div className="font-medium">{person.full_name ?? "Unknown"}</div>
-        {person.title && (
-          <div className="text-xs text-muted-foreground">{person.title}</div>
-        )}
+        {person.title && <div className="text-xs text-muted-foreground">{person.title}</div>}
         {person.location_label && (
           <div className="text-xs text-muted-foreground">{person.location_label}</div>
         )}

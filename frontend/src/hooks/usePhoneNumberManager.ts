@@ -11,6 +11,11 @@ import {
   type PhoneNumberUpdateRequest,
 } from "@/lib/api/phone-numbers";
 import { queryKeys } from "@/lib/query-keys";
+import {
+  getApiErrorMessage,
+  isProviderConfigurationError,
+  shouldThrowProviderError,
+} from "@/lib/utils/errors";
 import type { PhoneNumber } from "@/types";
 
 export interface UsePhoneNumberManagerResult {
@@ -28,6 +33,7 @@ export interface UsePhoneNumberManagerResult {
   isPurchasing: boolean;
   isUpdating: boolean;
   isSyncing: boolean;
+  providerNotConfigured: boolean;
   handleSearch: (event: React.FormEvent) => void;
   purchase: (phoneNumber: string) => void;
   updateAttribution: (
@@ -52,6 +58,7 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
   const [areaCode, setAreaCode] = useState("");
   const [searchResults, setSearchResults] = useState<PhoneNumberSearchResult[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [providerNotConfigured, setProviderNotConfigured] = useState(false);
 
   const invalidatePhoneNumbers = () =>
     queryClient.invalidateQueries({
@@ -80,15 +87,22 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
         limit: 10,
       });
     },
+    throwOnError: shouldThrowProviderError,
+    onMutate: () => setProviderNotConfigured(false),
     onSuccess: (data) => {
+      setProviderNotConfigured(false);
       setSearchResults(data);
       setHasSearched(true);
       if (data.length === 0) {
         toast.info("No numbers found matching your criteria");
       }
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to search for numbers");
+    onError: (error) => {
+      if (isProviderConfigurationError(error)) {
+        setProviderNotConfigured(true);
+      } else {
+        toast.error(getApiErrorMessage(error, "Failed to search for numbers"));
+      }
       setSearchResults([]);
       setHasSearched(true);
     },
@@ -101,13 +115,20 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
         phone_number: phoneNumber,
       });
     },
+    throwOnError: shouldThrowProviderError,
+    onMutate: () => setProviderNotConfigured(false),
     onSuccess: (data) => {
+      setProviderNotConfigured(false);
       toast.success(`Successfully purchased ${data.phone_number}`);
       void invalidatePhoneNumbers();
       setSearchResults((prev) => prev.filter((r) => r.phone_number !== data.phone_number));
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to purchase number");
+    onError: (error) => {
+      if (isProviderConfigurationError(error)) {
+        setProviderNotConfigured(true);
+      } else {
+        toast.error(getApiErrorMessage(error, "Failed to purchase number"));
+      }
     },
   });
 
@@ -136,12 +157,19 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return phoneNumbersApi.release(workspaceId, phoneNumberId);
     },
+    throwOnError: shouldThrowProviderError,
+    onMutate: () => setProviderNotConfigured(false),
     onSuccess: () => {
+      setProviderNotConfigured(false);
       toast.success("Phone number released successfully");
       void invalidatePhoneNumbers();
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to release number");
+    onError: (error) => {
+      if (isProviderConfigurationError(error)) {
+        setProviderNotConfigured(true);
+      } else {
+        toast.error(getApiErrorMessage(error, "Failed to release number"));
+      }
     },
   });
 
@@ -150,7 +178,10 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return phoneNumbersApi.sync(workspaceId);
     },
+    throwOnError: shouldThrowProviderError,
+    onMutate: () => setProviderNotConfigured(false),
     onSuccess: (data) => {
+      setProviderNotConfigured(false);
       if (data.synced > 0) {
         toast.success(`Synced ${data.synced} phone number(s) from Telnyx`);
       } else {
@@ -158,8 +189,12 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
       }
       void invalidatePhoneNumbers();
     },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to sync phone numbers");
+    onError: (error) => {
+      if (isProviderConfigurationError(error)) {
+        setProviderNotConfigured(true);
+      } else {
+        toast.error(getApiErrorMessage(error, "Failed to sync phone numbers"));
+      }
     },
   });
 
@@ -185,6 +220,7 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
     isPurchasing: purchaseMutation.isPending,
     isUpdating: updateMutation.isPending,
     isSyncing: syncMutation.isPending,
+    providerNotConfigured,
     handleSearch,
     purchase: (phoneNumber) => purchaseMutation.mutate(phoneNumber),
     updateAttribution: (phoneNumberId, data) => updateMutation.mutateAsync({ phoneNumberId, data }),

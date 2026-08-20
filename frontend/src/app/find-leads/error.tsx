@@ -3,7 +3,8 @@
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
-import { PageErrorState } from "@/components/ui/page-state";
+import { ProviderPageErrorState } from "@/components/shared/provider-error-state";
+import { isProviderConfigurationError } from "@/lib/utils/errors";
 
 export default function FindLeadsError({
   error,
@@ -13,12 +14,17 @@ export default function FindLeadsError({
   unstable_retry: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    if (!isProviderConfigurationError(error)) {
+      Sentry.captureException(error);
+    }
   }, [error]);
 
   return (
-    <PageErrorState
-      message="We couldn't load find leads. Please try again."
+    <ProviderPageErrorState
+      error={error}
+      provider="scraping"
+      transientTitle="Lead search is temporarily unavailable"
+      transientMessage="The scraping provider didn't respond. Retry your lead search."
       onRetry={unstable_retry}
     />
   );

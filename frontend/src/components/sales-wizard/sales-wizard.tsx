@@ -23,10 +23,7 @@ import { LightDesigner } from "@/components/estimator/light-designer";
 import type { DesignerProposalHost } from "@/components/estimator/proposal-host";
 import { Button } from "@/components/ui/button";
 import { PageEmptyState } from "@/components/ui/page-state";
-import {
-  resolveTierFixtures,
-  type FixtureType,
-} from "@/lib/estimator/fixtures";
+import { resolveTierFixtures, type FixtureType } from "@/lib/estimator/fixtures";
 import type { ServiceKey as DesignerServiceKey } from "@/lib/estimator/services";
 
 import { CalculatorScreen } from "./calculator-screen";
@@ -40,6 +37,7 @@ type Screen = "calc" | "design";
 interface SalesWizardProps {
   workspaceId: string;
   brandName: string;
+  brandLogoUrl?: string | null;
   /** Service branch to start on (deep-linked from the Quotes hub). */
   service?: ServiceKey;
   /** Existing quote opened from the quote list. */
@@ -49,6 +47,7 @@ interface SalesWizardProps {
 export function SalesWizard({
   workspaceId,
   brandName,
+  brandLogoUrl = null,
   service = "landscape",
   quoteId = null,
 }: SalesWizardProps) {
@@ -137,7 +136,14 @@ export function SalesWizard({
   if (screen === "design") {
     // Rendered outside the `.sales-wizard` theme: the designer ships its own
     // scoped `estimator.css`, exactly as it renders in the Quotes hub.
-    return <LightDesigner workspaceId={workspaceId} proposal={proposalHost} />;
+    return (
+      <LightDesigner
+        workspaceId={workspaceId}
+        workspaceName={brandName}
+        workspaceLogoUrl={brandLogoUrl}
+        proposal={proposalHost}
+      />
+    );
   }
 
   return (
@@ -154,8 +160,8 @@ export function SalesWizard({
         <div className="screen active" role="alert">
           <div className="present-body">
             <div className="wizard-review-intro">
-              This quote could not be reopened. It may have been removed, or it
-              may not be a sales-wizard quote.
+              This quote could not be reopened. It may have been removed, or it may not be a
+              sales-wizard quote.
             </div>
             <button type="button" className="btn-back" onClick={wizard.reloadQuote}>
               Retry loading quote
@@ -166,8 +172,8 @@ export function SalesWizard({
         <div className="screen active" role="alert">
           <div className="present-body">
             <div className="wizard-review-intro">
-              Could not load the pricing configuration for this workspace.
-              Check Settings → Pricing, then reload.
+              Could not load the pricing configuration for this workspace. Check Settings → Pricing,
+              then reload.
             </div>
           </div>
         </div>

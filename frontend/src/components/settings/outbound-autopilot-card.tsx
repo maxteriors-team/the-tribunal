@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { offersApi } from "@/lib/api/offers";
 import { workspacesApi } from "@/lib/api/workspaces";
 import { queryKeys } from "@/lib/query-keys";
@@ -52,7 +53,7 @@ export function OutboundAutopilotCard({ workspaceId }: { workspaceId: string }) 
   const autopilot = readAutopilot(workspace?.settings);
   const activeOffers = (offersData?.items ?? []).filter((o) => o.is_active);
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (next: AutopilotSettings) =>
       workspacesApi.update(workspaceId, {
         settings: {
@@ -60,6 +61,9 @@ export function OutboundAutopilotCard({ workspaceId }: { workspaceId: string }) 
           [AUTOPILOT_SETTINGS_KEY]: next,
         },
       }),
+    successMessage: "Outbound autopilot settings are up to date.",
+    errorMessage:
+      "We couldn't save outbound autopilot settings. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.workspaces.detail(workspaceId),

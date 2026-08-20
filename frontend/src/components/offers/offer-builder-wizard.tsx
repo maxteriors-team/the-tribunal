@@ -177,6 +177,7 @@ export function OfferBuilderWizard({
   const { data: leadMagnetsData } = useQuery({
     queryKey: queryKeys.leadMagnets.all(workspaceId ?? ""),
     queryFn: () => leadMagnetsApi.list(workspaceId, { active_only: true }),
+    enabled: !!workspaceId,
   });
 
   const leadMagnets = leadMagnetsData?.items || [];

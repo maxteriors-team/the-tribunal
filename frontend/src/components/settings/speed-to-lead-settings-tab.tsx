@@ -1,9 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Gauge, Loader2, Zap } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   settingsApi,
@@ -20,7 +20,6 @@ import {
 } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
 import { REALTIME } from "@/lib/query-options";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 
 function formatSeconds(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : `${value}s`;
@@ -82,9 +81,11 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
   const [quietEnd, setQuietEnd] = useState<string>(textback.quiet_hours_end ?? "");
   const [timezone, setTimezone] = useState<string>(textback.timezone ?? "");
 
-  const slaMutation = useMutation({
+  const slaMutation = useSettingsSaveMutation({
     mutationFn: (data: Parameters<typeof settingsApi.updateSpeedToLead>[1]) =>
       settingsApi.updateSpeedToLead(workspaceId, data),
+    successMessage: "Speed-to-lead targets are up to date.",
+    errorMessage: "We couldn't save speed-to-lead targets. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.speedToLead(workspaceId),
@@ -95,17 +96,17 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
     },
   });
 
-  const textbackMutation = useMutation({
+  const textbackMutation = useSettingsSaveMutation({
     mutationFn: (data: Parameters<typeof settingsApi.updateMissedCallTextback>[1]) =>
       settingsApi.updateMissedCallTextback(workspaceId, data),
+    successMessage: "Missed-call text-back settings are up to date.",
+    errorMessage:
+      "We couldn't save missed-call text-back settings. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.missedCallTextback(workspaceId),
       });
-      toast.success("Text-back settings saved");
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Couldn't save text-back settings")),
   });
 
   const pct = metrics?.pct_within_sla;

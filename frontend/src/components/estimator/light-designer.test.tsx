@@ -61,7 +61,7 @@ vi.mock("@/lib/estimator/photo", () => ({
     width: 1200,
     height: 800,
   }),
-  loadImage: vi.fn().mockResolvedValue({ naturalWidth: 1200, naturalHeight: 800 }),
+  loadImage: vi.fn(() => new Promise(() => undefined)),
 }));
 
 // jsdom can't flatten a canvas, so the composite is a fixed data URL.
@@ -231,6 +231,7 @@ function renderEstimator(
   proposal?: DesignerProposalHost,
   focus: "all" | "landscape" = "all",
   landscapeProject?: LandscapeProjectPersistenceAdapter,
+  workspace: { id: string; name?: string; logoUrl?: string | null } = { id: "ws_1" },
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -238,7 +239,9 @@ function renderEstimator(
   return render(
     <QueryClientProvider client={client}>
       <LightDesigner
-        workspaceId="ws_1"
+        workspaceId={workspace.id}
+        workspaceName={workspace.name}
+        workspaceLogoUrl={workspace.logoUrl}
         proposal={proposal}
         focus={focus}
         landscapeProject={landscapeProject}
@@ -401,8 +404,12 @@ describe("LightDesigner", () => {
     );
   });
 
-  it("opens a dedicated top-down aerial workflow when focused on landscape lighting", async () => {
-    const { container } = renderEstimator(undefined, "landscape");
+  it("keeps a second workspace brand on internal and customer-facing estimator surfaces", async () => {
+    const { container } = renderEstimator(undefined, "landscape", undefined, {
+      id: "ws_2",
+      name: "Northstar Outdoor Lighting",
+      logoUrl: "https://northstar.example/logo.svg",
+    });
 
     expect(
       await screen.findByRole("heading", {
@@ -411,6 +418,8 @@ describe("LightDesigner", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Fixture legend")).toBeInTheDocument();
     expect(screen.getAllByText("Untitled lighting project")).not.toHaveLength(0);
+    expect(screen.getAllByText("Northstar Outdoor Lighting")).not.toHaveLength(0);
+    expect(screen.queryByText(/maxteriors/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText("Drawing sheet tools")).toBeInTheDocument();
     expect(screen.getByRole("combobox")).toHaveValue("tabloid");
     expect(screen.getByRole("button", { name: /Add sheet/i })).toBeInTheDocument();
@@ -438,7 +447,11 @@ describe("LightDesigner", () => {
     const uplightTool = await screen.findByRole("button", { name: /^Uplight:/i });
     fireEvent.click(uplightTool);
     expect(uplightTool).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("img", { name: "Maxteriors Exterior Lighting" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Northstar Outdoor Lighting" })).toHaveAttribute(
+      "src",
+      "https://northstar.example/logo.svg",
+    );
+    expect(screen.queryByText(/maxteriors/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Details" }));
     expect(
       screen.getByRole("complementary", { name: "Fixture and drawing tools" }),

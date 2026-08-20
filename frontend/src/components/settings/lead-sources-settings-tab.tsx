@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { agentsApi } from "@/lib/api/agents";
 import { bookableStaffApi } from "@/lib/api/bookable-staff";
@@ -218,17 +219,21 @@ function LeadSourceDialog({
     videoCalendarReady,
   });
 
-  const createMutation = useMutation({
+  const createMutation = useSettingsSaveMutation({
     mutationFn: (data: LeadSourceCreateRequest) => leadSourcesApi.create(workspaceId, data),
+    successMessage: "The lead source was created.",
+    errorMessage: "We couldn't create the lead source. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.all(workspaceId ?? "") });
       onOpenChange(false);
     },
   });
 
-  const updateMutation = useMutation({
+  const updateMutation = useSettingsSaveMutation({
     mutationFn: (data: LeadSourceUpdateRequest) =>
       leadSourcesApi.update(workspaceId, source!.id, data),
+    successMessage: "The lead source is up to date.",
+    errorMessage: "We couldn't save the lead source. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.all(workspaceId ?? "") });
       onOpenChange(false);
@@ -538,11 +543,14 @@ export function LeadSourcesSettingsTab() {
     enabled: !!workspaceId,
   });
 
-  const captureSettingsMutation = useMutation({
+  const captureSettingsMutation = useSettingsSaveMutation({
     mutationFn: (required: boolean) =>
       leadSourcesApi.updateCaptureSettings(workspaceId!, {
         require_lead_source_on_manual_create: required,
       }),
+    successMessage: "Manual lead attribution settings are up to date.",
+    errorMessage:
+      "We couldn't save manual lead attribution settings. Check your connection and try again.",
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.leadSources.captureSettings(workspaceId ?? ""), settings);
     },
@@ -556,9 +564,12 @@ export function LeadSourcesSettingsTab() {
     },
   });
 
-  const toggleMutation = useMutation({
+  const toggleMutation = useSettingsSaveMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       leadSourcesApi.update(workspaceId!, id, { enabled }),
+    successMessage: (_updated, variables) =>
+      variables.enabled ? "The lead source was enabled." : "The lead source was disabled.",
+    errorMessage: "We couldn't update the lead source. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.leadSources.all(workspaceId ?? "") });
     },

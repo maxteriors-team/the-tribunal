@@ -17,21 +17,20 @@ import { toast } from "sonner";
 import { VirtualContactSelector } from "@/components/campaigns/virtual-contact-selector";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { salesWizardFontVars } from "@/components/sales-wizard/fonts";
-import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import {
-  emailCampaignsApi,
-  type CreateEmailCampaignRequest,
-} from "@/lib/api/email-campaigns";
+import { emailCampaignsApi, type CreateEmailCampaignRequest } from "@/lib/api/email-campaigns";
+import { resolveWorkspaceBrand } from "@/lib/brand";
 import { messages } from "@/lib/messages";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
+import { useWorkspace } from "@/providers/workspace-provider";
 
 import "@/components/sales-wizard/theme.css";
 
 export default function NewEmailCampaignPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const workspaceId = useWorkspaceId();
+  const { currentWorkspace, currentWorkspaceId: workspaceId } = useWorkspace();
+  const workspaceBrand = resolveWorkspaceBrand(currentWorkspace?.workspace);
 
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
@@ -105,16 +104,14 @@ export default function NewEmailCampaignPage() {
             <div className="calc-header" style={{ marginBottom: 32 }}>
               <div className="calc-wordmark">
                 <div className="calc-wordmark-line" />
-                <div className="calc-wordmark-text">Maxteriors</div>
+                <div className="calc-wordmark-text">{workspaceBrand.businessName}</div>
                 <div className="calc-wordmark-line" />
               </div>
               <div className="calc-title">
                 <em>Email</em>&nbsp;Campaign
               </div>
               <div className="calc-rule" />
-              <div className="calc-sub">
-                Compose the broadcast, choose recipients, then send
-              </div>
+              <div className="calc-sub">Compose the broadcast, choose recipients, then send</div>
             </div>
 
             <div className="fields-block">
@@ -140,7 +137,7 @@ export default function NewEmailCampaignPage() {
                 <input
                   id="subject"
                   className="field-input"
-                  placeholder="Hi {first_name}, an update from Maxteriors"
+                  placeholder={`Hi {first_name}, an update from ${workspaceBrand.businessName}`}
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                 />
@@ -166,9 +163,9 @@ export default function NewEmailCampaignPage() {
                   }}
                 />
                 <div className="wizard-copy" style={{ marginTop: 10 }}>
-                  Use {"{first_name}"} and {"{company_name}"} to personalize the
-                  subject and body. An unsubscribe link is added automatically to
-                  every email (required for marketing mail).
+                  Use {"{first_name}"} and {"{company_name}"} to personalize the subject and body.
+                  An unsubscribe link is added automatically to every email (required for marketing
+                  mail).
                 </div>
               </div>
             </div>
@@ -215,10 +212,7 @@ export default function NewEmailCampaignPage() {
                 disabled={!canSubmit || selectedIds.size === 0}
                 style={{
                   opacity: !canSubmit || selectedIds.size === 0 ? 0.5 : 1,
-                  cursor:
-                    !canSubmit || selectedIds.size === 0
-                      ? "not-allowed"
-                      : "pointer",
+                  cursor: !canSubmit || selectedIds.size === 0 ? "not-allowed" : "pointer",
                 }}
               >
                 Create &amp; Send

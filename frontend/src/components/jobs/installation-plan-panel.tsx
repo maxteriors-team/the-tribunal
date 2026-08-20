@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, Loader2, Printer, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useJobInstallationPlan } from "@/hooks/useJobs";
@@ -55,34 +55,42 @@ export function InstallationPlanPanel({ workspaceId, jobId }: InstallationPlanPa
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
 
-  const render = useCallback(async () => {
+  useEffect(() => {
     const plan = query.data;
     const canvas = canvasRef.current;
     if (!plan || !canvas) return;
-    try {
-      const photo = plan.photo as unknown as PhotoInfo;
-      const design = plan.design as unknown as Design;
-      const image = await loadImage(photo.dataUrl);
-      canvas.width = photo.width;
-      canvas.height = photo.height;
-      const context = canvas.getContext("2d");
-      if (!context) throw new Error("Canvas is unavailable");
-      const productById = new Map(productsFor(design).map((product) => [product.id, product]));
-      const scale = designScale(design, photo.width);
-      drawScene(context, image, design, productById, scale.pxPerFt, {
-        viewScale: 1,
-        dusk: plan.dusk,
-        showChrome: false,
-      });
-      setRenderError(null);
-    } catch {
-      setRenderError("The selected sheet could not be rendered.");
-    }
-  }, [query.data]);
 
-  useEffect(() => {
-    void render();
-  }, [render]);
+    let cancelled = false;
+    const photo = plan.photo as unknown as PhotoInfo;
+    const design = plan.design as unknown as Design;
+    void loadImage(photo.dataUrl)
+      .then((image) => {
+        if (cancelled) return;
+        canvas.width = photo.width;
+        canvas.height = photo.height;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Canvas is unavailable");
+        const productById = new Map(productsFor(design).map((product) => [product.id, product]));
+        const scale = designScale(design, photo.width);
+        drawScene(context, image, design, productById, scale.pxPerFt, {
+          viewScale: 1,
+          dusk: plan.dusk,
+          showChrome: false,
+        });
+      })
+      .then(
+        () => {
+          if (!cancelled) setRenderError(null);
+        },
+        () => {
+          if (!cancelled) setRenderError("The selected sheet could not be rendered.");
+        },
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [query.data]);
 
   if (query.isPending) {
     return (

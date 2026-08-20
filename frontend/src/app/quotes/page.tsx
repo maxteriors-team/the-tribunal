@@ -30,6 +30,7 @@ import {
 import { PageLoadingState } from "@/components/ui/page-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
+import { resolveWorkspaceBrand } from "@/lib/brand";
 import { queryKeys } from "@/lib/query-keys";
 import { useWorkspace } from "@/providers/workspace-provider";
 import type { PricingSettings } from "@/types/sales-wizard";
@@ -73,7 +74,8 @@ const SERVICE_ENTRIES: {
 ];
 
 function LightDesignerTab() {
-  const { currentWorkspaceId, isPending } = useWorkspace();
+  const { currentWorkspace, currentWorkspaceId, isPending } = useWorkspace();
+  const workspaceBrand = resolveWorkspaceBrand(currentWorkspace?.workspace);
   return (
     <div className="h-full overflow-y-auto">
       {isPending || !currentWorkspaceId ? (
@@ -81,7 +83,11 @@ function LightDesignerTab() {
           Loading workspace…
         </div>
       ) : (
-        <LightDesigner workspaceId={currentWorkspaceId} />
+        <LightDesigner
+          workspaceId={currentWorkspaceId}
+          workspaceName={workspaceBrand.businessName}
+          workspaceLogoUrl={workspaceBrand.logoUrl}
+        />
       )}
     </div>
   );
@@ -91,8 +97,7 @@ function QuotesHub() {
   const { currentWorkspaceId } = useWorkspace();
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const defaultTab =
-    requestedTab && TAB_VALUES.has(requestedTab) ? requestedTab : "quotes";
+  const defaultTab = requestedTab && TAB_VALUES.has(requestedTab) ? requestedTab : "quotes";
 
   // Only offer services this workspace actually sells, so a menu entry can never
   // land the rep on a branch with nothing to price.
@@ -108,12 +113,10 @@ function QuotesHub() {
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex flex-col gap-4 p-6 pb-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Quotes &amp; Estimates
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Quotes &amp; Estimates</h1>
           <p className="text-sm text-muted-foreground">
-            Build a quote, design the lights on a photo of the home, then send,
-            approve, and convert wins into jobs and invoices — all in one place.
+            Build a quote, design the lights on a photo of the home, then send, approve, and convert
+            wins into jobs and invoices — all in one place.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
@@ -143,9 +146,7 @@ function QuotesHub() {
                       <entry.Icon className="size-4" />
                       <span className="flex flex-col gap-0.5">
                         <span>{entry.label}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {entry.blurb}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{entry.blurb}</span>
                       </span>
                     </Link>
                   </DropdownMenuItem>
@@ -156,10 +157,7 @@ function QuotesHub() {
         </div>
       </div>
 
-      <Tabs
-        defaultValue={defaultTab}
-        className="flex min-h-0 flex-1 flex-col gap-0"
-      >
+      <Tabs defaultValue={defaultTab} className="flex min-h-0 flex-1 flex-col gap-0">
         <div className="px-6">
           <TabsList>
             <TabsTrigger value="quotes" className="gap-2">
@@ -173,17 +171,11 @@ function QuotesHub() {
           </TabsList>
         </div>
 
-        <TabsContent
-          value="quotes"
-          className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4"
-        >
+        <TabsContent value="quotes" className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
           <QuotesList />
         </TabsContent>
 
-        <TabsContent
-          value="designer"
-          className="min-h-0 flex-1 overflow-hidden pt-4"
-        >
+        <TabsContent value="designer" className="min-h-0 flex-1 overflow-hidden pt-4">
           <LightDesignerTab />
         </TabsContent>
       </Tabs>

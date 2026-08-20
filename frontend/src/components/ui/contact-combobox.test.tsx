@@ -14,7 +14,7 @@
  * the matching row at all.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -47,10 +47,7 @@ function contact(id: number, first: string, last: string): Contact {
   } as Contact;
 }
 
-const SAMANTHAS = [
-  contact(1, "Samantha", "Reyes"),
-  contact(2, "Samantha", "Okafor"),
-];
+const SAMANTHAS = [contact(1, "Samantha", "Reyes"), contact(2, "Samantha", "Okafor")];
 
 function resolveWith(items: Contact[], total = items.length) {
   list.mockResolvedValue({
@@ -118,9 +115,7 @@ describe("ContactCombobox", () => {
     await userEvent.type(screen.getByLabelText("Client"), "Dara Whitfield");
 
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(
-        /No existing client matches/,
-      ),
+      expect(screen.getByRole("status")).toHaveTextContent(/No existing client matches/),
     );
     expect(screen.getByLabelText("Client")).toHaveValue("Dara Whitfield");
     expect(screen.getByTestId("stored")).toHaveTextContent("Dara Whitfield");
@@ -150,13 +145,9 @@ describe("ContactCombobox", () => {
     render(<ComboboxHarness onSelect={onSelect} />);
 
     await userEvent.type(screen.getByLabelText("Client"), "Samantha");
-    await userEvent.click(
-      await screen.findByRole("option", { name: /Samantha Okafor/ }),
-    );
+    await userEvent.click(await screen.findByRole("option", { name: /Samantha Okafor/ }));
 
-    expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 2, last_name: "Okafor" }),
-    );
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 2, last_name: "Okafor" }));
   });
 
   it("stays usable when the customer lookup fails", async () => {
@@ -166,9 +157,7 @@ describe("ContactCombobox", () => {
     await userEvent.type(screen.getByLabelText("Client"), "Dara");
 
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(
-        /Couldn't reach the customer list/,
-      ),
+      expect(screen.getByRole("status")).toHaveTextContent(/Couldn't reach the customer list/),
     );
     expect(screen.getByLabelText("Client")).toHaveValue("Dara");
   });
@@ -180,9 +169,7 @@ describe("ContactPicker", () => {
     render(<PickerHarness />);
 
     await userEvent.click(screen.getByLabelText("Customer"));
-    await userEvent.click(
-      await screen.findByRole("option", { name: /Samantha Reyes/ }),
-    );
+    await userEvent.click(await screen.findByRole("option", { name: /Samantha Reyes/ }));
 
     expect(screen.getByLabelText("Customer")).toHaveValue("Samantha Reyes");
     expect(screen.getByTestId("stored")).toHaveTextContent("1");
@@ -193,9 +180,7 @@ describe("ContactPicker", () => {
     render(<PickerHarness />);
 
     await userEvent.click(screen.getByLabelText("Customer"));
-    await userEvent.click(
-      await screen.findByRole("option", { name: /Samantha Reyes/ }),
-    );
+    await userEvent.click(await screen.findByRole("option", { name: /Samantha Reyes/ }));
     expect(screen.getByTestId("stored")).toHaveTextContent("1");
 
     // The id must not survive the name it was chosen for.
@@ -208,13 +193,9 @@ describe("ContactPicker", () => {
     render(<PickerHarness />);
 
     await userEvent.click(screen.getByLabelText("Customer"));
-    await userEvent.click(
-      await screen.findByRole("option", { name: /Samantha Reyes/ }),
-    );
+    await userEvent.click(await screen.findByRole("option", { name: /Samantha Reyes/ }));
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /Clear selected client/ }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /Clear selected client/ }));
 
     expect(screen.getByLabelText("Customer")).toHaveValue("");
     expect(screen.getByTestId("stored")).toHaveTextContent("none");
@@ -252,12 +233,12 @@ describe("ContactPicker", () => {
     render(<PickerHarness />);
 
     const field = screen.getByLabelText("Customer");
-    field.focus();
+    await act(async () => {
+      field.focus();
+    });
     await userEvent.click(field);
 
-    expect(
-      await screen.findByRole("option", { name: /Samantha Reyes/ }),
-    ).toBeVisible();
+    expect(await screen.findByRole("option", { name: /Samantha Reyes/ })).toBeVisible();
   });
 
   it("exposes the ARIA combobox contract keyboard users rely on", async () => {
@@ -279,9 +260,7 @@ describe("ContactPicker", () => {
     expect(first).toHaveAttribute("aria-selected", "true");
 
     await userEvent.keyboard("{Escape}");
-    await waitFor(() =>
-      expect(screen.queryByRole("option")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByRole("option")).not.toBeInTheDocument());
     expect(field).toHaveAttribute("aria-expanded", "false");
   });
 });

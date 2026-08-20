@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+import { PRODUCT_BRAND } from "@/lib/brand";
+
 /**
  * PWA manifest — makes the CRM installable from the browser
  * (iOS: Share → Add to Home Screen; Android: Install app prompt).
@@ -8,10 +10,9 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Maxteriors CRM",
-    short_name: "Maxteriors",
-    description:
-      "Leads, quotes, jobs, and customer communications for the Maxteriors team.",
+    name: `${PRODUCT_BRAND.name} CRM`,
+    short_name: PRODUCT_BRAND.shortName,
+    description: PRODUCT_BRAND.description,
     start_url: "/dashboard",
     display: "standalone",
     background_color: "#0a0a0a",
