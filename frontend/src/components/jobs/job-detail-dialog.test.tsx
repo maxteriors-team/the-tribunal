@@ -151,9 +151,10 @@ describe("JobDetailDialog", () => {
     expect(screen.queryByLabelText("Status")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Start")).not.toBeInTheDocument();
 
-    // The assignment roster is still readable, just not editable.
+    // The assignment roster and time tracking remain available to the field member.
     expect(screen.getByText("Marco Reyes")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Details" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Time tracking" })).toBeInTheDocument();
   });
 
   it("renders the full dispatch panel when writable", () => {

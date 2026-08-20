@@ -35,13 +35,19 @@ const baseQuote: Quote = {
   updated_at: "2026-08-01T00:00:00Z",
 };
 
-function renderDialog(quote: Quote = baseQuote) {
+function renderDialog(quote: Quote = baseQuote, mode: "closeout" | "copy-to-job" = "closeout") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   render(
     <QueryClientProvider client={client}>
-      <ConvertQuoteDialog workspaceId="ws-1" quote={quote} open onOpenChange={vi.fn()} />
+      <ConvertQuoteDialog
+        workspaceId="ws-1"
+        quote={quote}
+        open
+        onOpenChange={vi.fn()}
+        mode={mode}
+      />
     </QueryClientProvider>,
   );
 }
@@ -150,6 +156,57 @@ describe("ConvertQuoteDialog guided closeout", () => {
         "ws-1",
         "quote-1",
         expect.objectContaining({ create_job: false, scheduled_start: null, scheduled_end: null }),
+      ),
+    );
+  });
+
+  it("copies the description and layout into a job without creating an invoice by default", async () => {
+    renderDialog(
+      {
+        ...baseQuote,
+        notes: "Install path lights along the front walk.",
+        lighting_project_id: "project-1",
+      },
+      "copy-to-job",
+    );
+
+    expect(screen.getByRole("heading", { name: "Copy quote QUO-000123 to a job" })).toBeVisible();
+    expect(screen.getByText("Install path lights along the front walk.")).toBeVisible();
+    expect(screen.getByText("Linked layout included")).toBeVisible();
+    expect(screen.queryByLabelText("Create a field-service job")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Also create an invoice")).not.toBeChecked();
+
+    await setWindow();
+    await userEvent.click(screen.getByText("Alex Field"));
+    await userEvent.click(screen.getByRole("button", { name: "Copy to job" }));
+
+    await waitFor(() =>
+      expect(convertMock).toHaveBeenCalledWith(
+        "ws-1",
+        "quote-1",
+        expect.objectContaining({
+          create_job: true,
+          create_invoice: false,
+          technician_ids: ["tech-1"],
+        }),
+      ),
+    );
+  });
+
+  it("keeps an existing invoice linked when adding the missing job", async () => {
+    renderDialog({ ...baseQuote, converted_invoice_id: "invoice-1" }, "copy-to-job");
+
+    expect(screen.getByText("The existing invoice will stay linked to this job.")).toBeVisible();
+    expect(screen.queryByLabelText("Also create an invoice")).not.toBeInTheDocument();
+
+    await setWindow();
+    await userEvent.click(screen.getByRole("button", { name: "Copy to job" }));
+
+    await waitFor(() =>
+      expect(convertMock).toHaveBeenCalledWith(
+        "ws-1",
+        "quote-1",
+        expect.objectContaining({ create_job: true, create_invoice: true }),
       ),
     );
   });

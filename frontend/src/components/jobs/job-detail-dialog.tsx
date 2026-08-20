@@ -220,7 +220,7 @@ export function JobDetailDialog({
               <TabsTrigger value="installation-plan">Installation plan</TabsTrigger>
             ) : null}
             <TabsTrigger value="visits-pricing">Visits & pricing</TabsTrigger>
-            <TabsTrigger value="field-work">Field work</TabsTrigger>
+            <TabsTrigger value="field-work">Time tracking</TabsTrigger>
             {showNeighbors && <TabsTrigger value="neighbors">Neighbors</TabsTrigger>}
           </TabsList>
           <TabsContent value="details" className="space-y-5 pt-2">

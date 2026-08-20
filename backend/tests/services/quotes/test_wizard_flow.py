@@ -740,8 +740,13 @@ async def test_wizard_deposit_persists_and_shows_in_document() -> None:
 
 
 async def test_landscape_wizard_uses_workspace_deposit_and_persists_project_link() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.field_service import Job
+
     async with AsyncSessionLocal() as db:
         ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
         ws.settings = {
             **ws.settings,
             "pricing": {
@@ -789,13 +794,32 @@ async def test_landscape_wizard_uses_workspace_deposit_and_persists_project_link
         payload.contact_id = contact.id
         payload.categories = ["landscape"]
         payload.bistro = None
+        payload.notes = "Install path lights along the front walk."
         payload.lighting_project_id = project.id
-        saved = await QuoteService(db).save_from_wizard(ws.id, payload, created_by_id=None)
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
 
         assert saved.lighting_project_id == project.id
         assert saved.deposit_percentage == 25
         assert saved.deposit_required is True
+        assert project.opportunity_id is None
 
+        await svc.approve_quote(ws.id, uuid.UUID(str(saved.id)))
+        scheduled_start = datetime(2026, 12, 1, 15, 0, tzinfo=UTC)
+        converted = await svc.convert_quote(
+            ws.id,
+            uuid.UUID(str(saved.id)),
+            create_invoice=False,
+            scheduled_start=scheduled_start,
+            scheduled_end=scheduled_start + timedelta(hours=3),
+            confirm_unpaid_deposit=True,
+        )
+        job = await db.get(Job, converted.job_id)
+        assert job is not None
+        assert job.title == saved.title
+        assert job.description == payload.notes
+        assert job.lighting_project_id == project.id
+        assert job.scheduled_start == scheduled_start
+        assert converted.quote.opportunity_id is not None
         no_deposit_payload = _payload()
         no_deposit_payload.contact_id = contact.id
         no_deposit_payload.categories = ["landscape"]
