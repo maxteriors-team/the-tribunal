@@ -15,6 +15,7 @@ from fastapi import APIRouter, status
 
 from app.api.deps import DB, CurrentUser, WorkspaceAccess
 from app.api.service_errors import ServiceErrorRoute
+from app.core.config import settings
 from app.schemas.prospect_search import (
     AddToMissionRequest,
     AddToMissionResponse,
@@ -25,6 +26,7 @@ from app.schemas.prospect_search import (
     RevealEmailResponse,
     RevealPhoneResponse,
 )
+from app.services.exceptions import ServiceUnavailableError
 from app.services.lead_discovery.prospect_search_service import ProspectSearchService
 from app.services.rate_limiting.scraping_limiter import enforce_scraping_rate_limit
 
@@ -85,6 +87,13 @@ async def launch_people_discovery(
     workspace: WorkspaceAccess,
 ) -> PeopleDiscoveryResponse:
     """Launch a ``web_people`` crawl. Enqueues a job the worker runs async."""
+    if discovery_in.query and not settings.google_places_api_key:
+        raise ServiceUnavailableError(
+            "Connect Google Places before searching for companies to crawl.",
+            code="people_search_provider_not_configured",
+            details={"provider": "google_places", "action": "people_discovery"},
+        )
+
     # Per-workspace quota on the (potentially paid Google Places + crawl) path.
     await enforce_scraping_rate_limit(workspace_id)
     service = ProspectSearchService(db)

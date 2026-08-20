@@ -73,8 +73,12 @@ For decision_maker_title, extract their title/role
 class AIContentAnalyzerService:
     """Service for AI-powered website content analysis."""
 
-    def __init__(self, api_key: str | None = None) -> None:
-        self._openai = AsyncOpenAI(api_key=api_key or get_openai_bearer_token())
+    def __init__(
+        self,
+        api_key: str | None = None,
+        client: AsyncOpenAI | None = None,
+    ) -> None:
+        self._openai = client or AsyncOpenAI(api_key=api_key or get_openai_bearer_token())
         self.logger = logger.bind(component="ai_content_analyzer")
 
     def _extract_text(self, html: str, max_chars: int = 8000) -> str:
