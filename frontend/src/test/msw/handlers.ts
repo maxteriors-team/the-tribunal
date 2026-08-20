@@ -194,6 +194,14 @@ export const handlers = [
     http.get(url, () => HttpResponse.json([stubWorkspace])),
   ),
 
+  // Lead-source controls used by contact creation and list filters.
+  ...both("/api/v1/settings/workspaces/:workspaceId/lead-source-capture").map((url) =>
+    http.get(url, () => HttpResponse.json({ require_lead_source_on_manual_create: false })),
+  ),
+  ...both("/api/v1/workspaces/:workspaceId/lead-sources").map((url) =>
+    http.get(url, () => HttpResponse.json([])),
+  ),
+
   // Contacts list
   ...both("/api/v1/workspaces/:workspaceId/contacts").map((url) =>
     http.get(url, () => HttpResponse.json(stubContactsList)),
