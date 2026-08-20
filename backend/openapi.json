@@ -56953,6 +56953,9 @@
             },
             "description": "Validation Error"
           },
+          "429": {
+            "description": "Payment verification rate limit exceeded"
+          },
           "503": {
             "description": "Stripe verification is temporarily unavailable"
           }
