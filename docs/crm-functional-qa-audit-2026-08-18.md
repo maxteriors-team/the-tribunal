@@ -2,13 +2,13 @@
 
 **Audit date:** 2026-08-18
 **Environment:** Local Next.js/FastAPI stack, isolated QA workspace, fake contact data
-**Status vocabulary:** Not Started / In Progress / Fixed / Retested / Closed
+**Status vocabulary:** Not Started / In Progress / Fixed / Retested / Remediated and runtime-verified / Closed
 
 ## Executive summary
 
-**QA Score: 64/100. 2 critical issues, 8 high-priority issues, 12 medium issues, and 5 minor issues were identified; 26 remain open (25 Not Started and QA-018 In Progress), while QA-026 is Closed after retest. The biggest problems are concentrated in public embed lead capture, role permissions, campaign creation, fresh-workspace quote setup, accessibility, and mobile action clipping. Fix the 10 critical/high-priority items before adding additional CRM features.**
+**QA Score: 64/100 (historical; not recalculated after remediation). 2 critical issues, 8 high-priority issues, 12 medium issues, and 5 minor issues were identified; 21 remain open (20 Not Started and QA-018 In Progress), QA-009 through QA-013 are remediated and runtime-verified, and QA-026 is Closed after retest. The biggest remaining problems are concentrated in public embed lead capture, role permissions, campaign creation, fresh-workspace quote setup, and provider recovery. Fix the remaining 8 critical/high-priority items before adding additional CRM features.**
 
-The internal CRM can register and onboard a workspace, create contacts, schedule appointments, save invoices, create automations, create opportunities, and generate a client quote link. The score is held below 100 because the anonymous embed is blocked twice, hidden modules remain reachable by lower roles, one campaign builder silently discards entered data, new workspaces have no priced quote lines, direct payment-success URLs make an unverified success claim, and multiple keyboard/mobile paths are not operable.
+The internal CRM can register and onboard a workspace, create contacts, schedule appointments, save invoices, create automations, create opportunities, and generate a client quote link. The historical score is held below 100 because the anonymous embed is blocked twice, hidden modules remain reachable by lower roles, one campaign builder silently discards entered data, new workspaces have no priced quote lines, direct payment-success URLs make an unverified success claim, and provider-recovery gaps remain open.
 
 Live Telnyx, OpenAI API-key, Google Places, Cal.com, and Resend delivery were not available in this environment. Their missing-configuration and recovery states were exercised without spending money or contacting real people. Stripe was configured in test mode; no charge was completed. These provider-dependent delivery paths remain unverified against live vendor accounts.
 
@@ -35,7 +35,7 @@ All commands below were run directly, without a pipeline or a construct that cou
 | `make ci.frontend` | **PASSED / exit 0** as a direct foreground command: clean install, lint, typecheck, **150 test files / 1,385 tests**, and production build passed. The Ad Library recovery regression is included. Existing React Compiler, hook, `act`, unused-variable, and MSW warnings remain under QA-027. |
 | `npm run e2e -- --project=chromium` | **PASSED / exit 0** as a direct foreground command with credentials preloaded outside the command: **21 passed / 1 skipped** across 22 tests using one worker. `ad-library.spec.ts` passed while the backend returned the provider-unavailable response. |
 
-These are the only results classified as current harness-accepted post-fix proof. The E2E command used no redirection, pipeline, or embedded credential; the seeded credentials were loaded separately from the ignored QA credentials file. Transient local login-rate rows for `127.0.0.1` were cleared before the run because prior audit traffic had consumed the same account's 10-attempt window. The raw `429` copy remains covered by QA-020. The 64/100 product score is unchanged because QA-018 remains open for the Phone Numbers and Find Leads recovery surfaces.
+These are the only results classified as current full-harness post-fix proof. The E2E command used no redirection, pipeline, or embedded credential; the seeded credentials were loaded separately from the ignored QA credentials file. Transient local login-rate rows for `127.0.0.1` were cleared before the run because prior audit traffic had consumed the same account's 10-attempt window. The raw `429` copy remains covered by QA-020. The 64/100 product score remains historical and has not been recalculated; QA-018 is still open for the Phone Numbers and Find Leads recovery surfaces. Targeted responsive proof added on 2026-08-19 is recorded under QA-010 through QA-013.
 
 ## Issue register
 
@@ -144,8 +144,8 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Issue type:** Accessibility / keyboard and assistive technology
 - **Severity:** **High**
 - **Recommended developer fix:** Add explicit names/label associations, correct invalid ARIA values, name progress indicators, make intentional scroll containers focusable, repair report contrast, and add axe plus manual keyboard/screen-reader checks to CI.
-- **Evidence:** `.ezcoder/eyes/out/qa/route-scan.json`; `.ezcoder/eyes/out/qa/settings-audit.json`; `.ezcoder/eyes/out/qa/agent-embed-audit.json`.
-- **Status:** **Not Started**
+- **Evidence:** Original failures: `.ezcoder/eyes/out/qa/route-scan.json`, `.ezcoder/eyes/out/qa/settings-audit.json`, and `.ezcoder/eyes/out/qa/agent-embed-audit.json`. Remediation: `frontend/e2e/accessibility.spec.ts`, `frontend/e2e/accessibility-keyboard-checklist.md`, and focused quantity/stepper/proposal Vitest coverage.
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - axe returned no scoped WCAG 2.2 A/AA violations across 23 desktop and 23 mobile CRM routes plus a light-theme financial report scan; 5 Playwright keyboard/axe checks and 1,427 Vitest tests passed. Screen-reader output and full zoom/reflow remain manual release checks.
 
 ### QA-010 - Mobile layout clips primary CRM actions
 
@@ -156,8 +156,8 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Issue type:** Responsive usability / visually defective
 - **Severity:** **High**
 - **Recommended developer fix:** Wrap header actions, allow text columns to shrink, stack actions below headings, and remove root overflow clipping. Add 320/390/768px screenshot and tap tests.
-- **Evidence:** `.ezcoder/eyes/out/qa/route-scan.json` layout/clipped records; `.ezcoder/eyes/out/qa/evidence/contact-sheets/mobile-owner-1.png`; `mobile-owner-2.png`.
-- **Status:** **Not Started**
+- **Evidence:** Original: `.ezcoder/eyes/out/qa/route-scan.json` and mobile contact sheets. Remediation: `frontend/e2e/responsive-mobile.spec.ts`; 390px captures under `.ezcoder/screenshots/responsive-390/`.
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - all 13 requested routes measured document, body, and app-main widths at 390px; no primary action or non-navigation interactive crossed the viewport.
 
 ### QA-011 - Mobile steppers and tab bars have undiscoverable clipped stages
 
@@ -168,8 +168,8 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Issue type:** Responsive navigation / confusing workflow
 - **Severity:** **Medium**
 - **Recommended developer fix:** Use labeled horizontal scrollers with edge fades and focus management, or compact/wrap the stepper while keeping the current stage and next action visible.
-- **Evidence:** `.ezcoder/eyes/out/qa/route-scan.json`; `.ezcoder/eyes/out/qa/evidence/contact-sheets/mobile-owner-4.png`.
-- **Status:** **Not Started**
+- **Evidence:** Original: `.ezcoder/eyes/out/qa/route-scan.json`. Remediation: `frontend/src/components/ui/horizontal-scroll.tsx`, `frontend/e2e/responsive-mobile.spec.ts`, and revised 390px captures.
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - tabs, stage boards, and campaign/offer steppers use labeled local scrollers with directional edge cues, active-item reveal, touch swiping, and keyboard scrolling; the Playwright touch/keyboard checks pass.
 
 ### QA-012 - Mobile Settings navigation becomes 20 unlabeled icons
 
@@ -180,8 +180,8 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Issue type:** Accessibility / confusing navigation
 - **Severity:** **Medium**
 - **Recommended developer fix:** Keep short visible labels, use a labeled select/accordion on mobile, or provide `aria-label` and tooltips while retaining a strong selected state.
-- **Evidence:** `.ezcoder/eyes/out/qa/settings-audit.json` (`tabAccessibleByName=false` for all mobile tabs); `.ezcoder/eyes/out/qa/evidence/settings/mobile-profile.png`.
-- **Status:** **Not Started**
+- **Evidence:** Original: `.ezcoder/eyes/out/qa/settings-audit.json`. Remediation: the Settings tablist keeps visible labels inside `HorizontalScroll`; `frontend/e2e/accessibility.spec.ts` and `frontend/e2e/responsive-mobile.spec.ts`.
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - all Settings destinations retain visible and accessible names in one horizontally scrollable mobile row; the requested Pricing tab is revealed and selected from its direct URL.
 
 ### QA-013 - Mobile Pricing hides service identities
 
@@ -192,8 +192,8 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Issue type:** Responsive form / accessibility
 - **Severity:** **Medium**
 - **Recommended developer fix:** Stack service name and threshold fields, allocate full-width names, name delete actions with the service, and associate labels with every input.
-- **Evidence:** `.ezcoder/eyes/out/qa/evidence/settings/mobile-pricing.png`; `.ezcoder/eyes/out/qa/settings-audit.json`.
-- **Status:** **Not Started**
+- **Evidence:** Original: `.ezcoder/eyes/out/qa/evidence/settings/mobile-pricing.png`. Remediation: revised `settings-pricing.png` under `.ezcoder/screenshots/responsive-390/` and `frontend/e2e/responsive-mobile.spec.ts`.
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - service names and minimums render in two flexible columns at 390px, delete buttons keep row-specific names, stacked upsell/seasonal rows remain labeled, and pricing actions stay inside the viewport.
 
 ### QA-014 - Compact Mode toggles visually but never persists or changes density
 

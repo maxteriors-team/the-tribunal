@@ -26,11 +26,13 @@ import {
 } from "@/components/dashboard/today-overview";
 import { Button } from "@/components/ui/button";
 import { PageErrorState } from "@/components/ui/page-state";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useDashboard } from "@/hooks/useDashboard";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 
 export function DashboardPage() {
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
   const { data, isPending, error, isFetching, refetch } = useDashboard(workspaceId ?? "");
 
   if (error && !data) {
@@ -72,7 +74,7 @@ export function DashboardPage() {
 
       <DashboardStatsGrid stats={data?.stats} isPending={isPending} />
 
-      {workspaceId && (
+      {workspaceId && can("reports:view") && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
