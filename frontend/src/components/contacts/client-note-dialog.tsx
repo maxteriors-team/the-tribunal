@@ -47,6 +47,7 @@ export function ClientNoteDialog({
       {
         onSuccess: () => {
           toast.success("Client note saved");
+          setBody("");
           onOpenChange(false);
         },
         onError: (error) => {

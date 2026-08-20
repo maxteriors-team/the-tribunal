@@ -56,6 +56,10 @@ test("creates a client with notes", async ({ page }) => {
   expect(noteResponse.ok(), await noteResponse.text()).toBeTruthy();
   await expect(noteDialog).toBeHidden();
 
+  await page.getByRole("button", { name: "Notes", exact: true }).click();
+  await expect(noteDialog.getByLabel("Note")).toHaveValue("");
+  await noteDialog.getByRole("button", { name: "Cancel" }).click();
+
   await page.getByRole("button", { name: "Conversation actions" }).click();
   await page.getByRole("menuitem", { name: "Add note" }).click();
   noteDialog = page.getByRole("dialog", { name: "Add client note" });
