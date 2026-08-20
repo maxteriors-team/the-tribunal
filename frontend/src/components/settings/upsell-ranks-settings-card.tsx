@@ -254,7 +254,7 @@ export function UpsellRanksSettingsCard() {
             >
               <div className="min-w-0 space-y-1 sm:flex-1">
                 <Label htmlFor={`upsell-rank-${row.id}-name`} className="text-xs sm:sr-only">
-                  Rank name
+                  Rank {index + 1} name
                 </Label>
                 <Input
                   id={`upsell-rank-${row.id}-name`}
@@ -266,7 +266,7 @@ export function UpsellRanksSettingsCard() {
               </div>
               <div className="min-w-0 space-y-1 sm:w-32">
                 <Label htmlFor={`upsell-rank-${row.id}-target`} className="text-xs sm:sr-only">
-                  Target ($)
+                  Rank {index + 1} target ($)
                 </Label>
                 <Input
                   id={`upsell-rank-${row.id}-target`}
@@ -281,7 +281,7 @@ export function UpsellRanksSettingsCard() {
               </div>
               <div className="min-w-0 space-y-1 sm:flex-1">
                 <Label htmlFor={`upsell-rank-${row.id}-bonus`} className="text-xs sm:sr-only">
-                  Bonus
+                  Rank {index + 1} bonus
                 </Label>
                 <Input
                   id={`upsell-rank-${row.id}-bonus`}
