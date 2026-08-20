@@ -25,6 +25,77 @@ describe("roleTier", () => {
   });
 });
 
+const ALL_CAPABILITIES: Capability[] = [
+  "workspace:manage",
+  "members:manage",
+  "crm:read",
+  "crm:write",
+  "pipeline:write_own",
+  "pipeline:write",
+  "jobs:read",
+  "jobs:write",
+  "comms:send",
+  "comms:manage",
+  "billing:read",
+  "billing:write",
+  "reports:view",
+  "outreach:write",
+  "locations:manage",
+  "upsell:sell",
+  "upsell:sell_uncapped",
+];
+
+const ADMIN_CAPABILITIES = [...ALL_CAPABILITIES];
+const MANAGER_CAPABILITIES: Capability[] = [
+  "crm:read",
+  "crm:write",
+  "pipeline:write_own",
+  "pipeline:write",
+  "jobs:read",
+  "jobs:write",
+  "comms:send",
+  "billing:read",
+  "billing:write",
+  "outreach:write",
+  "locations:manage",
+  "upsell:sell",
+  "upsell:sell_uncapped",
+];
+
+const ROLE_CAPABILITY_MATRIX = {
+  owner: ADMIN_CAPABILITIES,
+  admin: ADMIN_CAPABILITIES,
+  manager: MANAGER_CAPABILITIES,
+  dispatcher: MANAGER_CAPABILITIES,
+  sales_rep: [
+    "crm:read",
+    "pipeline:write_own",
+    "jobs:read",
+    "comms:send",
+    "outreach:write",
+    "upsell:sell",
+    "upsell:sell_uncapped",
+  ],
+  member: ["crm:read", "jobs:read", "comms:send", "upsell:sell", "upsell:sell_uncapped"],
+  lead_technician: ["jobs:read", "upsell:sell"],
+  technician: ["jobs:read"],
+} satisfies Record<string, Capability[]>;
+
+describe("eight-role capability matrix", () => {
+  it.each(Object.entries(ROLE_CAPABILITY_MATRIX))(
+    "%s has exactly its canonical grants",
+    (role, expectedCapabilities) => {
+      for (const capability of ALL_CAPABILITIES) {
+        expect(can(role, capability), `${role}: ${capability}`).toBe(
+          (expectedCapabilities as Capability[]).includes(capability),
+        );
+      }
+
+      expect(new Set(TIER_CAPABILITIES[roleTier(role)])).toEqual(new Set(expectedCapabilities));
+    },
+  );
+});
+
 describe("capability matrix (mirror of backend)", () => {
   it("admin has every capability", () => {
     const all = new Set<Capability>(TIER_CAPABILITIES.admin);
@@ -70,14 +141,7 @@ describe("capability matrix (mirror of backend)", () => {
 
   it("the crew lead is the seller the on-site proposal limit applies to", () => {
     // Office tiers sell uncapped; the lead sells under the workspace limit.
-    for (const role of [
-      "owner",
-      "admin",
-      "manager",
-      "dispatcher",
-      "sales_rep",
-      "member",
-    ]) {
+    for (const role of ["owner", "admin", "manager", "dispatcher", "sales_rep", "member"]) {
       expect(can(role, "upsell:sell_uncapped")).toBe(true);
     }
     expect(can("lead_technician", "upsell:sell_uncapped")).toBe(false);

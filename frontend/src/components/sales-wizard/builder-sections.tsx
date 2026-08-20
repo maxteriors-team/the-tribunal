@@ -6,14 +6,8 @@
  * document (`category_sections` / `grand_*`); these components only collect the
  * rep's raw inputs and render the server's numbers.
  */
-import {
-  FinancingEstimate,
-  financingFromSnapshot,
-} from "@/components/proposal/financing-estimate";
-import {
-  seasonalIconForCategory,
-  tintSurface,
-} from "@/lib/estimator/seasonal-icons";
+import { FinancingEstimate, financingFromSnapshot } from "@/components/proposal/financing-estimate";
+import { seasonalIconForCategory, tintSurface } from "@/lib/estimator/seasonal-icons";
 import type { ChristmasConfig, SeasonalItem } from "@/types/sales-wizard";
 
 import { fmt, type UseSalesWizardReturn } from "./use-sales-wizard";
@@ -84,9 +78,7 @@ function Breakdown({
         <span className="bistro-quote-label">{sec.label} Total</span>
         <span className="bistro-quote-val">{fmt(sec.financed_total)}</span>
       </div>
-      {sec.min_applied ? (
-        <div className="bistro-min-note">Minimum job charge applied</div>
-      ) : null}
+      {sec.min_applied ? <div className="bistro-min-note">Minimum job charge applied</div> : null}
     </>
   );
 }
@@ -100,14 +92,12 @@ export function PermanentSection({ wizard }: { wizard: UseSalesWizardReturn }) {
       <div className="care-head">
         <div>
           <div className="care-head-label">Year-Round Roofline</div>
-          <div className="care-head-title">
-            {cfg?.label ?? "Permanent Holiday Lighting"}
-          </div>
+          <div className="care-head-title">{cfg?.label ?? "Permanent Holiday Lighting"}</div>
         </div>
       </div>
       <div className="bistro-subtitle">
-        Permanent architectural-grade LED track — app-controlled color for the
-        holidays, sports, and everyday accent lighting.
+        Permanent architectural-grade LED track — app-controlled color for the holidays, sports, and
+        everyday accent lighting.
       </div>
       <div className="fields-grid-2">
         <RooflineFeetField
@@ -145,13 +135,7 @@ export function PermanentSection({ wizard }: { wizard: UseSalesWizardReturn }) {
 // One decor category (trees/bushes/wreaths/garland/…). `each` items render
 // steppers; `per_ft` items (garland) render a linear-feet input. Driven entirely
 // by the workspace pricing config so a new add-on needs no code here.
-function SeasonalItemGroup({
-  wizard,
-  item,
-}: {
-  wizard: UseSalesWizardReturn;
-  item: SeasonalItem;
-}) {
+function SeasonalItemGroup({ wizard, item }: { wizard: UseSalesWizardReturn; item: SeasonalItem }) {
   const options = item.options ?? [];
   if (!options.length) return null;
   const selection = wizard.christmas.items[item.key] ?? {};
@@ -176,10 +160,7 @@ function SeasonalItemGroup({
         {options.map((rate) => {
           const value = selection[rate.key] ?? 0;
           return (
-            <div
-              className={`fix-row${value > 0 ? " active-row" : ""}`}
-              key={rate.key}
-            >
+            <div className={`fix-row${value > 0 ? " active-row" : ""}`} key={rate.key}>
               <span
                 className="fix-icon"
                 style={{ color: tint, background: tintSurface(tint) }}
@@ -215,12 +196,10 @@ function SeasonalItemGroup({
                     <button
                       type="button"
                       className="step-btn"
+                      aria-label={`Decrease ${rate.name} quantity`}
+                      disabled={value <= 0}
                       onClick={() =>
-                        wizard.setSeasonalItem(
-                          item.key,
-                          rate.key,
-                          Math.floor(value) - 1,
-                        )
+                        wizard.setSeasonalItem(item.key, rate.key, Math.floor(value) - 1)
                       }
                     >
                       &#8722;
@@ -230,6 +209,7 @@ function SeasonalItemGroup({
                       type="number"
                       min={0}
                       value={value}
+                      aria-label={`${rate.name} quantity`}
                       onChange={(e) =>
                         wizard.setSeasonalItem(
                           item.key,
@@ -241,12 +221,9 @@ function SeasonalItemGroup({
                     <button
                       type="button"
                       className="step-btn"
+                      aria-label={`Increase ${rate.name} quantity`}
                       onClick={() =>
-                        wizard.setSeasonalItem(
-                          item.key,
-                          rate.key,
-                          Math.floor(value) + 1,
-                        )
+                        wizard.setSeasonalItem(item.key, rate.key, Math.floor(value) + 1)
                       }
                     >
                       +
@@ -299,9 +276,7 @@ function ChristmasPackageCards({ wizard }: { wizard: UseSalesWizardReturn }) {
     <div className="care-tiers">
       {ordered.map((pkg) => {
         const isSelected = pkg.key === selectedKey;
-        const tierLabel = [pkg.marker, pkg.card_tier ?? pkg.label]
-          .filter(Boolean)
-          .join("\u00a0 ");
+        const tierLabel = [pkg.marker, pkg.card_tier ?? pkg.label].filter(Boolean).join("\u00a0 ");
         const points = pkg.points ?? [];
         return (
           <button
@@ -311,26 +286,14 @@ function ChristmasPackageCards({ wizard }: { wizard: UseSalesWizardReturn }) {
             aria-pressed={isSelected}
             onClick={() => wizard.setChristmasPackage(pkg.key)}
           >
-            {pkg.popular ? (
-              <div className="care-tier-pop">Most Popular</div>
-            ) : null}
-            {pkg.value_tag ? (
-              <div className="pkg-value-tag">{pkg.value_tag}</div>
-            ) : null}
-            {tierLabel ? (
-              <div className="care-tier-per">{tierLabel}</div>
-            ) : null}
+            {pkg.popular ? <div className="care-tier-pop">Most Popular</div> : null}
+            {pkg.value_tag ? <div className="pkg-value-tag">{pkg.value_tag}</div> : null}
+            {tierLabel ? <div className="care-tier-per">{tierLabel}</div> : null}
             <div className="care-tier-name">{pkg.name ?? pkg.label}</div>
-            {pkg.card_tier && pkg.label ? (
-              <div className="care-tier-blurb">{pkg.label}</div>
-            ) : null}
-            <div className="care-tier-price">
-              {isSelected && total > 0 ? fmt(total) : "\u2014"}
-            </div>
+            {pkg.card_tier && pkg.label ? <div className="care-tier-blurb">{pkg.label}</div> : null}
+            <div className="care-tier-price">{isSelected && total > 0 ? fmt(total) : "\u2014"}</div>
             <div className="care-tier-per">Package total</div>
-            {pkg.experience ? (
-              <div className="care-tier-blurb">{pkg.experience}</div>
-            ) : null}
+            {pkg.experience ? <div className="care-tier-blurb">{pkg.experience}</div> : null}
             {points.length ? (
               <div className="pkg-points">
                 {points.map((point, i) => (
@@ -357,9 +320,7 @@ export function ChristmasSection({ wizard }: { wizard: UseSalesWizardReturn }) {
       <div className="care-head">
         <div>
           <div className="care-head-label">Seasonal Install</div>
-          <div className="care-head-title">
-            {cfg?.label ?? "Christmas Lighting"}
-          </div>
+          <div className="care-head-title">{cfg?.label ?? "Christmas Lighting"}</div>
         </div>
       </div>
       <div className="bistro-subtitle">

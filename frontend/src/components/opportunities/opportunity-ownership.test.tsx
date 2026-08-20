@@ -40,9 +40,7 @@ vi.mock("@/components/workspaces/team-member-picker", () => ({
       <select
         aria-label={label}
         value={value ?? ""}
-        onChange={(event) =>
-          onValueChange(event.target.value ? Number(event.target.value) : null)
-        }
+        onChange={(event) => onValueChange(event.target.value ? Number(event.target.value) : null)}
       >
         <option value="">Unassigned</option>
         <option value="7">Morgan Manager</option>
@@ -110,6 +108,8 @@ describe("opportunity ownership", () => {
         pipelineId="pipeline-1"
         stages={stages}
         defaultStageId="stage-1"
+        contactId={42}
+        contact={{ id: 42, first_name: "Helen", last_name: "Vasquez" }}
         canAssignOwners
         open
         onOpenChange={vi.fn()}
@@ -136,6 +136,8 @@ describe("opportunity ownership", () => {
         pipelineId="pipeline-1"
         stages={stages}
         defaultStageId="stage-1"
+        contactId={42}
+        contact={{ id: 42, first_name: "Helen", last_name: "Vasquez" }}
         canAssignOwners={false}
         open
         onOpenChange={vi.fn()}

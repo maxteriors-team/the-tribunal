@@ -258,6 +258,57 @@ class PublicLeadFormCORSMiddleware:
         await self.app(scope, receive, send_with_cors)
 
 
+# Public embed bootstrap calls can come directly from arbitrary customer sites.
+# The endpoint cross-checks this claim against the browser-controlled Origin.
+PUBLIC_EMBED_PATH_PREFIX = "/api/v1/p/embed/"
+
+
+class PublicEmbedCORSMiddleware:
+    """Allow credentialless embed requests to reach server-side domain checks."""
+
+    _PREFLIGHT_HEADERS = {
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, X-Embed-Parent-Origin",
+        "Access-Control-Max-Age": "600",
+        "Vary": "Origin",
+    }
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not scope["path"].startswith(PUBLIC_EMBED_PATH_PREFIX):
+            await self.app(scope, receive, send)
+            return
+
+        request_headers = Headers(scope=scope)
+        origin = request_headers.get("origin")
+        if not origin:
+            await self.app(scope, receive, send)
+            return
+
+        if scope["method"] == "OPTIONS" and "access-control-request-method" in request_headers:
+            response = PlainTextResponse(
+                "OK",
+                status_code=200,
+                headers={"Access-Control-Allow-Origin": origin, **self._PREFLIGHT_HEADERS},
+            )
+            await response(scope, receive, send)
+            return
+
+        async def send_with_cors(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                message.setdefault("headers", [])
+                headers = MutableHeaders(scope=message)
+                headers["Access-Control-Allow-Origin"] = origin
+                headers.append("Vary", "Origin")
+                if "access-control-allow-credentials" in headers:
+                    del headers["Access-Control-Allow-Credentials"]
+            await send(message)
+
+        await self.app(scope, receive, send_with_cors)
+
+
 # Minimum key material size in bytes. A 256-bit (32-byte) key is the recommended
 # minimum for HMAC-SHA256 (used to sign JWTs) and Fernet. We require the key to:
 #   1. Be at least 32 bytes long, AND
@@ -684,10 +735,11 @@ app.add_middleware(
     allow_headers=_ALLOWED_REQUEST_HEADERS,
 )
 
-# Public lead-form CORS — added after (= outermost of) CORSMiddleware so
-# third-party customer sites pass preflight on /api/v1/p/leads/* without being
-# granted the credentialed app-wide CORS policy. See the class docstring.
+# Public customer-site CORS layers — credentialless and path-scoped. They run
+# outside the strict app-wide middleware so browser preflights reach the route's
+# own allowed-domain check without weakening authenticated CRM endpoints.
 app.add_middleware(PublicLeadFormCORSMiddleware)
+app.add_middleware(PublicEmbedCORSMiddleware)
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")

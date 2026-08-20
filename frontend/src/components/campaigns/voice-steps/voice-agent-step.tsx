@@ -31,18 +31,12 @@ export interface VoiceAgentStepFields {
 export function makeVoiceAgentStep<
   TStepId extends string,
   TFormData extends VoiceAgentStepFields,
->(opts: {
-  id: TStepId;
-  voiceAgents: Agent[];
-}): WizardStep<TStepId, TFormData> {
+>(opts: { id: TStepId; voiceAgents: Agent[] }): WizardStep<TStepId, TFormData> {
   return {
     id: opts.id,
     label: "Voice Agent",
     icon: Phone,
-    validate: (data) =>
-      !data.voice_agent_id
-        ? { voice_agent_id: "Voice agent is required" }
-        : {},
+    validate: (data) => (!data.voice_agent_id ? { voice_agent_id: "Voice agent is required" } : {}),
     render: ({ formData, errors, updateField }) => {
       const setField = <K extends keyof VoiceAgentStepFields>(
         key: K,
@@ -90,22 +84,19 @@ export function makeVoiceAgentStep<
                 </p>
               </div>
               <Switch
+                aria-label="Machine detection"
                 checked={formData.enable_machine_detection}
-                onCheckedChange={(v) =>
-                  setField("enable_machine_detection", v)
-                }
+                onCheckedChange={(v) => setField("enable_machine_detection", v)}
               />
             </div>
 
             <div className="space-y-2">
-              <Label>Max Call Duration</Label>
+              <Label htmlFor="voice-max-call-duration">Max Call Duration</Label>
               <Select
                 value={String(formData.max_call_duration_seconds)}
-                onValueChange={(v) =>
-                  setField("max_call_duration_seconds", parseInt(v))
-                }
+                onValueChange={(v) => setField("max_call_duration_seconds", parseInt(v))}
               >
-                <SelectTrigger>
+                <SelectTrigger id="voice-max-call-duration">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

@@ -64,6 +64,17 @@ CRM_EVIDENCE_POLICY = "\n".join(
 class VoicePromptBuilder(_BaseVoicePromptBuilder):
     """Voice-specific builder with a hard cap on caller CRM context."""
 
+    def get_booking_instructions(self) -> str:
+        """Add spoken confirmation-turn guidance to the shared booking contract."""
+        return (
+            super().get_booking_instructions() + "\n\n[VOICE BOOKING CONFIRMATION]\n"
+            "Read the full booking summary aloud: exact weekday and calendar date, start "
+            f"time, {self.timezone} timezone, duration, and invite email. Ask whether every "
+            "detail is correct, then stop speaking and wait. A time choice or provided email "
+            "is not confirmation. Only call book_appointment with customer_confirmed=true "
+            "after the caller's next response explicitly affirms the complete summary."
+        )
+
     def build_context_section(
         self,
         contact_info: dict[str, Any] | None = None,

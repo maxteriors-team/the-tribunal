@@ -69,10 +69,13 @@
     document.head.appendChild(widgetScript);
   }
 
-  // Fetch agent config then bootstrap
+  // Fetch agent config then bootstrap. The custom header is browser-settable,
+  // while the API cross-checks it against the browser's real Origin header.
   var configUrl = baseUrl + "/api/v1/p/embed/" + agentId + "/config";
 
-  fetch(configUrl)
+  fetch(configUrl, {
+    headers: { "X-Embed-Parent-Origin": window.location.origin },
+  })
     .then(function (res) {
       if (!res.ok) throw new Error("HTTP " + res.status);
       return res.json();

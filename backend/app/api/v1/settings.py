@@ -7,7 +7,20 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import DB, CurrentUser, WorkspaceAccess
+from app.api.deps import (
+    DB,
+    CanManageComms,
+    CanManageMembers,
+    CanManageWorkspace,
+    CanReadBilling,
+    CanReadCRM,
+    CanWriteBilling,
+    CanWriteCRM,
+    CanWriteOutreach,
+    CanWritePipeline,
+    CurrentUser,
+    WorkspaceAccess,
+)
 from app.models.bookable_staff import BookableStaff
 from app.models.google_calendar_connection import GoogleCalendarConnection
 from app.models.message_template import MessageTemplate
@@ -246,6 +259,7 @@ async def update_notifications(
 async def get_integrations(
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanManageWorkspace,
 ) -> IntegrationsResponse:
     """Get workspace integration statuses."""
     integrations_result = await db.execute(
@@ -275,6 +289,7 @@ async def get_integrations(
 async def get_team_members(
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanManageMembers,
 ) -> list[TeamMemberResponse]:
     """Get workspace team members."""
     result = await db.execute(
@@ -328,6 +343,7 @@ async def get_team_members(
 @router.get("/workspaces/{workspace_id}/business-hours", response_model=BusinessHoursSettings)
 async def get_business_hours(
     workspace: WorkspaceAccess,
+    _gate: CanManageWorkspace,
 ) -> BusinessHoursSettings:
     """Get workspace business hours settings."""
     business_hours = workspace.settings.get("business_hours", {})
@@ -339,6 +355,7 @@ async def update_business_hours(
     update: BusinessHoursUpdate,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanManageWorkspace,
 ) -> BusinessHoursSettings:
     """Update workspace business hours settings."""
     current_settings = dict(workspace.settings)
@@ -366,6 +383,7 @@ async def update_business_hours(
 )
 async def get_proposal_template_settings(
     workspace: WorkspaceAccess,
+    _gate: CanReadBilling,
 ) -> ProposalTemplateSettings:
     """Get the workspace's client-proposal branding + boilerplate template."""
     return get_proposal_template(workspace)
@@ -379,6 +397,7 @@ async def update_proposal_template_settings(
     update: ProposalTemplateUpdate,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanWriteBilling,
 ) -> ProposalTemplateSettings:
     """Update the proposal template (partial merge into ``workspace.settings``).
 
@@ -404,6 +423,7 @@ async def update_proposal_template_settings(
 )
 async def get_pricing_settings(
     workspace: WorkspaceAccess,
+    _gate: CanReadBilling,
 ) -> PricingSettings:
     """Get the workspace's sales-pricing config (the proposal engine)."""
     return get_pricing_config(workspace)
@@ -417,6 +437,7 @@ async def update_pricing_settings(
     update: PricingSettingsUpdate,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanWriteBilling,
 ) -> PricingSettings:
     """Update the pricing config (shallow top-level merge into ``settings``).
 
@@ -443,6 +464,7 @@ async def update_pricing_settings(
 )
 async def get_neighbor_outreach_settings(
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
 ) -> NeighborOutreachSettings:
     """Get the workspace's job-site neighbour-outreach config."""
     return get_neighbor_outreach_config(workspace)
@@ -456,6 +478,7 @@ async def update_neighbor_outreach_settings(
     update: NeighborOutreachSettingsUpdate,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanWriteOutreach,
 ) -> NeighborOutreachSettings:
     """Update the neighbour-outreach config (partial merge into ``settings``).
 
@@ -526,6 +549,7 @@ async def _assert_templates_owned(
 )
 async def get_quote_followup_settings(
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
 ) -> QuoteFollowupSettings:
     """Get the workspace's first-14-days quote follow-up cadence."""
     return get_quote_followup_config(workspace)
@@ -539,6 +563,7 @@ async def update_quote_followup_settings(
     update: QuoteFollowupSettingsUpdate,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanWriteOutreach,
 ) -> QuoteFollowupSettings:
     """Merge and validate the quote cadence inside ``workspace.settings``."""
     current_settings = dict(workspace.settings or {})
@@ -586,6 +611,7 @@ async def update_quote_followup_settings(
 )
 async def get_quote_revival_settings(
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
 ) -> QuoteRevivalSettings:
     """Get the workspace's 30/60/90-day unsold-quote revival ladder."""
     return get_quote_revival_config(workspace)
@@ -599,6 +625,7 @@ async def update_quote_revival_settings(
     update: QuoteRevivalSettingsUpdate,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanWriteOutreach,
 ) -> QuoteRevivalSettings:
     """Merge and validate the revival ladder inside ``workspace.settings``."""
     current_settings = dict(workspace.settings or {})
@@ -654,6 +681,7 @@ async def update_quote_revival_settings(
 )
 async def get_lead_source_capture_policy(
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
 ) -> LeadSourceCaptureSettings:
     """Get the operator-only lead-source requirement for manual intake."""
     return get_lead_source_capture_settings(workspace)
@@ -667,6 +695,7 @@ async def update_lead_source_capture_policy(
     update: LeadSourceCaptureSettings,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanWriteCRM,
 ) -> LeadSourceCaptureSettings:
     """Replace the namespaced manual-intake policy without touching other settings."""
     current_settings = dict(workspace.settings or {})
@@ -684,6 +713,7 @@ async def update_lead_source_capture_policy(
 )
 async def get_auto_pipeline_policy(
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
 ) -> AutoPipelineSettings:
     """Get what auto-opens or advances a card on the sales pipeline."""
     return _auto_pipeline_settings(workspace)
@@ -697,6 +727,7 @@ async def update_auto_pipeline_policy(
     update: AutoPipelineSettings,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanWritePipeline,
 ) -> AutoPipelineSettings:
     """Replace the namespaced auto-pipeline policy without touching other settings."""
     current_settings = dict(workspace.settings or {})
@@ -722,6 +753,7 @@ def _auto_pipeline_settings(workspace: Workspace) -> AutoPipelineSettings:
 )
 async def get_attach_rules_settings(
     workspace: WorkspaceAccess,
+    _gate: CanReadBilling,
 ) -> AttachRulesSettings:
     """Get the workspace's attach-rule config (the cross-sell prompt)."""
     return get_attach_rules_config(workspace)
@@ -735,6 +767,7 @@ async def update_attach_rules_settings(
     update: AttachRulesSettingsUpdate,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanWriteBilling,
 ) -> AttachRulesSettings:
     """Update the attach-rule config (shallow top-level merge into ``settings``).
 
@@ -757,6 +790,7 @@ async def update_attach_rules_settings(
 @router.get("/workspaces/{workspace_id}/call-forwarding", response_model=CallForwardingSettings)
 async def get_call_forwarding(
     workspace: WorkspaceAccess,
+    _gate: CanManageComms,
 ) -> CallForwardingSettings:
     """Get workspace call forwarding settings."""
     call_forwarding = workspace.settings.get("call_forwarding", {})
@@ -768,6 +802,7 @@ async def update_call_forwarding(
     update: CallForwardingUpdate,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanManageComms,
 ) -> CallForwardingSettings:
     """Update workspace call forwarding settings."""
     current_settings = dict(workspace.settings)
@@ -790,6 +825,7 @@ async def update_call_forwarding(
 )
 async def get_speed_to_lead(
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
 ) -> SpeedToLeadSettingsResponse:
     """Get workspace speed-to-lead SLA settings."""
     config = get_speed_to_lead_settings(workspace)
@@ -810,6 +846,7 @@ async def update_speed_to_lead(
     update: SpeedToLeadSettingsUpdate,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanWriteOutreach,
 ) -> SpeedToLeadSettingsResponse:
     """Update workspace speed-to-lead SLA settings."""
     current_settings = dict(workspace.settings)
@@ -838,6 +875,7 @@ async def update_speed_to_lead(
 async def get_speed_to_lead_metrics(
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanReadCRM,
 ) -> SpeedToLeadMetrics:
     """Get live first-response SLA metrics for the workspace."""
     config = get_speed_to_lead_settings(workspace)
@@ -865,6 +903,7 @@ async def get_speed_to_lead_metrics(
 )
 async def get_missed_call_textback(
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
 ) -> MissedCallTextbackSettingsResponse:
     """Get workspace missed-call text-back settings."""
     raw = workspace.settings.get(MISSED_CALL_TEXTBACK_KEY, {})
@@ -881,6 +920,7 @@ async def update_missed_call_textback(
     update: MissedCallTextbackSettingsUpdate,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanWriteOutreach,
 ) -> MissedCallTextbackSettingsResponse:
     """Update workspace missed-call text-back settings."""
     current_settings = dict(workspace.settings)
@@ -902,6 +942,7 @@ async def update_missed_call_textback(
 async def get_card_settings(
     workspace: WorkspaceAccess,
     db: DB,  # noqa: ARG001
+    _gate: CanReadBilling,
 ) -> dict[str, str]:
     """Get card service sender address settings."""
     result: dict[str, str] = workspace.settings.get("card_service", {})
@@ -910,7 +951,10 @@ async def get_card_settings(
 
 @router.put("/workspaces/{workspace_id}/card-settings")
 async def update_card_settings(
-    workspace: WorkspaceAccess, db: DB, body: dict[str, str]
+    workspace: WorkspaceAccess,
+    db: DB,
+    body: dict[str, str],
+    _gate: CanWriteBilling,
 ) -> dict[str, str]:
     """Update card service sender address."""
     settings = dict(workspace.settings)

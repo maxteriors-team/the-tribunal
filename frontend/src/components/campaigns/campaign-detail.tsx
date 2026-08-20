@@ -19,14 +19,10 @@ import { GuaranteeProgress } from "@/components/campaigns/guarantee-progress";
 import { PreBookingPanel } from "@/components/campaigns/pre-booking-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageEmptyState, PageLoadingState } from "@/components/ui/page-state";
 import { useCampaignAnalytics } from "@/hooks/useCampaigns";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { campaignsApi } from "@/lib/api/campaigns";
 import { queryKeys } from "@/lib/query-keys";
@@ -41,9 +37,15 @@ interface CampaignDetailProps {
 export function CampaignDetail({ campaignId }: CampaignDetailProps) {
   const queryClient = useQueryClient();
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canManageCampaigns = can("outreach:write");
 
   // Load campaign data
-  const { data: campaign, isPending, error } = useQuery({
+  const {
+    data: campaign,
+    isPending,
+    error,
+  } = useQuery({
     queryKey: queryKeys.campaigns.detail(workspaceId ?? "", campaignId),
     queryFn: async () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
@@ -158,9 +160,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-2xl font-bold">{campaign.name}</h1>
-              <Badge className={campaignStatusColors[campaign.status]}>
-                {campaign.status}
-              </Badge>
+              <Badge className={campaignStatusColors[campaign.status]}>{campaign.status}</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
               Created {formatDate(campaign.created_at)}
@@ -169,50 +169,52 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
         </div>
 
         {/* Action buttons */}
-        <div className="flex gap-2">
-          {campaign.status === "draft" && (
-            <Button
-              onClick={() => startMutation.mutate()}
-              disabled={startMutation.isPending}
-              size="sm"
-            >
-              <Play className="size-4 mr-2" />
-              Start
-            </Button>
-          )}
-          {campaign.status === "running" && (
-            <Button
-              variant="outline"
-              onClick={() => pauseMutation.mutate()}
-              disabled={pauseMutation.isPending}
-              size="sm"
-            >
-              <Pause className="size-4 mr-2" />
-              Pause
-            </Button>
-          )}
-          {campaign.status === "paused" && (
-            <Button
-              onClick={() => resumeMutation.mutate()}
-              disabled={resumeMutation.isPending}
-              size="sm"
-            >
-              <RotateCcw className="size-4 mr-2" />
-              Resume
-            </Button>
-          )}
-          {(campaign.status === "paused" || campaign.status === "draft") && (
-            <Button
-              variant="destructive"
-              onClick={() => cancelMutation.mutate()}
-              disabled={cancelMutation.isPending}
-              size="sm"
-            >
-              <XCircle className="size-4 mr-2" />
-              Cancel
-            </Button>
-          )}
-        </div>
+        {canManageCampaigns && (
+          <div className="flex gap-2">
+            {campaign.status === "draft" && (
+              <Button
+                onClick={() => startMutation.mutate()}
+                disabled={startMutation.isPending}
+                size="sm"
+              >
+                <Play className="size-4 mr-2" />
+                Start
+              </Button>
+            )}
+            {campaign.status === "running" && (
+              <Button
+                variant="outline"
+                onClick={() => pauseMutation.mutate()}
+                disabled={pauseMutation.isPending}
+                size="sm"
+              >
+                <Pause className="size-4 mr-2" />
+                Pause
+              </Button>
+            )}
+            {campaign.status === "paused" && (
+              <Button
+                onClick={() => resumeMutation.mutate()}
+                disabled={resumeMutation.isPending}
+                size="sm"
+              >
+                <RotateCcw className="size-4 mr-2" />
+                Resume
+              </Button>
+            )}
+            {(campaign.status === "paused" || campaign.status === "draft") && (
+              <Button
+                variant="destructive"
+                onClick={() => cancelMutation.mutate()}
+                disabled={cancelMutation.isPending}
+                size="sm"
+              >
+                <XCircle className="size-4 mr-2" />
+                Cancel
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Campaign details */}
@@ -245,9 +247,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
             {campaign.initial_message && (
               <div>
                 <p className="text-sm text-muted-foreground">Initial Message</p>
-                <p className="text-sm mt-1 line-clamp-3">
-                  {campaign.initial_message}
-                </p>
+                <p className="text-sm mt-1 line-clamp-3">{campaign.initial_message}</p>
               </div>
             )}
           </CardContent>
@@ -261,9 +261,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <p className="text-2xl font-bold">
-                  {campaign.total_contacts}
-                </p>
+                <p className="text-2xl font-bold">{campaign.total_contacts}</p>
                 <p className="text-xs text-muted-foreground">Total Contacts</p>
               </div>
               <div>
@@ -271,34 +269,24 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                 <p className="text-xs text-muted-foreground">Sent</p>
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {campaign.messages_delivered}
-                </p>
+                <p className="text-2xl font-bold">{campaign.messages_delivered}</p>
                 <p className="text-xs text-muted-foreground">Delivered</p>
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {campaign.replies_received}
-                </p>
+                <p className="text-2xl font-bold">{campaign.replies_received}</p>
                 <p className="text-xs text-muted-foreground">Replies</p>
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {campaign.contacts_qualified}
-                </p>
+                <p className="text-2xl font-bold">{campaign.contacts_qualified}</p>
                 <p className="text-xs text-muted-foreground">Qualified</p>
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {campaign.contacts_opted_out}
-                </p>
+                <p className="text-2xl font-bold">{campaign.contacts_opted_out}</p>
                 <p className="text-xs text-muted-foreground">Opted Out</p>
               </div>
               {campaign.messages_failed > 0 && (
                 <div>
-                  <p className="text-2xl font-bold text-destructive">
-                    {campaign.messages_failed}
-                  </p>
+                  <p className="text-2xl font-bold text-destructive">{campaign.messages_failed}</p>
                   <p className="text-xs text-muted-foreground">Failed</p>
                 </div>
               )}
@@ -312,9 +300,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
                 </div>
               )}
               <div>
-                <p className="text-2xl font-bold">
-                  {campaign.links_clicked ?? 0}
-                </p>
+                <p className="text-2xl font-bold">{campaign.links_clicked ?? 0}</p>
                 <p className="text-xs text-muted-foreground">Links Clicked</p>
               </div>
               <RateStat label="Delivery Rate" rate={analytics?.delivery_rate} />
@@ -334,9 +320,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
       {campaign.pre_booking ? <PreBookingPanel campaignId={campaignId} /> : null}
 
       {/* Scheduling info */}
-      {(campaign.sending_hours_start ||
-        campaign.sending_hours_end ||
-        campaign.scheduled_start) && (
+      {(campaign.sending_hours_start || campaign.sending_hours_end || campaign.scheduled_start) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Schedule</CardTitle>
@@ -345,9 +329,7 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
             {campaign.scheduled_start && (
               <div>
                 <p className="text-sm text-muted-foreground">Start Date</p>
-                <p className="font-medium mt-1">
-                  {formatDate(campaign.scheduled_start)}
-                </p>
+                <p className="font-medium mt-1">{formatDate(campaign.scheduled_start)}</p>
               </div>
             )}
             {(campaign.sending_hours_start || campaign.sending_hours_end) && (
@@ -381,12 +363,8 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
             </div>
             {campaign.qualification_criteria && (
               <div>
-                <p className="text-sm text-muted-foreground">
-                  Qualification Criteria
-                </p>
-                <p className="text-sm mt-1 line-clamp-3">
-                  {campaign.qualification_criteria}
-                </p>
+                <p className="text-sm text-muted-foreground">Qualification Criteria</p>
+                <p className="text-sm mt-1 line-clamp-3">{campaign.qualification_criteria}</p>
               </div>
             )}
           </CardContent>
@@ -399,16 +377,10 @@ export function CampaignDetail({ campaignId }: CampaignDetailProps) {
 function RateStat({ label, rate }: { label: string; rate: number | undefined }) {
   const value = rate ?? 0;
   const colorClass =
-    value >= 0.2
-      ? "text-success"
-      : value >= 0.05
-        ? "text-amber-500"
-        : "text-muted-foreground";
+    value >= 0.2 ? "text-success" : value >= 0.05 ? "text-amber-500" : "text-muted-foreground";
   return (
     <div>
-      <p className={`text-2xl font-bold ${colorClass}`}>
-        {(value * 100).toFixed(1)}%
-      </p>
+      <p className={`text-2xl font-bold ${colorClass}`}>{(value * 100).toFixed(1)}%</p>
       <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   );

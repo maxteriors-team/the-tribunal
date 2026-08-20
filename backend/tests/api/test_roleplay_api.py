@@ -15,7 +15,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import roleplay as roleplay_module
 
 WS_ID = uuid.uuid4()
@@ -39,9 +39,13 @@ def _make_app(*, authed: bool) -> FastAPI:
         async def override_get_current_user() -> MagicMock:
             return SimpleNamespace(id=1, is_active=True)
 
+        async def override_get_membership() -> MagicMock:
+            return SimpleNamespace(role="member", workspace_id=WS_ID)
+
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_workspace] = override_get_workspace
         app.dependency_overrides[get_current_user] = override_get_current_user
+        app.dependency_overrides[get_membership] = override_get_membership
 
     app.include_router(
         roleplay_module.router,

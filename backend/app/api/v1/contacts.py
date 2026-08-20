@@ -54,6 +54,7 @@ from app.schemas.contact import (
     ContactEngagementSummary,
     ContactIdsResponse,
     ContactListResponse,
+    ContactNoteCreate,
     ContactResponse,
     ContactStatsResponse,
     ContactUpdate,
@@ -454,6 +455,26 @@ async def update_contact_ai_memory_fact(
     if knowledge is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
     return knowledge
+
+
+@router.post("/{contact_id}/notes", response_model=ContactResponse)
+async def append_contact_note(
+    workspace_id: uuid.UUID,
+    contact_id: int,
+    note_in: ContactNoteCreate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteCRM,
+) -> Contact:
+    """Append an internal client note without replacing prior note history."""
+    service = ContactService(db)
+    author_name = current_user.full_name or current_user.email
+    try:
+        return await service.append_contact_note(
+            contact_id, workspace_id, note_in.body, author_name
+        )
+    except ContactNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.put("/{contact_id}", response_model=ContactResponse)

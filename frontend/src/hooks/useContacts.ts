@@ -4,6 +4,7 @@ import {
   contactsApi,
   type ContactsListParams,
   type ContactIdsParams,
+  type ContactNoteCreate,
   type CreateContactRequest,
   type UpdateContactRequest,
 } from "@/lib/api/contacts";
@@ -22,10 +23,35 @@ const {
   useDelete: useDeleteContact,
 } = createResourceHooks({
   resourceKey: "contacts",
-  apiClient: contactsApi as unknown as ApiClient<Contact, CreateContactRequest, UpdateContactRequest>,
+  apiClient: contactsApi as unknown as ApiClient<
+    Contact,
+    CreateContactRequest,
+    UpdateContactRequest
+  >,
 });
 
-export { contactQueryKeys, useContacts, useContact, useCreateContact, useUpdateContact, useDeleteContact };
+export {
+  contactQueryKeys,
+  useContacts,
+  useContact,
+  useCreateContact,
+  useUpdateContact,
+  useDeleteContact,
+};
+
+export function useAppendContactNote(workspaceId: string, contactId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ContactNoteCreate) => contactsApi.appendNote(workspaceId, contactId, data),
+    onSuccess: (contact) => {
+      queryClient.setQueryData(queryKeys.contacts.detail(workspaceId, contactId), contact);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.contacts.all(workspaceId) });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.contacts.timeline(workspaceId, contactId),
+      });
+    },
+  });
+}
 
 /**
  * Fetch a single page of contacts with server-side filtering/sorting/pagination
@@ -139,7 +165,7 @@ export function useContactIds(
   workspaceId: string,
   params: ContactIdsParams,
   enabled: boolean,
-  onSuccess?: (data: Awaited<ReturnType<typeof contactsApi.listIds>>) => void
+  onSuccess?: (data: Awaited<ReturnType<typeof contactsApi.listIds>>) => void,
 ) {
   return useQuery({
     queryKey: queryKeys.contacts.ids(workspaceId, { ...params }),

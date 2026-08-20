@@ -9,8 +9,13 @@ import {
   type JobInstallationPlan,
   type JobList,
   type JobListParams,
+  type JobPricing,
+  type JobPricingReplace,
   type JobScheduleRequest,
   type JobUpdateRequest,
+  type JobVisit,
+  type JobVisitCreate,
+  type JobVisitUpdate,
 } from "@/lib/api/jobs";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -43,6 +48,68 @@ export function useJobInstallationPlan(workspaceId: string, jobId: string, enabl
     queryFn: () => jobsApi.installationPlan(workspaceId, jobId),
     enabled: enabled && Boolean(workspaceId) && Boolean(jobId),
     retry: false,
+  });
+}
+
+export function useJobVisits(workspaceId: string, jobId: string, enabled = true) {
+  return useQuery<JobVisit[]>({
+    queryKey: queryKeys.jobs.visits(workspaceId, jobId),
+    queryFn: () => jobsApi.listVisits(workspaceId, jobId),
+    enabled: enabled && Boolean(workspaceId) && Boolean(jobId),
+    retry: false,
+  });
+}
+
+export function useCreateJobVisit(workspaceId: string, jobId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: JobVisitCreate) => jobsApi.createVisit(workspaceId, jobId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.visits(workspaceId, jobId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all(workspaceId) });
+    },
+  });
+}
+
+export function useUpdateJobVisit(workspaceId: string, jobId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ visitId, body }: { visitId: string; body: JobVisitUpdate }) =>
+      jobsApi.updateVisit(workspaceId, jobId, visitId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.visits(workspaceId, jobId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all(workspaceId) });
+    },
+  });
+}
+
+export function useDeleteJobVisit(workspaceId: string, jobId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (visitId: string) => jobsApi.deleteVisit(workspaceId, jobId, visitId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.visits(workspaceId, jobId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all(workspaceId) });
+    },
+  });
+}
+
+export function useJobPricing(workspaceId: string, jobId: string, enabled = true) {
+  return useQuery<JobPricing>({
+    queryKey: queryKeys.jobs.pricing(workspaceId, jobId),
+    queryFn: () => jobsApi.getPricing(workspaceId, jobId),
+    enabled: enabled && Boolean(workspaceId) && Boolean(jobId),
+    retry: false,
+  });
+}
+
+export function useReplaceJobPricing(workspaceId: string, jobId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: JobPricingReplace) => jobsApi.replacePricing(workspaceId, jobId, body),
+    onSuccess: (pricing) => {
+      queryClient.setQueryData(queryKeys.jobs.pricing(workspaceId, jobId), pricing);
+    },
   });
 }
 

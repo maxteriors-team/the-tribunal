@@ -72,7 +72,7 @@ export interface Opportunity {
   workspace_id: string;
   pipeline_id: string;
   stage_id?: string;
-  primary_contact_id?: number;
+  primary_contact_id?: number | null;
   assigned_user_id?: number | null;
   assignee?: OpportunityAssignee | null;
   name: string;

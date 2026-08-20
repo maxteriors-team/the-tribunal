@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { Capability } from "@/lib/permissions";
+import { can, roleTier, type Capability } from "@/lib/permissions";
 
 import {
   allNavItems,
   appNavSections,
+  canAccessAppPath,
   canSeeNavItem,
+  directManagementCapabilityForPath,
+  findNavItemForPath,
   findNavSectionIdForPath,
   isFieldOperationalPath,
   setupNavItem,
@@ -14,9 +17,9 @@ import {
 
 // A capability checker that grants everything — proves the field tier is gated
 // by the operational allowlist, NOT by capabilities.
-const canAll = (_capability: Capability) => true;
+const canAll: (capability: Capability) => boolean = () => true;
 // Grants nothing.
-const canNone = (_capability: Capability) => false;
+const canNone: (capability: Capability) => boolean = () => false;
 
 function navItem(url: string, requires?: Capability): AppNavItem {
   return { title: url, url, icon: (() => null) as never, requires };
@@ -68,9 +71,7 @@ describe("findNavSectionIdForPath", () => {
     // Both /reports and /reports/sales are registered; the deeper route wins.
     expect(findNavSectionIdForPath("/reports/sales")).toBe("insights");
     // /find-leads/ad-library must not resolve via the /find-leads prefix alone.
-    expect(findNavSectionIdForPath("/find-leads/ad-library")).toBe(
-      "lead-discovery",
-    );
+    expect(findNavSectionIdForPath("/find-leads/ad-library")).toBe("lead-discovery");
   });
 
   it("ignores the query string on deep-linked items", () => {
@@ -176,7 +177,7 @@ describe("real nav items under the on-site tiers", () => {
   });
 });
 
-describe("setupNavItem (first-run \"Finish setup\" entry)", () => {
+describe('setupNavItem (first-run "Finish setup" entry)', () => {
   it("is gated on workspace:manage like the rest of the setup surface", () => {
     expect(setupNavItem.url).toBe("/onboarding");
     expect(setupNavItem.requires).toBe("workspace:manage");
@@ -251,5 +252,90 @@ describe("Christmas Lights seasonal hub nav item", () => {
 
   it("stays fail-closed to field techs even with all capabilities", () => {
     expect(canSeeNavItem(christmas!, "field", canAll)).toBe(false);
+  });
+});
+
+describe("canonical direct-route capability matrix", () => {
+  const routes = [
+    "/agents",
+    "/agents/create",
+    "/agents/practice",
+    "/automations",
+    "/experiments",
+    "/experiments/new",
+    "/campaigns",
+    "/campaigns/sms/new",
+    "/offers",
+    "/offers/new",
+    "/billing",
+    "/catalog",
+    "/reports",
+    "/settings",
+    "/onboarding",
+    "/calendar",
+    "/upsell",
+  ] as const;
+
+  const expectedByRole: Record<string, readonly (typeof routes)[number][]> = {
+    owner: routes,
+    admin: routes,
+    manager: routes.filter(
+      (route) => !["/agents/create", "/reports", "/onboarding"].includes(route),
+    ),
+    dispatcher: routes.filter(
+      (route) => !["/agents/create", "/reports", "/onboarding"].includes(route),
+    ),
+    sales_rep: [
+      "/agents",
+      "/agents/practice",
+      "/automations",
+      "/experiments",
+      "/experiments/new",
+      "/campaigns",
+      "/campaigns/sms/new",
+      "/offers",
+      "/offers/new",
+      "/settings",
+      "/calendar",
+      "/upsell",
+    ],
+    member: [
+      "/agents",
+      "/agents/practice",
+      "/automations",
+      "/experiments",
+      "/campaigns",
+      "/offers",
+      "/settings",
+      "/calendar",
+      "/upsell",
+    ],
+    lead_technician: ["/calendar", "/upsell"],
+    technician: ["/calendar"],
+  };
+
+  it.each(Object.entries(expectedByRole))(
+    "%s can enter exactly its permitted feature routes",
+    (role, allowedRoutes) => {
+      const capabilityCheck = (capability: Capability) => can(role, capability);
+
+      for (const route of routes) {
+        expect(canAccessAppPath(route, roleTier(role), capabilityCheck), `${role}: ${route}`).toBe(
+          allowedRoutes.includes(route),
+        );
+      }
+    },
+  );
+
+  it("uses longest-prefix read requirements plus explicit management overrides", () => {
+    expect(findNavItemForPath("/agents/practice/session")).toMatchObject({
+      url: "/agents/practice",
+      requires: "crm:read",
+    });
+    expect(directManagementCapabilityForPath("/agents/create")).toBe("workspace:manage");
+    expect(directManagementCapabilityForPath("/agents/agent-id")).toBe("workspace:manage");
+    expect(directManagementCapabilityForPath("/campaigns/email/new")).toBe("outreach:write");
+    expect(directManagementCapabilityForPath("/offers/offer-id")).toBe("outreach:write");
+    expect(directManagementCapabilityForPath("/experiments/new")).toBe("outreach:write");
   });
 });

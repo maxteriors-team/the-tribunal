@@ -4,13 +4,20 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.crud import get_or_404
-from app.api.deps import DB, CanReadCRM, CanWriteOutreach, CurrentUser
+from app.api.deps import (
+    DB,
+    CanReadCRM,
+    CanWriteOutreach,
+    CurrentUser,
+    require_route_capabilities,
+)
 from app.core.config import settings
+from app.core.permissions import Capability
 from app.db.pagination import paginate
 from app.models.agent import Agent
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus, CampaignType
@@ -43,7 +50,11 @@ from app.services.campaigns.campaign_lifecycle import (
 from app.services.campaigns.guarantee_tracker import check_guarantee_expiry
 from app.utils.datetime import parse_time_string
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.OUTREACH_WRITE))
+    ]
+)
 
 
 async def _validate_campaign_sender(db: AsyncSession, from_phone_number: str | None) -> None:

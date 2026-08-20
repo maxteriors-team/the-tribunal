@@ -36,6 +36,61 @@ ALL_ROLES = [
     "member",
 ]
 
+_ALL_CAPABILITIES = frozenset(Capability)
+_MANAGER_CAPABILITIES = frozenset(
+    {
+        Capability.CRM_READ,
+        Capability.CRM_WRITE,
+        Capability.PIPELINE_WRITE_OWN,
+        Capability.PIPELINE_WRITE,
+        Capability.JOBS_READ,
+        Capability.JOBS_WRITE,
+        Capability.COMMS_SEND,
+        Capability.BILLING_READ,
+        Capability.BILLING_WRITE,
+        Capability.OUTREACH_WRITE,
+        Capability.LOCATIONS_MANAGE,
+        Capability.UPSELL_SELL,
+        Capability.UPSELL_SELL_UNCAPPED,
+    }
+)
+ROLE_CAPABILITY_MATRIX: dict[str, frozenset[Capability]] = {
+    "owner": _ALL_CAPABILITIES,
+    "admin": _ALL_CAPABILITIES,
+    "manager": _MANAGER_CAPABILITIES,
+    "dispatcher": _MANAGER_CAPABILITIES,
+    "sales_rep": frozenset(
+        {
+            Capability.CRM_READ,
+            Capability.PIPELINE_WRITE_OWN,
+            Capability.JOBS_READ,
+            Capability.COMMS_SEND,
+            Capability.OUTREACH_WRITE,
+            Capability.UPSELL_SELL,
+            Capability.UPSELL_SELL_UNCAPPED,
+        }
+    ),
+    "member": frozenset(
+        {
+            Capability.CRM_READ,
+            Capability.JOBS_READ,
+            Capability.COMMS_SEND,
+            Capability.UPSELL_SELL,
+            Capability.UPSELL_SELL_UNCAPPED,
+        }
+    ),
+    "lead_technician": frozenset({Capability.JOBS_READ, Capability.UPSELL_SELL}),
+    "technician": frozenset({Capability.JOBS_READ}),
+}
+
+
+@pytest.mark.parametrize(("role", "expected"), ROLE_CAPABILITY_MATRIX.items())
+def test_eight_role_capability_matrix(role: str, expected: frozenset[Capability]) -> None:
+    """Every role is checked against every capability, not selected examples."""
+    assert capabilities_for(role) == expected
+    for capability in Capability:
+        assert role_can(role, capability) is (capability in expected), (role, capability)
+
 
 @pytest.mark.parametrize(
     ("role", "tier"),

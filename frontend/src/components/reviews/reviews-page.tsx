@@ -8,6 +8,7 @@ import { ReputationOverview } from "@/components/reviews/reputation-overview";
 import { ReviewRequestsTab } from "@/components/reviews/review-requests-tab";
 import { ReviewsList } from "@/components/reviews/reviews-list";
 import { Card, CardContent } from "@/components/ui/card";
+import { HorizontalScroll } from "@/components/ui/horizontal-scroll";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
@@ -32,15 +33,13 @@ export function ReviewsPage() {
 
   return (
     <AppSidebar>
-      <div className="p-6 space-y-6">
+      <div className="space-y-6 p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Reviews &amp; Reputation
-            </h1>
+            <h1 className="text-2xl font-bold tracking-tight">Reviews &amp; Reputation</h1>
             <p className="text-muted-foreground">
-              Collect reviews after completed jobs, route unhappy customers to
-              private feedback, and reply on-brand.
+              Collect reviews after completed jobs, route unhappy customers to private feedback, and
+              reply on-brand.
             </p>
           </div>
         </div>
@@ -48,33 +47,36 @@ export function ReviewsPage() {
         {isPending ? (
           <PageLoadingState message="Loading reputation…" />
         ) : error || !summary ? (
-          <PageErrorState
-            message="Failed to load reputation data."
-            onRetry={() => refetch()}
-          />
+          <PageErrorState message="Failed to load reputation data." onRetry={() => refetch()} />
         ) : (
           <ReputationOverview summary={summary} />
         )}
 
         <Tabs defaultValue="reviews" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="reviews" className="gap-2">
-              <Star className="size-4" />
-              Reviews
-            </TabsTrigger>
-            <TabsTrigger value="feedback" className="gap-2">
-              <MessageSquareWarning className="size-4" />
-              Private Feedback
-            </TabsTrigger>
-            <TabsTrigger value="public" className="gap-2">
-              <ShieldCheck className="size-4" />
-              Public
-            </TabsTrigger>
-            <TabsTrigger value="requests" className="gap-2">
-              <Send className="size-4" />
-              Requests
-            </TabsTrigger>
-          </TabsList>
+          <HorizontalScroll
+            activeKey="reviews"
+            aria-label="Review sections, scroll horizontally"
+            data-testid="reviews-tabs-scroll"
+          >
+            <TabsList className="h-auto w-max min-w-full justify-start">
+              <TabsTrigger value="reviews" className="gap-2">
+                <Star className="size-4" />
+                Reviews
+              </TabsTrigger>
+              <TabsTrigger value="feedback" className="gap-2">
+                <MessageSquareWarning className="size-4" />
+                Private Feedback
+              </TabsTrigger>
+              <TabsTrigger value="public" className="gap-2">
+                <ShieldCheck className="size-4" />
+                Public
+              </TabsTrigger>
+              <TabsTrigger value="requests" className="gap-2">
+                <Send className="size-4" />
+                Requests
+              </TabsTrigger>
+            </TabsList>
+          </HorizontalScroll>
 
           <TabsContent value="reviews">
             <Card>

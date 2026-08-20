@@ -5,11 +5,7 @@ import { useState } from "react";
 
 import { KnowledgeBaseTab } from "@/components/agents/tabs";
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Select,
   SelectContent,
@@ -30,21 +26,20 @@ export function KnowledgeBasePage() {
 
   return (
     <AppSidebar>
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
+      <div className="space-y-6 p-4 sm:p-6">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
               <BookOpen className="size-6" />
               Knowledge Base
             </h1>
             <p className="text-muted-foreground">
-              Manage the documents your AI agents use to answer questions
-              on-brand.
+              Manage the documents your AI agents use to answer questions on-brand.
             </p>
           </div>
           {agents.length > 0 && activeAgentId && (
             <Select value={activeAgentId} onValueChange={setSelectedAgentId}>
-              <SelectTrigger className="w-56">
+              <SelectTrigger className="w-full sm:w-56">
                 <SelectValue placeholder="Select an agent" />
               </SelectTrigger>
               <SelectContent>
@@ -61,10 +56,7 @@ export function KnowledgeBasePage() {
         {!workspaceId || isPending ? (
           <PageLoadingState message="Loading agents…" />
         ) : error ? (
-          <PageErrorState
-            message="Failed to load agents."
-            onRetry={() => refetch()}
-          />
+          <PageErrorState message="Failed to load agents." onRetry={() => refetch()} />
         ) : agents.length === 0 || !activeAgentId ? (
           <PageEmptyState
             icon={<BookOpen className="size-8" />}

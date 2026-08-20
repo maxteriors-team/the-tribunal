@@ -34,6 +34,7 @@ home-service workspace:
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
@@ -44,6 +45,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -565,9 +567,13 @@ class Job(Base):
         default=JobStatus.UNSCHEDULED,
     )
 
-    # Time window. Nullable: a job is "queued"/unscheduled until it gets one.
+    # Legacy primary time window. New multi-visit jobs mirror their next visit
+    # here so existing calendar and dispatch consumers remain compatible.
     scheduled_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scheduled_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    tax_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), nullable=False, default=Decimal("0.00"), server_default="0.00"
+    )
 
     # Provenance for jobs imported from an external system (e.g. Jobber). Null
     # for jobs created natively in the CRM. Together they form the idempotency
@@ -595,6 +601,19 @@ class Job(Base):
         "LightingProject", back_populates="jobs", foreign_keys=[lighting_project_id]
     )
 
+    visits: Mapped[list["JobVisit"]] = relationship(
+        "JobVisit",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="JobVisit.starts_at",
+    )
+    priced_line_items: Mapped[list["JobLineItem"]] = relationship(
+        "JobLineItem",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="JobLineItem.position",
+    )
+
     # The tag rows. Deleting a job removes its assignments.
     assignments: Mapped[list["JobAssignment"]] = relationship(
         "JobAssignment",
@@ -611,6 +630,75 @@ class Job(Base):
 
     def __repr__(self) -> str:
         return f"<Job(id={self.id}, title={self.title}, status={self.status})>"
+
+
+class JobVisit(Base):
+    """One scheduled visit belonging to a job; a job may have many visits."""
+
+    __tablename__ = "field_service_job_visits"
+    __table_args__ = (Index("ix_field_service_job_visits_job_start", "job_id", "starts_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("field_service_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    anytime: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=JobStatus.SCHEDULED.value, server_default="scheduled"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    job: Mapped["Job"] = relationship("Job", back_populates="visits")
+
+
+class JobLineItem(Base):
+    """Priced scope item for a job, visible only through billing-gated APIs."""
+
+    __tablename__ = "field_service_job_line_items"
+    __table_args__ = (Index("ix_field_service_job_line_items_job_position", "job_id", "position"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("field_service_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    taxable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    job: Mapped["Job"] = relationship("Job", back_populates="priced_line_items")
 
 
 class JobAssignment(Base):

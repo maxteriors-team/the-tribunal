@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { OutboundCallDialog } from "@/components/calls/outbound-call-dialog";
+import { ClientNoteDialog } from "@/components/contacts/client-note-dialog";
 import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import { ContactActions } from "@/components/contacts/contact-sidebar/contact-actions";
 import { ContactAppointments } from "@/components/contacts/contact-sidebar/contact-appointments";
@@ -27,6 +28,7 @@ import { ScheduleAppointmentDialog } from "@/components/contacts/schedule-appoin
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { useContactStore } from "@/lib/contact-store";
 import { messages } from "@/lib/messages";
@@ -40,6 +42,7 @@ interface ContactSidebarProps {
 
 export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
   const router = useRouter();
+  const { can } = useCapabilities();
   const { selectedContact, setSelectedContact } = useContactStore();
   const workspaceId = useWorkspaceId();
   const previousActiveElement = useRef<HTMLElement | null>(null);
@@ -50,9 +53,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
     if (!onClose) return;
 
     previousActiveElement.current =
-      typeof document !== "undefined"
-        ? (document.activeElement as HTMLElement | null)
-        : null;
+      typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -72,6 +73,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const {
@@ -108,9 +110,7 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
         },
         onError: (error) => {
           setAiEnabled(!newState);
-          toast.error(
-            getApiErrorMessage(error, messages.contacts.aiToggleFailed),
-          );
+          toast.error(getApiErrorMessage(error, messages.contacts.aiToggleFailed));
         },
       },
     );
@@ -127,21 +127,14 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
         router.push("/contacts");
       },
       onError: (error) => {
-        toast.error(
-          getApiErrorMessage(error, messages.contacts.deleteFailed),
-        );
+        toast.error(getApiErrorMessage(error, messages.contacts.deleteFailed));
       },
     });
   };
 
   if (!selectedContact) {
     return (
-      <div
-        className={cn(
-          "flex flex-col h-full items-center justify-center p-8",
-          className,
-        )}
-      >
+      <div className={cn("flex flex-col h-full items-center justify-center p-8", className)}>
         <p className="text-sm text-muted-foreground text-center">
           Select a contact to view details
         </p>
@@ -177,11 +170,13 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
           <Separator />
           <ContactActions
             hasPhoneNumber={!!selectedContact.phone_number}
+            canAddNotes={can("crm:write")}
             aiEnabled={aiEnabled}
             isCalling={initiateCallMutation.isPending}
             isTogglingAi={toggleAIMutation.isPending}
             onCall={callContact}
             onSchedule={() => setScheduleDialogOpen(true)}
+            onNotes={() => setNotesDialogOpen(true)}
             onEdit={() => setEditDialogOpen(true)}
             onToggleAi={handleAIEngage}
             onDelete={() => setDeleteDialogOpen(true)}
@@ -193,25 +188,16 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
           <ContactFilesMedia contactId={selectedContact.id} />
 
           <Separator />
-          <ImportantDatesSection
-            contact={selectedContact}
-            workspaceId={workspaceId}
-          />
+          <ImportantDatesSection contact={selectedContact} workspaceId={workspaceId} />
 
           <Separator />
-          <EngagementSummary
-            workspaceId={workspaceId ?? ""}
-            contactId={selectedContact.id}
-          />
+          <EngagementSummary workspaceId={workspaceId ?? ""} contactId={selectedContact.id} />
 
           <Separator />
           <ContactTimeline contact={selectedContact} timeline={timeline} />
 
           <Separator />
-          <ContactOpportunities
-            workspaceId={workspaceId}
-            contact={selectedContact}
-          />
+          <ContactOpportunities workspaceId={workspaceId} contact={selectedContact} />
 
           <Separator />
           <ContactAppointments
@@ -234,6 +220,15 @@ export function ContactSidebar({ className, onClose }: ContactSidebarProps) {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
       />
+      {workspaceId && (
+        <ClientNoteDialog
+          workspaceId={workspaceId}
+          contactId={selectedContact.id}
+          contactName={displayName}
+          open={notesDialogOpen}
+          onOpenChange={setNotesDialogOpen}
+        />
+      )}
       <ScheduleAppointmentDialog
         contact={selectedContact}
         open={scheduleDialogOpen}

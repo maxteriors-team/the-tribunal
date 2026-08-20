@@ -29,16 +29,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import {
-  promptVersionsApi,
-  type VersionComparisonItem,
-} from "@/lib/api/prompt-versions";
+import { promptVersionsApi, type VersionComparisonItem } from "@/lib/api/prompt-versions";
 import { queryKeys } from "@/lib/query-keys";
 import { REALTIME } from "@/lib/query-options";
 import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatNumber } from "@/lib/utils/number";
-
 
 interface ABTestDashboardProps {
   agentId: string;
@@ -67,7 +63,9 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
     },
     onSuccess: () => {
       toast.success("Winner declared! Other versions deactivated.");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.agents.promptVersionComparisonAll(),
+      });
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
       setDeclareWinnerVersion(null);
     },
@@ -81,7 +79,9 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
     },
     onSuccess: () => {
       toast.success("Version paused");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.agents.promptVersionComparisonAll(),
+      });
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to pause version")),
@@ -94,7 +94,9 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
     },
     onSuccess: () => {
       toast.success("Version resumed");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.agents.promptVersionComparisonAll(),
+      });
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to resume version")),
@@ -107,7 +109,9 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
     },
     onSuccess: () => {
       toast.success("Version eliminated from testing");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionComparisonAll() });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.agents.promptVersionComparisonAll(),
+      });
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents.promptVersionsAll() });
       setEliminateVersion(null);
     },
@@ -129,8 +133,8 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
           <FlaskConical className="mb-4 h-12 w-12 text-muted-foreground" />
           <h3 className="mb-2 text-lg font-semibold">No A/B Test Running</h3>
           <p className="mb-4 max-w-sm text-sm text-muted-foreground">
-            Activate multiple prompt versions to start an A/B test. The system will
-            automatically split traffic using Thompson Sampling.
+            Activate multiple prompt versions to start an A/B test. The system will automatically
+            split traffic using Thompson Sampling.
           </p>
         </CardContent>
       </Card>
@@ -241,16 +245,13 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
         ))}
       </div>
 
-      <AlertDialog
-        open={!!declareWinnerVersion}
-        onOpenChange={() => setDeclareWinnerVersion(null)}
-      >
+      <AlertDialog open={!!declareWinnerVersion} onOpenChange={() => setDeclareWinnerVersion(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Declare Winner?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will deactivate all other versions and make this the only active
-              version. The A/B test will end.
+              This will deactivate all other versions and make this the only active version. The A/B
+              test will end.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -265,16 +266,13 @@ export function ABTestDashboard({ agentId }: ABTestDashboardProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog
-        open={!!eliminateVersion}
-        onOpenChange={() => setEliminateVersion(null)}
-      >
+      <AlertDialog open={!!eliminateVersion} onOpenChange={() => setEliminateVersion(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Eliminate Version?</AlertDialogTitle>
             <AlertDialogDescription>
-              This version will be permanently removed from A/B testing. This action
-              cannot be undone.
+              This version will be permanently removed from A/B testing. This action cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -315,10 +313,7 @@ function VersionCard({
 
   return (
     <Card
-      className={cn(
-        isWinner && "border-success ring-1 ring-success",
-        isPaused && "opacity-60"
-      )}
+      className={cn(isWinner && "border-success ring-1 ring-success", isPaused && "opacity-60")}
     >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -344,11 +339,23 @@ function VersionCard({
           </div>
           <div className="flex gap-1">
             {isPaused ? (
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onResume} aria-label="Resume variant">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onResume}
+                aria-label="Resume variant"
+              >
                 <Play className="h-4 w-4" />
               </Button>
             ) : (
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onPause} aria-label="Pause variant">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={onPause}
+                aria-label="Pause variant"
+              >
                 <Pause className="h-4 w-4" />
               </Button>
             )}
@@ -363,9 +370,7 @@ function VersionCard({
             </Button>
           </div>
         </div>
-        <CardDescription>
-          {formatNumber(version.sample_size)} samples collected
-        </CardDescription>
+        <CardDescription>{formatNumber(version.sample_size)} samples collected</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
@@ -375,10 +380,11 @@ function VersionCard({
           </div>
           <Progress
             value={probabilityPercent}
+            aria-label="Probability of being best"
             className={cn(
               "h-3",
               probabilityPercent > 80 && "[&>div]:bg-success",
-              probabilityPercent < 20 && "[&>div]:bg-destructive"
+              probabilityPercent < 20 && "[&>div]:bg-destructive",
             )}
           />
         </div>
@@ -387,16 +393,12 @@ function VersionCard({
           <div>
             <p className="text-xs text-muted-foreground">Booking Rate</p>
             <p className="text-lg font-semibold">
-              {version.booking_rate !== null
-                ? `${(version.booking_rate * 100).toFixed(1)}%`
-                : "-"}
+              {version.booking_rate !== null ? `${(version.booking_rate * 100).toFixed(1)}%` : "-"}
             </p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Mean Estimate</p>
-            <p className="text-lg font-semibold">
-              {(version.mean_estimate * 100).toFixed(1)}%
-            </p>
+            <p className="text-lg font-semibold">{(version.mean_estimate * 100).toFixed(1)}%</p>
           </div>
         </div>
 

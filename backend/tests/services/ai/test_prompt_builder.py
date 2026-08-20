@@ -8,6 +8,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.services.ai.prompt_builder import VoicePromptBuilder
+from app.services.ai.voice_tools import (
+    VOICE_BOOKING_TOOLS,
+    get_booking_tools,
+    get_text_booking_tools,
+)
 
 
 @pytest.fixture
@@ -145,6 +150,36 @@ class TestVoicePromptBuilder:
         assert "check_availability" in instructions
         assert "book_appointment" in instructions
         assert "EMAIL" in instructions
+        assert "Selecting or proposing a time starts a separate confirmation turn" in instructions
+        assert "exact weekday and calendar date" in instructions
+        assert "appointment duration" in instructions
+        assert "invite email" in instructions
+        assert "customer_confirmed=true" in instructions
+        assert "ambiguous response is not confirmation" in instructions
+
+    def test_all_booking_tool_schemas_require_customer_confirmation(self) -> None:
+        booking_tools = [
+            next(tool for tool in VOICE_BOOKING_TOOLS if tool["name"] == "book_appointment"),
+            next(
+                tool
+                for tool in get_booking_tools("America/New_York")
+                if tool["name"] == "book_appointment"
+            ),
+            next(
+                tool["function"]
+                for tool in get_text_booking_tools("America/New_York")
+                if tool["function"]["name"] == "book_appointment"
+            ),
+        ]
+
+        for booking_tool in booking_tools:
+            parameters = booking_tool["parameters"]
+            assert "customer_confirmed" in parameters["required"]
+            assert parameters["properties"]["customer_confirmed"]["type"] == "boolean"
+            assert (
+                "explicitly affirms"
+                in parameters["properties"]["customer_confirmed"]["description"]
+            )
 
     def test_build_context_section_empty(self) -> None:
         """Test context section with no contact/offer info."""
@@ -179,9 +214,7 @@ class TestVoicePromptBuilder:
         """Test context section for outbound calls."""
         builder = VoicePromptBuilder()
         contact_info = {"name": "Jane Smith"}
-        context = builder.build_context_section(
-            contact_info=contact_info, is_outbound=True
-        )
+        context = builder.build_context_section(contact_info=contact_info, is_outbound=True)
 
         assert "OUTBOUND CALL" in context
         assert "Customer You Are Calling" in context
@@ -190,9 +223,7 @@ class TestVoicePromptBuilder:
         """Test context section for inbound calls."""
         builder = VoicePromptBuilder()
         contact_info = {"name": "Jane Smith"}
-        context = builder.build_context_section(
-            contact_info=contact_info, is_outbound=False
-        )
+        context = builder.build_context_section(contact_info=contact_info, is_outbound=False)
 
         assert "INBOUND CALL" in context
         assert "Customer Information" in context
@@ -249,15 +280,11 @@ class TestVoicePromptBuilder:
     def test_get_inbound_greeting_prompt_with_greeting(self) -> None:
         """Test inbound greeting prompt with specific greeting."""
         builder = VoicePromptBuilder()
-        prompt = builder.get_inbound_greeting_prompt(
-            greeting="Welcome to Acme Corp!"
-        )
+        prompt = builder.get_inbound_greeting_prompt(greeting="Welcome to Acme Corp!")
 
         assert "Welcome to Acme Corp!" in prompt
 
-    def test_get_inbound_greeting_prompt_default(
-        self, mock_agent: MagicMock
-    ) -> None:
+    def test_get_inbound_greeting_prompt_default(self, mock_agent: MagicMock) -> None:
         """Test inbound greeting prompt with default."""
         builder = VoicePromptBuilder(agent=mock_agent)
         prompt = builder.get_inbound_greeting_prompt()

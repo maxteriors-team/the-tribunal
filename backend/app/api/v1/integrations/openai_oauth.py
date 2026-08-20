@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 
-from app.api.deps import DB, CurrentUser, WorkspaceAccess, WorkspaceAdminAccess
+from app.api.deps import (
+    DB,
+    CurrentUser,
+    WorkspaceAccess,
+    WorkspaceAdminAccess,
+    require_route_capabilities,
+)
+from app.core.permissions import Capability
 from app.services.ai.openai_oauth import (
     OpenAIOAuthError,
     build_openai_oauth_start,
@@ -17,7 +24,13 @@ from app.services.ai.openai_oauth import (
     poll_openai_oauth_device_code,
 )
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(
+            require_route_capabilities(Capability.WORKSPACE_MANAGE, Capability.WORKSPACE_MANAGE)
+        )
+    ]
+)
 public_router = APIRouter()
 
 

@@ -16,13 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -143,12 +137,10 @@ function LocationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {isEditing ? "Edit Location" : "Add Location"}
-          </DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Location" : "Add Location"}</DialogTitle>
           <DialogDescription>
-            A location is one of your business&apos;s branches. Staff and jobs
-            can be assigned to it so you can filter and report by branch.
+            A location is one of your business&apos;s branches. Staff and jobs can be assigned to it
+            so you can filter and report by branch.
           </DialogDescription>
         </DialogHeader>
 
@@ -170,9 +162,7 @@ function LocationDialog({
                 id="loc-timezone"
                 placeholder="America/Chicago"
                 value={form.timezone}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, timezone: e.target.value }))
-                }
+                onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
@@ -181,9 +171,7 @@ function LocationDialog({
                 id="loc-phone"
                 placeholder="+1 512 555 0100"
                 value={form.phone}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, phone: e.target.value }))
-                }
+                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
               />
             </div>
           </div>
@@ -194,9 +182,7 @@ function LocationDialog({
               id="loc-address"
               placeholder="123 Main St"
               value={form.address_line1}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, address_line1: e.target.value }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, address_line1: e.target.value }))}
             />
           </div>
 
@@ -206,9 +192,7 @@ function LocationDialog({
               <Input
                 id="loc-city"
                 value={form.city}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, city: e.target.value }))
-                }
+                onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
@@ -216,9 +200,7 @@ function LocationDialog({
               <Input
                 id="loc-state"
                 value={form.state}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, state: e.target.value }))
-                }
+                onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
@@ -226,21 +208,18 @@ function LocationDialog({
               <Input
                 id="loc-postal"
                 value={form.postal_code}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, postal_code: e.target.value }))
-                }
+                onChange={(e) => setForm((f) => ({ ...f, postal_code: e.target.value }))}
               />
             </div>
           </div>
 
           {isEditing && (
             <div className="flex items-center justify-between">
-              <Label>Active</Label>
+              <Label htmlFor="location-active">Active</Label>
               <Switch
+                id="location-active"
                 checked={form.is_active}
-                onCheckedChange={(checked) =>
-                  setForm((f) => ({ ...f, is_active: checked }))
-                }
+                onCheckedChange={(checked) => setForm((f) => ({ ...f, is_active: checked }))}
               />
             </div>
           )}
@@ -316,8 +295,8 @@ export function LocationsSettingsTab() {
             <div>
               <CardTitle>Locations</CardTitle>
               <CardDescription>
-                Manage your business&apos;s branches. Assign staff and jobs to a
-                location to filter and report by branch.
+                Manage your business&apos;s branches. Assign staff and jobs to a location to filter
+                and report by branch.
               </CardDescription>
             </div>
             {canManage && (
@@ -376,9 +355,7 @@ export function LocationsSettingsTab() {
                       </p>
                     )}
                     {location.phone && (
-                      <p className="text-sm text-muted-foreground">
-                        {location.phone}
-                      </p>
+                      <p className="text-sm text-muted-foreground">{location.phone}</p>
                     )}
                   </div>
 
@@ -392,7 +369,7 @@ export function LocationsSettingsTab() {
                             isActive: checked,
                           })
                         }
-                        aria-label="Toggle active"
+                        aria-label={`${location.is_active ? "Deactivate" : "Activate"} ${location.name}`}
                       />
                       <Button
                         variant="ghost"
@@ -430,26 +407,20 @@ export function LocationsSettingsTab() {
         />
       )}
 
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-      >
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Location</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{deleteTarget?.name}&quot;?
-              Staff and jobs assigned to it will become unassigned. Consider
-              deactivating instead to keep history.
+              Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? Staff and jobs
+              assigned to it will become unassigned. Consider deactivating instead to keep history.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() =>
-                deleteTarget && deleteMutation.mutate(deleteTarget.id)
-              }
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
             >
               Delete
             </AlertDialogAction>

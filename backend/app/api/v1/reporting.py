@@ -8,9 +8,10 @@ service.
 
 from datetime import date, datetime
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import DB, CanViewReports
+from app.api.deps import DB, CanViewReports, require_route_capabilities
+from app.core.permissions import Capability
 from app.schemas.reporting import (
     ARAgingReport,
     AttributionGapReport,
@@ -25,7 +26,11 @@ from app.services.inventory import COGSService
 from app.services.reporting import CapacityService, ReportingService, SalesPerformanceService
 from app.services.reporting.capacity_service import DEFAULT_JOB_HOURS
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.REPORTS_VIEW, Capability.REPORTS_VIEW))
+    ]
+)
 
 
 @router.get("/ar-aging", response_model=ARAgingReport)

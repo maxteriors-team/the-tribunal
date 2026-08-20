@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable jsx-a11y/no-noninteractive-tabindex -- Installation code is a named horizontal scroll region. */
+
 import { Check, Copy, ExternalLink, Link2, LockKeyhole } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -44,7 +46,12 @@ function CodeSnippet({
 
   return (
     <div className="relative">
-      <pre className="overflow-x-auto rounded-lg bg-muted p-4 text-xs">
+      <pre
+        tabIndex={0}
+        role="region"
+        aria-label={`${tabId.replaceAll("-", " ")} installation code`}
+        className="overflow-x-auto rounded-lg bg-muted p-4 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      >
         {code}
       </pre>
       <Button
@@ -89,8 +96,7 @@ export function EmbedCodeBlock({
   );
 
   const scriptCode = useMemo(() => {
-    const displayAttr =
-      values.display !== "floating" ? ` display="${values.display}"` : "";
+    const displayAttr = values.display !== "floating" ? ` display="${values.display}"` : "";
     return `<script src="${baseUrl}/widget/v1/widget.js" defer></script>\n<ai-agent agent-id="${publicId}" mode="${values.mode}"${displayAttr}></ai-agent>`;
   }, [baseUrl, publicId, values.mode, values.display]);
 
@@ -133,9 +139,8 @@ export function EmbedCodeBlock({
         <AlertDescription className="space-y-2">
           <p>{blockedReason}</p>
           <p>
-            Add the domain where this widget will run, then save changes. Until
-            the saved allowlist includes that domain, backend embed requests
-            will be blocked.
+            Add the domain where this widget will run, then save changes. Until the saved allowlist
+            includes that domain, backend embed requests will be blocked.
           </p>
         </AlertDescription>
       </Alert>
@@ -177,8 +182,7 @@ export function EmbedCodeBlock({
             setCopiedTab={setCopiedTab}
           />
           <p className="text-xs text-muted-foreground">
-            Add this single line before {`</body>`}. That&apos;s it — settings
-            are auto-loaded.
+            Add this single line before {`</body>`}. That&apos;s it — settings are auto-loaded.
           </p>
         </TabsContent>
 
@@ -208,8 +212,8 @@ export function EmbedCodeBlock({
 
         <TabsContent value="wordpress" className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Go to <strong>Appearance → Widgets → Custom HTML</strong> (or your
-            theme&apos;s footer). Paste this code:
+            Go to <strong>Appearance → Widgets → Custom HTML</strong> (or your theme&apos;s footer).
+            Paste this code:
           </p>
           <CodeSnippet
             code={loaderSnippet}
@@ -221,9 +225,8 @@ export function EmbedCodeBlock({
 
         <TabsContent value="shopify" className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Go to{" "}
-            <strong>Online Store → Themes → Edit Code → theme.liquid</strong>.
-            Paste before {`</body>`}:
+            Go to <strong>Online Store → Themes → Edit Code → theme.liquid</strong>. Paste before{" "}
+            {`</body>`}:
           </p>
           <CodeSnippet
             code={loaderSnippet}
@@ -235,8 +238,7 @@ export function EmbedCodeBlock({
 
         <TabsContent value="webflow" className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Go to <strong>Project Settings → Custom Code → Footer Code</strong>.
-            Paste:
+            Go to <strong>Project Settings → Custom Code → Footer Code</strong>. Paste:
           </p>
           <CodeSnippet
             code={loaderSnippet}
@@ -263,13 +265,16 @@ export function EmbedCodeBlock({
         <div className="space-y-3 rounded-lg border p-4">
           <div className="flex items-center gap-2">
             <Link2 className="h-4 w-4 text-muted-foreground" />
-            <Label className="text-sm font-medium">Share Link</Label>
+            <Label htmlFor="agent-embed-share-link" className="text-sm font-medium">
+              Share Link
+            </Label>
           </div>
           <p className="text-xs text-muted-foreground">
             Share this direct link — no embedding required.
           </p>
           <div className="flex items-center gap-2">
             <Input
+              id="agent-embed-share-link"
               readOnly
               value={shareLink}
               className="flex-1 font-mono text-xs"

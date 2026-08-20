@@ -53,3 +53,8 @@ def test_booking_prompt_prevents_scott_conversation_failures() -> None:
     assert "invitation_sent is true" in prompt
     assert "did the invite email not arrive" in prompt
     assert "never claim you changed them" in prompt
+    assert "Selecting or proposing a time starts a SEPARATE confirmation turn" in prompt
+    assert "exact weekday and calendar date" in prompt
+    assert "appointment duration, and invite email" in prompt
+    assert "customer_confirmed=true" in prompt
+    assert "ambiguous reply is not confirmation" in prompt

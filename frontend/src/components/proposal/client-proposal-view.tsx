@@ -33,10 +33,7 @@ import {
   proposalValueProps,
   type ProposalDoc,
 } from "./document";
-import {
-  FinancingEstimate,
-  financingFromSnapshot,
-} from "./financing-estimate";
+import { FinancingEstimate, financingFromSnapshot } from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
 import { proposalFontVars } from "./proposal-fonts";
 import {
@@ -81,16 +78,11 @@ export function ClientProposalView({
   // not a choice, so the cards stay presentational in that case.
   const packages = useMemo(() => data.packages ?? [], [data.packages]);
   const choosable = packages.length > 1 && !data.is_decided;
-  const packagesByKey = useMemo(
-    () => new Map(packages.map((p) => [p.key, p])),
-    [packages],
-  );
+  const packagesByKey = useMemo(() => new Map(packages.map((p) => [p.key, p])), [packages]);
   // Starts on the rep's recommendation and follows the client from there.
   const [chosenTier, setChosenTier] = useState<string | null>(null);
   const selectedTier = chosenTier ?? doc.selected_tier ?? null;
-  const chosenPackage = selectedTier
-    ? (packagesByKey.get(selectedTier) ?? null)
-    : null;
+  const chosenPackage = selectedTier ? (packagesByKey.get(selectedTier) ?? null) : null;
 
   const onChoose = (key: string) => {
     if (!choosable) return;
@@ -98,10 +90,7 @@ export function ClientProposalView({
   };
 
   // Roving-focus arrow keys, per the ARIA radiogroup pattern.
-  const onCardKeyDown = (
-    event: React.KeyboardEvent<HTMLDivElement>,
-    key: string,
-  ) => {
+  const onCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, key: string) => {
     if (event.key === " " || event.key === "Enter") {
       event.preventDefault();
       onChoose(key);
@@ -139,9 +128,7 @@ export function ClientProposalView({
     const priced = doc.tiers.filter((tier) => tier.pricing.base > 0);
     return priced.reduce<(typeof priced)[number] | null>(
       (lowest, tier) =>
-        !lowest || tier.pricing.financed_total < lowest.pricing.financed_total
-          ? tier
-          : lowest,
+        !lowest || tier.pricing.financed_total < lowest.pricing.financed_total ? tier : lowest,
       null,
     );
   }, [doc.tiers]);
@@ -153,9 +140,7 @@ export function ClientProposalView({
     const known = new Set(doc.tiers.map((tier) => tier.key));
     return doc.additional_charges.filter(
       (charge) =>
-        !charge.tier_key ||
-        !known.has(charge.tier_key) ||
-        charge.tier_key === selectedTier,
+        !charge.tier_key || !known.has(charge.tier_key) || charge.tier_key === selectedTier,
     );
   }, [doc.additional_charges, doc.tiers, selectedTier]);
 
@@ -204,9 +189,7 @@ export function ClientProposalView({
 
   // The accept button names what's being accepted and what it costs today, so
   // the last click is never ambiguous about which package was bought.
-  const chosenLabel = choosable
-    ? (chosenPackage?.name ?? chosenPackage?.label ?? null)
-    : null;
+  const chosenLabel = choosable ? (chosenPackage?.name ?? chosenPackage?.label ?? null) : null;
   const ctaDeposit = choosable
     ? (chosenPackage?.deposit_amount ?? null)
     : data.deposit_required
@@ -214,19 +197,11 @@ export function ClientProposalView({
       : null;
 
   return (
-    <div
-      className={`proposal-view${festive ? " is-christmas" : ""} ${proposalFontVars}`}
-    >
+    <div className={`proposal-view${festive ? " is-christmas" : ""} ${proposalFontVars}`}>
       <div className="present-nav no-print">
-        <div className="present-nav-brand">
-          {`${brandName} · Proposal ${data.number}`}
-        </div>
+        <div className="present-nav-brand">{`${brandName} · Proposal ${data.number}`}</div>
         <div className="present-nav-actions">
-          <button
-            type="button"
-            className="send-email-nav-btn"
-            onClick={() => window.print()}
-          >
+          <button type="button" className="send-email-nav-btn" onClick={() => window.print()}>
             &#9113; Save as PDF
           </button>
         </div>
@@ -235,8 +210,8 @@ export function ClientProposalView({
       <div className="present-body">
         {justApproved ? (
           <div className="pp-banner ok">
-            &#10003;&nbsp; You approved this proposal. Thank you — we&rsquo;ll be
-            in touch shortly to schedule your project.
+            &#10003;&nbsp; You approved this proposal. Thank you — we&rsquo;ll be in touch shortly
+            to schedule your project.
           </div>
         ) : justDeclined ? (
           <div className="pp-banner no">
@@ -255,7 +230,7 @@ export function ClientProposalView({
           ) : null}
           <div className="present-eyebrow">{brandName}</div>
           <div className="present-hi">
-            Hi, <strong>{first || "there"}</strong>{" "}&#8212;{" "}
+            Hi, <strong>{first || "there"}</strong> &#8212;{" "}
             {festive ? "your Christmas lighting plan" : "your custom proposal"}
           </div>
           <div className="present-name">{residence}</div>
@@ -267,37 +242,31 @@ export function ClientProposalView({
           <div className="present-tagline">
             {festive ? (
               <>
-                {first ? `${first}, this` : "This"}{" "}display was designed
-                around your rooflines, your trees, and the way your home should
-                look from the street on Christmas Eve.
+                {first ? `${first}, this` : "This"} display was designed around your rooflines, your
+                trees, and the way your home should look from the street on Christmas Eve.
               </>
             ) : (
               <>
-                {first ? `${first}, we` : "We"}{" "}designed this around your
-                home and the way you want it to feel &#8212; every detail chosen
-                with intention, nothing left to chance.
+                {first ? `${first}, we` : "We"} designed this around your home and the way you want
+                it to feel &#8212; every detail chosen with intention, nothing left to chance.
               </>
             )}
           </div>
         </div>
 
         <div className="value-bar">
-          <div className="value-bar-eyebrow">
-            {festive ? "Our Promise" : "Our Approach"}
-          </div>
+          <div className="value-bar-eyebrow">{festive ? "Our Promise" : "Our Approach"}</div>
           <div className="value-bar-text">
             {festive ? (
               <>
-                You should get to enjoy Christmas.{" "}
-                <em>We handle everything else.</em>{" "}The design, the ladders,
-                the lights, the maintenance, and the takedown are all ours.
+                You should get to enjoy Christmas. <em>We handle everything else.</em> The design,
+                the ladders, the lights, the maintenance, and the takedown are all ours.
               </>
             ) : (
               <>
-                Your home is already beautiful.{" "}
-                <em>We&rsquo;re here to make it unforgettable.</em>{" "}Every
-                detail is deliberate &#8212; chosen for your home, your style,
-                and the way you live.
+                Your home is already beautiful. <em>We&rsquo;re here to make it unforgettable.</em>{" "}
+                Every detail is deliberate &#8212; chosen for your home, your style, and the way you
+                live.
               </>
             )}
           </div>
@@ -308,16 +277,12 @@ export function ClientProposalView({
             <div className="section-heading">
               {festive ? "Your Home, Lit Up" : "The Vision for Your Home"}
             </div>
-            <div
-              className={`pmock-grid${doc.mockups.length === 1 ? " single" : ""}`}
-            >
+            <div className={`pmock-grid${doc.mockups.length === 1 ? " single" : ""}`}>
               {doc.mockups.map((m, i) => (
                 <figure className="pmock-item" key={i}>
                   {/* eslint-disable-next-line @next/next/no-img-element -- snapshot data URL */}
                   <img src={m.image} alt={m.caption || `Design mockup ${i + 1}`} />
-                  {m.caption ? (
-                    <figcaption className="pmock-cap">{m.caption}</figcaption>
-                  ) : null}
+                  {m.caption ? <figcaption className="pmock-cap">{m.caption}</figcaption> : null}
                 </figure>
               ))}
             </div>
@@ -333,9 +298,7 @@ export function ClientProposalView({
                 <img src={image} alt="Your home, design preview" />
                 <div className="pnight-cap">
                   Your home &#8212; design preview
-                  {nightPhotos.length > 1
-                    ? ` (${i + 1} of ${nightPhotos.length})`
-                    : ""}
+                  {nightPhotos.length > 1 ? ` (${i + 1} of ${nightPhotos.length})` : ""}
                 </div>
               </div>
             ))}
@@ -374,6 +337,7 @@ export function ClientProposalView({
                   className={`pkg-card ${tier.key}${isSelected ? " pp-selected" : ""}${isChoice ? " pp-choosable" : ""}`}
                   key={tier.key}
                   role={isChoice ? "radio" : undefined}
+                  aria-label={isChoice ? `${tier.name ?? tier.label} package, ${lead}` : undefined}
                   aria-checked={isChoice ? isSelected : undefined}
                   tabIndex={isChoice ? (isSelected ? 0 : -1) : undefined}
                   onClick={isChoice ? () => onChoose(tier.key) : undefined}
@@ -385,28 +349,20 @@ export function ClientProposalView({
                   <div className="pkg-card-topbar" />
                   <div className="pkg-card-inner">
                     <div className="pkg-tier-label">{tier.label}</div>
-                    {tier.value_tag ? (
-                      <div className="pkg-value-tag">{tier.value_tag}</div>
-                    ) : null}
+                    {tier.value_tag ? <div className="pkg-value-tag">{tier.value_tag}</div> : null}
                     <div className="pkg-name">{tier.name ?? tier.label}</div>
-                    <div className="pkg-experience">
-                      {tier.experience ?? ""}
-                    </div>
+                    <div className="pkg-experience">{tier.experience ?? ""}</div>
                     <div className="pkg-price-wrap">
                       <div className="pkg-price">{lead}</div>
                       <div className="pkg-price-label">{priceLabel}</div>
                       {dueToday && dueToday > 0 ? (
-                        <div className="pkg-subprice">
-                          {`${fmt(dueToday)} due today to start`}
-                        </div>
+                        <div className="pkg-subprice">{`${fmt(dueToday)} due today to start`}</div>
                       ) : null}
                       {/* Independent of the deposit: this line is the only
                           thing pointing at the financing block below, so a
                           package that takes a deposit must not silence it. */}
                       {financingEstimate && tier.pricing.monthly_payment > 0 ? (
-                        <div className="pkg-monthly">
-                          Estimated payment options below
-                        </div>
+                        <div className="pkg-monthly">Estimated payment options below</div>
                       ) : null}
                     </div>
                     {tier.warranty ? (
@@ -438,8 +394,7 @@ export function ClientProposalView({
         ) : null}
         {choosable && !decided ? (
           <p className="pkg-grid-hint">
-            Tap a package to choose it. You can change your mind right up until
-            you accept.
+            Tap a package to choose it. You can change your mind right up until you accept.
           </p>
         ) : null}
 
@@ -450,7 +405,7 @@ export function ClientProposalView({
             <div className="addon-bar-label">
               {shownCharges.map((charge, i) => (
                 <span key={charge.description + i}>
-                  + {charge.description}{" "}&#8212; {fmt(charge.amount)}
+                  + {charge.description} &#8212; {fmt(charge.amount)}
                   {i < shownCharges.length - 1 ? <br /> : null}
                 </span>
               ))}
@@ -465,7 +420,7 @@ export function ClientProposalView({
               <div className="pcare-left">
                 <div className="pcare-eyebrow">Protect Your Investment</div>
                 <div className="pcare-name">
-                  <em>{careSelected.name}</em>{" "}Care Plan
+                  <em>{careSelected.name}</em> Care Plan
                 </div>
                 <div className="pcare-price">
                   {fmt(careSelected.price)} <span>/ year</span>
@@ -486,16 +441,12 @@ export function ClientProposalView({
                 </div>
               </div>
               <div className="pcare-right">
-                <div className="pcare-savings-label">
-                  &#9733; Potential Savings
-                </div>
-                <div className="pcare-savings-amount">
-                  {fmt(careSelected.savings)}
-                </div>
+                <div className="pcare-savings-label">&#9733; Potential Savings</div>
+                <div className="pcare-savings-amount">{fmt(careSelected.savings)}</div>
                 <div className="pcare-savings-unit">Estimated First Year</div>
                 <div className="pcare-savings-basis">
-                  Based on professional visits, avoided repairs, and plan
-                  discounts. An estimate &#8212; actual savings vary.
+                  Based on professional visits, avoided repairs, and plan discounts. An estimate
+                  &#8212; actual savings vary.
                 </div>
               </div>
             </div>
@@ -508,14 +459,11 @@ export function ClientProposalView({
               <div className="pcare-left">
                 <div className="pcare-eyebrow">Elevate Your Outdoor Living</div>
                 <div className="pcare-name">
-                  <em>
-                    {bistro.product === "color" ? "Color Changing" : "Classic"}
-                  </em>{" "}
-                  Bistro Lighting
+                  <em>{bistro.product === "color" ? "Color Changing" : "Classic"}</em> Bistro
+                  Lighting
                 </div>
                 <div className="pcare-price">
-                  {fmt(bistro.total)}{" "}
-                  <span>one-time</span>
+                  {fmt(bistro.total)} <span>one-time</span>
                 </div>
                 <div className="pcare-points">
                   {[
@@ -538,15 +486,14 @@ export function ClientProposalView({
                   className="pcare-savings-amount"
                   style={{ fontSize: "clamp(30px,4.4vw,42px)" }}
                 >
-                  {bistroTierName}{" "}Install
+                  {bistroTierName} Install
                 </div>
                 <div className="pcare-savings-unit">
-                  {Math.round(bistro.feet)}{" "}linear ft &middot; patio &amp;
-                  pergola
+                  {Math.round(bistro.feet)} linear ft &middot; patio &amp; pergola
                 </div>
                 <div className="pcare-savings-basis">
-                  Magazine-cover evenings &#8212; dinners, parties, and quiet
-                  nights, all under a warm canopy of light.
+                  Magazine-cover evenings &#8212; dinners, parties, and quiet nights, all under a
+                  warm canopy of light.
                 </div>
               </div>
             </div>
@@ -560,14 +507,11 @@ export function ClientProposalView({
                 <div className="pcare-inner">
                   <div className="pcare-left">
                     <div className="pcare-eyebrow">
-                      {sec.key === "christmas"
-                        ? "Your Holiday Display"
-                        : "Your Quote"}
+                      {sec.key === "christmas" ? "Your Holiday Display" : "Your Quote"}
                     </div>
                     <div className="pcare-name">{sec.label}</div>
                     <div className="pcare-price">
-                      {fmt(sec.financed_total)}{" "}
-                      <span>one-time</span>
+                      {fmt(sec.financed_total)} <span>one-time</span>
                     </div>
                     <div className="pcare-points">
                       {(sec.lines ?? []).map((line, i) => (
@@ -575,9 +519,7 @@ export function ClientProposalView({
                           <span className="pcare-point-mark">&#9670;</span>
                           <div>
                             {line.label}
-                            {line.line_total > 0
-                              ? ` \u2014 ${fmt(line.line_total)}`
-                              : ""}
+                            {line.line_total > 0 ? ` \u2014 ${fmt(line.line_total)}` : ""}
                           </div>
                         </div>
                       ))}
@@ -601,10 +543,7 @@ export function ClientProposalView({
               </div>
             ))}
             {doc.grand_financed_total > 0 ? (
-              <div
-                className="grand-panel"
-                style={{ maxWidth: 460, margin: "18px auto 0" }}
-              >
+              <div className="grand-panel" style={{ maxWidth: 460, margin: "18px auto 0" }}>
                 <div className="grand-panel-title">All-In Project Total</div>
                 <div className="grand-rows">
                   <div className="grand-row lead">
@@ -623,10 +562,7 @@ export function ClientProposalView({
             swaps rather than accumulating conditionals. */}
         {festive ? (
           <>
-            <ChristmasValueProps
-              brandName={brandName}
-              valueProps={valueProps}
-            />
+            <ChristmasValueProps brandName={brandName} valueProps={valueProps} />
             <ChristmasGuarantee />
             <ChristmasIncluded />
             <ChristmasSteps />
@@ -670,9 +606,7 @@ export function ClientProposalView({
           {decided ? (
             <>
               <div className="cta-eyebrow">
-                {justApproved || data.status === "approved"
-                  ? "Approved"
-                  : "Response Recorded"}
+                {justApproved || data.status === "approved" ? "Approved" : "Response Recorded"}
               </div>
               <div className="cta-heading">
                 {justApproved || data.status === "approved"
@@ -770,9 +704,7 @@ export function ClientProposalView({
             </>
           )}
           {actionError ? (
-            <div className="pp-error">
-              Something went wrong. Please refresh and try again.
-            </div>
+            <div className="pp-error">Something went wrong. Please refresh and try again.</div>
           ) : null}
         </div>
 
@@ -781,8 +713,7 @@ export function ClientProposalView({
           <div className="rep-sig-rep">
             {doc.client?.rep_name ? (
               <>
-                Prepared personally by <strong>{doc.client.rep_name}</strong>{" "}
-                &middot; {brandName}
+                Prepared personally by <strong>{doc.client.rep_name}</strong> &middot; {brandName}
               </>
             ) : (
               brandName
@@ -794,9 +725,7 @@ export function ClientProposalView({
           {[
             `Proposal ${data.number}`,
             data.issue_date ? `Issued ${formatDate(data.issue_date)}` : null,
-            data.expiry_date
-              ? `Valid until ${formatDate(data.expiry_date)}`
-              : null,
+            data.expiry_date ? `Valid until ${formatDate(data.expiry_date)}` : null,
           ]
             .filter(Boolean)
             .join(" \u00b7 ")}
@@ -814,9 +743,7 @@ export function ClientProposalView({
           ) : null}
         </div>
         {branding.footer ? (
-          <div className="pp-footer-note">
-            {renderTextWithLinks(branding.footer)}
-          </div>
+          <div className="pp-footer-note">{renderTextWithLinks(branding.footer)}</div>
         ) : null}
       </div>
     </div>

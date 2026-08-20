@@ -44,10 +44,7 @@ interface ContactOpportunitiesProps {
  * does not end up with two naming conventions.
  */
 function defaultDealName(contact: Contact): string {
-  const fullName = [contact.first_name, contact.last_name]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
+  const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim();
   const company = (contact.company_name ?? "").trim();
   if (fullName && company) return `${fullName} — ${company}`;
   return fullName || company || "New deal";
@@ -61,10 +58,7 @@ function defaultDealName(contact: Contact): string {
  * purpose: without them the button invites a duplicate card for a lead that is
  * already in the pipeline.
  */
-export function ContactOpportunities({
-  workspaceId,
-  contact,
-}: ContactOpportunitiesProps) {
+export function ContactOpportunities({ workspaceId, contact }: ContactOpportunitiesProps) {
   const { currentWorkspace } = useWorkspace();
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -92,8 +86,7 @@ export function ContactOpportunities({
   const defaultPipeline = useMemo<Pipeline | undefined>(() => {
     if (!pipelines || pipelines.length === 0) return undefined;
     return [...pipelines].sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     )[0];
   }, [pipelines]);
 
@@ -154,17 +147,11 @@ export function ContactOpportunities({
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{deal.name}</p>
                 <p className="text-muted-foreground text-xs truncate">
-                  {(deal.stage_id ? stageNames.get(deal.stage_id) : null) ??
-                    "No stage"}
-                  {deal.amount != null
-                    ? ` · ${formatCurrency(deal.amount, deal.currency)}`
-                    : ""}
+                  {(deal.stage_id ? stageNames.get(deal.stage_id) : null) ?? "No stage"}
+                  {deal.amount != null ? ` · ${formatCurrency(deal.amount, deal.currency)}` : ""}
                 </p>
               </div>
-              <Badge
-                variant={STATUS_VARIANT[deal.status]}
-                className="text-xs py-0 capitalize"
-              >
+              <Badge variant={STATUS_VARIANT[deal.status]} className="text-xs py-0 capitalize">
                 {deal.status}
               </Badge>
             </Link>
@@ -172,18 +159,14 @@ export function ContactOpportunities({
 
           {opportunities.length > VISIBLE_DEALS ? (
             <Button variant="outline" size="sm" className="w-full text-xs" asChild>
-              <Link href="/opportunities">
-                View all ({opportunities.length})
-              </Link>
+              <Link href="/opportunities">View all ({opportunities.length})</Link>
             </Button>
           ) : null}
 
           {opportunities.length === 0 ? (
             defaultPipeline ? (
               <>
-                <p className="text-xs text-muted-foreground">
-                  Not in the pipeline yet
-                </p>
+                <p className="text-xs text-muted-foreground">Not in the pipeline yet</p>
                 <Button
                   variant="outline"
                   size="sm"
@@ -208,10 +191,9 @@ export function ContactOpportunities({
         <OpportunityCreateSheet
           workspaceId={workspaceId}
           pipelineId={defaultPipeline.id}
-          stages={[...(defaultPipeline.stages ?? [])].sort(
-            (a, b) => a.order - b.order,
-          )}
+          stages={[...(defaultPipeline.stages ?? [])].sort((a, b) => a.order - b.order)}
           contactId={contact.id}
+          contact={contact}
           defaultName={defaultDealName(contact)}
           canAssignOwners={canAssignOwners}
           open={createOpen}

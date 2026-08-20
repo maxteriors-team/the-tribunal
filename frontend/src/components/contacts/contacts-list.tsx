@@ -45,7 +45,8 @@ interface ContactItemProps {
 }
 
 function ContactItem({ contact, isSelected, onClick }: ContactItemProps) {
-  const displayName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unknown";
+  const displayName =
+    [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unknown";
 
   return (
     <motion.div
@@ -60,7 +61,7 @@ function ContactItem({ contact, isSelected, onClick }: ContactItemProps) {
         className={cn(
           "w-full flex items-start gap-3 p-3 rounded-lg text-left transition-colors",
           "hover:bg-accent/50",
-          isSelected && "bg-accent"
+          isSelected && "bg-accent",
         )}
       >
         <Avatar className="h-10 w-10 shrink-0">
@@ -82,19 +83,23 @@ function ContactItem({ contact, isSelected, onClick }: ContactItemProps) {
                       ? "text-success bg-success/10"
                       : contact.lead_score >= 40
                         ? "text-warning bg-warning/10"
-                        : "text-muted-foreground bg-muted"
+                        : "text-muted-foreground bg-muted",
                   )}
                   title={`Lead Score: ${contact.lead_score}`}
                 >
                   {contact.lead_score}
                 </span>
               )}
-              {(contact.business_intel?.ad_pixels?.meta_pixel || contact.business_intel?.ad_pixels?.google_ads) && (
+              {(contact.business_intel?.ad_pixels?.meta_pixel ||
+                contact.business_intel?.ad_pixels?.google_ads) && (
                 <span title="Running paid ads">
                   <Sparkles className="h-3 w-3 text-primary" />
                 </span>
               )}
-              <Badge variant="secondary" className={cn("text-xs", contactStatusColors[contact.status])}>
+              <Badge
+                variant="secondary"
+                className={cn("text-xs", contactStatusColors[contact.status])}
+              >
                 {contact.status}
               </Badge>
             </div>
@@ -150,15 +155,20 @@ export function ContactsList({ className }: ContactsListProps) {
             variant="ghost"
             className="h-8 w-8"
             onClick={() => setIsCreateDialogOpen(true)}
+            aria-label="Add contact"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
 
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+            aria-hidden="true"
+          />
           <Input
+            aria-label="Search contacts"
             placeholder="Search contacts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

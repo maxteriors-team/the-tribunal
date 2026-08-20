@@ -18,14 +18,15 @@ from app.schemas.embed import (
     TranscriptRequest,
     TranscriptResponse,
 )
+from app.services.embed.access import verified_parent_origin
 from app.services.embed.service import PublicEmbedService
 
 router = APIRouter()
 
 
-def _origin(request: Request) -> str | None:
-    """Return the browser Origin header used by public embed validation."""
-    return request.headers.get("origin")
+def _parent_origin(request: Request, *, public_id: str) -> str:
+    """Resolve the real host page for cross- and same-origin iframe fetches."""
+    return verified_parent_origin(request, public_id=public_id)
 
 
 def _client_ip(request: Request) -> str:
@@ -40,7 +41,9 @@ async def get_embed_config(
     db: DB,
 ) -> EmbedConfigResponse:
     """Get public configuration for the embed widget."""
-    return await PublicEmbedService(db).get_config(public_id=public_id, origin=_origin(request))
+    return await PublicEmbedService(db).get_config(
+        public_id=public_id, origin=_parent_origin(request, public_id=public_id)
+    )
 
 
 @router.post("/{public_id}/token", response_model=TokenResponse)
@@ -54,7 +57,7 @@ async def get_ephemeral_token(
     del body
     return await PublicEmbedService(db).create_realtime_token(
         public_id=public_id,
-        origin=_origin(request),
+        origin=_parent_origin(request, public_id=public_id),
         client_ip=_client_ip(request),
     )
 
@@ -69,7 +72,7 @@ async def send_chat_message(
     """Send a chat message and get AI response."""
     return await PublicEmbedService(db).send_chat_message(
         public_id=public_id,
-        origin=_origin(request),
+        origin=_parent_origin(request, public_id=public_id),
         client_ip=_client_ip(request),
         body=body,
     )
@@ -85,7 +88,7 @@ async def execute_tool_call(
     """Execute a tool call from the AI."""
     return await PublicEmbedService(db).execute_tool_call(
         public_id=public_id,
-        origin=_origin(request),
+        origin=_parent_origin(request, public_id=public_id),
         client_ip=_client_ip(request),
         body=body,
     )
@@ -101,7 +104,7 @@ async def save_transcript(
     """Save a conversation transcript."""
     return await PublicEmbedService(db).save_transcript(
         public_id=public_id,
-        origin=_origin(request),
+        origin=_parent_origin(request, public_id=public_id),
         client_ip=_client_ip(request),
         body=body,
     )
@@ -117,7 +120,7 @@ async def trigger_embed_call(
     """Trigger an AI call via the embed widget."""
     return await PublicEmbedService(db).trigger_call(
         public_id=public_id,
-        origin=_origin(request),
+        origin=_parent_origin(request, public_id=public_id),
         client_ip=_client_ip(request),
         body=body,
     )
@@ -133,7 +136,7 @@ async def trigger_embed_text(
     """Trigger an AI text via the embed widget."""
     return await PublicEmbedService(db).trigger_text(
         public_id=public_id,
-        origin=_origin(request),
+        origin=_parent_origin(request, public_id=public_id),
         client_ip=_client_ip(request),
         body=body,
     )

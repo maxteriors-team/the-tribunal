@@ -436,8 +436,8 @@ VOICE_BOOKING_TOOLS: list[dict[str, Any]] = [
         "name": "book_appointment",
         "description": (
             "Book an appointment/meeting with the customer on the assigned Google Calendar. "
-            "Use this when the customer agrees to schedule a call, meeting, "
-            "or appointment. You MUST collect the customer's email address first."
+            "Use only after the customer explicitly confirms your immediately preceding "
+            "summary of the exact date, time, timezone, duration, and invite email."
         ),
         "parameters": {
             "type": "object",
@@ -459,6 +459,13 @@ VOICE_BOOKING_TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": "Customer's email address for booking confirmation",
                 },
+                "customer_confirmed": {
+                    "type": "boolean",
+                    "description": (
+                        "Must be true only after the customer explicitly affirms the immediately "
+                        "preceding full date, time, timezone, duration, and invite-email summary."
+                    ),
+                },
                 "duration_minutes": {
                     "type": "integer",
                     "description": "Duration in minutes. Default is 30.",
@@ -478,7 +485,7 @@ VOICE_BOOKING_TOOLS: list[dict[str, Any]] = [
                     ),
                 },
             },
-            "required": ["date", "time", "email"],
+            "required": ["date", "time", "email", "customer_confirmed"],
         },
     },
     {
@@ -550,7 +557,8 @@ def get_booking_tools(timezone: str = "America/New_York") -> list[dict[str, Any]
                 f"TODAY IS {today_str} ({today_iso}). "
                 f"When converting relative dates to YYYY-MM-DD: 'today' = {today_iso}, "
                 "'tomorrow' = the day after today, 'Friday' = the NEXT Friday from today. "
-                "You MUST collect the customer's email address first."
+                "Use only after the customer explicitly affirms the immediately preceding exact "
+                "date, time, timezone, duration, and invite-email summary."
             ),
             "parameters": {
                 "type": "object",
@@ -575,6 +583,14 @@ def get_booking_tools(timezone: str = "America/New_York") -> list[dict[str, Any]
                         "type": "string",
                         "description": "Customer's email address for booking confirmation",
                     },
+                    "customer_confirmed": {
+                        "type": "boolean",
+                        "description": (
+                            "Must be true only after the customer explicitly affirms "
+                            "the immediately preceding full date, time, timezone, "
+                            "duration, and invite-email summary."
+                        ),
+                    },
                     "duration_minutes": {
                         "type": "integer",
                         "description": "Duration in minutes. Default is 30.",
@@ -584,7 +600,7 @@ def get_booking_tools(timezone: str = "America/New_York") -> list[dict[str, Any]
                         "description": "Optional notes about the appointment",
                     },
                 },
-                "required": ["date", "time", "email"],
+                "required": ["date", "time", "email", "customer_confirmed"],
             },
         },
         {
@@ -1006,8 +1022,9 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                     "Use this only after asking whether the lead prefers a phone call "
                     "or video call; never infer the format or invent a meeting link. "
                     "Parse relative dates like 'tomorrow at 2pm'. "
-                    "IMPORTANT: You MUST collect the customer's email address and include "
-                    "it in this call. Ask for email in the same message as confirming the booking."
+                    "IMPORTANT: use only after the customer explicitly affirms your immediately "
+                    "preceding summary of the exact date, time, timezone, duration, call type, "
+                    "and invite email."
                 ),
                 "parameters": {
                     "type": "object",
@@ -1032,6 +1049,13 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                             "description": (
                                 "Customer's email address for booking confirmation. "
                                 "REQUIRED - always ask for and include the email."
+                            ),
+                        },
+                        "customer_confirmed": {
+                            "type": "boolean",
+                            "description": (
+                                "Must be true only after the customer explicitly affirms the "
+                                "immediately preceding complete booking summary."
                             ),
                         },
                         "call_type": {
@@ -1061,7 +1085,13 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                             ),
                         },
                     },
-                    "required": ["date", "time", "email", "call_type"],
+                    "required": [
+                        "date",
+                        "time",
+                        "email",
+                        "customer_confirmed",
+                        "call_type",
+                    ],
                 },
             },
         },

@@ -1,6 +1,6 @@
 "use client";
 
-import { Phone, Calendar, Edit2, Bot, Trash2, Loader2 } from "lucide-react";
+import { Phone, Calendar, Edit2, Bot, Trash2, Loader2, StickyNote } from "lucide-react";
 import { type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,9 @@ function QuickAction({
 }: QuickActionProps) {
   return (
     <Button
-      variant={variant === "destructive" ? "destructive" : variant === "primary" ? "default" : "outline"}
+      variant={
+        variant === "destructive" ? "destructive" : variant === "primary" ? "default" : "outline"
+      }
       size="sm"
       // min-w-0 lets the label truncate inside a narrow rail instead of
       // widening the button past its column.
@@ -44,11 +46,13 @@ function QuickAction({
 
 interface ContactActionsProps {
   hasPhoneNumber: boolean;
+  canAddNotes: boolean;
   aiEnabled: boolean;
   isCalling: boolean;
   isTogglingAi: boolean;
   onCall: () => void;
   onSchedule: () => void;
+  onNotes: () => void;
   onEdit: () => void;
   onToggleAi: () => void;
   onDelete: () => void;
@@ -56,11 +60,13 @@ interface ContactActionsProps {
 
 export function ContactActions({
   hasPhoneNumber,
+  canAddNotes,
   aiEnabled,
   isCalling,
   isTogglingAi,
   onCall,
   onSchedule,
+  onNotes,
   onEdit,
   onToggleAi,
   onDelete,
@@ -82,11 +88,10 @@ export function ContactActions({
           label="Schedule"
           onClick={onSchedule}
         />
-        <QuickAction
-          icon={<Edit2 className="h-4 w-4" />}
-          label="Edit"
-          onClick={onEdit}
-        />
+        {canAddNotes && (
+          <QuickAction icon={<StickyNote className="h-4 w-4" />} label="Notes" onClick={onNotes} />
+        )}
+        <QuickAction icon={<Edit2 className="h-4 w-4" />} label="Edit" onClick={onEdit} />
         <QuickAction
           icon={<Bot className="h-4 w-4" />}
           label={aiEnabled ? "AI On" : "AI Off"}

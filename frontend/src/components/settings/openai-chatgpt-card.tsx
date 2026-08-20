@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useIsMounted } from "@/hooks/useMounted";
 import { integrationsApi } from "@/lib/api/integrations";
 import { queryKeys } from "@/lib/query-keys";
 import { useWorkspace } from "@/providers/workspace-provider";
@@ -40,6 +41,7 @@ function getErrorMessage(error: Error, fallback: string): string {
 export function OpenAIChatGPTCard() {
   const { currentWorkspaceId: workspaceId } = useWorkspace();
   const queryClient = useQueryClient();
+  const isHydrated = useIsMounted();
   const pollTimer = useRef<number | null>(null);
   const pendingPopup = useRef<Window | null>(null);
   const activePollToken = useRef<string | null>(null);
@@ -202,9 +204,35 @@ export function OpenAIChatGPTCard() {
     };
   }, []);
 
-  const status = statusQuery.data;
+  // Browser workspace/query caches can be ready when SSR is not. Keep the
+  // hydration snapshot in one deterministic checking state, then reveal the
+  // real readiness after React attaches to the server markup.
+  const configurationReadiness = !isHydrated
+    ? "checking"
+    : !workspaceId
+      ? "workspace-required"
+      : statusQuery.isPending
+        ? "checking"
+        : statusQuery.isError
+          ? "error"
+          : "ready";
+  const isConfigurationReady = configurationReadiness === "ready";
+  const status = isConfigurationReady ? statusQuery.data : undefined;
   const connectedStatus = status?.connected ? status : null;
   const isConnected = connectedStatus !== null;
+
+  const connectionExplanation =
+    configurationReadiness === "checking"
+      ? "Checking this workspace’s OpenAI connection before sign-in…"
+      : configurationReadiness === "workspace-required"
+        ? "Select a workspace before connecting a ChatGPT subscription."
+        : configurationReadiness === "error"
+          ? "OpenAI connection status could not be loaded. Refresh the page before trying to connect."
+          : isConnected
+            ? "This workspace uses the connected ChatGPT subscription first and falls back to an API key only if the subscription becomes unavailable."
+            : isWaitingForCallback
+              ? "Finish signing in in the OpenAI tab. This card updates automatically when OpenAI confirms the connection."
+              : "Click connect, sign in with OpenAI/ChatGPT, then return here. Hosted deployments use OpenAI’s device-code flow, so enter the code shown here in the OpenAI tab.";
 
   const handleStart = () => {
     if (!workspaceId) {
@@ -254,10 +282,14 @@ export function OpenAIChatGPTCard() {
               </CardDescription>
             </div>
           </div>
-          {statusQuery.isPending ? (
+          {configurationReadiness === "checking" ? (
             <Badge variant="outline" className="gap-1">
               <Loader2 className="size-3 animate-spin" /> Checking
             </Badge>
+          ) : configurationReadiness === "workspace-required" ? (
+            <Badge variant="outline">Select workspace</Badge>
+          ) : configurationReadiness === "error" ? (
+            <Badge variant="outline">Unavailable</Badge>
           ) : isWaitingForCallback ? (
             <Badge variant="outline" className="gap-1">
               <Loader2 className="size-3 animate-spin" /> Waiting for sign-in
@@ -273,11 +305,8 @@ export function OpenAIChatGPTCard() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Click connect, sign in with OpenAI/ChatGPT, then return here. Hosted deployments use
-          OpenAI&apos;s device-code flow, so paste the code shown below into the OpenAI tab. This
-          workspace will use the subscription token first and fall back to an API key only if no
-          subscription login is connected.
+        <p id="openai-connection-readiness" className="text-sm text-muted-foreground">
+          {connectionExplanation}
         </p>
 
         {deviceLogin && !isConnected && (
@@ -371,7 +400,8 @@ export function OpenAIChatGPTCard() {
           <Button
             size="sm"
             onClick={handleStart}
-            disabled={startMutation.isPending || isWaitingForCallback || !workspaceId}
+            aria-describedby="openai-connection-readiness"
+            disabled={!isConfigurationReady || startMutation.isPending || isWaitingForCallback}
           >
             {startMutation.isPending || isWaitingForCallback ? (
               <Loader2 className="size-4 animate-spin" />

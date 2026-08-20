@@ -51,6 +51,17 @@ WORKSPACE_ID = uuid.uuid4()
 CONTACT_ID = 42
 
 
+def test_voice_booking_prompt_requires_spoken_confirmation_turn() -> None:
+    prompt = VoicePromptBuilder(timezone="America/Chicago").get_booking_instructions()
+
+    assert "[VOICE BOOKING CONFIRMATION]" in prompt
+    assert "exact weekday and calendar date" in prompt
+    assert "America/Chicago timezone" in prompt
+    assert "duration, and invite email" in prompt
+    assert "stop speaking and wait" in prompt
+    assert "customer_confirmed=true" in prompt
+
+
 def _provenance(
     source: str,
     source_id: str,

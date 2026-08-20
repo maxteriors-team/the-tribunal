@@ -106,7 +106,7 @@ export function OfferSelector({
         offer,
       })),
     ],
-    [activeOffers]
+    [activeOffers],
   );
 
   const selectedRowIds: string[] = [selectedId ?? NO_OFFER_ID];
@@ -125,10 +125,7 @@ export function OfferSelector({
       .filter((item) => item.included)
       .reduce((sum, item) => sum + (item.value || 0), 0);
     const leadMagnets = offerLeadMagnets[offer.id] || offer.lead_magnets || [];
-    const leadMagnetTotal = leadMagnets.reduce(
-      (sum, lm) => sum + (lm.estimated_value || 0),
-      0
-    );
+    const leadMagnetTotal = leadMagnets.reduce((sum, lm) => sum + (lm.estimated_value || 0), 0);
     return offer.total_value || valueStackTotal + leadMagnetTotal;
   };
 
@@ -176,14 +173,14 @@ export function OfferSelector({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Discount Type</Label>
+                  <Label htmlFor="campaign-offer-discount-type">Discount Type</Label>
                   <Select
                     value={newOffer.discount_type}
                     onValueChange={(v) =>
                       setNewOffer({ ...newOffer, discount_type: v as DiscountType })
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="campaign-offer-discount-type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -220,9 +217,7 @@ export function OfferSelector({
                   id="offer-description"
                   placeholder="Brief description of the offer..."
                   value={newOffer.description}
-                  onChange={(e) =>
-                    setNewOffer({ ...newOffer, description: e.target.value })
-                  }
+                  onChange={(e) => setNewOffer({ ...newOffer, description: e.target.value })}
                   rows={2}
                 />
               </div>
@@ -257,11 +252,7 @@ export function OfferSelector({
       <Tag className="size-12 mb-2 opacity-50" />
       <p>No offers available</p>
       {onCreateOffer && (
-        <Button
-          variant="link"
-          onClick={() => setShowCreateDialog(true)}
-          className="mt-1"
-        >
+        <Button variant="link" onClick={() => setShowCreateDialog(true)} className="mt-1">
           Create your first offer
         </Button>
       )}
@@ -292,11 +283,7 @@ export function OfferSelector({
           {previewOffer && (
             <OfferPreview
               offer={previewOffer}
-              leadMagnets={
-                offerLeadMagnets[previewOffer.id] ||
-                previewOffer.lead_magnets ||
-                []
-              }
+              leadMagnets={offerLeadMagnets[previewOffer.id] || previewOffer.lead_magnets || []}
             />
           )}
         </DialogContent>
@@ -338,9 +325,7 @@ export function OfferSelector({
     const { offer } = row;
     const totalValue = calculateTotalValue(offer);
     const leadMagnets = offerLeadMagnets[offer.id] || offer.lead_magnets || [];
-    const valueStackCount = (offer.value_stack_items || []).filter(
-      (item) => item.included
-    ).length;
+    const valueStackCount = (offer.value_stack_items || []).filter((item) => item.included).length;
 
     return (
       <div className={baseClass}>
@@ -383,21 +368,15 @@ export function OfferSelector({
             )}
 
             {offer.description && !offer.headline && (
-              <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
-                {offer.description}
-              </p>
+              <p className="text-sm text-muted-foreground mt-1 line-clamp-1">{offer.description}</p>
             )}
 
             <div className="flex items-center gap-2 mt-2">
               {(offer.valid_from || offer.valid_until) && (
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Calendar className="size-3" />
-                  {offer.valid_from && (
-                    <span>From {formatDate(offer.valid_from)}</span>
-                  )}
-                  {offer.valid_until && (
-                    <span>to {formatDate(offer.valid_until)}</span>
-                  )}
+                  {offer.valid_from && <span>From {formatDate(offer.valid_from)}</span>}
+                  {offer.valid_until && <span>to {formatDate(offer.valid_until)}</span>}
                 </div>
               )}
 

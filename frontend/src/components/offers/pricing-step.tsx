@@ -24,14 +24,12 @@ export function PricingStep({ formData, onFieldChange }: PricingStepProps) {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Discount Type</Label>
+          <Label htmlFor="offer-discount-type">Discount Type</Label>
           <Select
             value={formData.discount_type}
-            onValueChange={(v) =>
-              onFieldChange({ discount_type: v as DiscountType })
-            }
+            onValueChange={(v) => onFieldChange({ discount_type: v as DiscountType })}
           >
-            <SelectTrigger>
+            <SelectTrigger id="offer-discount-type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -44,9 +42,7 @@ export function PricingStep({ formData, onFieldChange }: PricingStepProps) {
 
         <div className="space-y-2">
           <Label htmlFor="discount_value">
-            {formData.discount_type === "percentage"
-              ? "Discount %"
-              : "Discount Amount ($)"}
+            {formData.discount_type === "percentage" ? "Discount %" : "Discount Amount ($)"}
           </Label>
           <Input
             id="discount_value"
@@ -80,9 +76,7 @@ export function PricingStep({ formData, onFieldChange }: PricingStepProps) {
               })
             }
           />
-          <p className="text-xs text-muted-foreground">
-            Anchor price (crossed out)
-          </p>
+          <p className="text-xs text-muted-foreground">Anchor price (crossed out)</p>
         </div>
 
         <div className="space-y-2">
@@ -99,9 +93,7 @@ export function PricingStep({ formData, onFieldChange }: PricingStepProps) {
               })
             }
           />
-          <p className="text-xs text-muted-foreground">
-            What they actually pay
-          </p>
+          <p className="text-xs text-muted-foreground">What they actually pay</p>
         </div>
       </div>
 
