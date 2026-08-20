@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any, Final
 
 import structlog
+from openai import AsyncOpenAI
 
 from app.core.config import settings
 from app.services.scraping.ai_content_analyzer import AIContentAnalyzerService
@@ -30,6 +31,7 @@ async def enrich_contact_data(
     company_name: str,
     google_places_data: dict[str, Any],
     enable_ai: bool = True,
+    openai_client: AsyncOpenAI | None = None,
 ) -> dict[str, Any]:
     """Enrich a contact with website data synchronously.
 
@@ -38,6 +40,7 @@ async def enrich_contact_data(
         company_name: The company name for context
         google_places_data: Google Places data to include in business_intel
         enable_ai: Whether to enable AI content analysis
+        openai_client: Optional workspace-aware OpenAI client
 
     Returns:
         Dictionary with keys:
@@ -82,7 +85,7 @@ async def enrich_contact_data(
         # Generate AI website summary if enabled
         html_content = result.get("html_content")
         if enable_ai and settings.enable_ai_enrichment and html_content:
-            ai_analyzer = AIContentAnalyzerService()
+            ai_analyzer = AIContentAnalyzerService(client=openai_client)
             website_summary = await ai_analyzer.generate_website_summary(
                 html_content=html_content,
                 website_url=website_url,

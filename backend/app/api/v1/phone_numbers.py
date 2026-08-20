@@ -13,6 +13,7 @@ from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
 from app.models.lead_source import LeadSource, LeadSourceCampaign
 from app.models.phone_number import PhoneNumber
+from app.models.workspace import WorkspaceIntegration
 from app.schemas.phone_number import (
     PaginatedPhoneNumbers,
     PhoneNumberInfoResponse,
@@ -26,6 +27,33 @@ from app.services.telephony.telnyx import TelnyxSMSService
 router = APIRouter()
 
 
+async def _resolve_telnyx_api_key(db: AsyncSession, workspace_id: uuid.UUID) -> str | None:
+    result = await db.execute(
+        select(WorkspaceIntegration).where(
+            WorkspaceIntegration.workspace_id == workspace_id,
+            WorkspaceIntegration.integration_type == "telnyx",
+            WorkspaceIntegration.is_active.is_(True),
+        )
+    )
+    integration = result.scalar_one_or_none()
+    credentials = integration.safe_credentials() if integration else None
+    workspace_api_key = credentials.get("api_key") if credentials else None
+    if isinstance(workspace_api_key, str) and workspace_api_key.strip():
+        return workspace_api_key.strip()
+    return settings.telnyx_api_key
+
+
+def _telnyx_not_configured(action: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "telnyx_provider_not_configured",
+            "message": f"Connect Telnyx before you {action}.",
+            "details": {"provider": "telnyx", "action": action},
+        },
+    )
+
+
 async def _validate_tracking_mapping(
     db: AsyncSession,
     workspace_id: uuid.UUID,
@@ -36,7 +64,7 @@ async def _validate_tracking_mapping(
     if lead_source_id is None:
         if lead_source_campaign_id is not None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="A campaign requires a lead source",
             )
         return
@@ -200,16 +228,15 @@ async def search_phone_numbers(
     workspace_id: uuid.UUID,
     request_data: SearchPhoneNumbersRequest,
     current_user: CurrentUser,
+    db: DB,
     membership: CanManageComms,
 ) -> list[PhoneNumberInfoResponse]:
     """Search for available phone numbers to purchase."""
-    if not settings.telnyx_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Telnyx not configured",
-        )
+    api_key = await _resolve_telnyx_api_key(db, workspace_id)
+    if not api_key:
+        raise _telnyx_not_configured("search for phone numbers")
 
-    service = TelnyxSMSService(settings.telnyx_api_key)
+    service = TelnyxSMSService(api_key)
     try:
         numbers = await service.search_phone_numbers(
             country=request_data.country,
@@ -239,13 +266,11 @@ async def purchase_phone_number(
     membership: CanManageComms,
 ) -> PhoneNumber:
     """Purchase a phone number from Telnyx."""
-    if not settings.telnyx_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Telnyx not configured",
-        )
+    api_key = await _resolve_telnyx_api_key(db, workspace_id)
+    if not api_key:
+        raise _telnyx_not_configured("purchase a phone number")
 
-    service = TelnyxSMSService(settings.telnyx_api_key)
+    service = TelnyxSMSService(api_key)
     try:
         # Purchase from Telnyx
         purchased = await service.purchase_phone_number(request_data.phone_number)
@@ -291,15 +316,13 @@ async def release_phone_number(
             detail="Phone number not found",
         )
 
-    if not settings.telnyx_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Telnyx not configured",
-        )
+    api_key = await _resolve_telnyx_api_key(db, workspace_id)
+    if not api_key:
+        raise _telnyx_not_configured("release a phone number")
 
     # Release from Telnyx if we have the provider ID
     if phone_number.telnyx_phone_number_id:
-        service = TelnyxSMSService(settings.telnyx_api_key)
+        service = TelnyxSMSService(api_key)
         try:
             await service.release_phone_number(phone_number.telnyx_phone_number_id)
         finally:
@@ -320,13 +343,11 @@ async def sync_phone_numbers(
     membership: CanManageComms,
 ) -> dict[str, int]:
     """Sync phone numbers from Telnyx account."""
-    if not settings.telnyx_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Telnyx not configured",
-        )
+    api_key = await _resolve_telnyx_api_key(db, workspace_id)
+    if not api_key:
+        raise _telnyx_not_configured("sync phone numbers")
 
-    service = TelnyxSMSService(settings.telnyx_api_key)
+    service = TelnyxSMSService(api_key)
     try:
         telnyx_numbers = await service.list_phone_numbers()
     finally:
