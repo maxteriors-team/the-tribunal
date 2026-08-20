@@ -2,13 +2,13 @@
 
 **Audit date:** 2026-08-18
 **Environment:** Local Next.js/FastAPI stack, isolated QA workspace, fake contact data
-**Status vocabulary:** Not Started / In Progress / Fixed / Retested / Closed
+**Status vocabulary:** Not Started / In Progress / Fixed and automated-tested / Retested / Remediated and runtime-verified / Closed
 
 ## Executive summary
 
-**QA Score: 64/100. 2 critical issues, 8 high-priority issues, 12 medium issues, and 5 minor issues were identified; 26 remain open (25 Not Started and QA-018 In Progress), while QA-026 is Closed after retest. The biggest problems are concentrated in public embed lead capture, role permissions, campaign creation, fresh-workspace quote setup, accessibility, and mobile action clipping. Fix the 10 critical/high-priority items before adding additional CRM features.**
+**QA Score: 64/100 (historical; not recalculated after remediation). The current release fixes or remediates QA-001 through QA-017 plus QA-022, QA-018 remains In Progress, QA-026 is Closed, and 7 findings remain Not Started. This score is retained only as the original audit baseline—not as the current product score.**
 
-The internal CRM can register and onboard a workspace, create contacts, schedule appointments, save invoices, create automations, create opportunities, and generate a client quote link. The score is held below 100 because the anonymous embed is blocked twice, hidden modules remain reachable by lower roles, one campaign builder silently discards entered data, new workspaces have no priced quote lines, direct payment-success URLs make an unverified success claim, and multiple keyboard/mobile paths are not operable.
+The internal CRM can register and onboard a workspace, create contacts and client notes, schedule appointments and job visits, save invoices, create real campaign drafts, create customer-linked opportunities, generate and price client quotes, render anonymous embeds, and verify Stripe payment return state. Remaining audited gaps are provider-recovery UX, one premature Offer query, login error copy, tenant-brand fallbacks, area-code paste normalization, Settings save feedback/density, and CI warning debt.
 
 Live Telnyx, OpenAI API-key, Google Places, Cal.com, and Resend delivery were not available in this environment. Their missing-configuration and recovery states were exercised without spending money or contacting real people. Stripe was configured in test mode; no charge was completed. These provider-dependent delivery paths remain unverified against live vendor accounts.
 
@@ -19,10 +19,10 @@ Live Telnyx, OpenAI API-key, Google Places, Cal.com, and Resend delivery were no
 - **350 role-route checks:** 50 authenticated routes for each of owner/admin/manager/dispatcher/sales_rep/member/lead_technician/technician, with targeted evidence captures for restricted modules.
 - **Primary workflows:** registration, login, password reset, onboarding, contact creation/detail, appointment creation/cleanup, opportunity creation, automation creation, campaign drafting, invoice drafting, quote creation/client-link generation, public lead form, embed configuration, and missing-provider recovery.
 - **Automated accessibility:** axe checks on the route set, Settings tabs, agent detail, and embed dialogs. This is not a WCAG conformance claim; screen-reader coverage was not completed.
-- **Frontend CI:** passed lint/type/unit/build; **150 test files and 1,385 tests passed**.
-- **Backend CI:** passed lint/type/tests; **4,581 tests passed**, 21 skipped, coverage 61.10%.
+- **Frontend CI:** passed lint/type/unit/build; **159 test files and 1,443 tests passed**.
+- **Backend CI:** passed lint/type/tests; **4,655 tests passed**, 21 skipped, coverage 61.26%.
 - **Contract/schema checks:** OpenAPI code generation and migration upgrade/check/downgrade/upgrade passed.
-- **Browser E2E:** The stale selectors, shared-session parallelism, resize race, appointment test-data buildup, and Ad Library missing-provider route crash were fixed and retested. The harness-accepted foreground Chromium run completed with **21 passed and 1 skipped**.
+- **Browser E2E:** The original harness-accepted foreground Chromium run completed with **21 passed and 1 skipped**. The release subset added **17 passing checks** across anonymous embeds, real campaign builders, authenticated client notes, jobs, and opportunity/customer relinking.
 - **Evidence root:** `.ezcoder/eyes/out/qa/`
 - **Task backlog:** 19 ordered implementation tasks were added to the project task list.
 
@@ -30,12 +30,14 @@ Live Telnyx, OpenAI API-key, Google Places, Cal.com, and Resend delivery were no
 
 All commands below were run directly, without a pipeline or a construct that could hide the command's exit code.
 
-| Check | Direct result |
-|---|---|
-| `make ci.frontend` | **PASSED / exit 0** as a direct foreground command: clean install, lint, typecheck, **150 test files / 1,385 tests**, and production build passed. The Ad Library recovery regression is included. Existing React Compiler, hook, `act`, unused-variable, and MSW warnings remain under QA-027. |
-| `npm run e2e -- --project=chromium` | **PASSED / exit 0** as a direct foreground command with credentials preloaded outside the command: **21 passed / 1 skipped** across 22 tests using one worker. `ad-library.spec.ts` passed while the backend returned the provider-unavailable response. |
+| Check                        | Direct result                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make ci.all`                | **PASSED / exit 0** in the isolated release worktree: codegen drift, backend lint/type/**4,655 tests**, frontend lint/type/**159 files and 1,443 tests**/production build, and migration upgrade→check→downgrade→upgrade all passed. Existing React Compiler, hook, `act`, unused-variable, SQLAlchemy cycle, and MSW warnings remain under QA-027. |
+| Selected Chromium E2E        | **PASSED:** 12 anonymous embed checks plus 5 serial authenticated/mocked workflow checks covered campaign builders, client notes from every Notes action, job create/update, and opportunity customer create/relink/filter. One initial 4-worker run exposed local worker/proxy contention; the deterministic API-only rerun passed.                |
+| Public payment runtime probe | **PASSED:** an unknown Checkout Session returned generic `404` with `Cache-Control: no-store`; request 31 from the same IP returned `429`, the bounded message, and `Retry-After`.                                                                                                                                                                  |
+| Security scans               | **PASSED:** Gitleaks 8.28.0 scanned 1,193 commits with zero findings; `pip-audit` and `npm audit --omit=dev` reported zero known vulnerabilities.                                                                                                                                                                                                   |
 
-These are the only results classified as current harness-accepted post-fix proof. The E2E command used no redirection, pipeline, or embedded credential; the seeded credentials were loaded separately from the ignored QA credentials file. Transient local login-rate rows for `127.0.0.1` were cleared before the run because prior audit traffic had consumed the same account's 10-attempt window. The raw `429` copy remains covered by QA-020. The 64/100 product score is unchanged because QA-018 remains open for the Phone Numbers and Find Leads recovery surfaces.
+The full CI and release-subset browser/API commands above are the current release proof. Credentials stayed in ignored local environment state; no live provider call, message, or charge was made. The 64/100 score remains the historical pre-remediation baseline and has not been recalculated; QA-018 remains in progress for the separate Phone Numbers and Find Leads provider-recovery work.
 
 ## Issue register
 
@@ -49,7 +51,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **Critical**
 - **Recommended developer fix:** Add `/embed/*` to the public-route contract, prevent auth refresh redirects on embed pages, and add anonymous browser tests for all four modes and invalid IDs.
 - **Evidence:** `.ezcoder/eyes/out/qa/agent-embed-audit.json`; `.ezcoder/eyes/out/qa/evidence/agent-embed/desktop-root.png`; reproduction: enable an agent embed, open its URL in a clean browser context, observe `/login`.
-- **Status:** **Not Started**
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - `/embed/*` is public in the auth contract; 12 anonymous allowed/denied/missing-ID Playwright checks passed across root/chat/both/fullpage modes.
 
 ### QA-002 - Embed config rejects the browser's same-origin request
 
@@ -61,7 +63,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **Critical**
 - **Recommended developer fix:** Replace direct Origin dependence with a secure parent-page handshake or signed embed token/domain claim, support hosted same-origin config fetches, and retain explicit unauthorized-domain rejection tests.
 - **Evidence:** `.ezcoder/eyes/out/qa/embed-probes/no-origin.txt`; `.ezcoder/eyes/out/http-20260818-220545.body` (`{"code":"forbidden","message":"Origin not allowed"}`); `.ezcoder/eyes/out/qa/agent-embed-audit.json`.
-- **Status:** **Not Started**
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - hosted config bootstrap no longer requires a browser `Origin`; the parent-origin handshake enforced allowed domains in the 12 passing embed checks.
 
 ### QA-003 - Capability rules are not enforced consistently across routes, actions, and reads
 
@@ -73,7 +75,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **High**
 - **Recommended developer fix:** Introduce one capability-to-route/action map, guard direct routes before queries run, apply capabilities to every create/manage control, enforce the same dependency on backend read and write endpoints, and add the complete eight-role matrix to CI.
 - **Evidence:** `.ezcoder/eyes/out/qa/permission-evidence.json`; `.ezcoder/eyes/out/qa/evidence/permissions/dispatcher-agents.png`; `member-automations.png`; `sales_rep-agents.png`.
-- **Status:** **Not Started**
+- **Status:** **Fixed and automated-tested (2026-08-19)** - the shared capability map now gates navigation, direct routes, queries, actions, and backend read/write dependencies; backend route matrices and frontend role tests pass.
 
 ### QA-004 - General campaign builder silently discards entered data
 
@@ -85,7 +87,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **High**
 - **Recommended developer fix:** Remove the fake general form, route type cards directly to real wizards, or implement typed draft-state transfer. Disable Multi-Channel until it has a persisted model and builder.
 - **Evidence:** `.ezcoder/eyes/out/qa/core-workflows.json` (`multiChannelPathAfterSave=/campaigns`, `emailNameTransferred=false`, `emailSubjectTransferred=false`); `.ezcoder/eyes/out/qa/evidence/core-workflows/campaign-01-multichannel-save-noop.png`; `campaign-email-fields-discarded.png`.
-- **Status:** **Not Started**
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - Playwright opened every real channel builder, confirmed Multi-Channel is explicitly unavailable, and preserved/saved an email draft to its detail page.
 
 ### QA-005 - Fresh workspace quote builder has no sellable package lines
 
@@ -97,7 +99,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **High**
 - **Recommended developer fix:** Seed a usable price book and package configuration during onboarding, or block the builder with a direct Price Book setup action until required SKUs exist.
 - **Evidence:** `.ezcoder/eyes/out/qa/financial-workflows.json` (`noConfiguredLineItems=true`); `.ezcoder/eyes/out/qa/evidence/financial-workflows/quote-02-line-items.png`; generated client link returned 201 after custom charge.
-- **Status:** **Not Started**
+- **Status:** **Fixed and automated-tested (2026-08-19)** - onboarding seeds a usable sales setup with guarded catalog/pricing defaults, and quote/proposal pricing tests cover the fresh-workspace path.
 
 ### QA-006 - Pipeline Add Opportunity cannot link a customer
 
@@ -109,7 +111,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **High**
 - **Recommended developer fix:** Add a searchable contact/customer picker, show the relationship on cards/details, and allow edit/relink with workspace scoping.
 - **Evidence:** `.ezcoder/eyes/out/qa/core-workflows.json` (`hasContactPicker=false`, `createdContactId=null`); `.ezcoder/eyes/out/qa/evidence/core-workflows/opportunity-01-form-no-contact.png`.
-- **Status:** **Not Started**
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - the authenticated Playwright flow created two customers, created/relinked/filtered the opportunity, and backend tests retain workspace ownership guards.
 
 ### QA-007 - ChatGPT/OpenAI integration button is stuck disabled after hydration
 
@@ -121,7 +123,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **High**
 - **Recommended developer fix:** Derive readiness from deterministic server data or gate the complete integration card until mounted; add a hydration assertion and click test.
 - **Evidence:** `.ezcoder/eyes/out/qa/settings-audit.json` integrations console error and `disabled=true`; `.ezcoder/eyes/out/qa/evidence/settings/desktop-integrations.png`.
-- **Status:** **Not Started**
+- **Status:** **Fixed and automated-tested (2026-08-19)** - the integration card waits for deterministic client readiness before rendering the Connect state; hydration and interaction coverage pass.
 
 ### QA-008 - Direct payment-complete URL makes an unverified success claim
 
@@ -133,7 +135,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **High**
 - **Recommended developer fix:** Require a Checkout session ID, verify it server-side, bind it to the invoice/workspace, and render pending/error/retry for missing, invalid, expired, or replayed sessions.
 - **Evidence:** `.ezcoder/eyes/out/qa/evidence/route-scan/desktop/payment-complete.png`; reproduction: open `http://localhost:3000/payment-complete` directly.
-- **Status:** **Not Started**
+- **Status:** **Fixed and automated-tested (2026-08-19)** - missing/invalid sessions never claim success; the backend binds the Checkout Session to a local payment, reconciles Stripe state, rate-limits verification, and frontend/API tests cover pending, paid, failed, replay, and provider-unavailable states.
 
 ### QA-009 - Systemic WCAG failures block unnamed controls and form fields
 
@@ -144,8 +146,8 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Issue type:** Accessibility / keyboard and assistive technology
 - **Severity:** **High**
 - **Recommended developer fix:** Add explicit names/label associations, correct invalid ARIA values, name progress indicators, make intentional scroll containers focusable, repair report contrast, and add axe plus manual keyboard/screen-reader checks to CI.
-- **Evidence:** `.ezcoder/eyes/out/qa/route-scan.json`; `.ezcoder/eyes/out/qa/settings-audit.json`; `.ezcoder/eyes/out/qa/agent-embed-audit.json`.
-- **Status:** **Not Started**
+- **Evidence:** Original failures: `.ezcoder/eyes/out/qa/route-scan.json`, `.ezcoder/eyes/out/qa/settings-audit.json`, and `.ezcoder/eyes/out/qa/agent-embed-audit.json`. Remediation: `frontend/e2e/accessibility.spec.ts`, `frontend/e2e/accessibility-keyboard-checklist.md`, and focused quantity/stepper/proposal Vitest coverage.
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - axe returned no scoped WCAG 2.2 A/AA violations across 23 desktop and 23 mobile CRM routes plus a light-theme financial report scan; 5 Playwright keyboard/axe checks and 1,427 Vitest tests passed. Screen-reader output and full zoom/reflow remain manual release checks.
 
 ### QA-010 - Mobile layout clips primary CRM actions
 
@@ -156,8 +158,8 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Issue type:** Responsive usability / visually defective
 - **Severity:** **High**
 - **Recommended developer fix:** Wrap header actions, allow text columns to shrink, stack actions below headings, and remove root overflow clipping. Add 320/390/768px screenshot and tap tests.
-- **Evidence:** `.ezcoder/eyes/out/qa/route-scan.json` layout/clipped records; `.ezcoder/eyes/out/qa/evidence/contact-sheets/mobile-owner-1.png`; `mobile-owner-2.png`.
-- **Status:** **Not Started**
+- **Evidence:** Original: `.ezcoder/eyes/out/qa/route-scan.json` and mobile contact sheets. Remediation: `frontend/e2e/responsive-mobile.spec.ts`; 390px captures under `.ezcoder/screenshots/responsive-390/`.
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - all 13 requested routes measured document, body, and app-main widths at 390px; no primary action or non-navigation interactive crossed the viewport.
 
 ### QA-011 - Mobile steppers and tab bars have undiscoverable clipped stages
 
@@ -168,8 +170,8 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Issue type:** Responsive navigation / confusing workflow
 - **Severity:** **Medium**
 - **Recommended developer fix:** Use labeled horizontal scrollers with edge fades and focus management, or compact/wrap the stepper while keeping the current stage and next action visible.
-- **Evidence:** `.ezcoder/eyes/out/qa/route-scan.json`; `.ezcoder/eyes/out/qa/evidence/contact-sheets/mobile-owner-4.png`.
-- **Status:** **Not Started**
+- **Evidence:** Original: `.ezcoder/eyes/out/qa/route-scan.json`. Remediation: `frontend/src/components/ui/horizontal-scroll.tsx`, `frontend/e2e/responsive-mobile.spec.ts`, and revised 390px captures.
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - tabs, stage boards, and campaign/offer steppers use labeled local scrollers with directional edge cues, active-item reveal, touch swiping, and keyboard scrolling; the Playwright touch/keyboard checks pass.
 
 ### QA-012 - Mobile Settings navigation becomes 20 unlabeled icons
 
@@ -180,8 +182,8 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Issue type:** Accessibility / confusing navigation
 - **Severity:** **Medium**
 - **Recommended developer fix:** Keep short visible labels, use a labeled select/accordion on mobile, or provide `aria-label` and tooltips while retaining a strong selected state.
-- **Evidence:** `.ezcoder/eyes/out/qa/settings-audit.json` (`tabAccessibleByName=false` for all mobile tabs); `.ezcoder/eyes/out/qa/evidence/settings/mobile-profile.png`.
-- **Status:** **Not Started**
+- **Evidence:** Original: `.ezcoder/eyes/out/qa/settings-audit.json`. Remediation: the Settings tablist keeps visible labels inside `HorizontalScroll`; `frontend/e2e/accessibility.spec.ts` and `frontend/e2e/responsive-mobile.spec.ts`.
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - all Settings destinations retain visible and accessible names in one horizontally scrollable mobile row; the requested Pricing tab is revealed and selected from its direct URL.
 
 ### QA-013 - Mobile Pricing hides service identities
 
@@ -192,8 +194,8 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Issue type:** Responsive form / accessibility
 - **Severity:** **Medium**
 - **Recommended developer fix:** Stack service name and threshold fields, allocate full-width names, name delete actions with the service, and associate labels with every input.
-- **Evidence:** `.ezcoder/eyes/out/qa/evidence/settings/mobile-pricing.png`; `.ezcoder/eyes/out/qa/settings-audit.json`.
-- **Status:** **Not Started**
+- **Evidence:** Original: `.ezcoder/eyes/out/qa/evidence/settings/mobile-pricing.png`. Remediation: revised `settings-pricing.png` under `.ezcoder/screenshots/responsive-390/` and `frontend/e2e/responsive-mobile.spec.ts`.
+- **Status:** **Remediated and runtime-verified (2026-08-19)** - service names and minimums render in two flexible columns at 390px, delete buttons keep row-specific names, stacked upsell/seasonal rows remain labeled, and pricing actions stay inside the viewport.
 
 ### QA-014 - Compact Mode toggles visually but never persists or changes density
 
@@ -205,7 +207,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **Medium**
 - **Recommended developer fix:** Persist a real density preference and apply semantic spacing tokens, or remove the setting until implemented.
 - **Evidence:** `.ezcoder/eyes/out/qa/compact-mode-audit.json`; `.ezcoder/eyes/out/qa/evidence/settings/compact-mode-after-click.png`.
-- **Status:** **Not Started**
+- **Status:** **Fixed and automated-tested (2026-08-19)** - the inert Compact Mode control was removed; the remaining Dark Mode behavior has a focused regression test.
 
 ### QA-015 - Onboarding shows a duplicate inert CSV upload card
 
@@ -217,7 +219,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **Medium**
 - **Recommended developer fix:** Remove the decorative card and promote the real keyboard-accessible dropzone as the only upload surface.
 - **Evidence:** `.ezcoder/eyes/out/qa/evidence/bootstrap/05-onboarding-import-empty.png`; reproduction: click the upper card and observe no file chooser.
-- **Status:** **Not Started**
+- **Status:** **Fixed and automated-tested (2026-08-19)** - the decorative duplicate was removed, leaving one labeled file input/dropzone; onboarding component tests cover its presence and constraints.
 
 ### QA-016 - Manager Dashboard makes a forbidden revenue-pace request
 
@@ -229,7 +231,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **Medium**
 - **Recommended developer fix:** Align the endpoint with `reports:view` or gate the widget using the stricter capability before querying.
 - **Evidence:** `.ezcoder/eyes/out/qa/permission-evidence.json`; `.ezcoder/eyes/out/qa/evidence/permissions/manager-dashboard.png`.
-- **Status:** **Not Started**
+- **Status:** **Fixed and automated-tested (2026-08-19)** - Month Pace now mounts and queries only with `reports:view`; manager/owner capability cases are pinned in the dashboard test.
 
 ### QA-017 - Calendar renders duplicate React keys
 
@@ -241,7 +243,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **Medium**
 - **Recommended developer fix:** Prefix stable IDs by event type and never use a shared `none` fallback; add mixed appointment/job placeholder coverage.
 - **Evidence:** `.ezcoder/eyes/out/qa/route-scan.json`; `.ezcoder/eyes/out/qa/frontend-unit-tests.log`; calendar screenshots show the Next issue badge.
-- **Status:** **Not Started**
+- **Status:** **Fixed and automated-tested (2026-08-19)** - appointment and job keys are type-prefixed with distinct empty fallbacks, and mixed/empty-ID rendering is covered without React key warnings.
 
 ### QA-018 - Missing integrations collapse into generic page-load errors
 
@@ -301,7 +303,7 @@ These are the only results classified as current harness-accepted post-fix proof
 - **Severity:** **Medium**
 - **Recommended developer fix:** Apply synchronous server/layout route guards from the capability map before mounting page queries; preserve a single clear access-denied destination.
 - **Evidence:** `.ezcoder/eyes/out/qa/permission-audit.json`; `.ezcoder/eyes/out/qa/permission-evidence.json`; `lead_technician-contacts.png`; technician route records.
-- **Status:** **Not Started**
+- **Status:** **Fixed and automated-tested (2026-08-19)** - the app shell checks direct URLs against the shared capability map and returns `null` before forbidden route children mount, then redirects field roles to Calendar.
 
 ### QA-023 - Mixed-format onboarding area-code paste loses digits
 
