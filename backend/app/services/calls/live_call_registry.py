@@ -29,13 +29,20 @@ import contextlib
 import json
 import time
 import uuid
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import structlog
 
 try:  # Python 3.13 removed the stdlib ``audioop`` module.
-    import audioop
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="'audioop' is deprecated and slated for removal in Python 3.13",
+            category=DeprecationWarning,
+        )
+        import audioop
 except ModuleNotFoundError:  # pragma: no cover - exercised only on 3.13+
     import audioop_lts as audioop  # type: ignore[no-redef]
 

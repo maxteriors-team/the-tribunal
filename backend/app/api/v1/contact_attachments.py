@@ -148,7 +148,7 @@ async def upload_contact_attachment(
     data = await file.read(MAX_ATTACHMENT_BYTES + 1)
     if len(data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Uploaded file is empty",
         )
     if len(data) > MAX_ATTACHMENT_BYTES:

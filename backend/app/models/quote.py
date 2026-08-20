@@ -297,9 +297,10 @@ class Quote(Base):
 
     # Conversion provenance — set when an approved quote is turned into a job
     # and/or an invoice, so the sales -> work -> billing chain is auditable.
+    # ``use_alter`` breaks the metadata cycle with field_service_jobs.source_quote_id.
     converted_job_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("field_service_jobs.id", ondelete="SET NULL"),
+        ForeignKey("field_service_jobs.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
         index=True,
     )

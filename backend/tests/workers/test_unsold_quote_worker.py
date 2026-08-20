@@ -474,11 +474,14 @@ async def test_every_stop_condition_prevents_dispatch(reason: str) -> None:
     worker._get_stop_reason = AsyncMock(return_value=reason)  # type: ignore[method-assign]
     worker._dispatch_touch = AsyncMock()  # type: ignore[method-assign]
 
+    quote = _quote()
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=quote.contact)
     await worker._process_quote(
-        _quote(),  # type: ignore[arg-type]
+        quote,  # type: ignore[arg-type]
         QuoteRevivalSettings(enabled=True),
         ANCHOR + timedelta(days=30),
-        AsyncMock(),
+        db,
     )
 
     worker._dispatch_touch.assert_not_awaited()

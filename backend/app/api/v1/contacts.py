@@ -286,7 +286,7 @@ async def create_contact_manually(
 
     if capture_settings.require_lead_source_on_manual_create and lead_source_id is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Lead source is required for manually created contacts",
         )
 
@@ -299,7 +299,7 @@ async def create_contact_manually(
             or not lead_source.enabled
         ):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Select an active lead source from this workspace",
             )
 
@@ -320,7 +320,7 @@ async def create_contact_manually(
         partner = await db.get(ReferralPartner, contact_in.referral_partner_id)
         if partner is None or partner.workspace_id != workspace_id or not partner.is_active:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Select an active referral partner from this workspace",
             )
         attribution_fields["referral_partner_id"] = contact_in.referral_partner_id

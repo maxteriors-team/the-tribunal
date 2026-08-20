@@ -238,7 +238,7 @@ def _render_preview(
         # Surfaced as 422 so the builder can show the authoring problem inline
         # rather than the operator meeting it at send time.
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
 

@@ -54,7 +54,7 @@ def _require_single_currency(currencies: set[str], report: str) -> str:
     present = {code for code in currencies if code}
     if len(present) > 1:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 f"{report} spans multiple currencies "
                 f"({', '.join(sorted(present))}); reporting across currencies "
@@ -83,7 +83,7 @@ class ReportingService:
         """Count contacts created in the inclusive range without first touch."""
         if date_to < date_from:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="date_to must be on or after date_from",
             )
 

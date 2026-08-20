@@ -172,10 +172,12 @@ async def test_every_stop_condition_prevents_dispatch(reason: str) -> None:
     worker = PostEstimateFollowupWorker()
     worker._get_stop_reason = AsyncMock(return_value=reason)  # type: ignore[method-assign]
     worker._dispatch_touch = AsyncMock()  # type: ignore[method-assign]
+    quote = _quote()
     db = AsyncMock()
+    db.get = AsyncMock(return_value=quote.contact)
 
     await worker._process_quote(
-        _quote(),  # type: ignore[arg-type]
+        quote,  # type: ignore[arg-type]
         QuoteFollowupSettings(enabled=True),
         SENT_AT + timedelta(days=1),
         db,
@@ -491,11 +493,14 @@ async def test_processed_offset_prevents_double_message() -> None:
     worker._completed_offsets = AsyncMock(return_value={1})  # type: ignore[method-assign]
     worker._dispatch_touch = AsyncMock()  # type: ignore[method-assign]
 
+    quote = _quote()
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=quote.contact)
     await worker._process_quote(
-        _quote(),  # type: ignore[arg-type]
+        quote,  # type: ignore[arg-type]
         QuoteFollowupSettings(enabled=True),
         SENT_AT + timedelta(days=1),
-        AsyncMock(),
+        db,
     )
 
     worker._dispatch_touch.assert_not_awaited()

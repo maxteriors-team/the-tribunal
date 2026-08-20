@@ -146,18 +146,18 @@ async def create_campaign(
     if campaign_in.campaign_type == CampaignType.EMAIL.value:
         if not campaign_in.email_subject or not campaign_in.email_subject.strip():
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Email campaigns require an email subject.",
             )
         if not campaign_in.initial_message or not campaign_in.initial_message.strip():
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Email campaigns require an email body.",
             )
     else:
         if not campaign_in.from_phone_number:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="A sender phone number is required for this campaign type.",
             )
         await _validate_campaign_sender(db, campaign_in.from_phone_number)
