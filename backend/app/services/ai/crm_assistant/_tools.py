@@ -194,14 +194,17 @@ def _automation_actions_schema() -> dict[str, Any]:
         ),
         _automation_action_variant(
             ["move_to_stage"],
-            description="Move the matched opportunity to a pipeline stage",
+            description=(
+                "Create the matched contact's open opportunity at a pipeline stage when "
+                "that pipeline has no open deal; otherwise move the existing open opportunity"
+            ),
             config=_closed_config(
                 description="Destination pipeline stage",
                 properties={
                     "stage_id": {"type": "string", "description": "Pipeline stage UUID"},
                     "pipeline_id": {
                         "type": "string",
-                        "description": "Optional pipeline UUID used to narrow the opportunity",
+                        "description": "Optional pipeline UUID; it must own the selected stage",
                     },
                 },
                 required=["stage_id"],
