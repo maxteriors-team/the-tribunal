@@ -1,28 +1,63 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { vi, afterAll, afterEach, beforeAll } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 
 import { server } from "@/test/msw/server";
 
 // MSW lifecycle — start once, reset handlers between tests, close at teardown.
 // `onUnhandledRequest: "error"` makes accidental network calls a loud test
 // failure instead of a silent timeout. Override per-test with `server.use(...)`.
+const unhandledRequests: string[] = [];
+const reactActWarnings: string[] = [];
+const originalConsoleError = console.error;
+const reactActWarningPatterns = [
+  "not wrapped in act",
+  "A component suspended inside an `act` scope",
+  "A suspended resource finished loading inside a test",
+];
+
+console.error = (...args: unknown[]) => {
+  const message = args.map(String).join(" ");
+  if (reactActWarningPatterns.some((pattern) => message.includes(pattern))) {
+    reactActWarnings.push(message);
+  }
+  originalConsoleError(...args);
+};
+
+server.events.on("request:unhandled", ({ request }) => {
+  unhandledRequests.push(`${request.method} ${request.url}`);
+});
+
 beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
 });
 
-afterAll(() => {
-  server.close();
+beforeEach(() => {
+  unhandledRequests.length = 0;
+  reactActWarnings.length = 0;
 });
 
-// Tell React we're inside an act() environment so state updates triggered
-// outside React (e.g. userEvent.click before async resolution) don't warn.
+afterAll(() => {
+  server.close();
+  console.error = originalConsoleError;
+});
+
+// Tell React to report updates that escape Testing Library's act() boundary.
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 // Clean up the DOM and any per-test MSW handler overrides between tests.
 afterEach(() => {
   cleanup();
   server.resetHandlers();
+  const failures = [
+    ...(unhandledRequests.length > 0
+      ? [`Unhandled MSW request(s):\n${unhandledRequests.join("\n")}`]
+      : []),
+    ...(reactActWarnings.length > 0
+      ? [`React act warning(s):\n${reactActWarnings.join("\n")}`]
+      : []),
+  ];
+  if (failures.length > 0) throw new Error(failures.join("\n\n"));
 });
 
 // Mock next/navigation — App Router hooks throw outside a Next runtime.
@@ -134,3 +169,11 @@ if (!Element.prototype.releasePointerCapture) {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = vi.fn();
 }
+
+// Browser rendering APIs that jsdom intentionally leaves unimplemented.
+Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+  configurable: true,
+  writable: true,
+  value: vi.fn(() => null),
+});
+window.scrollTo = vi.fn();
