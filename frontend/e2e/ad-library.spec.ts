@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { hasTestUser, loginViaUI } from "./helpers";
+import { hasParallelTestUser, loginViaUI } from "./helpers";
 
 /**
  * Ad Library prospecting smoke test.
@@ -12,8 +12,8 @@ import { hasTestUser, loginViaUI } from "./helpers";
  *   3. Launch a search and confirm a job-status banner appears.
  *   4. Confirm the ranked advertiser results section + monitors panel render.
  *
- * Requires a seeded test user — skipped otherwise so the suite stays green in
- * minimal environments. To assert the ranked-results *table* (rather than the
+ * Requires one isolated user per worker — skipped when an account pool or
+ * opt-in provisioning is absent. To assert the ranked-results *table* (rather than the
  * empty state) seed tracked advertisers for the test user's workspace first:
  *
  *   cd backend && uv run python -m scripts.dev.seed_promote_e2e
@@ -23,31 +23,33 @@ import { hasTestUser, loginViaUI } from "./helpers";
  */
 
 test.describe("Ad Library prospecting", () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     test.skip(
-      !hasTestUser(),
-      "E2E_USER_EMAIL / E2E_USER_PASSWORD not set — skipping authenticated ad-library flow",
+      !hasParallelTestUser(),
+      "Configure per-worker E2E users or enable opt-in provisioning for the ad-library flow",
     );
-    await loginViaUI(page);
+    await loginViaUI(page, testInfo);
   });
 
   test("search → results → monitors render", async ({ page }) => {
     await page.goto("/find-leads/ad-library");
 
-    await expect(
-      page.getByRole("heading", { name: /ad library/i }),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: /ad library/i })).toBeVisible({
+      timeout: 15_000,
+    });
 
     // ICP toggles are the product differentiator — they must be present.
     await expect(page.getByText(/long-runner/i)).toBeVisible();
     await expect(page.getByText(/no testing/i)).toBeVisible();
 
     // --- SEARCH -------------------------------------------------------------
-    await page.getByLabel(/keyword/i).first().fill("roofing");
+    await page
+      .getByLabel(/keyword/i)
+      .first()
+      .fill("roofing");
     const searchResponsePromise = page.waitForResponse(
       (response) =>
-        /\/ad-library\/search$/.test(response.url()) &&
-        response.request().method() === "POST",
+        /\/ad-library\/search$/.test(response.url()) && response.request().method() === "POST",
     );
     await page.getByRole("button", { name: /search ad library/i }).click();
     const searchResponse = await searchResponsePromise;

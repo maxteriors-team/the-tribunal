@@ -1,11 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
-import { hasTestUser, loginViaUI } from "./helpers";
+import { hasParallelTestUser, loginViaUI } from "./helpers";
 
-const storedAuthPath = process.env.E2E_STORAGE_STATE;
-const hasStoredAuth = Boolean(storedAuthPath);
-const hasAuthenticatedFixture = hasTestUser() || hasStoredAuth;
+const hasAuthenticatedFixture = hasParallelTestUser();
 
 const WCAG_AA_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
@@ -57,23 +55,27 @@ function violationSummary(
   return `${viewport.name} ${route} has WCAG 2.2 A/AA axe violations${details ? `:\n${details}` : ""}`;
 }
 
-async function authenticate(page: Page): Promise<void> {
-  if (hasTestUser()) {
-    await loginViaUI(page);
-    return;
-  }
-
-  await page.goto("/contacts", { waitUntil: "domcontentloaded" });
-  await page.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => undefined);
-  await page.waitForTimeout(250);
-  await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
+async function authenticate(page: Page, testInfo: TestInfo): Promise<void> {
+  await loginViaUI(page, testInfo);
 }
 
 async function waitForRoute(page: Page, route: string): Promise<void> {
-  await page.goto(route, { waitUntil: "domcontentloaded" });
-  await page.locator("body").waitFor({ state: "visible" });
-  await page.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => undefined);
-  await page.waitForTimeout(250);
+  const loadRoute = async () => {
+    await page.goto(route, { waitUntil: "domcontentloaded" });
+    await page.locator("body").waitFor({ state: "visible" });
+    await page.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => undefined);
+    await page.waitForTimeout(250);
+  };
+
+  await loadRoute();
+  if (/\/onboarding(?:\?|$)/.test(new URL(page.url()).pathname)) {
+    const skipOnboarding = page.getByRole("button", { name: "Skip for now" });
+    await expect(skipOnboarding).toBeVisible();
+    await skipOnboarding.click();
+    await expect(page).not.toHaveURL(/\/onboarding(?:\?|$)/);
+    await loadRoute();
+  }
+
   await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
 }
 
@@ -138,23 +140,44 @@ async function scanRoute(
     .toEqual([]);
 }
 
-test.afterEach(async ({ context }) => {
-  if (storedAuthPath) {
-    await context.storageState({ path: storedAuthPath });
-  }
+test.describe("login error recovery", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("an API rejection announces actionable copy and focuses the error", async ({ page }) => {
+    await page.route("**/api/v1/auth/login", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Incorrect email or password" }),
+      });
+    });
+
+    await page.goto("/login");
+    await page.getByLabel("Email").fill("operator@example.com");
+    await page.getByLabel("Password").fill("not-the-password");
+    await page.getByRole("button", { name: "Sign In" }).click();
+
+    const alert = page.locator("#login-error");
+    await expect(alert).toHaveAttribute("role", "alert");
+    await expect(alert).toHaveText(
+      "Email or password is incorrect. Try again or reset your password.",
+    );
+    await expect(alert).not.toContainText("Request failed with status code");
+    await expect(alert).toBeFocused();
+  });
 });
 
 test.describe("WCAG 2.2 AA route regression", () => {
   test.skip(
     !hasAuthenticatedFixture,
-    "Set E2E credentials or E2E_STORAGE_STATE to scan authenticated routes.",
+    "Configure per-worker E2E users or enable opt-in provisioning to scan authenticated routes.",
   );
 
   for (const viewport of VIEWPORTS) {
     test(`${viewport.name} CRM routes have no axe violations`, async ({ page }, testInfo) => {
       test.setTimeout(180_000);
       await page.setViewportSize(viewport);
-      await authenticate(page);
+      await authenticate(page, testInfo);
       await page.evaluate((theme) => localStorage.setItem("theme", theme), viewport.theme);
       await page.reload({ waitUntil: "domcontentloaded" });
 
@@ -172,20 +195,32 @@ test.describe("WCAG 2.2 AA route regression", () => {
 test.describe("keyboard-only CRM regression", () => {
   test.skip(
     !hasAuthenticatedFixture,
-    "Set E2E credentials or E2E_STORAGE_STATE to run keyboard checks.",
+    "Configure per-worker E2E users or enable opt-in provisioning to run keyboard checks.",
   );
 
-  test("mobile Settings tabs keep names and arrow-key navigation", async ({ page }) => {
+  test("mobile Settings tabs keep names and arrow-key navigation", async ({ page }, testInfo) => {
     await page.setViewportSize(VIEWPORTS[1]);
-    await authenticate(page);
+    await authenticate(page, testInfo);
     await waitForRoute(page, "/settings?tab=profile");
 
     const tabList = page.getByRole("tablist", { name: "Settings sections" });
     const tabs = tabList.getByRole("tab");
     expect(await tabs.count()).toBeGreaterThan(5);
 
+    for (const group of [
+      { value: "personal", label: "Personal" },
+      { value: "crm", label: "CRM" },
+      { value: "automation", label: "Automation" },
+      { value: "integrations", label: "Integrations" },
+      { value: "workspace", label: "Workspace" },
+    ]) {
+      const category = tabList.locator(`[data-settings-group="${group.value}"]`);
+      await expect(category.locator("[data-settings-group-label]")).toHaveText(group.label);
+    }
+
     for (let index = 0; index < (await tabs.count()); index += 1) {
       await expect(tabs.nth(index)).toHaveAccessibleName(/\S+/);
+      await expect(tabs.nth(index).locator("span")).toBeVisible();
     }
 
     await tabs.first().focus();
@@ -194,9 +229,56 @@ test.describe("keyboard-only CRM regression", () => {
     await expect(tabs.nth(1)).toHaveAttribute("aria-selected", "true");
   });
 
-  test("campaign, agent, and offer steppers expose keyboard state", async ({ page }) => {
+  test("Settings saves announce success and API failure without losing focus", async ({
+    page,
+  }, testInfo) => {
     await page.setViewportSize(VIEWPORTS[1]);
-    await authenticate(page);
+    await authenticate(page, testInfo);
+
+    let saveAttempts = 0;
+    await page.route("**/api/v1/settings/users/me/profile", async (route) => {
+      if (route.request().method() !== "PUT") {
+        await route.continue();
+        return;
+      }
+
+      saveAttempts += 1;
+      if (saveAttempts === 1) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+        return;
+      }
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Internal Server Error" }),
+      });
+    });
+
+    await waitForRoute(page, "/settings?tab=profile");
+    const saveButton = page.getByRole("button", { name: /^(?:Save Changes|Saved)$/ });
+    await saveButton.click();
+
+    const liveRegion = page.locator('[aria-live="polite"]').filter({ hasText: "Changes saved" });
+    await expect(liveRegion).toContainText("Your profile is up to date.");
+    await expect(saveButton).toBeFocused();
+
+    await expect(saveButton).toHaveAccessibleName("Save Changes", { timeout: 3_000 });
+    await saveButton.click();
+
+    const failureRegion = page
+      .locator('[aria-live="polite"]')
+      .filter({ hasText: "Changes not saved" });
+    await expect(failureRegion).toContainText(
+      "We couldn't save your profile. Check your connection and try again.",
+    );
+    await expect(failureRegion).not.toContainText("Request failed with status code");
+    await expect(saveButton).toBeFocused();
+    await expect(page.getByText("Profile Information", { exact: true })).toBeVisible();
+  });
+
+  test("campaign, agent, and offer steppers expose keyboard state", async ({ page }, testInfo) => {
+    await page.setViewportSize(VIEWPORTS[1]);
+    await authenticate(page, testInfo);
 
     for (const scenario of [
       { route: "/campaigns/sms/new", navigationName: "Setup progress" },
@@ -222,9 +304,9 @@ test.describe("keyboard-only CRM regression", () => {
     }
   });
 
-  test("report scroll region receives and retains keyboard focus", async ({ page }) => {
+  test("report scroll region receives and retains keyboard focus", async ({ page }, testInfo) => {
     await page.setViewportSize(VIEWPORTS[1]);
-    await authenticate(page);
+    await authenticate(page, testInfo);
     await waitForRoute(page, "/reports");
 
     const reports = page.getByRole("region", { name: "Reports" });

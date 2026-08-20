@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { hasTestUser, loginViaUI } from "./helpers";
+import { hasParallelTestUser, loginViaUI } from "./helpers";
 
 /**
  * Appointment dialog smoke test.
@@ -14,21 +14,17 @@ import { hasTestUser, loginViaUI } from "./helpers";
  */
 
 test.describe("New Appointment dialog", () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     test.skip(
-      !hasTestUser(),
-      "E2E_USER_EMAIL / E2E_USER_PASSWORD not set — skipping authenticated appointment flow",
+      !hasParallelTestUser(),
+      "Configure per-worker E2E users or enable opt-in provisioning for the appointment flow",
     );
-    await loginViaUI(page);
+    await loginViaUI(page, testInfo);
   });
 
-  test("opens dialog and surfaces validation when submitted empty", async ({
-    page,
-  }) => {
+  test("opens dialog and surfaces validation when submitted empty", async ({ page }) => {
     await page.goto("/calendar");
-    await expect(
-      page.getByRole("heading", { name: "Calendar" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible();
 
     await page.getByRole("button", { name: /new appointment/i }).click();
 

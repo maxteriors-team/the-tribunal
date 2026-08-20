@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { hasTestUser, loginViaUI, uniqueSuffix } from "./helpers";
+import { hasParallelTestUser, loginViaUI, uniqueSuffix } from "./helpers";
 
 /**
  * Full "book someone onto the schedule" happy path.
@@ -13,15 +13,9 @@ import { hasTestUser, loginViaUI, uniqueSuffix } from "./helpers";
  * it survives a reload — i.e. it was persisted, not just optimistically
  * rendered.
  *
- * Account strategy:
- *  - With E2E_USER_EMAIL / E2E_USER_PASSWORD set, it logs in as that user.
- *  - With E2E_ALLOW_PROVISIONING=1 (local/dev only), it registers a throwaway
- *    user so the run is self-contained and isolated from existing data.
- *  - With neither, it skips — matching the convention of the other specs, and
- *    keeping shared environments free of junk registrations.
+ * Account strategy: every parallel worker gets its own pre-provisioned account
+ * or an opt-in throwaway account, so refresh-token rotation cannot cross workers.
  */
-
-const ALLOW_PROVISIONING = process.env.E2E_ALLOW_PROVISIONING === "1";
 
 /** react-day-picker labels each day button like "Tuesday, August 11th, 2026". */
 function dayPickerLabel(date: Date): string {
@@ -32,45 +26,8 @@ function dayPickerLabel(date: Date): string {
   const suffix =
     rem100 >= 11 && rem100 <= 13
       ? "th"
-      : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[day % 10] ?? "th";
+      : (({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[day % 10] ?? "th");
   return `${weekday}, ${month} ${day}${suffix}, ${date.getFullYear()}`;
-}
-
-/** Register a throwaway operator and land in their fresh workspace. */
-async function registerThrowawayUser(page: Page): Promise<string> {
-  // `.test` is a reserved TLD that the backend's email validator rejects, so
-  // the throwaway address has to sit on a normal domain.
-  const email = `e2e-scheduler-${uniqueSuffix()}@example.com`;
-
-  await page.goto("/register");
-  await page.getByLabel(/full name/i).fill("Scheduler E2E");
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill("E2ePassw0rd!test");
-  await page.getByRole("button", { name: /create account|sign up|register/i }).click();
-
-  await expect(page).not.toHaveURL(/\/register$/, { timeout: 20_000 });
-  await settleOnboarding(page);
-  return email;
-}
-
-/**
- * Absorb the first-run onboarding gate.
- *
- * `SetupGate` force-redirects a fresh workspace to /onboarding exactly once,
- * and it fires from the authenticated shell — so it can land *after* a
- * `page.goto` and yank the test off the page it just opened. Trigger it
- * deliberately and skip out of the wizard so later navigation is stable.
- */
-async function settleOnboarding(page: Page): Promise<void> {
-  await page.goto("/contacts");
-  await page
-    .waitForURL(/\/onboarding/, { timeout: 10_000 })
-    .catch(() => undefined);
-
-  if (/\/onboarding/.test(page.url())) {
-    await page.getByRole("button", { name: /skip for now/i }).click();
-    await expect(page).not.toHaveURL(/\/onboarding/, { timeout: 15_000 });
-  }
 }
 
 interface CreatedApiResource {
@@ -128,19 +85,14 @@ test.describe("Calendar — book a contact onto the schedule", () => {
   let appointmentToDelete: CreatedApiResource | null = null;
   let contactToDelete: CreatedApiResource | null = null;
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     appointmentToDelete = null;
     contactToDelete = null;
     test.skip(
-      !hasTestUser() && !ALLOW_PROVISIONING,
-      "Set E2E_USER_EMAIL/E2E_USER_PASSWORD, or E2E_ALLOW_PROVISIONING=1 for a throwaway account",
+      !hasParallelTestUser(),
+      "Configure per-worker E2E users or enable opt-in provisioning for the booking flow",
     );
-
-    if (hasTestUser()) {
-      await loginViaUI(page);
-    } else {
-      await registerThrowawayUser(page);
-    }
+    await loginViaUI(page, testInfo);
   });
 
   test.afterEach(async ({ page }) => {
@@ -198,9 +150,7 @@ test.describe("Calendar — book a contact onto the schedule", () => {
       // Tomorrow can fall outside the rendered grid at a month boundary. The
       // nav arrows are absolutely positioned under the caption, so a plain
       // click fails actionability — force it.
-      await page
-        .getByRole("button", { name: /go to the next month/i })
-        .click({ force: true });
+      await page.getByRole("button", { name: /go to the next month/i }).click({ force: true });
       dayButton = page.getByRole("button", { name: dayPickerLabel(target) });
     }
     await expect(dayButton).toBeEnabled({ timeout: 10_000 });
@@ -238,8 +188,7 @@ test.describe("Calendar — book a contact onto the schedule", () => {
 
     // Step 8 — submit and wait for the real POST to succeed.
     const createResponse = page.waitForResponse(
-      (res) =>
-        /\/appointments/.test(res.url()) && res.request().method() === "POST",
+      (res) => /\/appointments/.test(res.url()) && res.request().method() === "POST",
       { timeout: 20_000 },
     );
     await dialog.getByRole("button", { name: /^schedule$/i }).click();
@@ -263,9 +212,7 @@ test.describe("Calendar — book a contact onto the schedule", () => {
     await page.reload();
     await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible();
 
-    const chip = page
-      .getByRole("button", { name: new RegExp(serviceType, "i") })
-      .first();
+    const chip = page.getByRole("button", { name: new RegExp(serviceType, "i") }).first();
     await expect(chip).toBeVisible({ timeout: 15_000 });
     await chip.click();
 
