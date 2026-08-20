@@ -33,6 +33,13 @@ test("creates, relinks, displays, and filters an opportunity by customer", async
   );
   await loginViaUI(page);
 
+  await page.goto("/contacts");
+  await page.waitForURL(/\/onboarding$/, { timeout: 5_000 }).catch(() => undefined);
+  if (/\/onboarding$/.test(page.url())) {
+    await page.getByRole("button", { name: /skip for now/i }).click();
+    await expect(page).not.toHaveURL(/\/onboarding$/, { timeout: 15_000 });
+  }
+
   const runId = Date.now().toString().slice(-7);
   const firstCustomer = {
     firstName: `Avery${runId}`,
@@ -49,7 +56,9 @@ test("creates, relinks, displays, and filters an opportunity by customer", async
   const opportunityName = `E2E customer deal ${runId}`;
 
   await page.goto("/contacts");
-  await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Contacts", exact: true }),
+  ).toBeVisible();
   await createCustomer(page, firstCustomer);
   await createCustomer(page, secondCustomer);
 
