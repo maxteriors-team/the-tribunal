@@ -666,7 +666,7 @@ export function CalendarPage({ initialJobId }: { initialJobId?: string } = {}) {
 
       {/* Shared detail dialogs — one per species, both driven by the grid. */}
       <AppointmentDetailsDialog
-        key={selectedAppointment?.id ?? "none"}
+        key={`appointment-${selectedAppointmentId ?? "none"}`}
         appointment={selectedAppointment}
         workspaceId={workspaceId}
         open={selectedAppointmentId !== null}
@@ -677,7 +677,7 @@ export function CalendarPage({ initialJobId }: { initialJobId?: string } = {}) {
       />
 
       <JobDetailDialog
-        key={selectedJobId ?? "none"}
+        key={`job-${selectedJobId ?? "none"}`}
         workspaceId={workspaceId}
         job={selectedJob}
         open={selectedJob !== null}
