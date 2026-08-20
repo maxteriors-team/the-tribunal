@@ -14,6 +14,19 @@ from app.api.v1 import public_payments
 from app.services.payments import call_payment_service
 
 
+@pytest.fixture(autouse=True)
+def _stub_payment_verification_limiter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncMock:
+    limiter = AsyncMock()
+    monkeypatch.setattr(
+        public_payments,
+        "enforce_public_payment_verification_rate_limit",
+        limiter,
+    )
+    return limiter
+
+
 def _app_with_db(db: AsyncMock) -> FastAPI:
     app = FastAPI()
     app.include_router(public_payments.public_router, prefix="/api/v1/p/payments")
@@ -71,6 +84,28 @@ def _stripe_session(
         amount_total=12_500,
         currency="usd",
     )
+
+
+@pytest.mark.asyncio
+async def test_public_verification_is_rate_limited_by_client_ip(
+    _stub_payment_verification_limiter: AsyncMock,
+) -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.execute.return_value = _result(None)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(
+            app=_app_with_db(db),
+            client=("203.0.113.7", 123),
+        ),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/p/payments/checkout-sessions/cs_test_unknown123/verify"
+        )
+
+    assert response.status_code == 404
+    _stub_payment_verification_limiter.assert_awaited_once_with("203.0.113.7")
 
 
 @pytest.mark.asyncio

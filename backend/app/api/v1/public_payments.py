@@ -2,14 +2,19 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Response, status
+from fastapi import APIRouter, HTTPException, Path, Request, Response, status
 
 from app.api.deps import DB
+from app.core.config import settings
+from app.core.utils import get_client_ip
 from app.schemas.public_payment import PublicPaymentVerification
 from app.services.payments.public_checkout_verification import (
     PaymentSessionNotFoundError,
     PaymentVerificationUnavailableError,
     verify_checkout_session,
+)
+from app.services.rate_limiting.public_payment_limiter import (
+    enforce_public_payment_verification_rate_limit,
 )
 
 public_router = APIRouter()
@@ -29,6 +34,9 @@ CheckoutSessionId = Annotated[
     response_model=PublicPaymentVerification,
     responses={
         status.HTTP_404_NOT_FOUND: {"description": "Unknown or invalid Checkout Session"},
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": "Payment verification rate limit exceeded"
+        },
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "description": "Stripe verification is temporarily unavailable"
         },
@@ -36,10 +44,14 @@ CheckoutSessionId = Annotated[
 )
 async def verify_public_checkout_session(
     session_id: CheckoutSessionId,
+    request: Request,
     db: DB,
     response: Response,
 ) -> PublicPaymentVerification:
     """Return payment state only after local ownership and Stripe both agree."""
+    await enforce_public_payment_verification_rate_limit(
+        get_client_ip(request, settings.trusted_proxies)
+    )
     response.headers["Cache-Control"] = "no-store"
     try:
         payment_status = await verify_checkout_session(db, session_id)
