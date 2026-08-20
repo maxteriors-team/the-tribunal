@@ -30,12 +30,12 @@ Live Telnyx, OpenAI API-key, Google Places, Cal.com, and Resend delivery were no
 
 All commands below were run directly, without a pipeline or a construct that could hide the command's exit code.
 
-| Check                        | Direct result                                                                                                                                                                                                                                                                                                                                       |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `make ci.all`                | **PASSED / exit 0** in the isolated release worktree: codegen drift, backend lint/type/**4,655 tests**, frontend lint/type/**159 files and 1,443 tests**/production build, and migration upgrade→check→downgrade→upgrade all passed. Existing React Compiler, hook, `act`, unused-variable, SQLAlchemy cycle, and MSW warnings remain under QA-027. |
-| Selected Chromium E2E        | **PASSED:** 12 anonymous embed checks plus 5 serial authenticated/mocked workflow checks covered campaign builders, client notes from every Notes action, job create/update, and opportunity customer create/relink/filter. One initial 4-worker run exposed local worker/proxy contention; the deterministic API-only rerun passed.                |
-| Public payment runtime probe | **PASSED:** an unknown Checkout Session returned generic `404` with `Cache-Control: no-store`; request 31 from the same IP returned `429`, the bounded message, and `Retry-After`.                                                                                                                                                                  |
-| Security scans               | **PASSED:** Gitleaks 8.28.0 scanned 1,193 commits with zero findings; `pip-audit` and `npm audit --omit=dev` reported zero known vulnerabilities.                                                                                                                                                                                                   |
+| Check | Direct result |
+|---|---|
+| `make ci.all` | **PASSED / exit 0** in the isolated release worktree: codegen drift, backend lint/type/**4,655 tests**, frontend lint/type/**159 files and 1,443 tests**/production build, and migration upgrade→check→downgrade→upgrade all passed. That run's warning debt was subsequently closed under QA-027. |
+| Selected Chromium E2E | **PASSED:** 12 anonymous embed checks plus 5 serial authenticated/mocked workflow checks covered campaign builders, client notes from every Notes action, job create/update, and opportunity customer create/relink/filter. One initial 4-worker run exposed local worker/proxy contention; the deterministic API-only rerun passed. |
+| Public payment runtime probe | **PASSED:** an unknown Checkout Session returned generic `404` with `Cache-Control: no-store`; request 31 from the same IP returned `429`, the bounded message, and `Retry-After`. |
+| Security scans | **PASSED:** Gitleaks 8.28.0 scanned 1,193 commits with zero findings; `pip-audit` and `npm audit --omit=dev` reported zero known vulnerabilities. |
 
 The full CI and release-subset browser/API commands above are the current release proof. Credentials stayed in ignored local environment state; no live provider call, message, or charge was made. The 64/100 score remains the historical pre-remediation baseline and has not been recalculated; QA-018 remains in progress for the separate Phone Numbers and Find Leads provider-recovery work.
 
@@ -358,12 +358,12 @@ The full CI and release-subset browser/API commands above are the current releas
 - **Location:** Frontend React Compiler/lint tests, backend AsyncMock tests, migration metadata
 - **Affected element:** Build/test signal quality and future framework compatibility
 - **Expected:** Passing CI is quiet enough that new regressions are visible.
-- **Actual:** Frontend logs repeated skipped compilation, render-time ref access, setState-in-effect, act, and unmatched MSW warnings; backend logs unawaited AsyncMock warnings; migration check warns about an unresolvable FK cycle.
+- **Actual:** Resolved: compiler/hook/unused lint findings were removed, Radix interactions now use an awaited React 19-safe helper, MSW has complete baseline handlers plus an unhandled-request failure guard, backend test warnings are errors (with narrow upstream/resource exclusions), and cyclic FKs are explicitly deferred with `use_alter`.
 - **Issue type:** Engineering quality / performance risk
 - **Severity:** **Low**
-- **Recommended developer fix:** Burn down warnings by category, fail on newly introduced warning classes, await AsyncMocks, add missing MSW handlers, and document or break the FK cycle before toolchain upgrades make it fatal.
-- **Evidence:** `.ezcoder/eyes/out/qa/ci-frontend.log`; `.ezcoder/eyes/out/qa/ci-backend.log`; `.ezcoder/eyes/out/qa/ci-migrations.log`.
-- **Status:** **Not Started**
+- **Recommended developer fix:** Implemented warning cleanup and regression gates in ESLint, Vitest setup, pytest configuration, and migration CI.
+- **Evidence:** `npm run lint`, `npm test` (**165 files / 1,464 tests**), and `npm run build` exited 0 without warnings; warning-focused backend tests passed (**111 tests**) and the full **4,659-test** run emitted no warning summary; `make ci.migrations` exited 0 with `PYTHONWARNINGS=error`.
+- **Status:** **Closed**
 
 ## Verified working behavior
 
