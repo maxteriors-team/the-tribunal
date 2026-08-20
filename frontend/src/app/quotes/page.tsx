@@ -5,6 +5,7 @@ import {
   Cable,
   Calculator,
   ChevronDown,
+  ClipboardCopy,
   FileText,
   Ruler,
   Snowflake,
@@ -17,6 +18,7 @@ import { Suspense } from "react";
 
 import { LightDesigner } from "@/components/estimator/light-designer";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { CopyToJobTab } from "@/components/quotes/copy-to-job-tab";
 import { QuotesList } from "@/components/quotes/quotes-list";
 import type { ServiceKey } from "@/components/sales-wizard/use-sales-wizard";
 import { Button } from "@/components/ui/button";
@@ -37,7 +39,7 @@ import type { PricingSettings } from "@/types/sales-wizard";
 
 // Deep-linkable tabs so the command palette / `/estimator` redirect can land the
 // rep straight on the Light Designer (`?tab=designer`).
-const TAB_VALUES = new Set(["quotes", "designer"]);
+const TAB_VALUES = new Set(["quotes", "designer", "copy-to-job"]);
 
 // A quote covers one service, so the branch is chosen here rather than mid-quote.
 // Each entry deep-links the wizard onto that service path (`?service=`).
@@ -158,7 +160,7 @@ function QuotesHub() {
       </div>
 
       <Tabs defaultValue={defaultTab} className="flex min-h-0 flex-1 flex-col gap-0">
-        <div className="px-6">
+        <div className="overflow-x-auto px-6">
           <TabsList>
             <TabsTrigger value="quotes" className="gap-2">
               <FileText className="size-4" />
@@ -167,6 +169,10 @@ function QuotesHub() {
             <TabsTrigger value="designer" className="gap-2">
               <Ruler className="size-4" />
               Light Designer
+            </TabsTrigger>
+            <TabsTrigger value="copy-to-job" className="gap-2">
+              <ClipboardCopy className="size-4" />
+              Copy to Job
             </TabsTrigger>
           </TabsList>
         </div>
@@ -177,6 +183,10 @@ function QuotesHub() {
 
         <TabsContent value="designer" className="min-h-0 flex-1 overflow-hidden pt-4">
           <LightDesignerTab />
+        </TabsContent>
+
+        <TabsContent value="copy-to-job" className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
+          <CopyToJobTab />
         </TabsContent>
       </Tabs>
     </div>

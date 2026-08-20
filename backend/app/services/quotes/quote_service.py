@@ -367,7 +367,9 @@ class QuoteService:
             raise ValidationError(
                 "Lighting project does not belong to the selected service location"
             )
-        if opportunity_id is not None and project.opportunity_id != opportunity_id:
+        # A saved layout can predate first-send/approval creating the pipeline card.
+        # Unassigned is valid; a conflicting assignment still fails after all ownership checks.
+        if opportunity_id is not None and project.opportunity_id not in {None, opportunity_id}:
             raise ValidationError("Lighting project does not belong to the selected opportunity")
         if project.installation_shot_id is None:
             raise ValidationError("Select and save an installation sheet before creating a quote")
