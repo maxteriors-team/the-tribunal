@@ -217,6 +217,34 @@ describe("one calendar, both entry types", () => {
     ).not.toHaveLength(0);
   });
 
+  it("keeps mixed same-day entries and empty detail placeholders uniquely keyed", async () => {
+    // The raw IDs intentionally collide while both unselected detail dialogs use
+    // placeholder state. Type prefixes must keep all four React identities separate.
+    const collidingJob = makeJob({ id: String(appointment.id) });
+    jobsListMock.mockImplementation((_ws: string, query: JobListParams = {}) =>
+      Promise.resolve(
+        query.status === "unscheduled" ? jobList([queuedJob]) : jobList([collidingJob]),
+      ),
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      renderCalendar();
+
+      expect(
+        await screen.findAllByRole("button", { name: /^Appointment: Gutter estimate/ }),
+      ).not.toHaveLength(0);
+      expect(screen.getAllByRole("button", { name: /^Job: Roof tune-up/ })).not.toHaveLength(0);
+
+      const duplicateKeyWarnings = consoleError.mock.calls.filter(([message]) =>
+        String(message).includes("Encountered two children with the same key"),
+      );
+      expect(duplicateKeyWarnings).toEqual([]);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("names each chip's species for assistive technology", async () => {
     // The wrench/clock icon and the accent rail are the visual signal; neither
     // reaches a screen reader, so the accessible name has to carry it.

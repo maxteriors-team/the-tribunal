@@ -23,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { useIsMounted } from "@/hooks/useMounted";
 import { settingsApi } from "@/lib/api/settings";
@@ -194,16 +193,6 @@ export function ProfileSettingsTab() {
               checked={isDark}
               onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
             />
-          </div>
-          <Separator />
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="appearance-compact-mode">Compact Mode</Label>
-              <p className="text-sm text-muted-foreground">
-                Reduce spacing for more content on screen
-              </p>
-            </div>
-            <Switch id="appearance-compact-mode" />
           </div>
         </CardContent>
       </Card>
