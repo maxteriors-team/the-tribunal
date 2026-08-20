@@ -63,7 +63,7 @@ export const actionTypeConfig: Record<AutomationActionType, { label: string; ico
   start_drip_campaign: { label: "Start Drip Campaign", icon: Rocket },
   apply_tag: { label: "Apply Tag", icon: Tag },
   add_tag: { label: "Add Tag", icon: Tag },
-  move_to_stage: { label: "Move Deal Stage", icon: TrendingUp },
+  move_to_stage: { label: "Create or Move Deal", icon: TrendingUp },
   wait: { label: "Wait", icon: Timer },
   delay: { label: "Delay", icon: Timer },
   branch: { label: "Branch", icon: GitBranch },
@@ -240,7 +240,7 @@ export function WorkflowStepsEditor({
 
               {step.type === "move_to_stage" && (
                 <div className="space-y-2">
-                  <Label>Move deal to stage</Label>
+                  <Label>Put deal in stage</Label>
                   {pipelines.length > 0 ? (
                     <Select
                       value={typeof step.config.stage_id === "string" ? step.config.stage_id : ""}
@@ -277,8 +277,8 @@ export function WorkflowStepsEditor({
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    When this runs, the contact&apos;s open deal is moved to this stage (e.g.
-                    Estimate Scheduled).
+                    Creates an open deal in this pipeline when the contact has none; otherwise moves
+                    the existing open deal to this stage.
                   </p>
                 </div>
               )}

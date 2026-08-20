@@ -45,9 +45,9 @@ Supported action type values
 - ``start_drip_campaign``: activate a reactivation drip sequence (and enroll the
                       matched contact when the trigger has one)
 - ``apply_tag`` / ``add_tag`` : add a normalized workspace tag to the contact
-- ``move_to_stage`` : move the contact's / event's opportunity to a pipeline
-                      stage (idempotent; re-firing against a settled stage is a
-                      no-op that emits nothing)
+- ``move_to_stage`` : move the contact's / event's open opportunity to a pipeline
+                      stage, creating one in that pipeline when the contact has none
+                      (idempotent; re-firing against a settled stage emits nothing)
 - ``wait`` / ``delay``: no-op in the current cycle (action is recorded as
                         "scheduled" and re-evaluated on subsequent poll)
 
@@ -113,7 +113,11 @@ from app.services.email import send_automation_email, send_template_email
 from app.services.email_layout import EmailCategory
 from app.services.email_opt_out import build_email_unsubscribe_url, email_suppressed
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
+from app.services.lead_sources.attribution_service import (
+    snapshot_contact_attribution_on_opportunity,
+)
 from app.services.leads.funnel_transitions import mark_contact_contacted
+from app.services.opportunities.lead_opportunity import opportunity_name
 from app.services.outbound.delivery import (
     OutboundDeliveryChannel,
     OutboundDeliveryRequest,
@@ -1565,26 +1569,12 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         payload: dict[str, Any],
         db: AsyncSession,
     ) -> None:
-        """Move an opportunity to a chosen pipeline stage.
+        """Move an open opportunity, creating one for the contact when absent.
 
-        Config keys:
-            stage_id (str): UUID of the destination stage (required).
-            pipeline_id (str, optional): Narrows contact-based resolution to one
-                pipeline (and gives the builder context).
-
-        Opportunity resolution order:
-            1. ``payload["opportunity_id"]`` (present on opportunity_created /
-               deal_stage_changed events) — that opportunity, scoped to the
-               workspace.
-            2. else the contact's newest open, active opportunity (optionally
-               filtered by ``pipeline_id``).
-            3. else warn + skip (e.g. lead_created before any deal exists — a
-               documented v1 limitation; this action does not create deals).
-
-        Loop-safe: ``OpportunityService.move_stage`` only logs/emits when the
-        target stage differs from the current one, so a
-        ``move -> deal_stage_changed -> move`` re-fire against a settled stage is
-        a no-op that emits nothing.
+        ``stage_id`` chooses the destination. ``pipeline_id`` is optional builder
+        context, but when present it must own that stage. Existing opportunities
+        and any newly-created opportunity are always constrained to the target
+        pipeline, preventing a stage from one pipeline being written onto another.
         """
         stage_id = self._parse_uuid(config.get("stage_id"))
         if stage_id is None:
@@ -1595,21 +1585,20 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             )
             return
 
-        pipeline_id: uuid.UUID | None = None
+        configured_pipeline_id: uuid.UUID | None = None
         if config.get("pipeline_id"):
-            pipeline_id = self._parse_uuid(config.get("pipeline_id"))
-            if pipeline_id is None:
+            configured_pipeline_id = self._parse_uuid(config.get("pipeline_id"))
+            if configured_pipeline_id is None:
                 self.logger.warning(
                     "move_to_stage has invalid pipeline_id",
                     pipeline_id=config.get("pipeline_id"),
                 )
                 return
 
-        # Validate the destination stage lives in this automation's workspace
-        # (via its pipeline) before touching any opportunity — mirrors the
-        # enroll_campaign workspace check and keeps moves tenant-scoped.
+        # Resolve the stage through its workspace-owned pipeline before touching
+        # any opportunity. This is the tenant boundary for both moves and creates.
         stage_in_workspace = await db.execute(
-            select(PipelineStage.id)
+            select(PipelineStage)
             .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
             .where(
                 PipelineStage.id == stage_id,
@@ -1617,7 +1606,8 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             )
             .limit(1)
         )
-        if stage_in_workspace.first() is None:
+        target_stage = stage_in_workspace.scalar_one_or_none()
+        if target_stage is None:
             self.logger.warning(
                 "move_to_stage: stage not found in workspace",
                 stage_id=str(stage_id),
@@ -1625,14 +1615,50 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             )
             return
 
+        pipeline_id = target_stage.pipeline_id
+        if configured_pipeline_id is not None and configured_pipeline_id != pipeline_id:
+            self.logger.warning(
+                "move_to_stage: stage does not belong to configured pipeline",
+                stage_id=str(stage_id),
+                pipeline_id=str(configured_pipeline_id),
+            )
+            return
+
         opportunity_id = await self._resolve_move_opportunity(
             automation, contact, payload, pipeline_id, db
         )
         if opportunity_id is None:
-            self.logger.warning(
-                "move_to_stage: no opportunity to move",
-                automation_id=str(automation.id),
-                contact_id=contact.id if contact else None,
+            if contact is None or contact.workspace_id != automation.workspace_id:
+                self.logger.warning(
+                    "move_to_stage: no workspace contact available to create opportunity",
+                    automation_id=str(automation.id),
+                    contact_id=contact.id if contact else None,
+                )
+                return
+
+            opportunity = Opportunity(
+                workspace_id=automation.workspace_id,
+                pipeline_id=pipeline_id,
+                stage_id=stage_id,
+                name=opportunity_name(contact),
+                primary_contact_id=contact.id,
+                source=contact.source or "automation",
+                probability=target_stage.probability,
+                status="open",
+                is_active=True,
+            )
+            snapshot_contact_attribution_on_opportunity(opportunity, contact)
+            db.add(opportunity)
+            await db.flush()
+
+            # This write is already downstream of an automation event. Emitting
+            # opportunity_created here would let mutually-opposed stage automations
+            # generate an unbounded event chain; human/API creation paths own that
+            # event instead.
+            self.logger.info(
+                "Automation created opportunity at stage",
+                opportunity_id=str(opportunity.id),
+                stage_id=str(stage_id),
             )
             return
 
@@ -1646,6 +1672,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             stage_id,
             user_id=None,
             source="automation",
+            emit_event=False,
         )
         self.logger.info(
             "Automation moved opportunity stage",
@@ -1661,28 +1688,29 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         pipeline_id: uuid.UUID | None,
         db: AsyncSession,
     ) -> uuid.UUID | None:
-        """Pick the opportunity a ``move_to_stage`` action should act on.
+        """Pick the open opportunity a ``move_to_stage`` action should act on.
 
         Prefers an explicit ``payload["opportunity_id"]`` (event path), then falls
         back to the contact's newest open, active opportunity. Every lookup is
-        scoped to the automation's workspace.
+        scoped to the automation's workspace and destination pipeline.
         """
         payload_oid = self._parse_uuid(payload.get("opportunity_id"))
         if payload_oid is not None:
-            found = await db.execute(
-                select(Opportunity.id)
-                .where(
-                    Opportunity.id == payload_oid,
-                    Opportunity.workspace_id == automation.workspace_id,
-                )
-                .limit(1)
-            )
+            filters: list[Any] = [
+                Opportunity.id == payload_oid,
+                Opportunity.workspace_id == automation.workspace_id,
+                Opportunity.is_active.is_(True),
+                Opportunity.status == "open",
+            ]
+            if pipeline_id is not None:
+                filters.append(Opportunity.pipeline_id == pipeline_id)
+            found = await db.execute(select(Opportunity.id).where(and_(*filters)).limit(1))
             resolved = found.scalar_one_or_none()
             if resolved is not None:
                 return resolved
 
         if contact is not None:
-            filters: list[Any] = [
+            filters = [
                 Opportunity.workspace_id == automation.workspace_id,
                 Opportunity.primary_contact_id == contact.id,
                 Opportunity.is_active.is_(True),
