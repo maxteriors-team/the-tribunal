@@ -4,9 +4,9 @@ Two layers:
 
 * **Unit** (default CI, mocked sessions) — dispatch wiring, opportunity
   resolution order, validation/skip branches, and contact-only deal creation.
-* **Integration** (``-m integration``, real Postgres) — an event carrying an
-  ``opportunity_id`` advances a deal, contact-based resolution works, a missing
-  deal is created, moves are idempotent, and out-of-workspace stages are skipped.
+* **Integration** (``-m integration``, real Postgres) — an ``opportunity_created``
+  event advances a deal, a ``lead_created`` event creates the contact's missing
+  pipeline opportunity, moves are idempotent, and foreign stages are skipped.
 
 The unit layer runs in ``make ci.backend`` (which excludes ``integration``); the
 integration layer is the end-to-end proof, run with ``pytest -m integration``.
@@ -547,20 +547,40 @@ async def test_move_to_stage_via_contact_resolution(_fresh_engine_pool) -> None:
 
 
 @pytest.mark.integration
-async def test_move_to_stage_creates_deal_for_contact_without_one(_fresh_engine_pool) -> None:
+async def test_lead_created_automation_creates_contact_pipeline_opportunity(
+    _fresh_engine_pool,
+) -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
         contact = await _contact_row(db, ws.id)
-        pipeline, _lead, scheduled = await _pipeline_with_stages(db, ws.id)
+        pipeline, lead, _scheduled = await _pipeline_with_stages(db, ws.id)
+
+        db.add(
+            Automation(
+                workspace_id=ws.id,
+                name="On new lead -> New Lead pipeline",
+                trigger_type="lead_created",
+                trigger_config={},
+                actions=[
+                    {
+                        "type": "move_to_stage",
+                        "config": {"stage_id": str(lead.id), "pipeline_id": str(pipeline.id)},
+                    }
+                ],
+                is_active=True,
+            )
+        )
+        event = AutomationEvent(
+            workspace_id=ws.id,
+            event_type="lead_created",
+            contact_id=contact.id,
+            payload={"source": "lead_form"},
+            status=EVENT_STATUS_PENDING,
+        )
+        db.add(event)
         await db.commit()
 
-        await AutomationWorker()._action_move_to_stage(
-            _automation_ns(ws.id),
-            contact,
-            {"stage_id": str(scheduled.id), "pipeline_id": str(pipeline.id)},
-            {},
-            db,
-        )
+        await AutomationWorker()._process_events(db)
         await db.commit()
 
         created = (
@@ -572,9 +592,11 @@ async def test_move_to_stage_creates_deal_for_contact_without_one(_fresh_engine_
             )
         ).scalar_one()
         assert created.pipeline_id == pipeline.id
-        assert created.stage_id == scheduled.id
+        assert created.stage_id == lead.id
         assert created.status == "open"
-        assert created.probability == scheduled.probability
+        assert created.probability == lead.probability
+        await db.refresh(event)
+        assert event.status == "processed"
 
 
 @pytest.mark.integration
