@@ -132,9 +132,11 @@ generic-component-*.html
 .ezcoder/eyes/_lib.sh
 .ezcoder/eyes/_redact.sh
 
-# Agent upload scratch (pasted screenshots/files); never part of the project.
-.ezcoder/uploads/
-.ezcoder/screenshots/
+# Agent browser/upload scratch; never part of the project.
+/.ezcoder/uploads/
+/.ezcoder/screenshots/
+/.ezcoder/chrome-profile/
+/frontend/.ezcoder/
 
 # Legacy agent toolchains — consolidated into .ezcoder/ (see CLAUDE.md).
 # Ignore the whole legacy trees so stray IDE/agent configs don't reintroduce them.
