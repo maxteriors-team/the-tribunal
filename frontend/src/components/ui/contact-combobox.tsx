@@ -47,8 +47,19 @@ import type { Contact } from "@/types";
 const MAX_SUGGESTIONS = 6;
 const SEARCH_DEBOUNCE_MS = 250;
 
+export interface ContactPickerSelection {
+  id: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  email?: string | null;
+  phone_number?: string | null;
+  company_name?: string | null;
+  address_city?: string | null;
+  address_state?: string | null;
+}
+
 /** "Sarah Henderson" — falls back to whichever parts exist. */
-export function contactDisplayName(contact: Contact): string {
+export function contactDisplayName(contact: ContactPickerSelection): string {
   return (
     [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim() ||
     contact.email ||
@@ -63,16 +74,13 @@ export function contactDisplayName(contact: Contact): string {
  * where they live is what a rep recognises. Anything longer (notes, tags)
  * makes the shortlist harder to scan, not easier.
  */
-function contactMeta(contact: Contact): string {
+function contactMeta(contact: ContactPickerSelection): string {
   const place =
     [contact.address_city, contact.address_state].filter(Boolean).join(", ") ||
     contact.company_name ||
     contact.email ||
     "";
-  return [
-    contact.phone_number ? formatPhoneNumber(contact.phone_number) : "",
-    place,
-  ]
+  return [contact.phone_number ? formatPhoneNumber(contact.phone_number) : "", place]
     .filter(Boolean)
     .join("  ·  ");
 }
@@ -111,8 +119,7 @@ function useContactSuggestions(
   minQueryLength: number,
 ): SuggestionState {
   const term = useDebounce(rawTerm.trim(), SEARCH_DEBOUNCE_MS);
-  const canSearch =
-    enabled && !!workspaceId && term.length >= minQueryLength;
+  const canSearch = enabled && !!workspaceId && term.length >= minQueryLength;
 
   const { data, isFetching, isError } = useQuery({
     queryKey: queryKeys.contacts.search(workspaceId ?? "", term),
@@ -189,8 +196,7 @@ function ComboboxCore({
   );
 
   const meetsMinLength = query.trim().length >= minQueryLength;
-  const showPanel =
-    isOpen && meetsMinLength && (suggestions.length > 0 || !isStale);
+  const showPanel = isOpen && meetsMinLength && (suggestions.length > 0 || !isStale);
   const hasMore = suggestions.length > 0 && total > suggestions.length;
 
   // Keep the highlighted row in view while arrowing through a scrolled list.
@@ -282,15 +288,10 @@ function ComboboxCore({
               "aria-expanded": showPanel,
               // Only advertise the listbox while one is actually rendered —
               // a zero-match panel is just a message.
-              "aria-controls":
-                showPanel && suggestions.length > 0 ? listboxId : undefined,
+              "aria-controls": showPanel && suggestions.length > 0 ? listboxId : undefined,
               "aria-autocomplete": "list",
-              "aria-activedescendant":
-                activeIndex >= 0 ? optionId(activeIndex) : undefined,
-              className: cn(
-                trailing && !unstyled ? "pe-9" : undefined,
-                inputProps.className,
-              ),
+              "aria-activedescendant": activeIndex >= 0 ? optionId(activeIndex) : undefined,
+              className: cn(trailing && !unstyled ? "pe-9" : undefined, inputProps.className),
               value: query,
               onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
                 setIsOpen(true);
@@ -316,9 +317,7 @@ function ComboboxCore({
               },
             })}
             {trailing ? (
-              <div className="absolute inset-y-0 end-1.5 flex items-center">
-                {trailing}
-              </div>
+              <div className="absolute inset-y-0 end-1.5 flex items-center">{trailing}</div>
             ) : null}
           </div>
         </PopoverAnchor>
@@ -473,8 +472,8 @@ export interface ContactPickerProps extends SharedFieldProps {
   value: string;
   /** `contact` is null when the choice is cleared or typed over. */
   onChange: (contactId: string, contact: Contact | null) => void;
-  /** Pre-selected contact, for forms that open on an existing record. */
-  initialContact?: Contact | null;
+  /** Pre-selected identity, including narrow summaries embedded on another record. */
+  initialContact?: ContactPickerSelection | null;
 }
 
 /**
@@ -491,7 +490,7 @@ export function ContactPicker({
   disabled,
   ...inputProps
 }: ContactPickerProps) {
-  const [selected, setSelected] = React.useState<Contact | null>(initialContact);
+  const [selected, setSelected] = React.useState<ContactPickerSelection | null>(initialContact);
   const [query, setQuery] = React.useState(
     initialContact ? contactDisplayName(initialContact) : "",
   );
@@ -572,9 +571,7 @@ export function FormContactPicker(props: ContactPickerProps) {
     <ContactPicker
       id={formItemId}
       aria-invalid={!!error}
-      aria-describedby={
-        error ? `${formDescriptionId} ${formMessageId}` : formDescriptionId
-      }
+      aria-describedby={error ? `${formDescriptionId} ${formMessageId}` : formDescriptionId}
       {...props}
     />
   );

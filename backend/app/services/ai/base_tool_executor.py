@@ -176,6 +176,7 @@ class BaseToolExecutor:
         date_str: str,
         time_str: str,
         email: str | None,
+        customer_confirmed: bool = False,
         duration_minutes: int = 30,
         notes: str | None = None,
         required_skill: str | None = None,
@@ -187,6 +188,17 @@ class BaseToolExecutor:
         agent confirms to the customer off this return value: anything not
         rejected here becomes a promise we cannot keep.
         """
+        if customer_confirmed is not True:
+            self.log.info("booking_rejected_customer_confirmation_missing")
+            return {
+                "success": False,
+                "error": "Explicit customer confirmation is required before booking",
+                "message": (
+                    "Restate the exact date, time, timezone, duration, and invite email, "
+                    "then ask the customer to explicitly confirm those details."
+                ),
+            }
+
         if not email:
             return {
                 "success": False,

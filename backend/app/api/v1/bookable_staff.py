@@ -18,7 +18,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import DB, CurrentMembership, CurrentUser, get_workspace
+from app.api.deps import (
+    DB,
+    CurrentMembership,
+    CurrentUser,
+    get_workspace,
+    require_route_capabilities,
+)
 from app.api.service_errors import ServiceErrorRoute
 from app.core.permissions import Capability, role_can
 from app.models.workspace import Workspace, WorkspaceMembership
@@ -31,7 +37,10 @@ from app.schemas.bookable_staff import (
 )
 from app.services.calendar.bookable_staff_service import BookableStaffService
 
-router = APIRouter(route_class=ServiceErrorRoute)
+router = APIRouter(
+    route_class=ServiceErrorRoute,
+    dependencies=[Depends(require_route_capabilities(Capability.JOBS_READ, Capability.JOBS_READ))],
+)
 workspace_router = APIRouter(route_class=ServiceErrorRoute)
 
 

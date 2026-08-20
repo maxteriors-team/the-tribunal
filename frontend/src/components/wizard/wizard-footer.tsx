@@ -29,28 +29,28 @@ export function WizardFooter({
   submitIcon: SubmitIcon = Send,
 }: WizardFooterProps) {
   return (
-    <div className="flex items-center justify-between px-6 py-4 border-t bg-background">
-      <div>
+    <div className="flex flex-wrap items-center gap-2 border-t bg-background px-4 py-4 sm:px-6">
+      <div className="mr-auto">
         {onCancel && (
           <Button variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         {!isFirstStep && (
-          <Button variant="outline" onClick={onPrevious}>
+          <Button className="shrink-0" variant="outline" onClick={onPrevious}>
             <ArrowLeft className="size-4 mr-2" />
             Previous
           </Button>
         )}
         {!isLastStep ? (
-          <Button onClick={onNext}>
+          <Button className="shrink-0" onClick={onNext}>
             Next
             <ArrowRight className="size-4 ml-2" />
           </Button>
         ) : (
-          <Button onClick={onSubmit} disabled={isSubmitting}>
+          <Button className="shrink-0" onClick={onSubmit} disabled={isSubmitting}>
             {isSubmitting ? (
               <>
                 <Loader2 className="size-4 mr-2 animate-spin" />

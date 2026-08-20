@@ -12,8 +12,9 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 const isCI = !!process.env.CI;
+const storageState = process.env.E2E_STORAGE_STATE;
 const usesSharedTestUser = Boolean(
-  process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD,
+  (process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD) || storageState,
 );
 
 export default defineConfig({
@@ -28,6 +29,7 @@ export default defineConfig({
 
   use: {
     baseURL,
+    storageState: storageState || undefined,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",

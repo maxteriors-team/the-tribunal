@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Plus,
-  Trash2,
-  GripVertical,
-  DollarSign,
-  CheckCircle,
-  XCircle,
-} from "lucide-react";
+import { Plus, Trash2, GripVertical, DollarSign, CheckCircle, XCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useState } from "react";
 
@@ -76,9 +69,7 @@ export function ValueStackBuilder({ items, onChange }: ValueStackBuilderProps) {
         </div>
         <div className="text-right">
           <p className="text-sm text-muted-foreground">Total Value</p>
-          <p className="text-2xl font-bold text-success">
-            ${formatNumber(totalValue)}
-          </p>
+          <p className="text-2xl font-bold text-success">${formatNumber(totalValue)}</p>
         </div>
       </div>
 
@@ -91,11 +82,7 @@ export function ValueStackBuilder({ items, onChange }: ValueStackBuilderProps) {
             exit={{ opacity: 0, x: -100 }}
             layout
           >
-            <Card
-              className={`transition-colors ${
-                !item.included ? "opacity-60" : ""
-              }`}
-            >
+            <Card className={`transition-colors ${!item.included ? "opacity-60" : ""}`}>
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
                   {/* Drag handle */}
@@ -116,9 +103,7 @@ export function ValueStackBuilder({ items, onChange }: ValueStackBuilderProps) {
                       <Input
                         placeholder="Item name (e.g., Video Training Series)"
                         value={item.name}
-                        onChange={(e) =>
-                          updateItem(index, { name: e.target.value })
-                        }
+                        onChange={(e) => updateItem(index, { name: e.target.value })}
                         className="flex-1"
                       />
                       <div className="flex items-center gap-1">
@@ -141,19 +126,16 @@ export function ValueStackBuilder({ items, onChange }: ValueStackBuilderProps) {
                     <Input
                       placeholder="Description (optional)"
                       value={item.description || ""}
-                      onChange={(e) =>
-                        updateItem(index, { description: e.target.value })
-                      }
+                      onChange={(e) => updateItem(index, { description: e.target.value })}
                       className="text-sm"
                     />
 
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Switch
+                          aria-label={`${item.included ? "Exclude" : "Include"} ${item.name || `value item ${index + 1}`} in offer`}
                           checked={item.included}
-                          onCheckedChange={(checked) =>
-                            updateItem(index, { included: checked })
-                          }
+                          onCheckedChange={(checked) => updateItem(index, { included: checked })}
                         />
                         <span className="text-sm text-muted-foreground">
                           {item.included ? (
@@ -188,12 +170,7 @@ export function ValueStackBuilder({ items, onChange }: ValueStackBuilderProps) {
         ))}
       </AnimatePresence>
 
-      <Button
-        type="button"
-        variant="outline"
-        onClick={addItem}
-        className="w-full"
-      >
+      <Button type="button" variant="outline" onClick={addItem} className="w-full">
         <Plus className="size-4 mr-2" />
         Add Value Stack Item
       </Button>
@@ -206,18 +183,13 @@ export function ValueStackBuilder({ items, onChange }: ValueStackBuilderProps) {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium text-success">
-                Total Stack Value
-              </p>
+              <p className="font-medium text-success">Total Stack Value</p>
               <p className="text-sm text-muted-foreground">
-                {items.filter((i) => i.included).length} of {items.length} items
-                included
+                {items.filter((i) => i.included).length} of {items.length} items included
               </p>
             </div>
             <div className="text-right">
-              <p className="text-3xl font-bold text-success">
-                ${formatNumber(totalValue)}
-              </p>
+              <p className="text-3xl font-bold text-success">${formatNumber(totalValue)}</p>
               <p className="text-xs text-muted-foreground">perceived value</p>
             </div>
           </div>

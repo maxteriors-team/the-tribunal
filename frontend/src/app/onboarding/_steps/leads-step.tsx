@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, FileSpreadsheet, Phone } from "lucide-react";
+import { CheckCircle2, Phone } from "lucide-react";
 import { useCallback, useId } from "react";
 import { useFormContext } from "react-hook-form";
 import { toast } from "sonner";
@@ -15,10 +15,16 @@ import type { OnboardingFormValues } from "../_state";
 
 import { useOnboardingExtras } from "./onboarding-context";
 
+function normalizeAreaCode(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  const nationalDigits = digits.length > 3 && digits.startsWith("1") ? digits.slice(1) : digits;
+
+  return nationalDigits.slice(0, 3);
+}
+
 export function LeadsStep() {
   const form = useFormContext<OnboardingFormValues>();
-  const { csvFile, csvRowCount, setCsvFile, leadsError } =
-    useOnboardingExtras();
+  const { csvFile, csvRowCount, setCsvFile, leadsError } = useOnboardingExtras();
 
   const areaCodeId = useId();
 
@@ -33,7 +39,7 @@ export function LeadsStep() {
       };
       reader.readAsText(selected);
     },
-    [setCsvFile]
+    [setCsvFile],
   );
 
   const areaCode = form.watch("area_code");
@@ -46,20 +52,6 @@ export function LeadsStep() {
           Choose how to import the leads you want to reactivate
         </p>
       </div>
-
-      <Card className="relative overflow-hidden">
-        <CardContent className="p-5 flex flex-col items-center text-center gap-3">
-          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary">
-            <FileSpreadsheet className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="font-semibold text-sm">Upload CSV</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Drag and drop or click to browse
-            </p>
-          </div>
-        </CardContent>
-      </Card>
 
       <FileDropzone
         accept=".csv"
@@ -87,11 +79,14 @@ export function LeadsStep() {
         </Card>
       )}
 
-      {leadsError && <p className="text-sm text-destructive">{leadsError}</p>}
+      {leadsError && (
+        <p className="text-sm text-destructive" role="alert">
+          {leadsError}
+        </p>
+      )}
 
       <p className="text-xs text-muted-foreground">
-        CSV needs at least:{" "}
-        <span className="font-mono font-medium">first_name</span> (or{" "}
+        CSV needs at least: <span className="font-mono font-medium">first_name</span> (or{" "}
         <span className="font-mono font-medium">name</span>),{" "}
         <span className="font-mono font-medium">phone</span>. Email is optional.
       </p>
@@ -103,20 +98,20 @@ export function LeadsStep() {
           <Input
             id={areaCodeId}
             type="text"
+            inputMode="numeric"
+            autoComplete="tel-area-code"
             placeholder="e.g. 212"
-            maxLength={3}
             className="pl-9"
             value={areaCode}
-            onChange={(e) =>
-              form.setValue("area_code", e.target.value.replace(/\D/g, ""), {
+            onChange={(event) =>
+              form.setValue("area_code", normalizeAreaCode(event.target.value), {
                 shouldDirty: true,
               })
             }
           />
         </div>
         <p className="text-xs text-muted-foreground">
-          Preferred area code for your texting number. Leave blank for any US
-          number.
+          Preferred area code for your texting number. Leave blank for any US number.
         </p>
       </div>
     </div>

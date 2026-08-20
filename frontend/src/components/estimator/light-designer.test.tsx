@@ -104,8 +104,11 @@ const ESTIMATE: LinearFeetEstimateResult = {
   permanent: {
     enabled: true,
     total: 3300,
-    per_ft: 32,
-    roofline_cost: 3200,
+    per_ft: 0,
+    package_feet: 100,
+    package_cogs: 1249,
+    markup: 3.5,
+    roofline_cost: 4371.5,
     custom_total: 0,
   },
   christmas: {

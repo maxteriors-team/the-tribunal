@@ -10,7 +10,13 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.v1.router import api_router
+from app.core.config import settings
 from app.services.ai.openai_credentials import OpenAICredentialContext
+from app.services.embed.access import EMBED_PARENT_ORIGIN_HEADER
+
+
+def _embed_headers(origin: str) -> dict[str, str]:
+    return {"Origin": origin, EMBED_PARENT_ORIGIN_HEADER: origin}
 
 
 @asynccontextmanager
@@ -98,7 +104,7 @@ class TestEmbedOriginValidation:
 
         response = await client.get(
             "/api/v1/p/embed/demo-public-id/config",
-            headers={"Origin": "https://allowed.example"},
+            headers=_embed_headers("https://allowed.example"),
         )
 
         assert response.status_code == 200
@@ -124,11 +130,101 @@ class TestEmbedOriginValidation:
 
         response = await client.get(
             "/api/v1/p/embed/demo-public-id/config",
-            headers={"Origin": "https://evil.example"},
+            headers=_embed_headers("https://evil.example"),
         )
 
         assert response.status_code == 403
-        assert response.json()["detail"] == "Origin not allowed"
+        assert response.json()["detail"] == "Parent origin not allowed"
+
+    async def test_config_requires_parent_origin_claim(
+        self,
+        client: AsyncClient,
+        patched_agent: MagicMock,
+    ) -> None:
+        del patched_agent
+
+        response = await client.get("/api/v1/p/embed/demo-public-id/config")
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Parent origin header required"
+
+    async def test_config_rejects_parent_claim_that_disagrees_with_browser_origin(
+        self,
+        client: AsyncClient,
+        patched_agent: MagicMock,
+    ) -> None:
+        del patched_agent
+
+        response = await client.get(
+            "/api/v1/p/embed/demo-public-id/config",
+            headers={
+                "Origin": "https://evil.example",
+                EMBED_PARENT_ORIGIN_HEADER: "https://allowed.example",
+            },
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Parent origin could not be verified"
+
+    async def test_config_accepts_parent_claim_from_matching_same_origin_embed_page(
+        self,
+        client: AsyncClient,
+        patched_agent: MagicMock,
+    ) -> None:
+        del patched_agent
+        frontend_origin = settings.frontend_url.rstrip("/")
+
+        response = await client.get(
+            "/api/v1/p/embed/demo-public-id/config",
+            headers={
+                "Origin": frontend_origin,
+                EMBED_PARENT_ORIGIN_HEADER: "https://allowed.example",
+                "Referer": f"{frontend_origin}/embed/demo-public-id/chat",
+                "Sec-Fetch-Site": "same-origin",
+            },
+        )
+
+        assert response.status_code == 200
+
+    async def test_config_accepts_same_origin_get_without_origin_header(
+        self,
+        client: AsyncClient,
+        patched_agent: MagicMock,
+    ) -> None:
+        del patched_agent
+        frontend_origin = settings.frontend_url.rstrip("/")
+
+        response = await client.get(
+            "/api/v1/p/embed/demo-public-id/config",
+            headers={
+                EMBED_PARENT_ORIGIN_HEADER: "https://allowed.example",
+                "Referer": f"{frontend_origin}/embed/demo-public-id/fullpage",
+                "Sec-Fetch-Site": "same-origin",
+            },
+        )
+
+        assert response.status_code == 200
+
+    async def test_config_rejects_same_origin_claim_from_unrelated_frontend_page(
+        self,
+        client: AsyncClient,
+        patched_agent: MagicMock,
+    ) -> None:
+        del patched_agent
+        frontend_origin = settings.frontend_url.rstrip("/")
+
+        response = await client.get(
+            "/api/v1/p/embed/demo-public-id/config",
+            headers={
+                "Origin": frontend_origin,
+                EMBED_PARENT_ORIGIN_HEADER: "https://allowed.example",
+                "Referer": f"{frontend_origin}/contacts",
+                "Sec-Fetch-Site": "same-origin",
+            },
+        )
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Parent origin could not be verified"
 
 
 class TestEmbedChatAndVoiceFlows:
@@ -158,7 +254,7 @@ class TestEmbedChatAndVoiceFlows:
         ):
             response = await client.post(
                 "/api/v1/p/embed/demo-public-id/chat",
-                headers={"Origin": "https://allowed.example"},
+                headers=_embed_headers("https://allowed.example"),
                 json={
                     "message": "Can you help?",
                     "conversation_history": [
@@ -214,7 +310,7 @@ class TestEmbedChatAndVoiceFlows:
         ):
             response = await client.post(
                 "/api/v1/p/embed/demo-public-id/chat",
-                headers={"Origin": "https://allowed.example"},
+                headers=_embed_headers("https://allowed.example"),
                 json={
                     "message": "What is wrong with this roof?",
                     "conversation_history": [],
@@ -245,7 +341,7 @@ class TestEmbedChatAndVoiceFlows:
         ):
             response = await client.post(
                 "/api/v1/p/embed/demo-public-id/chat",
-                headers={"Origin": "https://allowed.example"},
+                headers=_embed_headers("https://allowed.example"),
                 json={
                     "message": "look at this",
                     "conversation_history": [],
@@ -279,7 +375,7 @@ class TestEmbedChatAndVoiceFlows:
         ):
             response = await client.post(
                 "/api/v1/p/embed/demo-public-id/token",
-                headers={"Origin": "https://allowed.example"},
+                headers=_embed_headers("https://allowed.example"),
                 json={"mode": "voice"},
             )
 

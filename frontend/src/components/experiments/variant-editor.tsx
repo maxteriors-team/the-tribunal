@@ -35,14 +35,8 @@ const placeholders = [
   { label: "Company", value: "{company_name}" },
 ];
 
-export function VariantEditor({
-  variants,
-  onChange,
-  error,
-}: VariantEditorProps) {
-  const [activeVariantId, setActiveVariantId] = useState<string | null>(
-    variants[0]?.id || null
-  );
+export function VariantEditor({ variants, onChange, error }: VariantEditorProps) {
+  const [activeVariantId, setActiveVariantId] = useState<string | null>(variants[0]?.id || null);
   const [loadTemplateOpen, setLoadTemplateOpen] = useState(false);
 
   const generateId = () => `temp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -60,11 +54,7 @@ export function VariantEditor({
   };
 
   const updateVariant = (id: string, updates: Partial<VariantFormData>) => {
-    onChange(
-      variants.map((v) =>
-        v.id === id ? { ...v, ...updates } : v
-      )
-    );
+    onChange(variants.map((v) => (v.id === id ? { ...v, ...updates } : v)));
   };
 
   const removeVariant = (id: string) => {
@@ -87,7 +77,7 @@ export function VariantEditor({
       variants.map((v) => ({
         ...v,
         is_control: v.id === id,
-      }))
+      })),
     );
   };
 
@@ -96,7 +86,7 @@ export function VariantEditor({
       reorderedVariants.map((v, index) => ({
         ...v,
         sort_order: index,
-      }))
+      })),
     );
   };
 
@@ -132,30 +122,16 @@ export function VariantEditor({
         <div className="col-span-4 space-y-2">
           <div className="flex items-center justify-between mb-2">
             <Label>Message Variants</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addVariant}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={addVariant}>
               <Plus className="size-4 mr-1" />
               Add
             </Button>
           </div>
 
-          <Reorder.Group
-            axis="y"
-            values={variants}
-            onReorder={handleReorder}
-            className="space-y-2"
-          >
+          <Reorder.Group axis="y" values={variants} onReorder={handleReorder} className="space-y-2">
             <AnimatePresence>
               {variants.map((variant) => (
-                <Reorder.Item
-                  key={variant.id}
-                  value={variant}
-                  className="cursor-move"
-                >
+                <Reorder.Item key={variant.id} value={variant} className="cursor-move">
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -174,14 +150,9 @@ export function VariantEditor({
                           <GripVertical className="size-4 text-muted-foreground flex-shrink-0" />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium truncate">
-                                {variant.name}
-                              </span>
+                              <span className="font-medium truncate">{variant.name}</span>
                               {variant.is_control && (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-xs flex-shrink-0"
-                                >
+                                <Badge variant="secondary" className="text-xs flex-shrink-0">
                                   <Star className="size-3 mr-1" />
                                   Control
                                 </Badge>
@@ -203,15 +174,8 @@ export function VariantEditor({
           {variants.length === 0 && (
             <div className="text-center py-8 border-2 border-dashed rounded-lg">
               <MessageSquare className="size-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">
-                Add at least 2 variants to test
-              </p>
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                onClick={addVariant}
-              >
+              <p className="text-sm text-muted-foreground">Add at least 2 variants to test</p>
+              <Button type="button" variant="link" size="sm" onClick={addVariant}>
                 Add your first variant
               </Button>
             </div>
@@ -256,9 +220,7 @@ export function VariantEditor({
                   <Input
                     id="variant-name"
                     value={activeVariant.name}
-                    onChange={(e) =>
-                      updateVariant(activeVariant.id, { name: e.target.value })
-                    }
+                    onChange={(e) => updateVariant(activeVariant.id, { name: e.target.value })}
                     placeholder="e.g., Friendly Tone"
                   />
                 </div>
@@ -277,9 +239,7 @@ export function VariantEditor({
                         <FileText className="size-3 mr-1" />
                         Load Template
                       </Button>
-                      <span className="text-xs text-muted-foreground mx-2">
-                        Insert:
-                      </span>
+                      <span className="text-xs text-muted-foreground mx-2">Insert:</span>
                       {placeholders.map((p) => (
                         <Button
                           key={p.value}
@@ -287,9 +247,7 @@ export function VariantEditor({
                           variant="outline"
                           size="sm"
                           className="text-xs h-6 px-2"
-                          onClick={() =>
-                            insertPlaceholder(activeVariant.id, p.value)
-                          }
+                          onClick={() => insertPlaceholder(activeVariant.id, p.value)}
                         >
                           {p.label}
                         </Button>
@@ -308,8 +266,7 @@ export function VariantEditor({
                     rows={5}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {activeVariant.message_template.length}/160 characters
-                    (standard SMS)
+                    {activeVariant.message_template.length}/160 characters (standard SMS)
                   </p>
                 </div>
 
@@ -321,6 +278,7 @@ export function VariantEditor({
                     </p>
                   </div>
                   <Switch
+                    aria-label={`Use ${activeVariant.name} as the control variant`}
                     checked={activeVariant.is_control}
                     onCheckedChange={() => setAsControl(activeVariant.id)}
                   />
@@ -331,9 +289,7 @@ export function VariantEditor({
             <div className="flex items-center justify-center h-full border-2 border-dashed rounded-lg p-8">
               <div className="text-center">
                 <MessageSquare className="size-8 mx-auto text-muted-foreground mb-2" />
-                <p className="text-muted-foreground">
-                  Select a variant to edit
-                </p>
+                <p className="text-muted-foreground">Select a variant to edit</p>
               </div>
             </div>
           )}
@@ -343,8 +299,7 @@ export function VariantEditor({
       {variants.length > 0 && variants.length < 2 && (
         <Alert>
           <AlertDescription>
-            You need at least 2 variants to run an A/B test. Add another variant
-            to continue.
+            You need at least 2 variants to run an A/B test. Add another variant to continue.
           </AlertDescription>
         </Alert>
       )}

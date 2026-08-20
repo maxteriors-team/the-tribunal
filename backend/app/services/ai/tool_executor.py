@@ -178,6 +178,7 @@ class VoiceToolExecutor(BaseToolExecutor):
                 date_str=arguments.get("date", ""),
                 time_str=arguments.get("time", ""),
                 email=arguments.get("email"),
+                customer_confirmed=arguments.get("customer_confirmed", False),
                 duration_minutes=arguments.get("duration_minutes", 30),
                 notes=arguments.get("notes"),
                 required_skill=arguments.get("skill"),

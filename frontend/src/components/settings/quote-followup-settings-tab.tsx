@@ -1,27 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ExternalLink,
-  Loader2,
-  MessageSquareText,
-  PhoneCall,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { ExternalLink, Loader2, MessageSquareText, PhoneCall, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -60,18 +47,11 @@ export function QuoteFollowupSettingsTab() {
       page: 1,
       page_size: 100,
     }),
-    queryFn: () =>
-      messageTemplatesApi.list(workspaceId!, { page: 1, page_size: 100 }),
+    queryFn: () => messageTemplatesApi.list(workspaceId!, { page: 1, page_size: 100 }),
     enabled: !!workspaceId,
   });
 
-  if (
-    !workspaceId ||
-    settingsPending ||
-    templatesPending ||
-    !settings ||
-    !templatesPage
-  ) {
+  if (!workspaceId || settingsPending || templatesPending || !settings || !templatesPage) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -94,30 +74,21 @@ interface QuoteFollowupFormProps {
   templates: MessageTemplate[];
 }
 
-function QuoteFollowupForm({
-  workspaceId,
-  initialSettings,
-  templates,
-}: QuoteFollowupFormProps) {
+function QuoteFollowupForm({ workspaceId, initialSettings, templates }: QuoteFollowupFormProps) {
   const queryClient = useQueryClient();
   const [enabled, setEnabled] = useState(initialSettings.enabled);
-  const [threshold, setThreshold] = useState(
-    initialSettings.high_value_threshold,
-  );
+  const [threshold, setThreshold] = useState(initialSettings.high_value_threshold);
   const [quietStart, setQuietStart] = useState(
     initialSettings.quiet_hours_start?.slice(0, 5) ?? "",
   );
-  const [quietEnd, setQuietEnd] = useState(
-    initialSettings.quiet_hours_end?.slice(0, 5) ?? "",
-  );
+  const [quietEnd, setQuietEnd] = useState(initialSettings.quiet_hours_end?.slice(0, 5) ?? "");
   const [timezone, setTimezone] = useState(initialSettings.timezone ?? "");
   const [touches, setTouches] = useState<QuoteFollowupTouch[]>(
     initialSettings.touches.map((touch) => ({ ...touch })),
   );
 
   const mutation = useMutation({
-    mutationFn: (data: QuoteFollowupSettings) =>
-      settingsApi.updateQuoteFollowup(workspaceId, data),
+    mutationFn: (data: QuoteFollowupSettings) => settingsApi.updateQuoteFollowup(workspaceId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.quoteFollowup(workspaceId),
@@ -155,9 +126,7 @@ function QuoteFollowupForm({
   };
 
   const save = () => {
-    const sortedTouches = [...touches].sort(
-      (left, right) => left.offset_days - right.offset_days,
-    );
+    const sortedTouches = [...touches].sort((left, right) => left.offset_days - right.offset_days);
     const offsets = sortedTouches.map((touch) => touch.offset_days);
     if (new Set(offsets).size !== offsets.length) {
       toast.error("Each touch needs a different day");
@@ -167,20 +136,11 @@ function QuoteFollowupForm({
       toast.error("Add at least one human call task");
       return;
     }
-    if (
-      !sortedTouches.some(
-        (touch) => touch.channel === "sms" || touch.channel === "email",
-      )
-    ) {
+    if (!sortedTouches.some((touch) => touch.channel === "sms" || touch.channel === "email")) {
       toast.error("Add at least one SMS or email touch");
       return;
     }
-    if (
-      enabled &&
-      sortedTouches.some(
-        (touch) => touch.channel !== "call" && !touch.template_id,
-      )
-    ) {
+    if (enabled && sortedTouches.some((touch) => touch.channel !== "call" && !touch.template_id)) {
       toast.error("Choose a saved template for every SMS and email touch");
       return;
     }
@@ -212,19 +172,20 @@ function QuoteFollowupForm({
             <MessageSquareText className="size-5" /> Estimate close-rate cadence
           </CardTitle>
           <CardDescription>
-            Follow up while a sent quote is still fresh. The sequence stops on a
-            decision, reply, opt-out, or booked appointment.
+            Follow up while a sent quote is still fresh. The sequence stops on a decision, reply,
+            opt-out, or booked appointment.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label>Enable post-estimate follow-up</Label>
+              <Label htmlFor="quote-followup-enabled">Enable post-estimate follow-up</Label>
               <p className="text-sm text-muted-foreground">
                 Run the configured touches from the quote&apos;s first sent date.
               </p>
             </div>
             <Switch
+              id="quote-followup-enabled"
               checked={enabled}
               onCheckedChange={setEnabled}
               disabled={mutation.isPending}
@@ -232,9 +193,7 @@ function QuoteFollowupForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="quote-followup-threshold">
-              High-value quote threshold
-            </Label>
+            <Label htmlFor="quote-followup-threshold">High-value quote threshold</Label>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">$</span>
               <Input
@@ -260,17 +219,15 @@ function QuoteFollowupForm({
             <PhoneCall className="size-5" /> First 14 days
           </CardTitle>
           <CardDescription>
-            Mix automation with real conversations. Day 15 and later are excluded
-            so this cadence cannot collide with 30/60/90-day quote revival.
+            Mix automation with real conversations. Day 15 and later are excluded so this cadence
+            cannot collide with 30/60/90-day quote revival.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {templates.length === 0 && (
             <Alert>
               <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                <span>
-                  Save at least one message template before enabling SMS or email.
-                </span>
+                <span>Save at least one message template before enabling SMS or email.</span>
                 <Button asChild size="sm" variant="outline">
                   <Link href="/experiments">
                     Manage templates <ExternalLink className="ml-2 size-3.5" />
@@ -290,9 +247,7 @@ function QuoteFollowupForm({
               disabled={mutation.isPending}
               onChange={(patch) => updateTouch(index, patch)}
               onRemove={() =>
-                setTouches((current) =>
-                  current.filter((_, touchIndex) => touchIndex !== index),
-                )
+                setTouches((current) => current.filter((_, touchIndex) => touchIndex !== index))
               }
             />
           ))}
@@ -307,9 +262,8 @@ function QuoteFollowupForm({
           </Button>
 
           <p className="text-xs text-muted-foreground">
-            Template placeholders: {"{first_name}"}, {"{last_name}"},{" "}
-            {"{quote_number}"}, {"{quote_total}"}, {"{proposal_url}"}, and{" "}
-            {"{company_name}"}.
+            Template placeholders: {"{first_name}"}, {"{last_name}"}, {"{quote_number}"},{" "}
+            {"{quote_total}"}, {"{proposal_url}"}, and {"{company_name}"}.
           </p>
         </CardContent>
       </Card>
@@ -318,8 +272,8 @@ function QuoteFollowupForm({
         <CardHeader>
           <CardTitle>Quiet hours</CardTitle>
           <CardDescription>
-            Automated customer messages wait until outside this local window. Human
-            call tasks can still be queued for the team.
+            Automated customer messages wait until outside this local window. Human call tasks can
+            still be queued for the team.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -382,9 +336,7 @@ function TouchRow({
   onChange,
   onRemove,
 }: TouchRowProps) {
-  const selectedTemplate = templates.find(
-    (template) => template.id === touch.template_id,
-  );
+  const selectedTemplate = templates.find((template) => template.id === touch.template_id);
 
   return (
     <div className="rounded-lg border p-4">
@@ -398,22 +350,18 @@ function TouchRow({
             max={MAX_OFFSET_DAYS}
             value={touch.offset_days}
             disabled={disabled}
-            onChange={(event) =>
-              onChange({ offset_days: Number(event.target.value) })
-            }
+            onChange={(event) => onChange({ offset_days: Number(event.target.value) })}
           />
         </div>
 
         <div className="space-y-2">
-          <Label>Channel</Label>
+          <Label htmlFor={`quote-touch-channel-${index}`}>Channel</Label>
           <Select
             value={touch.channel}
             disabled={disabled}
-            onValueChange={(value) =>
-              onChange({ channel: value as QuoteFollowupChannel })
-            }
+            onValueChange={(value) => onChange({ channel: value as QuoteFollowupChannel })}
           >
-            <SelectTrigger>
+            <SelectTrigger id={`quote-touch-channel-${index}`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -425,7 +373,7 @@ function TouchRow({
         </div>
 
         <div className="space-y-2">
-          <Label>Saved message template</Label>
+          <Label htmlFor={`quote-touch-template-${index}`}>Saved message template</Label>
           <Select
             value={touch.template_id ?? NONE_TEMPLATE}
             disabled={disabled || touch.channel === "call"}
@@ -433,11 +381,9 @@ function TouchRow({
               onChange({ template_id: value === NONE_TEMPLATE ? null : value })
             }
           >
-            <SelectTrigger>
+            <SelectTrigger id={`quote-touch-template-${index}`}>
               <SelectValue
-                placeholder={
-                  touch.channel === "call" ? "Not needed for calls" : "Choose template"
-                }
+                placeholder={touch.channel === "call" ? "Not needed for calls" : "Choose template"}
               />
             </SelectTrigger>
             <SelectContent>

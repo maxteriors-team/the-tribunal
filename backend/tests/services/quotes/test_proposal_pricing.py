@@ -354,39 +354,54 @@ def test_tax_exclusive_and_inclusive():
 # --------------------------------------------------------------------------- #
 def _permanent_config(**overrides) -> PricingSettings:
     return _landscape_config(
-        permanent=PermanentConfig(
-            enabled=True,
-            per_ft=30,
-            controller_base=300,
-            per_channel=50,
-            included_channels=2,
-            **overrides,
-        )
+        permanent=PermanentConfig(enabled=True, **overrides)
     )
 
 
-def test_permanent_grosses_roofline_controller_and_extra_zones():
-    cfg = _permanent_config()
-    r = pp.price_permanent(cfg, feet=100, channels=5)
-    # roofline 100*30=3000 -> round(3000/0.89)=3371; controller round(300/0.89)=337;
-    # extra zones = 5-2 = 3 -> 3*50=150 -> round(150/0.89)=169.
-    assert r.roofline_cost == 3371
-    assert r.controller_cost == 337
-    assert r.channels_cost == 169
-    assert r.raw_total == 3877
-    assert r.total == 3877
-    assert r.min_applied is False
-    # Display lines sum exactly to raw_total.
-    assert sum(line.line_total for line in r.lines) == 3877
+def test_permanent_rounds_165_feet_up_to_200_foot_kit():
+    result = pp.price_permanent(_permanent_config(), feet=165, channels=5)
+
+    assert result.package_feet == 200
+    assert result.package_cogs == 2099
+    assert result.markup == 3
+    # $2,099 COGS × 3, then grossed up for the configured 11% fee buffer.
+    assert result.raw_total == 7075
+    assert result.total == 7075
+    assert result.min_applied is False
+    assert sum(line.line_total for line in result.lines) == 7075
+
+
+def test_permanent_complexity_selects_configured_multiplier():
+    config = _permanent_config()
+
+    easy = pp.price_permanent(config, feet=100, complexity="easy")
+    standard = pp.price_permanent(config, feet=100, complexity="standard")
+    complex_job = pp.price_permanent(config, feet=100, complexity="complex")
+
+    assert (easy.markup, standard.markup, complex_job.markup) == (2.5, 3, 3.5)
+    assert (easy.raw_total, standard.raw_total, complex_job.raw_total) == (3508, 4210, 4912)
+
+
+def test_permanent_weights_markup_by_measured_run_footage():
+    result = pp.price_permanent(
+        _permanent_config(),
+        feet=100,
+        complexity_feet={"easy": 75, "complex": 25},
+    )
+
+    assert result.package_feet == 100
+    assert result.markup == 2.75
+    # $1,249 COGS × weighted 2.75 multiplier, then the configured fee buffer.
+    assert result.raw_total == 3859
 
 
 def test_permanent_applies_minimum():
-    cfg = _permanent_config(minimum=5000)
-    r = pp.price_permanent(cfg, feet=100, channels=2)
-    # raw 3371+337 = 3708 < gross min round(5000/0.89)=5618.
-    assert r.raw_total == 3708
-    assert r.total == 5618
-    assert r.min_applied is True
+    result = pp.price_permanent(_permanent_config(minimum=5000), feet=100)
+
+    # $1,249 COGS × 3 grosses to $4,210; the $5,000 net floor grosses to $5,618.
+    assert result.raw_total == 4210
+    assert result.total == 5618
+    assert result.min_applied is True
 
 
 def test_permanent_zero_feet_is_empty():

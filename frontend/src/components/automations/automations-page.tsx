@@ -52,10 +52,7 @@ import {
   normalizeSteps,
   validateSteps,
 } from "@/components/automations/workflow-steps";
-import {
-  WorkflowStepsEditor,
-  actionMeta,
-} from "@/components/automations/workflow-steps-editor";
+import { WorkflowStepsEditor, actionMeta } from "@/components/automations/workflow-steps-editor";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -102,6 +99,7 @@ import {
   useDeleteAutomation,
   useToggleAutomation,
 } from "@/hooks/useAutomations";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { automationsApi } from "@/lib/api/automations";
 import { dripCampaignsApi } from "@/lib/api/drip-campaigns";
@@ -111,39 +109,163 @@ import { tagsApi } from "@/lib/api/tags";
 import { queryKeys } from "@/lib/query-keys";
 import { REALTIME } from "@/lib/query-options";
 import { formatDate } from "@/lib/utils/date";
-import type {
-  Automation,
-  AutomationAction,
-  AutomationTriggerType,
-} from "@/types";
+import type { Automation, AutomationAction, AutomationTriggerType } from "@/types";
 
-const triggerTypeConfig: Record<AutomationTriggerType, { label: string; icon: LucideIcon; color: string; description: string }> = {
+const triggerTypeConfig: Record<
+  AutomationTriggerType,
+  { label: string; icon: LucideIcon; color: string; description: string }
+> = {
   event: { label: "Event", icon: Zap, color: "text-warning", description: "When an event occurs" },
-  schedule: { label: "Schedule", icon: Clock, color: "text-info", description: "Runs on a schedule" },
-  condition: { label: "Condition", icon: Settings2, color: "text-primary", description: "When conditions are met" },
-  appointment_booked: { label: "Appointment Booked", icon: CalendarCheck, color: "text-success", description: "When a qualified lead books a CRM appointment" },
-  booking_created: { label: "Booking Created", icon: CalendarCheck, color: "text-success", description: "When a booking is created" },
-  no_show: { label: "No-show", icon: CalendarX, color: "text-destructive", description: "When a contact misses an appointment" },
-  contact_tagged: { label: "Contact Tagged", icon: Tag, color: "text-primary", description: "When a contact gets a specific tag" },
-  never_booked: { label: "Never Booked", icon: UserPlus, color: "text-warning", description: "When a contact never booked after engaging" },
-  backlog_below_threshold: { label: "Backlog Below Threshold", icon: Gauge, color: "text-warning", description: "When booked work drops below your threshold" },
-  review_received: { label: "Review Received", icon: Star, color: "text-warning", description: "When a new review or rating comes in" },
-  review_request_response: { label: "Review Request Response", icon: Star, color: "text-warning", description: "When a contact responds to a review request" },
-  opportunity_created: { label: "Opportunity Created", icon: TrendingUp, color: "text-success", description: "When a new deal is created" },
-  deal_stage_changed: { label: "Deal Stage Changed", icon: TrendingUp, color: "text-info", description: "When a deal moves to a new stage" },
-  missed_call: { label: "Missed Call", icon: PhoneMissed, color: "text-destructive", description: "When an inbound call goes unanswered" },
-  roleplay_completed: { label: "Roleplay Completed", icon: GraduationCap, color: "text-primary", description: "When a practice-arena rehearsal finishes" },
-  knowledge_document_uploaded: { label: "Knowledge Doc Uploaded", icon: FileText, color: "text-info", description: "When a knowledge document is added" },
-  lead_created: { label: "New Lead Captured", icon: UserPlus, color: "text-success", description: "When a new lead is captured from a lead source" },
-  lead_qualified: { label: "Lead Qualified", icon: BadgeCheck, color: "text-success", description: "When AI validates a lead's qualification evidence and score" },
-  quote_sent: { label: "Quote Sent", icon: FileText, color: "text-info", description: "When a quote goes out to a customer" },
-  quote_approved: { label: "Quote Approved", icon: FileCheck, color: "text-success", description: "When a customer approves a quote" },
-  quote_declined: { label: "Quote Declined", icon: FileX, color: "text-destructive", description: "When a customer declines a quote" },
-  quote_converted: { label: "Quote Converted", icon: FileCheck, color: "text-success", description: "When a quote becomes a job or invoice" },
-  invoice_sent: { label: "Invoice Sent", icon: Receipt, color: "text-info", description: "When an invoice is sent" },
-  invoice_paid: { label: "Invoice Paid", icon: BadgeDollarSign, color: "text-success", description: "When an invoice is paid" },
-  job_scheduled: { label: "Job Scheduled", icon: CalendarClock, color: "text-info", description: "When a job gets a date on the calendar" },
-  job_completed: { label: "Job Completed", icon: Wrench, color: "text-success", description: "When a job is marked complete — the moment to send resources or ask for a review" },
+  schedule: {
+    label: "Schedule",
+    icon: Clock,
+    color: "text-info",
+    description: "Runs on a schedule",
+  },
+  condition: {
+    label: "Condition",
+    icon: Settings2,
+    color: "text-primary",
+    description: "When conditions are met",
+  },
+  appointment_booked: {
+    label: "Appointment Booked",
+    icon: CalendarCheck,
+    color: "text-success",
+    description: "When a qualified lead books a CRM appointment",
+  },
+  booking_created: {
+    label: "Booking Created",
+    icon: CalendarCheck,
+    color: "text-success",
+    description: "When a booking is created",
+  },
+  no_show: {
+    label: "No-show",
+    icon: CalendarX,
+    color: "text-destructive",
+    description: "When a contact misses an appointment",
+  },
+  contact_tagged: {
+    label: "Contact Tagged",
+    icon: Tag,
+    color: "text-primary",
+    description: "When a contact gets a specific tag",
+  },
+  never_booked: {
+    label: "Never Booked",
+    icon: UserPlus,
+    color: "text-warning",
+    description: "When a contact never booked after engaging",
+  },
+  backlog_below_threshold: {
+    label: "Backlog Below Threshold",
+    icon: Gauge,
+    color: "text-warning",
+    description: "When booked work drops below your threshold",
+  },
+  review_received: {
+    label: "Review Received",
+    icon: Star,
+    color: "text-warning",
+    description: "When a new review or rating comes in",
+  },
+  review_request_response: {
+    label: "Review Request Response",
+    icon: Star,
+    color: "text-warning",
+    description: "When a contact responds to a review request",
+  },
+  opportunity_created: {
+    label: "Opportunity Created",
+    icon: TrendingUp,
+    color: "text-success",
+    description: "When a new deal is created",
+  },
+  deal_stage_changed: {
+    label: "Deal Stage Changed",
+    icon: TrendingUp,
+    color: "text-info",
+    description: "When a deal moves to a new stage",
+  },
+  missed_call: {
+    label: "Missed Call",
+    icon: PhoneMissed,
+    color: "text-destructive",
+    description: "When an inbound call goes unanswered",
+  },
+  roleplay_completed: {
+    label: "Roleplay Completed",
+    icon: GraduationCap,
+    color: "text-primary",
+    description: "When a practice-arena rehearsal finishes",
+  },
+  knowledge_document_uploaded: {
+    label: "Knowledge Doc Uploaded",
+    icon: FileText,
+    color: "text-info",
+    description: "When a knowledge document is added",
+  },
+  lead_created: {
+    label: "New Lead Captured",
+    icon: UserPlus,
+    color: "text-success",
+    description: "When a new lead is captured from a lead source",
+  },
+  lead_qualified: {
+    label: "Lead Qualified",
+    icon: BadgeCheck,
+    color: "text-success",
+    description: "When AI validates a lead's qualification evidence and score",
+  },
+  quote_sent: {
+    label: "Quote Sent",
+    icon: FileText,
+    color: "text-info",
+    description: "When a quote goes out to a customer",
+  },
+  quote_approved: {
+    label: "Quote Approved",
+    icon: FileCheck,
+    color: "text-success",
+    description: "When a customer approves a quote",
+  },
+  quote_declined: {
+    label: "Quote Declined",
+    icon: FileX,
+    color: "text-destructive",
+    description: "When a customer declines a quote",
+  },
+  quote_converted: {
+    label: "Quote Converted",
+    icon: FileCheck,
+    color: "text-success",
+    description: "When a quote becomes a job or invoice",
+  },
+  invoice_sent: {
+    label: "Invoice Sent",
+    icon: Receipt,
+    color: "text-info",
+    description: "When an invoice is sent",
+  },
+  invoice_paid: {
+    label: "Invoice Paid",
+    icon: BadgeDollarSign,
+    color: "text-success",
+    description: "When an invoice is paid",
+  },
+  job_scheduled: {
+    label: "Job Scheduled",
+    icon: CalendarClock,
+    color: "text-info",
+    description: "When a job gets a date on the calendar",
+  },
+  job_completed: {
+    label: "Job Completed",
+    icon: Wrench,
+    color: "text-success",
+    description: "When a job is marked complete — the moment to send resources or ask for a review",
+  },
 };
 
 // Triggers offered in the builder dropdown, grouped for readability.
@@ -151,10 +273,35 @@ const TRIGGER_OPTIONS: { group: string; values: AutomationTriggerType[] }[] = [
   { group: "General", values: ["event", "schedule", "condition"] },
   { group: "Leads", values: ["lead_created", "lead_qualified"] },
   { group: "Capacity", values: ["backlog_below_threshold"] },
-  { group: "Appointments", values: ["appointment_booked", "booking_created", "no_show", "never_booked"] },
-  { group: "Contacts & Pipeline", values: ["contact_tagged", "opportunity_created", "deal_stage_changed"] },
-  { group: "Engagement", values: ["review_received", "review_request_response", "missed_call", "roleplay_completed", "knowledge_document_uploaded"] },
-  { group: "Quotes & Invoices", values: ["quote_sent", "quote_approved", "quote_declined", "quote_converted", "invoice_sent", "invoice_paid"] },
+  {
+    group: "Appointments",
+    values: ["appointment_booked", "booking_created", "no_show", "never_booked"],
+  },
+  {
+    group: "Contacts & Pipeline",
+    values: ["contact_tagged", "opportunity_created", "deal_stage_changed"],
+  },
+  {
+    group: "Engagement",
+    values: [
+      "review_received",
+      "review_request_response",
+      "missed_call",
+      "roleplay_completed",
+      "knowledge_document_uploaded",
+    ],
+  },
+  {
+    group: "Quotes & Invoices",
+    values: [
+      "quote_sent",
+      "quote_approved",
+      "quote_declined",
+      "quote_converted",
+      "invoice_sent",
+      "invoice_paid",
+    ],
+  },
   { group: "Jobs", values: ["job_scheduled", "job_completed"] },
 ];
 
@@ -203,6 +350,8 @@ function AutomationCardSkeleton() {
 
 export function AutomationsPage() {
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canManageAutomations = can("outreach:write");
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newAutomationName, setNewAutomationName] = useState("");
@@ -262,7 +411,7 @@ export function AutomationsPage() {
   const pipelines = pipelinesData ?? [];
   // A completed sequence can't be restarted, so the builder doesn't offer one.
   const dripCampaigns = (dripCampaignsData ?? []).filter(
-    (campaign) => campaign.status !== "completed"
+    (campaign) => campaign.status !== "completed",
   );
   const dripCampaignNameById = (id: string): string | undefined =>
     dripCampaigns.find((campaign) => campaign.id === id)?.name;
@@ -280,7 +429,7 @@ export function AutomationsPage() {
   const filteredAutomations = automations.filter(
     (automation) =>
       automation.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      automation.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      automation.description?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const activeCount = automations.filter((a) => a.is_active).length;
@@ -371,7 +520,9 @@ export function AutomationsPage() {
       setIsCreateDialogOpen(false);
       resetForm();
     } catch {
-      toast.error(editingAutomation ? "Failed to update automation" : "Failed to create automation");
+      toast.error(
+        editingAutomation ? "Failed to update automation" : "Failed to create automation",
+      );
     }
   };
 
@@ -384,7 +535,7 @@ export function AutomationsPage() {
     setNewSteps(
       automation.actions.length > 0
         ? automation.actions.map((action) => ({ ...action, config: { ...action.config } }))
-        : defaultSteps()
+        : defaultSteps(),
     );
     setNewBacklogInputs(parseBacklogTriggerConfig(automation.trigger_config));
     const sourceKey = automation.trigger_config?.lead_source_public_key;
@@ -442,215 +593,222 @@ export function AutomationsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Automations</h1>
-          <p className="text-muted-foreground">
-            Create workflows to automate repetitive tasks
-          </p>
+          <p className="text-muted-foreground">Create workflows to automate repetitive tasks</p>
         </div>
-        <Dialog
-          open={isCreateDialogOpen || !!editingAutomation}
-          onOpenChange={(open) => {
-            if (!open) {
-              setIsCreateDialogOpen(false);
-              setEditingAutomation(null);
-              resetForm();
-            }
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button onClick={() => { setEditingAutomation(null); setIsCreateDialogOpen(true); }}>
-              <Plus className="mr-2 size-4" />
-              Create Automation
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{editingAutomation ? "Configure Automation" : "Create Automation"}</DialogTitle>
-              <DialogDescription>
-                {editingAutomation ? "Modify the automation settings" : "Set up a new automated workflow"}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="auto-name">Name</Label>
-                <Input
-                  id="auto-name"
-                  placeholder="e.g., New Lead Welcome"
-                  value={newAutomationName}
-                  onChange={(e) => setNewAutomationName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="auto-desc">Description</Label>
-                <Input
-                  id="auto-desc"
-                  placeholder="Brief description of what this automation does"
-                  value={newAutomationDescription}
-                  onChange={(e) => setNewAutomationDescription(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Trigger Type</Label>
-                <Select
-                  value={newTriggerType}
-                  onValueChange={(v) => setNewTriggerType(v as AutomationTriggerType)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TRIGGER_OPTIONS.map((group) => (
-                      <SelectGroup key={group.group}>
-                        <SelectLabel>{group.group}</SelectLabel>
-                        {group.values.map((value) => {
-                          const cfg = triggerTypeConfig[value];
-                          const Icon = cfg.icon;
-                          return (
-                            <SelectItem key={value} value={value}>
-                              <div className="flex items-center gap-2">
-                                <Icon className={`size-4 ${cfg.color}`} />
-                                {cfg.label}
-                              </div>
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {newTriggerType === "lead_created" && (
+        {canManageAutomations && (
+          <Dialog
+            open={isCreateDialogOpen || !!editingAutomation}
+            onOpenChange={(open) => {
+              if (!open) {
+                setIsCreateDialogOpen(false);
+                setEditingAutomation(null);
+                resetForm();
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button
+                onClick={() => {
+                  setEditingAutomation(null);
+                  setIsCreateDialogOpen(true);
+                }}
+              >
+                <Plus className="mr-2 size-4" />
+                Create Automation
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingAutomation ? "Configure Automation" : "Create Automation"}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingAutomation
+                    ? "Modify the automation settings"
+                    : "Set up a new automated workflow"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Lead source</Label>
+                  <Label htmlFor="auto-name">Name</Label>
+                  <Input
+                    id="auto-name"
+                    placeholder="e.g., New Lead Welcome"
+                    value={newAutomationName}
+                    onChange={(e) => setNewAutomationName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="auto-desc">Description</Label>
+                  <Input
+                    id="auto-desc"
+                    placeholder="Brief description of what this automation does"
+                    value={newAutomationDescription}
+                    onChange={(e) => setNewAutomationDescription(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Trigger Type</Label>
                   <Select
-                    value={newLeadSourceKey || ALL_LEAD_SOURCES}
-                    onValueChange={(v) =>
-                      setNewLeadSourceKey(v === ALL_LEAD_SOURCES ? "" : v)
-                    }
+                    value={newTriggerType}
+                    onValueChange={(v) => setNewTriggerType(v as AutomationTriggerType)}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value={ALL_LEAD_SOURCES}>All lead sources</SelectItem>
-                      {leadSources.map((source) => (
-                        <SelectItem key={source.id} value={source.public_key}>
-                          {source.name}
-                        </SelectItem>
+                      {TRIGGER_OPTIONS.map((group) => (
+                        <SelectGroup key={group.group}>
+                          <SelectLabel>{group.group}</SelectLabel>
+                          {group.values.map((value) => {
+                            const cfg = triggerTypeConfig[value];
+                            const Icon = cfg.icon;
+                            return (
+                              <SelectItem key={value} value={value}>
+                                <div className="flex items-center gap-2">
+                                  <Icon className={`size-4 ${cfg.color}`} />
+                                  {cfg.label}
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectGroup>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Run this for one form only, or leave on all lead sources to catch every new lead.
-                  </p>
                 </div>
-              )}
-              {isTagTrigger && (
-                <div className="space-y-2">
-                  <Label>Tag</Label>
-                  {tagOptions.length > 0 ? (
-                    <Select value={newTriggerTag} onValueChange={setNewTriggerTag}>
+                {newTriggerType === "lead_created" && (
+                  <div className="space-y-2">
+                    <Label>Lead source</Label>
+                    <Select
+                      value={newLeadSourceKey || ALL_LEAD_SOURCES}
+                      onValueChange={(v) => setNewLeadSourceKey(v === ALL_LEAD_SOURCES ? "" : v)}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Choose a tag" />
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {tagOptions.map((tag) => (
-                          <SelectItem key={tag.id} value={tag.name}>
-                            {tag.name}
+                        <SelectItem value={ALL_LEAD_SOURCES}>All lead sources</SelectItem>
+                        {leadSources.map((source) => (
+                          <SelectItem key={source.id} value={source.public_key}>
+                            {source.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  ) : (
-                    <Input
-                      placeholder="e.g. Landscape Lighting"
-                      value={newTriggerTag}
-                      onChange={(e) => setNewTriggerTag(e.target.value)}
-                    />
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Fires for contacts who have this exact tag, like a service line
-                    (Landscape Lighting, Permanent Lighting) or Previous Client.
-                  </p>
-                </div>
-              )}
-              {isBacklogTrigger && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="auto-backlog-threshold">Fire below (weeks of work)</Label>
-                    <Input
-                      id="auto-backlog-threshold"
-                      type="number"
-                      min={0.5}
-                      step={0.5}
-                      value={newBacklogInputs.thresholdWeeks}
-                      onChange={(e) =>
-                        setNewBacklogInputs((prev) => ({
-                          ...prev,
-                          thresholdWeeks: e.target.value,
-                        }))
-                      }
-                    />
                     <p className="text-xs text-muted-foreground">
-                      {BACKLOG_DEFAULT_THRESHOLD_WEEKS} weeks is a common threshold for home
-                      services — under that, fill the calendar now, while a new lead still has
-                      time to become a job. Needs crew capacity set in Revenue Targets;
-                      without it the backlog is unknown and this never fires.
+                      Run this for one form only, or leave on all lead sources to catch every new
+                      lead.
                     </p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="auto-backlog-cooldown">Cooldown (days)</Label>
-                    <Input
-                      id="auto-backlog-cooldown"
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={newBacklogInputs.cooldownDays}
-                      onChange={(e) =>
-                        setNewBacklogInputs((prev) => ({
-                          ...prev,
-                          cooldownDays: e.target.value,
-                        }))
-                      }
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      A thin backlog stays thin, so this waits at least this many days before
-                      firing again — otherwise a slow month would message your whole list
-                      daily.
-                    </p>
-                  </div>
-                </div>
-              )}
-              <WorkflowStepsEditor
-                workspaceId={workspaceId ?? ""}
-                steps={newSteps}
-                onStepsChange={setNewSteps}
-                pipelines={pipelines}
-                dripCampaigns={dripCampaigns}
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsCreateDialogOpen(false);
-                  setEditingAutomation(null);
-                  resetForm();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateAutomation}
-                disabled={createMutation.isPending || updateMutation.isPending}
-              >
-                {(createMutation.isPending || updateMutation.isPending) && (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
                 )}
-                {editingAutomation ? "Save Changes" : "Create"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                {isTagTrigger && (
+                  <div className="space-y-2">
+                    <Label>Tag</Label>
+                    {tagOptions.length > 0 ? (
+                      <Select value={newTriggerTag} onValueChange={setNewTriggerTag}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose a tag" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tagOptions.map((tag) => (
+                            <SelectItem key={tag.id} value={tag.name}>
+                              {tag.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        placeholder="e.g. Landscape Lighting"
+                        value={newTriggerTag}
+                        onChange={(e) => setNewTriggerTag(e.target.value)}
+                      />
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Fires for contacts who have this exact tag, like a service line (Landscape
+                      Lighting, Permanent Lighting) or Previous Client.
+                    </p>
+                  </div>
+                )}
+                {isBacklogTrigger && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="auto-backlog-threshold">Fire below (weeks of work)</Label>
+                      <Input
+                        id="auto-backlog-threshold"
+                        type="number"
+                        min={0.5}
+                        step={0.5}
+                        value={newBacklogInputs.thresholdWeeks}
+                        onChange={(e) =>
+                          setNewBacklogInputs((prev) => ({
+                            ...prev,
+                            thresholdWeeks: e.target.value,
+                          }))
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {BACKLOG_DEFAULT_THRESHOLD_WEEKS} weeks is a common threshold for home
+                        services — under that, fill the calendar now, while a new lead still has
+                        time to become a job. Needs crew capacity set in Revenue Targets; without it
+                        the backlog is unknown and this never fires.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="auto-backlog-cooldown">Cooldown (days)</Label>
+                      <Input
+                        id="auto-backlog-cooldown"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={newBacklogInputs.cooldownDays}
+                        onChange={(e) =>
+                          setNewBacklogInputs((prev) => ({
+                            ...prev,
+                            cooldownDays: e.target.value,
+                          }))
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        A thin backlog stays thin, so this waits at least this many days before
+                        firing again — otherwise a slow month would message your whole list daily.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <WorkflowStepsEditor
+                  workspaceId={workspaceId ?? ""}
+                  steps={newSteps}
+                  onStepsChange={setNewSteps}
+                  pipelines={pipelines}
+                  dripCampaigns={dripCampaigns}
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsCreateDialogOpen(false);
+                    setEditingAutomation(null);
+                    resetForm();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateAutomation}
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                >
+                  {(createMutation.isPending || updateMutation.isPending) && (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  )}
+                  {editingAutomation ? "Save Changes" : "Create"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Stats */}
@@ -681,7 +839,7 @@ export function AutomationsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {isPending ? <Skeleton className="h-8 w-8" /> : statsData?.triggered_today ?? 0}
+              {isPending ? <Skeleton className="h-8 w-8" /> : (statsData?.triggered_today ?? 0)}
             </div>
           </CardContent>
         </Card>
@@ -718,8 +876,13 @@ export function AutomationsPage() {
                   : "Create your first automation to automate repetitive tasks"
               }
               action={
-                !searchQuery ? (
-                  <Button onClick={() => { setEditingAutomation(null); setIsCreateDialogOpen(true); }}>
+                !searchQuery && canManageAutomations ? (
+                  <Button
+                    onClick={() => {
+                      setEditingAutomation(null);
+                      setIsCreateDialogOpen(true);
+                    }}
+                  >
                     <Plus className="mr-2 size-4" />
                     Create Automation
                   </Button>
@@ -766,58 +929,60 @@ export function AutomationsPage() {
                           </CardTitle>
                           <CardDescription>{automation.description}</CardDescription>
                         </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="size-8 opacity-0 group-hover:opacity-100"
-                              aria-label="Automation actions"
-                            >
-                              <MoreHorizontal className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onClick={() => handleConfigureAutomation(automation)}
-                            >
-                              <Settings2 className="mr-2 size-4" />
-                              Configure
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleToggleAutomation(automation)}
-                              disabled={toggleMutation.isPending}
-                            >
-                              {automation.is_active ? (
-                                <>
-                                  <Pause className="mr-2 size-4" />
-                                  Pause
-                                </>
-                              ) : (
-                                <>
-                                  <Play className="mr-2 size-4" />
-                                  Activate
-                                </>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDuplicateAutomation(automation)}
-                              disabled={createMutation.isPending}
-                            >
-                              <Copy className="mr-2 size-4" />
-                              Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => handleDeleteAutomation(automation)}
-                              disabled={deleteMutation.isPending}
-                            >
-                              <Trash2 className="mr-2 size-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {canManageAutomations && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 opacity-0 group-hover:opacity-100"
+                                aria-label="Automation actions"
+                              >
+                                <MoreHorizontal className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => handleConfigureAutomation(automation)}
+                              >
+                                <Settings2 className="mr-2 size-4" />
+                                Configure
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleToggleAutomation(automation)}
+                                disabled={!canManageAutomations || toggleMutation.isPending}
+                              >
+                                {automation.is_active ? (
+                                  <>
+                                    <Pause className="mr-2 size-4" />
+                                    Pause
+                                  </>
+                                ) : (
+                                  <>
+                                    <Play className="mr-2 size-4" />
+                                    Activate
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDuplicateAutomation(automation)}
+                                disabled={createMutation.isPending}
+                              >
+                                <Copy className="mr-2 size-4" />
+                                Duplicate
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => handleDeleteAutomation(automation)}
+                                disabled={deleteMutation.isPending}
+                              >
+                                <Trash2 className="mr-2 size-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -828,16 +993,14 @@ export function AutomationsPage() {
                         </div>
                         <div className="flex-1">
                           <p className="text-sm font-medium">{trigger.label} Trigger</p>
-                          <p className="text-xs text-muted-foreground">
-                            {trigger.description}
-                          </p>
+                          <p className="text-xs text-muted-foreground">{trigger.description}</p>
                           {automation.trigger_type === "lead_created" &&
                             typeof automation.trigger_config?.lead_source_public_key ===
                               "string" && (
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 Source:{" "}
                                 {leadSourceNameByKey(
-                                  automation.trigger_config.lead_source_public_key as string
+                                  automation.trigger_config.lead_source_public_key as string,
                                 )}
                               </p>
                             )}
@@ -882,11 +1045,11 @@ export function AutomationsPage() {
                           const chip =
                             action.type === "move_to_stage"
                               ? stageId
-                                ? stageNameById(stageId) ?? "Stage"
+                                ? (stageNameById(stageId) ?? "Stage")
                                 : ""
                               : action.type === "start_drip_campaign"
                                 ? dripId
-                                  ? dripCampaignNameById(dripId) ?? "Drip campaign"
+                                  ? (dripCampaignNameById(dripId) ?? "Drip campaign")
                                   : ""
                                 : isWaitAction(action.type)
                                   ? describeWaitStep(action.config)
@@ -920,7 +1083,7 @@ export function AutomationsPage() {
                         <Switch
                           checked={automation.is_active}
                           onCheckedChange={() => handleToggleAutomation(automation)}
-                          disabled={toggleMutation.isPending}
+                          disabled={!canManageAutomations || toggleMutation.isPending}
                         />
                       </div>
                     </CardFooter>

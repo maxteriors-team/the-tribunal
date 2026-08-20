@@ -96,7 +96,7 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
 
   const isMappingValid = (): boolean => {
     const mappedFields = new Set(
-      Object.values(columnMapping).filter((v): v is string => v !== null && v !== SKIP_VALUE)
+      Object.values(columnMapping).filter((v): v is string => v !== null && v !== SKIP_VALUE),
     );
     return mappedFields.has("first_name") && mappedFields.has("phone_number");
   };
@@ -125,7 +125,9 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
       }
     },
     onError: (error) => {
-      toast.error(getApiErrorMessage(error, "Failed to import contacts. Please check your CSV file."));
+      toast.error(
+        getApiErrorMessage(error, "Failed to import contacts. Please check your CSV file."),
+      );
       setStep("options");
     },
   });
@@ -225,10 +227,7 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className={cn(
-        "sm:max-w-[550px]",
-        step === "mapping" && "sm:max-w-[700px]"
-      )}>
+      <DialogContent className={cn("sm:max-w-[550px]", step === "mapping" && "sm:max-w-[700px]")}>
         <DialogHeader>
           <DialogTitle>
             {step === "upload" && "Import Contacts"}
@@ -277,23 +276,42 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
             <div className="flex items-start gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg text-sm text-warning">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
-                Every contact needs a <strong>phone number</strong>. The Tribunal follows up by
-                AI voice and SMS, so email-only lists can&apos;t be imported yet — add a phone
-                column before uploading.
+                Every contact needs a <strong>phone number</strong>. The Tribunal follows up by AI
+                voice and SMS, so email-only lists can&apos;t be imported yet — add a phone column
+                before uploading.
               </span>
             </div>
 
             <div className="bg-muted/50 rounded-lg p-4 text-sm">
               <p className="font-medium mb-2">Required columns:</p>
               <ul className="list-disc list-inside text-muted-foreground space-y-1">
-                <li><code className="text-xs bg-muted px-1 rounded">first_name</code> - Contact&apos;s first name</li>
-                <li><code className="text-xs bg-muted px-1 rounded">phone_number</code> - Phone number (used for voice/SMS follow-up)</li>
+                <li>
+                  <code className="text-xs bg-muted px-1 rounded">first_name</code> - Contact&apos;s
+                  first name
+                </li>
+                <li>
+                  <code className="text-xs bg-muted px-1 rounded">phone_number</code> - Phone number
+                  (used for voice/SMS follow-up)
+                </li>
               </ul>
               <p className="font-medium mt-3 mb-2">Optional columns:</p>
               <ul className="list-disc list-inside text-muted-foreground space-y-1">
-                <li><code className="text-xs bg-muted px-1 rounded">last_name</code>, <code className="text-xs bg-muted px-1 rounded">email</code>, <code className="text-xs bg-muted px-1 rounded">company_name</code></li>
-                <li><code className="text-xs bg-muted px-1 rounded">status</code>, <code className="text-xs bg-muted px-1 rounded">tags</code>, <code className="text-xs bg-muted px-1 rounded">notes</code></li>
-                <li><code className="text-xs bg-muted px-1 rounded">address_line1</code>, <code className="text-xs bg-muted px-1 rounded">address_city</code>, <code className="text-xs bg-muted px-1 rounded">address_state</code>, <code className="text-xs bg-muted px-1 rounded">address_zip</code></li>
+                <li>
+                  <code className="text-xs bg-muted px-1 rounded">last_name</code>,{" "}
+                  <code className="text-xs bg-muted px-1 rounded">email</code>,{" "}
+                  <code className="text-xs bg-muted px-1 rounded">company_name</code>
+                </li>
+                <li>
+                  <code className="text-xs bg-muted px-1 rounded">status</code>,{" "}
+                  <code className="text-xs bg-muted px-1 rounded">tags</code>,{" "}
+                  <code className="text-xs bg-muted px-1 rounded">notes</code>
+                </li>
+                <li>
+                  <code className="text-xs bg-muted px-1 rounded">address_line1</code>,{" "}
+                  <code className="text-xs bg-muted px-1 rounded">address_city</code>,{" "}
+                  <code className="text-xs bg-muted px-1 rounded">address_state</code>,{" "}
+                  <code className="text-xs bg-muted px-1 rounded">address_zip</code>
+                </li>
               </ul>
             </div>
           </div>
@@ -307,101 +325,102 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Analyzing CSV file...</p>
               </div>
-            ) : preview && (
-              <>
-                {/* File info */}
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg text-sm">
-                  <FileText className="h-5 w-5 text-primary shrink-0" />
-                  <span className="font-medium truncate">{file?.name}</span>
-                  <span className="text-muted-foreground shrink-0">
-                    {preview.headers.length} columns, {preview.sample_rows.length}+ rows
-                  </span>
-                </div>
-
-                {/* One-click preset for known exporters (Jobber, etc.) */}
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">Importing from another tool?</span>
-                  {Object.entries(IMPORT_PRESETS).map(([key, preset]) => (
-                    <Button
-                      key={key}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => applyPreset(preset.mapping)}
-                    >
-                      Use {preset.label} mapping
-                    </Button>
-                  ))}
-                </div>
-
-                {/* Required fields warning */}
-                {!isMappingValid() && (
-                  <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg text-sm text-warning">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                    <span>
-                      Map both <strong>First Name</strong> and <strong>Phone Number</strong> to continue.
-                      A phone number is required because follow-up runs over AI voice and SMS.
+            ) : (
+              preview && (
+                <>
+                  {/* File info */}
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg text-sm">
+                    <FileText className="h-5 w-5 text-primary shrink-0" />
+                    <span className="font-medium truncate">{file?.name}</span>
+                    <span className="text-muted-foreground shrink-0">
+                      {preview.headers.length} columns, {preview.sample_rows.length}+ rows
                     </span>
                   </div>
-                )}
 
-                {/* Mapping table */}
-                <ScrollArea className="h-[300px] rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[180px]">CSV Column</TableHead>
-                        <TableHead className="w-[200px]">Maps To</TableHead>
-                        <TableHead>Sample Data</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {preview.headers.map((header) => {
-                        const mappedFields = getMappedFields(header);
-                        const currentValue = columnMapping[header];
-                        return (
-                          <TableRow key={header}>
-                            <TableCell className="font-mono text-xs">
-                              {header}
-                            </TableCell>
-                            <TableCell>
-                              <Select
-                                value={currentValue ?? SKIP_VALUE}
-                                onValueChange={(value) =>
-                                  setColumnMapping((prev) => ({
-                                    ...prev,
-                                    [header]: value === SKIP_VALUE ? null : value,
-                                  }))
-                                }
-                              >
-                                <SelectTrigger className="h-8 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value={SKIP_VALUE}>-- Skip --</SelectItem>
-                                  {preview.contact_fields.map((field) => (
-                                    <SelectItem
-                                      key={field.name}
-                                      value={field.name}
-                                      disabled={mappedFields.has(field.name)}
-                                    >
-                                      {field.label}
-                                      {field.required ? " *" : ""}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">
-                              {getSampleData(header)}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              </>
+                  {/* One-click preset for known exporters (Jobber, etc.) */}
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Importing from another tool?</span>
+                    {Object.entries(IMPORT_PRESETS).map(([key, preset]) => (
+                      <Button
+                        key={key}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => applyPreset(preset.mapping)}
+                      >
+                        Use {preset.label} mapping
+                      </Button>
+                    ))}
+                  </div>
+
+                  {/* Required fields warning */}
+                  {!isMappingValid() && (
+                    <div className="flex items-center gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg text-sm text-warning">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      <span>
+                        Map both <strong>First Name</strong> and <strong>Phone Number</strong> to
+                        continue. A phone number is required because follow-up runs over AI voice
+                        and SMS.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Mapping table */}
+                  <ScrollArea className="h-[300px] rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[180px]">CSV Column</TableHead>
+                          <TableHead className="w-[200px]">Maps To</TableHead>
+                          <TableHead>Sample Data</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {preview.headers.map((header) => {
+                          const mappedFields = getMappedFields(header);
+                          const currentValue = columnMapping[header];
+                          return (
+                            <TableRow key={header}>
+                              <TableCell className="font-mono text-xs">{header}</TableCell>
+                              <TableCell>
+                                <Select
+                                  value={currentValue ?? SKIP_VALUE}
+                                  onValueChange={(value) =>
+                                    setColumnMapping((prev) => ({
+                                      ...prev,
+                                      [header]: value === SKIP_VALUE ? null : value,
+                                    }))
+                                  }
+                                >
+                                  <SelectTrigger className="h-8 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value={SKIP_VALUE}>-- Skip --</SelectItem>
+                                    {preview.contact_fields.map((field) => (
+                                      <SelectItem
+                                        key={field.name}
+                                        value={field.name}
+                                        disabled={mappedFields.has(field.name)}
+                                      >
+                                        {field.label}
+                                        {field.required ? " *" : ""}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                {getSampleData(header)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </>
+              )
             )}
           </div>
         )}
@@ -413,9 +432,7 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
               <FileText className="h-8 w-8 text-primary" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{file.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {(file.size / 1024).toFixed(1)} KB
-                </p>
+                <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(1)} KB</p>
               </div>
               <Button
                 type="button"
@@ -436,12 +453,13 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Skip Duplicates</Label>
+                  <Label htmlFor="import-skip-duplicates">Skip Duplicates</Label>
                   <p className="text-xs text-muted-foreground">
                     Skip contacts with phone numbers that already exist
                   </p>
                 </div>
                 <Switch
+                  id="import-skip-duplicates"
                   checked={options.skip_duplicates}
                   onCheckedChange={(checked) =>
                     setOptions({ ...options, skip_duplicates: checked })
@@ -450,14 +468,12 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
               </div>
 
               <div className="space-y-2">
-                <Label>Default Status</Label>
+                <Label htmlFor="import-default-status">Default Status</Label>
                 <Select
                   value={options.default_status}
-                  onValueChange={(value) =>
-                    setOptions({ ...options, default_status: value })
-                  }
+                  onValueChange={(value) => setOptions({ ...options, default_status: value })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="import-default-status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -479,10 +495,8 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
         {/* Importing Step */}
         {step === "importing" && (
           <div className="py-8 space-y-4">
-            <Progress value={undefined} className="h-2" />
-            <p className="text-center text-sm text-muted-foreground">
-              Processing your CSV file...
-            </p>
+            <Progress value={undefined} aria-label="Importing contacts" className="h-2" />
+            <p className="text-center text-sm text-muted-foreground">Processing your CSV file...</p>
           </div>
         )}
 
@@ -524,10 +538,7 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
                 <ScrollArea className="h-[150px] rounded-lg border">
                   <div className="p-3 space-y-2">
                     {result.errors.map((error, idx) => (
-                      <div
-                        key={idx}
-                        className="text-xs p-2 bg-destructive/10 rounded flex gap-2"
-                      >
+                      <div key={idx} className="text-xs p-2 bg-destructive/10 rounded flex gap-2">
                         <span className="font-mono text-destructive">Row {error.row}</span>
                         <span className="text-muted-foreground">{error.error}</span>
                       </div>
@@ -571,16 +582,10 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
               <Button variant="outline" onClick={() => setStep("mapping")}>
                 Back
               </Button>
-              <Button onClick={handleStartImport}>
-                Import Contacts
-              </Button>
+              <Button onClick={handleStartImport}>Import Contacts</Button>
             </>
           )}
-          {step === "results" && (
-            <Button onClick={handleClose}>
-              Done
-            </Button>
-          )}
+          {step === "results" && <Button onClick={handleClose}>Done</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

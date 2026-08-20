@@ -15,7 +15,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import settings as settings_module
 from app.api.v1.integrations import credentials as credentials_module
 
@@ -68,6 +68,9 @@ def _auth_app(mock_db: AsyncMock) -> FastAPI:
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_workspace] = override_get_workspace
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_membership] = lambda: SimpleNamespace(
+        role="owner", workspace_id=WS_ID
+    )
     app.include_router(settings_module.router, prefix="/api/v1")
     return app
 
@@ -108,6 +111,7 @@ def _credentials_app(mock_db: AsyncMock) -> FastAPI:
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_workspace] = override_get_workspace
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_membership] = lambda: MagicMock(role="owner", workspace_id=WS_ID)
     app.include_router(
         credentials_module.router,
         prefix="/api/v1/workspaces/{workspace_id}/integrations",

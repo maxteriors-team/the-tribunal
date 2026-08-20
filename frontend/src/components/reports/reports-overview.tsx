@@ -3,18 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Table,
   TableBody,
@@ -61,10 +51,7 @@ function ARAgingCard() {
           <div className="space-y-4">
             <div>
               <div className="text-2xl font-semibold">
-                {formatCurrency(
-                  query.data?.total_outstanding ?? 0,
-                  query.data?.currency
-                )}
+                {formatCurrency(query.data?.total_outstanding ?? 0, query.data?.currency)}
               </div>
               <div className="text-xs text-muted-foreground">
                 {query.data?.total_invoices ?? 0} open invoice
@@ -86,14 +73,14 @@ function ARAgingCard() {
                       {b.label === "Current" ? (
                         <Badge variant="secondary">Current</Badge>
                       ) : b.label === "90+" ? (
-                        <Badge variant="destructive">{b.label} days</Badge>
+                        <Badge className="bg-red-700 text-white dark:bg-red-600">
+                          {b.label} days
+                        </Badge>
                       ) : (
                         <Badge variant="outline">{b.label} days</Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {b.count}
-                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">{b.count}</TableCell>
                     <TableCell className="text-right font-medium">
                       {formatCurrency(b.amount, query.data?.currency)}
                     </TableCell>
@@ -119,9 +106,9 @@ function StatRow({
 }) {
   const toneClass =
     tone === "positive"
-      ? "text-emerald-500"
+      ? "text-emerald-700 dark:text-emerald-400"
       : tone === "negative"
-        ? "text-red-500"
+        ? "text-red-700 dark:text-red-400"
         : "";
   return (
     <div className="flex items-center justify-between py-1.5">
@@ -189,10 +176,7 @@ function COGSCard() {
               />
               <StatRow
                 label="Inventory on hand"
-                value={formatCurrency(
-                  data?.ending_inventory_value ?? 0,
-                  data?.currency,
-                )}
+                value={formatCurrency(data?.ending_inventory_value ?? 0, data?.currency)}
               />
             </div>
             {breakdown.length > 0 && (
@@ -208,9 +192,7 @@ function COGSCard() {
                   {breakdown.map((row) => (
                     <TableRow key={row.key ?? row.label}>
                       <TableCell>{row.label}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {row.quantity}
-                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{row.quantity}</TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatCurrency(row.cogs, data?.currency)}
                       </TableCell>
@@ -247,8 +229,7 @@ function JobPnLCard() {
       <CardHeader>
         <CardTitle>Job Profitability</CardTitle>
         <CardDescription>
-          Revenue from linked invoices minus tracked labor, expenses, and
-          materials
+          Revenue from linked invoices minus tracked labor, expenses, and materials
           {data ? ` · ${data.job_count} jobs` : ""}.
         </CardDescription>
       </CardHeader>
@@ -265,14 +246,14 @@ function JobPnLCard() {
             <div>
               <div
                 className={`text-2xl font-semibold ${
-                  profit >= 0 ? "text-emerald-500" : "text-red-500"
+                  profit >= 0
+                    ? "text-emerald-700 dark:text-emerald-400"
+                    : "text-red-700 dark:text-red-400"
                 }`}
               >
                 {formatCurrency(profit, data?.currency)}
               </div>
-              <div className="text-xs text-muted-foreground">
-                profit · {marginPct} margin
-              </div>
+              <div className="text-xs text-muted-foreground">profit · {marginPct} margin</div>
             </div>
             <div className="divide-y">
               <StatRow

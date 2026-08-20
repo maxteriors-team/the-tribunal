@@ -23,21 +23,17 @@ export function GuaranteeStep({ formData, onFieldChange }: GuaranteeStepProps) {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Label>Guarantee Type</Label>
+        <Label htmlFor="offer-guarantee-type">Guarantee Type</Label>
         <Select
           value={formData.guarantee_type}
-          onValueChange={(v) =>
-            onFieldChange({ guarantee_type: v as GuaranteeType })
-          }
+          onValueChange={(v) => onFieldChange({ guarantee_type: v as GuaranteeType })}
         >
-          <SelectTrigger>
+          <SelectTrigger id="offer-guarantee-type">
             <SelectValue placeholder="Select a guarantee type" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="money_back">Money-Back Guarantee</SelectItem>
-            <SelectItem value="satisfaction">
-              Satisfaction Guarantee
-            </SelectItem>
+            <SelectItem value="satisfaction">Satisfaction Guarantee</SelectItem>
             <SelectItem value="results">Results Guarantee</SelectItem>
           </SelectContent>
         </Select>
@@ -66,9 +62,7 @@ export function GuaranteeStep({ formData, onFieldChange }: GuaranteeStepProps) {
               id="guarantee_text"
               placeholder="e.g., If you don't see results in 30 days, we'll refund every penny..."
               value={formData.guarantee_text}
-              onChange={(e) =>
-                onFieldChange({ guarantee_text: e.target.value })
-              }
+              onChange={(e) => onFieldChange({ guarantee_text: e.target.value })}
               rows={3}
             />
           </div>

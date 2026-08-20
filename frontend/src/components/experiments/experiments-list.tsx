@@ -54,6 +54,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useDebouncedSearch } from "@/hooks/useDebouncedSearch";
 import { useFilterState } from "@/hooks/useFilterState";
 import { useRowSelection } from "@/hooks/useRowSelection";
@@ -70,9 +71,15 @@ export function ExperimentsList() {
   const { filters, setFilter } = useFilterState({ initialFilters: { status: "all" } });
   const statusFilter = filters.status;
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canManageExperiments = can("outreach:write");
   const queryClient = useQueryClient();
 
-  const { data: testsData, isPending, error } = useQuery({
+  const {
+    data: testsData,
+    isPending,
+    error,
+  } = useQuery({
     queryKey: queryKeys.messageTests.all(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
@@ -170,7 +177,9 @@ export function ExperimentsList() {
     return (
       <ResourceListError
         resourceName="experiments"
-        onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.all(workspaceId ?? "") })}
+        onRetry={() =>
+          queryClient.invalidateQueries({ queryKey: queryKeys.messageTests.all(workspaceId ?? "") })
+        }
       />
     );
   }
@@ -182,12 +191,14 @@ export function ExperimentsList() {
           title="Message Experiments"
           subtitle="A/B test your outreach messages to find what works best"
           action={
-            <Button asChild>
-              <Link href="/experiments/new">
-                <FlaskConical className="mr-2 size-4" />
-                New Experiment
-              </Link>
-            </Button>
+            canManageExperiments ? (
+              <Button asChild>
+                <Link href="/experiments/new">
+                  <FlaskConical className="mr-2 size-4" />
+                  New Experiment
+                </Link>
+              </Button>
+            ) : undefined
           }
         />
       }
@@ -199,9 +210,11 @@ export function ExperimentsList() {
             { label: "Total Variants", value: tests.reduce((sum, t) => sum + t.total_variants, 0) },
             {
               label: "Avg Response Rate",
-              value: `${tests.length > 0
-                ? Math.round(tests.reduce((sum, t) => sum + getResponseRate(t), 0) / tests.length)
-                : 0}%`,
+              value: `${
+                tests.length > 0
+                  ? Math.round(tests.reduce((sum, t) => sum + getResponseRate(t), 0) / tests.length)
+                  : 0
+              }%`,
             },
           ]}
         />
@@ -213,7 +226,7 @@ export function ExperimentsList() {
           placeholder="Search experiments..."
           filters={
             <Select value={statusFilter} onValueChange={(value) => setFilter("status", value)}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[140px]" aria-label="Filter experiments by status">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -233,9 +246,11 @@ export function ExperimentsList() {
           title="No experiments yet"
           description="Create your first A/B test to start optimizing your outreach"
           action={
-            <Button asChild>
-              <Link href="/experiments/new">Create Experiment</Link>
-            </Button>
+            canManageExperiments ? (
+              <Button asChild>
+                <Link href="/experiments/new">Create Experiment</Link>
+              </Button>
+            ) : undefined
           }
         />
       }
@@ -250,7 +265,7 @@ export function ExperimentsList() {
         ) : undefined
       }
     >
-      {selection.selectedCount > 0 && (
+      {canManageExperiments && selection.selectedCount > 0 && (
         <ResourceListBulkBar
           className="mb-4"
           selectedCount={selection.selectedCount}
@@ -281,35 +296,35 @@ export function ExperimentsList() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[40px]">
-                  <Checkbox
-                    checked={
-                      selection.allVisibleSelected
-                        ? true
-                        : selection.someVisibleSelected
-                          ? "indeterminate"
-                          : false
-                    }
-                    onCheckedChange={selection.toggleAllVisible}
-                    aria-label="Select all experiments"
-                  />
-                </TableHead>
+                {canManageExperiments && (
+                  <TableHead className="w-[40px]">
+                    <Checkbox
+                      checked={
+                        selection.allVisibleSelected
+                          ? true
+                          : selection.someVisibleSelected
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={selection.toggleAllVisible}
+                      aria-label="Select all experiments"
+                    />
+                  </TableHead>
+                )}
                 <TableHead>Experiment</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Variants</TableHead>
                 <TableHead>Progress</TableHead>
                 <TableHead>Response Rate</TableHead>
                 <TableHead>Winner</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
+                {canManageExperiments && <TableHead className="w-[50px]" />}
               </TableRow>
             </TableHeader>
             <TableBody>
               <AnimatePresence mode="popLayout">
                 {filteredTests.map((test) => {
                   const progress =
-                    test.total_contacts > 0
-                      ? (test.messages_sent / test.total_contacts) * 100
-                      : 0;
+                    test.total_contacts > 0 ? (test.messages_sent / test.total_contacts) * 100 : 0;
 
                   return (
                     <motion.tr
@@ -321,13 +336,15 @@ export function ExperimentsList() {
                       data-state={selection.isSelected(test.id) ? "selected" : undefined}
                       className="group cursor-pointer hover:bg-muted/50"
                     >
-                      <TableCell>
-                        <Checkbox
-                          checked={selection.isSelected(test.id)}
-                          onCheckedChange={() => selection.toggle(test.id)}
-                          aria-label={`Select ${test.name}`}
-                        />
-                      </TableCell>
+                      {canManageExperiments && (
+                        <TableCell>
+                          <Checkbox
+                            checked={selection.isSelected(test.id)}
+                            onCheckedChange={() => selection.toggle(test.id)}
+                            aria-label={`Select ${test.name}`}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell>
                         <Link href={`/experiments/${test.id}`} className="block">
                           <div className="font-medium">{test.name}</div>
@@ -349,7 +366,11 @@ export function ExperimentsList() {
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
-                          <Progress value={progress} className="h-2 w-24" />
+                          <Progress
+                            value={progress}
+                            aria-label={`${test.name} delivery progress`}
+                            className="h-2 w-24"
+                          />
                           <div className="text-xs text-muted-foreground">
                             {formatNumber(test.messages_sent)} / {formatNumber(test.total_contacts)}
                           </div>
@@ -370,47 +391,49 @@ export function ExperimentsList() {
                           <span className="text-sm text-muted-foreground">-</span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="opacity-0 group-hover:opacity-100"
-                              aria-label="Experiment actions"
-                            >
-                              <MoreHorizontal className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {test.status === "running" ? (
-                              <DropdownMenuItem onSelect={() => pauseMutation.mutate(test.id)}>
-                                <Pause className="mr-2 size-4" />
-                                Pause
+                      {canManageExperiments && (
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="opacity-0 group-hover:opacity-100"
+                                aria-label="Experiment actions"
+                              >
+                                <MoreHorizontal className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {test.status === "running" ? (
+                                <DropdownMenuItem onSelect={() => pauseMutation.mutate(test.id)}>
+                                  <Pause className="mr-2 size-4" />
+                                  Pause
+                                </DropdownMenuItem>
+                              ) : test.status === "paused" || test.status === "draft" ? (
+                                <DropdownMenuItem onSelect={() => startMutation.mutate(test.id)}>
+                                  <Play className="mr-2 size-4" />
+                                  {test.status === "draft" ? "Start" : "Resume"}
+                                </DropdownMenuItem>
+                              ) : null}
+                              {(test.status === "running" || test.status === "paused") && (
+                                <DropdownMenuItem onSelect={() => completeMutation.mutate(test.id)}>
+                                  <CheckCircle2 className="mr-2 size-4" />
+                                  Complete
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => deleteMutation.mutate(test.id)}
+                              >
+                                <Trash2 className="mr-2 size-4" />
+                                Delete
                               </DropdownMenuItem>
-                            ) : test.status === "paused" || test.status === "draft" ? (
-                              <DropdownMenuItem onSelect={() => startMutation.mutate(test.id)}>
-                                <Play className="mr-2 size-4" />
-                                {test.status === "draft" ? "Start" : "Resume"}
-                              </DropdownMenuItem>
-                            ) : null}
-                            {(test.status === "running" || test.status === "paused") && (
-                              <DropdownMenuItem onSelect={() => completeMutation.mutate(test.id)}>
-                                <CheckCircle2 className="mr-2 size-4" />
-                                Complete
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onSelect={() => deleteMutation.mutate(test.id)}
-                            >
-                              <Trash2 className="mr-2 size-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      )}
                     </motion.tr>
                   );
                 })}

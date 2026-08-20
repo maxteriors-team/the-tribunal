@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable jsx-a11y/no-noninteractive-tabindex -- The named scorecard scroll region must accept keyboard focus. */
+
 import { useQuery } from "@tanstack/react-query";
 import {
   PhoneCall,
@@ -17,12 +19,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { scorecardApi, type ReceptionistScorecard } from "@/lib/api/scorecard";
 import { queryKeys } from "@/lib/query-keys";
@@ -94,26 +91,41 @@ export function ScorecardPage() {
   });
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div
+      tabIndex={0}
+      role="region"
+      aria-labelledby="scorecard-heading"
+      className="h-full overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+    >
       <div className="space-y-6 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 id="scorecard-heading" className="text-2xl font-semibold tracking-tight">
               Receptionist Scorecard
             </h1>
             <p className="text-sm text-muted-foreground">
               How your AI receptionist captured, recovered, and booked demand.
             </p>
           </div>
-          <Tabs value={preset} onValueChange={(v) => setPreset(v as RangePreset)}>
-            <TabsList>
-              {RANGE_PRESETS.map((p) => (
-                <TabsTrigger key={p.value} value={p.value}>
-                  {p.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+          <div
+            role="group"
+            aria-label="Scorecard date range"
+            className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-[3px]"
+          >
+            {RANGE_PRESETS.map((rangePreset) => (
+              <Button
+                key={rangePreset.value}
+                type="button"
+                size="sm"
+                variant={preset === rangePreset.value ? "secondary" : "ghost"}
+                aria-pressed={preset === rangePreset.value}
+                onClick={() => setPreset(rangePreset.value)}
+                className="h-[calc(100%-1px)] px-2 py-1 text-sm shadow-none"
+              >
+                {rangePreset.label}
+              </Button>
+            ))}
+          </div>
         </div>
 
         {isError && !data ? (
@@ -229,9 +241,7 @@ function ScorecardBody({ data }: { data: ReceptionistScorecard }) {
         {metrics.map((m) => (
           <Card key={m.key}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {m.label}
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{m.label}</CardTitle>
               <m.icon className="size-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -260,14 +270,9 @@ function ScorecardBody({ data }: { data: ReceptionistScorecard }) {
           ) : (
             <ul className="divide-y">
               {data.top_call_reasons.map((reason) => (
-                <li
-                  key={reason.reason}
-                  className="flex items-center justify-between py-2 text-sm"
-                >
+                <li key={reason.reason} className="flex items-center justify-between py-2 text-sm">
                   <span className="capitalize">{reason.reason}</span>
-                  <span className="font-semibold tabular-nums">
-                    {formatNumber(reason.count)}
-                  </span>
+                  <span className="font-semibold tabular-nums">{formatNumber(reason.count)}</span>
                 </li>
               ))}
             </ul>

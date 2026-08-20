@@ -18,11 +18,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +36,7 @@ import {
 import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   improvementSuggestionsApi,
@@ -62,14 +59,22 @@ export function SuggestionsQueue({
   compact = false,
 }: SuggestionsQueueProps) {
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canManageSuggestions = can("workspace:manage");
   const queryClient = useQueryClient();
   const [selectedSuggestion, setSelectedSuggestion] =
     useState<ImprovementSuggestionResponse | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-  const [showRejectDialog, setShowRejectDialog] =
-    useState<ImprovementSuggestionResponse | null>(null);
+  const [showRejectDialog, setShowRejectDialog] = useState<ImprovementSuggestionResponse | null>(
+    null,
+  );
 
-  const { data: suggestions, isPending, isError, refetch } = useQuery({
+  const {
+    data: suggestions,
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: queryKeys.improvementSuggestions.list(workspaceId ?? "", {
       agent_id: agentId ?? null,
       status: statusFilter,
@@ -212,6 +217,7 @@ export function SuggestionsQueue({
             key={suggestion.id}
             suggestion={suggestion}
             compact={compact}
+            canManage={canManageSuggestions}
             onApprove={() => approveMutation.mutate(suggestion.id)}
             onReject={() => setShowRejectDialog(suggestion)}
             onView={() => setSelectedSuggestion(suggestion)}
@@ -269,7 +275,7 @@ export function SuggestionsQueue({
             <Button variant="outline" onClick={() => setSelectedSuggestion(null)}>
               Close
             </Button>
-            {selectedSuggestion?.status === "pending" && (
+            {canManageSuggestions && selectedSuggestion?.status === "pending" && (
               <>
                 <Button
                   variant="destructive"
@@ -297,39 +303,41 @@ export function SuggestionsQueue({
       </Dialog>
 
       {/* Reject Dialog */}
-      <Dialog open={!!showRejectDialog} onOpenChange={() => setShowRejectDialog(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Suggestion</DialogTitle>
-            <DialogDescription>
-              Optionally provide a reason for rejecting this suggestion.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            placeholder="Reason for rejection (optional)"
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRejectDialog(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() =>
-                showRejectDialog &&
-                rejectMutation.mutate({
-                  suggestionId: showRejectDialog.id,
-                  reason: rejectReason || undefined,
-                })
-              }
-              disabled={rejectMutation.isPending}
-            >
-              {rejectMutation.isPending ? "Rejecting..." : "Reject"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {canManageSuggestions && (
+        <Dialog open={!!showRejectDialog} onOpenChange={() => setShowRejectDialog(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reject Suggestion</DialogTitle>
+              <DialogDescription>
+                Optionally provide a reason for rejecting this suggestion.
+              </DialogDescription>
+            </DialogHeader>
+            <Textarea
+              placeholder="Reason for rejection (optional)"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowRejectDialog(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() =>
+                  showRejectDialog &&
+                  rejectMutation.mutate({
+                    suggestionId: showRejectDialog.id,
+                    reason: rejectReason || undefined,
+                  })
+                }
+                disabled={rejectMutation.isPending}
+              >
+                {rejectMutation.isPending ? "Rejecting..." : "Reject"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }
@@ -337,6 +345,7 @@ export function SuggestionsQueue({
 interface SuggestionCardProps {
   suggestion: ImprovementSuggestionResponse;
   compact: boolean;
+  canManage: boolean;
   onApprove: () => void;
   onReject: () => void;
   onView: () => void;
@@ -348,6 +357,7 @@ interface SuggestionCardProps {
 function SuggestionCard({
   suggestion,
   compact,
+  canManage,
   onApprove,
   onReject,
   onView,
@@ -375,24 +385,35 @@ function SuggestionCard({
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            {suggestion.status === "pending" && (
+            {canManage && suggestion.status === "pending" && (
               <>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={onReject}
                   className="text-destructive"
+                  aria-label="Reject suggestion"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-4 w-4" aria-hidden="true" />
                 </Button>
-                <Button size="sm" onClick={onApprove} disabled={isApproving}>
-                  <Check className="h-4 w-4" />
+                <Button
+                  size="sm"
+                  onClick={onApprove}
+                  disabled={isApproving}
+                  aria-label={isApproving ? "Approving suggestion" : "Approve suggestion"}
+                >
+                  <Check className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </>
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Suggestion actions">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  aria-label="Suggestion actions"
+                >
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -432,14 +453,9 @@ function SuggestionCard({
           </Collapsible>
 
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Created{" "}
-              {formatRelative(suggestion.created_at)}
-            </span>
+            <span>Created {formatRelative(suggestion.created_at)}</span>
             {suggestion.expected_improvement && (
-              <span className="max-w-xs truncate">
-                Expected: {suggestion.expected_improvement}
-              </span>
+              <span className="max-w-xs truncate">Expected: {suggestion.expected_improvement}</span>
             )}
           </div>
         </CardContent>

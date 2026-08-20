@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { messageTestsApi } from "@/lib/api/message-tests";
 import { queryKeys } from "@/lib/query-keys";
@@ -43,6 +44,8 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
   const { id: testId } = use(params);
   const router = useRouter();
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canManageExperiments = can("outreach:write");
   const queryClient = useQueryClient();
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<TestVariant | null>(null);
@@ -130,175 +133,183 @@ export default function ExperimentDetailPage({ params }: ExperimentDetailPagePro
   return (
     <AppSidebar>
       <div className="flex flex-col h-full overflow-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/experiments")}
-            aria-label="Back to experiments"
-          >
-            <ArrowLeft className="size-5" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold">{test.name}</h1>
-              <Badge variant="outline" className={statusColors[test.status]}>
-                {test.status}
-              </Badge>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push("/experiments")}
+              aria-label="Back to experiments"
+            >
+              <ArrowLeft className="size-5" />
+            </Button>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-semibold">{test.name}</h1>
+                <Badge variant="outline" className={statusColors[test.status]}>
+                  {test.status}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {test.description || "No description"}
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              {test.description || "No description"}
-            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {test.status === "draft" && (
+              <Button
+                onClick={() => startMutation.mutate()}
+                disabled={!canManageExperiments || startMutation.isPending}
+              >
+                <Play className="size-4 mr-2" />
+                Start Test
+              </Button>
+            )}
+            {test.status === "running" && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => pauseMutation.mutate()}
+                  disabled={!canManageExperiments || pauseMutation.isPending}
+                >
+                  <Pause className="size-4 mr-2" />
+                  Pause
+                </Button>
+                <Button
+                  onClick={() => completeMutation.mutate()}
+                  disabled={!canManageExperiments || completeMutation.isPending}
+                >
+                  <CheckCircle2 className="size-4 mr-2" />
+                  Complete
+                </Button>
+              </>
+            )}
+            {test.status === "paused" && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => startMutation.mutate()}
+                  disabled={!canManageExperiments || startMutation.isPending}
+                >
+                  <Play className="size-4 mr-2" />
+                  Resume
+                </Button>
+                <Button
+                  onClick={() => completeMutation.mutate()}
+                  disabled={!canManageExperiments || completeMutation.isPending}
+                >
+                  <CheckCircle2 className="size-4 mr-2" />
+                  Complete
+                </Button>
+              </>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {test.status === "draft" && (
-            <Button onClick={() => startMutation.mutate()}>
-              <Play className="size-4 mr-2" />
-              Start Test
-            </Button>
-          )}
-          {test.status === "running" && (
-            <>
-              <Button variant="outline" onClick={() => pauseMutation.mutate()}>
-                <Pause className="size-4 mr-2" />
-                Pause
-              </Button>
-              <Button onClick={() => completeMutation.mutate()}>
-                <CheckCircle2 className="size-4 mr-2" />
-                Complete
-              </Button>
-            </>
-          )}
-          {test.status === "paused" && (
-            <>
-              <Button variant="outline" onClick={() => startMutation.mutate()}>
-                <Play className="size-4 mr-2" />
-                Resume
-              </Button>
-              <Button onClick={() => completeMutation.mutate()}>
-                <CheckCircle2 className="size-4 mr-2" />
-                Complete
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
 
-      {/* Content */}
-      <div className="flex-1 p-6">
-        <Tabs defaultValue="analytics" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="analytics" className="flex items-center gap-2">
-              <FlaskConical className="size-4" />
-              Analytics
-            </TabsTrigger>
-            <TabsTrigger value="variants" className="flex items-center gap-2">
-              <Settings2 className="size-4" />
-              Variants
-            </TabsTrigger>
-            <TabsTrigger value="contacts" className="flex items-center gap-2">
-              <Users className="size-4" />
-              Contacts
-            </TabsTrigger>
-          </TabsList>
+        {/* Content */}
+        <div className="flex-1 p-6">
+          <Tabs defaultValue="analytics" className="space-y-6">
+            <TabsList>
+              <TabsTrigger value="analytics" className="flex items-center gap-2">
+                <FlaskConical className="size-4" />
+                Analytics
+              </TabsTrigger>
+              <TabsTrigger value="variants" className="flex items-center gap-2">
+                <Settings2 className="size-4" />
+                Variants
+              </TabsTrigger>
+              <TabsTrigger value="contacts" className="flex items-center gap-2">
+                <Users className="size-4" />
+                Contacts
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="analytics">
-            <TestAnalytics testId={testId} />
-          </TabsContent>
+            <TabsContent value="analytics">
+              <TestAnalytics testId={testId} />
+            </TabsContent>
 
-          <TabsContent value="variants">
-            <div className="space-y-4">
-              {test.variants?.map((variant) => (
-                <Card key={variant.id}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {variant.name}
-                        {variant.is_control && (
-                          <Badge variant="secondary">Control</Badge>
-                        )}
+            <TabsContent value="variants">
+              <div className="space-y-4">
+                {test.variants?.map((variant) => (
+                  <Card key={variant.id}>
+                    <CardHeader>
+                      <CardTitle className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {variant.name}
+                          {variant.is_control && <Badge variant="secondary">Control</Badge>}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={!canManageExperiments}
+                          onClick={() => {
+                            setSelectedVariant(variant);
+                            setSaveDialogOpen(true);
+                          }}
+                        >
+                          <Save className="size-4 mr-1" />
+                          Save as Template
+                        </Button>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="whitespace-pre-wrap bg-muted p-4 rounded-lg">
+                        {variant.message_template}
+                      </p>
+                      <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Assigned</p>
+                          <p className="text-lg font-semibold">{variant.contacts_assigned}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Sent</p>
+                          <p className="text-lg font-semibold">{variant.messages_sent}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Replies</p>
+                          <p className="text-lg font-semibold">{variant.replies_received}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Response Rate</p>
+                          <p className="text-lg font-semibold">
+                            {variant.response_rate.toFixed(1)}%
+                          </p>
+                        </div>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedVariant(variant);
-                          setSaveDialogOpen(true);
-                        }}
-                      >
-                        <Save className="size-4 mr-1" />
-                        Save as Template
-                      </Button>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="whitespace-pre-wrap bg-muted p-4 rounded-lg">
-                      {variant.message_template}
-                    </p>
-                    <div className="grid grid-cols-4 gap-4 mt-4 pt-4 border-t">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Assigned</p>
-                        <p className="text-lg font-semibold">
-                          {variant.contacts_assigned}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Sent</p>
-                        <p className="text-lg font-semibold">
-                          {variant.messages_sent}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Replies</p>
-                        <p className="text-lg font-semibold">
-                          {variant.replies_received}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Response Rate
-                        </p>
-                        <p className="text-lg font-semibold">
-                          {variant.response_rate.toFixed(1)}%
-                        </p>
-                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="contacts">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Test Contacts</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div className="p-4 bg-muted/50 rounded-lg">
+                      <p className="text-2xl font-bold">{test.total_contacts}</p>
+                      <p className="text-sm text-muted-foreground">Total</p>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="contacts">
-            <Card>
-              <CardHeader>
-                <CardTitle>Test Contacts</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="p-4 bg-muted/50 rounded-lg">
-                    <p className="text-2xl font-bold">{test.total_contacts}</p>
-                    <p className="text-sm text-muted-foreground">Total</p>
+                    <div className="p-4 bg-muted/50 rounded-lg">
+                      <p className="text-2xl font-bold">{test.messages_sent}</p>
+                      <p className="text-sm text-muted-foreground">Sent</p>
+                    </div>
+                    <div className="p-4 bg-muted/50 rounded-lg">
+                      <p className="text-2xl font-bold">
+                        {test.total_contacts - test.messages_sent}
+                      </p>
+                      <p className="text-sm text-muted-foreground">Pending</p>
+                    </div>
                   </div>
-                  <div className="p-4 bg-muted/50 rounded-lg">
-                    <p className="text-2xl font-bold">{test.messages_sent}</p>
-                    <p className="text-sm text-muted-foreground">Sent</p>
-                  </div>
-                  <div className="p-4 bg-muted/50 rounded-lg">
-                    <p className="text-2xl font-bold">
-                      {test.total_contacts - test.messages_sent}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Pending</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
 
       <SaveTemplateDialog

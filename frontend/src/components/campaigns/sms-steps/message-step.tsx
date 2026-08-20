@@ -21,7 +21,6 @@ import type { Offer } from "@/types";
 import { OfferSelector } from "../offer-selector";
 import type { WizardStep } from "../wizard-types";
 
-
 export interface MessageStepFields {
   initial_message: string;
   offer_id?: string;
@@ -35,10 +34,7 @@ export interface MessageStepFields {
  * SMS-specific "Message" step: composes the initial outbound message,
  * optional offer attachment, and optional follow-up cadence.
  */
-export function makeMessageStep<
-  TStepId extends string,
-  TFormData extends MessageStepFields,
->(opts: {
+export function makeMessageStep<TStepId extends string, TFormData extends MessageStepFields>(opts: {
   id: TStepId;
   offers: Offer[];
   onCreateOffer?: (offer: Partial<Offer>) => Promise<void>;
@@ -48,25 +44,17 @@ export function makeMessageStep<
     label: "Message",
     icon: MessageSquare,
     validate: (data) =>
-      !data.initial_message.trim()
-        ? { initial_message: "Message is required" }
-        : {},
+      !data.initial_message.trim() ? { initial_message: "Message is required" } : {},
     render: ({ formData, errors, updateField }) => {
-      const setField = <K extends keyof MessageStepFields>(
-        key: K,
-        value: MessageStepFields[K],
-      ) =>
+      const setField = <K extends keyof MessageStepFields>(key: K, value: MessageStepFields[K]) =>
         updateField(
           key as unknown as keyof TFormData,
           value as unknown as TFormData[keyof TFormData],
         );
 
       const insertPlaceholder = (placeholder: string) =>
-        insertPlaceholderAtCursor(
-          "initial-message",
-          placeholder,
-          formData.initial_message,
-          (v) => setField("initial_message", v),
+        insertPlaceholderAtCursor("initial-message", placeholder, formData.initial_message, (v) =>
+          setField("initial_message", v),
         );
 
       return (
@@ -75,9 +63,7 @@ export function makeMessageStep<
             <div className="flex items-center justify-between">
               <Label htmlFor="initial-message">Initial Message *</Label>
               <div className="flex items-center gap-1">
-                <span className="text-xs text-muted-foreground mr-2">
-                  Insert:
-                </span>
+                <span className="text-xs text-muted-foreground mr-2">Insert:</span>
                 {[
                   { label: "First Name", value: "{first_name}" },
                   { label: "Last Name", value: "{last_name}" },
@@ -104,9 +90,7 @@ export function makeMessageStep<
               className={errors.initial_message ? "border-destructive" : ""}
             />
             {errors.initial_message && (
-              <p className="text-sm text-destructive">
-                {errors.initial_message}
-              </p>
+              <p className="text-sm text-destructive">{errors.initial_message}</p>
             )}
             <p className="text-xs text-muted-foreground">
               {formData.initial_message.length}/160 characters (standard SMS)
@@ -139,6 +123,7 @@ export function makeMessageStep<
                 </p>
               </div>
               <Switch
+                aria-label="Follow-up messages"
                 checked={formData.follow_up_enabled}
                 onCheckedChange={(v) => setField("follow_up_enabled", v)}
               />
@@ -153,14 +138,12 @@ export function makeMessageStep<
               >
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Delay Before Follow-up</Label>
+                    <Label htmlFor="sms-follow-up-delay">Delay Before Follow-up</Label>
                     <Select
                       value={String(formData.follow_up_delay_hours)}
-                      onValueChange={(v) =>
-                        setField("follow_up_delay_hours", parseInt(v))
-                      }
+                      onValueChange={(v) => setField("follow_up_delay_hours", parseInt(v))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="sms-follow-up-delay">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -172,14 +155,12 @@ export function makeMessageStep<
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Max Follow-ups</Label>
+                    <Label htmlFor="sms-max-follow-ups">Max Follow-ups</Label>
                     <Select
                       value={String(formData.max_follow_ups)}
-                      onValueChange={(v) =>
-                        setField("max_follow_ups", parseInt(v))
-                      }
+                      onValueChange={(v) => setField("max_follow_ups", parseInt(v))}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="sms-max-follow-ups">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -197,9 +178,7 @@ export function makeMessageStep<
                     id="follow-up-message"
                     placeholder="Just following up on my previous message..."
                     value={formData.follow_up_message}
-                    onChange={(e) =>
-                      setField("follow_up_message", e.target.value)
-                    }
+                    onChange={(e) => setField("follow_up_message", e.target.value)}
                     rows={3}
                   />
                 </div>

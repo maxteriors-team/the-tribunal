@@ -23,13 +23,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -81,9 +75,7 @@ export function FinancingSettingsCard() {
   const [disclaimer, setDisclaimer] = useState("");
   // Snapshot of the server block so save preserves the margin knobs and copy
   // this editor doesn't expose.
-  const [serverFinancing, setServerFinancing] = useState<FinancingConfig | null>(
-    null,
-  );
+  const [serverFinancing, setServerFinancing] = useState<FinancingConfig | null>(null);
 
   if (pricing?.financing && pricing.financing !== serverFinancing) {
     setServerFinancing(pricing.financing);
@@ -95,10 +87,7 @@ export function FinancingSettingsCard() {
     mutationFn: (financing: FinancingConfig) =>
       salesWizardApi.updatePricing(workspaceId!, { financing }),
     onSuccess: (updated) => {
-      queryClient.setQueryData(
-        queryKeys.salesWizard.pricing(workspaceId ?? ""),
-        updated,
-      );
+      queryClient.setQueryData(queryKeys.salesWizard.pricing(workspaceId ?? ""), updated);
       toast.success("Financing presentation saved");
     },
     onError: (err: unknown) =>
@@ -109,16 +98,11 @@ export function FinancingSettingsCard() {
 
   const patchRow = (id: string, patch: Partial<CategoryRow>) =>
     setRows((prev) =>
-      prev
-        ? prev.map((row) => (row.id === id ? { ...row, ...patch } : row))
-        : prev,
+      prev ? prev.map((row) => (row.id === id ? { ...row, ...patch } : row)) : prev,
     );
 
   const addRow = () =>
-    setRows((prev) => [
-      ...(prev ?? []),
-      { id: nextRowId(), category: "", minimum: "0" },
-    ]);
+    setRows((prev) => [...(prev ?? []), { id: nextRowId(), category: "", minimum: "0" }]);
 
   const removeRow = (id: string) =>
     setRows((prev) => (prev ? prev.filter((row) => row.id !== id) : prev));
@@ -174,10 +158,10 @@ export function FinancingSettingsCard() {
         <div className="space-y-1.5">
           <CardTitle>Financing Presentation</CardTitle>
           <CardDescription>
-            Which services show an estimated monthly payment beside the price,
-            and the project subtotal that qualifies. A service that isn&rsquo;t
-            listed never shows a payment estimate. Use the name your price book
-            uses for the service — roofing, siding, gutters, landscape.
+            Which services show an estimated monthly payment beside the price, and the project
+            subtotal that qualifies. A service that isn&rsquo;t listed never shows a payment
+            estimate. Use the name your price book uses for the service — roofing, siding, gutters,
+            landscape.
           </CardDescription>
         </div>
       </CardHeader>
@@ -185,22 +169,24 @@ export function FinancingSettingsCard() {
         <div className="space-y-3">
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No services offer financing. Add one to start showing monthly
-              payment estimates.
+              No services offer financing. Add one to start showing monthly payment estimates.
             </p>
           ) : (
-            <div className="flex items-end gap-3 text-sm font-medium">
-              <div className="flex-1">Service</div>
-              <div className="w-40">Minimum ($)</div>
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem] items-end gap-2 text-sm font-medium sm:flex sm:gap-3">
+              <div className="min-w-0 flex-1">Service</div>
+              <div className="min-w-0 sm:w-40">Minimum ($)</div>
               {/* Spacer matching the per-row remove button. */}
               <div className="size-9" aria-hidden="true" />
             </div>
           )}
 
           {rows.map((row, index) => (
-            <div key={row.id} className="flex items-end gap-3">
+            <div
+              key={row.id}
+              className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem] items-end gap-2 sm:flex sm:gap-3"
+            >
               <Input
-                className="flex-1"
+                className="min-w-0 flex-1"
                 aria-label={`Service ${index + 1} name`}
                 value={row.category}
                 placeholder="roofing"
@@ -208,7 +194,7 @@ export function FinancingSettingsCard() {
                 disabled={disabled}
               />
               <Input
-                className="w-40"
+                className="min-w-0 sm:w-40"
                 aria-label={`Service ${index + 1} minimum ($)`}
                 type="number"
                 min={0}
@@ -231,18 +217,12 @@ export function FinancingSettingsCard() {
             </div>
           ))}
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addRow}
-            disabled={disabled}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={disabled}>
             <Plus className="size-4" /> Add service
           </Button>
           <p className="text-xs text-muted-foreground">
-            0 means any job qualifies. Set a floor to keep small jobs from
-            showing a payment estimate.
+            0 means any job qualifies. Set a floor to keep small jobs from showing a payment
+            estimate.
           </p>
         </div>
 
@@ -258,16 +238,15 @@ export function FinancingSettingsCard() {
             disabled={disabled}
           />
           <p className="text-xs text-muted-foreground">
-            Shown with every payment figure. Payments are estimates, never an
-            approved offer. Leave this blank to use the standard disclaimer —
-            it can&rsquo;t be removed.
+            Shown with every payment figure. Payments are estimates, never an approved offer. Leave
+            this blank to use the standard disclaimer — it can&rsquo;t be removed.
           </p>
         </div>
 
         <Separator />
 
         <div className="flex justify-end">
-          <Button type="button" onClick={save} disabled={disabled}>
+          <Button className="w-full sm:w-auto" type="button" onClick={save} disabled={disabled}>
             {mutation.isPending ? (
               <>
                 <Loader2 className="size-4 animate-spin" /> Saving…

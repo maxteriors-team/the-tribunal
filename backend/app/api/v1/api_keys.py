@@ -10,13 +10,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_workspace
+from app.api.deps import CurrentUser, get_workspace, require_route_capabilities
+from app.core.permissions import Capability
 from app.db.session import get_db
 from app.models.api_key import APIKey
 from app.models.workspace import Workspace
 from app.schemas.api_key import APIKeyCreate, APIKeyCreated, APIKeyResponse
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(
+            require_route_capabilities(Capability.WORKSPACE_MANAGE, Capability.WORKSPACE_MANAGE)
+        )
+    ]
+)
 
 
 def _hash_api_key(key: str) -> str:

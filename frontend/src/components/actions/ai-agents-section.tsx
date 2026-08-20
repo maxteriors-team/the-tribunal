@@ -53,15 +53,17 @@ function AgentCard({
       animate={{ opacity: 1, y: 0 }}
       className={cn(
         "relative p-3 rounded-lg border transition-all",
-        isAssigned ? "border-primary bg-primary/5" : "hover:border-muted-foreground/30"
+        isAssigned ? "border-primary bg-primary/5" : "hover:border-muted-foreground/30",
       )}
     >
       <div className="flex items-start gap-3">
         <Avatar className="h-10 w-10 shrink-0">
-          <AvatarFallback className={cn(
-            "text-sm font-medium",
-            agent.is_active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-          )}>
+          <AvatarFallback
+            className={cn(
+              "text-sm font-medium",
+              agent.is_active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+            )}
+          >
             <Bot className="h-5 w-5" />
           </AvatarFallback>
         </Avatar>
@@ -75,9 +77,7 @@ function AgentCard({
               </Badge>
             )}
           </div>
-          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-            {agent.description}
-          </p>
+          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{agent.description}</p>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-xs text-muted-foreground">
               {channelIcons[agent.channel_mode]}
@@ -101,7 +101,13 @@ function AgentCard({
                 {isActive ? "Active" : "Paused"}
               </span>
             </div>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onUnassign} disabled={isPending}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              onClick={onUnassign}
+              disabled={isPending}
+            >
               Unassign
             </Button>
           </>
@@ -130,10 +136,7 @@ export function AIAgentsSection() {
   const toggleAIMutation = useToggleContactAI(workspaceId ?? "");
 
   const { data: conversationsData } = useQuery({
-    queryKey: queryKeys.conversations.byContact(
-      workspaceId ?? "",
-      selectedContact?.id,
-    ),
+    queryKey: queryKeys.conversations.byContact(workspaceId ?? "", selectedContact?.id),
     queryFn: () =>
       workspaceId
         ? conversationsApi.list(workspaceId, { page: 1, page_size: 100 })
@@ -141,18 +144,17 @@ export function AIAgentsSection() {
     enabled: !!workspaceId && !!selectedContact,
   });
 
-  const selectedContactPhone = normalizePhoneForComparison(
-    selectedContact?.phone_number,
-  );
+  const selectedContactPhone = normalizePhoneForComparison(selectedContact?.phone_number);
 
-  const contactConversation: Conversation | undefined =
-    conversationsData?.items?.find((conversation) => {
+  const contactConversation: Conversation | undefined = conversationsData?.items?.find(
+    (conversation) => {
       if (conversation.contact_id === selectedContact?.id) return true;
       return (
         !!selectedContactPhone &&
         normalizePhoneForComparison(conversation.contact_phone) === selectedContactPhone
       );
-    });
+    },
+  );
 
   const assignedAgentId = contactConversation?.assigned_agent_id;
   const assignedAgent = useMemo(() => {

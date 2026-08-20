@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
+from app.core.permissions import Capability
 from app.models.agent import Agent
 from app.models.human_profile import HumanProfile
 from app.models.workspace import Workspace
@@ -17,7 +18,11 @@ from app.schemas.human_profile import (
     HumanProfileUpdate,
 )
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.WORKSPACE_MANAGE))
+    ]
+)
 
 
 def _profile_to_response(profile: HumanProfile) -> HumanProfileResponse:

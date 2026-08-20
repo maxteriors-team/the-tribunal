@@ -17,6 +17,11 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.v1.router import api_router
 from app.services.ai.openai_credentials import OpenAICredentialContext
+from app.services.embed.access import EMBED_PARENT_ORIGIN_HEADER
+
+
+def _embed_headers(origin: str) -> dict[str, str]:
+    return {"Origin": origin, EMBED_PARENT_ORIGIN_HEADER: origin}
 
 
 @asynccontextmanager
@@ -132,7 +137,7 @@ class TestTokenEndpointRateLimit:
             for i in range(limit):
                 resp = await client.post(
                     "/api/v1/p/embed/demo-public-id/token",
-                    headers={"Origin": "https://testserver"},
+                    headers=_embed_headers("https://testserver"),
                     json={"mode": "voice"},
                 )
                 assert resp.status_code == 200, (
@@ -143,7 +148,7 @@ class TestTokenEndpointRateLimit:
 
             resp = await client.post(
                 "/api/v1/p/embed/demo-public-id/token",
-                headers={"Origin": "https://testserver"},
+                headers=_embed_headers("https://testserver"),
                 json={"mode": "voice"},
             )
 
@@ -208,7 +213,7 @@ class TestChatEndpointRateLimit:
             for i in range(limit):
                 resp = await client.post(
                     "/api/v1/p/embed/demo-public-id/chat",
-                    headers={"Origin": "https://testserver"},
+                    headers=_embed_headers("https://testserver"),
                     json={"message": "hi", "conversation_history": []},
                 )
                 assert resp.status_code == 200, (
@@ -217,7 +222,7 @@ class TestChatEndpointRateLimit:
 
             resp = await client.post(
                 "/api/v1/p/embed/demo-public-id/chat",
-                headers={"Origin": "https://testserver"},
+                headers=_embed_headers("https://testserver"),
                 json={"message": "hi", "conversation_history": []},
             )
 
@@ -241,7 +246,7 @@ class TestChatEndpointRateLimit:
         ):
             resp = await client.post(
                 "/api/v1/p/embed/demo-public-id/tool-call",
-                headers={"Origin": "https://testserver"},
+                headers=_embed_headers("https://testserver"),
                 json={"tool_name": "end_call", "arguments": {}},
             )
 
@@ -265,7 +270,7 @@ class TestChatEndpointRateLimit:
         ):
             resp = await client.post(
                 "/api/v1/p/embed/demo-public-id/transcript",
-                headers={"Origin": "https://testserver"},
+                headers=_embed_headers("https://testserver"),
                 json={
                     "session_id": "sess",
                     "transcript": "hello",

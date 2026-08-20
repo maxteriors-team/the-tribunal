@@ -23,10 +23,16 @@ import uuid
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 
-from app.api.deps import DB, CanManageWorkspace, CanViewReports
+from app.api.deps import (
+    DB,
+    CanManageWorkspace,
+    CanViewReports,
+    require_route_capabilities,
+)
 from app.api.service_errors import ServiceErrorRoute
+from app.core.permissions import Capability
 from app.schemas.revenue_target import (
     RevenuePace,
     RevenueTargetBulkUpsert,
@@ -36,7 +42,12 @@ from app.schemas.revenue_target import (
 )
 from app.services.reporting import RevenueTargetService
 
-router = APIRouter(route_class=ServiceErrorRoute)
+router = APIRouter(
+    route_class=ServiceErrorRoute,
+    dependencies=[
+        Depends(require_route_capabilities(Capability.REPORTS_VIEW, Capability.WORKSPACE_MANAGE))
+    ],
+)
 
 PeriodMonth = Annotated[
     date,

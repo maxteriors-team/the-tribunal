@@ -5,7 +5,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
+from app.core.permissions import Capability
 from app.models.message_test import MessageTest, TestVariant
 from app.models.workspace import Workspace
 from app.schemas.message_test import (
@@ -26,7 +27,11 @@ from app.schemas.message_test import (
 from app.services.exceptions import NotFoundError, ValidationError
 from app.services.message_tests import MessageTestService
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.OUTREACH_WRITE))
+    ]
+)
 
 
 # === Message Test CRUD ===

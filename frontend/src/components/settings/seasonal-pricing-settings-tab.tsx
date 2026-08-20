@@ -18,13 +18,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,11 +36,7 @@ import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
-import type {
-  ChristmasConfig,
-  ChristmasPackage,
-  SeasonalItem,
-} from "@/types/sales-wizard";
+import type { ChristmasConfig, ChristmasPackage, SeasonalItem } from "@/types/sales-wizard";
 
 type SeasonalUnit = "each" | "per_ft";
 
@@ -239,9 +229,7 @@ export function SeasonalPricingSettingsTab() {
   const [rooflineComparison, setRooflineComparison] = useState(false);
   // Snapshot of the server christmas block so save preserves `perks`, the package
   // sub-fields, and anything else this editor intentionally does not expose.
-  const [serverChristmas, setServerChristmas] = useState<ChristmasConfig | null>(
-    null,
-  );
+  const [serverChristmas, setServerChristmas] = useState<ChristmasConfig | null>(null);
 
   // Seed/re-seed the editable draft from the server config, resetting when its
   // identity changes (first load, or after a save replaces the cached copy).
@@ -274,15 +262,10 @@ export function SeasonalPricingSettingsTab() {
   }
 
   const mutation = useMutation({
-    mutationFn: (update: {
-      christmas: ChristmasConfig;
-      roofline_comparison_enabled: boolean;
-    }) => salesWizardApi.updatePricing(workspaceId!, update),
+    mutationFn: (update: { christmas: ChristmasConfig; roofline_comparison_enabled: boolean }) =>
+      salesWizardApi.updatePricing(workspaceId!, update),
     onSuccess: (updated) => {
-      queryClient.setQueryData(
-        queryKeys.salesWizard.pricing(workspaceId ?? ""),
-        updated,
-      );
+      queryClient.setQueryData(queryKeys.salesWizard.pricing(workspaceId ?? ""), updated);
       toast.success("Seasonal pricing saved");
     },
     onError: (err: unknown) =>
@@ -293,23 +276,15 @@ export function SeasonalPricingSettingsTab() {
 
   // ── Category / option editing ──────────────────────────────────────────
   const patchCategory = (cidKey: string, patch: Partial<EditCategory>) =>
-    setCategories((prev) =>
-      prev.map((c) => (c._cid === cidKey ? { ...c, ...patch } : c)),
-    );
+    setCategories((prev) => prev.map((c) => (c._cid === cidKey ? { ...c, ...patch } : c)));
 
-  const patchOption = (
-    catCid: string,
-    optCid: string,
-    patch: Partial<EditOption>,
-  ) =>
+  const patchOption = (catCid: string, optCid: string, patch: Partial<EditOption>) =>
     setCategories((prev) =>
       prev.map((c) =>
         c._cid === catCid
           ? {
               ...c,
-              options: c.options.map((o) =>
-                o._cid === optCid ? { ...o, ...patch } : o,
-              ),
+              options: c.options.map((o) => (o._cid === optCid ? { ...o, ...patch } : o)),
             }
           : c,
       ),
@@ -336,10 +311,7 @@ export function SeasonalPricingSettingsTab() {
         c._cid === catCid
           ? {
               ...c,
-              options: [
-                ...c.options,
-                { _cid: cid(), key: "", name: "", price: 0 },
-              ],
+              options: [...c.options, { _cid: cid(), key: "", name: "", price: 0 }],
             }
           : c,
       ),
@@ -348,17 +320,13 @@ export function SeasonalPricingSettingsTab() {
   const removeOption = (catCid: string, optCid: string) =>
     setCategories((prev) =>
       prev.map((c) =>
-        c._cid === catCid
-          ? { ...c, options: c.options.filter((o) => o._cid !== optCid) }
-          : c,
+        c._cid === catCid ? { ...c, options: c.options.filter((o) => o._cid !== optCid) } : c,
       ),
     );
 
   // ── Package editing ───────────────────────────────────────────────────────
   const patchPackage = (pkgCid: string, patch: Partial<EditPackage>) =>
-    setPackages((prev) =>
-      prev.map((p) => (p._cid === pkgCid ? { ...p, ...patch } : p)),
-    );
+    setPackages((prev) => prev.map((p) => (p._cid === pkgCid ? { ...p, ...patch } : p)));
 
   const addPackage = () =>
     setPackages((prev) => [
@@ -454,9 +422,7 @@ export function SeasonalPricingSettingsTab() {
     // existing key so a freshly-named row can never collide with one assigned
     // later in the list (keys are the stable references the pricing engine and
     // saved comparisons look selections up by).
-    const usedCatKeys = new Set<string>(
-      categories.map((c) => c.key).filter(Boolean),
-    );
+    const usedCatKeys = new Set<string>(categories.map((c) => c.key).filter(Boolean));
     const items: SeasonalItem[] = [];
     // Maps each category's client id to its final saved key so packages can
     // resolve their included-category selections to SeasonalItem keys below.
@@ -473,9 +439,7 @@ export function SeasonalPricingSettingsTab() {
       }
       const catKey = cat.key || uniqueKey(slugify(label, "category"), usedCatKeys);
       cidToKey.set(cat._cid, catKey);
-      const usedOptKeys = new Set<string>(
-        cat.options.map((o) => o.key).filter(Boolean),
-      );
+      const usedOptKeys = new Set<string>(cat.options.map((o) => o.key).filter(Boolean));
       const options = [];
       for (const opt of cat.options) {
         const name = opt.name.trim();
@@ -495,9 +459,7 @@ export function SeasonalPricingSettingsTab() {
 
     // Freeze keys for new packages just like categories, then resolve each
     // package's included categories to their saved SeasonalItem keys.
-    const usedPkgKeys = new Set<string>(
-      packages.map((p) => p.key).filter(Boolean),
-    );
+    const usedPkgKeys = new Set<string>(packages.map((p) => p.key).filter(Boolean));
     const builtPackages: ChristmasPackage[] = [];
     for (const pkg of packages) {
       const pkgLabel = pkg.label.trim();
@@ -505,8 +467,7 @@ export function SeasonalPricingSettingsTab() {
         toast.error("Every package needs a name");
         return;
       }
-      const pkgKey =
-        pkg.key || uniqueKey(slugify(pkgLabel, "package"), usedPkgKeys);
+      const pkgKey = pkg.key || uniqueKey(slugify(pkgLabel, "package"), usedPkgKeys);
       const points = pkg.points
         .split("\n")
         .map((s) => s.trim())
@@ -572,12 +533,11 @@ export function SeasonalPricingSettingsTab() {
             <div className="space-y-1.5">
               <CardTitle>Seasonal Decor Pricing</CardTitle>
               <CardDescription>
-                Add or edit seasonal add-ons — trees, bushes, wreaths, garland,
-                and anything else. Choose whether each is priced per item or per
-                linear foot. Turn the offering on to sell Christmas lighting at
-                all — the quote builder hides the whole service while it&apos;s off.
-                Changes apply instantly to the sales wizard and roofline
-                estimator — no developer needed.
+                Add or edit seasonal add-ons — trees, bushes, wreaths, garland, and anything else.
+                Choose whether each is priced per item or per linear foot. Turn the offering on to
+                sell Christmas lighting at all — the quote builder hides the whole service while
+                it&apos;s off. Changes apply instantly to the sales wizard and roofline estimator —
+                no developer needed.
               </CardDescription>
             </div>
             <Switch
@@ -599,8 +559,8 @@ export function SeasonalPricingSettingsTab() {
                 disabled={disabled}
               />
               <p className="text-xs text-muted-foreground">
-                Shown to customers on the estimate and proposal, and used to
-                title the install/takedown jobs a signup schedules.
+                Shown to customers on the estimate and proposal, and used to title the
+                install/takedown jobs a signup schedules.
               </p>
             </div>
 
@@ -649,32 +609,26 @@ export function SeasonalPricingSettingsTab() {
             ) : null}
 
             {categories.map((cat) => (
-              <div
-                key={cat._cid}
-                className="rounded-lg border p-4 space-y-4 bg-muted/20"
-              >
+              <div key={cat._cid} className="space-y-4 rounded-lg border bg-muted/20 p-3 sm:p-4">
                 <div className="flex flex-wrap items-end gap-3">
                   <div className="space-y-2 flex-1 min-w-[180px]">
-                    <Label>Category name</Label>
+                    <Label htmlFor={`seasonal-category-${cat._cid}-name`}>Category name</Label>
                     <Input
+                      id={`seasonal-category-${cat._cid}-name`}
                       placeholder="e.g. Trees, Garland"
                       value={cat.label}
-                      onChange={(e) =>
-                        patchCategory(cat._cid, { label: e.target.value })
-                      }
+                      onChange={(e) => patchCategory(cat._cid, { label: e.target.value })}
                       disabled={disabled}
                     />
                   </div>
                   <div className="space-y-2 w-44">
-                    <Label>Priced by</Label>
+                    <Label htmlFor={`seasonal-category-${cat._cid}-unit`}>Priced by</Label>
                     <Select
                       value={cat.unit}
-                      onValueChange={(v) =>
-                        patchCategory(cat._cid, { unit: v as SeasonalUnit })
-                      }
+                      onValueChange={(v) => patchCategory(cat._cid, { unit: v as SeasonalUnit })}
                       disabled={disabled}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id={`seasonal-category-${cat._cid}-unit`}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -697,12 +651,16 @@ export function SeasonalPricingSettingsTab() {
 
                 <div className="space-y-2">
                   {cat.options.map((opt) => (
-                    <div key={opt._cid} className="flex items-end gap-3">
-                      <div className="space-y-1 flex-1 min-w-[160px]">
-                        <Label className="text-xs text-muted-foreground">
+                    <div key={opt._cid} className="flex flex-wrap items-end gap-3">
+                      <div className="w-full min-w-0 space-y-1 sm:min-w-[160px] sm:flex-1">
+                        <Label
+                          htmlFor={`seasonal-category-${cat._cid}-option-${opt._cid}-name`}
+                          className="text-xs text-muted-foreground"
+                        >
                           Option
                         </Label>
                         <Input
+                          id={`seasonal-category-${cat._cid}-option-${opt._cid}-name`}
                           placeholder={
                             cat.unit === "per_ft"
                               ? "e.g. Garland (installed)"
@@ -717,11 +675,15 @@ export function SeasonalPricingSettingsTab() {
                           disabled={disabled}
                         />
                       </div>
-                      <div className="space-y-1 w-40">
-                        <Label className="text-xs text-muted-foreground">
+                      <div className="min-w-0 flex-1 space-y-1 sm:w-40 sm:flex-none">
+                        <Label
+                          htmlFor={`seasonal-category-${cat._cid}-option-${opt._cid}-price`}
+                          className="text-xs text-muted-foreground"
+                        >
                           {cat.unit === "per_ft" ? "$ / ft" : "$ / item"}
                         </Label>
                         <Input
+                          id={`seasonal-category-${cat._cid}-option-${opt._cid}-price`}
                           type="number"
                           min={0}
                           step="0.01"
@@ -763,6 +725,7 @@ export function SeasonalPricingSettingsTab() {
             <Button
               type="button"
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={addCategory}
               disabled={disabled}
             >
@@ -777,10 +740,9 @@ export function SeasonalPricingSettingsTab() {
               <div className="space-y-1">
                 <h3 className="text-base font-semibold">Christmas Packages</h3>
                 <p className="text-sm text-muted-foreground">
-                  Sell seasonal lighting as ready-made tiers (Good / Better /
-                  Best) instead of à la carte. Each package includes a subset of
-                  the decor categories above — plus the roofline, optionally —
-                  and is priced by the same engine. Order runs low → high.
+                  Sell seasonal lighting as ready-made tiers (Good / Better / Best) instead of à la
+                  carte. Each package includes a subset of the decor categories above — plus the
+                  roofline, optionally — and is priced by the same engine. Order runs low → high.
                 </p>
               </div>
               <Switch
@@ -798,10 +760,7 @@ export function SeasonalPricingSettingsTab() {
             ) : null}
 
             {packages.map((pkg, idx) => (
-              <div
-                key={pkg._cid}
-                className="rounded-lg border p-4 space-y-4 bg-muted/20"
-              >
+              <div key={pkg._cid} className="rounded-lg border p-4 space-y-4 bg-muted/20">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-medium text-muted-foreground">
                     Package {idx + 1}
@@ -842,58 +801,52 @@ export function SeasonalPricingSettingsTab() {
 
                 <div className="flex flex-wrap gap-3">
                   <div className="space-y-2 flex-1 min-w-[180px]">
-                    <Label>Package label</Label>
+                    <Label htmlFor={`seasonal-package-${pkg._cid}-label`}>Package label</Label>
                     <Input
+                      id={`seasonal-package-${pkg._cid}-label`}
                       placeholder="e.g. Premier — The Full Display"
                       value={pkg.label}
-                      onChange={(e) =>
-                        patchPackage(pkg._cid, { label: e.target.value })
-                      }
+                      onChange={(e) => patchPackage(pkg._cid, { label: e.target.value })}
                       disabled={disabled}
                     />
                   </div>
                   <div className="space-y-2 flex-1 min-w-[180px]">
-                    <Label>Display name</Label>
+                    <Label htmlFor={`seasonal-package-${pkg._cid}-name`}>Display name</Label>
                     <Input
+                      id={`seasonal-package-${pkg._cid}-name`}
                       placeholder="e.g. The Premier"
                       value={pkg.name}
-                      onChange={(e) =>
-                        patchPackage(pkg._cid, { name: e.target.value })
-                      }
+                      onChange={(e) => patchPackage(pkg._cid, { name: e.target.value })}
                       disabled={disabled}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Experience</Label>
+                  <Label htmlFor={`seasonal-package-${pkg._cid}-experience`}>Experience</Label>
                   <Textarea
+                    id={`seasonal-package-${pkg._cid}-experience`}
                     rows={2}
                     placeholder="A sentence or two describing the look and feel…"
                     value={pkg.experience}
-                    onChange={(e) =>
-                      patchPackage(pkg._cid, { experience: e.target.value })
-                    }
+                    onChange={(e) => patchPackage(pkg._cid, { experience: e.target.value })}
                     disabled={disabled}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Selling points</Label>
+                  <Label htmlFor={`seasonal-package-${pkg._cid}-points`}>Selling points</Label>
                   <Textarea
+                    id={`seasonal-package-${pkg._cid}-points`}
                     rows={3}
                     placeholder={
                       "One per line, e.g.\nFull roofline outlined\nTrees and bushes wrapped"
                     }
                     value={pkg.points}
-                    onChange={(e) =>
-                      patchPackage(pkg._cid, { points: e.target.value })
-                    }
+                    onChange={(e) => patchPackage(pkg._cid, { points: e.target.value })}
                     disabled={disabled}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    One bullet per line.
-                  </p>
+                  <p className="text-xs text-muted-foreground">One bullet per line.</p>
                 </div>
 
                 <div className="flex items-center justify-between gap-3">
@@ -905,9 +858,7 @@ export function SeasonalPricingSettingsTab() {
                   </div>
                   <Switch
                     checked={pkg.includesRoofline}
-                    onCheckedChange={(v) =>
-                      patchPackage(pkg._cid, { includesRoofline: v })
-                    }
+                    onCheckedChange={(v) => patchPackage(pkg._cid, { includesRoofline: v })}
                     disabled={disabled}
                     aria-label={`Include roofline in ${pkg.label || "package"}`}
                   />
@@ -924,26 +875,16 @@ export function SeasonalPricingSettingsTab() {
                       {categories.map((cat) => {
                         const cbId = `pkg-${pkg._cid}-cat-${cat._cid}`;
                         return (
-                          <div
-                            key={cat._cid}
-                            className="flex items-center gap-2"
-                          >
+                          <div key={cat._cid} className="flex items-center gap-2">
                             <Checkbox
                               id={cbId}
                               checked={pkg.itemCids.includes(cat._cid)}
                               onCheckedChange={(v) =>
-                                togglePackageItem(
-                                  pkg._cid,
-                                  cat._cid,
-                                  v === true,
-                                )
+                                togglePackageItem(pkg._cid, cat._cid, v === true)
                               }
                               disabled={disabled}
                             />
-                            <Label
-                              htmlFor={cbId}
-                              className="text-sm font-normal"
-                            >
+                            <Label htmlFor={cbId} className="text-sm font-normal">
                               {cat.label || "Untitled category"}
                             </Label>
                           </div>
@@ -958,6 +899,7 @@ export function SeasonalPricingSettingsTab() {
             <Button
               type="button"
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={addPackage}
               disabled={disabled}
             >
@@ -971,8 +913,7 @@ export function SeasonalPricingSettingsTab() {
             <div className="space-y-1">
               <h3 className="text-base font-semibold">Takedown &amp; storage</h3>
               <p className="text-sm text-muted-foreground">
-                The two post-season add-ons a client can buy alongside the
-                install.
+                The two post-season add-ons a client can buy alongside the install.
               </p>
             </div>
 
@@ -980,8 +921,8 @@ export function SeasonalPricingSettingsTab() {
               <div className="space-y-0.5">
                 <Label>Offer post-season takedown</Label>
                 <p className="text-xs text-muted-foreground">
-                  Shows the takedown option in the sales wizard. Off = you don&apos;t
-                  sell takedown, and an approved quote never schedules one.
+                  Shows the takedown option in the sales wizard. Off = you don&apos;t sell takedown,
+                  and an approved quote never schedules one.
                 </p>
               </div>
               <Switch
@@ -994,9 +935,7 @@ export function SeasonalPricingSettingsTab() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="xmas-takedown-rate">
-                  Takedown rate (% of install)
-                </Label>
+                <Label htmlFor="xmas-takedown-rate">Takedown rate (% of install)</Label>
                 <Input
                   id="xmas-takedown-rate"
                   type="number"
@@ -1009,11 +948,10 @@ export function SeasonalPricingSettingsTab() {
                   disabled={disabled}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Added on top of the install subtotal (roofline + decor) when a
-                  client buys takedown. 25 = 25% of the install. If takedown is
-                  already baked into your install price, set 0 and leave the
-                  toggle on &mdash; the January job still needs to be on the
-                  board.
+                  Added on top of the install subtotal (roofline + decor) when a client buys
+                  takedown. 25 = 25% of the install. If takedown is already baked into your install
+                  price, set 0 and leave the toggle on &mdash; the January job still needs to be on
+                  the board.
                 </p>
               </div>
 
@@ -1030,9 +968,9 @@ export function SeasonalPricingSettingsTab() {
                   disabled={disabled}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Flat fee to store the client&apos;s lights until next season. The
-                  wizard only offers storage when this is above $0 — leave it at
-                  0 if you don&apos;t store lights.
+                  Flat fee to store the client&apos;s lights until next season. The wizard only
+                  offers storage when this is above $0 — leave it at 0 if you don&apos;t store
+                  lights.
                 </p>
               </div>
             </div>
@@ -1044,11 +982,10 @@ export function SeasonalPricingSettingsTab() {
             <div className="space-y-1">
               <h3 className="text-base font-semibold">Season dates</h3>
               <p className="text-sm text-muted-foreground">
-                When the crew hangs the lights and when they come back for them.
-                Approving a Christmas quote schedules two yearly Service Plans
-                anchored on these days — install, plus takedown when the client
-                bought it — so next season&apos;s work is already on the board. The
-                year is resolved at approval, always forward from that date.
+                When the crew hangs the lights and when they come back for them. Approving a
+                Christmas quote schedules two yearly Service Plans anchored on these days — install,
+                plus takedown when the client bought it — so next season&apos;s work is already on
+                the board. The year is resolved at approval, always forward from that date.
               </p>
             </div>
 
@@ -1090,9 +1027,7 @@ export function SeasonalPricingSettingsTab() {
                     step="1"
                     inputMode="numeric"
                     value={installDay}
-                    onChange={(e) =>
-                      setInstallDay(clampDay(e.target.value, installMonth))
-                    }
+                    onChange={(e) => setInstallDay(clampDay(e.target.value, installMonth))}
                     disabled={disabled}
                   />
                 </div>
@@ -1135,17 +1070,14 @@ export function SeasonalPricingSettingsTab() {
                     step="1"
                     inputMode="numeric"
                     value={takedownDay}
-                    onChange={(e) =>
-                      setTakedownDay(clampDay(e.target.value, takedownMonth))
-                    }
+                    onChange={(e) => setTakedownDay(clampDay(e.target.value, takedownMonth))}
                     disabled={disabled}
                   />
                 </div>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              February caps at the 28th so a yearly plan always lands on a real
-              date.
+              February caps at the 28th so a yearly plan always lands on a real date.
             </p>
           </div>
 
@@ -1153,15 +1085,12 @@ export function SeasonalPricingSettingsTab() {
 
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
-              <h3 className="text-base font-semibold">
-                Roofline cost comparison
-              </h3>
+              <h3 className="text-base font-semibold">Roofline cost comparison</h3>
               <p className="text-sm text-muted-foreground">
-                Show customers a roofline-only cost comparison on every shared
-                estimate: the one-time permanent install against the seasonal
-                roofline they pay each year. Roofline against roofline, decor
-                excluded, so the numbers are like-for-like. Only appears when
-                you sell both permanent and seasonal lighting.
+                Show customers a roofline-only cost comparison on every shared estimate: the
+                one-time permanent install against the seasonal roofline they pay each year.
+                Roofline against roofline, decor excluded, so the numbers are like-for-like. Only
+                appears when you sell both permanent and seasonal lighting.
               </p>
             </div>
             <Switch
@@ -1175,7 +1104,7 @@ export function SeasonalPricingSettingsTab() {
           <Separator />
 
           <div className="flex justify-end">
-            <Button type="button" onClick={save} disabled={disabled}>
+            <Button className="w-full sm:w-auto" type="button" onClick={save} disabled={disabled}>
               {mutation.isPending ? (
                 <>
                   <Loader2 className="size-4 animate-spin" /> Saving…

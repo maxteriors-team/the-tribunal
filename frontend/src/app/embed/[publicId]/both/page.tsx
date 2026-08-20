@@ -4,17 +4,11 @@ import { X, Mic, MicOff, MessageSquare, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, use, Suspense } from "react";
 
-import {
-  postToParent,
-  subscribeToEmbedMessages,
-} from "@/lib/embed/messaging";
+import { postToParent, subscribeToEmbedMessages } from "@/lib/embed/messaging";
+import { embedFetch } from "@/lib/embed/request";
 
 import { ChatInput, MessageList, type ChatMessage } from "../_chat-ui";
-import {
-  DEFAULT_PRIMARY_COLOR,
-  getAgentStateInfo,
-  getEmbedTheme,
-} from "../_theme";
+import { DEFAULT_PRIMARY_COLOR, getAgentStateInfo, getEmbedTheme } from "../_theme";
 import { POSITION_CLASSES, type ThemeOption } from "../_types";
 import { useAgentConfig, useResolvedTheme } from "../_use-agent-config";
 import { useVoiceSession } from "../_use-voice-session";
@@ -83,17 +77,13 @@ function BothEmbedPageContent({ params }: BothEmbedPageProps) {
         ]);
       } else {
         const text = currentAssistantTextRef.current;
-        setMessages((prev) =>
-          prev.map((m) => (m.id === msgId ? { ...m, content: text } : m))
-        );
+        setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, content: text } : m)));
       }
     },
     onAssistantDone: (finalText) => {
       const msgId = currentAssistantMsgIdRef.current;
       if (msgId) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === msgId ? { ...m, content: finalText } : m))
-        );
+        setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, content: finalText } : m)));
       }
       currentAssistantTextRef.current = "";
       currentAssistantMsgIdRef.current = "";
@@ -120,12 +110,7 @@ function BothEmbedPageContent({ params }: BothEmbedPageProps) {
 
   // Notify parent of state
   useEffect(() => {
-    const state =
-      voiceStatus === "connected"
-        ? agentState
-        : isChatLoading
-          ? "thinking"
-          : "idle";
+    const state = voiceStatus === "connected" ? agentState : isChatLoading ? "thinking" : "idle";
     postToParent({ type: "ai-agent:state", state });
   }, [agentState, isChatLoading, voiceStatus]);
 
@@ -183,9 +168,9 @@ function BothEmbedPageContent({ params }: BothEmbedPageProps) {
         content: m.content,
       }));
 
-      const res = await fetch(`/api/v1/p/embed/${publicId}/chat`, {
+      const res = await embedFetch(`/api/v1/p/embed/${publicId}/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Origin: window.location.origin },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMessage.content,
           conversation_history: conversationHistory,
@@ -252,9 +237,7 @@ function BothEmbedPageContent({ params }: BothEmbedPageProps) {
 
   if (!config) {
     return (
-      <div
-        className={`fixed ${POSITION_CLASSES[position] ?? POSITION_CLASSES["bottom-right"]}`}
-      >
+      <div className={`fixed ${POSITION_CLASSES[position] ?? POSITION_CLASSES["bottom-right"]}`}>
         <div className="h-14 w-14 animate-pulse rounded-full bg-gray-200" />
       </div>
     );
@@ -305,10 +288,12 @@ function BothEmbedPageContent({ params }: BothEmbedPageProps) {
             )}
           </div>
           <button
+            type="button"
             onClick={closeChat}
+            aria-label="Close chat"
             className="rounded-full p-1 transition-colors hover:bg-white/20"
           >
-            <X className="h-5 w-5 text-white" />
+            <X className="h-5 w-5 text-white" aria-hidden="true" />
           </button>
         </div>
 
@@ -341,8 +326,16 @@ function BothEmbedPageContent({ params }: BothEmbedPageProps) {
             primaryColor={primaryColor}
             trailing={
               <button
+                type="button"
                 onClick={toggleVoice}
                 disabled={voiceStatus === "connecting"}
+                aria-label={
+                  voiceStatus === "connecting"
+                    ? "Connecting voice"
+                    : voiceActive
+                      ? "Stop voice"
+                      : "Start voice"
+                }
                 className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-105 disabled:opacity-50"
                 style={{ backgroundColor: voiceActive ? "#ef4444" : theme.iconBg }}
                 title={voiceActive ? "Stop voice" : "Start voice"}

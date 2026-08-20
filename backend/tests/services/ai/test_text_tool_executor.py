@@ -115,6 +115,34 @@ async def test_ai_staff_routing_requires_connected_google_calendar() -> None:
     assert resolver.await_args.kwargs["require_calendar_connection"] is True
 
 
+@pytest.mark.asyncio
+async def test_sms_executor_passes_explicit_confirmation_to_booking_guard() -> None:
+    workspace_id = uuid.uuid4()
+    executor = TextToolExecutor(
+        agent=SimpleNamespace(id=uuid.uuid4(), workspace_id=workspace_id),
+        conversation=SimpleNamespace(id=uuid.uuid4(), workspace_id=workspace_id),
+        db=AsyncMock(),
+    )
+    executor._execute_book_with_contact_lookup = AsyncMock(  # type: ignore[method-assign]
+        return_value={"success": False, "error": "test stop"}
+    )
+
+    await executor.execute(
+        "book_appointment",
+        {
+            "date": "2099-01-15",
+            "time": "10:00",
+            "email": "lead@example.com",
+            "customer_confirmed": True,
+            "call_type": "phone_call",
+        },
+    )
+
+    assert (
+        executor._execute_book_with_contact_lookup.await_args.kwargs["customer_confirmed"] is True
+    )
+
+
 @pytest.fixture
 def qualification_executor() -> TextToolExecutor:
     executor = TextToolExecutor.__new__(TextToolExecutor)

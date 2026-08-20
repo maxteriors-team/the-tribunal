@@ -26,12 +26,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { leadMagnetsApi, GenerateCalculatorRequest } from "@/lib/api/lead-magnets";
 import type {
   CalculatorContent,
@@ -108,7 +103,11 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
     });
   };
 
-  const updateInputOption = (inputIndex: number, optionIndex: number, updates: Partial<CalculatorSelectOption>) => {
+  const updateInputOption = (
+    inputIndex: number,
+    optionIndex: number,
+    updates: Partial<CalculatorSelectOption>,
+  ) => {
     const newInputs = [...value.inputs];
     const input = newInputs[inputIndex];
     if (input.options) {
@@ -173,9 +172,7 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-semibold">Calculator Builder</h3>
-            <p className="text-sm text-muted-foreground">
-              Build an ROI or value calculator
-            </p>
+            <p className="text-sm text-muted-foreground">Build an ROI or value calculator</p>
           </div>
           <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
             <DialogTrigger asChild>
@@ -197,7 +194,9 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                   <Input
                     placeholder="e.g., ROI Calculator, Savings Calculator"
                     value={aiInputs.calculator_type}
-                    onChange={(e) => setAiInputs((p) => ({ ...p, calculator_type: e.target.value }))}
+                    onChange={(e) =>
+                      setAiInputs((p) => ({ ...p, calculator_type: e.target.value }))
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -213,7 +212,9 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                   <Input
                     placeholder="e.g., Small business owners"
                     value={aiInputs.target_audience}
-                    onChange={(e) => setAiInputs((p) => ({ ...p, target_audience: e.target.value }))}
+                    onChange={(e) =>
+                      setAiInputs((p) => ({ ...p, target_audience: e.target.value }))
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -221,7 +222,9 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                   <Textarea
                     placeholder="What value are you demonstrating?"
                     value={aiInputs.value_proposition}
-                    onChange={(e) => setAiInputs((p) => ({ ...p, value_proposition: e.target.value }))}
+                    onChange={(e) =>
+                      setAiInputs((p) => ({ ...p, value_proposition: e.target.value }))
+                    }
                     rows={2}
                   />
                 </div>
@@ -290,18 +293,25 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
             <Card key={input.id}>
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
-                  <CardTitle className="text-sm flex-1">{input.label || `Input ${iIndex + 1}`}</CardTitle>
+                  <CardTitle className="text-sm flex-1">
+                    {input.label || `Input ${iIndex + 1}`}
+                  </CardTitle>
                   <Select
                     value={input.type}
                     onValueChange={(v) => {
-                      const updates: Partial<CalculatorInput> = { type: v as CalculatorInput["type"] };
+                      const updates: Partial<CalculatorInput> = {
+                        type: v as CalculatorInput["type"],
+                      };
                       if (v === "select" && !input.options) {
                         updates.options = [{ value: "option1", label: "Option 1", multiplier: 1 }];
                       }
                       updateInput(iIndex, updates);
                     }}
                   >
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger
+                      className="w-32"
+                      aria-label={`${input.label || `Input ${iIndex + 1}`} type`}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -316,8 +326,9 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                     size="icon"
                     className="text-destructive"
                     onClick={() => removeInput(iIndex)}
+                    aria-label={`Remove ${input.label || `input ${iIndex + 1}`}`}
                   >
-                    <Trash2 className="size-4" />
+                    <Trash2 className="size-4" aria-hidden="true" />
                   </Button>
                 </div>
               </CardHeader>
@@ -336,7 +347,9 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                     <Input
                       placeholder="e.g., monthly_revenue"
                       value={input.id}
-                      onChange={(e) => updateInput(iIndex, { id: e.target.value.replace(/\s/g, "_") })}
+                      onChange={(e) =>
+                        updateInput(iIndex, { id: e.target.value.replace(/\s/g, "_") })
+                      }
                     />
                   </div>
                 </div>
@@ -391,13 +404,17 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                         <Input
                           placeholder="Label"
                           value={option.label}
-                          onChange={(e) => updateInputOption(iIndex, oIndex, { label: e.target.value })}
+                          onChange={(e) =>
+                            updateInputOption(iIndex, oIndex, { label: e.target.value })
+                          }
                           className="flex-1"
                         />
                         <Input
                           placeholder="Value"
                           value={option.value}
-                          onChange={(e) => updateInputOption(iIndex, oIndex, { value: e.target.value })}
+                          onChange={(e) =>
+                            updateInputOption(iIndex, oIndex, { value: e.target.value })
+                          }
                           className="w-24"
                         />
                         <Input
@@ -405,7 +422,11 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                           step="0.1"
                           placeholder="×"
                           value={option.multiplier ?? ""}
-                          onChange={(e) => updateInputOption(iIndex, oIndex, { multiplier: parseFloat(e.target.value) })}
+                          onChange={(e) =>
+                            updateInputOption(iIndex, oIndex, {
+                              multiplier: parseFloat(e.target.value),
+                            })
+                          }
                           className="w-16"
                         />
                         {(input.options?.length || 0) > 1 && (
@@ -413,8 +434,9 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                             variant="ghost"
                             size="icon"
                             onClick={() => removeInputOption(iIndex, oIndex)}
+                            aria-label={`Remove option ${oIndex + 1} from ${input.label || `input ${iIndex + 1}`}`}
                           >
-                            <Trash2 className="size-4" />
+                            <Trash2 className="size-4" aria-hidden="true" />
                           </Button>
                         )}
                       </div>
@@ -480,9 +502,14 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                   />
                   <Select
                     value={output.format}
-                    onValueChange={(v) => updateOutput(oIndex, { format: v as CalculatorOutput["format"] })}
+                    onValueChange={(v) =>
+                      updateOutput(oIndex, { format: v as CalculatorOutput["format"] })
+                    }
                   >
-                    <SelectTrigger className="w-28">
+                    <SelectTrigger
+                      className="w-28"
+                      aria-label={`${output.label || `Result ${oIndex + 1}`} format`}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -496,8 +523,9 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                     size="icon"
                     className="text-destructive"
                     onClick={() => removeOutput(oIndex)}
+                    aria-label={`Remove ${output.label || `result ${oIndex + 1}`}`}
                   >
-                    <Trash2 className="size-4" />
+                    <Trash2 className="size-4" aria-hidden="true" />
                   </Button>
                 </div>
 
@@ -555,7 +583,9 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
               <Input
                 placeholder="e.g., Get Your Free Consultation"
                 value={value.cta?.text || ""}
-                onChange={(e) => onChange({ ...value, cta: { ...value.cta, text: e.target.value } })}
+                onChange={(e) =>
+                  onChange({ ...value, cta: { ...value.cta, text: e.target.value } })
+                }
               />
             </div>
             <div className="space-y-2">
@@ -564,7 +594,10 @@ export function CalculatorBuilder({ workspaceId, value, onChange }: CalculatorBu
                 placeholder="e.g., Talk to an expert about your results"
                 value={value.cta?.description || ""}
                 onChange={(e) =>
-                  onChange({ ...value, cta: { text: value.cta?.text || "", description: e.target.value } })
+                  onChange({
+                    ...value,
+                    cta: { text: value.cta?.text || "", description: e.target.value },
+                  })
                 }
               />
             </div>

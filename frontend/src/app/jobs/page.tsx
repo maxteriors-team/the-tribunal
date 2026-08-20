@@ -1,19 +1,10 @@
-import { redirect } from "next/navigation";
+import { JobsPage } from "@/components/jobs/jobs-page";
+import { AppSidebar } from "@/components/layout/app-sidebar";
 
-/**
- * `/jobs` was a second, job-only calendar. The schedule is now one surface, so
- * this route redirects to `/calendar`.
- *
- * The `?job=<id>` deep link is carried across: converting an approved quote
- * lands the user straight on the job it just created, and that link also exists
- * in already-sent notifications, so dropping the parameter would strand people
- * on a calendar with nothing open.
- */
-export default async function Jobs({
-  searchParams,
-}: {
-  searchParams: Promise<{ job?: string }>;
-}) {
-  const { job } = await searchParams;
-  redirect(job ? `/calendar?job=${encodeURIComponent(job)}` : "/calendar");
+export default function Jobs() {
+  return (
+    <AppSidebar>
+      <JobsPage />
+    </AppSidebar>
+  );
 }

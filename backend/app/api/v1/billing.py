@@ -12,7 +12,12 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from app.api.deps import DB, CurrentUser
+from app.api.deps import (
+    DB,
+    CanReadActiveBilling,
+    CanWriteActiveBilling,
+    CurrentUser,
+)
 from app.core.config import settings
 from app.core.encryption import decrypt_json, encrypt_json
 from app.models.workspace import WorkspaceIntegration, WorkspaceMembership
@@ -157,6 +162,7 @@ async def create_checkout(
     request: CheckoutRequest,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanWriteActiveBilling,
 ) -> CheckoutResponse:
     """Create a Stripe Checkout session for a new subscription."""
     if not settings.stripe_secret_key:
@@ -220,6 +226,7 @@ async def create_checkout(
 async def create_portal(
     current_user: CurrentUser,
     db: DB,
+    _gate: CanWriteActiveBilling,
 ) -> PortalResponse:
     """Create a Stripe Customer Portal session for subscription management."""
     if not settings.stripe_secret_key:
@@ -269,6 +276,7 @@ async def create_portal(
 async def get_billing_status(
     current_user: CurrentUser,
     db: DB,
+    _gate: CanReadActiveBilling,
 ) -> BillingStatus:
     """Return the subscription status for the current workspace."""
     if not settings.stripe_secret_key:

@@ -21,8 +21,10 @@ import {
   User,
   Webhook,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import { useSyncExternalStore } from "react";
 
 import { AttachRulesSettingsTab } from "@/components/settings/attach-rules-settings-tab";
 import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
@@ -46,63 +48,115 @@ import { SpeedToLeadSettingsTab } from "@/components/settings/speed-to-lead-sett
 import { TeamSettingsTab } from "@/components/settings/team-settings-tab";
 import { UpsellRanksSettingsCard } from "@/components/settings/upsell-ranks-settings-card";
 import { TagManagement } from "@/components/tags/tag-management";
+import { HorizontalScroll } from "@/components/ui/horizontal-scroll";
+import { PageLoadingState } from "@/components/ui/page-state";
 import { QueryErrorBoundary } from "@/components/ui/query-error-boundary";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCapabilities } from "@/hooks/useCapabilities";
+import type { Capability } from "@/lib/permissions";
 
-const settingsTabs = [
+export interface SettingsTab {
+  value: string;
+  label: string;
+  icon: LucideIcon;
+  requires?: Capability;
+}
+
+export const settingsTabs: SettingsTab[] = [
   { value: "profile", label: "Profile", icon: User },
-  { value: "tags", label: "Tags", icon: Tags },
+  { value: "tags", label: "Tags", icon: Tags, requires: "crm:write" },
   { value: "notifications", label: "Notifications", icon: Bell },
-  { value: "nudges", label: "Nudges", icon: HandHeart },
-  { value: "reviews", label: "Reviews", icon: Star },
-  { value: "proposals", label: "Proposals", icon: FileText },
-  { value: "pricing", label: "Pricing", icon: DollarSign },
-  { value: "attach-rules", label: "Attach Rules", icon: Layers },
-  { value: "sales-targets", label: "Sales Targets", icon: Target },
-  { value: "pipeline", label: "Pipeline", icon: KanbanSquare },
-  { value: "speed-to-lead", label: "Speed to Lead", icon: Zap },
-  { value: "estimate-followup", label: "Estimate Follow-up", icon: CalendarClock },
-  { value: "quote-revival", label: "Quote Revival", icon: History },
-  { value: "neighbors", label: "Neighbors", icon: Home },
+  { value: "nudges", label: "Nudges", icon: HandHeart, requires: "workspace:manage" },
+  { value: "reviews", label: "Reviews", icon: Star, requires: "workspace:manage" },
+  { value: "proposals", label: "Proposals", icon: FileText, requires: "billing:write" },
+  { value: "pricing", label: "Pricing", icon: DollarSign, requires: "billing:write" },
+  { value: "attach-rules", label: "Attach Rules", icon: Layers, requires: "billing:write" },
+  { value: "sales-targets", label: "Sales Targets", icon: Target, requires: "workspace:manage" },
+  { value: "pipeline", label: "Pipeline", icon: KanbanSquare, requires: "pipeline:write" },
+  { value: "speed-to-lead", label: "Speed to Lead", icon: Zap, requires: "outreach:write" },
+  {
+    value: "estimate-followup",
+    label: "Estimate Follow-up",
+    icon: CalendarClock,
+    requires: "outreach:write",
+  },
+  { value: "quote-revival", label: "Quote Revival", icon: History, requires: "outreach:write" },
+  { value: "neighbors", label: "Neighbors", icon: Home, requires: "outreach:write" },
   { value: "calendar", label: "My Calendar", icon: CalendarDays },
-  { value: "integrations", label: "Integrations", icon: Webhook },
-  { value: "billing", label: "Billing", icon: CreditCard },
-  { value: "team", label: "Team", icon: Building2 },
-  { value: "locations", label: "Locations", icon: MapPin },
-  { value: "lead-sources", label: "Lead Sources", icon: FileInput },
+  {
+    value: "integrations",
+    label: "Integrations",
+    icon: Webhook,
+    requires: "workspace:manage",
+  },
+  { value: "billing", label: "Billing", icon: CreditCard, requires: "billing:read" },
+  { value: "team", label: "Team", icon: Building2, requires: "members:manage" },
+  { value: "locations", label: "Locations", icon: MapPin, requires: "locations:manage" },
+  { value: "lead-sources", label: "Lead Sources", icon: FileInput, requires: "crm:write" },
 ];
 
-const TAB_VALUES = new Set(settingsTabs.map((tab) => tab.value));
+export function canSeeSettingsTab(
+  tab: SettingsTab,
+  can: (capability: Capability) => boolean,
+): boolean {
+  return !tab.requires || can(tab.requires);
+}
+
+const subscribeToHydration = () => () => undefined;
+
+function useIsHydrated(): boolean {
+  return useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false,
+  );
+}
 
 export function SettingsPage() {
   const searchParams = useSearchParams();
+  const isHydrated = useIsHydrated();
+  const { can } = useCapabilities();
+  const visibleSettingsTabs = settingsTabs.filter((tab) => canSeeSettingsTab(tab, can));
   const requestedTab = searchParams.get("tab");
-  const defaultTab = requestedTab && TAB_VALUES.has(requestedTab) ? requestedTab : "profile";
+  const defaultTab = visibleSettingsTabs.some((tab) => tab.value === requestedTab)
+    ? requestedTab!
+    : "profile";
+
+  if (!isHydrated) {
+    return <PageLoadingState className="min-h-[24rem]" message="Loading settings…" />;
+  }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">Manage your account and application preferences</p>
       </div>
 
-      <Tabs defaultValue={defaultTab} className="space-y-6">
-        {/*
-          Tabs size to their own labels and wrap onto extra rows as needed.
-          Do NOT use a fixed `grid-cols-N` here: equal `minmax(0, 1fr)` tracks
-          are narrower than labels like "Notifications" / "Speed to Lead", and
-          because the triggers are `whitespace-nowrap` the text overflows its
-          cell and collides with the neighbouring tab's icon.
-        */}
-        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
-          {settingsTabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className="flex-none gap-2">
-              <tab.icon className="size-4" />
-              <span className="hidden sm:inline">{tab.label}</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      <Tabs key={defaultTab} defaultValue={defaultTab} className="space-y-6">
+        <HorizontalScroll
+          activeKey={defaultTab}
+          aria-label="Settings sections, scroll horizontally"
+          data-testid="settings-tabs-scroll"
+        >
+          <TabsList
+            aria-label="Settings sections"
+            className="h-auto w-max min-w-full justify-start gap-1 sm:w-full sm:flex-wrap"
+          >
+            {visibleSettingsTabs.map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                aria-label={tab.label}
+                className="shrink-0 gap-2 px-3"
+              >
+                <tab.icon className="size-4" aria-hidden="true" />
+                <span>{tab.label}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </HorizontalScroll>
 
         <TabsContent value="profile">
           <QueryErrorBoundary message="Failed to load profile settings. Please try again.">

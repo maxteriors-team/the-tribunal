@@ -2,15 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import {
-  Search,
-  Users,
-  CheckCircle2,
-  Circle,
-  Filter,
-  X,
-  Loader2,
-} from "lucide-react";
+import { Search, Users, CheckCircle2, Circle, Filter, X, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useState, useRef, useCallback, useEffect } from "react";
 
@@ -57,23 +49,15 @@ export function VirtualContactSelector({
 
   const parentRef = useRef<HTMLDivElement>(null);
 
-  const filtersJson = advancedFilters
-    ? JSON.stringify(advancedFilters)
-    : undefined;
+  const filtersJson = advancedFilters ? JSON.stringify(advancedFilters) : undefined;
 
-  const {
-    contacts,
-    total,
-    isPending,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-  } = useInfiniteContacts({
-    workspaceId,
-    search: debouncedSearch,
-    status: statusFilter,
-    filters: filtersJson,
-  });
+  const { contacts, total, isPending, isFetchingNextPage, hasNextPage, fetchNextPage } =
+    useInfiniteContacts({
+      workspaceId,
+      search: debouncedSearch,
+      status: statusFilter,
+      filters: filtersJson,
+    });
 
   // Resolve segment contacts when a segment is selected
   const segmentMutation = useMutation({
@@ -146,11 +130,7 @@ export function VirtualContactSelector({
     const lastItem = virtualItems[virtualItems.length - 1];
     if (!lastItem) return;
 
-    if (
-      lastItem.index >= contacts.length - 1 - OVERSCAN &&
-      hasNextPage &&
-      !isFetchingNextPage
-    ) {
+    if (lastItem.index >= contacts.length - 1 - OVERSCAN && hasNextPage && !isFetchingNextPage) {
       fetchNextPage();
     }
   }, [virtualItems, contacts.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
@@ -165,7 +145,7 @@ export function VirtualContactSelector({
       }
       onSelectionChange(newSelected);
     },
-    [selectedIds, onSelectionChange]
+    [selectedIds, onSelectionChange],
   );
 
   const handleQuickSelect = (value: string) => {
@@ -194,9 +174,7 @@ export function VirtualContactSelector({
 
   const renderContactRow = (contact: Contact) => {
     const isSelected = selectedIds.has(contact.id);
-    const fullName = [contact.first_name, contact.last_name]
-      .filter(Boolean)
-      .join(" ");
+    const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(" ");
 
     return (
       <div
@@ -211,9 +189,7 @@ export function VirtualContactSelector({
           }
         }}
         className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors h-[${ROW_HEIGHT}px] ${
-          isSelected
-            ? "bg-primary/10 border border-primary/30"
-            : "hover:bg-muted/50"
+          isSelected ? "bg-primary/10 border border-primary/30" : "hover:bg-muted/50"
         }`}
       >
         <div className="flex-shrink-0">
@@ -226,28 +202,17 @@ export function VirtualContactSelector({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-medium truncate">
-              {fullName || "Unknown"}
-            </span>
-            <Badge
-              variant="secondary"
-              className={`text-xs ${contactStatusColors[contact.status]}`}
-            >
+            <span className="font-medium truncate">{fullName || "Unknown"}</span>
+            <Badge variant="secondary" className={`text-xs ${contactStatusColors[contact.status]}`}>
               {contact.status}
             </Badge>
           </div>
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            {contact.phone_number && (
-              <span>{formatPhone(contact.phone_number)}</span>
-            )}
-            {contact.email && (
-              <span className="truncate">{contact.email}</span>
-            )}
+            {contact.phone_number && <span>{formatPhone(contact.phone_number)}</span>}
+            {contact.email && <span className="truncate">{contact.email}</span>}
           </div>
           {contact.company_name && (
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {contact.company_name}
-            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">{contact.company_name}</div>
           )}
         </div>
       </div>
@@ -270,7 +235,7 @@ export function VirtualContactSelector({
             onValueChange={handleQuickSelect}
             disabled={total === 0 || selectMutation.isPending}
           >
-            <SelectTrigger className="w-36">
+            <SelectTrigger className="w-36" aria-label="Quick select contacts">
               {selectMutation.isPending ? (
                 <>
                   <Loader2 className="size-4 mr-2 animate-spin" />
@@ -311,6 +276,7 @@ export function VirtualContactSelector({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
+            aria-label="Search campaign contacts"
             placeholder="Search by name, email, phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -322,8 +288,9 @@ export function VirtualContactSelector({
               size="icon"
               className="absolute right-1 top-1/2 -translate-y-1/2 size-7"
               onClick={() => setSearch("")}
+              aria-label="Clear contact search"
             >
-              <X className="size-4" />
+              <X className="size-4" aria-hidden="true" />
             </Button>
           )}
         </div>
@@ -331,8 +298,8 @@ export function VirtualContactSelector({
           value={statusFilter}
           onValueChange={(v) => setStatusFilter(v as ContactStatus | "all")}
         >
-          <SelectTrigger className="w-40">
-            <Filter className="size-4 mr-2" />
+          <SelectTrigger className="w-40" aria-label="Filter contacts by status">
+            <Filter className="size-4 mr-2" aria-hidden="true" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -355,10 +322,7 @@ export function VirtualContactSelector({
       />
 
       {/* Virtual Contact List */}
-      <div
-        ref={parentRef}
-        className="h-[400px] border rounded-lg overflow-auto"
-      >
+      <div ref={parentRef} className="h-[400px] border rounded-lg overflow-auto">
         {isPending ? (
           <div className="flex items-center justify-center h-full">
             <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -371,11 +335,7 @@ export function VirtualContactSelector({
             <Users className="size-12 mb-2 opacity-50" />
             <p>No contacts found</p>
             {search && (
-              <Button
-                variant="link"
-                onClick={() => setSearch("")}
-                className="mt-1"
-              >
+              <Button variant="link" onClick={() => setSearch("")} className="mt-1">
                 Clear search
               </Button>
             )}

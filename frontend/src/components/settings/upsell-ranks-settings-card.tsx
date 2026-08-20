@@ -22,13 +22,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -102,13 +96,9 @@ export function UpsellRanksSettingsCard() {
   }
 
   const mutation = useMutation({
-    mutationFn: (upsell: UpsellConfig) =>
-      salesWizardApi.updatePricing(workspaceId!, { upsell }),
+    mutationFn: (upsell: UpsellConfig) => salesWizardApi.updatePricing(workspaceId!, { upsell }),
     onSuccess: (updated) => {
-      queryClient.setQueryData(
-        queryKeys.salesWizard.pricing(workspaceId ?? ""),
-        updated,
-      );
+      queryClient.setQueryData(queryKeys.salesWizard.pricing(workspaceId ?? ""), updated);
       toast.success("Field selling settings saved");
     },
     onError: (err: unknown) =>
@@ -206,8 +196,8 @@ export function UpsellRanksSettingsCard() {
         <div className="space-y-1.5">
           <CardTitle>Field Selling</CardTitle>
           <CardDescription>
-            What a Lead Technician can sell from a job site, and the targets they
-            see on their own scoreboard. Regular Technicians cannot sell.
+            What a Lead Technician can sell from a job site, and the targets they see on their own
+            scoreboard. Regular Technicians cannot sell.
           </CardDescription>
         </div>
       </CardHeader>
@@ -227,9 +217,8 @@ export function UpsellRanksSettingsCard() {
             disabled={disabled}
           />
           <p className="text-xs text-muted-foreground">
-            The most a Lead Technician can put on one proposal without the
-            office. Leave blank for no limit. Care plans don&rsquo;t count
-            toward it.
+            The most a Lead Technician can put on one proposal without the office. Leave blank for
+            no limit. Care plans don&rsquo;t count toward it.
           </p>
         </div>
 
@@ -239,8 +228,8 @@ export function UpsellRanksSettingsCard() {
           <div className="space-y-1">
             <h3 className="text-sm font-medium">Bonus ranks</h3>
             <p className="text-xs text-muted-foreground">
-              Ranks a technician climbs by approved upsell revenue each month.
-              Leave empty for no ranks — they&rsquo;ll still see what they sold.
+              Ranks a technician climbs by approved upsell revenue each month. Leave empty for no
+              ranks — they&rsquo;ll still see what they sold.
             </p>
           </div>
 
@@ -249,7 +238,7 @@ export function UpsellRanksSettingsCard() {
               No ranks yet. Add one to give technicians a target.
             </p>
           ) : (
-            <div className="flex items-end gap-3 text-sm font-medium">
+            <div className="hidden items-end gap-3 text-sm font-medium sm:flex">
               <div className="flex-1">Rank name</div>
               <div className="w-32">Target ($)</div>
               <div className="flex-1">Bonus</div>
@@ -259,38 +248,54 @@ export function UpsellRanksSettingsCard() {
           )}
 
           {rows.map((row, index) => (
-            <div key={row.id} className="flex items-end gap-3">
-              <Input
-                className="flex-1"
-                aria-label={`Rank ${index + 1} name`}
-                value={row.name}
-                placeholder="Gold"
-                onChange={(e) => patchRow(row.id, { name: e.target.value })}
-                disabled={disabled}
-              />
-              <Input
-                className="w-32"
-                aria-label={`Rank ${index + 1} target ($)`}
-                type="number"
-                min={0}
-                step="0.01"
-                inputMode="decimal"
-                value={row.threshold}
-                onChange={(e) => patchRow(row.id, { threshold: e.target.value })}
-                disabled={disabled}
-              />
-              <Input
-                className="flex-1"
-                aria-label={`Rank ${index + 1} bonus`}
-                value={row.reward}
-                placeholder="$500 bonus"
-                onChange={(e) => patchRow(row.id, { reward: e.target.value })}
-                disabled={disabled}
-              />
+            <div
+              key={row.id}
+              className="grid gap-3 rounded-lg border p-3 sm:flex sm:items-end sm:gap-3 sm:rounded-none sm:border-0 sm:p-0"
+            >
+              <div className="min-w-0 space-y-1 sm:flex-1">
+                <Label htmlFor={`upsell-rank-${row.id}-name`} className="text-xs sm:sr-only">
+                  Rank name
+                </Label>
+                <Input
+                  id={`upsell-rank-${row.id}-name`}
+                  value={row.name}
+                  placeholder="Gold"
+                  onChange={(e) => patchRow(row.id, { name: e.target.value })}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="min-w-0 space-y-1 sm:w-32">
+                <Label htmlFor={`upsell-rank-${row.id}-target`} className="text-xs sm:sr-only">
+                  Target ($)
+                </Label>
+                <Input
+                  id={`upsell-rank-${row.id}-target`}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={row.threshold}
+                  onChange={(e) => patchRow(row.id, { threshold: e.target.value })}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="min-w-0 space-y-1 sm:flex-1">
+                <Label htmlFor={`upsell-rank-${row.id}-bonus`} className="text-xs sm:sr-only">
+                  Bonus
+                </Label>
+                <Input
+                  id={`upsell-rank-${row.id}-bonus`}
+                  value={row.reward}
+                  placeholder="$500 bonus"
+                  onChange={(e) => patchRow(row.id, { reward: e.target.value })}
+                  disabled={disabled}
+                />
+              </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
+                className="justify-self-end sm:shrink-0"
                 aria-label={`Remove rank ${index + 1}`}
                 onClick={() => removeRow(row.id)}
                 disabled={disabled}
@@ -300,26 +305,19 @@ export function UpsellRanksSettingsCard() {
             </div>
           ))}
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={addRow}
-            disabled={disabled}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={addRow} disabled={disabled}>
             <Plus className="size-4" /> Add rank
           </Button>
           <p className="text-xs text-muted-foreground">
-            Bonus text is shown to the technician as-is — it doesn&rsquo;t pay
-            anything, so keep paying it however you do today. Order doesn&rsquo;t
-            matter; ranks sort by target.
+            Bonus text is shown to the technician as-is — it doesn&rsquo;t pay anything, so keep
+            paying it however you do today. Order doesn&rsquo;t matter; ranks sort by target.
           </p>
         </div>
 
         <Separator />
 
         <div className="flex justify-end">
-          <Button type="button" onClick={save} disabled={disabled}>
+          <Button className="w-full sm:w-auto" type="button" onClick={save} disabled={disabled}>
             {mutation.isPending ? (
               <>
                 <Loader2 className="size-4 animate-spin" /> Saving…

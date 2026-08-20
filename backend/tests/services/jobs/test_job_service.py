@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
@@ -198,6 +199,54 @@ async def test_create_with_window_is_scheduled() -> None:
             },
         )
         assert job.status == JobStatus.SCHEDULED
+        visits = await JobService(db).list_visits(job.id, ws.id)
+        assert len(visits) == 1
+        assert visits[0].starts_at == start
+        assert visits[0].ends_at == end
+
+
+async def test_visits_and_pricing_are_persisted_and_totaled() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        service = JobService(db)
+        job = await service.create(ws.id, {"contact_id": contact.id, "title": "Lighting"})
+        start, end = _window()
+
+        visit = await service.create_visit(
+            job.id,
+            ws.id,
+            {
+                "starts_at": start,
+                "ends_at": end,
+                "anytime": False,
+                "instructions": "Check transformer",
+            },
+        )
+        assert visit.instructions == "Check transformer"
+        refreshed = await service.get(job.id, ws.id)
+        assert refreshed.status == JobStatus.SCHEDULED
+        assert refreshed.scheduled_start == start
+
+        pricing = await service.replace_pricing(
+            job.id,
+            ws.id,
+            Decimal("6.00"),
+            [
+                {
+                    "name": "Landscape lighting service",
+                    "description": None,
+                    "quantity": Decimal("2.00"),
+                    "unit_price": Decimal("125.00"),
+                    "taxable": True,
+                }
+            ],
+        )
+        assert pricing.subtotal == Decimal("250.00")
+        assert pricing.tax == Decimal("15.00")
+        assert pricing.total == Decimal("265.00")
+        loaded = await service.get_pricing(job.id, ws.id)
+        assert loaded.total == Decimal("265.00")
 
 
 async def test_create_with_technicians_tags_them() -> None:

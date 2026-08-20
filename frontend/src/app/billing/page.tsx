@@ -10,6 +10,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import {
   createCheckout,
   createPortal,
@@ -46,6 +47,8 @@ function PlanFeature({ text }: { text: string }) {
 
 function BillingContent() {
   const router = useRouter();
+  const { can } = useCapabilities();
+  const canManageBilling = can("billing:write");
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   const { data: billingStatus, isPending } = useQuery<BillingStatus>({
@@ -57,6 +60,7 @@ function BillingContent() {
   const subscribed = billingStatus?.subscribed ?? false;
 
   async function handleGetStarted() {
+    if (!canManageBilling) return;
     setIsRedirecting(true);
     try {
       const { checkout_url } = await createCheckout();
@@ -68,6 +72,7 @@ function BillingContent() {
   }
 
   async function handleManageSubscription() {
+    if (!canManageBilling) return;
     setIsRedirecting(true);
     try {
       const { portal_url } = await createPortal();
@@ -136,7 +141,7 @@ function BillingContent() {
                 variant="outline"
                 className="w-full"
                 onClick={handleManageSubscription}
-                disabled={isRedirecting}
+                disabled={!canManageBilling || isRedirecting}
               >
                 {isRedirecting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -158,7 +163,7 @@ function BillingContent() {
               className="w-full"
               size="lg"
               onClick={handleGetStarted}
-              disabled={isRedirecting}
+              disabled={!canManageBilling || isRedirecting}
             >
               {isRedirecting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

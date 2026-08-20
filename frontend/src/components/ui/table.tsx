@@ -1,14 +1,23 @@
 "use client"
 
+/* eslint-disable jsx-a11y/no-noninteractive-tabindex -- Table overflow must remain keyboard-scrollable in Safari. */
+
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+type TableProps = React.ComponentProps<"table"> & {
+  scrollLabel?: string
+}
+
+function Table({ className, scrollLabel = "Scrollable data table", ...props }: TableProps) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      role="region"
+      aria-label={scrollLabel}
+      tabIndex={0}
+      className="relative w-full overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
     >
       <table
         data-slot="table"
@@ -70,7 +79,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "text-muted-foreground/70 h-10 px-2 text-left align-middle text-xs font-semibold uppercase tracking-wide whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        "text-muted-foreground h-10 px-2 text-left align-middle text-xs font-semibold uppercase tracking-wide whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}

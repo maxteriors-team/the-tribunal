@@ -232,6 +232,7 @@ export const customerNavItems: AppNavItem[] = [
     icon: Megaphone,
     sidebar: true,
     commandPalette: true,
+    requires: "crm:read",
   },
   {
     title: "Calls",
@@ -306,6 +307,7 @@ export const automationNavItems: AppNavItem[] = [
     icon: Bot,
     sidebar: true,
     commandPalette: true,
+    requires: "crm:read",
   },
   {
     title: "Practice / Roleplay",
@@ -313,6 +315,7 @@ export const automationNavItems: AppNavItem[] = [
     icon: Drama,
     sidebar: true,
     commandPalette: true,
+    requires: "crm:read",
   },
   {
     title: "Knowledge Base",
@@ -320,6 +323,7 @@ export const automationNavItems: AppNavItem[] = [
     icon: BookOpen,
     sidebar: true,
     commandPalette: true,
+    requires: "crm:read",
   },
   {
     title: "AI Suggestions",
@@ -327,6 +331,7 @@ export const automationNavItems: AppNavItem[] = [
     icon: Lightbulb,
     sidebar: true,
     commandPalette: true,
+    requires: "crm:read",
   },
   {
     title: "Automations",
@@ -334,6 +339,7 @@ export const automationNavItems: AppNavItem[] = [
     icon: Zap,
     sidebar: true,
     commandPalette: true,
+    requires: "crm:read",
   },
   {
     title: "Experiments",
@@ -341,6 +347,7 @@ export const automationNavItems: AppNavItem[] = [
     icon: FlaskConical,
     sidebar: true,
     commandPalette: true,
+    requires: "crm:read",
   },
 ];
 
@@ -351,6 +358,7 @@ export const marketingNavItems: AppNavItem[] = [
     icon: Gift,
     sidebar: true,
     commandPalette: true,
+    requires: "crm:read",
   },
   {
     title: "Reviews",
@@ -525,40 +533,41 @@ export const appNavSections: AppNavSection[] = [
 ];
 
 /** Every registered nav item, in sidebar order. */
-export const allNavItems: AppNavItem[] = appNavSections.flatMap(
-  (section) => section.items
-);
+export const allNavItems: AppNavItem[] = appNavSections.flatMap((section) => section.items);
 
-export const commandPaletteNavItems = allNavItems.filter(
-  (item) => item.commandPalette
-);
+export const commandPaletteNavItems = allNavItems.filter((item) => item.commandPalette);
 
 /**
- * Id of the section that owns `pathname`, or null when no nav item matches.
- * The sidebar uses this to expand the section you are actually in — including
- * on a hard load or a deep link from the command palette, where no click ever
- * opened it. Longest URL match wins so `/reports/sales` resolves to the item
- * that owns it rather than its `/reports` prefix.
+ * Longest-prefix nav match for a route. Query strings on nav entries are ignored
+ * because `usePathname()` only supplies the pathname.
  */
-export function findNavSectionIdForPath(pathname: string): string | null {
-  let bestId: string | null = null;
+export function findNavItemForPath(pathname: string): AppNavItem | null {
+  let bestItem: AppNavItem | null = null;
   let bestLength = -1;
 
-  for (const section of appNavSections) {
-    for (const item of section.items) {
-      // Nav URLs may carry a query string (e.g. `/quotes?tab=designer`);
-      // `usePathname()` never does, so compare on the path alone.
-      const url = item.url.split("?")[0];
-      const matches = pathname === url || pathname.startsWith(`${url}/`);
+  for (const item of [...allNavItems, setupNavItem]) {
+    const url = item.url.split("?")[0];
+    const matches = pathname === url || pathname.startsWith(`${url}/`);
 
-      if (matches && url.length > bestLength) {
-        bestId = section.id;
-        bestLength = url.length;
-      }
+    if (matches && url.length > bestLength) {
+      bestItem = item;
+      bestLength = url.length;
     }
   }
 
-  return bestId;
+  return bestItem;
+}
+
+/**
+ * Id of the section that owns `pathname`, or null when no nav item matches.
+ * Longest URL match wins, so `/reports/sales` resolves to its dedicated item
+ * rather than the shorter `/reports` prefix.
+ */
+export function findNavSectionIdForPath(pathname: string): string | null {
+  const item = findNavItemForPath(pathname);
+  if (!item) return null;
+
+  return appNavSections.find((section) => section.items.includes(item))?.id ?? null;
 }
 
 export const breadcrumbLabels: Record<string, string> = {
@@ -635,11 +644,7 @@ export function isNavItemVisible(item: AppNavItem) {
  * but is additionally capability-gated in {@link canSeeNavItem}, so only a crew
  * lead sees it.
  */
-export const FIELD_OPERATIONAL_PREFIXES: readonly string[] = [
-  "/jobs",
-  "/calendar",
-  "/upsell",
-];
+export const FIELD_OPERATIONAL_PREFIXES: readonly string[] = ["/jobs", "/calendar", "/upsell"];
 
 /** Whether a path is inside the field-technician operational allowlist. */
 export function isFieldOperationalPath(pathname: string): boolean {
@@ -670,4 +675,50 @@ export function canSeeNavItem(
     return isFieldOperationalPath(item.url) && allowed;
   }
   return allowed;
+}
+
+/** Capability required only by a direct management screen under a readable area. */
+export function directManagementCapabilityForPath(pathname: string): Capability | null {
+  const segments = pathname.split("/").filter(Boolean);
+
+  if (segments[0] === "agents" && segments.length > 1 && segments[1] !== "practice") {
+    return "workspace:manage";
+  }
+
+  if (segments[0] === "campaigns" && segments.at(-1) === "new") {
+    return "outreach:write";
+  }
+
+  if (segments[0] === "offers" && segments.length > 1) {
+    return "outreach:write";
+  }
+
+  if (segments[0] === "experiments" && segments[1] === "new") {
+    return "outreach:write";
+  }
+
+  return null;
+}
+
+/**
+ * Shared direct-URL decision used by the app shell and unit tests.
+ *
+ * Field and lead-technician tiers stay fail-closed to their explicit operational
+ * allowlist. Other roles must satisfy both the nav area's read capability and any
+ * narrower management-screen requirement.
+ */
+export function canAccessAppPath(
+  pathname: string,
+  tier: Tier,
+  can: (capability: Capability) => boolean,
+): boolean {
+  if (tier === "field" || tier === "lead") {
+    if (!isFieldOperationalPath(pathname)) return false;
+  }
+
+  const item = findNavItemForPath(pathname);
+  if (item && !canSeeNavItem(item, tier, can)) return false;
+
+  const managementCapability = directManagementCapabilityForPath(pathname);
+  return !managementCapability || can(managementCapability);
 }

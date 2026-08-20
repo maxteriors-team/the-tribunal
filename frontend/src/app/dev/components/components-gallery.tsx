@@ -19,22 +19,14 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SectionProps {
   id: string;
@@ -57,9 +49,7 @@ function Section({ id, title, importPath, description, children }: SectionProps)
             {importPath}
           </code>
         </div>
-        {description ? (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        ) : null}
+        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
       </header>
       <div className="space-y-6">{children}</div>
     </section>
@@ -74,9 +64,7 @@ interface ExampleProps {
 function Example({ label, children }: ExampleProps) {
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <div className="rounded-lg border border-dashed border-border bg-background p-4">
         {children}
       </div>
@@ -104,13 +92,12 @@ export function ComponentsGallery() {
         <h1 className="text-3xl font-bold tracking-tight">UI Component Gallery</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           Living style guide for the shared primitives under{" "}
-          <code className="rounded bg-muted px-1 py-0.5">@/components/ui/*</code>.
-          Reach for these <strong>before</strong> rolling a new loading spinner,
-          empty state, or button variant. The page-state primitives at the top
-          are the canonical loading / error / empty surfaces for every page —
-          use them in <code className="rounded bg-muted px-1 py-0.5">loading.tsx</code>,{" "}
-          <code className="rounded bg-muted px-1 py-0.5">error.tsx</code>, and
-          any list view that can be empty.
+          <code className="rounded bg-muted px-1 py-0.5">@/components/ui/*</code>. Reach for these{" "}
+          <strong>before</strong> rolling a new loading spinner, empty state, or button variant. The
+          page-state primitives at the top are the canonical loading / error / empty surfaces for
+          every page — use them in <code className="rounded bg-muted px-1 py-0.5">loading.tsx</code>
+          , <code className="rounded bg-muted px-1 py-0.5">error.tsx</code>, and any list view that
+          can be empty.
         </p>
         <nav aria-label="Sections" className="flex flex-wrap gap-2 pt-2">
           {SECTIONS.map((s) => (
@@ -129,7 +116,7 @@ export function ComponentsGallery() {
         <Section
           id="page-state"
           title="Page State (canonical)"
-          importPath='@/components/ui/page-state'
+          importPath="@/components/ui/page-state"
           description="Use these for every page-level loading, error, and empty surface so the app renders consistent states. PageLoadingState belongs in loading.tsx, PageErrorState in error.tsx (pair with Sentry capture), PageEmptyState in any list whose query returned zero rows."
         >
           <Example label="PageLoadingState">
@@ -153,17 +140,14 @@ export function ComponentsGallery() {
             <ResourceListLoading />
           </Example>
           <Example label="ResourceListError (wraps PageErrorState)">
-            <ResourceListError
-              resourceName="contacts"
-              onRetry={() => undefined}
-            />
+            <ResourceListError resourceName="contacts" onRetry={() => undefined} />
           </Example>
         </Section>
 
         <Section
           id="button"
           title="Button"
-          importPath='@/components/ui/button'
+          importPath="@/components/ui/button"
           description="Variants: default · secondary · destructive · outline · ghost · link. Sizes: sm · default · lg · icon."
         >
           <Example label="Variants">
@@ -191,11 +175,7 @@ export function ComponentsGallery() {
           </Example>
         </Section>
 
-        <Section
-          id="badge"
-          title="Badge"
-          importPath='@/components/ui/badge'
-        >
+        <Section id="badge" title="Badge" importPath="@/components/ui/badge">
           <Example label="Variants">
             <div className="flex flex-wrap gap-2">
               <Badge>Default</Badge>
@@ -209,7 +189,7 @@ export function ComponentsGallery() {
         <Section
           id="alert"
           title="Alert"
-          importPath='@/components/ui/alert'
+          importPath="@/components/ui/alert"
           description="In-flow notice. For page-level errors, prefer PageErrorState instead."
         >
           <Example label="Default">
@@ -224,18 +204,12 @@ export function ComponentsGallery() {
           <Example label="Destructive">
             <Alert variant="destructive">
               <AlertTitle>Something went wrong</AlertTitle>
-              <AlertDescription>
-                Your last action could not be completed.
-              </AlertDescription>
+              <AlertDescription>Your last action could not be completed.</AlertDescription>
             </Alert>
           </Example>
         </Section>
 
-        <Section
-          id="card"
-          title="Card"
-          importPath='@/components/ui/card'
-        >
+        <Section id="card" title="Card" importPath="@/components/ui/card">
           <Example label="Composed">
             <Card className="max-w-sm">
               <CardHeader>
@@ -257,7 +231,7 @@ export function ComponentsGallery() {
         <Section
           id="form-controls"
           title="Form Controls"
-          importPath='@/components/ui/{input,textarea,label,checkbox,switch,separator}'
+          importPath="@/components/ui/{input,textarea,label,checkbox,switch,separator}"
         >
           <Example label="Input + Label">
             <div className="grid max-w-sm gap-2">
@@ -290,7 +264,7 @@ export function ComponentsGallery() {
         <Section
           id="skeleton-progress"
           title="Skeleton & Progress"
-          importPath='@/components/ui/{skeleton,progress}'
+          importPath="@/components/ui/{skeleton,progress}"
           description="Use Skeleton inline for granular per-row placeholders. For full page loading, prefer PageLoadingState above."
         >
           <Example label="Skeleton">
@@ -301,15 +275,11 @@ export function ComponentsGallery() {
             </div>
           </Example>
           <Example label="Progress">
-            <Progress value={62} />
+            <Progress value={62} aria-label="Example progress" />
           </Example>
         </Section>
 
-        <Section
-          id="tabs"
-          title="Tabs"
-          importPath='@/components/ui/tabs'
-        >
+        <Section id="tabs" title="Tabs" importPath="@/components/ui/tabs">
           <Example label="Default">
             <Tabs defaultValue="overview" className="max-w-md">
               <TabsList>
@@ -330,11 +300,7 @@ export function ComponentsGallery() {
           </Example>
         </Section>
 
-        <Section
-          id="tooltip"
-          title="Tooltip"
-          importPath='@/components/ui/tooltip'
-        >
+        <Section id="tooltip" title="Tooltip" importPath="@/components/ui/tooltip">
           <Example label="On hover">
             <Tooltip>
               <TooltipTrigger asChild>

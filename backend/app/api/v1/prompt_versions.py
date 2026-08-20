@@ -5,8 +5,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
 from app.api.service_errors import ServiceErrorRoute
+from app.core.permissions import Capability
 from app.models.workspace import Workspace
 from app.schemas.prompt_version import (
     ArmStatusUpdate,
@@ -22,7 +23,12 @@ from app.schemas.prompt_version import (
 )
 from app.services.ai.prompt_version_lifecycle_service import PromptVersionLifecycleService
 
-router = APIRouter(route_class=ServiceErrorRoute)
+router = APIRouter(
+    route_class=ServiceErrorRoute,
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.WORKSPACE_MANAGE))
+    ],
+)
 
 
 def _prompt_version_service() -> PromptVersionLifecycleService:

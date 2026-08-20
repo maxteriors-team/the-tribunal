@@ -22,11 +22,7 @@ import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Toggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
@@ -50,12 +46,7 @@ function MenuBar({ editor }: MenuBarProps) {
     if (linkUrl === "") {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
     } else {
-      editor
-        .chain()
-        .focus()
-        .extendMarkRange("link")
-        .setLink({ href: linkUrl })
-        .run();
+      editor.chain().focus().extendMarkRange("link").setLink({ href: linkUrl }).run();
     }
     setLinkUrl("");
     setLinkPopoverOpen(false);
@@ -94,27 +85,21 @@ function MenuBar({ editor }: MenuBarProps) {
       <Toggle
         size="sm"
         pressed={editor.isActive("heading", { level: 1 })}
-        onPressedChange={() =>
-          editor.chain().focus().toggleHeading({ level: 1 }).run()
-        }
+        onPressedChange={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
       >
         <Heading1 className="size-4" />
       </Toggle>
       <Toggle
         size="sm"
         pressed={editor.isActive("heading", { level: 2 })}
-        onPressedChange={() =>
-          editor.chain().focus().toggleHeading({ level: 2 }).run()
-        }
+        onPressedChange={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
       >
         <Heading2 className="size-4" />
       </Toggle>
       <Toggle
         size="sm"
         pressed={editor.isActive("heading", { level: 3 })}
-        onPressedChange={() =>
-          editor.chain().focus().toggleHeading({ level: 3 }).run()
-        }
+        onPressedChange={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
       >
         <Heading3 className="size-4" />
       </Toggle>
@@ -175,11 +160,7 @@ function MenuBar({ editor }: MenuBarProps) {
               />
             </div>
             <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setLinkPopoverOpen(false)}
-              >
+              <Button variant="outline" size="sm" onClick={() => setLinkPopoverOpen(false)}>
                 Cancel
               </Button>
               <Button size="sm" onClick={setLink}>
@@ -197,16 +178,18 @@ function MenuBar({ editor }: MenuBarProps) {
         size="icon"
         onClick={() => editor.chain().focus().undo().run()}
         disabled={!editor.can().chain().focus().undo().run()}
+        aria-label="Undo"
       >
-        <Undo className="size-4" />
+        <Undo className="size-4" aria-hidden="true" />
       </Button>
       <Button
         variant="ghost"
         size="icon"
         onClick={() => editor.chain().focus().redo().run()}
         disabled={!editor.can().chain().focus().redo().run()}
+        aria-label="Redo"
       >
-        <Redo className="size-4" />
+        <Redo className="size-4" aria-hidden="true" />
       </Button>
     </div>
   );
@@ -247,7 +230,7 @@ export function RichTextEditor({ value, onChange }: RichTextEditorProps) {
           "[&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-3",
           "[&_li]:mb-1",
           "[&_blockquote]:border-l-4 [&_blockquote]:border-muted [&_blockquote]:pl-4 [&_blockquote]:italic",
-          "[&_code]:bg-muted [&_code]:px-1 [&_code]:rounded"
+          "[&_code]:bg-muted [&_code]:px-1 [&_code]:rounded",
         ),
       },
     },

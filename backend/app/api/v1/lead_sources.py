@@ -3,11 +3,12 @@ the unknown-attribution cleanup queue."""
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
 from app.core.config import settings
+from app.core.permissions import Capability
 from app.models.lead_source import LeadSource, LeadSourceCampaign, LeadSourceSpendEntry
 from app.schemas.lead_source import (
     LeadSourceCampaignCreate,
@@ -25,9 +26,10 @@ from app.services.lead_sources.attribution_service import (
     suggest_source_type_for_contact,
 )
 
-router = APIRouter()
-campaigns_router = APIRouter()
-spend_router = APIRouter()
+_route_gate = Depends(require_route_capabilities(Capability.CRM_READ, Capability.CRM_WRITE))
+router = APIRouter(dependencies=[_route_gate])
+campaigns_router = APIRouter(dependencies=[_route_gate])
+spend_router = APIRouter(dependencies=[_route_gate])
 
 
 def _to_response(ls: LeadSource) -> LeadSourceResponse:

@@ -34,11 +34,7 @@ import {
 } from "@/components/ui/select";
 import { useLeadImport } from "@/hooks/useLeadImport";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import {
-  scrapingApi,
-  type BusinessResult,
-  type ImportLeadsResponse,
-} from "@/lib/api/scraping";
+import { scrapingApi, type BusinessResult, type ImportLeadsResponse } from "@/lib/api/scraping";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 
 interface ScrapeLeadsDialogProps {
@@ -71,9 +67,7 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
     onSuccess: (data) => {
       setResults(data.results);
       // Auto-select leads with phone numbers
-      const withPhone = new Set(
-        data.results.filter((r) => r.has_phone).map((r) => r.place_id),
-      );
+      const withPhone = new Set(data.results.filter((r) => r.has_phone).map((r) => r.place_id));
       setSelectedIds(withPhone);
       setStep("results");
     },
@@ -177,6 +171,7 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
                 <Button
                   onClick={handleSearch}
                   disabled={searchMutation.isPending || !query.trim()}
+                  aria-label={searchMutation.isPending ? "Searching for leads" : "Search for leads"}
                 >
                   {searchMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -242,7 +237,7 @@ export function ScrapeLeadsDialog({ open, onOpenChange }: ScrapeLeadsDialogProps
         {/* Importing Step */}
         {step === "importing" && (
           <div className="py-8 space-y-4">
-            <Progress value={undefined} className="h-2" />
+            <Progress value={undefined} aria-label="Importing selected leads" className="h-2" />
             <p className="text-center text-sm text-muted-foreground">
               Importing {selectedCount} leads...
             </p>

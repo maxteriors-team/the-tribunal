@@ -21,6 +21,7 @@ import { useState, useCallback } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HorizontalScroll } from "@/components/ui/horizontal-scroll";
 import { leadMagnetsApi } from "@/lib/api/lead-magnets";
 import { offersApi, CreateOfferRequest } from "@/lib/api/offers";
 import { queryKeys } from "@/lib/query-keys";
@@ -41,7 +42,6 @@ import { PublishStep } from "./publish-step";
 import { ReviewStep } from "./review-step";
 import { UrgencyStep } from "./urgency-step";
 import { ValueStackStep } from "./value-stack-step";
-
 
 interface OfferBuilderWizardProps {
   workspaceId: string;
@@ -180,9 +180,7 @@ export function OfferBuilderWizard({
   });
 
   const leadMagnets = leadMagnetsData?.items || [];
-  const selectedLeadMagnets = leadMagnets.filter((lm) =>
-    formData.lead_magnet_ids.includes(lm.id)
-  );
+  const selectedLeadMagnets = leadMagnets.filter((lm) => formData.lead_magnet_ids.includes(lm.id));
 
   // Create/update mutation
   const createMutation = useMutation({
@@ -193,11 +191,7 @@ export function OfferBuilderWizard({
 
       // Attach lead magnets if any
       if (formData.lead_magnet_ids.length > 0) {
-        await offersApi.attachLeadMagnets(
-          workspaceId,
-          offer.id,
-          formData.lead_magnet_ids
-        );
+        await offersApi.attachLeadMagnets(workspaceId, offer.id, formData.lead_magnet_ids);
       }
 
       return offer;
@@ -229,12 +223,9 @@ export function OfferBuilderWizard({
     },
   });
 
-  const updateFormData = useCallback(
-    (updates: Partial<FormData>) => {
-      setFormData((prev) => ({ ...prev, ...updates }));
-    },
-    []
-  );
+  const updateFormData = useCallback((updates: Partial<FormData>) => {
+    setFormData((prev) => ({ ...prev, ...updates }));
+  }, []);
 
   const goNext = () => {
     if (currentStep < STEPS.length - 1) {
@@ -267,9 +258,8 @@ export function OfferBuilderWizard({
       urgency_type: formData.urgency_type || undefined,
       urgency_text: formData.urgency_text || undefined,
       scarcity_count: formData.scarcity_count || undefined,
-      value_stack_items: formData.value_stack_items.length > 0
-        ? formData.value_stack_items
-        : undefined,
+      value_stack_items:
+        formData.value_stack_items.length > 0 ? formData.value_stack_items : undefined,
       cta_text: formData.cta_text || undefined,
       cta_subtext: formData.cta_subtext || undefined,
       // Public landing page fields
@@ -286,19 +276,45 @@ export function OfferBuilderWizard({
   const renderStepContent = () => {
     switch (STEPS[currentStep].id) {
       case "basics":
-        return <BasicsStep formData={formData} onFieldChange={updateFormData} workspaceId={workspaceId} />;
+        return (
+          <BasicsStep
+            formData={formData}
+            onFieldChange={updateFormData}
+            workspaceId={workspaceId}
+          />
+        );
       case "pricing":
         return <PricingStep formData={formData} onFieldChange={updateFormData} />;
       case "value-stack":
-        return <ValueStackStep items={formData.value_stack_items} onChange={(items) => updateFormData({ value_stack_items: items })} />;
+        return (
+          <ValueStackStep
+            items={formData.value_stack_items}
+            onChange={(items) => updateFormData({ value_stack_items: items })}
+          />
+        );
       case "lead-magnets":
-        return <LeadMagnetsStep leadMagnets={leadMagnets} selectedIds={formData.lead_magnet_ids} onSelect={(ids) => updateFormData({ lead_magnet_ids: ids })} onCreateLeadMagnet={async (lm) => { await createLeadMagnetMutation.mutateAsync(lm); }} />;
+        return (
+          <LeadMagnetsStep
+            leadMagnets={leadMagnets}
+            selectedIds={formData.lead_magnet_ids}
+            onSelect={(ids) => updateFormData({ lead_magnet_ids: ids })}
+            onCreateLeadMagnet={async (lm) => {
+              await createLeadMagnetMutation.mutateAsync(lm);
+            }}
+          />
+        );
       case "guarantee":
         return <GuaranteeStep formData={formData} onFieldChange={updateFormData} />;
       case "urgency":
         return <UrgencyStep formData={formData} onFieldChange={updateFormData} />;
       case "publish":
-        return <PublishStep formData={formData} onFieldChange={updateFormData} existingOffer={existingOffer} />;
+        return (
+          <PublishStep
+            formData={formData}
+            onFieldChange={updateFormData}
+            existingOffer={existingOffer}
+          />
+        );
       case "review":
         return <ReviewStep formData={formData} selectedLeadMagnets={selectedLeadMagnets} />;
       default:
@@ -309,44 +325,51 @@ export function OfferBuilderWizard({
   return (
     <div className="space-y-6">
       {/* Step Indicator */}
-      <div className="flex items-center justify-between mb-8">
-        {STEPS.map((step, index) => (
-          <div
-            key={step.id}
-            className={`flex items-center ${
-              index < STEPS.length - 1 ? "flex-1" : ""
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setCurrentStep(index)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                index === currentStep
-                  ? "bg-primary text-primary-foreground"
-                  : index < currentStep
-                  ? "bg-primary/20 text-primary"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {index < currentStep ? (
-                <Check className="size-4" />
-              ) : (
-                step.icon
-              )}
-              <span className="hidden sm:inline text-sm font-medium">
-                {step.label}
-              </span>
-            </button>
-            {index < STEPS.length - 1 && (
-              <div
-                className={`flex-1 h-0.5 mx-2 ${
-                  index < currentStep ? "bg-primary" : "bg-muted"
-                }`}
-              />
-            )}
-          </div>
-        ))}
-      </div>
+      <nav className="mb-6" aria-label="Offer setup progress">
+        <HorizontalScroll
+          activeKey={currentStep}
+          aria-label="Offer setup steps, scroll horizontally"
+          data-testid="offer-step-scroll"
+        >
+          <ol className="flex min-w-max items-center pr-1">
+            {STEPS.map((step, index) => {
+              const stateLabel =
+                index === currentStep ? "current" : index < currentStep ? "completed" : "upcoming";
+
+              return (
+                <li key={step.id} className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(index)}
+                    aria-current={index === currentStep ? "step" : undefined}
+                    aria-label={`Step ${index + 1}: ${step.label} (${stateLabel})`}
+                    className={`flex min-h-12 shrink-0 items-center gap-2 rounded-lg px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                      index === currentStep
+                        ? "bg-primary text-primary-foreground"
+                        : index < currentStep
+                          ? "bg-primary/20 text-primary"
+                          : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <span aria-hidden="true">
+                      {index < currentStep ? <Check className="size-4" /> : step.icon}
+                    </span>
+                    <span className="hidden text-sm font-medium sm:inline">{step.label}</span>
+                  </button>
+                  {index < STEPS.length - 1 ? (
+                    <div
+                      aria-hidden="true"
+                      className={`mx-2 h-0.5 w-4 ${
+                        index < currentStep ? "bg-primary" : "bg-muted"
+                      }`}
+                    />
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </HorizontalScroll>
+      </nav>
 
       {/* Step Content */}
       <Card>
@@ -373,11 +396,7 @@ export function OfferBuilderWizard({
 
       {/* Navigation */}
       <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          onClick={goPrev}
-          disabled={currentStep === 0}
-        >
+        <Button variant="outline" onClick={goPrev} disabled={currentStep === 0}>
           <ChevronLeft className="size-4 mr-1" />
           Previous
         </Button>
@@ -388,10 +407,7 @@ export function OfferBuilderWizard({
             <ChevronRight className="size-4 ml-1" />
           </Button>
         ) : (
-          <Button
-            onClick={handleSubmit}
-            disabled={!formData.name || createMutation.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={!formData.name || createMutation.isPending}>
             {createMutation.isPending ? (
               <>
                 <Loader2 className="size-4 mr-2 animate-spin" />

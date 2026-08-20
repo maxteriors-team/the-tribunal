@@ -10,7 +10,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KanbanSquare, Plus, Settings2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -29,11 +29,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { ContactPicker } from "@/components/ui/contact-combobox";
+import { HorizontalScroll } from "@/components/ui/horizontal-scroll";
+import { Label } from "@/components/ui/label";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { useContact } from "@/hooks/useContacts";
 import { useOutboundCall } from "@/hooks/useOutboundCall";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
@@ -42,7 +41,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { useWorkspace } from "@/providers/workspace-provider";
-import type { Opportunity, Pipeline, PipelineStage } from "@/types";
+import type { Contact, Opportunity, Pipeline, PipelineStage } from "@/types";
 
 import { ManageStagesDialog } from "./manage-stages-dialog";
 import { OpportunityCard, OpportunityCardSummary } from "./opportunity-card";
@@ -82,8 +81,7 @@ export function OpportunitiesBoard() {
   const defaultPipeline = useMemo<Pipeline | undefined>(() => {
     if (!pipelines || pipelines.length === 0) return undefined;
     return [...pipelines].sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     )[0];
   }, [pipelines]);
 
@@ -93,10 +91,7 @@ export function OpportunitiesBoard() {
 
   if (pipelinesError) {
     return (
-      <PageErrorState
-        message="Couldn't load pipelines."
-        onRetry={() => void refetchPipelines()}
-      />
+      <PageErrorState message="Couldn't load pipelines." onRetry={() => void refetchPipelines()} />
     );
   }
 
@@ -113,13 +108,7 @@ export function OpportunitiesBoard() {
   return <PipelineBoard workspaceId={workspaceId} pipeline={defaultPipeline} />;
 }
 
-function PipelineBoard({
-  workspaceId,
-  pipeline,
-}: {
-  workspaceId: string;
-  pipeline: Pipeline;
-}) {
+function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipeline: Pipeline }) {
   const queryClient = useQueryClient();
   const { currentWorkspace } = useWorkspace();
   const canAssignOwners = currentWorkspace?.role !== "sales_rep";
@@ -131,6 +120,10 @@ function PipelineBoard({
   const [manageStagesOpen, setManageStagesOpen] = useState(false);
   const [scheduleContactId, setScheduleContactId] = useState<number | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<Opportunity | null>(null);
+  const [customerFilter, setCustomerFilter] = useState<{
+    id: string;
+    contact: Contact | null;
+  }>({ id: "", contact: null });
 
   const {
     callTarget,
@@ -143,30 +136,28 @@ function PipelineBoard({
 
   // The board payload carries only a contact summary; the appointment dialog
   // needs the full record, so fetch it once the operator asks to book.
-  const { data: scheduleContact } = useContact(
-    workspaceId,
-    scheduleContactId ?? undefined,
-  );
+  const { data: scheduleContact } = useContact(workspaceId, scheduleContactId ?? undefined);
 
   const sensors = useSensors(
     // Require a small drag distance so a plain click still opens the card.
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
 
   const stages = useMemo<PipelineStage[]>(
     () => [...pipeline.stages].sort((a, b) => a.order - b.order),
-    [pipeline.stages]
+    [pipeline.stages],
   );
 
-  const listParams = { pipeline_id: pipeline.id };
+  const listParams = useMemo(
+    () => ({
+      pipeline_id: pipeline.id,
+      contact_id: customerFilter.id ? Number(customerFilter.id) : undefined,
+    }),
+    [pipeline.id, customerFilter.id],
+  );
   const listKey = queryKeys.opportunities.list(workspaceId, listParams);
 
-  const {
-    data,
-    isPending,
-    isError,
-    refetch,
-  } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: listKey,
     queryFn: () =>
       opportunitiesApi.list(workspaceId, {
@@ -175,6 +166,7 @@ function PipelineBoard({
       }),
     enabled: !!workspaceId,
     staleTime: BOARD_STALE_TIME_MS,
+    placeholderData: keepPreviousData,
   });
 
   const moveMutation = useMutation({
@@ -195,7 +187,7 @@ function PipelineBoard({
                   stage_id: stageId,
                   probability: stage?.probability ?? opp.probability,
                 }
-              : opp
+              : opp,
           ),
         };
       });
@@ -225,8 +217,7 @@ function PipelineBoard({
       toast.success("Removed from the pipeline");
       setPendingRemoval(null);
     },
-    onError: (err) =>
-      toast.error(getApiErrorMessage(err, "Failed to remove from the pipeline")),
+    onError: (err) => toast.error(getApiErrorMessage(err, "Failed to remove from the pipeline")),
     onSettled: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.opportunities.all(workspaceId),
@@ -246,9 +237,7 @@ function PipelineBoard({
     return map;
   }, [opportunities, stages]);
 
-  const activeOpportunity = activeId
-    ? opportunities.find((o) => o.id === activeId)
-    : undefined;
+  const activeOpportunity = activeId ? opportunities.find((o) => o.id === activeId) : undefined;
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(String(event.active.id));
@@ -292,61 +281,77 @@ function PipelineBoard({
   }
 
   if (isError) {
-    return (
-      <PageErrorState
-        message="Couldn't load opportunities."
-        onRetry={() => void refetch()}
-      />
-    );
+    return <PageErrorState message="Couldn't load opportunities." onRetry={() => void refetch()} />;
   }
 
   return (
     <>
       <div className="flex h-full flex-col gap-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium text-muted-foreground">
-            {pipeline.name}
-          </span>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-sm font-medium text-muted-foreground">{pipeline.name}</span>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <Button
               size="sm"
               variant="outline"
               onClick={() => setManageStagesOpen(true)}
+              className="flex-1 sm:flex-none"
               data-testid="manage-stages"
             >
               <Settings2 className="mr-1.5 h-4 w-4" />
               Manage stages
             </Button>
-            <Button size="sm" onClick={() => openCreate()} data-testid="add-opportunity">
+            <Button
+              size="sm"
+              className="flex-1 sm:flex-none"
+              onClick={() => openCreate()}
+              data-testid="add-opportunity"
+            >
               <Plus className="mr-1.5 h-4 w-4" />
               Add Opportunity
             </Button>
           </div>
         </div>
 
-        <DndContext
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <div className="flex flex-1 gap-4 overflow-x-auto pb-4">
-            {stages.map((stage) => (
-              <StageColumn
-                key={stage.id}
-                stage={stage}
-                stages={stages}
-                opportunities={byStage.get(stage.id) ?? []}
-                onOpen={openDetail}
-                onAdd={() => openCreate(stage.id)}
-                onMove={(opportunityId, stageId) =>
-                  moveMutation.mutate({ opportunityId, stageId })
-                }
-                onCall={callContact}
-                onSchedule={scheduleContactFor}
-                onRemove={setPendingRemoval}
-              />
-            ))}
-          </div>
+        <div className="w-full max-w-sm space-y-1.5">
+          <Label htmlFor="opportunity-customer-filter" className="text-xs">
+            Filter by customer
+          </Label>
+          <ContactPicker
+            id="opportunity-customer-filter"
+            workspaceId={workspaceId}
+            value={customerFilter.id}
+            initialContact={customerFilter.contact}
+            onChange={(id, contact) => setCustomerFilter({ id, contact })}
+            placeholder="Filter by customer…"
+            data-testid="opportunity-customer-filter"
+          />
+        </div>
+
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <HorizontalScroll
+            aria-label="Opportunity stages, scroll horizontally"
+            className="flex-1"
+            data-testid="opportunity-board-scroll"
+          >
+            <div className="flex min-w-max gap-4 pr-1">
+              {stages.map((stage) => (
+                <StageColumn
+                  key={stage.id}
+                  stage={stage}
+                  stages={stages}
+                  opportunities={byStage.get(stage.id) ?? []}
+                  onOpen={openDetail}
+                  onAdd={() => openCreate(stage.id)}
+                  onMove={(opportunityId, stageId) =>
+                    moveMutation.mutate({ opportunityId, stageId })
+                  }
+                  onCall={callContact}
+                  onSchedule={scheduleContactFor}
+                  onRemove={setPendingRemoval}
+                />
+              ))}
+            </div>
+          </HorizontalScroll>
 
           <DragOverlay>
             {activeOpportunity ? (
@@ -390,19 +395,15 @@ function PipelineBoard({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Remove {pendingRemoval?.name} from the pipeline?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Remove {pendingRemoval?.name} from the pipeline?</AlertDialogTitle>
             <AlertDialogDescription>
-              The deal and its history are kept, but the card leaves the board and
-              automation will not put it back — including the next time you send
-              this customer a quote. You can always add a deal for them manually.
+              The deal and its history are kept, but the card leaves the board and automation will
+              not put it back — including the next time you send this customer a quote. You can
+              always add a deal for them manually.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={removeMutation.isPending}>
-              Keep it
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={removeMutation.isPending}>Keep it</AlertDialogCancel>
             <AlertDialogAction
               disabled={removeMutation.isPending}
               onClick={(event) => {
@@ -470,7 +471,7 @@ function StageColumn({
       data-testid={`stage-column-${stage.id}`}
       className={cn(
         "flex w-72 shrink-0 flex-col rounded-lg border bg-muted/30",
-        isOver && "ring-2 ring-primary"
+        isOver && "ring-2 ring-primary",
       )}
     >
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2.5">
@@ -478,7 +479,7 @@ function StageColumn({
           <span
             className={cn(
               "h-2.5 w-2.5 rounded-full",
-              STAGE_ACCENT[stage.stage_type] ?? "bg-muted-foreground"
+              STAGE_ACCENT[stage.stage_type] ?? "bg-muted-foreground",
             )}
           />
           <span className="text-sm font-medium">{stage.name}</span>
@@ -521,4 +522,3 @@ function StageColumn({
     </div>
   );
 }
-

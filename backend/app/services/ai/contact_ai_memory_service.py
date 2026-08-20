@@ -421,7 +421,7 @@ class ContactAIMemoryService:
                 if same_event or same_value or same_source:
                     old_fact.supersession_state = FactSupersessionState.SUPERSEDED.value
                     old_fact.superseded_at = observed_at
-                    old_fact.superseded_by_id = new_row.id
+                    old_fact.superseded_by = new_row
                     old_fact.updated_at = observed_at
             self._db.add(new_row)
 
@@ -659,7 +659,7 @@ class ContactAIMemoryService:
                 supersession_state=FactSupersessionState.ACTIVE.value,
             )
             fact.supersession_state = FactSupersessionState.SUPERSEDED.value
-            fact.superseded_by_id = replacement.id
+            fact.superseded_by = replacement
             self._db.add(replacement)
 
         await self._db.flush()

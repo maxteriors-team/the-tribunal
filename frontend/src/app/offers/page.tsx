@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PageEmptyState, PageErrorState } from "@/components/ui/page-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { offersApi } from "@/lib/api/offers";
 import { queryKeys } from "@/lib/query-keys";
@@ -77,6 +78,8 @@ export default function OffersPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canManageOffers = can("outreach:write");
 
   const [deleteOfferId, setDeleteOfferId] = useState<string | null>(null);
 
@@ -135,23 +138,23 @@ export default function OffersPage() {
 
   return (
     <AppSidebar>
-      <div className="p-6 space-y-6">
+      <div className="space-y-6 p-4 sm:p-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold">Offers</h1>
-            <p className="text-muted-foreground">
-              Create irresistible offers with value stacking
-            </p>
+            <p className="text-muted-foreground">Create irresistible offers with value stacking</p>
           </div>
-          <Button onClick={() => router.push("/offers/new")}>
-            <Plus className="size-4 mr-2" />
-            Create Offer
-          </Button>
+          {canManageOffers && (
+            <Button className="w-full sm:w-auto" onClick={() => router.push("/offers/new")}>
+              <Plus className="size-4 mr-2" />
+              Create Offer
+            </Button>
+          )}
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -169,9 +172,7 @@ export default function OffersPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-success">
-                {activeOffers.length}
-              </p>
+              <p className="text-2xl font-bold text-success">{activeOffers.length}</p>
             </CardContent>
           </Card>
           <Card>
@@ -212,10 +213,12 @@ export default function OffersPage() {
                 description="Create your first irresistible offer with value stacking"
                 icon={<Tag className="size-12" />}
                 action={
-                  <Button onClick={() => router.push("/offers/new")}>
-                    <Plus className="size-4 mr-2" />
-                    Create Your First Offer
-                  </Button>
+                  canManageOffers ? (
+                    <Button className="w-full sm:w-auto" onClick={() => router.push("/offers/new")}>
+                      <Plus className="size-4 mr-2" />
+                      Create Your First Offer
+                    </Button>
+                  ) : undefined
                 }
               />
             </CardContent>
@@ -229,24 +232,19 @@ export default function OffersPage() {
                 animate={{ opacity: 1, y: 0 }}
               >
                 <Card className={!offer.is_active ? "opacity-60" : ""}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-4">
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-start gap-3 sm:gap-4">
                         <div className="size-12 rounded-full bg-gradient-to-br from-success/20 to-success/5 flex items-center justify-center text-success">
                           {discountTypeIcons[offer.discount_type]}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-semibold text-lg">{offer.name}</h3>
-                            <Badge
-                              variant="secondary"
-                              className="bg-success/10 text-success"
-                            >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="break-words text-lg font-semibold">{offer.name}</h3>
+                            <Badge variant="secondary" className="bg-success/10 text-success">
                               {formatDiscount(offer)}
                             </Badge>
-                            {!offer.is_active && (
-                              <Badge variant="secondary">Inactive</Badge>
-                            )}
+                            {!offer.is_active && <Badge variant="secondary">Inactive</Badge>}
                             {offer.value_stack_items && offer.value_stack_items.length > 0 && (
                               <Badge variant="outline" className="gap-1">
                                 <Layers className="size-3" />
@@ -284,69 +282,60 @@ export default function OffersPage() {
                         </div>
                       </div>
 
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label="Offer actions">
-                            <MoreHorizontal className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() =>
-                              router.push(`/offers/${offer.id}`)
-                            }
-                          >
-                            <Edit className="size-4 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
-                          {offer.is_public && offer.public_slug ? (
-                            <>
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  window.open(
-                                    getPublicOfferUrl(offer.public_slug!),
-                                    "_blank",
-                                  )
-                                }
-                              >
-                                <ExternalLink className="size-4 mr-2" />
-                                Open public page
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  void navigator.clipboard.writeText(
-                                    getPublicOfferUrl(offer.public_slug!),
-                                  );
-                                  toast.success("Link copied");
-                                }}
-                              >
-                                <Link2 className="size-4 mr-2" />
-                                Copy public link
-                              </DropdownMenuItem>
-                            </>
-                          ) : (
-                            <DropdownMenuItem
-                              onClick={() => router.push(`/offers/${offer.id}`)}
-                            >
-                              <Eye className="size-4 mr-2" />
-                              Preview
+                      {canManageOffers && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" aria-label="Offer actions">
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => router.push(`/offers/${offer.id}`)}>
+                              <Edit className="size-4 mr-2" />
+                              Edit
                             </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onClick={() => duplicateMutation.mutate(offer)}
-                          >
-                            <Copy className="size-4 mr-2" />
-                            Duplicate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => setDeleteOfferId(offer.id)}
-                          >
-                            <Trash2 className="size-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            {offer.is_public && offer.public_slug ? (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    window.open(getPublicOfferUrl(offer.public_slug!), "_blank")
+                                  }
+                                >
+                                  <ExternalLink className="size-4 mr-2" />
+                                  Open public page
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    void navigator.clipboard.writeText(
+                                      getPublicOfferUrl(offer.public_slug!),
+                                    );
+                                    toast.success("Link copied");
+                                  }}
+                                >
+                                  <Link2 className="size-4 mr-2" />
+                                  Copy public link
+                                </DropdownMenuItem>
+                              </>
+                            ) : (
+                              <DropdownMenuItem onClick={() => router.push(`/offers/${offer.id}`)}>
+                                <Eye className="size-4 mr-2" />
+                                Preview
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => duplicateMutation.mutate(offer)}>
+                              <Copy className="size-4 mr-2" />
+                              Duplicate
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setDeleteOfferId(offer.id)}
+                            >
+                              <Trash2 className="size-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -357,29 +346,27 @@ export default function OffersPage() {
       </div>
 
       {/* Delete Confirmation */}
-      <AlertDialog
-        open={!!deleteOfferId}
-        onOpenChange={() => setDeleteOfferId(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Offer</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this offer? This action cannot be
-              undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteOfferId && deleteMutation.mutate(deleteOfferId)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {canManageOffers && (
+        <AlertDialog open={!!deleteOfferId} onOpenChange={() => setDeleteOfferId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Offer</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this offer? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteOfferId && deleteMutation.mutate(deleteOfferId)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </AppSidebar>
   );
 }

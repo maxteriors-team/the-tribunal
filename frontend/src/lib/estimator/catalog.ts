@@ -233,14 +233,17 @@ export function buildCatalog(estimate: LinearFeetEstimateResult | null | undefin
   // Permanent LED roofline — offered only when the workspace sells permanent
   // lighting (`permanent.enabled`). Like the warm/multicolor C9 pair, it targets
   // the shared roofline `feet`, so it's another *visual* for the one measured
-  // roofline; its per-ft rate is priced server-side (display hint only here).
+  // roofline; this derived display hint does not drive server package pricing.
   if (estimate?.permanent?.enabled) {
     products.push({
       id: "roofline-permanent",
       name: "Permanent LED Roofline",
       category: "permanent",
       kind: "linear",
-      price: estimate.permanent.per_ft,
+      price:
+        estimate.permanent.package_feet > 0
+          ? estimate.permanent.total / estimate.permanent.package_feet
+          : 0,
       style: "permanent",
       colors: COLOR_PRESETS["Warm White"],
       spacingIn: DEFAULT_SPACING.permanent,

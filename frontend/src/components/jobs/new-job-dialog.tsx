@@ -1,11 +1,12 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { CalendarDays, Loader2, Plus, RotateCcw, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { TechnicianSelect } from "@/components/jobs/technician-select";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ContactPicker } from "@/components/ui/contact-combobox";
 import {
   Dialog,
@@ -21,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCreateJob, useWorkspaceTechnicians } from "@/hooks/useJobs";
 import type { JobCreateRequest } from "@/lib/api/jobs";
 import { jobWindowError, localToIso } from "@/lib/jobs/job-derivations";
+import { cn } from "@/lib/utils";
 
 interface NewJobDialogProps {
   workspaceId: string;
@@ -32,9 +34,16 @@ const EMPTY_FORM = {
   contactId: "",
   title: "",
   description: "",
-  start: "",
-  end: "",
+  date: "",
+  startTime: "09:00",
+  endTime: "17:00",
+  scheduleLater: false,
+  anytime: false,
 };
+
+function localDateTime(date: string, time: string) {
+  return date && time ? `${date}T${time}` : "";
+}
 
 export function NewJobDialog({ workspaceId, open, onOpenChange }: NewJobDialogProps) {
   const [form, setForm] = useState(EMPTY_FORM);
@@ -42,8 +51,18 @@ export function NewJobDialog({ workspaceId, open, onOpenChange }: NewJobDialogPr
 
   const { data: techData } = useWorkspaceTechnicians(workspaceId, open);
   const createJob = useCreateJob(workspaceId);
-
   const technicians = useMemo(() => techData?.items ?? [], [techData?.items]);
+
+  const start = form.scheduleLater
+    ? ""
+    : localDateTime(form.date, form.anytime ? "00:00" : form.startTime);
+  const end = form.scheduleLater
+    ? ""
+    : localDateTime(form.date, form.anytime ? "23:59" : form.endTime);
+  const windowError = jobWindowError(start, end);
+  const hasSchedule = form.scheduleLater || Boolean(form.date);
+  const canSubmit =
+    Boolean(form.contactId) && form.title.trim().length > 0 && hasSchedule && !windowError;
 
   const reset = () => {
     setForm(EMPTY_FORM);
@@ -56,14 +75,10 @@ export function NewJobDialog({ workspaceId, open, onOpenChange }: NewJobDialogPr
   };
 
   const toggleTech = (id: string) => {
-    setSelectedTechs((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id],
+    setSelectedTechs((current) =>
+      current.includes(id) ? current.filter((technicianId) => technicianId !== id) : [...current, id],
     );
   };
-
-  const windowError = jobWindowError(form.start, form.end);
-
-  const canSubmit = Boolean(form.contactId) && form.title.trim().length > 0 && !windowError;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -71,8 +86,8 @@ export function NewJobDialog({ workspaceId, open, onOpenChange }: NewJobDialogPr
       contact_id: Number(form.contactId),
       title: form.title.trim(),
       description: form.description.trim() || null,
-      scheduled_start: localToIso(form.start),
-      scheduled_end: localToIso(form.end),
+      scheduled_start: form.scheduleLater ? null : localToIso(start),
+      scheduled_end: form.scheduleLater ? null : localToIso(end),
       technician_ids: selectedTechs,
     };
     createJob.mutate(body, {
@@ -86,97 +101,173 @@ export function NewJobDialog({ workspaceId, open, onOpenChange }: NewJobDialogPr
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[520px]">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[760px]">
+        <DialogHeader className="border-b px-6 py-5">
           <DialogTitle>New Job</DialogTitle>
-          <DialogDescription>
-            Create a work order, set a time window, and tag the workers who&apos;ll see it on
-            their calendar.
-          </DialogDescription>
+          <DialogDescription>Create the work order and its first visit.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Customer */}
-          <div className="space-y-1.5">
-            <Label htmlFor="job-contact">Customer</Label>
-            <ContactPicker
-              id="job-contact"
-              workspaceId={workspaceId}
-              value={form.contactId}
-              onChange={(contactId) => setForm((prev) => ({ ...prev, contactId }))}
-              placeholder="Search customers by name, phone, or email…"
-            />
-          </div>
+        <div className="overflow-y-auto px-6 py-5">
+          <section aria-labelledby="job-details-heading" className="space-y-4">
+            <h3 id="job-details-heading" className="text-sm font-semibold text-foreground">
+              Job details
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="job-contact">Customer</Label>
+                <ContactPicker
+                  id="job-contact"
+                  workspaceId={workspaceId}
+                  value={form.contactId}
+                  onChange={(contactId) => setForm((current) => ({ ...current, contactId }))}
+                  placeholder="Search customers by name, phone, or email…"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="job-title">Title</Label>
+                <Input
+                  id="job-title"
+                  placeholder="e.g. Landscape lighting installation"
+                  value={form.title}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, title: event.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          </section>
 
-          {/* Title */}
-          <div className="space-y-1.5">
-            <Label htmlFor="job-title">Title</Label>
-            <Input
-              id="job-title"
-              placeholder="e.g. Replace water heater"
-              value={form.title}
-              onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))}
-            />
-          </div>
+          <div className="my-6 border-t" />
 
-          {/* Description */}
-          <div className="space-y-1.5">
-            <Label htmlFor="job-description">Description</Label>
-            <Textarea
-              id="job-description"
-              placeholder="Scope, parts, access notes…"
-              value={form.description}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, description: event.target.value }))
-              }
-            />
-          </div>
+          <section aria-labelledby="visit-heading" className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 id="visit-heading" className="text-sm font-semibold text-foreground">
+                  Visit
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">One-off visit</p>
+              </div>
+              <CalendarDays className="size-5 text-muted-foreground" aria-hidden="true" />
+            </div>
 
-          {/* Time window */}
-          <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-center gap-3 rounded-md border p-3">
+              <Checkbox
+                id="job-schedule-later"
+                checked={form.scheduleLater}
+                onCheckedChange={(checked) =>
+                  setForm((current) => ({ ...current, scheduleLater: checked === true }))
+                }
+              />
+              <Label htmlFor="job-schedule-later" className="cursor-pointer font-medium">
+                Schedule later
+              </Label>
+            </div>
+
+            <div
+              className={cn("grid gap-4 sm:grid-cols-3", form.scheduleLater && "hidden")}
+              aria-hidden={form.scheduleLater}
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="job-date">Date</Label>
+                <Input
+                  id="job-date"
+                  type="date"
+                  value={form.date}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, date: event.target.value }))
+                  }
+                  disabled={form.scheduleLater}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="job-start">Start time</Label>
+                <Input
+                  id="job-start"
+                  type="time"
+                  value={form.startTime}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, startTime: event.target.value }))
+                  }
+                  disabled={form.scheduleLater || form.anytime}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="job-end">End time</Label>
+                <Input
+                  id="job-end"
+                  type="time"
+                  value={form.endTime}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, endTime: event.target.value }))
+                  }
+                  disabled={form.scheduleLater || form.anytime}
+                />
+              </div>
+            </div>
+
+            {!form.scheduleLater && (
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="job-anytime"
+                  checked={form.anytime}
+                  onCheckedChange={(checked) =>
+                    setForm((current) => ({ ...current, anytime: checked === true }))
+                  }
+                />
+                <Label htmlFor="job-anytime" className="cursor-pointer font-normal">
+                  Anytime
+                </Label>
+              </div>
+            )}
+            {windowError && <p className="text-sm text-destructive">{windowError}</p>}
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Users className="size-4" aria-hidden="true" /> Assign technicians
+              </Label>
+              <TechnicianSelect
+                technicians={technicians}
+                selectedIds={selectedTechs}
+                onToggle={toggleTech}
+              />
+              <p className="text-xs text-muted-foreground">
+                Assigned technicians can see this visit on their calendar.
+              </p>
+            </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="job-start">Starts</Label>
-              <Input
-                id="job-start"
-                type="datetime-local"
-                value={form.start}
-                onChange={(event) => setForm((prev) => ({ ...prev, start: event.target.value }))}
+              <Label htmlFor="job-description">Visit instructions</Label>
+              <Textarea
+                id="job-description"
+                placeholder="Scope, access details, materials, or customer requests…"
+                value={form.description}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, description: event.target.value }))
+                }
+                className="min-h-28"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="job-end">Ends</Label>
-              <Input
-                id="job-end"
-                type="datetime-local"
-                value={form.end}
-                onChange={(event) => setForm((prev) => ({ ...prev, end: event.target.value }))}
-              />
-            </div>
-          </div>
-          {windowError && <p className="text-xs text-destructive">{windowError}</p>}
-
-          {/* Tag workers */}
-          <div className="space-y-1.5">
-            <Label>Assign technicians</Label>
-            <TechnicianSelect
-              technicians={technicians}
-              selectedIds={selectedTechs}
-              onToggle={toggleTech}
-            />
-            <p className="text-xs text-muted-foreground">
-              Only technicians linked to a login see jobs on their own calendar.
-            </p>
-          </div>
+          </section>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>
-            Cancel
+        <DialogFooter className="border-t bg-background px-6 py-4 sm:justify-between">
+          <Button type="button" variant="ghost" onClick={reset} disabled={createJob.isPending}>
+            <RotateCcw className="mr-2 size-4" aria-hidden="true" />
+            Reset
           </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit || createJob.isPending}>
-            {createJob.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-            Create job
-          </Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={!canSubmit || createJob.isPending}>
+              {createJob.isPending ? (
+                <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Plus className="mr-2 size-4" aria-hidden="true" />
+              )}
+              Save job
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

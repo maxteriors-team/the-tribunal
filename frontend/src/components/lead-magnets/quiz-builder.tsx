@@ -84,7 +84,11 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
     onChange({ ...value, questions: newQuestions });
   };
 
-  const updateOption = (questionIndex: number, optionIndex: number, updates: Partial<QuizOption>) => {
+  const updateOption = (
+    questionIndex: number,
+    optionIndex: number,
+    updates: Partial<QuizOption>,
+  ) => {
     const newQuestions = [...value.questions];
     const newOptions = [...newQuestions[questionIndex].options];
     newOptions[optionIndex] = { ...newOptions[optionIndex], ...updates };
@@ -137,12 +141,14 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
   };
 
   const addResult = () => {
-    const maxScore = value.results.length > 0
-      ? Math.max(...value.results.map(r => r.max_score))
-      : 100;
+    const maxScore =
+      value.results.length > 0 ? Math.max(...value.results.map((r) => r.max_score)) : 100;
     onChange({
       ...value,
-      results: [...value.results, createDefaultResult(`result${value.results.length + 1}`, 0, maxScore)],
+      results: [
+        ...value.results,
+        createDefaultResult(`result${value.results.length + 1}`, 0, maxScore),
+      ],
     });
   };
 
@@ -224,7 +230,12 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
             <div className="flex justify-end">
               <Button
                 onClick={() => generateMutation.mutate()}
-                disabled={!aiInputs.topic || !aiInputs.target_audience || !aiInputs.goal || generateMutation.isPending}
+                disabled={
+                  !aiInputs.topic ||
+                  !aiInputs.target_audience ||
+                  !aiInputs.goal ||
+                  generateMutation.isPending
+                }
               >
                 {generateMutation.isPending ? (
                   <>
@@ -285,7 +296,7 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
                   value={question.type}
                   onValueChange={(v) => updateQuestion(qIndex, { type: v as QuizQuestion["type"] })}
                 >
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="w-40" aria-label={`Question ${qIndex + 1} type`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -299,8 +310,9 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
                   size="icon"
                   className="text-destructive"
                   onClick={() => removeQuestion(qIndex)}
+                  aria-label={`Remove question ${qIndex + 1}`}
                 >
-                  <Trash2 className="size-4" />
+                  <Trash2 className="size-4" aria-hidden="true" />
                 </Button>
               </div>
             </CardHeader>
@@ -332,7 +344,9 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
                         type="number"
                         placeholder="Score"
                         value={option.score}
-                        onChange={(e) => updateOption(qIndex, oIndex, { score: parseInt(e.target.value) || 0 })}
+                        onChange={(e) =>
+                          updateOption(qIndex, oIndex, { score: parseInt(e.target.value) || 0 })
+                        }
                         className="w-20"
                       />
                       {question.options.length > 2 && (
@@ -341,8 +355,9 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
                           size="icon"
                           className="text-muted-foreground hover:text-destructive"
                           onClick={() => removeOption(qIndex, oIndex)}
+                          aria-label={`Remove option ${oIndex + 1} from question ${qIndex + 1}`}
                         >
-                          <Trash2 className="size-4" />
+                          <Trash2 className="size-4" aria-hidden="true" />
                         </Button>
                       )}
                     </div>
@@ -357,7 +372,9 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
                     type="number"
                     placeholder="Weight multiplier (e.g., 5)"
                     value={question.weight || ""}
-                    onChange={(e) => updateQuestion(qIndex, { weight: parseInt(e.target.value) || undefined })}
+                    onChange={(e) =>
+                      updateQuestion(qIndex, { weight: parseInt(e.target.value) || undefined })
+                    }
                     className="w-32"
                   />
                   <p className="text-xs text-muted-foreground">
@@ -403,7 +420,9 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
                     type="number"
                     placeholder="Min"
                     value={result.min_score}
-                    onChange={(e) => updateResult(rIndex, { min_score: parseInt(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      updateResult(rIndex, { min_score: parseInt(e.target.value) || 0 })
+                    }
                     className="w-20"
                   />
                   <span className="text-muted-foreground">to</span>
@@ -411,7 +430,9 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
                     type="number"
                     placeholder="Max"
                     value={result.max_score}
-                    onChange={(e) => updateResult(rIndex, { max_score: parseInt(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      updateResult(rIndex, { max_score: parseInt(e.target.value) || 0 })
+                    }
                     className="w-20"
                   />
                   <span className="text-muted-foreground">points</span>
@@ -421,8 +442,9 @@ export function QuizBuilder({ workspaceId, value, onChange }: QuizBuilderProps) 
                   size="icon"
                   className="text-destructive"
                   onClick={() => removeResult(rIndex)}
+                  aria-label={`Remove result range ${rIndex + 1}`}
                 >
-                  <Trash2 className="size-4" />
+                  <Trash2 className="size-4" aria-hidden="true" />
                 </Button>
               </div>
               <Input

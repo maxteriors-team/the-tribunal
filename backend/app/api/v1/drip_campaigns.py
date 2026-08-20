@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
+from app.core.permissions import Capability
 from app.models.drip_campaign import (
     DripCampaign,
     DripCampaignStatus,
@@ -26,7 +27,11 @@ from app.schemas.drip_campaign import (
 )
 from app.services.reactivation.drip_runner import enroll_contacts
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.OUTREACH_WRITE))
+    ]
+)
 logger = structlog.get_logger()
 
 

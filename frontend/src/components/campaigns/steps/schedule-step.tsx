@@ -70,9 +70,7 @@ export function ScheduleStep({
             id="scheduled-start"
             type="datetime-local"
             value={scheduledStart || ""}
-            onChange={(e) =>
-              onScheduledStartChange(e.target.value || undefined)
-            }
+            onChange={(e) => onScheduledStartChange(e.target.value || undefined)}
           />
         </div>
         <div className="space-y-2">
@@ -81,9 +79,7 @@ export function ScheduleStep({
             id="scheduled-end"
             type="datetime-local"
             value={scheduledEnd || ""}
-            onChange={(e) =>
-              onScheduledEndChange(e.target.value || undefined)
-            }
+            onChange={(e) => onScheduledEndChange(e.target.value || undefined)}
           />
         </div>
       </div>
@@ -96,12 +92,11 @@ export function ScheduleStep({
             <Clock className="size-4" />
             <div>
               <h4 className="font-medium">{sendingHoursLabel}</h4>
-              <p className="text-sm text-muted-foreground">
-                {sendingHoursDescription}
-              </p>
+              <p className="text-sm text-muted-foreground">{sendingHoursDescription}</p>
             </div>
           </div>
           <Switch
+            aria-label={sendingHoursLabel}
             checked={sendingHoursEnabled}
             onCheckedChange={onSendingHoursEnabledChange}
           />
@@ -115,25 +110,27 @@ export function ScheduleStep({
             className="grid grid-cols-3 gap-4 pl-4 border-l-2 border-muted"
           >
             <div className="space-y-2">
-              <Label>Start Time</Label>
+              <Label htmlFor="campaign-sending-hours-start">Start Time</Label>
               <Input
+                id="campaign-sending-hours-start"
                 type="time"
                 value={sendingHoursStart}
                 onChange={(e) => onSendingHoursStartChange(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label>End Time</Label>
+              <Label htmlFor="campaign-sending-hours-end">End Time</Label>
               <Input
+                id="campaign-sending-hours-end"
                 type="time"
                 value={sendingHoursEnd}
                 onChange={(e) => onSendingHoursEndChange(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label>Timezone</Label>
+              <Label htmlFor="campaign-timezone">Timezone</Label>
               <Select value={timezone} onValueChange={onTimezoneChange}>
-                <SelectTrigger>
+                <SelectTrigger id="campaign-timezone">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -163,15 +160,13 @@ export function ScheduleStep({
                 variant={isSelected ? "default" : "outline"}
                 size="sm"
                 className="w-12"
+                aria-label={`${day.value} sending`}
+                aria-pressed={isSelected}
                 onClick={() => {
                   if (isSelected) {
-                    onSendingDaysChange(
-                      sendingDays.filter((d) => d !== day.value)
-                    );
+                    onSendingDaysChange(sendingDays.filter((d) => d !== day.value));
                   } else {
-                    onSendingDaysChange(
-                      [...sendingDays, day.value].sort()
-                    );
+                    onSendingDaysChange([...sendingDays, day.value].sort());
                   }
                 }}
               >
@@ -180,9 +175,7 @@ export function ScheduleStep({
             );
           })}
         </div>
-        {errors.sending_days && (
-          <p className="text-sm text-destructive">{errors.sending_days}</p>
-        )}
+        {errors.sending_days && <p className="text-sm text-destructive">{errors.sending_days}</p>}
       </div>
 
       {rateLimitingSlot && (

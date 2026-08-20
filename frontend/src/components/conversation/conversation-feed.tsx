@@ -294,6 +294,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   return (
     <div className={cn("flex flex-col h-full overflow-hidden", className)}>
       <ChatHeader
+        workspaceId={workspaceId ?? ""}
         contactId={selectedContact.id}
         contactName={contactName}
         phoneNumber={selectedContact.phone_number}

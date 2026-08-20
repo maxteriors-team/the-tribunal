@@ -10,10 +10,17 @@ source the quote / invoice line-item editors pull names and prices from.
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
+from app.api.deps import (
+    DB,
+    CanReadBilling,
+    CanWriteBilling,
+    CurrentUser,
+    require_route_capabilities,
+)
 from app.api.service_errors import ServiceErrorRoute
+from app.core.permissions import Capability
 from app.schemas.catalog import (
     CatalogItemCreate,
     CatalogItemResponse,
@@ -22,7 +29,12 @@ from app.schemas.catalog import (
 )
 from app.services.catalog import CatalogService
 
-router = APIRouter(route_class=ServiceErrorRoute)
+router = APIRouter(
+    route_class=ServiceErrorRoute,
+    dependencies=[
+        Depends(require_route_capabilities(Capability.BILLING_READ, Capability.BILLING_WRITE))
+    ],
+)
 
 
 @router.get("", response_model=PaginatedCatalogItems)

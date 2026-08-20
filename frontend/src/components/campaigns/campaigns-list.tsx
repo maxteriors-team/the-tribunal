@@ -56,6 +56,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { campaignsApi } from "@/lib/api/campaigns";
 import { queryKeys } from "@/lib/query-keys";
@@ -77,9 +78,15 @@ export function CampaignsList() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canManageCampaigns = can("outreach:write");
   const queryClient = useQueryClient();
 
-  const { data: campaignsData, isPending, error } = useQuery({
+  const {
+    data: campaignsData,
+    isPending,
+    error,
+  } = useQuery({
     queryKey: queryKeys.campaigns.all(workspaceId ?? ""),
     queryFn: () => {
       if (!workspaceId) throw new Error("Workspace not loaded");
@@ -139,27 +146,20 @@ export function CampaignsList() {
   });
 
   const filteredCampaigns = campaigns.filter((campaign) => {
-    const matchesSearch = campaign.name
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesStatus =
-      statusFilter === "all" || campaign.status === statusFilter;
+    const matchesSearch = campaign.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "all" || campaign.status === statusFilter;
     const matchesType = typeFilter === "all" || campaign.campaign_type === typeFilter;
     return matchesSearch && matchesStatus && matchesType;
   });
 
   const getDeliveryRate = (campaign: Campaign) => {
     if (campaign.messages_sent === 0) return 0;
-    return Math.round(
-      (campaign.messages_delivered / campaign.messages_sent) * 100
-    );
+    return Math.round((campaign.messages_delivered / campaign.messages_sent) * 100);
   };
 
   const getResponseRate = (campaign: Campaign) => {
     if (campaign.messages_sent === 0) return 0;
-    return Math.round(
-      (campaign.replies_received / campaign.messages_sent) * 100
-    );
+    return Math.round((campaign.replies_received / campaign.messages_sent) * 100);
   };
 
   if (isPending) return <ResourceListLoading />;
@@ -168,7 +168,9 @@ export function CampaignsList() {
     return (
       <ResourceListError
         resourceName="campaigns"
-        onRetry={() => queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all(workspaceId ?? "") })}
+        onRetry={() =>
+          queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all(workspaceId ?? "") })
+        }
       />
     );
   }
@@ -180,45 +182,49 @@ export function CampaignsList() {
           title="Campaigns"
           subtitle="Create and manage your outreach campaigns"
           action={
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button>
-                  New Campaign
-                  <ChevronDown className="ml-2 size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuItem asChild>
-                  <Link href="/campaigns/sms/new" className="flex items-center cursor-pointer">
-                    <MessageSquare className="mr-2 size-4" />
-                    SMS Campaign
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/campaigns/voice/new" className="flex items-center cursor-pointer">
-                    <Phone className="mr-2 size-4" />
-                    <div>
-                      <div>Voice Campaign with SMS Fallback</div>
-                      <div className="text-xs text-muted-foreground">AI calls with auto-text on failures</div>
-                    </div>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link
-                    href="/campaigns/pre-booking/new"
-                    className="flex items-center cursor-pointer"
-                  >
-                    <CalendarClock className="mr-2 size-4" />
-                    <div>
-                      <div>Pre-Booking Campaign</div>
-                      <div className="text-xs text-muted-foreground">
-                        Sell next season&apos;s work now
+            canManageCampaigns ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button>
+                    New Campaign
+                    <ChevronDown className="ml-2 size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuItem asChild>
+                    <Link href="/campaigns/sms/new" className="flex items-center cursor-pointer">
+                      <MessageSquare className="mr-2 size-4" />
+                      SMS Campaign
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/campaigns/voice/new" className="flex items-center cursor-pointer">
+                      <Phone className="mr-2 size-4" />
+                      <div>
+                        <div>Voice Campaign with SMS Fallback</div>
+                        <div className="text-xs text-muted-foreground">
+                          AI calls with auto-text on failures
+                        </div>
                       </div>
-                    </div>
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href="/campaigns/pre-booking/new"
+                      className="flex items-center cursor-pointer"
+                    >
+                      <CalendarClock className="mr-2 size-4" />
+                      <div>
+                        <div>Pre-Booking Campaign</div>
+                        <div className="text-xs text-muted-foreground">
+                          Sell next season&apos;s work now
+                        </div>
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : undefined
           }
         />
       }
@@ -227,8 +233,14 @@ export function CampaignsList() {
           stats={[
             { label: "Total Campaigns", value: campaigns.length },
             { label: "Active", value: campaigns.filter((c) => c.status === "running").length },
-            { label: "Total Contacts", value: campaigns.reduce((sum, c) => sum + c.total_contacts, 0) },
-            { label: "Total Responses", value: campaigns.reduce((sum, c) => sum + c.replies_received, 0) },
+            {
+              label: "Total Contacts",
+              value: campaigns.reduce((sum, c) => sum + c.total_contacts, 0),
+            },
+            {
+              label: "Total Responses",
+              value: campaigns.reduce((sum, c) => sum + c.replies_received, 0),
+            },
           ]}
         />
       }
@@ -240,7 +252,10 @@ export function CampaignsList() {
           filters={
             <>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[140px]">
+                <SelectTrigger
+                  className="w-full sm:w-[140px]"
+                  aria-label="Filter campaigns by status"
+                >
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -253,7 +268,10 @@ export function CampaignsList() {
                 </SelectContent>
               </Select>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full sm:w-[140px]">
+                <SelectTrigger
+                  className="w-full sm:w-[140px]"
+                  aria-label="Filter campaigns by type"
+                >
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -275,9 +293,11 @@ export function CampaignsList() {
           title="No campaigns yet"
           description="Create your first campaign to start reaching your contacts"
           action={
-            <Button asChild>
-              <Link href="/campaigns/new">Create campaign</Link>
-            </Button>
+            canManageCampaigns ? (
+              <Button asChild>
+                <Link href="/campaigns/new">Create campaign</Link>
+              </Button>
+            ) : undefined
           }
         />
       }
@@ -328,10 +348,7 @@ export function CampaignsList() {
                       className="group cursor-pointer hover:bg-muted/50"
                     >
                       <TableCell>
-                        <Link
-                          href={`/campaigns/${campaign.id}`}
-                          className="block"
-                        >
+                        <Link href={`/campaigns/${campaign.id}`} className="block">
                           <div className="font-medium">{campaign.name}</div>
                           <div className="text-sm text-muted-foreground line-clamp-1">
                             {campaign.description}
@@ -356,16 +373,17 @@ export function CampaignsList() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={campaignStatusColors[campaign.status]}
-                        >
+                        <Badge variant="outline" className={campaignStatusColors[campaign.status]}>
                           {campaign.status}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
-                          <Progress value={progress} className="h-2 w-24" />
+                          <Progress
+                            value={progress}
+                            aria-label={`${campaign.name} delivery progress`}
+                            className="h-2 w-24"
+                          />
                           <div className="text-xs text-muted-foreground">
                             {formatNumber(campaign.messages_sent)} /{" "}
                             {formatNumber(campaign.total_contacts)}
@@ -373,53 +391,57 @@ export function CampaignsList() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">
-                          {getDeliveryRate(campaign)}%
-                        </div>
+                        <div className="font-medium">{getDeliveryRate(campaign)}%</div>
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">
-                          {getResponseRate(campaign)}%
-                        </div>
+                        <div className="font-medium">{getResponseRate(campaign)}%</div>
                       </TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="opacity-0 group-hover:opacity-100"
-                              aria-label="Campaign actions"
-                            >
-                              <MoreHorizontal className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {campaign.status === "running" ? (
-                              <DropdownMenuItem onSelect={() => pauseMutation.mutate(campaign.id)}>
-                                <Pause className="mr-2 size-4" />
-                                Pause
+                        {canManageCampaigns && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="opacity-0 group-hover:opacity-100"
+                                aria-label="Campaign actions"
+                              >
+                                <MoreHorizontal className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {campaign.status === "running" ? (
+                                <DropdownMenuItem
+                                  onSelect={() => pauseMutation.mutate(campaign.id)}
+                                >
+                                  <Pause className="mr-2 size-4" />
+                                  Pause
+                                </DropdownMenuItem>
+                              ) : campaign.status === "paused" || campaign.status === "draft" ? (
+                                <DropdownMenuItem
+                                  onSelect={() => startMutation.mutate(campaign.id)}
+                                >
+                                  <Play className="mr-2 size-4" />
+                                  {campaign.status === "draft" ? "Start" : "Resume"}
+                                </DropdownMenuItem>
+                              ) : null}
+                              <DropdownMenuItem
+                                onSelect={() => duplicateMutation.mutate(campaign.id)}
+                              >
+                                <Copy className="mr-2 size-4" />
+                                Duplicate
                               </DropdownMenuItem>
-                            ) : campaign.status === "paused" ||
-                              campaign.status === "draft" ? (
-                              <DropdownMenuItem onSelect={() => startMutation.mutate(campaign.id)}>
-                                <Play className="mr-2 size-4" />
-                                {campaign.status === "draft"
-                                  ? "Start"
-                                  : "Resume"}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => deleteMutation.mutate(campaign.id)}
+                              >
+                                <Trash2 className="mr-2 size-4" />
+                                Delete
                               </DropdownMenuItem>
-                            ) : null}
-                            <DropdownMenuItem onSelect={() => duplicateMutation.mutate(campaign.id)}>
-                              <Copy className="mr-2 size-4" />
-                              Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onSelect={() => deleteMutation.mutate(campaign.id)}>
-                              <Trash2 className="mr-2 size-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </TableCell>
                     </motion.tr>
                   );

@@ -60,6 +60,14 @@ class ContactUpdate(LeadAttributionFields):
     important_dates: dict[str, Any] | None = None
 
 
+class ContactNoteCreate(BaseModel):
+    """Append-only internal note input for a workspace contact."""
+
+    body: str = Field(..., min_length=1, max_length=5000)
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
 class QualificationSignalDetail(BaseModel):
     """Detail for a single BANT qualification signal."""
 

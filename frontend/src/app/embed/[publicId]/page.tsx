@@ -4,16 +4,9 @@ import { Mic, MicOff, X, Phone } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, use, Suspense } from "react";
 
-import {
-  postToParent,
-  subscribeToEmbedMessages,
-} from "@/lib/embed/messaging";
+import { postToParent, subscribeToEmbedMessages } from "@/lib/embed/messaging";
 
-import {
-  DEFAULT_PRIMARY_COLOR,
-  getAgentStateInfo,
-  getEmbedTheme,
-} from "./_theme";
+import { DEFAULT_PRIMARY_COLOR, getAgentStateInfo, getEmbedTheme } from "./_theme";
 import { POSITION_CLASSES_LG, type ThemeOption } from "./_types";
 import { useAgentConfig, useResolvedTheme } from "./_use-agent-config";
 import { useVoiceSession } from "./_use-voice-session";
@@ -43,24 +36,16 @@ function EmbedPageContent({ params }: EmbedPageProps) {
     postToParent({ type: "ai-agent:close" });
   }, []);
 
-  const {
-    status,
-    agentState,
-    isMuted,
-    frequencies,
-    smoothedLevel,
-    start,
-    end,
-    toggleMute,
-  } = useVoiceSession({
-    publicId,
-    config,
-    saveTranscript: true,
-    audioAnalysis: "level+bars",
-    barCount: BAR_COUNT,
-    onError: setSessionError,
-    onClose: () => setIsExpanded(false),
-  });
+  const { status, agentState, isMuted, frequencies, smoothedLevel, start, end, toggleMute } =
+    useVoiceSession({
+      publicId,
+      config,
+      saveTranscript: true,
+      audioAnalysis: "level+bars",
+      barCount: BAR_COUNT,
+      onError: setSessionError,
+      onClose: () => setIsExpanded(false),
+    });
 
   const error = configError ?? sessionError;
 
@@ -223,7 +208,9 @@ function EmbedPageContent({ params }: EmbedPageProps) {
           <div className="flex items-center gap-2">
             {status === "connected" && (
               <button
+                type="button"
                 onClick={toggleMute}
+                aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
                 className="rounded-full p-3 transition-all duration-200 hover:scale-105"
                 style={{
                   backgroundColor: isMuted
@@ -239,7 +226,9 @@ function EmbedPageContent({ params }: EmbedPageProps) {
             )}
 
             <button
+              type="button"
               onClick={handleEnd}
+              aria-label="End voice session"
               className="rounded-full bg-red-500 p-3 text-white transition-all duration-200 hover:scale-105 hover:bg-red-600"
             >
               <X className="h-5 w-5" />
@@ -271,6 +260,7 @@ function EmbedPageContent({ params }: EmbedPageProps) {
         </div>
       ) : (
         <button
+          type="button"
           onClick={() => void handleStart()}
           className="group relative flex items-center gap-3 overflow-hidden rounded-full py-3 pl-4 pr-6 shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl active:scale-95"
           style={{

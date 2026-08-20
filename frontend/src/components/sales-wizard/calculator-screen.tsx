@@ -803,6 +803,14 @@ export function CalculatorScreen({
                   >
                     Copy
                   </button>
+                  <a
+                    className="share-link-copy inline-flex items-center justify-center no-underline"
+                    href={shareLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open
+                  </a>
                 </div>
               ) : null}
               <div className="share-link-row">

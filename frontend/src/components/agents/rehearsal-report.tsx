@@ -45,7 +45,7 @@ function ScoreStat({
           {display}
           {value !== null ? <span className="text-base">/100</span> : null}
         </div>
-        {value !== null ? <Progress value={value} /> : null}
+        {value !== null ? <Progress value={value} aria-label={`${label} score`} /> : null}
       </CardContent>
     </Card>
   );
@@ -64,11 +64,7 @@ function FeedbackList({
 }) {
   if (items.length === 0) return null;
   const toneClass =
-    tone === "good"
-      ? "text-emerald-600"
-      : tone === "warn"
-        ? "text-amber-600"
-        : "text-sky-600";
+    tone === "good" ? "text-emerald-600" : tone === "warn" ? "text-amber-600" : "text-sky-600";
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -108,9 +104,7 @@ export function RehearsalReport({ run }: { run: RehearsalRun }) {
           </p>
         </div>
         <div className="text-right">
-          <div className="text-xs uppercase text-muted-foreground">
-            Overall score
-          </div>
+          <div className="text-xs uppercase text-muted-foreground">Overall score</div>
           <div className={`text-4xl font-bold ${scoreColor(run.overall_score)}`}>
             {run.overall_score === null ? "—" : Math.round(run.overall_score)}
           </div>
@@ -193,9 +187,7 @@ export function RehearsalReport({ run }: { run: RehearsalRun }) {
                 )}
                 <div>
                   <div className="font-medium">{item.objection}</div>
-                  {item.note ? (
-                    <div className="text-muted-foreground">{item.note}</div>
-                  ) : null}
+                  {item.note ? <div className="text-muted-foreground">{item.note}</div> : null}
                 </div>
               </div>
             ))}
@@ -211,19 +203,14 @@ export function RehearsalReport({ run }: { run: RehearsalRun }) {
           {run.transcript.map((turn, i) => {
             const isProspect = turn.role === "prospect";
             return (
-              <div
-                key={i}
-                className={`flex ${isProspect ? "justify-start" : "justify-end"}`}
-              >
+              <div key={i} className={`flex ${isProspect ? "justify-start" : "justify-end"}`}>
                 <div
                   className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-                    isProspect
-                      ? "bg-muted"
-                      : "bg-primary text-primary-foreground"
+                    isProspect ? "bg-muted" : "bg-primary text-primary-foreground"
                   }`}
                 >
                   <div className="mb-1 text-xs opacity-70">
-                    {isProspect ? run.persona_name ?? "Prospect" : "Rep"}
+                    {isProspect ? (run.persona_name ?? "Prospect") : "Rep"}
                   </div>
                   {turn.content}
                 </div>

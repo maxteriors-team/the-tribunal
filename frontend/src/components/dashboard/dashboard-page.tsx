@@ -31,9 +31,7 @@ import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 
 export function DashboardPage() {
   const workspaceId = useWorkspaceId();
-  const { data, isPending, error, isFetching, refetch } = useDashboard(
-    workspaceId ?? "",
-  );
+  const { data, isPending, error, isFetching, refetch } = useDashboard(workspaceId ?? "");
 
   if (error && !data) {
     return (
@@ -46,9 +44,9 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="space-y-6 p-4 sm:p-6">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight gradient-heading">
             Dashboard
             {isFetching && !isPending && (
@@ -59,11 +57,11 @@ export function DashboardPage() {
             Welcome back! Here&apos;s an overview of your CRM activity.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          <Button variant="outline" className="flex-1 sm:flex-none" asChild>
             <Link href="/campaigns/new">New Campaign</Link>
           </Button>
-          <Button asChild>
+          <Button className="flex-1 sm:flex-none" asChild>
             <Link href="/contacts">
               <Users className="mr-2 size-4" />
               View Contacts
@@ -89,10 +87,7 @@ export function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.12 }}
       >
-        <RevenueRoiCard
-          revenueStats={data?.revenue_stats}
-          isPending={isPending}
-        />
+        <RevenueRoiCard revenueStats={data?.revenue_stats} isPending={isPending} />
       </motion.div>
 
       <motion.div
@@ -100,10 +95,7 @@ export function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.13 }}
       >
-        <LeadSourceRoiCard
-          stats={data?.lead_source_roi_stats}
-          isPending={isPending}
-        />
+        <LeadSourceRoiCard stats={data?.lead_source_roi_stats} isPending={isPending} />
       </motion.div>
 
       <motion.div
@@ -111,10 +103,7 @@ export function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
       >
-        <AppointmentStatsCard
-          appointmentStats={data?.appointment_stats}
-          isPending={isPending}
-        />
+        <AppointmentStatsCard appointmentStats={data?.appointment_stats} isPending={isPending} />
       </motion.div>
 
       <motion.div
@@ -122,10 +111,7 @@ export function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.16 }}
       >
-        <SpeedToLeadCard
-          speedToLeadStats={data?.speed_to_lead_stats}
-          isPending={isPending}
-        />
+        <SpeedToLeadCard speedToLeadStats={data?.speed_to_lead_stats} isPending={isPending} />
       </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -142,10 +128,7 @@ export function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.19 }}
         >
-          <RoleplayCard
-            roleplayStats={data?.roleplay_stats}
-            isPending={isPending}
-          />
+          <RoleplayCard roleplayStats={data?.roleplay_stats} isPending={isPending} />
         </motion.div>
       </div>
 
@@ -154,10 +137,7 @@ export function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <KnowledgeBaseCard
-          knowledgeBaseStats={data?.knowledge_base_stats}
-          isPending={isPending}
-        />
+        <KnowledgeBaseCard knowledgeBaseStats={data?.knowledge_base_stats} isPending={isPending} />
       </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -167,10 +147,7 @@ export function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <ActiveCampaignsCard
-            campaigns={data?.campaign_stats ?? []}
-            isPending={isPending}
-          />
+          <ActiveCampaignsCard campaigns={data?.campaign_stats ?? []} isPending={isPending} />
         </motion.div>
 
         <motion.div
@@ -188,10 +165,7 @@ export function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
-          <RecentActivityFeed
-            activities={data?.recent_activity ?? []}
-            isPending={isPending}
-          />
+          <RecentActivityFeed activities={data?.recent_activity ?? []} isPending={isPending} />
         </motion.div>
 
         <motion.div
@@ -200,10 +174,7 @@ export function DashboardPage() {
           transition={{ delay: 0.5 }}
           className="space-y-6"
         >
-          <TodayOverviewCard
-            overview={data?.today_overview}
-            isPending={isPending}
-          />
+          <TodayOverviewCard overview={data?.today_overview} isPending={isPending} />
           <NudgesCard workspaceId={workspaceId} />
           <QuickActionsCard />
         </motion.div>

@@ -9,12 +9,14 @@ import {
   Loader2,
   MessageSquare,
   Phone,
+  StickyNote,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { OutboundCallDialog } from "@/components/calls/outbound-call-dialog";
+import { ClientNoteDialog } from "@/components/contacts/client-note-dialog";
 import { ContactAIKnowledge } from "@/components/contacts/contact-detail/contact-ai-knowledge";
 import { ContactHistory } from "@/components/contacts/contact-detail/contact-history";
 import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
@@ -105,25 +107,16 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
   const workspaceId = useWorkspaceId();
   const { can } = useCapabilities();
   const [editOpen, setEditOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
-  const {
-    data: contact,
-    isPending,
-    isError,
-    refetch,
-  } = useContact(workspaceId ?? "", contactId);
+  const { data: contact, isPending, isError, refetch } = useContact(workspaceId ?? "", contactId);
 
-  const {
-    callContact,
-    callDialogOpen,
-    setCallDialogOpen,
-    submitCall,
-    initiateCallMutation,
-  } = useContactSidebarData({
-    workspaceId,
-    contact: contact ?? null,
-  });
+  const { callContact, callDialogOpen, setCallDialogOpen, submitCall, initiateCallMutation } =
+    useContactSidebarData({
+      workspaceId,
+      contact: contact ?? null,
+    });
 
   if (isPending) {
     return <PageLoadingState message="Loading contact…" />;
@@ -166,17 +159,12 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
             <div className="min-w-0">
               <h1 className="truncate text-xl font-semibold">{displayName}</h1>
               {contact.company_name && (
-                <p className="text-muted-foreground truncate text-sm">
-                  {contact.company_name}
-                </p>
+                <p className="text-muted-foreground truncate text-sm">{contact.company_name}</p>
               )}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge variant="secondary" className="gap-1.5">
                   <span
-                    className={cn(
-                      "size-2 rounded-full",
-                      contactStatusDotColors[contact.status],
-                    )}
+                    className={cn("size-2 rounded-full", contactStatusDotColors[contact.status])}
                     aria-hidden
                   />
                   {contactStatusLabels[contact.status]}
@@ -217,6 +205,12 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
               <CalendarPlus className="size-4" />
               Schedule
             </Button>
+            {can("crm:write") && (
+              <Button variant="outline" onClick={() => setNotesOpen(true)}>
+                <StickyNote className="size-4" />
+                Notes
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Edit2 className="size-4" />
               Edit
@@ -249,10 +243,7 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
 
           <Card>
             <CardContent className="space-y-6">
-              <EngagementSummary
-                workspaceId={workspaceId ?? ""}
-                contactId={contact.id}
-              />
+              <EngagementSummary workspaceId={workspaceId ?? ""} contactId={contact.id} />
               <Separator />
               <ContactFilesMedia contactId={contact.id} />
             </CardContent>
@@ -276,12 +267,16 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
         </div>
       </div>
 
-      <ContactFormDialog
-        mode="edit"
-        contact={contact}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-      />
+      <ContactFormDialog mode="edit" contact={contact} open={editOpen} onOpenChange={setEditOpen} />
+      {workspaceId && (
+        <ClientNoteDialog
+          workspaceId={workspaceId}
+          contactId={contact.id}
+          contactName={displayName}
+          open={notesOpen}
+          onOpenChange={setNotesOpen}
+        />
+      )}
       <ScheduleAppointmentDialog
         contact={contact}
         open={scheduleOpen}

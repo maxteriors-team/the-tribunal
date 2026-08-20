@@ -215,7 +215,7 @@ describe("buildCatalog bridge", () => {
   it("derives draw/place products from the christmas catalog", () => {
     const catalog = buildCatalog({
       feet: 0,
-      permanent: { enabled: true, total: 0, per_ft: 32, roofline_cost: 0, custom_total: 0 },
+      permanent: { enabled: true, total: 4371.5, per_ft: 0, package_feet: 100, package_cogs: 1249, markup: 3.5, roofline_cost: 4371.5, custom_total: 0 },
       christmas: {
         enabled: true,
         total: 0,

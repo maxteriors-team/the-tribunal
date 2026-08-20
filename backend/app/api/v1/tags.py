@@ -5,7 +5,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 
-from app.api.deps import DB, CurrentUser, TransactionalDB, get_workspace
+from app.api.deps import (
+    DB,
+    CurrentUser,
+    TransactionalDB,
+    get_workspace,
+    require_route_capabilities,
+)
+from app.core.permissions import Capability
 from app.models.workspace import Workspace
 from app.schemas.tag import (
     BulkTagRequest,
@@ -17,7 +24,9 @@ from app.schemas.tag import (
 )
 from app.services.tags import TagService
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_route_capabilities(Capability.CRM_READ, Capability.CRM_WRITE))]
+)
 
 
 async def _transactional_workspace(

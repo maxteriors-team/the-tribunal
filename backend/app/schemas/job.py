@@ -8,6 +8,7 @@ job on their calendar. Status is derived/maintained server-side by
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -81,6 +82,80 @@ class JobScheduleRequest(BaseModel):
         if self.scheduled_end <= self.scheduled_start:
             raise ValueError("scheduled_end must be after scheduled_start")
         return self
+
+
+class JobVisitCreate(BaseModel):
+    """Add a scheduled visit to a job."""
+
+    starts_at: datetime
+    ends_at: datetime
+    anytime: bool = False
+    instructions: str | None = Field(None, max_length=5000)
+
+    @model_validator(mode="after")
+    def _check_order(self) -> "JobVisitCreate":
+        if self.ends_at <= self.starts_at:
+            raise ValueError("ends_at must be after starts_at")
+        return self
+
+
+class JobVisitUpdate(BaseModel):
+    """Update a visit window, instructions, or lifecycle status."""
+
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    anytime: bool | None = None
+    instructions: str | None = Field(None, max_length=5000)
+    status: JobStatus | None = None
+
+
+class JobVisitResponse(BaseModel):
+    id: uuid.UUID
+    job_id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+    anytime: bool
+    instructions: str | None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class JobPricedLineItemInput(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str | None = Field(None, max_length=2000)
+    quantity: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
+    unit_price: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)
+    taxable: bool = True
+
+
+class JobPricingReplace(BaseModel):
+    """Replace priced scope atomically; omitted rows are deleted."""
+
+    tax_rate: Decimal = Field(Decimal("0.00"), ge=0, le=100, max_digits=5, decimal_places=2)
+    items: list[JobPricedLineItemInput] = Field(default_factory=list, max_length=200)
+
+
+class JobPricedLineItemResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: str | None
+    quantity: Decimal
+    unit_price: Decimal
+    taxable: bool
+    position: int
+    total: Decimal
+
+
+class JobPricingResponse(BaseModel):
+    job_id: uuid.UUID
+    tax_rate: Decimal
+    items: list[JobPricedLineItemResponse]
+    subtotal: Decimal
+    tax: Decimal
+    total: Decimal
 
 
 class JobAssignRequest(BaseModel):

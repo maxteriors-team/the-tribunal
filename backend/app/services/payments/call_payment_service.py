@@ -10,6 +10,7 @@ the tool executor thin and testable.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -76,6 +77,19 @@ class SessionStatus:
     payment_intent_id: str | None
 
 
+@dataclass(slots=True)
+class CheckoutSessionDetails:
+    """Security-relevant fields from a Stripe Checkout Session."""
+
+    payment_status: str
+    status: str
+    payment_intent_id: str | None
+    mode: str
+    metadata: dict[str, str]
+    amount_total: int | None
+    currency: str | None
+
+
 def is_payment_configured() -> bool:
     """Return whether Stripe is configured for collecting payments."""
     return bool(settings.stripe_secret_key)
@@ -132,7 +146,8 @@ async def create_payment_checkout_session(
                 "quantity": 1,
             }
         ],
-        "success_url": success_url or f"{settings.frontend_url}/payment-complete",
+        "success_url": success_url
+        or f"{settings.frontend_url}/payment-complete?session_id={{CHECKOUT_SESSION_ID}}",
         "cancel_url": cancel_url or f"{settings.frontend_url}/payment-cancelled",
         "metadata": metadata,
         "payment_intent_data": {"metadata": metadata},
@@ -150,16 +165,43 @@ async def create_payment_checkout_session(
     )
 
 
-async def retrieve_session_status(session_id: str) -> SessionStatus:
-    """Fetch the current status of a Checkout Session from Stripe."""
+async def retrieve_checkout_session_details(session_id: str) -> CheckoutSessionDetails:
+    """Fetch fields needed to prove a Checkout Session belongs to a local payment."""
     client = _stripe_client()
-    session = client.checkout.sessions.retrieve(session_id)
+    session = await client.checkout.sessions.retrieve_async(session_id)
     payment_intent = getattr(session, "payment_intent", None)
     payment_intent_id = payment_intent if isinstance(payment_intent, str) else None
-    return SessionStatus(
+    raw_metadata = getattr(session, "metadata", None)
+    metadata_source: Mapping[object, object] = {}
+    if isinstance(raw_metadata, Mapping):
+        metadata_source = raw_metadata
+    else:
+        to_dict = getattr(raw_metadata, "to_dict", None)
+        converted_metadata = to_dict() if callable(to_dict) else None
+        if isinstance(converted_metadata, Mapping):
+            metadata_source = converted_metadata
+    metadata = {str(key): str(value) for key, value in metadata_source.items()}
+    raw_amount_total = getattr(session, "amount_total", None)
+    amount_total = int(raw_amount_total) if isinstance(raw_amount_total, int | float) else None
+    raw_currency = getattr(session, "currency", None)
+    return CheckoutSessionDetails(
         payment_status=str(getattr(session, "payment_status", "unpaid")),
         status=str(getattr(session, "status", "open")),
         payment_intent_id=payment_intent_id,
+        mode=str(getattr(session, "mode", "")),
+        metadata=metadata,
+        amount_total=amount_total,
+        currency=str(raw_currency).lower() if raw_currency else None,
+    )
+
+
+async def retrieve_session_status(session_id: str) -> SessionStatus:
+    """Fetch the current status of a Checkout Session from Stripe."""
+    session = await retrieve_checkout_session_details(session_id)
+    return SessionStatus(
+        payment_status=session.payment_status,
+        status=session.status,
+        payment_intent_id=session.payment_intent_id,
     )
 
 

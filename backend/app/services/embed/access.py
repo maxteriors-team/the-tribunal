@@ -1,9 +1,9 @@
-"""Origin validation and rate limiting for public embed requests."""
+"""Parent-origin validation and rate limiting for public embed requests."""
 
 from datetime import UTC, datetime, timedelta
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,28 +16,125 @@ from app.services.rate_limiting.embed_limiter import (
     enforce_token_rate_limits,
 )
 
+EMBED_PARENT_ORIGIN_HEADER = "X-Embed-Parent-Origin"
 
-def is_origin_allowed(origin: str | None, allowed_domains: list[str]) -> bool:
-    """Return whether an Origin header is allowed for an embed agent.
 
-    Only browser ``Origin`` is accepted. ``Referer`` remains intentionally ignored
-    because it is commonly omitted and is not a trustworthy security boundary.
-    """
-    if not origin or not allowed_domains:
-        return False
+def _normalize_http_origin(value: str | None) -> str | None:
+    """Return a canonical HTTP(S) origin, rejecting URL-like impostors."""
+    if not value or any(char.isspace() or ord(char) < 32 for char in value):
+        return None
+    if "\\" in value:
+        return None
 
     try:
-        parsed = urlparse(origin)
+        parsed = urlparse(value)
+        port = parsed.port
+    except ValueError:
+        return None
+
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+
+    hostname = parsed.hostname.lower()
+    serialized_host = f"[{hostname}]" if ":" in hostname else hostname
+    default_port = 80 if parsed.scheme == "http" else 443
+    port_suffix = f":{port}" if port is not None and port != default_port else ""
+    return f"{parsed.scheme}://{serialized_host}{port_suffix}"
+
+
+def _trusted_frontend_origins() -> set[str]:
+    candidates = [settings.frontend_url, *settings.cors_origins]
+    return {origin for value in candidates if (origin := _normalize_http_origin(value))}
+
+
+def _is_same_origin_embed_fetch(
+    request: Request,
+    *,
+    public_id: str,
+    browser_origin: str | None,
+) -> bool:
+    """Verify a fetch made by our hosted ``/embed/{public_id}`` document."""
+    if request.headers.get("sec-fetch-site", "").lower() != "same-origin":
+        return False
+
+    referer = request.headers.get("referer")
+    try:
+        parsed_referer = urlparse(referer or "")
     except ValueError:
         return False
 
-    host = parsed.hostname or ""
+    referer_origin = _normalize_http_origin(f"{parsed_referer.scheme}://{parsed_referer.netloc}")
+    if referer_origin not in _trusted_frontend_origins():
+        return False
+    if browser_origin is not None and browser_origin != referer_origin:
+        return False
+
+    path_parts = parsed_referer.path.split("/")
+    return len(path_parts) >= 3 and path_parts[1] == "embed" and unquote(path_parts[2]) == public_id
+
+
+def verified_parent_origin(request: Request, *, public_id: str) -> str:
+    """Return a browser-verified parent origin or fail closed with HTTP 403.
+
+    A customer-page request must send a claim matching the browser-controlled
+    ``Origin`` header. A same-origin API fetch from our iframe cannot carry the
+    parent as ``Origin``; for that case, the claim is accepted only when Fetch
+    Metadata and ``Referer`` prove the caller is our matching hosted embed page.
+    """
+    claimed_header = request.headers.get(EMBED_PARENT_ORIGIN_HEADER)
+    claimed_origin = _normalize_http_origin(claimed_header)
+    if claimed_origin is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Parent origin header required",
+        )
+
+    browser_origin_header = request.headers.get("origin")
+    browser_origin = _normalize_http_origin(browser_origin_header)
+    if browser_origin_header is not None and browser_origin is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Parent origin could not be verified",
+        )
+
+    if browser_origin == claimed_origin:
+        return claimed_origin
+
+    if _is_same_origin_embed_fetch(
+        request,
+        public_id=public_id,
+        browser_origin=browser_origin,
+    ):
+        return claimed_origin
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Parent origin could not be verified",
+    )
+
+
+def is_origin_allowed(origin: str | None, allowed_domains: list[str]) -> bool:
+    """Return whether a verified parent origin is configured for an embed agent."""
+    normalized_origin = _normalize_http_origin(origin)
+    if normalized_origin is None or not allowed_domains:
+        return False
+
+    host = urlparse(normalized_origin).hostname or ""
     if not host:
         return False
 
     host_lower = host.lower()
     for configured_domain in allowed_domains:
-        domain = configured_domain.lower().strip()
+        domain = configured_domain.lower().strip().rstrip(".")
         if not domain:
             continue
         if host_lower == domain:
@@ -51,11 +148,11 @@ def is_origin_allowed(origin: str | None, allowed_domains: list[str]) -> bool:
 
 
 def enforce_allowed_origin(origin: str | None, allowed_domains: list[str]) -> None:
-    """Raise 403 when an embed request origin is not configured for the agent."""
+    """Raise 403 when an embed parent is not configured for the agent."""
     if not is_origin_allowed(origin, allowed_domains):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Origin not allowed",
+            detail="Parent origin not allowed",
         )
 
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { embedFetch } from "@/lib/embed/request";
 import { resolveThemeOption } from "@/lib/embed/theme";
 
 import type { AgentConfig, ResolvedTheme, ThemeOption } from "./_types";
@@ -49,9 +50,7 @@ export function useAgentConfig(publicId: string): UseAgentConfigResult {
 
     async function fetchConfig() {
       try {
-        const res = await fetch(`/api/v1/p/embed/${publicId}/config`, {
-          headers: { Origin: window.location.origin },
-        });
+        const res = await embedFetch(`/api/v1/p/embed/${publicId}/config`);
         if (!res.ok) {
           const data = await res.json();
           throw new Error((data.detail as string) ?? "Failed to load agent");

@@ -35,16 +35,17 @@ export function PublishStep({ formData, onFieldChange, existingOffer }: PublishS
     <div className="space-y-6">
       <div className="flex items-center justify-between p-4 border rounded-lg">
         <div className="space-y-0.5">
-          <Label className="text-base">Public Landing Page</Label>
+          <Label htmlFor="offer-public-page" className="text-base">
+            Public Landing Page
+          </Label>
           <p className="text-sm text-muted-foreground">
             Enable a shareable landing page for this offer
           </p>
         </div>
         <Switch
+          id="offer-public-page"
           checked={formData.is_public}
-          onCheckedChange={(checked) =>
-            onFieldChange({ is_public: checked })
-          }
+          onCheckedChange={(checked) => onFieldChange({ is_public: checked })}
         />
       </div>
 
@@ -80,7 +81,8 @@ export function PublishStep({ formData, onFieldChange, existingOffer }: PublishS
             <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-lg border border-primary/20">
               <Globe className="size-4 text-primary" />
               <span className="text-sm flex-1 truncate">
-                {typeof window !== "undefined" ? window.location.origin : ""}/p/offers/{formData.public_slug}
+                {typeof window !== "undefined" ? window.location.origin : ""}/p/offers/
+                {formData.public_slug}
               </span>
               <Button
                 type="button"
@@ -89,23 +91,14 @@ export function PublishStep({ formData, onFieldChange, existingOffer }: PublishS
                 onClick={handleCopyLink}
                 aria-label={copied ? "Copied" : "Copy public link"}
               >
-                {copied ? (
-                  <Check className="size-4 text-green-500" />
-                ) : (
-                  <Copy className="size-4" />
-                )}
+                {copied ? <Check className="size-4 text-green-500" /> : <Copy className="size-4" />}
               </Button>
               {existingOffer?.is_public && existingOffer?.public_slug && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() =>
-                    window.open(
-                      `/p/offers/${existingOffer.public_slug}`,
-                      "_blank"
-                    )
-                  }
+                  onClick={() => window.open(`/p/offers/${existingOffer.public_slug}`, "_blank")}
                 >
                   <ExternalLink className="size-4" />
                 </Button>
@@ -126,14 +119,9 @@ export function PublishStep({ formData, onFieldChange, existingOffer }: PublishS
                 <Checkbox
                   id="require_email"
                   checked={formData.require_email}
-                  onCheckedChange={(checked) =>
-                    onFieldChange({ require_email: checked === true })
-                  }
+                  onCheckedChange={(checked) => onFieldChange({ require_email: checked === true })}
                 />
-                <Label
-                  htmlFor="require_email"
-                  className="text-sm font-normal cursor-pointer"
-                >
+                <Label htmlFor="require_email" className="text-sm font-normal cursor-pointer">
                   Email address (recommended)
                 </Label>
               </div>
@@ -142,14 +130,9 @@ export function PublishStep({ formData, onFieldChange, existingOffer }: PublishS
                 <Checkbox
                   id="require_phone"
                   checked={formData.require_phone}
-                  onCheckedChange={(checked) =>
-                    onFieldChange({ require_phone: checked === true })
-                  }
+                  onCheckedChange={(checked) => onFieldChange({ require_phone: checked === true })}
                 />
-                <Label
-                  htmlFor="require_phone"
-                  className="text-sm font-normal cursor-pointer"
-                >
+                <Label htmlFor="require_phone" className="text-sm font-normal cursor-pointer">
                   Phone number
                 </Label>
               </div>
@@ -158,14 +141,9 @@ export function PublishStep({ formData, onFieldChange, existingOffer }: PublishS
                 <Checkbox
                   id="require_name"
                   checked={formData.require_name}
-                  onCheckedChange={(checked) =>
-                    onFieldChange({ require_name: checked === true })
-                  }
+                  onCheckedChange={(checked) => onFieldChange({ require_name: checked === true })}
                 />
-                <Label
-                  htmlFor="require_name"
-                  className="text-sm font-normal cursor-pointer"
-                >
+                <Label htmlFor="require_name" className="text-sm font-normal cursor-pointer">
                   Full name
                 </Label>
               </div>

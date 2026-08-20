@@ -3,10 +3,17 @@
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from app.api.deps import DB, CanReadCRM, CanWriteOutreach, CurrentUser
+from app.api.deps import (
+    DB,
+    CanReadCRM,
+    CanWriteOutreach,
+    CurrentUser,
+    require_route_capabilities,
+)
+from app.core.permissions import Capability
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
 from app.models.automation import Automation
@@ -18,7 +25,11 @@ from app.schemas.automation import (
     PaginatedAutomations,
 )
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.OUTREACH_WRITE))
+    ]
+)
 
 
 @router.get("/stats", response_model=AutomationStatsResponse)

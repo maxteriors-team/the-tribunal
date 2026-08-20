@@ -15,10 +15,14 @@
  * photo tool: what the rep draws here saves onto the proposal and pushes its
  * measured fixtures and roofline feet back into this quote.
  */
+import { BookOpen } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { LightDesigner } from "@/components/estimator/light-designer";
 import type { DesignerProposalHost } from "@/components/estimator/proposal-host";
+import { Button } from "@/components/ui/button";
+import { PageEmptyState } from "@/components/ui/page-state";
 import {
   resolveTierFixtures,
   type FixtureType,
@@ -27,6 +31,7 @@ import type { ServiceKey as DesignerServiceKey } from "@/lib/estimator/services"
 
 import { CalculatorScreen } from "./calculator-screen";
 import { salesWizardFontVars } from "./fonts";
+import { hasSellableLandscapePackage } from "./sales-setup";
 import { useSalesWizard, type ServiceKey } from "./use-sales-wizard";
 import "./theme.css";
 
@@ -67,6 +72,7 @@ export function SalesWizard({
     pricing,
     catalog,
   } = wizard;
+  const hasSellablePackage = hasSellableLandscapePackage(pricing, catalog);
 
   // The quote's own service seeds the designer's toggle, so opening the tool
   // from a Christmas quote starts on Christmas rather than landscape.
@@ -164,6 +170,20 @@ export function SalesWizard({
               Check Settings → Pricing, then reload.
             </div>
           </div>
+        </div>
+      ) : !hasSellablePackage ? (
+        <div className="screen active" role="region" aria-label="Price Book setup required">
+          <PageEmptyState
+            className="min-h-screen"
+            icon={<BookOpen className="size-9" />}
+            title="Set up your Price Book before building a quote"
+            description="Landscape Design Packages need at least one active, priced line item. Add or restore package items in Settings → Price Book, then return here."
+            action={
+              <Button asChild>
+                <Link href="/catalog">Set up Price Book</Link>
+              </Button>
+            }
+          />
         </div>
       ) : (
         <CalculatorScreen

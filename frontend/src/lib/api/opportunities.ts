@@ -49,6 +49,7 @@ export interface UpdateOpportunityRequest {
   currency?: string;
   stage_id?: string;
   expected_close_date?: string;
+  primary_contact_id?: number | null;
   assigned_user_id?: number | null;
   source?: string;
   status?: "open" | "won" | "lost" | "abandoned";
@@ -95,35 +96,27 @@ const baseOpportunitiesApi = createApiClient<
 export const opportunitiesApi = {
   // Pipeline endpoints (custom)
   listPipelines: async (workspaceId: string): Promise<Pipeline[]> => {
-    return apiGet<Pipeline[]>(
-      `/api/v1/workspaces/${workspaceId}/opportunities/pipelines`
-    );
+    return apiGet<Pipeline[]>(`/api/v1/workspaces/${workspaceId}/opportunities/pipelines`);
   },
 
   getPipeline: async (workspaceId: string, pipelineId: string): Promise<Pipeline> => {
     return apiGet<Pipeline>(
-      `/api/v1/workspaces/${workspaceId}/opportunities/pipelines/${pipelineId}`
+      `/api/v1/workspaces/${workspaceId}/opportunities/pipelines/${pipelineId}`,
     );
   },
 
-  createPipeline: async (
-    workspaceId: string,
-    data: CreatePipelineRequest
-  ): Promise<Pipeline> => {
-    return apiPost<Pipeline>(
-      `/api/v1/workspaces/${workspaceId}/opportunities/pipelines`,
-      data
-    );
+  createPipeline: async (workspaceId: string, data: CreatePipelineRequest): Promise<Pipeline> => {
+    return apiPost<Pipeline>(`/api/v1/workspaces/${workspaceId}/opportunities/pipelines`, data);
   },
 
   updatePipeline: async (
     workspaceId: string,
     pipelineId: string,
-    data: UpdatePipelineRequest
+    data: UpdatePipelineRequest,
   ): Promise<Pipeline> => {
     return apiPut<Pipeline>(
       `/api/v1/workspaces/${workspaceId}/opportunities/pipelines/${pipelineId}`,
-      data
+      data,
     );
   },
 
@@ -135,11 +128,11 @@ export const opportunitiesApi = {
   createStage: async (
     workspaceId: string,
     pipelineId: string,
-    data: CreatePipelineStageRequest
+    data: CreatePipelineStageRequest,
   ): Promise<PipelineStage> => {
     return apiPost<PipelineStage>(
       `/api/v1/workspaces/${workspaceId}/opportunities/pipelines/${pipelineId}/stages`,
-      data
+      data,
     );
   },
 
@@ -147,11 +140,11 @@ export const opportunitiesApi = {
     workspaceId: string,
     pipelineId: string,
     stageId: string,
-    data: UpdatePipelineStageRequest
+    data: UpdatePipelineStageRequest,
   ): Promise<PipelineStage> => {
     return apiPut<PipelineStage>(
       `/api/v1/workspaces/${workspaceId}/opportunities/pipelines/${pipelineId}/stages/${stageId}`,
-      data
+      data,
     );
   },
 
@@ -168,12 +161,9 @@ export const opportunitiesApi = {
    * Sticky on purpose: the contact is not given a fresh card the next time a
    * quote is sent to them, so the action does not silently undo itself.
    */
-  removeFromPipeline: async (
-    workspaceId: string,
-    opportunityId: string
-  ): Promise<Opportunity> => {
+  removeFromPipeline: async (workspaceId: string, opportunityId: string): Promise<Opportunity> => {
     return apiPost<Opportunity>(
-      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/remove-from-pipeline`
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/remove-from-pipeline`,
     );
   },
 
@@ -187,11 +177,11 @@ export const opportunitiesApi = {
       quantity: number;
       unit_price: number;
       discount?: number;
-    }
+    },
   ): Promise<{ id: string; total: number }> => {
     return apiPost<{ id: string; total: number }>(
       `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/line-items`,
-      data
+      data,
     );
   },
 
@@ -205,59 +195,60 @@ export const opportunitiesApi = {
       quantity?: number;
       unit_price?: number;
       discount?: number;
-    }
+    },
   ): Promise<{ id: string; total: number }> => {
     return apiPut<{ id: string; total: number }>(
       `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/line-items/${itemId}`,
-      data
+      data,
     );
   },
 
   deleteLineItem: async (
     workspaceId: string,
     opportunityId: string,
-    itemId: string
+    itemId: string,
   ): Promise<void> => {
     await apiDelete(
-      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/line-items/${itemId}`
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/line-items/${itemId}`,
     );
   },
 
-  deleteStage: async (
-    workspaceId: string,
-    pipelineId: string,
-    stageId: string
-  ): Promise<void> => {
+  deleteStage: async (workspaceId: string, pipelineId: string, stageId: string): Promise<void> => {
     await apiDelete(
-      `/api/v1/workspaces/${workspaceId}/opportunities/pipelines/${pipelineId}/stages/${stageId}`
+      `/api/v1/workspaces/${workspaceId}/opportunities/pipelines/${pipelineId}/stages/${stageId}`,
     );
   },
 
   addNote: async (
     workspaceId: string,
     opportunityId: string,
-    data: { body: string; kind?: OpportunityNoteKind }
+    data: { body: string; kind?: OpportunityNoteKind },
   ): Promise<OpportunityActivity> => {
     return apiPost<OpportunityActivity>(
       `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/notes`,
-      data
+      data,
     );
   },
 
   listTasks: async (workspaceId: string, opportunityId: string): Promise<OpportunityTask[]> => {
     return apiGet<OpportunityTask[]>(
-      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/tasks`
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/tasks`,
     );
   },
 
   createTask: async (
     workspaceId: string,
     opportunityId: string,
-    data: { title: string; notes?: string; due_at?: string | null; assigned_user_id?: number | null }
+    data: {
+      title: string;
+      notes?: string;
+      due_at?: string | null;
+      assigned_user_id?: number | null;
+    },
   ): Promise<OpportunityTask> => {
     return apiPost<OpportunityTask>(
       `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/tasks`,
-      data
+      data,
     );
   },
 
@@ -271,21 +262,17 @@ export const opportunitiesApi = {
       due_at?: string | null;
       assigned_user_id?: number | null;
       completed?: boolean;
-    }
+    },
   ): Promise<OpportunityTask> => {
     return apiPatch<OpportunityTask>(
       `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/tasks/${taskId}`,
-      data
+      data,
     );
   },
 
-  deleteTask: async (
-    workspaceId: string,
-    opportunityId: string,
-    taskId: string
-  ): Promise<void> => {
+  deleteTask: async (workspaceId: string, opportunityId: string, taskId: string): Promise<void> => {
     await apiDelete(
-      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/tasks/${taskId}`
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/tasks/${taskId}`,
     );
   },
 };

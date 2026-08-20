@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_nested_or_404, get_or_404
 from app.db.pagination import paginate
+from app.models.contact import Contact
 from app.models.opportunity import (
     Opportunity,
     OpportunityActivity,
@@ -307,6 +308,16 @@ class OpportunityService:
             if not stage:
                 raise NotFoundError("Stage not found")
 
+        primary_contact = None
+        if opportunity_in.primary_contact_id is not None:
+            primary_contact = await get_or_404(
+                self.db,
+                Contact,
+                opportunity_in.primary_contact_id,
+                workspace_id=workspace_id,
+                detail="Contact not found",
+            )
+
         requested_owner_id = (
             assigned_user_id if assigned_user_id is not None else opportunity_in.assigned_user_id
         )
@@ -318,9 +329,11 @@ class OpportunityService:
         opportunity = Opportunity(
             workspace_id=workspace_id,
             probability=stage.probability if stage else 0,
+            primary_contact_id=opportunity_in.primary_contact_id,
+            primary_contact=primary_contact,
             assigned_user_id=requested_owner_id,
             assigned_user=assignee,
-            **opportunity_in.model_dump(exclude={"assigned_user_id"}),
+            **opportunity_in.model_dump(exclude={"assigned_user_id", "primary_contact_id"}),
         )
         self.db.add(opportunity)
         await self.db.flush()
@@ -479,6 +492,19 @@ class OpportunityService:
                 )
             opportunity.assigned_user_id = requested_owner_id
             opportunity.assigned_user = assignee
+
+        if "primary_contact_id" in opportunity_in.model_fields_set:
+            primary_contact = None
+            if opportunity_in.primary_contact_id is not None:
+                primary_contact = await get_or_404(
+                    self.db,
+                    Contact,
+                    opportunity_in.primary_contact_id,
+                    workspace_id=workspace_id,
+                    detail="Contact not found",
+                )
+            opportunity.primary_contact_id = opportunity_in.primary_contact_id
+            opportunity.primary_contact = primary_contact
 
         # Stage change — delegate to move_stage so the activity log, probability
         # update, stage_changed_at, and deal_stage_changed event stay in one

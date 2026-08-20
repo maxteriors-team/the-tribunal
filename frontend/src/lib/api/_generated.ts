@@ -844,6 +844,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/payments/checkout-sessions/{session_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Public Checkout Session
+         * @description Return payment state only after local ownership and Stripe both agree.
+         */
+        post: operations["verify_public_checkout_session_api_v1_p_payments_checkout_sessions__session_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/quotes/{token}": {
         parameters: {
             query?: never;
@@ -4018,6 +4038,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append Contact Note
+         * @description Append an internal client note without replacing prior note history.
+         */
+        post: operations["append_contact_note_api_v1_workspaces__workspace_id__contacts__contact_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/qualification": {
         parameters: {
             query?: never;
@@ -5788,6 +5828,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job Pricing
+         * @description Return priced scope only to roles with billing visibility.
+         */
+        get: operations["get_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_get"];
+        /**
+         * Replace Job Pricing
+         * @description Atomically replace job pricing for billing-authorized operators.
+         */
+        put: operations["replace_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/profitability": {
         parameters: {
             query?: never;
@@ -5914,6 +5978,45 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Job Visits
+         * @description List visits after applying the same job visibility boundary as job detail.
+         */
+        get: operations["list_job_visits_api_v1_workspaces__workspace_id__jobs__job_id__visits_get"];
+        put?: never;
+        /** Create Job Visit */
+        post: operations["create_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits/{visit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Job Visit */
+        delete: operations["delete_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits__visit_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Job Visit */
+        patch: operations["update_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits__visit_id__patch"];
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_id}/lead-magnets": {
@@ -15030,6 +15133,16 @@ export interface components {
             label?: string | null;
             /** Per Ft Override */
             per_ft_override?: number | null;
+            /**
+             * Permanent Complexity
+             * @default standard
+             * @enum {string}
+             */
+            permanent_complexity: "easy" | "standard" | "complex";
+            /** Permanent Complexity Feet */
+            permanent_complexity_feet?: {
+                [key: string]: number;
+            };
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -15384,6 +15497,14 @@ export interface components {
             pages: number;
             /** Total */
             total: number;
+        };
+        /**
+         * ContactNoteCreate
+         * @description Append-only internal note input for a workspace contact.
+         */
+        ContactNoteCreate: {
+            /** Body */
+            body: string;
         };
         /**
          * ContactResponse
@@ -17081,6 +17202,16 @@ export interface components {
             label?: string | null;
             /** Per Ft Override */
             per_ft_override?: number | null;
+            /**
+             * Permanent Complexity
+             * @default standard
+             * @enum {string}
+             */
+            permanent_complexity: "easy" | "standard" | "complex";
+            /** Permanent Complexity Feet */
+            permanent_complexity_feet?: {
+                [key: string]: number;
+            };
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -19265,6 +19396,75 @@ export interface components {
             /** Total Hours */
             total_hours: number;
         };
+        /** JobPricedLineItemInput */
+        JobPricedLineItemInput: {
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: number | string;
+            /**
+             * Taxable
+             * @default true
+             */
+            taxable: boolean;
+            /** Unit Price */
+            unit_price: number | string;
+        };
+        /** JobPricedLineItemResponse */
+        JobPricedLineItemResponse: {
+            /** Description */
+            description: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Position */
+            position: number;
+            /** Quantity */
+            quantity: string;
+            /** Taxable */
+            taxable: boolean;
+            /** Total */
+            total: string;
+            /** Unit Price */
+            unit_price: string;
+        };
+        /**
+         * JobPricingReplace
+         * @description Replace priced scope atomically; omitted rows are deleted.
+         */
+        JobPricingReplace: {
+            /** Items */
+            items?: components["schemas"]["JobPricedLineItemInput"][];
+            /**
+             * Tax Rate
+             * @default 0.00
+             */
+            tax_rate: number | string;
+        };
+        /** JobPricingResponse */
+        JobPricingResponse: {
+            /** Items */
+            items: components["schemas"]["JobPricedLineItemResponse"][];
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Subtotal */
+            subtotal: string;
+            /** Tax */
+            tax: string;
+            /** Tax Rate */
+            tax_rate: string;
+            /** Total */
+            total: string;
+        };
         /**
          * JobProfitability
          * @description Computed P&L for a single job.
@@ -19462,6 +19662,83 @@ export interface components {
             status?: components["schemas"]["JobStatus"] | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * JobVisitCreate
+         * @description Add a scheduled visit to a job.
+         */
+        JobVisitCreate: {
+            /**
+             * Anytime
+             * @default false
+             */
+            anytime: boolean;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Instructions */
+            instructions?: string | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+        };
+        /** JobVisitResponse */
+        JobVisitResponse: {
+            /** Anytime */
+            anytime: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Instructions */
+            instructions: string | null;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * JobVisitUpdate
+         * @description Update a visit window, instructions, or lifecycle status.
+         */
+        JobVisitUpdate: {
+            /** Anytime */
+            anytime?: boolean | null;
+            /** Ends At */
+            ends_at?: string | null;
+            /** Instructions */
+            instructions?: string | null;
+            /** Starts At */
+            starts_at?: string | null;
+            status?: components["schemas"]["JobStatus"] | null;
         };
         /**
          * KnowledgeBaseStats
@@ -20562,6 +20839,16 @@ export interface components {
             feet: number;
             /** Per Ft Override */
             per_ft_override?: number | null;
+            /**
+             * Permanent Complexity
+             * @default standard
+             * @enum {string}
+             */
+            permanent_complexity: "easy" | "standard" | "complex";
+            /** Permanent Complexity Feet */
+            permanent_complexity_feet?: {
+                [key: string]: number;
+            };
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -22590,6 +22877,8 @@ export interface components {
             lost_reason?: string | null;
             /** Name */
             name?: string | null;
+            /** Primary Contact Id */
+            primary_contact_id?: number | null;
             /** Referral Partner Id */
             referral_partner_id?: string | null;
             /** Source */
@@ -23600,19 +23889,27 @@ export interface components {
         };
         /**
          * PermanentConfig
-         * @description Permanent LED roofline priced per linear foot plus a controller/hub.
+         * @description Permanent LED roofline priced by the smallest kit that covers the job.
          *
-         *     Placeholder rates ship so a workspace prices before customization; the
-         *     operator tunes ``per_ft`` / controller / channel rates in Settings → Pricing
-         *     (the operator's standalone tool was not provided, so these are sane defaults).
-         *     All values are *net*; the engine grosses them up like every other price.
+         *     Package costs are COGS. ``markup`` converts COGS to the net installed sale
+         *     price before the standard cash/financing gross-up is applied.
          */
         PermanentConfig: {
             /**
+             * Complex Markup
+             * @default 3.5
+             */
+            complex_markup: number;
+            /**
              * Controller Base
-             * @default 299
+             * @default 0
              */
             controller_base: number;
+            /**
+             * Easy Markup
+             * @default 2.5
+             */
+            easy_markup: number;
             /**
              * Enabled
              * @default false
@@ -23620,7 +23917,7 @@ export interface components {
             enabled: boolean;
             /**
              * Included Channels
-             * @default 1
+             * @default 0
              */
             included_channels: number;
             /**
@@ -23629,35 +23926,38 @@ export interface components {
              */
             label: string;
             /**
+             * Markup
+             * @default 3.5
+             */
+            markup: number;
+            /**
              * Minimum
              * @default 0
              */
             minimum: number;
+            /** Packages */
+            packages?: components["schemas"]["PermanentPackage"][];
             /**
              * Per Channel
-             * @default 45
+             * @default 0
              */
             per_channel: number;
             /**
              * Per Ft
-             * @default 32
+             * @default 0
              */
             per_ft: number;
             /** Perks */
             perks?: string[];
+            /**
+             * Standard Markup
+             * @default 3
+             */
+            standard_markup: number;
         };
         /**
          * PermanentEstimate
-         * @description Permanent-lighting side of the estimate (rep view — includes per_ft).
-         *
-         *     ``roofline_cost`` is the track-only component of ``total`` (no controller or
-         *     zone hardware), so it can be compared like-for-like against the seasonal
-         *     roofline cost — standalone lines are deliberately excluded from it for the
-         *     same reason.
-         *
-         *     ``custom_total`` is the part of ``total`` contributed by the rep's standalone
-         *     lines, broken out so a caller pricing a *package* (whose total excludes them)
-         *     can add them back without re-deriving the arithmetic.
+         * @description Permanent-lighting estimate using the kit that covers measured footage.
          */
         PermanentEstimate: {
             /**
@@ -23667,7 +23967,25 @@ export interface components {
             custom_total: number;
             /** Enabled */
             enabled: boolean;
-            /** Per Ft */
+            /**
+             * Markup
+             * @default 0
+             */
+            markup: number;
+            /**
+             * Package Cogs
+             * @default 0
+             */
+            package_cogs: number;
+            /**
+             * Package Feet
+             * @default 0
+             */
+            package_feet: number;
+            /**
+             * Per Ft
+             * @default 0
+             */
             per_ft: number;
             /**
              * Roofline Cost
@@ -23676,6 +23994,16 @@ export interface components {
             roofline_cost: number;
             /** Total */
             total: number;
+        };
+        /**
+         * PermanentPackage
+         * @description One supplier kit used to cover a measured roofline.
+         */
+        PermanentPackage: {
+            /** Cost */
+            cost: number;
+            /** Feet */
+            feet: number;
         };
         /**
          * PersonResult
@@ -25654,6 +25982,17 @@ export interface components {
             urgency_type?: string | null;
             /** Value Stack Items */
             value_stack_items?: components["schemas"]["ValueStackItem"][] | null;
+        };
+        /**
+         * PublicPaymentVerification
+         * @description Non-sensitive Stripe Checkout state for the generic return page.
+         */
+        PublicPaymentVerification: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "paid" | "pending" | "expired" | "failed";
         };
         /**
          * PublicPermanentComparison
@@ -32801,6 +33140,52 @@ export interface operations {
             };
         };
     };
+    verify_public_checkout_session_api_v1_p_payments_checkout_sessions__session_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stripe Checkout Session identifier returned by Checkout */
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPaymentVerification"];
+                };
+            };
+            /** @description Unknown or invalid Checkout Session */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Stripe verification is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_public_proposal_api_v1_p_quotes__token__get: {
         parameters: {
             query?: never;
@@ -39480,6 +39865,42 @@ export interface operations {
             };
         };
     };
+    append_contact_note_api_v1_workspaces__workspace_id__contacts__contact_id__notes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactNoteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_contact_qualification_api_v1_workspaces__workspace_id__contacts__contact_id__qualification_get: {
         parameters: {
             query?: never;
@@ -43083,6 +43504,74 @@ export interface operations {
             };
         };
     };
+    get_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobPricingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobPricingReplace"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobPricingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     job_profitability_api_v1_workspaces__workspace_id__jobs__job_id__profitability_get: {
         parameters: {
             query?: never;
@@ -43306,6 +43795,142 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_job_visits_api_v1_workspaces__workspace_id__jobs__job_id__visits_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobVisitResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobVisitCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobVisitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits__visit_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                visit_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits__visit_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                visit_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobVisitUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobVisitResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

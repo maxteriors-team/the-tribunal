@@ -25,9 +25,7 @@ export function MiniTotals({ wizard }: { wizard: UseSalesWizardReturn }) {
         return (
           <div className="wizard-mini-total" key={key}>
             <span>{view?.name ?? cfg?.name ?? cfg?.label ?? key}</span>
-            <strong>
-              {hasValue ? fmt(view?.pricing.financed_total) : "—"}
-            </strong>
+            <strong>{hasValue ? fmt(view?.pricing.financed_total) : "—"}</strong>
           </div>
         );
       })}
@@ -51,9 +49,7 @@ export function DesignStep({ wizard }: DesignStepProps) {
   } = wizard;
 
   const tiers = pricing?.tiers ?? [];
-  const order = pricing?.tier_order?.length
-    ? pricing.tier_order
-    : tiers.map((t) => t.key);
+  const order = pricing?.tier_order?.length ? pricing.tier_order : tiers.map((t) => t.key);
   const active = tiers.find((t) => t.key === activeTier) ?? tiers[0];
 
   return (
@@ -100,15 +96,11 @@ export function DesignStep({ wizard }: DesignStepProps) {
                     );
                     const qty = quantities[itemId] ?? 0;
                     const lineTotal = line?.line_total ?? 0;
+                    const itemName = line?.name ?? catalogItem?.name ?? itemId;
                     return (
-                      <div
-                        className={`fix-row${qty > 0 ? " active-row" : ""}`}
-                        key={itemId}
-                      >
+                      <div className={`fix-row${qty > 0 ? " active-row" : ""}`} key={itemId}>
                         <div className="fix-name-wrap">
-                          <div className="fix-name">
-                            {line?.name ?? catalogItem?.name ?? itemId}
-                          </div>
+                          <div className="fix-name">{itemName}</div>
                           <div className="fix-price">
                             {line ? `${fmt(line.unit_price)} / ea` : "—"}
                           </div>
@@ -118,6 +110,8 @@ export function DesignStep({ wizard }: DesignStepProps) {
                             <button
                               type="button"
                               className="step-btn"
+                              aria-label={`Decrease ${itemName} quantity`}
+                              disabled={qty <= 0}
                               onClick={() => changeQty(itemId, -1)}
                             >
                               &#8722;
@@ -127,24 +121,21 @@ export function DesignStep({ wizard }: DesignStepProps) {
                               type="number"
                               min={0}
                               value={qty}
+                              aria-label={`${itemName} quantity`}
                               onChange={(e) =>
-                                setQty(
-                                  itemId,
-                                  Number.parseInt(e.target.value, 10) || 0,
-                                )
+                                setQty(itemId, Number.parseInt(e.target.value, 10) || 0)
                               }
                             />
                             <button
                               type="button"
                               className="step-btn"
+                              aria-label={`Increase ${itemName} quantity`}
                               onClick={() => changeQty(itemId, 1)}
                             >
                               +
                             </button>
                           </div>
-                          <div
-                            className={`fix-line-total${lineTotal > 0 ? " has-value" : ""}`}
-                          >
+                          <div className={`fix-line-total${lineTotal > 0 ? " has-value" : ""}`}>
                             {lineTotal > 0 ? fmt(lineTotal) : "—"}
                           </div>
                         </div>
@@ -165,6 +156,7 @@ export function DesignStep({ wizard }: DesignStepProps) {
             <input
               type="text"
               className="additional-desc"
+              aria-label={`Additional charge ${i + 1} description`}
               placeholder="e.g. Core drilling, rock removal… (enter the amount you keep — fee buffer added automatically)"
               value={charge.description}
               onChange={(e) => setCharge(i, { description: e.target.value })}
@@ -174,6 +166,7 @@ export function DesignStep({ wizard }: DesignStepProps) {
               <input
                 type="number"
                 className="additional-amount"
+                aria-label={`Additional charge ${i + 1} amount`}
                 placeholder="0"
                 min={0}
                 value={charge.amount}
@@ -188,9 +181,7 @@ export function DesignStep({ wizard }: DesignStepProps) {
                 className="additional-tier"
                 value={charge.tierKey ?? ""}
                 aria-label="Charge applies to"
-                onChange={(e) =>
-                  setCharge(i, { tierKey: e.target.value || null })
-                }
+                onChange={(e) => setCharge(i, { tierKey: e.target.value || null })}
               >
                 <option value="">Every package</option>
                 {order.map((key) => {
@@ -207,6 +198,7 @@ export function DesignStep({ wizard }: DesignStepProps) {
               type="button"
               className="charge-del"
               title="Remove this charge"
+              aria-label={`Remove additional charge ${i + 1}`}
               onClick={() => removeCharge(i)}
             >
               &#10005;

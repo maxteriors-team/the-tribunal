@@ -78,8 +78,7 @@ export function getCallBookingReadiness({
     !videoCalendarReady && "Google Calendar is not connected for video calls",
   ].filter(Boolean) as string[];
   return {
-    callBookingReady:
-      qualificationEnabled && bookingEnabled && bookingAutoApproved && bookableRep,
+    callBookingReady: qualificationEnabled && bookingEnabled && bookingAutoApproved && bookableRep,
     blockers,
   };
 }
@@ -354,7 +353,7 @@ function LeadSourceDialog({
 
           {/* Action */}
           <div className="space-y-2">
-            <Label>Post-Capture Action</Label>
+            <Label htmlFor="lead-source-action">Post-Capture Action</Label>
             <Select
               value={form.action}
               onValueChange={(v) =>
@@ -365,7 +364,7 @@ function LeadSourceDialog({
                 }))
               }
             >
-              <SelectTrigger>
+              <SelectTrigger id="lead-source-action">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -381,7 +380,7 @@ function LeadSourceDialog({
           {(form.action === "auto_text" || form.action === "auto_call") && (
             <>
               <div className="space-y-2">
-                <Label>Agent</Label>
+                <Label htmlFor="lead-source-agent">Agent</Label>
                 <Select
                   value={form.action_config.agent_id ?? ""}
                   onValueChange={(v) =>
@@ -391,7 +390,7 @@ function LeadSourceDialog({
                     }))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="lead-source-agent">
                     <SelectValue placeholder="Select an agent" />
                   </SelectTrigger>
                   <SelectContent>
@@ -404,8 +403,9 @@ function LeadSourceDialog({
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>From Phone Number</Label>
+                <Label htmlFor="lead-source-phone">From Phone Number</Label>
                 <Input
+                  id="lead-source-phone"
                   placeholder="+1234567890"
                   value={form.action_config.from_phone_number ?? ""}
                   onChange={(e) =>
@@ -468,7 +468,7 @@ function LeadSourceDialog({
           {/* Action Config - Campaign (enroll_campaign) */}
           {form.action === "enroll_campaign" && (
             <div className="space-y-2">
-              <Label>Campaign</Label>
+              <Label htmlFor="lead-source-campaign">Campaign</Label>
               <Select
                 value={form.action_config.campaign_id ?? ""}
                 onValueChange={(v) =>
@@ -478,7 +478,7 @@ function LeadSourceDialog({
                   }))
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger id="lead-source-campaign">
                   <SelectValue placeholder="Select a campaign" />
                 </SelectTrigger>
                 <SelectContent>
@@ -495,8 +495,9 @@ function LeadSourceDialog({
           {/* Enabled toggle (edit only) */}
           {isEditing && (
             <div className="flex items-center justify-between">
-              <Label>Enabled</Label>
+              <Label htmlFor="lead-source-enabled">Enabled</Label>
               <Switch
+                id="lead-source-enabled"
                 checked={form.enabled}
                 onCheckedChange={(checked) => setForm((f) => ({ ...f, enabled: checked }))}
               />
@@ -678,6 +679,7 @@ export function LeadSourcesSettingsTab() {
 
                   <div className="flex items-center gap-1">
                     <Switch
+                      aria-label={`${source.enabled ? "Disable" : "Enable"} ${source.name}`}
                       checked={source.enabled}
                       onCheckedChange={(checked) =>
                         toggleMutation.mutate({

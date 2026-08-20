@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.opportunities import ensure_default_pipeline
+from app.services.workspaces.default_sales_setup import ensure_default_sales_setup
 
 logger = structlog.get_logger()
 
@@ -120,6 +121,7 @@ async def ensure_personal_workspace(db: AsyncSession, user: User) -> Workspace:
     # :attr:`Workspace.onboarding_completed_at` stamp, written only when the
     # wizard completes.
     await ensure_default_pipeline(db, workspace.id)
+    await ensure_default_sales_setup(db, workspace, created_by_id=user.id)
     await db.flush()
 
     logger.info(

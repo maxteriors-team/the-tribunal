@@ -4,12 +4,10 @@ import { Mic, MicOff, Loader2, MessageSquare } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, use, Suspense } from "react";
 
+import { embedFetch } from "@/lib/embed/request";
+
 import { ChatInput, MessageList, type ChatMessage } from "../_chat-ui";
-import {
-  DEFAULT_PRIMARY_COLOR,
-  getAgentStateInfo,
-  getEmbedTheme,
-} from "../_theme";
+import { DEFAULT_PRIMARY_COLOR, getAgentStateInfo, getEmbedTheme } from "../_theme";
 import type { ThemeOption } from "../_types";
 import { useAgentConfig, useResolvedTheme } from "../_use-agent-config";
 import { useVoiceSession } from "../_use-voice-session";
@@ -129,11 +127,10 @@ function FullpageEmbedContent({ params }: FullpageEmbedProps) {
         content: m.content,
       }));
 
-      const res = await fetch(`/api/v1/p/embed/${publicId}/chat`, {
+      const res = await embedFetch(`/api/v1/p/embed/${publicId}/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Origin: window.location.origin,
         },
         body: JSON.stringify({
           message: userMessage.content,
@@ -231,8 +228,7 @@ function FullpageEmbedContent({ params }: FullpageEmbedProps) {
               <div
                 className="h-2 w-2 rounded-full"
                 style={{
-                  backgroundColor:
-                    voiceStatus === "connecting" ? "#f59e0b" : stateInfo.color,
+                  backgroundColor: voiceStatus === "connecting" ? "#f59e0b" : stateInfo.color,
                   boxShadow: `0 0 6px ${voiceStatus === "connecting" ? "#f59e0b" : stateInfo.color}`,
                   animation: voiceStatus === "connecting" ? "pulse 1.5s infinite" : undefined,
                 }}
@@ -280,8 +276,18 @@ function FullpageEmbedContent({ params }: FullpageEmbedProps) {
           primaryColor={primaryColor}
           trailing={
             <button
+              type="button"
               onClick={toggleMic}
               disabled={voiceStatus === "connecting"}
+              aria-label={
+                voiceStatus === "connecting"
+                  ? "Connecting voice"
+                  : voiceIsActive
+                    ? isMuted
+                      ? "Unmute microphone"
+                      : "Mute microphone"
+                    : "Start voice"
+              }
               className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-105 disabled:opacity-50"
               style={{
                 backgroundColor: voiceIsActive
@@ -292,11 +298,7 @@ function FullpageEmbedContent({ params }: FullpageEmbedProps) {
                 color: voiceIsActive ? "#ffffff" : theme.iconColor,
               }}
               title={
-                voiceIsActive
-                  ? isMuted
-                    ? "Unmute microphone"
-                    : "Mute microphone"
-                  : "Start voice"
+                voiceIsActive ? (isMuted ? "Unmute microphone" : "Mute microphone") : "Start voice"
               }
             >
               {voiceStatus === "connecting" ? (

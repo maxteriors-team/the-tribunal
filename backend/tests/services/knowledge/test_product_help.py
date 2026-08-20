@@ -154,7 +154,7 @@ class TestCorpus:
             repo_root / "frontend/src/components/settings/settings-page.tsx"
         ).read_text(encoding="utf-8")
         settings_tabs = re.findall(r'\{ value: "([^"]+)", label: "([^"]+)"', settings_source)
-        assert len(settings_tabs) >= 19
+        assert len(settings_tabs) >= 18
         corpus = "\n".join(document.content for document in load_help_documents())
 
         missing = [

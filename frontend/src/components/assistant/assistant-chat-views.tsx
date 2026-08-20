@@ -162,7 +162,7 @@ export function ChatHeader({
   onNewConversation: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between border-b px-4 py-3 lg:px-6">
+    <div className="flex flex-col items-start gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between lg:px-6">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <h2 className="truncate text-sm font-semibold">
@@ -179,7 +179,13 @@ export function ChatHeader({
           {runtime.isStreaming ? "Working live…" : "Each chat keeps its own CRM context."}
         </p>
       </div>
-      <Button type="button" variant="outline" size="sm" onClick={onNewConversation}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full sm:w-auto"
+        onClick={onNewConversation}
+      >
         <Plus className="mr-1 size-3.5" />
         New chat
       </Button>
@@ -210,6 +216,7 @@ export function EmptyState({
             type="button"
             variant="outline"
             size="sm"
+            className="h-auto max-w-full whitespace-normal text-pretty py-2"
             onClick={() => onPrompt(prompt)}
           >
             {prompt}

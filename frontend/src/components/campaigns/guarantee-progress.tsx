@@ -4,12 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Shield, ShieldCheck, ShieldAlert } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { campaignsApi } from "@/lib/api/campaigns";
@@ -70,9 +65,10 @@ export function GuaranteeProgress({ campaignId, campaignType }: GuaranteeProgres
     },
   };
 
-  const status = progress.guarantee_status && progress.guarantee_status in statusConfig
-    ? statusConfig[progress.guarantee_status as keyof typeof statusConfig]
-    : statusConfig.pending;
+  const status =
+    progress.guarantee_status && progress.guarantee_status in statusConfig
+      ? statusConfig[progress.guarantee_status as keyof typeof statusConfig]
+      : statusConfig.pending;
 
   const StatusIcon = status.icon;
 
@@ -96,7 +92,7 @@ export function GuaranteeProgress({ campaignId, campaignType }: GuaranteeProgres
             </span>
             <span className="font-medium">{percentage}%</span>
           </div>
-          <Progress value={percentage} className="h-3" />
+          <Progress value={percentage} aria-label="Guarantee completion progress" className="h-3" />
         </div>
 
         {/* Stats grid */}

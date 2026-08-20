@@ -1,14 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  MoreHorizontal,
-  Pencil,
-  Play,
-  Plus,
-  Repeat,
-  Trash2,
-} from "lucide-react";
+import { MoreHorizontal, Pencil, Play, Plus, Repeat, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -22,11 +15,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { HorizontalScroll } from "@/components/ui/horizontal-scroll";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Table,
   TableBody,
@@ -35,7 +25,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { contactsApi } from "@/lib/api/contacts";
 import { servicePlansApi } from "@/lib/api/service-plans";
@@ -164,7 +153,7 @@ export function ServicePlansList() {
       toast.success(
         result.created > 0
           ? `Generated ${result.created} job${result.created > 1 ? "s" : ""}`
-          : "Nothing due — cursor advanced"
+          : "Nothing due — cursor advanced",
       );
       invalidate();
       if (workspaceId) {
@@ -173,8 +162,7 @@ export function ServicePlansList() {
         });
       }
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to generate job")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to generate job")),
   });
 
   const deleteMutation = useMutation({
@@ -183,8 +171,7 @@ export function ServicePlansList() {
       toast.success("Service plan deleted");
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to delete")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to delete")),
   });
 
   const openCreate = () => {
@@ -197,7 +184,7 @@ export function ServicePlansList() {
   };
 
   const newButton = (
-    <Button onClick={openCreate} size="sm">
+    <Button className="w-full sm:w-auto" onClick={openCreate} size="sm">
       <Plus className="mr-1.5 h-4 w-4" />
       New service plan
     </Button>
@@ -249,23 +236,16 @@ export function ServicePlansList() {
               const grouped = row.plans.length > 1;
               const anyActive = row.plans.some((p) => p.is_active);
               return (
-                <TableRow
-                  key={row.key}
-                  className={anyActive ? "" : "opacity-50"}
-                >
+                <TableRow key={row.key} className={anyActive ? "" : "opacity-50"}>
                   <TableCell className="font-medium">
-                    {grouped
-                      ? row.plans.map(planPartLabel).join(" · ")
-                      : plan.title}
+                    {grouped ? row.plans.map(planPartLabel).join(" · ") : plan.title}
                     <div className="text-xs text-muted-foreground">
                       {contactName(plan.contact_id)}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-1">
-                      <Badge variant="outline">
-                        {PLAN_TYPE_LABELS[plan.plan_type]}
-                      </Badge>
+                      <Badge variant="outline">{PLAN_TYPE_LABELS[plan.plan_type]}</Badge>
                       {plan.care_plan_tier ? (
                         <Badge variant="secondary" className="capitalize">
                           {plan.care_plan_tier}
@@ -280,26 +260,15 @@ export function ServicePlansList() {
                     {formatDate(plan.next_run_at, {
                       pattern: "MMM d, yyyy · h:mm a",
                     })}
-                    {grouped ? (
-                      <div className="text-xs">{planPartLabel(plan)}</div>
-                    ) : null}
+                    {grouped ? <div className="text-xs">{planPartLabel(plan)}</div> : null}
                   </TableCell>
                   <TableCell>
-                    {anyActive ? (
-                      <Badge>Active</Badge>
-                    ) : (
-                      <Badge variant="outline">Paused</Badge>
-                    )}
+                    {anyActive ? <Badge>Active</Badge> : <Badge variant="outline">Paused</Badge>}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          disabled={busy}
-                          aria-label="Actions"
-                        >
+                        <Button variant="ghost" size="icon" disabled={busy} aria-label="Actions">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -309,14 +278,10 @@ export function ServicePlansList() {
                             {grouped ? (
                               <>
                                 {index > 0 ? <DropdownMenuSeparator /> : null}
-                                <DropdownMenuLabel>
-                                  {planPartLabel(item)}
-                                </DropdownMenuLabel>
+                                <DropdownMenuLabel>{planPartLabel(item)}</DropdownMenuLabel>
                               </>
                             ) : null}
-                            <DropdownMenuItem
-                              onClick={() => runMutation.mutate(item.id)}
-                            >
+                            <DropdownMenuItem onClick={() => runMutation.mutate(item.id)}>
                               <Play className="mr-2 h-4 w-4" />
                               Generate next now
                             </DropdownMenuItem>
@@ -347,29 +312,37 @@ export function ServicePlansList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Tabs
-          value={planType}
-          onValueChange={(value) =>
-            setPlanType(value as "all" | ServicePlanType)
-          }
+      <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <HorizontalScroll
+          activeKey={planType}
+          aria-label="Service plan types, scroll horizontally"
+          className="sm:max-w-[calc(100%-12rem)]"
+          data-testid="service-plan-tabs-scroll"
         >
-          <TabsList>
+          <div
+            role="group"
+            aria-label="Service plan type"
+            className="inline-flex min-w-max items-center justify-center rounded-lg bg-muted p-[3px]"
+          >
             {TABS.map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}>
+              <Button
+                key={tab.value}
+                type="button"
+                size="sm"
+                variant={planType === tab.value ? "secondary" : "ghost"}
+                aria-pressed={planType === tab.value}
+                className="h-8 shrink-0 px-2 py-1 shadow-none"
+                onClick={() => setPlanType(tab.value)}
+              >
                 {tab.label}
-              </TabsTrigger>
+              </Button>
             ))}
-          </TabsList>
-        </Tabs>
+          </div>
+        </HorizontalScroll>
         {newButton}
       </div>
       {body}
-      <ServicePlanDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        plan={editing}
-      />
+      <ServicePlanDialog open={dialogOpen} onOpenChange={setDialogOpen} plan={editing} />
     </div>
   );
 }

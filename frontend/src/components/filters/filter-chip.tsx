@@ -71,15 +71,14 @@ export function FilterChip({ rule, onRemove }: FilterChipProps) {
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
       <span className="text-muted-foreground">{fieldLabel}</span>
       <span>{operatorLabel}</span>
-      {showValue && (
-        <span className="font-semibold">{formatValue(rule.value)}</span>
-      )}
+      {showValue && <span className="font-semibold">{formatValue(rule.value)}</span>}
       <button
         type="button"
         onClick={onRemove}
+        aria-label={`Remove ${fieldLabel} filter`}
         className="ml-0.5 rounded-full p-0.5 hover:bg-foreground/10"
       >
-        <X className="h-3 w-3" />
+        <X className="h-3 w-3" aria-hidden="true" />
       </button>
     </span>
   );

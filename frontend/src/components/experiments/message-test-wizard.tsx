@@ -1,16 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import {
-  FileText,
-  Users,
-  Bot,
-  Eye,
-  Send,
-  Phone,
-  AlertCircle,
-  FlaskConical,
-} from "lucide-react";
+import { FileText, Users, Bot, Eye, Send, Phone, AlertCircle, FlaskConical } from "lucide-react";
 import { motion } from "motion/react";
 import { useState, useCallback } from "react";
 
@@ -40,7 +31,6 @@ import { ContactSelector } from "../campaigns/contact-selector";
 
 import { VariantEditor, type VariantFormData } from "./variant-editor";
 
-
 const STEPS = [
   { id: "basics", label: "Basics", icon: FileText },
   { id: "contacts", label: "Contacts", icon: Users },
@@ -56,10 +46,7 @@ interface MessageTestWizardProps {
   contacts: Contact[];
   agents: Agent[];
   phoneNumbers: PhoneNumber[];
-  onSubmit: (
-    data: CreateMessageTestRequest,
-    contactIds: number[]
-  ) => Promise<MessageTest>;
+  onSubmit: (data: CreateMessageTestRequest, contactIds: number[]) => Promise<MessageTest>;
   onCancel?: () => void;
   isSubmitting?: boolean;
 }
@@ -128,18 +115,20 @@ export function MessageTestWizard({
   };
 
   const validateStep = useCallback(
-    (step: StepId, data: FormData, setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>) => {
+    (
+      step: StepId,
+      data: FormData,
+      setErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+    ) => {
       const newErrors: Record<string, string> = {};
 
       switch (step) {
         case "basics":
           if (!data.name.trim()) newErrors.name = "Experiment name is required";
-          if (!data.from_phone_number)
-            newErrors.from_phone_number = "Phone number is required";
+          if (!data.from_phone_number) newErrors.from_phone_number = "Phone number is required";
           break;
         case "contacts":
-          if (selectedContactIds.length === 0)
-            newErrors.contacts = "Select at least one contact";
+          if (selectedContactIds.length === 0) newErrors.contacts = "Select at least one contact";
           break;
         case "variants":
           if (variants.length < 2)
@@ -152,7 +141,7 @@ export function MessageTestWizard({
       setErrors(newErrors);
       return Object.keys(newErrors).length === 0;
     },
-    [selectedContactIds, variants]
+    [selectedContactIds, variants],
   );
 
   const wizard = useWizard<StepId, FormData>({
@@ -191,9 +180,7 @@ export function MessageTestWizard({
   };
 
   const selectedAgent = agents.find((a) => a.id === formData.agent_id);
-  const selectedPhone = phoneNumbers.find(
-    (p) => p.phone_number === formData.from_phone_number
-  );
+  const selectedPhone = phoneNumbers.find((p) => p.phone_number === formData.from_phone_number);
 
   const renderStepContent = () => {
     switch (wizard.currentStepId) {
@@ -209,9 +196,7 @@ export function MessageTestWizard({
                 onChange={(e) => updateField("name", e.target.value)}
                 className={errors.name ? "border-destructive" : ""}
               />
-              {errors.name && (
-                <p className="text-sm text-destructive">{errors.name}</p>
-              )}
+              {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
             </div>
 
             <div className="space-y-2">
@@ -226,12 +211,13 @@ export function MessageTestWizard({
             </div>
 
             <div className="space-y-2">
-              <Label>From Phone Number *</Label>
+              <Label htmlFor="experiment-phone-number">From Phone Number *</Label>
               <Select
                 value={formData.from_phone_number}
                 onValueChange={(v) => updateField("from_phone_number", v)}
               >
                 <SelectTrigger
+                  id="experiment-phone-number"
                   className={errors.from_phone_number ? "border-destructive" : ""}
                 >
                   <SelectValue placeholder="Select a phone number" />
@@ -243,9 +229,7 @@ export function MessageTestWizard({
                         <Phone className="size-4" />
                         <span>{phone.phone_number}</span>
                         {phone.friendly_name && (
-                          <span className="text-muted-foreground">
-                            ({phone.friendly_name})
-                          </span>
+                          <span className="text-muted-foreground">({phone.friendly_name})</span>
                         )}
                       </div>
                     </SelectItem>
@@ -253,9 +237,7 @@ export function MessageTestWizard({
                 </SelectContent>
               </Select>
               {errors.from_phone_number && (
-                <p className="text-sm text-destructive">
-                  {errors.from_phone_number}
-                </p>
+                <p className="text-sm text-destructive">{errors.from_phone_number}</p>
               )}
             </div>
           </div>
@@ -291,15 +273,11 @@ export function MessageTestWizard({
             <div className="mb-4">
               <h3 className="text-lg font-medium">Message Variants</h3>
               <p className="text-sm text-muted-foreground">
-                Create at least 2 different message variants. Contacts will be
-                randomly assigned to each variant using round-robin distribution.
+                Create at least 2 different message variants. Contacts will be randomly assigned to
+                each variant using round-robin distribution.
               </p>
             </div>
-            <VariantEditor
-              variants={variants}
-              onChange={setVariants}
-              error={errors.variants}
-            />
+            <VariantEditor variants={variants} onChange={setVariants} error={errors.variants} />
           </div>
         );
 
@@ -314,17 +292,14 @@ export function MessageTestWizard({
                 </p>
               </div>
               <Switch
+                aria-label="AI responses"
                 checked={formData.ai_enabled}
                 onCheckedChange={(v) => updateField("ai_enabled", v)}
               />
             </div>
 
             {formData.ai_enabled && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="space-y-6"
-              >
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
                 <AgentSelector
                   agents={agents}
                   selectedId={formData.agent_id}
@@ -333,21 +308,16 @@ export function MessageTestWizard({
                 />
 
                 <div className="space-y-2">
-                  <Label htmlFor="qualification-criteria">
-                    Qualification Criteria (Optional)
-                  </Label>
+                  <Label htmlFor="qualification-criteria">Qualification Criteria (Optional)</Label>
                   <Textarea
                     id="qualification-criteria"
                     placeholder="e.g., Interested in scheduling a demo, Has budget over $1000..."
                     value={formData.qualification_criteria}
-                    onChange={(e) =>
-                      updateField("qualification_criteria", e.target.value)
-                    }
+                    onChange={(e) => updateField("qualification_criteria", e.target.value)}
                     rows={3}
                   />
                   <p className="text-xs text-muted-foreground">
-                    The AI will mark contacts as qualified when they meet these
-                    criteria
+                    The AI will mark contacts as qualified when they meet these criteria
                   </p>
                 </div>
               </motion.div>
@@ -399,8 +369,7 @@ export function MessageTestWizard({
                   <span className="text-muted-foreground">contacts selected</span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Each contact will receive ONE message from ONE randomly assigned
-                  variant
+                  Each contact will receive ONE message from ONE randomly assigned variant
                 </p>
               </CardContent>
             </Card>
@@ -416,9 +385,7 @@ export function MessageTestWizard({
                 {variants.map((variant, index) => (
                   <div key={variant.id} className="p-3 bg-muted/50 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="outline">
-                        {String.fromCharCode(65 + index)}
-                      </Badge>
+                      <Badge variant="outline">{String.fromCharCode(65 + index)}</Badge>
                       <span className="font-medium">{variant.name}</span>
                       {variant.is_control && (
                         <Badge variant="secondary" className="text-xs">
@@ -426,9 +393,7 @@ export function MessageTestWizard({
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm whitespace-pre-wrap">
-                      {variant.message_template}
-                    </p>
+                    <p className="text-sm whitespace-pre-wrap">{variant.message_template}</p>
                   </div>
                 ))}
               </CardContent>
@@ -447,20 +412,14 @@ export function MessageTestWizard({
                     {selectedAgent ? (
                       <div className="flex items-center gap-2">
                         <Badge variant="default">{selectedAgent.name}</Badge>
-                        <span className="text-sm text-muted-foreground">
-                          will handle responses
-                        </span>
+                        <span className="text-sm text-muted-foreground">will handle responses</span>
                       </div>
                     ) : (
-                      <p className="text-muted-foreground">
-                        AI enabled but no agent selected
-                      </p>
+                      <p className="text-muted-foreground">AI enabled but no agent selected</p>
                     )}
                     {formData.qualification_criteria && (
                       <div className="mt-2">
-                        <p className="text-sm text-muted-foreground">
-                          Qualification criteria:
-                        </p>
+                        <p className="text-sm text-muted-foreground">Qualification criteria:</p>
                         <p className="text-sm">{formData.qualification_criteria}</p>
                       </div>
                     )}

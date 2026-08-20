@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Search,
-  Users,
-  CheckCircle2,
-  Circle,
-  Filter,
-  X,
-} from "lucide-react";
+import { Search, Users, CheckCircle2, Circle, Filter, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useState, useMemo } from "react";
 
@@ -50,8 +43,7 @@ export function ContactSelector({
         contact.phone_number?.includes(search) ||
         contact.company_name?.toLowerCase().includes(search.toLowerCase());
 
-      const matchesStatus =
-        statusFilter === "all" || contact.status === statusFilter;
+      const matchesStatus = statusFilter === "all" || contact.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -123,6 +115,7 @@ export function ContactSelector({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
+            aria-label="Search campaign contacts"
             placeholder="Search by name, email, phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -134,8 +127,9 @@ export function ContactSelector({
               size="icon"
               className="absolute right-1 top-1/2 -translate-y-1/2 size-7"
               onClick={() => setSearch("")}
+              aria-label="Clear contact search"
             >
-              <X className="size-4" />
+              <X className="size-4" aria-hidden="true" />
             </Button>
           )}
         </div>
@@ -143,8 +137,8 @@ export function ContactSelector({
           value={statusFilter}
           onValueChange={(v) => setStatusFilter(v as ContactStatus | "all")}
         >
-          <SelectTrigger className="w-40">
-            <Filter className="size-4 mr-2" />
+          <SelectTrigger className="w-40" aria-label="Filter contacts by status">
+            <Filter className="size-4 mr-2" aria-hidden="true" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -164,9 +158,7 @@ export function ContactSelector({
           <AnimatePresence mode="popLayout">
             {filteredContacts.map((contact) => {
               const isSelected = selectedIds.includes(contact.id);
-              const fullName = [contact.first_name, contact.last_name]
-                .filter(Boolean)
-                .join(" ");
+              const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(" ");
 
               return (
                 <motion.div
@@ -177,9 +169,7 @@ export function ContactSelector({
                   exit={{ opacity: 0, y: -10 }}
                   onClick={() => toggleContact(contact.id)}
                   className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
-                    isSelected
-                      ? "bg-primary/10 border border-primary/30"
-                      : "hover:bg-muted/50"
+                    isSelected ? "bg-primary/10 border border-primary/30" : "hover:bg-muted/50"
                   }`}
                 >
                   <div className="flex-shrink-0">
@@ -192,9 +182,7 @@ export function ContactSelector({
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">
-                        {fullName || "Unknown"}
-                      </span>
+                      <span className="font-medium truncate">{fullName || "Unknown"}</span>
                       <Badge
                         variant="secondary"
                         className={`text-xs ${contactStatusColors[contact.status]}`}
@@ -203,12 +191,8 @@ export function ContactSelector({
                       </Badge>
                     </div>
                     <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                      {contact.phone_number && (
-                        <span>{formatPhone(contact.phone_number)}</span>
-                      )}
-                      {contact.email && (
-                        <span className="truncate">{contact.email}</span>
-                      )}
+                      {contact.phone_number && <span>{formatPhone(contact.phone_number)}</span>}
+                      {contact.email && <span className="truncate">{contact.email}</span>}
                     </div>
                     {contact.company_name && (
                       <div className="text-xs text-muted-foreground mt-0.5">
@@ -226,11 +210,7 @@ export function ContactSelector({
               <Users className="size-12 mb-2 opacity-50" />
               <p>No contacts found</p>
               {search && (
-                <Button
-                  variant="link"
-                  onClick={() => setSearch("")}
-                  className="mt-1"
-                >
+                <Button variant="link" onClick={() => setSearch("")} className="mt-1">
                   Clear search
                 </Button>
               )}

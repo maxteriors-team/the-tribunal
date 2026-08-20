@@ -59,6 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { agentsApi } from "@/lib/api/agents";
 import { callsApi } from "@/lib/api/calls";
@@ -81,6 +82,9 @@ export function AgentsList() {
   const [toNumber, setToNumber] = useState("");
   const [fromNumberId, setFromNumberId] = useState("");
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canManageAgents = can("workspace:manage");
+  const canTestAgents = can("comms:send");
   const queryClient = useQueryClient();
 
   const {
@@ -245,19 +249,21 @@ export function AgentsList() {
           title="AI Agents"
           subtitle="Configure and manage your AI voice and text agents"
           action={
-            <div className="flex gap-2">
-              <Button variant="outline" asChild>
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+              <Button variant="outline" className="flex-1 sm:flex-none" asChild>
                 <Link href="/agents/practice">
                   <Sparkles className="mr-2 size-4" />
                   Practice Arena
                 </Link>
               </Button>
-              <Button asChild>
-                <Link href="/agents/create">
-                  <Plus className="mr-2 size-4" />
-                  Create Agent
-                </Link>
-              </Button>
+              {canManageAgents && (
+                <Button className="flex-1 sm:flex-none" asChild>
+                  <Link href="/agents/create">
+                    <Plus className="mr-2 size-4" />
+                    Create Agent
+                  </Link>
+                </Button>
+              )}
             </div>
           }
         />
@@ -292,75 +298,79 @@ export function AgentsList() {
           title="No agents yet"
           description="Create your first AI agent to start handling calls and messages"
           action={
-            <Button asChild>
-              <Link href="/agents/create">Create Agent</Link>
-            </Button>
+            canManageAgents ? (
+              <Button asChild>
+                <Link href="/agents/create">Create Agent</Link>
+              </Button>
+            ) : undefined
           }
         />
       }
       extras={
-        <Dialog open={testCallDialogOpen} onOpenChange={setTestCallDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Test Call with {selectedAgent?.name}</DialogTitle>
-              <DialogDescription>
-                Initiate a test call to verify the AI agent is working correctly.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="to-number">Phone Number to Call</Label>
-                <PhoneInput
-                  id="to-number"
-                  value={toNumber}
-                  onChange={setToNumber}
-                  placeholder="(555) 123-4567"
-                />
+        canTestAgents ? (
+          <Dialog open={testCallDialogOpen} onOpenChange={setTestCallDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Test Call with {selectedAgent?.name}</DialogTitle>
+                <DialogDescription>
+                  Initiate a test call to verify the AI agent is working correctly.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="to-number">Phone Number to Call</Label>
+                  <PhoneInput
+                    id="to-number"
+                    value={toNumber}
+                    onChange={setToNumber}
+                    placeholder="(555) 123-4567"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="from-number">Call From</Label>
+                  <Select value={fromNumberId} onValueChange={setFromNumberId}>
+                    <SelectTrigger id="from-number" className="w-full">
+                      <SelectValue placeholder="Select a phone number" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {phoneNumbers.map((phone) => (
+                        <SelectItem key={phone.id} value={phone.id}>
+                          {phone.phone_number}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {phoneNumbers.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No voice-enabled phone numbers available.
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="from-number">Call From</Label>
-                <Select value={fromNumberId} onValueChange={setFromNumberId}>
-                  <SelectTrigger id="from-number" className="w-full">
-                    <SelectValue placeholder="Select a phone number" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {phoneNumbers.map((phone) => (
-                      <SelectItem key={phone.id} value={phone.id}>
-                        {phone.phone_number}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {phoneNumbers.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No voice-enabled phone numbers available.
-                  </p>
-                )}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setTestCallDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleTestCall}
-                disabled={!toNumber || !fromNumberId || initiateCallMutation.isPending}
-              >
-                {initiateCallMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                    Calling...
-                  </>
-                ) : (
-                  <>
-                    <PhoneCall className="mr-2 size-4" />
-                    Start Call
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setTestCallDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleTestCall}
+                  disabled={!toNumber || !fromNumberId || initiateCallMutation.isPending}
+                >
+                  {initiateCallMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      Calling...
+                    </>
+                  ) : (
+                    <>
+                      <PhoneCall className="mr-2 size-4" />
+                      Start Call
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        ) : undefined
       }
     >
       <motion.div
@@ -414,66 +424,83 @@ export function AgentsList() {
                           </div>
                         </div>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="opacity-0 group-hover:opacity-100"
-                            aria-label="Agent actions"
-                          >
-                            <MoreHorizontal className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link href={`/agents/${agent.id}`}>
-                              <Settings2 className="mr-2 size-4" />
-                              Configure
-                            </Link>
-                          </DropdownMenuItem>
-                          {(agent.channel_mode === "voice" || agent.channel_mode === "both") && (
-                            <DropdownMenuItem onClick={() => openTestCallDialog(agent)}>
-                              <PhoneCall className="mr-2 size-4" />
-                              Test Call
-                            </DropdownMenuItem>
-                          )}
-                          {agent.is_active ? (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                toggleAgentMutation.mutate({ agentId: agent.id, isActive: false })
-                              }
+                      {(canManageAgents ||
+                        (canTestAgents &&
+                          (agent.channel_mode === "voice" || agent.channel_mode === "both"))) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="opacity-0 group-hover:opacity-100"
+                              aria-label="Agent actions"
                             >
-                              <Pause className="mr-2 size-4" />
-                              Deactivate
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                toggleAgentMutation.mutate({ agentId: agent.id, isActive: true })
-                              }
-                            >
-                              <Play className="mr-2 size-4" />
-                              Activate
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onClick={() => duplicateAgentMutation.mutate(agent)}
-                            disabled={duplicateAgentMutation.isPending}
-                          >
-                            <Copy className="mr-2 size-4" />
-                            Duplicate
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => deleteAgentMutation.mutate(agent.id)}
-                          >
-                            <Trash2 className="mr-2 size-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {canManageAgents && (
+                              <DropdownMenuItem asChild>
+                                <Link href={`/agents/${agent.id}`}>
+                                  <Settings2 className="mr-2 size-4" />
+                                  Configure
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                            {canTestAgents &&
+                              (agent.channel_mode === "voice" || agent.channel_mode === "both") && (
+                                <DropdownMenuItem onClick={() => openTestCallDialog(agent)}>
+                                  <PhoneCall className="mr-2 size-4" />
+                                  Test Call
+                                </DropdownMenuItem>
+                              )}
+                            {canManageAgents && (
+                              <>
+                                {agent.is_active ? (
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      toggleAgentMutation.mutate({
+                                        agentId: agent.id,
+                                        isActive: false,
+                                      })
+                                    }
+                                  >
+                                    <Pause className="mr-2 size-4" />
+                                    Deactivate
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      toggleAgentMutation.mutate({
+                                        agentId: agent.id,
+                                        isActive: true,
+                                      })
+                                    }
+                                  >
+                                    <Play className="mr-2 size-4" />
+                                    Activate
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  onClick={() => duplicateAgentMutation.mutate(agent)}
+                                  disabled={duplicateAgentMutation.isPending}
+                                >
+                                  <Copy className="mr-2 size-4" />
+                                  Duplicate
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => deleteAgentMutation.mutate(agent.id)}
+                                >
+                                  <Trash2 className="mr-2 size-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -507,9 +534,11 @@ export function AgentsList() {
                           {agent.is_active ? "Active" : "Inactive"}
                         </span>
                       </div>
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/agents/${agent.id}`}>Configure</Link>
-                      </Button>
+                      {canManageAgents && (
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/agents/${agent.id}`}>Configure</Link>
+                        </Button>
+                      )}
                     </div>
                   </CardFooter>
                 </Card>

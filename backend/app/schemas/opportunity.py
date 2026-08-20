@@ -247,6 +247,7 @@ class OpportunityUpdate(OpportunityLeadAttributionFields):
     currency: str | None = None
     stage_id: uuid.UUID | None = None
     expected_close_date: date | None = None
+    primary_contact_id: int | None = None
     assigned_user_id: int | None = None
     source: str | None = None
     status: OpportunityStatus | None = None

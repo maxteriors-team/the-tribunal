@@ -11,12 +11,19 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.crud import get_or_404
-from app.api.deps import DB, CanReadCRM, CanWriteOutreach, CurrentUser
+from app.api.deps import (
+    DB,
+    CanReadCRM,
+    CanWriteOutreach,
+    CurrentUser,
+    require_route_capabilities,
+)
+from app.core.permissions import Capability
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus
 from app.models.prebooking import PreBookingCampaignConfig, PreBookingReservation
 from app.schemas.prebooking import (
@@ -40,11 +47,19 @@ from app.services.prebooking.reservation_service import (
 )
 from app.services.prebooking.season import resolve_season_window
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.OUTREACH_WRITE))
+    ]
+)
 # Workspace-level utilities that must answer *before* a campaign row exists —
 # chiefly "how big is my warm database", which is the number that decides whether
 # building the campaign is worth the afternoon.
-workspace_router = APIRouter()
+workspace_router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.OUTREACH_WRITE))
+    ]
+)
 logger = structlog.get_logger()
 
 

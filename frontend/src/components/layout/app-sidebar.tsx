@@ -69,9 +69,9 @@ import { useWorkspace } from "@/providers/workspace-provider";
 import {
   appNavSections,
   breadcrumbLabels,
+  canAccessAppPath,
   canSeeNavItem,
   findNavSectionIdForPath,
-  isFieldOperationalPath,
   isNavItemVisible,
   setupNavItem,
   type AppNavBadgeKey,
@@ -396,18 +396,24 @@ export function AppSidebar({ children }: AppSidebarProps) {
   // "Finish setup" link into the setup wizard.
   const showSetupNav = needsSetup && canSeeNavItem(setupNavItem, tier, can);
 
-  // Field technicians are operational-only: keep them on the calendar, which is
-  // now the single schedule surface. This is UX, not the security boundary — the
-  // API enforces the capability gate — so it waits for the workspace/role to
-  // load before acting (the tier fails closed to "field" while the role is still
-  // resolving, which must not bounce a real manager/admin off a CRM page
-  // mid-load).
+  const routeAllowed = workspacePending || canAccessAppPath(pathname, tier, can);
+
+  // The shell is the direct-URL capability boundary for rendered UI. Backend
+  // dependencies remain the security boundary; this prevents protected page
+  // content and mutations from mounting before the API can reject them.
   useEffect(() => {
-    if (workspacePending) return;
-    if (tier !== "field") return;
-    if (isFieldOperationalPath(pathname)) return;
-    router.replace("/calendar");
-  }, [workspacePending, tier, pathname, router]);
+    if (routeAllowed) return;
+
+    const fallback =
+      tier === "field" || tier === "lead"
+        ? "/calendar"
+        : can("crm:read")
+          ? "/contacts"
+          : "/settings";
+    router.replace(fallback);
+  }, [can, routeAllowed, router, tier]);
+
+  if (!routeAllowed) return null;
 
   return (
     <SidebarProvider
@@ -547,7 +553,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
           </Button>
         </header>
         {commandMounted && <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />}
-        <main className="app-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <main className="app-scrollbar min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto">
           <SetupGate />
           <NoWorkspaceGate>{children}</NoWorkspaceGate>
         </main>

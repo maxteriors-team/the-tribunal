@@ -4,11 +4,12 @@ import uuid
 from datetime import UTC, datetime
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
-from app.api.deps import DB, WorkspaceAccess
+from app.api.deps import DB, WorkspaceAccess, require_route_capabilities
+from app.core.permissions import Capability
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
 from app.models.contact import Contact
@@ -270,7 +271,13 @@ async def snooze_nudge(
 # ── Nudge Settings (stored in workspace.settings JSONB) ──────────────
 
 
-settings_router = APIRouter()
+settings_router = APIRouter(
+    dependencies=[
+        Depends(
+            require_route_capabilities(Capability.WORKSPACE_MANAGE, Capability.WORKSPACE_MANAGE)
+        )
+    ]
+)
 
 
 @settings_router.get("", response_model=NudgeSettingsResponse)

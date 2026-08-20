@@ -18,7 +18,9 @@ from fastapi import APIRouter, Query
 from app.api.deps import (
     DB,
     CanReadBilling,
+    CanWriteBilling,
     CanWriteJobs,
+    CanWriteOutreach,
     CurrentMembership,
     CurrentUser,
     TransactionalDB,
@@ -39,9 +41,14 @@ from app.schemas.job import (
     JobCreate,
     JobInstallationPlanResponse,
     JobListResponse,
+    JobPricingReplace,
+    JobPricingResponse,
     JobResponse,
     JobScheduleRequest,
     JobUpdate,
+    JobVisitCreate,
+    JobVisitResponse,
+    JobVisitUpdate,
 )
 from app.schemas.job_costing import (
     ClockInRequest,
@@ -207,6 +214,86 @@ async def get_job_installation_plan(
         workspace.id,
         membership=membership,
         user_id=current_user.id,
+    )
+
+
+@router.get("/{job_id}/visits", response_model=list[JobVisitResponse])
+async def list_job_visits(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    membership: CurrentMembership,
+    current_user: CurrentUser,
+    db: DB,
+) -> list[JobVisitResponse]:
+    """List visits after applying the same job visibility boundary as job detail."""
+    service = JobService(db)
+    await service.get(
+        job_id,
+        workspace.id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
+    return await service.list_visits(job_id, workspace.id)
+
+
+@router.post("/{job_id}/visits", response_model=JobVisitResponse, status_code=201)
+async def create_job_visit(
+    job_id: uuid.UUID,
+    payload: JobVisitCreate,
+    membership: WorkspaceDispatcher,
+    db: TransactionalDB,
+) -> JobVisitResponse:
+    return await JobService(db).create_visit(job_id, membership.workspace_id, payload.model_dump())
+
+
+@router.patch("/{job_id}/visits/{visit_id}", response_model=JobVisitResponse)
+async def update_job_visit(
+    job_id: uuid.UUID,
+    visit_id: uuid.UUID,
+    payload: JobVisitUpdate,
+    membership: WorkspaceDispatcher,
+    db: TransactionalDB,
+) -> JobVisitResponse:
+    return await JobService(db).update_visit(
+        job_id,
+        visit_id,
+        membership.workspace_id,
+        payload.model_dump(exclude_unset=True),
+    )
+
+
+@router.delete("/{job_id}/visits/{visit_id}", status_code=204)
+async def delete_job_visit(
+    job_id: uuid.UUID,
+    visit_id: uuid.UUID,
+    membership: WorkspaceDispatcher,
+    db: TransactionalDB,
+) -> None:
+    await JobService(db).delete_visit(job_id, visit_id, membership.workspace_id)
+
+
+@router.get("/{job_id}/pricing", response_model=JobPricingResponse)
+async def get_job_pricing(
+    job_id: uuid.UUID,
+    membership: CanReadBilling,
+    db: DB,
+) -> JobPricingResponse:
+    """Return priced scope only to roles with billing visibility."""
+    return await JobService(db).get_pricing(job_id, membership.workspace_id)
+
+
+@router.put("/{job_id}/pricing", response_model=JobPricingResponse)
+async def replace_job_pricing(
+    job_id: uuid.UUID,
+    payload: JobPricingReplace,
+    membership: CanWriteBilling,
+    db: TransactionalDB,
+) -> JobPricingResponse:
+    """Atomically replace job pricing for billing-authorized operators."""
+    return await JobService(db).replace_pricing(
+        job_id,
+        membership.workspace_id,
+        payload.tax_rate,
+        [item.model_dump() for item in payload.items],
     )
 
 
@@ -513,6 +600,7 @@ async def enroll_job_neighbors_in_campaign(
     payload: NeighborOutreachCampaignRequest,
     membership: WorkspaceDispatcher,
     db: TransactionalDB,
+    _gate: CanWriteOutreach,
 ) -> NeighborOutreachCampaignResponse:
     """Enroll the *consented* subset of the batch into an existing campaign.
 

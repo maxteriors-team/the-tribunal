@@ -11360,6 +11360,30 @@
             ],
             "title": "Per Ft Override"
           },
+          "permanent_complexity": {
+            "default": "standard",
+            "enum": [
+              "easy",
+              "standard",
+              "complex"
+            ],
+            "title": "Permanent Complexity",
+            "type": "string"
+          },
+          "permanent_complexity_feet": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "enum": [
+                "easy",
+                "standard",
+                "complex"
+              ]
+            },
+            "title": "Permanent Complexity Feet",
+            "type": "object"
+          },
           "selected_package": {
             "anyOf": [
               {
@@ -12359,6 +12383,22 @@
           "pages"
         ],
         "title": "ContactListResponse",
+        "type": "object"
+      },
+      "ContactNoteCreate": {
+        "description": "Append-only internal note input for a workspace contact.",
+        "properties": {
+          "body": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "ContactNoteCreate",
         "type": "object"
       },
       "ContactResponse": {
@@ -17052,6 +17092,30 @@
               }
             ],
             "title": "Per Ft Override"
+          },
+          "permanent_complexity": {
+            "default": "standard",
+            "enum": [
+              "easy",
+              "standard",
+              "complex"
+            ],
+            "title": "Permanent Complexity",
+            "type": "string"
+          },
+          "permanent_complexity_feet": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "enum": [
+                "easy",
+                "standard",
+                "complex"
+              ]
+            },
+            "title": "Permanent Complexity Feet",
+            "type": "object"
           },
           "selected_package": {
             "anyOf": [
@@ -22262,6 +22326,201 @@
         "title": "JobPnLSummary",
         "type": "object"
       },
+      "JobPricedLineItemInput": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,13}0*$)\\d{0,10}\\.\\d{0,2}0*$)",
+                "type": "string"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "taxable": {
+            "default": true,
+            "title": "Taxable",
+            "type": "boolean"
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,13}0*$)\\d{0,10}\\.\\d{0,2}0*$)",
+                "type": "string"
+              }
+            ],
+            "title": "Unit Price"
+          }
+        },
+        "required": [
+          "name",
+          "quantity",
+          "unit_price"
+        ],
+        "title": "JobPricedLineItemInput",
+        "type": "object"
+      },
+      "JobPricedLineItemResponse": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "quantity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "taxable": {
+            "title": "Taxable",
+            "type": "boolean"
+          },
+          "total": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total",
+            "type": "string"
+          },
+          "unit_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Unit Price",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "quantity",
+          "unit_price",
+          "taxable",
+          "position",
+          "total"
+        ],
+        "title": "JobPricedLineItemResponse",
+        "type": "object"
+      },
+      "JobPricingReplace": {
+        "description": "Replace priced scope atomically; omitted rows are deleted.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JobPricedLineItemInput"
+            },
+            "maxItems": 200,
+            "title": "Items",
+            "type": "array"
+          },
+          "tax_rate": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,3}|(?=[\\d.]{1,6}0*$)\\d{0,3}\\.\\d{0,2}0*$)",
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Tax Rate"
+          }
+        },
+        "title": "JobPricingReplace",
+        "type": "object"
+      },
+      "JobPricingResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JobPricedLineItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "subtotal": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Subtotal",
+            "type": "string"
+          },
+          "tax": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Tax",
+            "type": "string"
+          },
+          "tax_rate": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Tax Rate",
+            "type": "string"
+          },
+          "total": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Total",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "tax_rate",
+          "items",
+          "subtotal",
+          "tax",
+          "total"
+        ],
+        "title": "JobPricingResponse",
+        "type": "object"
+      },
       "JobProfitability": {
         "description": "Computed P&L for a single job.\n\n``revenue`` comes from the linked invoice's total (0 when unlinked).\n``labor_cost`` sums completed time entries (hours * rate); ``expense_cost``\nsums expenses; ``material_cost`` sums stock consumed on the job from the\ninventory ledger (net of anything returned). ``margin`` is\n``profit / revenue`` (null when revenue is 0).",
         "properties": {
@@ -22822,6 +23081,174 @@
           }
         },
         "title": "JobUpdate",
+        "type": "object"
+      },
+      "JobVisitCreate": {
+        "description": "Add a scheduled visit to a job.",
+        "properties": {
+          "anytime": {
+            "default": false,
+            "title": "Anytime",
+            "type": "boolean"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "starts_at",
+          "ends_at"
+        ],
+        "title": "JobVisitCreate",
+        "type": "object"
+      },
+      "JobVisitResponse": {
+        "properties": {
+          "anytime": {
+            "title": "Anytime",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "starts_at",
+          "ends_at",
+          "anytime",
+          "instructions",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "JobVisitResponse",
+        "type": "object"
+      },
+      "JobVisitUpdate": {
+        "description": "Update a visit window, instructions, or lifecycle status.",
+        "properties": {
+          "anytime": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anytime"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "JobVisitUpdate",
         "type": "object"
       },
       "KnowledgeBaseStats": {
@@ -25701,6 +26128,30 @@
               }
             ],
             "title": "Per Ft Override"
+          },
+          "permanent_complexity": {
+            "default": "standard",
+            "enum": [
+              "easy",
+              "standard",
+              "complex"
+            ],
+            "title": "Permanent Complexity",
+            "type": "string"
+          },
+          "permanent_complexity_feet": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "propertyNames": {
+              "enum": [
+                "easy",
+                "standard",
+                "complex"
+              ]
+            },
+            "title": "Permanent Complexity Feet",
+            "type": "object"
           },
           "selected_package": {
             "anyOf": [
@@ -31715,6 +32166,17 @@
             ],
             "title": "Name"
           },
+          "primary_contact_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Contact Id"
+          },
           "referral_partner_id": {
             "anyOf": [
               {
@@ -34329,12 +34791,24 @@
         "type": "object"
       },
       "PermanentConfig": {
-        "description": "Permanent LED roofline priced per linear foot plus a controller/hub.\n\nPlaceholder rates ship so a workspace prices before customization; the\noperator tunes ``per_ft`` / controller / channel rates in Settings → Pricing\n(the operator's standalone tool was not provided, so these are sane defaults).\nAll values are *net*; the engine grosses them up like every other price.",
+        "description": "Permanent LED roofline priced by the smallest kit that covers the job.\n\nPackage costs are COGS. ``markup`` converts COGS to the net installed sale\nprice before the standard cash/financing gross-up is applied.",
         "properties": {
+          "complex_markup": {
+            "default": 3.5,
+            "exclusiveMinimum": 0.0,
+            "title": "Complex Markup",
+            "type": "number"
+          },
           "controller_base": {
-            "default": 299,
+            "default": 0,
             "minimum": 0.0,
             "title": "Controller Base",
+            "type": "number"
+          },
+          "easy_markup": {
+            "default": 2.5,
+            "exclusiveMinimum": 0.0,
+            "title": "Easy Markup",
             "type": "number"
           },
           "enabled": {
@@ -34343,7 +34817,7 @@
             "type": "boolean"
           },
           "included_channels": {
-            "default": 1,
+            "default": 0,
             "minimum": 0.0,
             "title": "Included Channels",
             "type": "integer"
@@ -34353,20 +34827,34 @@
             "title": "Label",
             "type": "string"
           },
+          "markup": {
+            "default": 3.5,
+            "exclusiveMinimum": 0.0,
+            "title": "Markup",
+            "type": "number"
+          },
           "minimum": {
             "default": 0,
             "minimum": 0.0,
             "title": "Minimum",
             "type": "number"
           },
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/PermanentPackage"
+            },
+            "minItems": 1,
+            "title": "Packages",
+            "type": "array"
+          },
           "per_channel": {
-            "default": 45,
+            "default": 0,
             "minimum": 0.0,
             "title": "Per Channel",
             "type": "number"
           },
           "per_ft": {
-            "default": 32,
+            "default": 0,
             "minimum": 0.0,
             "title": "Per Ft",
             "type": "number"
@@ -34377,13 +34865,19 @@
             },
             "title": "Perks",
             "type": "array"
+          },
+          "standard_markup": {
+            "default": 3,
+            "exclusiveMinimum": 0.0,
+            "title": "Standard Markup",
+            "type": "number"
           }
         },
         "title": "PermanentConfig",
         "type": "object"
       },
       "PermanentEstimate": {
-        "description": "Permanent-lighting side of the estimate (rep view — includes per_ft).\n\n``roofline_cost`` is the track-only component of ``total`` (no controller or\nzone hardware), so it can be compared like-for-like against the seasonal\nroofline cost — standalone lines are deliberately excluded from it for the\nsame reason.\n\n``custom_total`` is the part of ``total`` contributed by the rep's standalone\nlines, broken out so a caller pricing a *package* (whose total excludes them)\ncan add them back without re-deriving the arithmetic.",
+        "description": "Permanent-lighting estimate using the kit that covers measured footage.",
         "properties": {
           "custom_total": {
             "default": 0,
@@ -34394,7 +34888,23 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "markup": {
+            "default": 0,
+            "title": "Markup",
+            "type": "number"
+          },
+          "package_cogs": {
+            "default": 0,
+            "title": "Package Cogs",
+            "type": "number"
+          },
+          "package_feet": {
+            "default": 0,
+            "title": "Package Feet",
+            "type": "integer"
+          },
           "per_ft": {
+            "default": 0,
             "title": "Per Ft",
             "type": "number"
           },
@@ -34410,10 +34920,30 @@
         },
         "required": [
           "enabled",
-          "total",
-          "per_ft"
+          "total"
         ],
         "title": "PermanentEstimate",
+        "type": "object"
+      },
+      "PermanentPackage": {
+        "description": "One supplier kit used to cover a measured roofline.",
+        "properties": {
+          "cost": {
+            "minimum": 0.0,
+            "title": "Cost",
+            "type": "number"
+          },
+          "feet": {
+            "exclusiveMinimum": 0.0,
+            "title": "Feet",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feet",
+          "cost"
+        ],
+        "title": "PermanentPackage",
         "type": "object"
       },
       "PersonResult": {
@@ -39881,6 +40411,26 @@
           "name"
         ],
         "title": "PublicOfferResponse",
+        "type": "object"
+      },
+      "PublicPaymentVerification": {
+        "description": "Non-sensitive Stripe Checkout state for the generic return page.",
+        "properties": {
+          "status": {
+            "enum": [
+              "paid",
+              "pending",
+              "expired",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PublicPaymentVerification",
         "type": "object"
       },
       "PublicPermanentComparison": {
@@ -56321,6 +56871,60 @@
         ]
       }
     },
+    "/api/v1/p/payments/checkout-sessions/{session_id}/verify": {
+      "post": {
+        "description": "Return payment state only after local ownership and Stripe both agree.",
+        "operationId": "verify_public_checkout_session_api_v1_p_payments_checkout_sessions__session_id__verify_post",
+        "parameters": [
+          {
+            "description": "Stripe Checkout Session identifier returned by Checkout",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "description": "Stripe Checkout Session identifier returned by Checkout",
+              "maxLength": 255,
+              "minLength": 8,
+              "pattern": "^cs_[A-Za-z0-9_]+$",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicPaymentVerification"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Unknown or invalid Checkout Session"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "Stripe verification is temporarily unavailable"
+          }
+        },
+        "summary": "Verify Public Checkout Session",
+        "tags": [
+          "Public Payments"
+        ]
+      }
+    },
     "/api/v1/p/quotes/{token}": {
       "get": {
         "description": "Render a client's proposal from its share token. Drafts/unknown 404.",
@@ -69036,6 +69640,74 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/notes": {
+      "post": {
+        "description": "Append an internal client note without replacing prior note history.",
+        "operationId": "append_contact_note_api_v1_workspaces__workspace_id__contacts__contact_id__notes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactNoteCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Append Contact Note",
+        "tags": [
+          "Contacts"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/qualification": {
       "get": {
         "description": "Get the current qualification status of a contact without re-analyzing.",
@@ -75842,6 +76514,132 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/pricing": {
+      "get": {
+        "description": "Return priced scope only to roles with billing visibility.",
+        "operationId": "get_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPricingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Job Pricing",
+        "tags": [
+          "Field Service"
+        ]
+      },
+      "put": {
+        "description": "Atomically replace job pricing for billing-authorized operators.",
+        "operationId": "replace_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobPricingReplace"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPricingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Replace Job Pricing",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/profitability": {
       "get": {
         "description": "Compute the job's P&L (revenue from the linked invoice minus costs).\n\nGated on ``billing:read``: the P&L exposes customer revenue, profit, and\nmargin, so a field technician (``jobs:read`` only, no billing) must not see\nit — even though they can still log their own time and expenses on the job.",
@@ -76285,6 +77083,272 @@
           }
         ],
         "summary": "Delete Time Entry",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits": {
+      "get": {
+        "description": "List visits after applying the same job visibility boundary as job detail.",
+        "operationId": "list_job_visits_api_v1_workspaces__workspace_id__jobs__job_id__visits_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobVisitResponse"
+                  },
+                  "title": "Response List Job Visits Api V1 Workspaces  Workspace Id  Jobs  Job Id  Visits Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Job Visits",
+        "tags": [
+          "Field Service"
+        ]
+      },
+      "post": {
+        "operationId": "create_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobVisitCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobVisitResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Job Visit",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits/{visit_id}": {
+      "delete": {
+        "operationId": "delete_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits__visit_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "visit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Visit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Job Visit",
+        "tags": [
+          "Field Service"
+        ]
+      },
+      "patch": {
+        "operationId": "update_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits__visit_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "visit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Visit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobVisitUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobVisitResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Job Visit",
         "tags": [
           "Field Service"
         ]

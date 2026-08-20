@@ -10,7 +10,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
+from app.core.permissions import Capability
 from app.models.workspace import Workspace
 from app.schemas.roleplay import (
     CreateRehearsalRequest,
@@ -24,7 +25,9 @@ from app.schemas.roleplay import (
 from app.services.ai.roleplay import RoleplayService
 from app.services.exceptions import NotFoundError, ValidationError
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_route_capabilities(Capability.CRM_READ, Capability.CRM_READ))]
+)
 
 
 # === Personas ===

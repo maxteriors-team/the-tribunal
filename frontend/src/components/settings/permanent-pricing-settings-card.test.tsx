@@ -33,7 +33,17 @@ function permanent(overrides: Partial<PermanentConfig> = {}): PermanentConfig {
   return {
     enabled: false,
     label: "Permanent Holiday Lighting",
-    per_ft: 32,
+    easy_markup: 2.5,
+    standard_markup: 3,
+    complex_markup: 3.5,
+    markup: 3.5,
+    packages: [
+      { feet: 100, cost: 1249 },
+      { feet: 150, cost: 1649 },
+      { feet: 200, cost: 2099 },
+      { feet: 400, cost: 3999 },
+    ],
+    per_ft: 0,
     controller_base: 299,
     per_channel: 45,
     included_channels: 1,
@@ -70,25 +80,26 @@ beforeEach(() => {
 
 describe("PermanentPricingSettingsCard", () => {
   it("seeds the fields from the saved permanent config", async () => {
-    getPricingMock.mockResolvedValue(pricing(permanent({ per_ft: 32 })));
+    getPricingMock.mockResolvedValue(pricing(permanent()));
 
     renderCard();
 
-    expect(await screen.findByLabelText("Price per linear foot ($)")).toHaveValue(
-      32,
-    );
+    expect(await screen.findByLabelText("Easy multiplier")).toHaveValue(2.5);
+    expect(screen.getByLabelText("Standard multiplier")).toHaveValue(3);
+    expect(screen.getByLabelText("Complex multiplier")).toHaveValue(3.5);
     expect(screen.getByLabelText("Offering name")).toHaveValue(
       "Permanent Holiday Lighting",
     );
-    expect(screen.getByLabelText("Controller base price ($)")).toHaveValue(299);
+    expect(screen.getAllByLabelText("Kit footage")[0]).toHaveValue(100);
+    expect(screen.getAllByLabelText("COGS ($)")[0]).toHaveValue(1249);
   });
 
   it("saves a complete permanent block, enabling it and preserving perks", async () => {
     getPricingMock.mockResolvedValue(
-      pricing(permanent({ enabled: false, per_ft: 32, perks: ["Pro install"] })),
+      pricing(permanent({ enabled: false, perks: ["Pro install"] })),
     );
     updatePricingMock.mockResolvedValue(
-      pricing(permanent({ enabled: true, per_ft: 40 })),
+      pricing(permanent({ enabled: true, markup: 4 })),
     );
 
     renderCard();
@@ -98,9 +109,9 @@ describe("PermanentPricingSettingsCard", () => {
     });
     await userEvent.click(toggle);
 
-    const perFt = screen.getByLabelText("Price per linear foot ($)");
-    await userEvent.clear(perFt);
-    await userEvent.type(perFt, "40");
+    const markup = screen.getByLabelText("Complex multiplier");
+    await userEvent.clear(markup);
+    await userEvent.type(markup, "4");
 
     await userEvent.click(
       screen.getByRole("button", { name: /save permanent pricing/i }),
@@ -111,7 +122,17 @@ describe("PermanentPricingSettingsCard", () => {
         permanent: {
           enabled: true,
           label: "Permanent Holiday Lighting",
-          per_ft: 40,
+          easy_markup: 2.5,
+          standard_markup: 3,
+          complex_markup: 4,
+          markup: 4,
+          packages: [
+            { feet: 100, cost: 1249 },
+            { feet: 150, cost: 1649 },
+            { feet: 200, cost: 2099 },
+            { feet: 400, cost: 3999 },
+          ],
+          per_ft: 0,
           controller_base: 299,
           per_channel: 45,
           included_channels: 1,

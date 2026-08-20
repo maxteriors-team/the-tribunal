@@ -1,14 +1,14 @@
 "use client";
 
+/* eslint-disable jsx-a11y/no-noninteractive-tabindex -- Named message history must accept keyboard focus. */
+
 import { Send, X, MessageSquare, Loader2, ImagePlus } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useRef, use, Suspense } from "react";
 
 import { IMAGE_ACCEPT_ATTR, readImageFile } from "@/lib/ai/image-upload";
-import {
-  postToParent,
-  subscribeToEmbedMessages,
-} from "@/lib/embed/messaging";
+import { postToParent, subscribeToEmbedMessages } from "@/lib/embed/messaging";
+import { embedFetch } from "@/lib/embed/request";
 import { parseThemeOption, resolveThemeOption } from "@/lib/embed/theme";
 
 interface AgentConfig {
@@ -62,8 +62,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
   useEffect(() => {
     if (theme === "auto") {
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handler = (e: MediaQueryListEvent) =>
-        setSystemTheme(e.matches ? "dark" : "light");
+      const handler = (e: MediaQueryListEvent) => setSystemTheme(e.matches ? "dark" : "light");
       mediaQuery.addEventListener("change", handler);
       return () => mediaQuery.removeEventListener("change", handler);
     }
@@ -83,9 +82,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
   useEffect(() => {
     async function fetchConfig() {
       try {
-        const res = await fetch(`/api/v1/p/embed/${publicId}/config`, {
-          headers: { Origin: window.location.origin },
-        });
+        const res = await embedFetch(`/api/v1/p/embed/${publicId}/config`);
         if (!res.ok) {
           const data = await res.json();
           throw new Error((data.detail as string) ?? "Failed to load agent");
@@ -134,21 +131,18 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
     });
   }, [isOpen, config]);
 
-  const handleFileChange = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      event.target.value = "";
-      if (!file) return;
-      const { dataUrl, error: readError } = await readImageFile(file);
-      if (readError || !dataUrl) {
-        setError(readError ?? "Could not read the image file.");
-        return;
-      }
-      setError(null);
-      setImageDataUrl(dataUrl);
-    },
-    [],
-  );
+  const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const { dataUrl, error: readError } = await readImageFile(file);
+    if (readError || !dataUrl) {
+      setError(readError ?? "Could not read the image file.");
+      return;
+    }
+    setError(null);
+    setImageDataUrl(dataUrl);
+  }, []);
 
   const sendMessage = useCallback(async () => {
     if ((!inputValue.trim() && !imageDataUrl) || isLoading || !config) return;
@@ -173,11 +167,10 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
         content: m.content,
       }));
 
-      const res = await fetch(`/api/v1/p/embed/${publicId}/chat`, {
+      const res = await embedFetch(`/api/v1/p/embed/${publicId}/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Origin: window.location.origin,
         },
         body: JSON.stringify({
           message: userMessage.content,
@@ -272,16 +265,22 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
               <span className="font-semibold text-white">{config.name}</span>
             </div>
             <button
+              type="button"
               onClick={closeChat}
+              aria-label="Close chat"
               className="rounded-full p-1 transition-colors hover:bg-white/20"
             >
-              <X className="h-5 w-5 text-white" />
+              <X className="h-5 w-5 text-white" aria-hidden="true" />
             </button>
           </div>
 
           {/* Messages */}
           <div
-            className="flex-1 overflow-y-auto p-4"
+            tabIndex={0}
+            role="log"
+            aria-label="Conversation messages"
+            aria-live="polite"
+            className="flex-1 overflow-y-auto p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset"
             style={{ backgroundColor: isDark ? "#111827" : "#f9fafb" }}
           >
             {messages.length === 0 && (
@@ -302,23 +301,12 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
               >
                 <div
                   className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-                    message.role === "user"
-                      ? "rounded-br-md"
-                      : "rounded-bl-md"
+                    message.role === "user" ? "rounded-br-md" : "rounded-bl-md"
                   }`}
                   style={{
                     backgroundColor:
-                      message.role === "user"
-                        ? primaryColor
-                        : isDark
-                          ? "#374151"
-                          : "#ffffff",
-                    color:
-                      message.role === "user"
-                        ? "#ffffff"
-                        : isDark
-                          ? "#f3f4f6"
-                          : "#1f2937",
+                      message.role === "user" ? primaryColor : isDark ? "#374151" : "#ffffff",
+                    color: message.role === "user" ? "#ffffff" : isDark ? "#f3f4f6" : "#1f2937",
                     boxShadow:
                       message.role === "assistant"
                         ? isDark
@@ -348,9 +336,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
                   className="flex items-center gap-2 rounded-2xl rounded-bl-md px-4 py-2"
                   style={{
                     backgroundColor: isDark ? "#374151" : "#ffffff",
-                    boxShadow: isDark
-                      ? "0 1px 2px rgba(0,0,0,0.3)"
-                      : "0 1px 2px rgba(0,0,0,0.1)",
+                    boxShadow: isDark ? "0 1px 2px rgba(0,0,0,0.3)" : "0 1px 2px rgba(0,0,0,0.1)",
                   }}
                 >
                   <div className="flex gap-1">
@@ -382,9 +368,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
               borderColor: isDark ? "#374151" : "#e5e7eb",
             }}
           >
-            {error && (
-              <p className="mb-2 text-xs text-red-500">{error}</p>
-            )}
+            {error && <p className="mb-2 text-xs text-red-500">{error}</p>}
             {imageDataUrl && (
               <div className="mb-2 inline-flex items-start gap-1">
                 <div className="relative">
@@ -396,6 +380,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
                     style={{ borderColor: isDark ? "#4b5563" : "#e5e7eb" }}
                   />
                   <button
+                    type="button"
                     onClick={() => setImageDataUrl(null)}
                     aria-label="Remove image"
                     className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-gray-700 text-white shadow"
@@ -414,6 +399,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
                 className="hidden"
               />
               <button
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isLoading}
                 aria-label="Attach image"
@@ -432,6 +418,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Type a message..."
+                aria-label="Message"
                 disabled={isLoading}
                 className="flex-1 rounded-full border px-4 py-2 text-sm outline-none transition-all focus:ring-2"
                 style={{
@@ -441,8 +428,10 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
                 }}
               />
               <button
+                type="button"
                 onClick={() => void sendMessage()}
                 disabled={(!inputValue.trim() && !imageDataUrl) || isLoading}
+                aria-label={isLoading ? "Sending message" : "Send message"}
                 className="flex h-10 w-10 items-center justify-center rounded-full transition-all hover:scale-105 disabled:opacity-50"
                 style={{ backgroundColor: primaryColor }}
               >
@@ -457,6 +446,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
         </div>
       ) : (
         <button
+          type="button"
           onClick={() => setIsOpen(true)}
           className="group flex items-center gap-3 rounded-full py-3 pl-4 pr-6 shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl"
           style={{

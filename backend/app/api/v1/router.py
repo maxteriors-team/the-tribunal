@@ -55,6 +55,7 @@ from app.api.v1 import (
     prebooking,
     prompt_versions,
     prospects,
+    public_payments,
     quotes,
     realtime,
     recurring_jobs,
@@ -244,6 +245,11 @@ api_router.include_router(
     invoices.public_router,
     prefix="/p/invoices",
     tags=["Public Invoices"],
+)
+api_router.include_router(
+    public_payments.public_router,
+    prefix="/p/payments",
+    tags=["Public Payments"],
 )
 api_router.include_router(
     quotes.router,

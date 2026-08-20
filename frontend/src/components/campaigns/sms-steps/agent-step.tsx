@@ -22,10 +22,7 @@ export interface AgentStepFields {
  * SMS-specific "AI Agent" step: toggles AI responses and picks the text
  * agent + qualification criteria used to score replies.
  */
-export function makeAgentStep<
-  TStepId extends string,
-  TFormData extends AgentStepFields,
->(opts: {
+export function makeAgentStep<TStepId extends string, TFormData extends AgentStepFields>(opts: {
   id: TStepId;
   agents: Agent[];
 }): WizardStep<TStepId, TFormData> {
@@ -35,10 +32,7 @@ export function makeAgentStep<
     icon: Bot,
     validate: (data) => validateAgent(data),
     render: ({ formData, errors, updateField }) => {
-      const setField = <K extends keyof AgentStepFields>(
-        key: K,
-        value: AgentStepFields[K],
-      ) =>
+      const setField = <K extends keyof AgentStepFields>(key: K, value: AgentStepFields[K]) =>
         updateField(
           key as unknown as keyof TFormData,
           value as unknown as TFormData[keyof TFormData],
@@ -54,17 +48,14 @@ export function makeAgentStep<
               </p>
             </div>
             <Switch
+              aria-label="AI responses"
               checked={formData.ai_enabled}
               onCheckedChange={(v) => setField("ai_enabled", v)}
             />
           </div>
 
           {formData.ai_enabled && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-6"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
               <div className="space-y-2">
                 <AgentSelector
                   agents={opts.agents}
@@ -72,27 +63,20 @@ export function makeAgentStep<
                   onSelect={(id) => setField("agent_id", id)}
                   showTextAgentsOnly={true}
                 />
-                {errors.agent_id && (
-                  <p className="text-sm text-destructive">{errors.agent_id}</p>
-                )}
+                {errors.agent_id && <p className="text-sm text-destructive">{errors.agent_id}</p>}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="qualification-criteria">
-                  Qualification Criteria (Optional)
-                </Label>
+                <Label htmlFor="qualification-criteria">Qualification Criteria (Optional)</Label>
                 <Textarea
                   id="qualification-criteria"
                   placeholder="e.g., Interested in scheduling a demo, Has budget over $1000..."
                   value={formData.qualification_criteria}
-                  onChange={(e) =>
-                    setField("qualification_criteria", e.target.value)
-                  }
+                  onChange={(e) => setField("qualification_criteria", e.target.value)}
                   rows={3}
                 />
                 <p className="text-xs text-muted-foreground">
-                  The AI will mark contacts as qualified when they meet these
-                  criteria
+                  The AI will mark contacts as qualified when they meet these criteria
                 </p>
               </div>
             </motion.div>

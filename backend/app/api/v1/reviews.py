@@ -10,7 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanManageWorkspace, CurrentUser, get_workspace
 from app.models.workspace import Workspace
 from app.schemas.review import (
     GeneratedReviewReply,
@@ -49,6 +49,7 @@ async def get_review_settings(
     current_user: CurrentUser,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanManageWorkspace,
 ) -> ReviewSettings:
     """Get reputation engine settings for the workspace."""
     return ReviewService(db).get_settings(workspace)
@@ -61,6 +62,7 @@ async def update_review_settings(
     current_user: CurrentUser,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
+    _gate: CanManageWorkspace,
 ) -> ReviewSettings:
     """Update reputation engine settings for the workspace."""
     return await ReviewService(db).update_settings(workspace, update.model_dump(exclude_unset=True))

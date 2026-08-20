@@ -1,14 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Handshake,
-  MoreHorizontal,
-  Pencil,
-  PhoneOutgoing,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Handshake, MoreHorizontal, Pencil, PhoneOutgoing, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -22,11 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Select,
   SelectContent,
@@ -42,22 +31,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import {
-  referralPartnersApi,
-  type ReferralPartner,
-} from "@/lib/api/referral-partners";
+import { referralPartnersApi, type ReferralPartner } from "@/lib/api/referral-partners";
 import { queryKeys } from "@/lib/query-keys";
 import { REALTIME } from "@/lib/query-options";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatNumber } from "@/lib/utils/number";
 
-import {
-  formatMoney,
-  partnerTypeLabel,
-} from "./partner-metrics";
+import { formatMoney, partnerTypeLabel } from "./partner-metrics";
 import { ReferralPartnerDialog } from "./referral-partner-dialog";
 import { ReferralPartnerScoreboard } from "./referral-partner-scoreboard";
 
@@ -88,9 +70,7 @@ export function ReferralPartnersPage() {
   const { can } = useCapabilities();
   const canManage = can("crm:write");
   const [view, setView] = useState<PartnerView>("scoreboard");
-  const [quietAfterDays, setQuietAfterDays] = useState<number>(
-    DEFAULT_QUIET_AFTER_DAYS,
-  );
+  const [quietAfterDays, setQuietAfterDays] = useState<number>(DEFAULT_QUIET_AFTER_DAYS);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ReferralPartner | null>(null);
 
@@ -101,10 +81,7 @@ export function ReferralPartnersPage() {
   };
 
   const scoreboardQuery = useQuery({
-    queryKey: queryKeys.referralPartners.scoreboard(
-      workspaceId ?? "",
-      scoreboardParams,
-    ),
+    queryKey: queryKeys.referralPartners.scoreboard(workspaceId ?? "", scoreboardParams),
     queryFn: () => referralPartnersApi.scoreboard(workspaceId ?? "", scoreboardParams),
     enabled: Boolean(workspaceId) && view !== "roster",
     ...REALTIME,
@@ -129,8 +106,7 @@ export function ReferralPartnersPage() {
       toast.success("Referral partner deleted");
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to delete partner")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to delete partner")),
   });
 
   const openCreate = () => {
@@ -157,10 +133,7 @@ export function ReferralPartnersPage() {
   } else if (activeQuery.isError) {
     body = (
       <PageErrorState
-        message={getApiErrorMessage(
-          activeQuery.error,
-          "Failed to load referral partners",
-        )}
+        message={getApiErrorMessage(activeQuery.error, "Failed to load referral partners")}
         onRetry={() => void activeQuery.refetch()}
       />
     );
@@ -191,10 +164,7 @@ export function ReferralPartnersPage() {
           </TableHeader>
           <TableBody>
             {partners.map((partner) => (
-              <TableRow
-                key={partner.id}
-                className={partner.is_active ? undefined : "opacity-60"}
-              >
+              <TableRow key={partner.id} className={partner.is_active ? undefined : "opacity-60"}>
                 <TableCell className="max-w-[16rem]">
                   <Link
                     href={`/referral-partners/${partner.id}`}
@@ -203,15 +173,11 @@ export function ReferralPartnersPage() {
                     {partner.name}
                   </Link>
                   {partner.company ? (
-                    <div className="truncate text-xs text-muted-foreground">
-                      {partner.company}
-                    </div>
+                    <div className="truncate text-xs text-muted-foreground">{partner.company}</div>
                   ) : null}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">
-                    {partnerTypeLabel(partner.partner_type)}
-                  </Badge>
+                  <Badge variant="outline">{partnerTypeLabel(partner.partner_type)}</Badge>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {partner.phone || partner.email || "Not recorded"}
@@ -282,11 +248,8 @@ export function ReferralPartnersPage() {
             <p className="text-sm text-muted-foreground">
               {isCallList ? (
                 <>
-                  <span className="font-medium text-foreground">
-                    {formatNumber(board.total)}
-                  </span>{" "}
-                  {board.total === 1 ? "partner has" : "partners have"} gone quiet,
-                  worth{" "}
+                  <span className="font-medium text-foreground">{formatNumber(board.total)}</span>{" "}
+                  {board.total === 1 ? "partner has" : "partners have"} gone quiet, worth{" "}
                   <span className="font-medium text-foreground">
                     {formatMoney(board.total_revenue, board.currency)}
                   </span>{" "}
@@ -294,15 +257,12 @@ export function ReferralPartnersPage() {
                 </>
               ) : (
                 <>
-                  <span className="font-medium text-foreground">
-                    {formatNumber(board.total)}
-                  </span>{" "}
+                  <span className="font-medium text-foreground">{formatNumber(board.total)}</span>{" "}
                   {board.total === 1 ? "partner" : "partners"} sent{" "}
                   <span className="font-medium text-foreground">
                     {formatNumber(board.total_referrals_sent)}
                   </span>{" "}
-                  {board.total_referrals_sent === 1 ? "referral" : "referrals"},
-                  closing{" "}
+                  {board.total_referrals_sent === 1 ? "referral" : "referrals"}, closing{" "}
                   <span className="font-medium text-foreground">
                     {formatNumber(board.total_jobs_closed)}
                   </span>{" "}
@@ -329,22 +289,29 @@ export function ReferralPartnersPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <Tabs value={view} onValueChange={(value) => setView(value as PartnerView)}>
-          <TabsList>
-            {TABS.map((tab) => (
-              <TabsTrigger key={tab.value} value={tab.value}>
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <div
+          role="group"
+          aria-label="Referral partner view"
+          className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-[3px]"
+        >
+          {TABS.map((tab) => (
+            <Button
+              key={tab.value}
+              type="button"
+              size="sm"
+              variant={view === tab.value ? "secondary" : "ghost"}
+              aria-pressed={view === tab.value}
+              className="h-[calc(100%-1px)] px-2 py-1 shadow-none"
+              onClick={() => setView(tab.value)}
+            >
+              {tab.label}
+            </Button>
+          ))}
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           {view === "roster" ? null : (
             <div className="space-y-1">
-              <Label
-                htmlFor="quiet-window"
-                className="text-xs text-muted-foreground"
-              >
+              <Label htmlFor="quiet-window" className="text-xs text-muted-foreground">
                 Quiet after
               </Label>
               <Select
@@ -368,11 +335,7 @@ export function ReferralPartnersPage() {
         </div>
       </div>
       {body}
-      <ReferralPartnerDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        partner={editing}
-      />
+      <ReferralPartnerDialog open={dialogOpen} onOpenChange={setDialogOpen} partner={editing} />
     </div>
   );
 }

@@ -579,3 +579,144 @@ remove controls have visible keyboard focus; captions and labels expose table pu
 identity; no emoji, hover lift, tint-on-tint status chips, `transition: all`, or ambient motion were
 introduced. Desktop and narrow rendered critique, measured contrast, 200% text zoom, and manual
 assistive-technology results are recorded after implementation rather than claimed in advance.
+
+## CRM accessibility semantics (Aug 2026)
+
+### Design read and thesis
+
+- **Surface:** authenticated, data-dense CRM routes plus proposal and embed customer surfaces.
+- **Audience:** operators and customers using pointer, touch, keyboard, zoom, or assistive technology.
+- **Single job:** preserve every existing workflow while making each control's purpose, state, and
+  focus location available without visual labels or color.
+- **Risk:** an unnamed action can trigger outreach, pricing, or payment changes; a mouse-only scroll
+  region can hide reports; low-contrast financial values can hide decision-critical outcomes.
+- **Thesis:** accessibility state belongs at the semantic control, not in a tooltip or test-only
+  workaround. Existing Radix, shadcn, Lucide, Tailwind, and proposal presentation styles remain the
+  visual system.
+
+### Reuse and interaction rules
+
+- Icon buttons, mobile tabs, switches, progress bars, quantity controls, proposal package choices,
+  and setup steps carry task-specific names. Decorative icons are excluded from the accessibility
+  tree, and current/pressed/checked state uses native ARIA patterns.
+- Visible form labels use stable `htmlFor`/`id` pairs. Controls that share one visual heading, such
+  as color picker plus hex input, receive distinct labels.
+- Filter choices that do not control tab panels are pressed-button groups rather than ARIA tabs.
+  Real Settings tabs retain arrow-key navigation and expose their full label at narrow widths.
+- Scroll-only report, chat history, and embed-code regions are named, keyboard-focusable, and use
+  the existing focus-visible ring. Proposal package choices use one roving tab stop and arrow keys.
+- Normal-size positive and negative financial text uses darker light-theme colors and lighter
+  dark-theme colors; semantic meaning is also present in text, not color alone.
+
+### Responsive states and proof boundary
+
+The semantic contract is identical at 1440 x 900 and 390 x 844. Text can hide visually in a mobile
+stepper or Settings tab only when an equivalent accessible name remains. Disabled decrement buttons
+keep their item-specific name; current steps expose `aria-current="step"`; pending actions keep a
+stable action name.
+
+`e2e/accessibility.spec.ts` runs axe with WCAG 2.2 A/AA tags over representative desktop and mobile
+CRM routes and automates keyboard checks for tabs, steppers, and report scrolling. Focused Vitest
+coverage pins proposal package and quantity-control keyboard behavior. The human checks in
+`e2e/accessibility-keyboard-checklist.md` cover visible focus, complete tab order, reflow, dialog
+focus return, and assistive-technology output. These scoped checks are regression evidence, not a
+product-wide WCAG or legal conformance claim.
+
+---
+
+## 390px responsive application shell (2026-08-19)
+
+### Design read
+
+- **Surface:** data-dense CRM application UI spanning dashboards, queues, builders, and settings.
+- **Audience:** home-service operators working quickly on desktop or a 390px touch device; keyboard users
+  must be able to reach the same navigation and actions.
+- **Single job:** keep each route's primary action visible while making wider navigation reachable without
+  introducing page-level horizontal scrolling.
+- **Risk:** clipped actions can block campaign, offer, opportunity, agent, document, and pricing work;
+  wrapped navigation can also hide sequence and selection context.
+- **Constraints:** preserve the existing dark theme, typography, cards, buttons, Radix tab semantics,
+  Lucide icons, real workspace data, and desktop composition. This is a reflow correction, not a redesign.
+
+### Thesis and reuse map
+
+Use one 16px mobile content rail, then restore the established 24px rail at `sm`. Header action groups
+stack or wrap within that rail and make their primary buttons full-width only when the narrow layout needs
+it. Navigation remains a single horizontal sequence inside `HorizontalScroll`: native touch scrolling, a
+focusable keyboard region, stable scrollbar space, active-item reveal, and directional edge cues make
+off-screen destinations explicit. The application `main` no longer clips horizontal content as a fallback;
+every audited route still measures exactly 390px because intentional overflow is contained locally.
+
+Reused primitives remain `Button`, `Tabs`, `Card`, `ResourceListHeader`, `WizardContainer`, and the
+existing focus-ring/color tokens. `HorizontalScroll` is the only new primitive. It owns neither tab state nor
+wizard state, so Radix and route-specific controls preserve their established semantics and behavior.
+
+### Responsive behavior
+
+- **Wrapped actions:** Dashboard, Assistant, Opportunities, Agents, Knowledge Base, Service Plans, Offers,
+  offer AI generation, and pricing save controls place actions below or wrap them at 390px.
+- **Contained navigation:** AI Suggestions, Reviews, Service Plans, Settings, opportunity stages, shared
+  campaign/pre-booking steps, and offer steps scroll locally with left/right edge cues.
+- **Pricing forms:** financing service rows use two flexible fields plus a delete target; upsell rank rows
+  become labeled stacked groups; seasonal option rows wrap name and price fields; save actions remain
+  fully visible.
+- **Content extremes:** assistant starter prompts use normal wrapping; offer/document names use min-width
+  and word-breaking rules; populated opportunity and offer cards retain local containment.
+- **Desktop:** the existing sidebar, content widths, multi-column layouts, and wrapped Settings tab set are
+  preserved at 1440px.
+
+### States and interaction
+
+The scroll primitive exposes start, middle, and end states: a right cue appears when more content follows,
+a left cue appears after movement, and the active tab or step is scrolled into view without animation.
+The region is touch-scrollable and focusable; native arrow-key scrolling remains available, while nested
+tabs and step buttons keep their own names, selection/current state, and focus rings. Reduced-motion
+screenshots disable the existing route transitions. No new loading, error, empty, success, or destructive
+business states were introduced.
+
+### Evidence and critique
+
+Rendered evidence is generated by `e2e/responsive-mobile.spec.ts`, which attaches one 390x844 screenshot
+for Dashboard, Assistant, Opportunities, Agents, Knowledge Base, AI Suggestions, Reviews, Service Plans,
+SMS campaign steps, pre-booking steps, Offers, offer steps, and Settings Pricing. Local review artifacts live
+under `.ezcoder/screenshots/responsive-390/`; representative 1440px captures live under
+`.ezcoder/screenshots/responsive-desktop/` (both gitignored).
+
+The first narrow capture showed that native overlay scrollbars were not visually persistent. The revision
+added stateful directional edge cues, then re-captured all routes. A proposed sticky/boxed mobile header
+treatment was rejected as unnecessary decoration; wrapping the existing controls preserved hierarchy with
+less visual weight.
+
+Quality-rubric score from the revised 390px and 1440px captures: **22/24**.
+
+| Criterion                   | Score | Rendered evidence                                                                         |
+| --------------------------- | ----: | ----------------------------------------------------------------------------------------- |
+| Brief specificity           |     2 | Route-specific actions and navigation retain CRM labels and behavior.                     |
+| Information hierarchy       |     2 | Page title, context, primary action, then work surface remain ordered.                    |
+| Composition                 |     2 | Shared 16px mobile and 24px desktop rails align all changed routes.                       |
+| Consistency and flow        |     2 | One wrapping rule and one scrolling primitive cover equivalent patterns.                  |
+| Typography                  |     2 | Existing type scale is preserved; long prompts and descriptions reflow.                   |
+| Material and surface logic  |     2 | Existing cards, borders, and selected controls remain unchanged.                          |
+| State completeness          |     2 | Scroll start/middle/end, active reveal, focus, touch, and keyboard states are covered.    |
+| Responsive behavior         |     2 | Thirteen 390px captures report no document, body, main, or primary-action overflow.       |
+| Accessibility quality floor |     1 | Touch and keyboard paths pass; screen-reader and forced-colors review remain unverified.  |
+| Motion purpose              |     2 | Edge changes are immediate; reduced-motion capture introduces no new motion.              |
+| Content authenticity        |     2 | Captures use actual local workspace records and honest empty states.                      |
+| Visual distinctiveness      |     1 | The task intentionally preserves the established product system rather than restyling it. |
+
+### Verification contract
+
+- `npm run typecheck` passed.
+- `npm run lint` passed with no errors (36 existing repository warnings); targeted ESLint also passed for the
+  changed responsive files and Playwright spec.
+- `npm run build` passed, including production compilation, TypeScript, and all 67 static page renders.
+- `E2E_STORAGE_STATE=… npx playwright test e2e/responsive-mobile.spec.ts --project=chromium --workers=1`
+  passed **4/4** tests, including a synthesized touch swipe, keyboard scrolling, touch/Enter activation,
+  prompt reflow, 13 route screenshots, and viewport-bound assertions.
+- The runtime route audit measured `document`, `body`, and application `main` widths at **390px on 13/13
+  routes**, found **0 clipped non-navigation interactives**, and found no page errors after the Settings
+  hydration stabilization.
+- Representative 1440px captures measured no document overflow on Dashboard, Opportunities, offer steps,
+  or Settings Pricing.
+- Assistive-technology speech output, forced-colors rendering, browser zoom, and legal conformance remain
+  unverified; this section makes no product-wide WCAG or legal compliance claim.

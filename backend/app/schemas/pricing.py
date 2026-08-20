@@ -304,7 +304,7 @@ class BistroConfig(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
-# Permanent holiday lighting (per-linear-foot roofline + controller/channels)
+# Permanent holiday lighting (footage rounded up to stocked kits)
 # --------------------------------------------------------------------------- #
 def _default_permanent_perks() -> list[str]:
     """Client-facing selling points for permanent lighting (operator-editable)."""
@@ -318,20 +318,45 @@ def _default_permanent_perks() -> list[str]:
     ]
 
 
-class PermanentConfig(BaseModel):
-    """Permanent LED roofline priced per linear foot plus a controller/hub.
+class PermanentPackage(BaseModel):
+    """One supplier kit used to cover a measured roofline."""
 
-    Placeholder rates ship so a workspace prices before customization; the
-    operator tunes ``per_ft`` / controller / channel rates in Settings → Pricing
-    (the operator's standalone tool was not provided, so these are sane defaults).
-    All values are *net*; the engine grosses them up like every other price.
+    feet: int = Field(gt=0)
+    cost: float = Field(ge=0)
+
+
+def _default_permanent_packages() -> list[PermanentPackage]:
+    """Current Minleon RGBW WEC Mini complete-kit costs (August 2026)."""
+    return [
+        PermanentPackage(feet=100, cost=1249),
+        PermanentPackage(feet=150, cost=1649),
+        PermanentPackage(feet=200, cost=2099),
+        PermanentPackage(feet=400, cost=3999),
+    ]
+
+
+class PermanentConfig(BaseModel):
+    """Permanent LED roofline priced by the smallest kit that covers the job.
+
+    Package costs are COGS. ``markup`` converts COGS to the net installed sale
+    price before the standard cash/financing gross-up is applied.
     """
 
     enabled: bool = False
-    per_ft: float = Field(default=32, ge=0)  # installed roofline, net $/linear ft
-    controller_base: float = Field(default=299, ge=0)  # base controller/hub
-    per_channel: float = Field(default=45, ge=0)  # each zone/channel over included
-    included_channels: int = Field(default=1, ge=0)
+    packages: list[PermanentPackage] = Field(
+        default_factory=_default_permanent_packages, min_length=1
+    )
+    easy_markup: float = Field(default=2.5, gt=0)
+    standard_markup: float = Field(default=3, gt=0)
+    complex_markup: float = Field(default=3.5, gt=0)
+    # Deprecated single multiplier retained for older saved settings and clients.
+    markup: float = Field(default=3.5, gt=0)
+    # Deprecated inputs retained so older saved settings and clients still parse.
+    # They are intentionally ignored by package pricing.
+    per_ft: float = Field(default=0, ge=0)
+    controller_base: float = Field(default=0, ge=0)
+    per_channel: float = Field(default=0, ge=0)
+    included_channels: int = Field(default=0, ge=0)
     minimum: float = Field(default=0, ge=0)
     label: str = "Permanent Holiday Lighting"
     # Client-facing perks rendered on the comparison page (operator-editable).
@@ -1001,14 +1026,19 @@ class CategoryLine(BaseModel):
 
 
 class PermanentPricing(BaseModel):
-    """Computed permanent-holiday-lighting price + component breakdown."""
+    """Computed kit-based permanent-lighting price + component breakdown."""
 
     feet: float
     channels: int
-    per_ft: float
-    roofline_cost: float
-    controller_cost: float
-    channels_cost: float
+    package_feet: int
+    package_cogs: float
+    markup: float
+    # Deprecated display fields retained for API compatibility; package pricing
+    # never derives the sale from a per-foot or controller rate.
+    per_ft: float = 0
+    roofline_cost: float = 0
+    controller_cost: float = 0
+    channels_cost: float = 0
     minimum: float
     raw_total: float
     total: float

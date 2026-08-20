@@ -56,9 +56,7 @@ export function BasicsStep({
           onChange={(e) => onNameChange(e.target.value)}
           className={errors.name ? "border-destructive" : ""}
         />
-        {errors.name && (
-          <p className="text-sm text-destructive">{errors.name}</p>
-        )}
+        {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
       </div>
 
       <div className="space-y-2">
@@ -73,9 +71,10 @@ export function BasicsStep({
       </div>
 
       <div className="space-y-2">
-        <Label>From Phone Number *</Label>
+        <Label htmlFor="campaign-phone-number">From Phone Number *</Label>
         <Select value={fromPhoneNumber} onValueChange={onPhoneChange}>
           <SelectTrigger
+            id="campaign-phone-number"
             className={errors.from_phone_number ? "border-destructive" : ""}
           >
             <SelectValue placeholder="Select a phone number" />
@@ -91,13 +90,9 @@ export function BasicsStep({
                     <Icon className="size-4" />
                     <span>{displayAddress}</span>
                     {phone.friendly_name && (
-                      <span className="text-muted-foreground">
-                        ({phone.friendly_name})
-                      </span>
+                      <span className="text-muted-foreground">({phone.friendly_name})</span>
                     )}
-                    {isImessage && (
-                      <span className="text-muted-foreground">iMessage</span>
-                    )}
+                    {isImessage && <span className="text-muted-foreground">iMessage</span>}
                   </div>
                 </SelectItem>
               );
@@ -105,9 +100,7 @@ export function BasicsStep({
           </SelectContent>
         </Select>
         {errors.from_phone_number && (
-          <p className="text-sm text-destructive">
-            {errors.from_phone_number}
-          </p>
+          <p className="text-sm text-destructive">{errors.from_phone_number}</p>
         )}
         {phoneNumbers.length === 0 && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

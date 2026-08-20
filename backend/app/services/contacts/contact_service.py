@@ -1,9 +1,11 @@
 """Contact service - business logic orchestration layer."""
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
@@ -182,6 +184,29 @@ class ContactService:
         """
         contact = await self.get_contact(contact_id, workspace_id)
         return await repo_update_contact(contact, self.db, update_data)
+
+    async def append_contact_note(
+        self,
+        contact_id: int,
+        workspace_id: uuid.UUID,
+        note: str,
+        author_name: str,
+    ) -> Contact:
+        """Append one internal note without overwriting concurrent client history."""
+        result = await self.db.execute(
+            select(Contact)
+            .where(Contact.id == contact_id, Contact.workspace_id == workspace_id)
+            .with_for_update()
+        )
+        contact = result.scalar_one_or_none()
+        if contact is None:
+            raise ContactNotFoundError()
+
+        timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+        entry = f"[{timestamp}] {author_name}: {note}"
+        existing = (contact.notes or "").rstrip()
+        notes = f"{existing}\n\n{entry}" if existing else entry
+        return await repo_update_contact(contact, self.db, {"notes": notes})
 
     async def delete_contact(
         self,

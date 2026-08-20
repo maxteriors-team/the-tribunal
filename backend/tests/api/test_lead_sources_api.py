@@ -17,7 +17,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_membership
 from app.api.v1 import lead_sources as lead_sources_module
 from app.schemas.lead_source import LeadSourceResponse
 
@@ -104,6 +104,9 @@ async def client(mock_db: AsyncMock) -> AsyncIterator[AsyncClient]:
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_membership] = lambda: MagicMock(
+        role="owner", workspace_id=WS_ID
+    )
     _mount(app)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
         yield ac

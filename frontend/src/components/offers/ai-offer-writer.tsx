@@ -50,9 +50,26 @@ interface AIOfferWriterProps {
   }) => void;
 }
 
-type Step = "inputs" | "headlines" | "subheadlines" | "values" | "guarantees" | "urgency" | "ctas" | "review";
+type Step =
+  | "inputs"
+  | "headlines"
+  | "subheadlines"
+  | "values"
+  | "guarantees"
+  | "urgency"
+  | "ctas"
+  | "review";
 
-const STEPS: Step[] = ["inputs", "headlines", "subheadlines", "values", "guarantees", "urgency", "ctas", "review"];
+const STEPS: Step[] = [
+  "inputs",
+  "headlines",
+  "subheadlines",
+  "values",
+  "guarantees",
+  "urgency",
+  "ctas",
+  "review",
+];
 
 export function AIOfferWriter({ workspaceId, onApply }: AIOfferWriterProps) {
   const [open, setOpen] = useState(false);
@@ -305,7 +322,7 @@ export function AIOfferWriter({ workspaceId, onApply }: AIOfferWriterProps) {
     options: T[],
     selected: T | T[] | null,
     onSelect: (item: T) => void,
-    isMulti = false
+    isMulti = false,
   ) => (
     <div className="space-y-4">
       <div className="text-center">
@@ -317,7 +334,8 @@ export function AIOfferWriter({ workspaceId, onApply }: AIOfferWriterProps) {
           const text = option.text || option.name || "";
           const isSelected = isMulti
             ? (selected as T[])?.some((s) => (s.text || s.name) === (option.text || option.name))
-            : selected && ((selected as T).text || (selected as T).name) === (option.text || option.name);
+            : selected &&
+              ((selected as T).text || (selected as T).name) === (option.text || option.name);
 
           return (
             <Card
@@ -380,9 +398,7 @@ export function AIOfferWriter({ workspaceId, onApply }: AIOfferWriterProps) {
     <div className="space-y-4">
       <div className="text-center">
         <h3 className="font-semibold">Review Your Selections</h3>
-        <p className="text-sm text-muted-foreground">
-          These will be applied to your offer form
-        </p>
+        <p className="text-sm text-muted-foreground">These will be applied to your offer form</p>
       </div>
 
       <div className="space-y-3">
@@ -448,53 +464,71 @@ export function AIOfferWriter({ workspaceId, onApply }: AIOfferWriterProps) {
       case "inputs":
         return renderInputsStep();
       case "headlines":
-        return generatedContent && renderSelectionStep(
-          "Choose a Headline",
-          "Select the headline that best captures your offer",
-          generatedContent.headlines,
-          selectedHeadline,
-          setSelectedHeadline
+        return (
+          generatedContent &&
+          renderSelectionStep(
+            "Choose a Headline",
+            "Select the headline that best captures your offer",
+            generatedContent.headlines,
+            selectedHeadline,
+            setSelectedHeadline,
+          )
         );
       case "subheadlines":
-        return generatedContent && renderSelectionStep(
-          "Choose a Subheadline",
-          "Supporting text that reinforces your headline",
-          generatedContent.subheadlines,
-          selectedSubheadline,
-          setSelectedSubheadline
+        return (
+          generatedContent &&
+          renderSelectionStep(
+            "Choose a Subheadline",
+            "Supporting text that reinforces your headline",
+            generatedContent.subheadlines,
+            selectedSubheadline,
+            setSelectedSubheadline,
+          )
         );
       case "values":
-        return generatedContent && renderSelectionStep(
-          "Build Your Value Stack",
-          "Select items to include in your offer (select multiple)",
-          generatedContent.value_stack_items,
-          selectedValueItems,
-          toggleValueItem,
-          true
+        return (
+          generatedContent &&
+          renderSelectionStep(
+            "Build Your Value Stack",
+            "Select items to include in your offer (select multiple)",
+            generatedContent.value_stack_items,
+            selectedValueItems,
+            toggleValueItem,
+            true,
+          )
         );
       case "guarantees":
-        return generatedContent && renderSelectionStep(
-          "Choose a Guarantee",
-          "Remove risk with a powerful guarantee",
-          generatedContent.guarantees,
-          selectedGuarantee,
-          setSelectedGuarantee
+        return (
+          generatedContent &&
+          renderSelectionStep(
+            "Choose a Guarantee",
+            "Remove risk with a powerful guarantee",
+            generatedContent.guarantees,
+            selectedGuarantee,
+            setSelectedGuarantee,
+          )
         );
       case "urgency":
-        return generatedContent && renderSelectionStep(
-          "Add Urgency",
-          "Create a reason to act now",
-          generatedContent.urgency_options,
-          selectedUrgency,
-          setSelectedUrgency
+        return (
+          generatedContent &&
+          renderSelectionStep(
+            "Add Urgency",
+            "Create a reason to act now",
+            generatedContent.urgency_options,
+            selectedUrgency,
+            setSelectedUrgency,
+          )
         );
       case "ctas":
-        return generatedContent && renderSelectionStep(
-          "Choose Your CTA",
-          "The button text that drives action",
-          generatedContent.ctas,
-          selectedCTA,
-          setSelectedCTA
+        return (
+          generatedContent &&
+          renderSelectionStep(
+            "Choose Your CTA",
+            "The button text that drives action",
+            generatedContent.ctas,
+            selectedCTA,
+            setSelectedCTA,
+          )
         );
       case "review":
         return renderReviewStep();
@@ -527,7 +561,7 @@ export function AIOfferWriter({ workspaceId, onApply }: AIOfferWriterProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button variant="outline" size="sm" className="w-full gap-2 sm:w-auto">
           <Sparkles className="size-4" />
           Generate with AI
         </Button>
@@ -543,7 +577,7 @@ export function AIOfferWriter({ workspaceId, onApply }: AIOfferWriterProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4 flex-wrap">
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {STEPS.map((step, index) => (
             <span
               key={step}
@@ -551,8 +585,8 @@ export function AIOfferWriter({ workspaceId, onApply }: AIOfferWriterProps) {
                 step === currentStep
                   ? "text-primary font-medium"
                   : STEPS.indexOf(currentStep) > index
-                  ? "text-primary/60"
-                  : ""
+                    ? "text-primary/60"
+                    : ""
               }`}
             >
               {getStepLabel(step)}
@@ -561,11 +595,9 @@ export function AIOfferWriter({ workspaceId, onApply }: AIOfferWriterProps) {
           ))}
         </div>
 
-        <ScrollArea className="max-h-[50vh] pr-4">
-          {renderStepContent()}
-        </ScrollArea>
+        <ScrollArea className="max-h-[50vh] pr-4">{renderStepContent()}</ScrollArea>
 
-        <div className="flex justify-between mt-4 pt-4 border-t">
+        <div className="mt-4 flex flex-wrap justify-between gap-2 border-t pt-4">
           <Button
             variant="outline"
             onClick={currentStep === "inputs" ? () => setOpen(false) : handleBack}

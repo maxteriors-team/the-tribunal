@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.sql import Select
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import voice_campaigns as voice_campaigns_module
 from app.models.agent import Agent
 from app.models.campaign import Campaign, CampaignStatus, CampaignType
@@ -150,6 +150,9 @@ def _make_auth_test_app(mock_db: AsyncMock) -> FastAPI:
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_workspace] = override_get_workspace
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_membership] = lambda: MagicMock(
+        role="owner", workspace_id=WS_ID
+    )
     app.include_router(
         voice_campaigns_module.router,
         prefix="/api/v1/workspaces/{workspace_id}/voice-campaigns",

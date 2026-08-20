@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
+from app.core.permissions import Capability
 from app.db.pagination import paginate
 from app.models.agent import Agent
 from app.models.knowledge_document import KnowledgeDocument
@@ -28,7 +29,11 @@ from app.services.knowledge.ingestion_service import (
 )
 from app.services.knowledge.knowledge_context_service import knowledge_context_service
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.WORKSPACE_MANAGE))
+    ]
+)
 
 
 async def _reindex_or_400(db: AsyncSession, doc: KnowledgeDocument) -> None:

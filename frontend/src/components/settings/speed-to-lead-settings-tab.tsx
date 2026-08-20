@@ -6,13 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -84,9 +78,7 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
   // Initialised once from loaded data; no effect-based mirroring needed.
   const [slaSeconds, setSlaSeconds] = useState<number>(settings.sla_seconds);
   const [template, setTemplate] = useState<string>(textback.template);
-  const [quietStart, setQuietStart] = useState<string>(
-    textback.quiet_hours_start ?? "",
-  );
+  const [quietStart, setQuietStart] = useState<string>(textback.quiet_hours_start ?? "");
   const [quietEnd, setQuietEnd] = useState<string>(textback.quiet_hours_end ?? "");
   const [timezone, setTimezone] = useState<string>(textback.timezone ?? "");
 
@@ -104,9 +96,8 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
   });
 
   const textbackMutation = useMutation({
-    mutationFn: (
-      data: Parameters<typeof settingsApi.updateMissedCallTextback>[1],
-    ) => settingsApi.updateMissedCallTextback(workspaceId, data),
+    mutationFn: (data: Parameters<typeof settingsApi.updateMissedCallTextback>[1]) =>
+      settingsApi.updateMissedCallTextback(workspaceId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.missedCallTextback(workspaceId),
@@ -142,15 +133,11 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
             </p>
           </div>
           <div>
-            <p className="text-2xl font-bold">
-              {formatSeconds(metrics?.median_response_seconds)}
-            </p>
+            <p className="text-2xl font-bold">{formatSeconds(metrics?.median_response_seconds)}</p>
             <p className="text-sm text-muted-foreground">median</p>
           </div>
           <div>
-            <p className="text-2xl font-bold">
-              {formatSeconds(metrics?.fastest_response_seconds)}
-            </p>
+            <p className="text-2xl font-bold">{formatSeconds(metrics?.fastest_response_seconds)}</p>
             <p className="text-sm text-muted-foreground">fastest</p>
           </div>
           <div>
@@ -173,16 +160,15 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Enable SLA tracking</Label>
+              <Label htmlFor="speed-to-lead-enabled">Enable SLA tracking</Label>
               <p className="text-sm text-muted-foreground">
                 Measure time-to-first-response on every new lead.
               </p>
             </div>
             <Switch
+              id="speed-to-lead-enabled"
               checked={settings.enabled}
-              onCheckedChange={(checked) =>
-                slaMutation.mutate({ enabled: checked })
-              }
+              onCheckedChange={(checked) => slaMutation.mutate({ enabled: checked })}
               disabled={slaMutation.isPending}
             />
           </div>
@@ -201,9 +187,7 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
               />
               <Button
                 onClick={() => slaMutation.mutate({ sla_seconds: slaSeconds })}
-                disabled={
-                  slaMutation.isPending || slaSeconds === settings.sla_seconds
-                }
+                disabled={slaMutation.isPending || slaSeconds === settings.sla_seconds}
               >
                 Save target
               </Button>
@@ -212,32 +196,30 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Alert on misses</Label>
+              <Label htmlFor="speed-to-lead-alerts">Alert on misses</Label>
               <p className="text-sm text-muted-foreground">
                 Notify the team when a lead waits longer than the target.
               </p>
             </div>
             <Switch
+              id="speed-to-lead-alerts"
               checked={settings.alert_enabled}
-              onCheckedChange={(checked) =>
-                slaMutation.mutate({ alert_enabled: checked })
-              }
+              onCheckedChange={(checked) => slaMutation.mutate({ alert_enabled: checked })}
               disabled={slaMutation.isPending}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Public proof badge</Label>
+              <Label htmlFor="speed-to-lead-badge">Public proof badge</Label>
               <p className="text-sm text-muted-foreground">
                 Show your answered-within-target stat on the lead-form widget.
               </p>
             </div>
             <Switch
+              id="speed-to-lead-badge"
               checked={settings.badge_enabled}
-              onCheckedChange={(checked) =>
-                slaMutation.mutate({ badge_enabled: checked })
-              }
+              onCheckedChange={(checked) => slaMutation.mutate({ badge_enabled: checked })}
               disabled={slaMutation.isPending}
             />
           </div>
@@ -255,16 +237,15 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Enable text-back</Label>
+              <Label htmlFor="missed-call-textback-enabled">Enable text-back</Label>
               <p className="text-sm text-muted-foreground">
                 Send an instant SMS to capture the missed lead.
               </p>
             </div>
             <Switch
+              id="missed-call-textback-enabled"
               checked={textback.enabled}
-              onCheckedChange={(checked) =>
-                textbackMutation.mutate({ enabled: checked })
-              }
+              onCheckedChange={(checked) => textbackMutation.mutate({ enabled: checked })}
               disabled={textbackMutation.isPending}
             />
           </div>
@@ -284,9 +265,7 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
             </p>
             <Button
               onClick={() => textbackMutation.mutate({ template })}
-              disabled={
-                textbackMutation.isPending || template === textback.template
-              }
+              disabled={textbackMutation.isPending || template === textback.template}
             >
               Save message
             </Button>
@@ -296,8 +275,8 @@ function SpeedToLeadForm({ workspaceId, settings, textback, metrics }: FormProps
             <div className="space-y-0.5">
               <Label>Quiet hours (optional)</Label>
               <p className="text-sm text-muted-foreground">
-                Skip auto-texts during these local hours to stay compliant. Set
-                both a start and end to enable; leave blank to text back any time.
+                Skip auto-texts during these local hours to stay compliant. Set both a start and end
+                to enable; leave blank to text back any time.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">

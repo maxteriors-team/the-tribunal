@@ -48,13 +48,13 @@ export function EmbedConfigForm({
     <div className="space-y-6">
       {/* Domain allowlist */}
       <div className="space-y-3">
-        <Label>Allowed Domains</Label>
+        <Label htmlFor="embed-allowed-domain">Allowed Domains</Label>
         <p className="text-xs text-muted-foreground">
-          Specify which domains can embed this agent. Use *.example.com for
-          subdomains.
+          Specify which domains can embed this agent. Use *.example.com for subdomains.
         </p>
         <div className="flex gap-2">
           <Input
+            id="embed-allowed-domain"
             placeholder="example.com"
             value={newDomain}
             onChange={(e) => onNewDomainChange(e.target.value)}
@@ -79,8 +79,9 @@ export function EmbedConfigForm({
                   type="button"
                   onClick={() => onRemoveDomain(domain)}
                   className="ml-1 rounded-full hover:bg-destructive/20"
+                  aria-label={`Remove ${domain} from allowed domains`}
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-3 w-3" aria-hidden="true" />
                 </button>
               </Badge>
             ))}
@@ -91,12 +92,9 @@ export function EmbedConfigForm({
       {/* Settings grid */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Mode</Label>
-          <Select
-            value={values.mode}
-            onValueChange={(v) => onChange({ mode: v })}
-          >
-            <SelectTrigger>
+          <Label htmlFor="embed-mode">Mode</Label>
+          <Select value={values.mode} onValueChange={(v) => onChange({ mode: v })}>
+            <SelectTrigger id="embed-mode">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -110,12 +108,9 @@ export function EmbedConfigForm({
         </div>
 
         <div className="space-y-2">
-          <Label>Display</Label>
-          <Select
-            value={values.display}
-            onValueChange={(v) => onChange({ display: v })}
-          >
-            <SelectTrigger>
+          <Label htmlFor="embed-display">Display</Label>
+          <Select value={values.display} onValueChange={(v) => onChange({ display: v })}>
+            <SelectTrigger id="embed-display">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -129,12 +124,9 @@ export function EmbedConfigForm({
         </div>
 
         <div className="space-y-2">
-          <Label>Position</Label>
-          <Select
-            value={values.position}
-            onValueChange={(v) => onChange({ position: v })}
-          >
-            <SelectTrigger>
+          <Label htmlFor="embed-position">Position</Label>
+          <Select value={values.position} onValueChange={(v) => onChange({ position: v })}>
+            <SelectTrigger id="embed-position">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -148,12 +140,9 @@ export function EmbedConfigForm({
         </div>
 
         <div className="space-y-2">
-          <Label>Theme</Label>
-          <Select
-            value={values.theme}
-            onValueChange={(v) => onChange({ theme: v })}
-          >
-            <SelectTrigger>
+          <Label htmlFor="embed-theme">Theme</Label>
+          <Select value={values.theme} onValueChange={(v) => onChange({ theme: v })}>
+            <SelectTrigger id="embed-theme">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -167,15 +156,20 @@ export function EmbedConfigForm({
         </div>
 
         <div className="space-y-2">
-          <Label>Primary Color</Label>
+          <Label htmlFor="embed-primary-color">Primary Color</Label>
           <div className="flex gap-2">
             <Input
+              id="embed-primary-color"
               type="color"
               value={values.primaryColor}
               onChange={(e) => onChange({ primaryColor: e.target.value })}
               className="h-10 w-14 cursor-pointer p-1"
             />
+            <Label className="sr-only" htmlFor="embed-primary-color-text">
+              Primary color hex value
+            </Label>
             <Input
+              id="embed-primary-color-text"
               value={values.primaryColor}
               onChange={(e) => onChange({ primaryColor: e.target.value })}
               className="font-mono"
@@ -184,8 +178,9 @@ export function EmbedConfigForm({
         </div>
 
         <div className="space-y-2">
-          <Label>Button Text</Label>
+          <Label htmlFor="embed-button-text">Button Text</Label>
           <Input
+            id="embed-button-text"
             value={values.buttonText}
             onChange={(e) => onChange({ buttonText: e.target.value })}
             placeholder="Talk to AI"

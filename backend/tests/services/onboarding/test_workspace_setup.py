@@ -47,6 +47,14 @@ class _ExecuteResult:
     def scalar(self) -> int | None:
         return self._scalar
 
+    def scalars(self) -> _ExecuteResult:
+        return self
+
+    def all(self) -> list[Any]:
+        if self._row is None:
+            return []
+        return self._row if isinstance(self._row, list) else [self._row]
+
 
 @dataclass(slots=True)
 class _MockTelnyxService:
@@ -214,6 +222,7 @@ async def test_complete_onboarding_creates_calendar_resource_and_purchases_phone
         _ExecuteResult(workspace),
         _ExecuteResult(None),
         _ExecuteResult(None),
+        _ExecuteResult(None),
     ]
     available_number = PhoneNumberInfo(id="", phone_number="+15555550123")
     purchased_number = PhoneNumberInfo(id="telnyx-123", phone_number="+15555550123")
@@ -236,6 +245,8 @@ async def test_complete_onboarding_creates_calendar_resource_and_purchases_phone
     assert telnyx.purchase_calls == ["+15555550123"]
     assert telnyx.closed is True
     assert db.add.call_count == 3
+    assert len(db.add_all.call_args.args[0]) == 9
+    assert workspace.settings["pricing"]["tier_order"] == ["best", "better", "good"]
     added_types = [type(call.args[0]) for call in db.add.call_args_list]
     assert Agent in added_types
     assert BookableStaff in added_types

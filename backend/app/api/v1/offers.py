@@ -9,8 +9,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_or_404
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
 from app.core.encryption import hash_phone, hash_value
+from app.core.permissions import Capability
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope, select_workspace_owned
 from app.models.contact import Contact
@@ -35,7 +36,11 @@ from app.schemas.offer import (
 )
 from app.services.ai.offer_generator import generate_offer_content
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.OUTREACH_WRITE))
+    ]
+)
 public_router = APIRouter()
 
 
