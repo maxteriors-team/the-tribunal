@@ -32,6 +32,7 @@ interface ConvertQuoteDialogProps {
   quote: Quote | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  mode?: "closeout" | "copy-to-job";
 }
 
 const money = (value: number | null | undefined, currency = "USD") =>
@@ -43,10 +44,12 @@ export function ConvertQuoteDialog({
   quote,
   open,
   onOpenChange,
+  mode = "closeout",
 }: ConvertQuoteDialogProps) {
+  const copyToJob = mode === "copy-to-job";
   const queryClient = useQueryClient();
   const [createJob, setCreateJob] = useState(true);
-  const [createInvoice, setCreateInvoice] = useState(true);
+  const [createInvoice, setCreateInvoice] = useState(!copyToJob);
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [crewId, setCrewId] = useState("");
@@ -60,7 +63,7 @@ export function ConvertQuoteDialog({
 
   const reset = () => {
     setCreateJob(true);
-    setCreateInvoice(true);
+    setCreateInvoice(!copyToJob);
     setStart("");
     setEnd("");
     setCrewId("");
@@ -77,6 +80,7 @@ export function ConvertQuoteDialog({
   const paidDeposit = Boolean(quote?.deposit_paid);
   const depositAmount = quote?.deposit_amount ?? null;
   const paidMethod = depositPaymentMethodLabel(quote?.deposit_payment_method);
+  const hasExistingInvoice = Boolean(quote?.converted_invoice_id);
   const windowError = createJob
     ? !start || !end
       ? "Set both start and end."
@@ -89,7 +93,8 @@ export function ConvertQuoteDialog({
       if (!quote) throw new Error("No quote selected");
       return quotesApi.convert(workspaceId, quote.id, {
         create_job: createJob,
-        create_invoice: createInvoice,
+        // Conversion flags describe the desired final handoff; retain an invoice already linked.
+        create_invoice: createInvoice || hasExistingInvoice,
         scheduled_start: createJob ? localToIso(start) : null,
         scheduled_end: createJob ? localToIso(end) : null,
         crew_id: createJob && crewId ? crewId : null,
@@ -104,7 +109,11 @@ export function ConvertQuoteDialog({
         void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all(workspaceId) });
       }
       toast.success(
-        converted.idempotent_replay ? "Existing handoff opened" : "Installation scheduled",
+        converted.idempotent_replay
+          ? "Existing handoff opened"
+          : copyToJob
+            ? "Job created and scheduled"
+            : "Installation scheduled",
       );
     },
     onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to convert quote")),
@@ -112,7 +121,7 @@ export function ConvertQuoteDialog({
 
   const canSubmit =
     Boolean(quote) &&
-    (createJob || createInvoice) &&
+    (createJob || createInvoice || hasExistingInvoice) &&
     !windowError &&
     !unpaidBlocked &&
     !convertMutation.isPending;
@@ -121,16 +130,23 @@ export function ConvertQuoteDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Close out quote{quote ? ` ${quote.number}` : ""}</DialogTitle>
+          <DialogTitle>
+            {copyToJob ? "Copy" : "Close out"} quote{quote ? ` ${quote.number}` : ""}
+            {copyToJob ? " to a job" : ""}
+          </DialogTitle>
           <DialogDescription>
-            Confirm payment truth, schedule the work, then share the selected plan automatically.
+            {copyToJob
+              ? "Copy the approved scope into a scheduled job, then assign the installation team."
+              : "Confirm payment truth, schedule the work, then share the selected plan automatically."}
           </DialogDescription>
         </DialogHeader>
 
         {result ? (
           <div className="space-y-4 py-2">
             <div className="rounded-lg border bg-muted/30 p-4">
-              <p className="font-medium">Authoritative handoff saved</p>
+              <p className="font-medium">
+                {copyToJob ? "Job created and scheduled" : "Authoritative handoff saved"}
+              </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 Crew delivery: {result.crew_notification.status.replace("_", " ")} ·{" "}
                 {result.crew_notification.sent_count}/{result.crew_notification.recipient_count}{" "}
@@ -154,9 +170,40 @@ export function ConvertQuoteDialog({
           </div>
         ) : (
           <div className="space-y-5 py-1">
+            {copyToJob ? (
+              <section className="rounded-lg border p-4" aria-labelledby="job-details-step">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  1 · Job details
+                </p>
+                <h3 id="job-details-step" className="mt-1 font-medium">
+                  Copied from {quote?.number}
+                </h3>
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Title</dt>
+                    <dd>{quote?.title || quote?.number || "Untitled job"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Job description</dt>
+                    <dd className="whitespace-pre-wrap text-muted-foreground">
+                      {quote?.notes?.trim() || "No job description added"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Installation layout</dt>
+                    <dd className="text-muted-foreground">
+                      {quote?.lighting_project_id
+                        ? "Linked layout included"
+                        : "No layout linked to this quote"}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+            ) : null}
+
             <section className="rounded-lg border p-4" aria-labelledby="deposit-step">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                1 · Deposit
+                {copyToJob ? "2" : "1"} · Deposit
               </p>
               <h3 id="deposit-step" className="mt-1 font-medium">
                 {paidDeposit
@@ -200,19 +247,25 @@ export function ConvertQuoteDialog({
 
             <section className="rounded-lg border p-4" aria-labelledby="schedule-step">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                2 · Schedule
+                {copyToJob ? "3" : "2"} · Schedule
               </p>
               <h3 id="schedule-step" className="mt-1 font-medium">
                 Installation window
               </h3>
-              <label className="mt-3 flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={createJob}
-                  onChange={(event) => setCreateJob(event.target.checked)}
-                />{" "}
-                Create a field-service job
-              </label>
+              {copyToJob ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  A field-service job will be added to the shared calendar.
+                </p>
+              ) : (
+                <label className="mt-3 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={createJob}
+                    onChange={(event) => setCreateJob(event.target.checked)}
+                  />{" "}
+                  Create a field-service job
+                </label>
+              )}
               {createJob ? (
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
@@ -237,24 +290,30 @@ export function ConvertQuoteDialog({
                   </div>
                 </div>
               ) : null}
-              <label className="mt-3 flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={createInvoice}
-                  onChange={(event) => setCreateInvoice(event.target.checked)}
-                />{" "}
-                Create an invoice
-              </label>
+              {hasExistingInvoice ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  The existing invoice will stay linked to this job.
+                </p>
+              ) : (
+                <label className="mt-3 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={createInvoice}
+                    onChange={(event) => setCreateInvoice(event.target.checked)}
+                  />{" "}
+                  {copyToJob ? "Also create an invoice" : "Create an invoice"}
+                </label>
+              )}
               {windowError ? <p className="mt-2 text-sm text-destructive">{windowError}</p> : null}
             </section>
 
             {createJob ? (
               <section className="rounded-lg border p-4" aria-labelledby="team-step">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  3 · Installation team
+                  {copyToJob ? "4" : "3"} · Installation team
                 </p>
                 <h3 id="team-step" className="mt-1 font-medium">
-                  Crew and technicians
+                  Crew and members
                 </h3>
                 <div className="mt-3 space-y-1.5">
                   <Label htmlFor="convert-crew">Route to crew</Label>
@@ -273,7 +332,7 @@ export function ConvertQuoteDialog({
                   </select>
                 </div>
                 <div className="mt-3 space-y-1.5">
-                  <Label>Direct technician assignments</Label>
+                  <Label>Direct member assignments</Label>
                   {techniciansQuery.isPending ? (
                     <p className="text-sm text-muted-foreground">Loading technicians…</p>
                   ) : (
@@ -313,7 +372,7 @@ export function ConvertQuoteDialog({
               {convertMutation.isPending ? (
                 <Loader2 className="mr-1.5 size-4 animate-spin" />
               ) : null}
-              Schedule installation
+              {copyToJob ? "Copy to job" : "Schedule installation"}
             </Button>
           ) : null}
         </DialogFooter>
