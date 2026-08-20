@@ -295,6 +295,10 @@ audit.security: ## Scan for known CVEs in backend (pip-audit) and frontend prod 
 	@echo "▶ frontend — npm audit --omit=dev"
 	cd $(FRONTEND_DIR) && npm audit --omit=dev
 
+.PHONY: audit.handoff
+audit.handoff: ## Validate the SaaS handoff audit structure and compliance-register linkage.
+	python3 scripts/qa/validate_saas_handoff_audit.py
+
 .PHONY: audit.secrets
 audit.secrets: ## Scan the working tree for committed secrets (gitleaks).
 	@if command -v gitleaks >/dev/null 2>&1; then \

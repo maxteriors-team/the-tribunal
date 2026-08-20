@@ -162,7 +162,7 @@ async def act_on_nudge(
         contact = contact_result.scalar_one_or_none()
         if not contact or not contact.has_address:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Contact does not have a complete mailing address.",
             )
 
@@ -180,7 +180,7 @@ async def act_on_nudge(
         integration = integration_result.scalar_one_or_none()
         if not integration:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Card service not configured. Set up Lob in Settings > Integrations.",
             )
 
@@ -188,7 +188,7 @@ async def act_on_nudge(
         card_settings: dict[str, str] = workspace.settings.get("card_service", {})
         if not card_settings.get("from_name") or not card_settings.get("from_address_line1"):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Sender address not configured in card settings.",
             )
 

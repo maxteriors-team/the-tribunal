@@ -160,7 +160,7 @@ def _reject_past_season(start_month: int, end_month: int, year: int) -> None:
     window = resolve_season_window(start_month=start_month, end_month=end_month, year=year)
     if window.end < datetime.now(UTC).date():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 f"That season ended on {window.end.isoformat()}. "
                 "Point this campaign at an upcoming season."
@@ -275,7 +275,7 @@ async def schedule_pre_booking_launch(
         launch_at = launch_at.replace(tzinfo=UTC)
     if launch_at <= datetime.now(UTC):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="A scheduled launch must be in the future. Start the campaign now instead.",
         )
     window = resolve_season_window(
@@ -285,7 +285,7 @@ async def schedule_pre_booking_launch(
     )
     if launch_at.date() > window.end:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 f"That launch date is after the season ends ({window.end.isoformat()}). "
                 "Nobody would receive the offer in time to book."
@@ -440,7 +440,7 @@ async def reserve_pre_booking_slot(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except PreBookingError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
 
     return PreBookingReserveResponse(

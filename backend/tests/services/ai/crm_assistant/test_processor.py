@@ -49,6 +49,7 @@ def _make_db() -> AsyncMock:
     no_history = MagicMock()
     no_history.scalars.return_value.all.return_value = []
     db.execute.side_effect = [no_conv, no_history]
+    db.get = AsyncMock(return_value=None)
     db.flush = AsyncMock()
     db.commit = AsyncMock()
     db.add = MagicMock()
