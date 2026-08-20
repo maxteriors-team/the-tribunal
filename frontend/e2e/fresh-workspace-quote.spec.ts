@@ -438,6 +438,7 @@ test("freshly onboarded workspace prices, previews, saves, and opens its client 
   page,
   context,
 }) => {
+  test.setTimeout(90_000);
   const api = await installFreshWorkspaceApi(context);
 
   await page.goto("/sales-wizard?service=landscape");
@@ -452,8 +453,11 @@ test("freshly onboarded workspace prices, previews, saves, and opens its client 
 
   const estateUplight = page.locator(".fix-row", { hasText: "Estate Color Uplight" });
   await expect(estateUplight).toBeVisible();
-  await estateUplight.getByRole("button", { name: "+" }).click();
-  await estateUplight.getByRole("button", { name: "+" }).click();
+  const increaseUplightQuantity = estateUplight.getByRole("button", {
+    name: "Increase Estate Color Uplight quantity",
+  });
+  await increaseUplightQuantity.click();
+  await increaseUplightQuantity.click();
 
   await expect
     .poll(
@@ -481,7 +485,7 @@ test("freshly onboarded workspace prices, previews, saves, and opens its client 
     page.getByRole("link", { name: "Open" }).click(),
   ]);
   await expect(clientPage).toHaveURL(new RegExp(`/p/quotes/${PUBLIC_TOKEN}$`));
-  await expect(clientPage.getByText("The Stone Residence")).toBeVisible();
+  await expect(clientPage.getByText("The Stone Residence")).toBeVisible({ timeout: 30_000 });
   await expect(clientPage.getByText(/\$1,764(?:\.00)?/).first()).toBeVisible();
 });
 

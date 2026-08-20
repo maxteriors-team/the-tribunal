@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { hasTestUser, loginViaUI } from "./helpers";
+import { hasParallelTestUser, loginViaUI } from "./helpers";
 
 async function createCustomer(
   page: Page,
@@ -26,12 +26,14 @@ function opportunityCard(page: Page, opportunityName: string) {
   return page.locator('[data-testid^="opportunity-card-"]').filter({ hasText: opportunityName });
 }
 
-test("creates, relinks, displays, and filters an opportunity by customer", async ({ page }) => {
+test("creates, relinks, displays, and filters an opportunity by customer", async ({
+  page,
+}, testInfo) => {
   test.skip(
-    !hasTestUser(),
-    "E2E_USER_EMAIL / E2E_USER_PASSWORD not set — skipping authenticated opportunity flow",
+    !hasParallelTestUser(),
+    "Configure per-worker E2E users or enable opt-in provisioning for the opportunity flow",
   );
-  await loginViaUI(page);
+  await loginViaUI(page, testInfo);
 
   const runId = Date.now().toString().slice(-7);
   const firstCustomer = {
@@ -49,7 +51,7 @@ test("creates, relinks, displays, and filters an opportunity by customer", async
   const opportunityName = `E2E customer deal ${runId}`;
 
   await page.goto("/contacts");
-  await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Contacts", exact: true })).toBeVisible();
   await createCustomer(page, firstCustomer);
   await createCustomer(page, secondCustomer);
 

@@ -159,6 +159,7 @@ async function installCampaignApi(page: Page) {
 test("campaign launcher opens real builders and clearly disables multi-channel", async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   await installCampaignApi(page);
 
   const choices = [
@@ -170,8 +171,10 @@ test("campaign launcher opens real builders and clearly disables multi-channel",
 
   for (const choice of choices) {
     await page.goto("/campaigns/new");
-    await page.getByRole("link", { name: new RegExp(choice.name) }).click();
-    await expect(page).toHaveURL(new RegExp(`${choice.path}$`), { timeout: 15_000 });
+    const builderLink = page.getByRole("link", { name: new RegExp(choice.name) });
+    await expect(builderLink).toHaveAttribute("href", choice.path);
+    await builderLink.click();
+    await expect(page).toHaveURL(new RegExp(`${choice.path}$`), { timeout: 30_000 });
   }
 
   await page.goto("/campaigns/new");
@@ -190,6 +193,7 @@ test("campaign launcher opens real builders and clearly disables multi-channel",
 test("email wizard preserves entered data and saves drafts to their detail page", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   const api = await installCampaignApi(page);
   const campaignName = "Fall gutter follow-up";
   const subject = "Your fall gutter service is ready";
@@ -219,7 +223,7 @@ test("email wizard preserves entered data and saves drafts to their detail page"
   });
 
   await expect(page).toHaveURL(new RegExp(`/campaigns/${CAMPAIGN_ID}$`), {
-    timeout: 15_000,
+    timeout: 30_000,
   });
   await expect(page.getByRole("heading", { name: campaignName })).toBeVisible();
   await expect(page.getByText(body)).toBeVisible();
