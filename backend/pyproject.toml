@@ -108,11 +108,10 @@ dependencies = [
     # ML (TF-IDF similarity for IVR loop detection)
     # baseline: scikit-learn 1.5 is the floor that supports numpy 2 / Python 3.12.
     "scikit-learn>=1.5.0",
-    # CVE fix: cryptography >=46.0.7 patches CVE-2026-39892 (non-contiguous buffer overflow); >=46.0.6
-    # patches CVE-2026-34073 (X.509 name-constraint bypass); >=46.0.0 patches CVE-2026-26007 (ECC
-    # subgroup attack via SECT curves); >=48.0.1 patches GHSA-537c-gmf6-5ccf. 48.0.1 bundles all four
-    # plus OpenSSL 3.5.x. Do not lower below 48.0.1 under any circumstance.
-    "cryptography>=48.0.1",
+    # CVE fixes: cryptography >=50.0.0 patches CVE-2026-69247 (PKCS#7 Bleichenbacher oracle)
+    # and includes the earlier CVE-2026-39892, CVE-2026-34073, CVE-2026-26007, and
+    # GHSA-537c-gmf6-5ccf fixes. Do not lower below 50.0.0 under any circumstance.
+    "cryptography>=50.0.0",
     # runtime requirement: stdlib `audioop` was removed in Python 3.13; this is the PyPI backport.
     "audioop-lts>=0.2.1 ; python_full_version >= '3.13'",
     # feature floor: stripe 15.1 carries the 2025-09 API version pinned in app/services/billing/.
@@ -145,8 +144,9 @@ dependencies = [
     "tiktoken>=0.8.0",
     # feature floor: pypdf 5.1 is the maintained pure-Python PDF parser used for text extraction
     # in app/services/knowledge/text_extraction.py (supersedes the unmaintained PyPDF2 line).
-    # CVE fix: 6.13.3 patches GHSA-jm82-fx9c-mx94 (quadratic blowup on crafted PDFs); do not lower below 6.13.3.
-    "pypdf>=6.13.3",
+    # CVE fixes: 6.15.0 bounds crafted font maps/ranges (CVE-2026-71870 and CVE-2026-71852)
+    # and includes the earlier GHSA-jm82-fx9c-mx94 fix. Do not lower below 6.15.0.
+    "pypdf>=6.15.0",
     # feature floor: python-docx 1.1 carries the typing + lxml fixes used for .docx text extraction
     # in app/services/knowledge/text_extraction.py.
     "python-docx>=1.1.2",
