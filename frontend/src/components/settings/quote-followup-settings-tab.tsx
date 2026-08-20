@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Loader2, MessageSquareText, PhoneCall, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { messageTemplatesApi } from "@/lib/api/message-templates";
 import {
@@ -28,7 +29,6 @@ import {
   settingsApi,
 } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { MessageTemplate } from "@/types";
 
 const MAX_OFFSET_DAYS = 14;
@@ -87,16 +87,16 @@ function QuoteFollowupForm({ workspaceId, initialSettings, templates }: QuoteFol
     initialSettings.touches.map((touch) => ({ ...touch })),
   );
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (data: QuoteFollowupSettings) => settingsApi.updateQuoteFollowup(workspaceId, data),
+    successMessage: "Estimate follow-up settings are up to date.",
+    errorMessage:
+      "We couldn't save estimate follow-up settings. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.quoteFollowup(workspaceId),
       });
-      toast.success("Estimate follow-up settings saved");
     },
-    onError: (error: unknown) =>
-      toast.error(getApiErrorMessage(error, "Couldn't save estimate follow-up")),
   });
 
   const updateTouch = (index: number, patch: Partial<QuoteFollowupTouch>) => {

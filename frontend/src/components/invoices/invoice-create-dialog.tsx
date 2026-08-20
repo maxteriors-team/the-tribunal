@@ -77,14 +77,6 @@ const EMPTY_LINE = {
   is_optional: false,
 } as const;
 
-/** "Sarah Henderson — sarah@example.com", degrading to whatever exists. */
-function contactLabel(contact: Contact): string {
-  const name =
-    [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim() ||
-    `Contact #${contact.id}`;
-  return contact.email ? `${name} — ${contact.email}` : name;
-}
-
 // True when the only line is the untouched starter row, so picking from the
 // price book replaces it instead of leaving an empty line above the selection.
 function isBlankLine(line: { name?: string; unit_price?: string }): boolean {
@@ -131,9 +123,7 @@ export function InvoiceCreateDialog({
   // Deriving through the form value (rather than trusting the last pick)
   // means a form reset drops the warning below with it.
   const selectedContact =
-    pickedContact && String(pickedContact.id) === selectedContactId
-      ? pickedContact
-      : undefined;
+    pickedContact && String(pickedContact.id) === selectedContactId ? pickedContact : undefined;
   // A contact with no email can be billed, but not *delivered* to. Say so
   // before the operator hits send rather than after.
   const selectedHasNoEmail = Boolean(selectedContact && !selectedContact.email);
@@ -205,8 +195,7 @@ export function InvoiceCreateDialog({
       setPickedContact(null);
       onOpenChange(false);
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to create invoice")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to create invoice")),
   });
 
   const submit = (send: boolean) => {
@@ -234,8 +223,7 @@ export function InvoiceCreateDialog({
         <DialogHeader>
           <DialogTitle>New invoice</DialogTitle>
           <DialogDescription>
-            Add line items and create a draft, or create and send it to the
-            contact right away.
+            Add line items and create a draft, or create and send it to the contact right away.
           </DialogDescription>
         </DialogHeader>
 
@@ -266,9 +254,8 @@ export function InvoiceCreateDialog({
                     />
                     {selectedHasNoEmail && (
                       <p className="text-sm text-amber-600 dark:text-amber-500">
-                        This customer has no email address, so the invoice can be
-                        created but not sent. Add one on their contact record to
-                        email it.
+                        This customer has no email address, so the invoice can be created but not
+                        sent. Add one on their contact record to email it.
                       </p>
                     )}
                     <FormMessage />
@@ -467,9 +454,7 @@ export function InvoiceCreateDialog({
 
             <div className="flex items-center justify-between border-t pt-3 text-sm">
               <span className="text-muted-foreground">Total</span>
-              <span className="text-base font-semibold">
-                {formatCurrency(total)}
-              </span>
+              <span className="text-base font-semibold">{formatCurrency(total)}</span>
             </div>
 
             <DialogFooter className="gap-2">
@@ -481,14 +466,8 @@ export function InvoiceCreateDialog({
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={createMutation.isPending}
-              >
-                {createMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
+              <Button type="submit" variant="outline" disabled={createMutation.isPending}>
+                {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save draft
               </Button>
               <Button
@@ -496,9 +475,7 @@ export function InvoiceCreateDialog({
                 onClick={() => submit(true)}
                 disabled={createMutation.isPending}
               >
-                {createMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
+                {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Create &amp; send
               </Button>
             </DialogFooter>

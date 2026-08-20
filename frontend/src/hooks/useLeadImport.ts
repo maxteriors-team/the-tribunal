@@ -25,7 +25,9 @@ export function useLeadImport<TRequest, TResponse extends { imported: number }>(
    * toast entirely. Default: "Successfully imported N leads" when imported > 0.
    */
   successToast?: (data: TResponse) => { type: "success" | "error"; message: string } | null;
-  onError?: (error: unknown) => void;
+  /** Return true when the page rendered an inline recovery state for this error. */
+  onError?: (error: unknown) => boolean | void;
+  throwOnError?: boolean | ((error: unknown) => boolean);
   errorFallback?: string;
 }) {
   const queryClient = useQueryClient();
@@ -36,6 +38,7 @@ export function useLeadImport<TRequest, TResponse extends { imported: number }>(
       if (!workspaceId) throw new Error("No workspace");
       return opts.importFn(workspaceId, request);
     },
+    throwOnError: opts.throwOnError,
     onSuccess: (data) => {
       opts.onSuccess?.(data);
       queryClient.invalidateQueries({
@@ -52,8 +55,10 @@ export function useLeadImport<TRequest, TResponse extends { imported: number }>(
       }
     },
     onError: (error) => {
-      toast.error(getApiErrorMessage(error, opts.errorFallback ?? "Failed to import leads"));
-      opts.onError?.(error);
+      const handled = opts.onError?.(error) === true;
+      if (!handled) {
+        toast.error(getApiErrorMessage(error, opts.errorFallback ?? "Failed to import leads"));
+      }
     },
   });
 }

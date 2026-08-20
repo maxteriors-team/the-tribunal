@@ -88,12 +88,19 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Never try to refresh on the refresh endpoint itself — that would loop.
+    // Never refresh a failed login: the caller needs the original 401 detail,
+    // and an anonymous login attempt has no session to refresh.
     const requestUrl: string = originalRequest?.url ?? "";
     const isRefreshCall = requestUrl.includes("/api/v1/auth/refresh");
+    const isLoginCall = requestUrl.includes("/api/v1/auth/login");
 
     // If 401 and we haven't tried to refresh yet
-    if (error.response?.status === 401 && !originalRequest._retry && !isRefreshCall) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isRefreshCall &&
+      !isLoginCall
+    ) {
       if (isRefreshing) {
         // If already refreshing, queue this request
         return new Promise((resolve, reject) => {
@@ -138,7 +145,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 // Typed wrapper helpers — return response.data directly, eliminating boilerplate

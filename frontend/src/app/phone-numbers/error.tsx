@@ -3,7 +3,8 @@
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
-import { PageErrorState } from "@/components/ui/page-state";
+import { ProviderPageErrorState } from "@/components/shared/provider-error-state";
+import { isProviderConfigurationError } from "@/lib/utils/errors";
 
 export default function PhoneNumbersError({
   error,
@@ -13,12 +14,17 @@ export default function PhoneNumbersError({
   unstable_retry: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    if (!isProviderConfigurationError(error)) {
+      Sentry.captureException(error);
+    }
   }, [error]);
 
   return (
-    <PageErrorState
-      message="We couldn't load phone numbers. Please try again."
+    <ProviderPageErrorState
+      error={error}
+      provider="telnyx"
+      transientTitle="Phone numbers are temporarily unavailable"
+      transientMessage="Telnyx didn't respond. Retry to load your phone numbers."
       onRetry={unstable_retry}
     />
   );

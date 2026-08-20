@@ -184,6 +184,7 @@ import {
   editorReducer,
   initialEditorState,
   nextId,
+  type EditorAction,
   type EditorState,
 } from "./editor-store";
 import { EstimatePanel } from "./estimate-panel";
@@ -308,6 +309,9 @@ const landscapeDraftSignature = (
   activeShotId: string | null,
   liveState: LandscapeDraftState,
 ): string => JSON.stringify({ activeShotId, shots, ...liveState });
+
+const parseLandscapeLiveState = (serialized: string): LandscapeDraftState =>
+  JSON.parse(serialized) as LandscapeDraftState;
 
 const landscapeStateFromDraft = (draft: LandscapeDraft): LandscapeDraftState => ({
   activeWorkflowTab: draft.activeWorkflowTab ?? "drawing",
@@ -523,6 +527,7 @@ function LandscapeWelcome({
 
 function LandscapeDraftingToolbar({
   products,
+  workspaceName,
   activeTool,
   design,
   hasPhoto,
@@ -559,6 +564,7 @@ function LandscapeDraftingToolbar({
   onStudioAction,
 }: {
   products: Product[];
+  workspaceName: string;
   activeTool: EditorState["tool"];
   design: Design;
   hasPhoto: boolean;
@@ -612,6 +618,7 @@ function LandscapeDraftingToolbar({
   if (studio && studioSettings && onStudioAction) {
     return (
       <DrawingToolbar
+        workspaceName={workspaceName}
         paperSize={sheetSize}
         activeAction={
           activeTool.type === "select"
@@ -2290,7 +2297,7 @@ export function LightDesigner({
           activeShot?.id ?? null,
           new Date().toISOString(),
           undefined,
-          landscapeLiveState,
+          parseLandscapeLiveState(landscapeLiveStateJson),
         );
         const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json" });
         const href = URL.createObjectURL(blob);
@@ -2383,69 +2390,53 @@ export function LightDesigner({
     }
   };
 
-  useEffect(() => {
-    if (serverBacked && state.selection) setLandscapeToolsOpen(true);
-  }, [serverBacked, state.selection]);
+  const dispatchCanvasAction = (action: EditorAction) => {
+    if (serverBacked && action.type === "SET_SELECTION" && action.selection) {
+      setLandscapeToolsOpen(true);
+    }
+    dispatch(action);
+  };
 
   const activeShot = shots.find((shot) => shot.id === activeShotId) ?? shots[0] ?? null;
   const photo: PhotoInfo | null = activeShot?.photo ?? null;
   // Shots as they stand right now: the stored list with the active shot's
   // drawing swapped in from the reducer. Everything that has to see the whole
   // job — totals, the save, the strip's "drawn" dots — reads this, never `shots`.
-  const liveShots = useMemo(
-    () => shots.map((shot) => (shot.id === activeShot?.id ? { ...shot, design, dusk } : shot)),
-    [shots, activeShot?.id, design, dusk],
+  const liveShots = shots.map((shot) =>
+    shot.id === activeShot?.id ? { ...shot, design, dusk } : shot,
   );
-  const landscapeLiveState = useMemo<LandscapeDraftState>(
-    () => ({
-      activeWorkflowTab: landscapeTab,
-      settings: {
-        paperSize: landscapeSheetSize,
-        planFit: landscapePlanFit,
-        planOpacity: landscapePlanOpacity,
-        legend: {
-          visible: landscapeLegendOpen,
-          position: landscapeLegendPosition,
-          scale: landscapeLegendScale,
-        },
-        halosVisible,
-        fixtureNumbersVisible,
-        measurementsVisible,
-        sourceVoltage: landscapeSourceVoltage,
+  const landscapeLiveStateJson = JSON.stringify({
+    activeWorkflowTab: landscapeTab,
+    settings: {
+      paperSize: landscapeSheetSize,
+      planFit: landscapePlanFit,
+      planOpacity: landscapePlanOpacity,
+      legend: {
+        visible: landscapeLegendOpen,
+        position: landscapeLegendPosition,
+        scale: landscapeLegendScale,
       },
-      proposal: {
-        ...landscapeProposalSettings,
-        selectedTierKey: selectedLandscapeTierKey,
-        selectedCarePlanKey: selectedLandscapeCarePlanKey,
-        additionalLineItems: landscapeAdditionalLineItems,
-      },
-      bomLineItems: landscapeBomLineItems,
-      procurement: landscapeProcurement,
-      precon: preconState,
-    }),
-    [
-      fixtureNumbersVisible,
       halosVisible,
-      landscapeAdditionalLineItems,
-      landscapeBomLineItems,
-      landscapeLegendOpen,
-      landscapeLegendPosition,
-      landscapeLegendScale,
-      landscapePlanFit,
-      landscapePlanOpacity,
-      landscapeProcurement,
-      landscapeProposalSettings,
-      landscapeSheetSize,
-      landscapeSourceVoltage,
-      landscapeTab,
+      fixtureNumbersVisible,
       measurementsVisible,
-      preconState,
-      selectedLandscapeCarePlanKey,
-      selectedLandscapeTierKey,
-    ],
-  );
+      sourceVoltage: landscapeSourceVoltage,
+    },
+    proposal: {
+      ...landscapeProposalSettings,
+      selectedTierKey: selectedLandscapeTierKey,
+      selectedCarePlanKey: selectedLandscapeCarePlanKey,
+      additionalLineItems: landscapeAdditionalLineItems,
+    },
+    bomLineItems: landscapeBomLineItems,
+    procurement: landscapeProcurement,
+    precon: preconState,
+  } satisfies LandscapeDraftState);
   const emittedServerDraftSignatureRef = useRef(
-    landscapeDraftSignature(liveShots, activeShot?.id ?? null, landscapeLiveState),
+    landscapeDraftSignature(
+      liveShots,
+      activeShot?.id ?? null,
+      parseLandscapeLiveState(landscapeLiveStateJson),
+    ),
   );
   const persistedItemCountRef = useRef(
     liveShots.reduce((total, shot) => total + shot.design.items.length, 0),
@@ -2552,7 +2543,7 @@ export function LightDesigner({
           activeShot?.id ?? null,
           new Date().toISOString(),
           undefined,
-          landscapeLiveState,
+          parseLandscapeLiveState(landscapeLiveStateJson),
         ),
       )
         .then((draft) => {
@@ -2571,7 +2562,7 @@ export function LightDesigner({
   }, [
     activeShot?.id,
     draftReady,
-    landscapeLiveState,
+    landscapeLiveStateJson,
     landscapeOnly,
     liveShots,
     serverBacked,
@@ -2590,9 +2581,16 @@ export function LightDesigner({
         projectInitialDraft.shots.find((shot) => shot.id === projectInitialDraft.activeShotId) ??
         projectInitialDraft.shots[0];
       const restoredState = landscapeStateFromDraft(projectInitialDraft);
-      emittedServerDraftSignatureRef.current = landscapeDraftSignature(
+      const normalizedDraft = createLandscapeDraft(
         projectInitialDraft.shots,
         nextActiveShot?.id ?? null,
+        projectInitialDraft.updatedAt,
+        undefined,
+        restoredState,
+      );
+      emittedServerDraftSignatureRef.current = landscapeDraftSignature(
+        normalizedDraft.shots,
+        normalizedDraft.activeShotId,
         restoredState,
       );
       persistedItemCountRef.current = projectInitialDraft.shots.reduce(
@@ -2628,11 +2626,17 @@ export function LightDesigner({
         dispatch({ type: "SET_DUSK", dusk: nextActiveShot.dusk });
       }
       setDraftReady(true);
+      const needsNormalizedState =
+        projectInitialDraft.settings === undefined ||
+        projectInitialDraft.proposal === undefined ||
+        projectInitialDraft.procurement === undefined ||
+        projectInitialDraft.precon === undefined;
+      if (needsNormalizedState) emitProjectDraft?.(normalizedDraft);
     });
     return () => {
       cancelled = true;
     };
-  }, [projectInitialDraft, projectResetKey, serverBacked, setLandscapeTab]);
+  }, [emitProjectDraft, projectInitialDraft, projectResetKey, serverBacked, setLandscapeTab]);
 
   // Fixture placement is the highest-value edit in this workflow. Queue it for
   // server persistence immediately; all other drawing edits keep the quiet-period
@@ -2645,7 +2649,8 @@ export function LightDesigner({
       return;
     }
     const nextActiveShotId = activeShot?.id ?? null;
-    const signature = landscapeDraftSignature(liveShots, nextActiveShotId, landscapeLiveState);
+    const liveState = parseLandscapeLiveState(landscapeLiveStateJson);
+    const signature = landscapeDraftSignature(liveShots, nextActiveShotId, liveState);
     emittedServerDraftSignatureRef.current = signature;
     emitProjectDraft(
       createLandscapeDraft(
@@ -2653,7 +2658,7 @@ export function LightDesigner({
         nextActiveShotId,
         new Date().toISOString(),
         undefined,
-        landscapeLiveState,
+        liveState,
       ),
       { immediate: true },
     );
@@ -2661,7 +2666,7 @@ export function LightDesigner({
     activeShot?.id,
     draftReady,
     emitProjectDraft,
-    landscapeLiveState,
+    landscapeLiveStateJson,
     landscapeOnly,
     liveShots,
     serverBacked,
@@ -2675,7 +2680,8 @@ export function LightDesigner({
       return;
     }
     const nextActiveShotId = activeShot?.id ?? null;
-    const signature = landscapeDraftSignature(liveShots, nextActiveShotId, landscapeLiveState);
+    const liveState = parseLandscapeLiveState(landscapeLiveStateJson);
+    const signature = landscapeDraftSignature(liveShots, nextActiveShotId, liveState);
     if (signature === emittedServerDraftSignatureRef.current) return;
 
     const timer = window.setTimeout(() => {
@@ -2686,7 +2692,7 @@ export function LightDesigner({
           nextActiveShotId,
           new Date().toISOString(),
           undefined,
-          landscapeLiveState,
+          liveState,
         ),
       );
     }, 600);
@@ -2695,7 +2701,7 @@ export function LightDesigner({
     activeShot?.id,
     draftReady,
     emitProjectDraft,
-    landscapeLiveState,
+    landscapeLiveStateJson,
     landscapeOnly,
     liveShots,
     serverBacked,
@@ -2807,15 +2813,11 @@ export function LightDesigner({
   // Totalled across every photo: front elevation plus back patio is one job and
   // one price. Each shot measures on its own calibration before it's summed, so
   // photos taken from different distances still add up correctly.
-  const inputs = useMemo(
-    () =>
-      sumEstimateInputs(
-        liveShots.map((shot) => designToEstimateInputs(shot.design, productById, shot.photo.width)),
-      ),
-    [liveShots, productById],
+  const inputs = sumEstimateInputs(
+    liveShots.map((shot) => designToEstimateInputs(shot.design, productById, shot.photo.width)),
   );
   const feet = inputs.feet;
-  const permanentComplexityFeet = useMemo(() => {
+  const permanentComplexityFeet = (() => {
     const totals = { easy: 0, standard: 0, complex: 0 };
     for (const shot of liveShots) {
       const { ftPerPx } = designScale(shot.design, shot.photo.width);
@@ -2826,7 +2828,7 @@ export function LightDesigner({
       }
     }
     return totals;
-  }, [liveShots, productById]);
+  })();
   const selectedPermanentRun =
     state.selection?.kind === "run"
       ? (design.runs.find((run) => {
@@ -2859,23 +2861,15 @@ export function LightDesigner({
   // product from another package — the rep is told, and picks.
   const unresolvedFixtures = fixtureLines.filter((line) => !line.sku);
   const fixtureCount = fixtureLines.reduce((sum, line) => sum + line.count, 0);
-  const transformerCount = useMemo(
-    () =>
-      liveShots.reduce(
-        (total, shot) =>
-          total +
-          shot.design.items.filter(
-            (item) => productById.get(item.productId)?.style === "transformer",
-          ).length,
-        0,
-      ),
-    [liveShots, productById],
+  const transformerCount = liveShots.reduce(
+    (total, shot) =>
+      total +
+      shot.design.items.filter((item) => productById.get(item.productId)?.style === "transformer")
+        .length,
+    0,
   );
-  const perFixtureSchedule = useMemo(
-    () => buildPerFixtureSchedule(liveShots, products, priceBook ?? []),
-    [liveShots, priceBook, products],
-  );
-  const fixtureScheduleRows = useMemo<LandscapeFixtureScheduleRow[]>(() => {
+  const perFixtureSchedule = buildPerFixtureSchedule(liveShots, products, priceBook ?? []);
+  const fixtureScheduleRows: LandscapeFixtureScheduleRow[] = (() => {
     const rows: LandscapeFixtureScheduleRow[] = fixtureLines.map((line) => {
       const beamLabels = new Set<string>();
       for (const shot of liveShots) {
@@ -2908,21 +2902,17 @@ export function LightDesigner({
       });
     }
     return rows;
-  }, [fixtureLines, liveShots, productById, transformerCount, transformerResolution]);
-  const electricalLoad = useMemo(
-    () =>
-      calculateLandscapeElectricalLoad(
-        fixtureLines.map((line) => ({
-          id: line.type,
-          label: line.label,
-          quantity: line.count,
-          item: fixtureResolution[line.type].item,
-        })),
-        { item: transformerResolution.item, quantity: transformerCount },
-      ),
-    [fixtureLines, fixtureResolution, transformerCount, transformerResolution],
+  })();
+  const electricalLoad = calculateLandscapeElectricalLoad(
+    fixtureLines.map((line) => ({
+      id: line.type,
+      label: line.label,
+      quantity: line.count,
+      item: fixtureResolution[line.type].item,
+    })),
+    { item: transformerResolution.item, quantity: transformerCount },
   );
-  const circuitLoads = useMemo(() => {
+  const circuitLoads = (() => {
     const circuitInputs = liveShots.flatMap((shot, shotIndex) => {
       const scale = designScale(shot.design, shot.photo.width);
       return shot.design.runs.flatMap((run, circuitIndex) => {
@@ -2956,7 +2946,7 @@ export function LightDesigner({
       });
     });
     return calculateLandscapeCircuits(circuitInputs);
-  }, [fixtureResolution, landscapeSourceVoltage, liveShots, productById]);
+  })();
   const selectedTierWireItems = useMemo(
     () =>
       new Map<10 | 12, CatalogItemResponse | null>([
@@ -2965,7 +2955,7 @@ export function LightDesigner({
       ]),
     [priceBook, pricing, tierKey],
   );
-  const generatedSupplierRows = useMemo(() => {
+  const generatedSupplierRows = (() => {
     const fixtures: SupplierFixtureInput[] = fixtureLines.map((line) => ({
       label: line.label,
       quantity: line.count,
@@ -2992,39 +2982,21 @@ export function LightDesigner({
             : null,
       })),
     );
-  }, [
-    circuitLoads,
-    fixtureLines,
-    fixtureResolution,
-    selectedTierWireItems,
-    transformerCount,
-    transformerResolution,
-  ]);
-  const procurementSupplements = useMemo(
-    () =>
-      generatedSupplierRows.flatMap((row) => {
-        const supplement = procurementSupplementFromSupplierRow(row);
-        return supplement ? [supplement] : [];
-      }),
-    [generatedSupplierRows],
+  })();
+  const procurementSupplements = generatedSupplierRows.flatMap((row) => {
+    const supplement = procurementSupplementFromSupplierRow(row);
+    return supplement ? [supplement] : [];
+  });
+  const procurementRows = buildLandscapeProcurement(
+    perFixtureSchedule,
+    priceBook ?? [],
+    landscapeProcurement,
+    procurementSupplements,
   );
-  const procurementRows = useMemo(
-    () =>
-      buildLandscapeProcurement(
-        perFixtureSchedule,
-        priceBook ?? [],
-        landscapeProcurement,
-        procurementSupplements,
-      ),
-    [landscapeProcurement, perFixtureSchedule, priceBook, procurementSupplements],
-  );
-  const supplierRows = useMemo(
-    () => [
-      ...procurementRowsToSupplierCsv(procurementRows),
-      ...buildManualSupplierCsvRows(landscapeBomLineItems),
-    ],
-    [landscapeBomLineItems, procurementRows],
-  );
+  const supplierRows = [
+    ...procurementRowsToSupplierCsv(procurementRows),
+    ...buildManualSupplierCsvRows(landscapeBomLineItems),
+  ];
   const updateLandscapeProcurementRow = useCallback(
     (row: LandscapeProcurementRow, patch: Partial<LandscapeProcurementRow>) => {
       const nextRow = { ...row, ...patch };
@@ -3037,44 +3009,27 @@ export function LightDesigner({
   );
   const hasLandscape = fixtureCount > 0 || transformerCount > 0 || inputs.bistro_feet > 0;
 
-  const landscapeProposalPayload = useMemo<ProposalWizardPayload | null>(() => {
-    if (!landscapeOnly || !pricing || !priceBook || !effectiveLandscapeTierKey) return null;
-    return buildLandscapeProposalPayload({
-      pricing,
-      catalog: priceBook,
-      fixtureCounts: inputs.fixtures,
-      wireRuns: circuitLoads.map((circuit) => ({
-        gauge: circuit.wireGauge,
-        lengthFeet: circuit.lengthFeet,
-      })),
-      selectedTierKey: effectiveLandscapeTierKey,
-      selectedCarePlanKey: selectedLandscapeCarePlanKey,
-      additionalLineItems: landscapeAdditionalLineItems,
-      contactId: landscapeProject?.contactId,
-      opportunityId: landscapeProject?.opportunityId,
-      serviceLocationId: landscapeProject?.serviceLocationId,
-      lightingProjectId: landscapeProject?.projectId,
-      title: landscapeProjectName,
-    });
-  }, [
-    circuitLoads,
-    effectiveLandscapeTierKey,
-    inputs.fixtures,
-    landscapeAdditionalLineItems,
-    landscapeOnly,
-    landscapeProject?.contactId,
-    landscapeProject?.opportunityId,
-    landscapeProject?.projectId,
-    landscapeProject?.serviceLocationId,
-    landscapeProjectName,
-    priceBook,
-    pricing,
-    selectedLandscapeCarePlanKey,
-  ]);
-  const landscapeProposalSignature = useMemo(
-    () => JSON.stringify(landscapeProposalPayload),
-    [landscapeProposalPayload],
-  );
+  const landscapeProposalPayload: ProposalWizardPayload | null =
+    !landscapeOnly || !pricing || !priceBook || !effectiveLandscapeTierKey
+      ? null
+      : buildLandscapeProposalPayload({
+          pricing,
+          catalog: priceBook,
+          fixtureCounts: inputs.fixtures,
+          wireRuns: circuitLoads.map((circuit) => ({
+            gauge: circuit.wireGauge,
+            lengthFeet: circuit.lengthFeet,
+          })),
+          selectedTierKey: effectiveLandscapeTierKey,
+          selectedCarePlanKey: selectedLandscapeCarePlanKey,
+          additionalLineItems: landscapeAdditionalLineItems,
+          contactId: landscapeProject?.contactId,
+          opportunityId: landscapeProject?.opportunityId,
+          serviceLocationId: landscapeProject?.serviceLocationId,
+          lightingProjectId: landscapeProject?.projectId,
+          title: landscapeProjectName,
+        });
+  const landscapeProposalSignature = JSON.stringify(landscapeProposalPayload);
   const landscapeProposalQuery = useQuery({
     queryKey: queryKeys.lightingProjects.proposalPreview(workspaceId, landscapeProposalSignature),
     queryFn: () => salesWizardApi.preview(workspaceId, landscapeProposalPayload!),
@@ -3083,23 +3038,37 @@ export function LightDesigner({
   });
   useEffect(() => {
     if (
-      landscapeOnly &&
-      effectiveLandscapeTierKey &&
-      selectedLandscapeTierKey !== effectiveLandscapeTierKey
+      !landscapeOnly ||
+      !effectiveLandscapeTierKey ||
+      selectedLandscapeTierKey === effectiveLandscapeTierKey
     ) {
-      setSelectedLandscapeTierKey(effectiveLandscapeTierKey);
+      return;
     }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setSelectedLandscapeTierKey(effectiveLandscapeTierKey);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [effectiveLandscapeTierKey, landscapeOnly, selectedLandscapeTierKey]);
   useEffect(() => {
     if (
-      selectedLandscapeCarePlanKey &&
-      landscapeProposalQuery.data &&
-      !(landscapeProposalQuery.data.care_plan?.options ?? []).some(
+      !selectedLandscapeCarePlanKey ||
+      !landscapeProposalQuery.data ||
+      (landscapeProposalQuery.data.care_plan?.options ?? []).some(
         (option) => option.key === selectedLandscapeCarePlanKey,
       )
     ) {
-      setSelectedLandscapeCarePlanKey(null);
+      return;
     }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setSelectedLandscapeCarePlanKey(null);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [landscapeProposalQuery.data, selectedLandscapeCarePlanKey]);
   const [savedLandscapeQuote, setSavedLandscapeQuote] = useState<{
     quote: QuoteDetail;
@@ -3184,31 +3153,30 @@ export function LightDesigner({
 
   const customLineInputs = useMemo(() => toEstimateCustomLines(customLines), [customLines]);
 
-  const estimateParams = useMemo<LinearFeetEstimateRequest>(
-    () => ({
-      feet,
-      channels: 0,
-      takedown,
-      storage,
-      permanent_complexity: "standard",
-      permanent_complexity_feet: permanentComplexityFeet,
-      per_ft_override: null,
-      christmas_per_ft_override: christmasPerFtOverride,
-      christmas_items: inputs.christmas_items,
-      selected_package: selectedPackage,
-      custom_lines: customLineInputs,
-    }),
-    [
-      feet,
-      takedown,
-      storage,
-      permanentComplexityFeet,
-      christmasPerFtOverride,
-      inputs.christmas_items,
-      selectedPackage,
-      customLineInputs,
-    ],
-  );
+  const estimateParams: LinearFeetEstimateRequest = {
+    feet,
+    channels: 0,
+    takedown,
+    storage,
+    permanent_complexity: "standard",
+    permanent_complexity_feet: permanentComplexityFeet,
+    per_ft_override: null,
+    christmas_per_ft_override: christmasPerFtOverride,
+    christmas_items: inputs.christmas_items,
+    selected_package: selectedPackage,
+    custom_lines: customLineInputs,
+  };
+  const estimateSignature = JSON.stringify(estimateParams);
+  const [shareEstimateSignature, setShareEstimateSignature] = useState(estimateSignature);
+  if (shareEstimateSignature !== estimateSignature) {
+    setShareEstimateSignature(estimateSignature);
+    setShareUrl(null);
+    setShareToken(null);
+    setSentTo(null);
+    setSentVia(null);
+    setSavedToCustomer(false);
+    setQuoteResult(null);
+  }
 
   // Holiday pricing only: a landscape-only design has nothing for the roofline
   // comparison endpoint to price; saved landscape projects own that pricing. A
@@ -3266,19 +3234,14 @@ export function LightDesigner({
     };
   }, [pricing?.roofline_comparison_enabled, estimate]);
 
-  // Any change to the priced inputs invalidates a previously saved link so the
-  // "Saved to customer" confirmation can never read as current after an edit.
-  const resetShare = useCallback(() => {
+  const resetShare = () => {
     setShareUrl(null);
     setShareToken(null);
     setSentTo(null);
     setSentVia(null);
     setSavedToCustomer(false);
     setQuoteResult(null);
-  }, []);
-  useEffect(() => {
-    resetShare();
-  }, [estimateParams, resetShare]);
+  };
 
   // ---- Shots (photos in this design) -------------------------------------
   /**
@@ -3286,11 +3249,8 @@ export function LightDesigner({
    * moves the reducer off it — switching, removing, adding — so a drawing is
    * never left behind in a reducer that's about to be reset.
    */
-  const commitActive = useCallback(
-    (list: DesignerShot[]) =>
-      list.map((shot) => (shot.id === activeShot?.id ? { ...shot, design, dusk } : shot)),
-    [activeShot?.id, design, dusk],
-  );
+  const commitActive = (list: DesignerShot[]) =>
+    list.map((shot) => (shot.id === activeShot?.id ? { ...shot, design, dusk } : shot));
 
   /** Load a shot into the editor. History is per-shot, so it starts clean. */
   const openShot = (target: DesignerShot) => {
@@ -3830,6 +3790,7 @@ export function LightDesigner({
         <>
           <LandscapeDraftingToolbar
             products={products}
+            workspaceName={workspaceName}
             activeTool={state.tool}
             design={design}
             hasPhoto={Boolean(photo)}
@@ -4069,7 +4030,7 @@ export function LightDesigner({
                           photo={photo}
                           products={products}
                           state={state}
-                          dispatch={dispatch}
+                          dispatch={dispatchCanvasAction}
                           perspective="aerial"
                           placementMarkerColor={newFixtureMarkerColor}
                           planFit={landscapePlanFit}
@@ -4137,7 +4098,7 @@ export function LightDesigner({
                     photo={photo}
                     products={products}
                     state={state}
-                    dispatch={dispatch}
+                    dispatch={dispatchCanvasAction}
                   />
                   <div className="est-side">
                     {hasLandscape ? (

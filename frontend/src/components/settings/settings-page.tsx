@@ -55,44 +55,123 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import type { Capability } from "@/lib/permissions";
 
+export const settingsGroups = [
+  { value: "personal", label: "Personal" },
+  { value: "crm", label: "CRM" },
+  { value: "automation", label: "Automation" },
+  { value: "integrations", label: "Integrations" },
+  { value: "workspace", label: "Workspace" },
+] as const;
+
+export type SettingsGroup = (typeof settingsGroups)[number]["value"];
+
 export interface SettingsTab {
   value: string;
   label: string;
   icon: LucideIcon;
+  group: SettingsGroup;
   requires?: Capability;
 }
 
 export const settingsTabs: SettingsTab[] = [
-  { value: "profile", label: "Profile", icon: User },
-  { value: "tags", label: "Tags", icon: Tags, requires: "crm:write" },
-  { value: "notifications", label: "Notifications", icon: Bell },
-  { value: "nudges", label: "Nudges", icon: HandHeart, requires: "workspace:manage" },
-  { value: "reviews", label: "Reviews", icon: Star, requires: "workspace:manage" },
-  { value: "proposals", label: "Proposals", icon: FileText, requires: "billing:write" },
-  { value: "pricing", label: "Pricing", icon: DollarSign, requires: "billing:write" },
-  { value: "attach-rules", label: "Attach Rules", icon: Layers, requires: "billing:write" },
-  { value: "sales-targets", label: "Sales Targets", icon: Target, requires: "workspace:manage" },
-  { value: "pipeline", label: "Pipeline", icon: KanbanSquare, requires: "pipeline:write" },
-  { value: "speed-to-lead", label: "Speed to Lead", icon: Zap, requires: "outreach:write" },
+  { value: "profile", label: "Profile", icon: User, group: "personal" },
+  { value: "notifications", label: "Notifications", icon: Bell, group: "personal" },
+  { value: "calendar", label: "My Calendar", icon: CalendarDays, group: "personal" },
+  { value: "tags", label: "Tags", icon: Tags, group: "crm", requires: "crm:write" },
+  { value: "reviews", label: "Reviews", icon: Star, group: "crm", requires: "workspace:manage" },
+  {
+    value: "proposals",
+    label: "Proposals",
+    icon: FileText,
+    group: "crm",
+    requires: "billing:write",
+  },
+  { value: "pricing", label: "Pricing", icon: DollarSign, group: "crm", requires: "billing:write" },
+  {
+    value: "sales-targets",
+    label: "Sales Targets",
+    icon: Target,
+    group: "crm",
+    requires: "workspace:manage",
+  },
+  {
+    value: "locations",
+    label: "Locations",
+    icon: MapPin,
+    group: "crm",
+    requires: "locations:manage",
+  },
+  {
+    value: "lead-sources",
+    label: "Lead Sources",
+    icon: FileInput,
+    group: "crm",
+    requires: "crm:write",
+  },
+  {
+    value: "nudges",
+    label: "Nudges",
+    icon: HandHeart,
+    group: "automation",
+    requires: "workspace:manage",
+  },
+  {
+    value: "attach-rules",
+    label: "Attach Rules",
+    icon: Layers,
+    group: "automation",
+    requires: "billing:write",
+  },
+  {
+    value: "pipeline",
+    label: "Pipeline",
+    icon: KanbanSquare,
+    group: "automation",
+    requires: "pipeline:write",
+  },
+  {
+    value: "speed-to-lead",
+    label: "Speed to Lead",
+    icon: Zap,
+    group: "automation",
+    requires: "outreach:write",
+  },
   {
     value: "estimate-followup",
     label: "Estimate Follow-up",
     icon: CalendarClock,
+    group: "automation",
     requires: "outreach:write",
   },
-  { value: "quote-revival", label: "Quote Revival", icon: History, requires: "outreach:write" },
-  { value: "neighbors", label: "Neighbors", icon: Home, requires: "outreach:write" },
-  { value: "calendar", label: "My Calendar", icon: CalendarDays },
+  {
+    value: "quote-revival",
+    label: "Quote Revival",
+    icon: History,
+    group: "automation",
+    requires: "outreach:write",
+  },
+  {
+    value: "neighbors",
+    label: "Neighbors",
+    icon: Home,
+    group: "automation",
+    requires: "outreach:write",
+  },
   {
     value: "integrations",
     label: "Integrations",
     icon: Webhook,
+    group: "integrations",
     requires: "workspace:manage",
   },
-  { value: "billing", label: "Billing", icon: CreditCard, requires: "billing:read" },
-  { value: "team", label: "Team", icon: Building2, requires: "members:manage" },
-  { value: "locations", label: "Locations", icon: MapPin, requires: "locations:manage" },
-  { value: "lead-sources", label: "Lead Sources", icon: FileInput, requires: "crm:write" },
+  {
+    value: "billing",
+    label: "Billing",
+    icon: CreditCard,
+    group: "workspace",
+    requires: "billing:read",
+  },
+  { value: "team", label: "Team", icon: Building2, group: "workspace", requires: "members:manage" },
 ];
 
 export function canSeeSettingsTab(
@@ -100,6 +179,67 @@ export function canSeeSettingsTab(
   can: (capability: Capability) => boolean,
 ): boolean {
   return !tab.requires || can(tab.requires);
+}
+
+export function groupSettingsTabs(tabs: SettingsTab[]) {
+  return settingsGroups
+    .map((group) => ({
+      ...group,
+      tabs: tabs.filter((tab) => tab.group === group.value),
+    }))
+    .filter((group) => group.tabs.length > 0);
+}
+
+interface SettingsTabNavigationProps {
+  activeTab: string;
+  groups: ReturnType<typeof groupSettingsTabs>;
+}
+
+export function SettingsTabNavigation({ activeTab, groups }: SettingsTabNavigationProps) {
+  return (
+    <HorizontalScroll
+      activeKey={activeTab}
+      aria-label="Settings sections, scroll horizontally"
+      data-testid="settings-tabs-scroll"
+      viewportClassName="md:overflow-visible"
+    >
+      <TabsList
+        aria-label="Settings sections"
+        className="grid h-auto w-max min-w-full grid-flow-col items-start justify-start gap-5 rounded-none bg-transparent p-0 md:w-full md:grid-flow-row md:grid-cols-2 xl:grid-cols-5"
+      >
+        {groups.map((group) => (
+          <div
+            key={group.value}
+            role="presentation"
+            data-settings-group={group.value}
+            className="min-w-52 space-y-2 border-l pl-4 first:border-l-0 first:pl-0 md:min-w-0 md:first:border-l md:first:pl-4"
+          >
+            <div
+              id={`settings-group-${group.value}`}
+              data-settings-group-label
+              className="px-1 text-xs font-semibold text-muted-foreground"
+            >
+              {group.label}
+            </div>
+            <div role="presentation" className="flex flex-wrap gap-1">
+              {group.tabs.map((tab) => (
+                <TabsTrigger
+                  key={tab.value}
+                  value={tab.value}
+                  aria-label={tab.label}
+                  aria-describedby={`settings-group-${group.value}`}
+                  className="min-h-9 shrink-0 gap-2 px-3 py-2"
+                >
+                  <tab.icon className="size-4" aria-hidden="true" />
+                  <span>{tab.label}</span>
+                </TabsTrigger>
+              ))}
+            </div>
+          </div>
+        ))}
+      </TabsList>
+    </HorizontalScroll>
+  );
 }
 
 const subscribeToHydration = () => () => undefined;
@@ -117,6 +257,7 @@ export function SettingsPage() {
   const isHydrated = useIsHydrated();
   const { can } = useCapabilities();
   const visibleSettingsTabs = settingsTabs.filter((tab) => canSeeSettingsTab(tab, can));
+  const visibleSettingsGroups = groupSettingsTabs(visibleSettingsTabs);
   const requestedTab = searchParams.get("tab");
   const defaultTab = visibleSettingsTabs.some((tab) => tab.value === requestedTab)
     ? requestedTab!
@@ -135,28 +276,7 @@ export function SettingsPage() {
       </div>
 
       <Tabs key={defaultTab} defaultValue={defaultTab} className="space-y-6">
-        <HorizontalScroll
-          activeKey={defaultTab}
-          aria-label="Settings sections, scroll horizontally"
-          data-testid="settings-tabs-scroll"
-        >
-          <TabsList
-            aria-label="Settings sections"
-            className="h-auto w-max min-w-full justify-start gap-1 sm:w-full sm:flex-wrap"
-          >
-            {visibleSettingsTabs.map((tab) => (
-              <TabsTrigger
-                key={tab.value}
-                value={tab.value}
-                aria-label={tab.label}
-                className="shrink-0 gap-2 px-3"
-              >
-                <tab.icon className="size-4" aria-hidden="true" />
-                <span>{tab.label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </HorizontalScroll>
+        <SettingsTabNavigation activeTab={defaultTab} groups={visibleSettingsGroups} />
 
         <TabsContent value="profile">
           <QueryErrorBoundary message="Failed to load profile settings. Please try again.">

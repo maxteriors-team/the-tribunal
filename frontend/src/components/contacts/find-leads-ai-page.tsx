@@ -12,6 +12,7 @@ import {
   type LeadFilterState,
 } from "@/components/contacts/shared/lead-filters";
 import { LeadResultsList } from "@/components/contacts/shared/lead-results-list";
+import { ProviderNotConfiguredBanner } from "@/components/shared/provider-not-configured-banner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,7 +32,11 @@ import {
   type AIImportLeadsResponse,
   type BusinessResult,
 } from "@/lib/api/find-leads-ai";
-import { getApiErrorMessage } from "@/lib/utils/errors";
+import {
+  getApiErrorMessage,
+  isProviderConfigurationError,
+  shouldThrowProviderError,
+} from "@/lib/utils/errors";
 
 // Re-export status badges for callers that historically imported them from this module.
 export {
@@ -59,13 +64,16 @@ export function FindLeadsAIPage() {
   const [importResult, setImportResult] = useState<AIImportLeadsResponse | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [configurationIssue, setConfigurationIssue] = useState<"scraping" | "openai" | null>(null);
 
   const searchMutation = useMutation({
     mutationFn: async (searchQuery?: string) => {
       if (!workspaceId) throw new Error("No workspace");
       return findLeadsAIApi.search(workspaceId, searchQuery || query, maxResults);
     },
+    throwOnError: shouldThrowProviderError,
     onSuccess: (data) => {
+      setConfigurationIssue((current) => (current === "scraping" ? null : current));
       setResults(data.results);
       setHasSearched(true);
       setImportResult(null);
@@ -77,15 +85,27 @@ export function FindLeadsAIPage() {
       toast.success(`Found ${data.results.length} businesses`);
     },
     onError: (error) => {
-      toast.error(
-        getApiErrorMessage(error, "Failed to search. Please check your API key configuration."),
-      );
+      if (isProviderConfigurationError(error)) {
+        setConfigurationIssue("scraping");
+        return;
+      }
+      setConfigurationIssue(null);
+      toast.error(getApiErrorMessage(error, "Failed to search for leads."));
     },
   });
 
   const importMutation = useLeadImport({
     importFn: findLeadsAIApi.importLeads,
-    onSuccess: setImportResult,
+    throwOnError: shouldThrowProviderError,
+    onSuccess: (data) => {
+      setConfigurationIssue((current) => (current === "openai" ? null : current));
+      setImportResult(data);
+    },
+    onError: (error) => {
+      if (!isProviderConfigurationError(error)) return false;
+      setConfigurationIssue("openai");
+      return true;
+    },
     successToast: (data) => {
       if (data.imported > 0) {
         const rejectedMsg =
@@ -170,6 +190,23 @@ export function FindLeadsAIPage() {
             </p>
           </div>
         </div>
+
+        {configurationIssue === "scraping" ? (
+          <ProviderNotConfiguredBanner
+            title="AI lead search needs Google Places"
+            description="Connect Google Places in Settings, then retry your search."
+            restrictedDescription="Ask a workspace owner or admin to connect Google Places."
+            settingsLabel="Set up lead search"
+          />
+        ) : null}
+        {configurationIssue === "openai" ? (
+          <ProviderNotConfiguredBanner
+            title="AI enrichment needs OpenAI"
+            description="Connect OpenAI in Settings, then retry the import."
+            restrictedDescription="Ask a workspace owner or admin to connect OpenAI."
+            settingsLabel="Set up OpenAI"
+          />
+        ) : null}
 
         {/* Search Bar */}
         <div className="flex gap-2 max-w-2xl">

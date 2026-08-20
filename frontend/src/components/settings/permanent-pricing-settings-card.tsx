@@ -1,26 +1,20 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { PermanentConfig } from "@/types/sales-wizard";
 
 interface DraftPackage {
@@ -64,27 +58,22 @@ export function PermanentPricingSettingsCard() {
     refetchOnWindowFocus: false,
   });
   const [draft, setDraft] = useState<DraftFields | null>(null);
-  const [serverPermanent, setServerPermanent] = useState<PermanentConfig | null>(
-    null,
-  );
+  const [serverPermanent, setServerPermanent] = useState<PermanentConfig | null>(null);
 
   if (pricing?.permanent && pricing.permanent !== serverPermanent) {
     setServerPermanent(pricing.permanent);
     setDraft(toDraft(pricing.permanent));
   }
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (permanent: PermanentConfig) =>
       salesWizardApi.updatePricing(workspaceId!, { permanent }),
+    successMessage: "Permanent lighting package pricing is up to date.",
+    errorMessage:
+      "We couldn't save permanent lighting pricing. Check your connection and try again.",
     onSuccess: (updated) => {
-      queryClient.setQueryData(
-        queryKeys.salesWizard.pricing(workspaceId ?? ""),
-        updated,
-      );
-      toast.success("Permanent lighting package pricing saved");
+      queryClient.setQueryData(queryKeys.salesWizard.pricing(workspaceId ?? ""), updated);
     },
-    onError: (error: unknown) =>
-      toast.error(getApiErrorMessage(error, "Failed to save permanent pricing")),
   });
 
   const disabled = mutation.isPending || !serverPermanent || !draft;
@@ -173,8 +162,8 @@ export function PermanentPricingSettingsCard() {
           <div className="space-y-1.5">
             <CardTitle>Permanent Holiday Lighting</CardTitle>
             <CardDescription>
-              Measured footage rounds up to the smallest Minleon kit that covers
-              the job. Customer price equals kit COGS multiplied by your markup.
+              Measured footage rounds up to the smallest Minleon kit that covers the job. Customer
+              price equals kit COGS multiplied by your markup.
             </CardDescription>
           </div>
           <Switch
@@ -257,9 +246,7 @@ export function PermanentPricingSettingsCard() {
                     min={1}
                     step={1}
                     value={kit.feet}
-                    onChange={(event) =>
-                      patchPackage(index, { feet: event.target.value })
-                    }
+                    onChange={(event) => patchPackage(index, { feet: event.target.value })}
                     disabled={disabled}
                   />
                 </div>
@@ -271,9 +258,7 @@ export function PermanentPricingSettingsCard() {
                     min={0}
                     step="0.01"
                     value={kit.cost}
-                    onChange={(event) =>
-                      patchPackage(index, { cost: event.target.value })
-                    }
+                    onChange={(event) => patchPackage(index, { cost: event.target.value })}
                     disabled={disabled}
                   />
                 </div>

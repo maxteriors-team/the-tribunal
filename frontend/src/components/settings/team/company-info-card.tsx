@@ -1,11 +1,10 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { workspacesApi } from "@/lib/api/workspaces";
 import { TIMEZONE_OPTIONS } from "@/lib/constants";
 import { queryKeys } from "@/lib/query-keys";
@@ -34,7 +34,6 @@ import {
   emptyCompanyFormValues,
   type CompanyFormValues,
 } from "@/lib/schemas/team-settings";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 import { useWorkspace } from "@/providers/workspace-provider";
 
 interface CompanyInfoCardProps {
@@ -47,10 +46,7 @@ interface CompanyInfoCardProps {
  * on `workspace.settings`. Form values flow through react-hook-form so the
  * parent tab can stay focused on layout.
  */
-export function CompanyInfoCard({
-  workspaceId,
-  canEditWorkspace,
-}: CompanyInfoCardProps) {
+export function CompanyInfoCard({ workspaceId, canEditWorkspace }: CompanyInfoCardProps) {
   const { currentWorkspace } = useWorkspace();
   const queryClient = useQueryClient();
   const [saved, setSaved] = useState(false);
@@ -82,7 +78,7 @@ export function CompanyInfoCard({
     });
   }, [currentWorkspace, workspaceSettings, form]);
 
-  const updateMutation = useMutation({
+  const updateMutation = useSettingsSaveMutation({
     mutationFn: (data: Record<string, unknown>) =>
       workspacesApi.update(workspaceId!, {
         settings: {
@@ -90,16 +86,12 @@ export function CompanyInfoCard({
           ...data,
         },
       }),
+    successMessage: "Company information is up to date.",
+    errorMessage: "We couldn't save company information. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all() });
       setSaved(true);
-      toast.success("Company information updated successfully");
       setTimeout(() => setSaved(false), 2000);
-    },
-    onError: (err: unknown) => {
-      toast.error(
-        getApiErrorMessage(err, "Failed to update company information"),
-      );
     },
   });
 
@@ -123,8 +115,7 @@ export function CompanyInfoCard({
         <CardHeader>
           <CardTitle>Company Information</CardTitle>
           <CardDescription>
-            Business details for this workspace (GoHighLevel-style subaccount
-            info)
+            Business details for this workspace (GoHighLevel-style subaccount info)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -212,9 +203,7 @@ export function CompanyInfoCard({
               <Label htmlFor="companyTimezone">Timezone</Label>
               <Select
                 value={timezone}
-                onValueChange={(value) =>
-                  form.setValue("timezone", value, { shouldDirty: true })
-                }
+                onValueChange={(value) => form.setValue("timezone", value, { shouldDirty: true })}
                 disabled={!canEditWorkspace}
               >
                 <SelectTrigger id="companyTimezone">

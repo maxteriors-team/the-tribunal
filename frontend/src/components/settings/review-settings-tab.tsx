@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, Loader2 } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { reviewsApi } from "@/lib/api/reviews";
 import { queryKeys } from "@/lib/query-keys";
@@ -31,8 +32,10 @@ export function ReviewSettingsTab() {
     enabled: !!workspaceId,
   });
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (data: UpdateReviewSettings) => reviewsApi.updateSettings(workspaceId!, data),
+    successMessage: "Review request settings are up to date.",
+    errorMessage: "We couldn't save review request settings. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.reviews.settings(workspaceId ?? ""),

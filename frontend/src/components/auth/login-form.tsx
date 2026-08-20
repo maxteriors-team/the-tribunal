@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { getLoginErrorMessage } from "@/lib/utils/errors";
 import { useAuth } from "@/providers/auth-provider";
 
 const loginSchema = z.object({
@@ -35,6 +36,7 @@ export function LoginForm({ className }: LoginFormProps) {
   const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -44,6 +46,10 @@ export function LoginForm({ className }: LoginFormProps) {
     },
   });
 
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
   async function onSubmit(data: LoginFormValues) {
     setIsLoading(true);
     setError(null);
@@ -51,11 +57,7 @@ export function LoginForm({ className }: LoginFormProps) {
     try {
       await login(data);
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Invalid email or password");
-      }
+      setError(getLoginErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +66,12 @@ export function LoginForm({ className }: LoginFormProps) {
   return (
     <div className={cn("grid gap-6", className)}>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="space-y-4"
+          aria-busy={isLoading}
+          aria-describedby={error ? "login-error" : undefined}
+        >
           <FormField
             control={form.control}
             name="email"
@@ -113,10 +120,20 @@ export function LoginForm({ className }: LoginFormProps) {
               </FormItem>
             )}
           />
-          {error && <div className="text-destructive text-sm text-center">{error}</div>}
+          {error && (
+            <div
+              ref={errorRef}
+              id="login-error"
+              role="alert"
+              tabIndex={-1}
+              className="rounded-md border border-destructive/50 bg-background px-3 py-2 text-left text-sm text-destructive focus:outline-2 focus:outline-offset-2 focus:outline-destructive"
+            >
+              {error}
+            </div>
+          )}
           <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Sign In
+            {isLoading && <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />}
+            {isLoading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
       </Form>

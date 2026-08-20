@@ -23,28 +23,14 @@
  * Saving PUTs the whole config back (the endpoint merges top-level keys and
  * replaces each provided one), so every field this editor exposes round-trips.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ChevronDown,
-  Loader2,
-  Plus,
-  RotateCcw,
-  Save,
-  Trash2,
-  TriangleAlert,
-} from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, Loader2, Plus, RotateCcw, Save, Trash2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -65,16 +51,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { attachRulesApi } from "@/lib/api/attach-rules";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
-import type {
-  AttachRule,
-  AttachRuleMode,
-  AttachRulesSettings,
-} from "@/types/sales-wizard";
+import type { AttachRule, AttachRuleMode, AttachRulesSettings } from "@/types/sales-wizard";
 
 // The placeholder the backend interpolates (`app/schemas/attach_rules.py`).
 const PROMPT_PLACEHOLDER = "{primary}";
@@ -107,9 +89,7 @@ const MODES: readonly ModeSpec[] = [
 ];
 
 /** Distinct, trimmed category names from the workspace price book, sorted. */
-function priceBookCategories(
-  items: readonly { service_category?: string | null }[],
-): string[] {
+function priceBookCategories(items: readonly { service_category?: string | null }[]): string[] {
   const seen = new Map<string, string>();
   for (const item of items) {
     const name = (item.service_category ?? "").trim();
@@ -150,8 +130,7 @@ function CategoryMultiSelect({
   const unknown = selected.filter(
     (category) => !options.some((option) => sameCategory(option, category)),
   );
-  const summary =
-    selected.length === 0 ? "Choose services" : selected.join(", ");
+  const summary = selected.length === 0 ? "Choose services" : selected.join(", ");
 
   return (
     <DropdownMenu>
@@ -171,21 +150,14 @@ function CategoryMultiSelect({
         >
           <span
             id={`${id}-value`}
-            className={
-              selected.length === 0
-                ? "truncate text-muted-foreground"
-                : "truncate"
-            }
+            className={selected.length === 0 ? "truncate text-muted-foreground" : "truncate"}
           >
             {summary}
           </span>
           <ChevronDown className="ml-2 size-4 shrink-0 opacity-60" aria-hidden />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="max-h-72 w-64 overflow-y-auto"
-      >
+      <DropdownMenuContent align="start" className="max-h-72 w-64 overflow-y-auto">
         <DropdownMenuLabel>Services in your price book</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {options.length === 0 ? (
@@ -253,9 +225,7 @@ function RuleRow({
 
   const toggle = (category: string) =>
     onChange({
-      suggested_categories: suggested.some((existing) =>
-        sameCategory(existing, category),
-      )
+      suggested_categories: suggested.some((existing) => sameCategory(existing, category))
         ? suggested.filter((existing) => !sameCategory(existing, category))
         : [...suggested, category],
     });
@@ -264,11 +234,8 @@ function RuleRow({
     <li className="rounded-lg border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          A{" "}
-          <span className="font-semibold text-foreground">
-            {primary || "…"}
-          </span>{" "}
-          job should also quote{" "}
+          A <span className="font-semibold text-foreground">{primary || "…"}</span> job should also
+          quote{" "}
           <span className="font-semibold text-foreground">
             {suggested.length > 0 ? suggested.join(" or ") : "…"}
           </span>
@@ -295,9 +262,7 @@ function RuleRow({
             value={rule.primary_category}
             disabled={disabled}
             placeholder="roof"
-            onChange={(event) =>
-              onChange({ primary_category: event.target.value })
-            }
+            onChange={(event) => onChange({ primary_category: event.target.value })}
           />
         </div>
 
@@ -324,9 +289,7 @@ function RuleRow({
           <Select
             value={rule.mode}
             disabled={disabled}
-            onValueChange={(value) =>
-              onChange({ mode: value as AttachRuleMode })
-            }
+            onValueChange={(value) => onChange({ mode: value as AttachRuleMode })}
           >
             <SelectTrigger id={modeId} aria-describedby={consequenceId}>
               <SelectValue />
@@ -389,18 +352,13 @@ export function AttachRulesSettingsTab() {
     setDraft(data);
   }
 
-  const mutation = useMutation({
-    mutationFn: (config: AttachRulesSettings) =>
-      attachRulesApi.update(workspaceId!, config),
+  const mutation = useSettingsSaveMutation({
+    mutationFn: (config: AttachRulesSettings) => attachRulesApi.update(workspaceId!, config),
+    successMessage: "Attach rules are up to date.",
+    errorMessage: "We couldn't save attach rules. Check your connection and try again.",
     onSuccess: (saved) => {
-      queryClient.setQueryData(
-        queryKeys.attachRules.config(workspaceId ?? ""),
-        saved,
-      );
-      toast.success("Attach rules saved");
+      queryClient.setQueryData(queryKeys.attachRules.config(workspaceId ?? ""), saved);
     },
-    onError: (error: unknown) =>
-      toast.error(getApiErrorMessage(error, "Failed to save attach rules")),
   });
 
   if (isPending || !draft) {
@@ -429,14 +387,10 @@ export function AttachRulesSettingsTab() {
 
   const addRule = () =>
     patch({
-      rules: [
-        ...rules,
-        { primary_category: "", suggested_categories: [], mode: "advisory" },
-      ],
+      rules: [...rules, { primary_category: "", suggested_categories: [], mode: "advisory" }],
     });
 
-  const removeRule = (index: number) =>
-    patch({ rules: rules.filter((_, i) => i !== index) });
+  const removeRule = (index: number) => patch({ rules: rules.filter((_, i) => i !== index) });
 
   const addReason = () => {
     const reason = reasonInput.trim();
@@ -454,9 +408,7 @@ export function AttachRulesSettingsTab() {
       .map((rule) => ({
         ...rule,
         primary_category: rule.primary_category.trim(),
-        suggested_categories: (rule.suggested_categories ?? []).map((c) =>
-          c.trim(),
-        ),
+        suggested_categories: (rule.suggested_categories ?? []).map((c) => c.trim()),
       }))
       .filter((rule) => rule.primary_category !== "");
 
@@ -466,9 +418,7 @@ export function AttachRulesSettingsTab() {
       return;
     }
     if (draft.require_dismissal_reason && cleaned.length > 0 && reasons.length === 0) {
-      toast.error(
-        "Add at least one dismissal reason, or stop requiring a reason",
-      );
+      toast.error("Add at least one dismissal reason, or stop requiring a reason");
       return;
     }
 
@@ -504,9 +454,9 @@ export function AttachRulesSettingsTab() {
             <div className="space-y-1.5">
               <CardTitle>Attach prompts</CardTitle>
               <CardDescription>
-                Prompt the rep to quote a second service on every job. Gutters on
-                a roof, trim on siding: the attach is what moves average job
-                value, and it only happens if someone asks.
+                Prompt the rep to quote a second service on every job. Gutters on a roof, trim on
+                siding: the attach is what moves average job value, and it only happens if someone
+                asks.
               </CardDescription>
             </div>
             <Switch
@@ -526,19 +476,12 @@ export function AttachRulesSettingsTab() {
               value={draft.prompt_template}
               disabled={disabled}
               aria-describedby="attach-prompt-template-hint"
-              onChange={(event) =>
-                patch({ prompt_template: event.target.value })
-              }
+              onChange={(event) => patch({ prompt_template: event.target.value })}
             />
-            <p
-              id="attach-prompt-template-hint"
-              className="text-xs text-muted-foreground"
-            >
+            <p id="attach-prompt-template-hint" className="text-xs text-muted-foreground">
               What the rep reads when a service is missing.{" "}
-              <code className="rounded bg-muted px-1 py-0.5">
-                {PROMPT_PLACEHOLDER}
-              </code>{" "}
-              is replaced with the job type, for example &quot;roof&quot;.
+              <code className="rounded bg-muted px-1 py-0.5">{PROMPT_PLACEHOLDER}</code> is replaced
+              with the job type, for example &quot;roof&quot;.
             </p>
           </div>
 
@@ -548,16 +491,14 @@ export function AttachRulesSettingsTab() {
                 Require a reason to skip
               </Label>
               <p className="text-sm text-muted-foreground">
-                A dismissal without a reason is not reportable, so you can never
-                tell a customer who declined from a rep who never asked.
+                A dismissal without a reason is not reportable, so you can never tell a customer who
+                declined from a rep who never asked.
               </p>
             </div>
             <Switch
               id="attach-require-reason"
               checked={draft.require_dismissal_reason}
-              onCheckedChange={(value) =>
-                patch({ require_dismissal_reason: value })
-              }
+              onCheckedChange={(value) => patch({ require_dismissal_reason: value })}
               disabled={disabled}
             />
           </div>
@@ -571,9 +512,7 @@ export function AttachRulesSettingsTab() {
             {rules.length === 0
               ? "No rules yet. Add one to start prompting."
               : `${activeCount} of ${rules.length} active${
-                  blockingCount > 0
-                    ? `, ${blockingCount} blocking a save until answered`
-                    : ""
+                  blockingCount > 0 ? `, ${blockingCount} blocking a save until answered` : ""
                 }.`}
           </CardDescription>
         </CardHeader>
@@ -604,12 +543,7 @@ export function AttachRulesSettingsTab() {
             </ul>
           )}
 
-          <Button
-            type="button"
-            variant="outline"
-            onClick={addRule}
-            disabled={disabled}
-          >
+          <Button type="button" variant="outline" onClick={addRule} disabled={disabled}>
             <Plus className="size-4" /> Add a rule
           </Button>
         </CardContent>
@@ -619,8 +553,8 @@ export function AttachRulesSettingsTab() {
         <CardHeader>
           <CardTitle>Reasons for skipping</CardTitle>
           <CardDescription>
-            The vocabulary a rep picks from when they dismiss a prompt. These are
-            what turn a low attach rate into a diagnosis.
+            The vocabulary a rep picks from when they dismiss a prompt. These are what turn a low
+            attach rate into a diagnosis.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

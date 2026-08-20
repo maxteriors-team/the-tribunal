@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import React from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
+import { loadImage } from "@/lib/estimator/photo";
 import { beamAngleAt, beamHandlePos, resizeHandlePos } from "@/lib/estimator/render";
 import type { PhotoInfo, Product } from "@/lib/estimator/types";
 
@@ -27,7 +28,7 @@ vi.mock("@/lib/estimator/render", () => ({
 }));
 
 vi.mock("@/lib/estimator/photo", () => ({
-  loadImage: vi.fn().mockResolvedValue({ naturalWidth: 1000, naturalHeight: 800 }),
+  loadImage: vi.fn(() => new Promise(() => undefined)),
   fileToPhoto: vi.fn().mockResolvedValue({
     dataUrl: "data:image/png;base64,PLAN",
     width: 200,
@@ -46,6 +47,8 @@ const PHOTO: PhotoInfo = {
 };
 
 beforeEach(() => {
+  vi.mocked(loadImage).mockReset();
+  vi.mocked(loadImage).mockImplementation(() => new Promise(() => undefined));
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
 });
 
@@ -152,6 +155,10 @@ describe("LightCanvas — aerial plan semantics", () => {
     vi.stubGlobal("ResizeObserver", ControlledResizeObserver);
 
     try {
+      vi.mocked(loadImage).mockResolvedValueOnce({
+        naturalWidth: 1000,
+        naturalHeight: 800,
+      } as HTMLImageElement);
       let width = 1000;
       let height = 800;
       const dispatch = vi.fn();
@@ -436,6 +443,9 @@ describe("LightCanvas — plan images", () => {
   });
 
   it("compresses oversized plan images before they enter autosave", async () => {
+    vi.mocked(loadImage)
+      .mockImplementationOnce(() => new Promise(() => undefined))
+      .mockResolvedValueOnce({ naturalWidth: 1600, naturalHeight: 900 } as HTMLImageElement);
     const { container, seen } = setupCanvas();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File([new Uint8Array(2 * 1024 * 1024 + 1)], "large-photo.png", {

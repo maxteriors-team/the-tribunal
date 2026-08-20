@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { lightingProjectsApi, type LightingProjectDetail } from "@/lib/api/lighting-projects";
+import { resolveWorkspaceBrand } from "@/lib/brand";
 import type { LandscapeWorkflowTab } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
 import { STATIC } from "@/lib/query-options";
@@ -180,10 +181,12 @@ function SaveStatus({
 function ActiveProjectEditor({
   workspaceId,
   workspaceName,
+  workspaceLogoUrl,
   loadedProject,
 }: {
   workspaceId: string;
   workspaceName: string;
+  workspaceLogoUrl: string | null;
   loadedProject: LightingProjectDetail;
 }) {
   const router = useRouter();
@@ -369,6 +372,7 @@ function ActiveProjectEditor({
           key={`${autosave.project.id}-${autosave.resetKey}`}
           workspaceId={workspaceId}
           workspaceName={workspaceName}
+          workspaceLogoUrl={workspaceLogoUrl}
           focus="landscape"
           landscapeProject={{
             initialDraft: autosave.initialDraft,
@@ -398,6 +402,7 @@ function ActiveProjectEditor({
 
 export function LightingProjectEditor({ projectId }: LightingProjectEditorProps) {
   const { currentWorkspace, currentWorkspaceId, isPending: workspacePending } = useWorkspace();
+  const workspaceBrand = resolveWorkspaceBrand(currentWorkspace?.workspace);
   const projectQuery = useQuery({
     queryKey: queryKeys.lightingProjects.detail(currentWorkspaceId ?? "", projectId),
     queryFn: () => lightingProjectsApi.get(currentWorkspaceId!, projectId),
@@ -459,7 +464,8 @@ export function LightingProjectEditor({ projectId }: LightingProjectEditorProps)
   return (
     <ActiveProjectEditor
       workspaceId={currentWorkspaceId}
-      workspaceName={currentWorkspace?.workspace.name ?? "Maxteriors"}
+      workspaceName={workspaceBrand.businessName}
+      workspaceLogoUrl={workspaceBrand.logoUrl}
       loadedProject={projectQuery.data}
     />
   );

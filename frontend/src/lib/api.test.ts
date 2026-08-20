@@ -54,6 +54,7 @@ beforeEach(() => {
   // Reset any href changes made by logout()
   window.history.replaceState({}, "", "/");
   vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -202,6 +203,24 @@ describe("api response interceptor", () => {
     // Only the single refresh call — no recursive retry.
     const refreshCalls = calls.filter((c) => c.includes("/api/v1/auth/refresh"));
     expect(refreshCalls.length).toBe(1);
+  });
+
+  it("propagates a login 401 without attempting a refresh", async () => {
+    const calls: string[] = [];
+    installAdapter((config) => {
+      const url = config.url ?? "";
+      calls.push(url);
+      throw makeAxiosError(config, 401);
+    });
+
+    await expect(
+      api.post("/api/v1/auth/login", {
+        email: "operator@example.com",
+        password: "incorrect",
+      }),
+    ).rejects.toMatchObject({ response: { status: 401 } });
+
+    expect(calls).toEqual(["/api/v1/auth/login"]);
   });
 
   it("propagates non-401 errors without attempting refresh", async () => {

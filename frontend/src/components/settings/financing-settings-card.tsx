@@ -17,7 +17,7 @@
  * replaces blocks wholesale), so every field this editor doesn't expose
  * round-trips untouched.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -28,10 +28,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { FinancingConfig } from "@/types/sales-wizard";
 
 // One editable eligibility row. `minimum` is held as a string so a half-typed
@@ -83,15 +83,15 @@ export function FinancingSettingsCard() {
     setDisclaimer(pricing.financing.disclaimer ?? "");
   }
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (financing: FinancingConfig) =>
       salesWizardApi.updatePricing(workspaceId!, { financing }),
+    successMessage: "Financing presentation settings are up to date.",
+    errorMessage:
+      "We couldn't save financing presentation settings. Check your connection and try again.",
     onSuccess: (updated) => {
       queryClient.setQueryData(queryKeys.salesWizard.pricing(workspaceId ?? ""), updated);
-      toast.success("Financing presentation saved");
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to save financing settings")),
   });
 
   const disabled = mutation.isPending || !serverFinancing || !rows;

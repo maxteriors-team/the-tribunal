@@ -143,6 +143,21 @@ const acceptButton = () => {
   return within(cta).getByRole("button", { name: /accept|approve proposal/i });
 };
 
+describe("customer-facing tenant branding", () => {
+  it("renders a second workspace without leaking the first tenant's brand", () => {
+    renderView({
+      branding: {
+        business_name: "Northstar Outdoor Lighting",
+        brand_color: "#123456",
+        accent_color: "#654321",
+      },
+    });
+
+    expect(screen.getAllByText("Northstar Outdoor Lighting")).not.toHaveLength(0);
+    expect(screen.queryByText(/maxteriors/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("client package selection", () => {
   it("offers each package as a choice, starting on the rep's recommendation", () => {
     renderView();
@@ -232,8 +247,7 @@ describe("client package selection", () => {
         headline: "0% APR financing available.",
         body: "Pay monthly instead.",
         points: ["No interest, ever"],
-        disclaimer:
-          "Payment estimates are not offers and are subject to credit approval.",
+        disclaimer: "Payment estimates are not offers and are subject to credit approval.",
       },
       tiers: DOCUMENT.tiers.map((t) => ({
         ...t,
@@ -256,13 +270,9 @@ describe("client package selection", () => {
       "Payment estimates are not offers and are subject to credit approval.",
     );
     expect(estimate).toHaveTextContent("Wisetack");
-    expect(card(/The Premier/)).toHaveTextContent(
-      "Estimated payment options below",
-    );
+    expect(card(/The Premier/)).toHaveTextContent("Estimated payment options below");
 
-    await user.click(
-      within(estimate).getByRole("button", { name: /12 months.*\$1,398\/mo est/i }),
-    );
+    await user.click(within(estimate).getByRole("button", { name: /12 months.*\$1,398\/mo est/i }));
     expect(estimate).toHaveTextContent("$1,398/month");
     // Financing presentation is additive; package pricing remains untouched.
     expect(card(/The Premier/)).toHaveTextContent("$16,782");
@@ -311,9 +321,7 @@ describe("ClientProposalView — seasonal Christmas", () => {
     },
   ];
 
-  const christmasSection = (
-    overrides: Record<string, unknown> = {},
-  ): Record<string, unknown> => ({
+  const christmasSection = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
     key: "christmas",
     label: "Christmas Lighting",
     lines: [{ label: "Roofline", line_total: 1800, quantity: 300 }],
@@ -382,9 +390,7 @@ describe("ClientProposalView — seasonal Christmas", () => {
     expect(
       screen.getByRole("heading", { level: 3, name: /worry-free christmas/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/maintenance is included through december 23/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/maintenance is included through december 23/i)).toBeInTheDocument();
     expect(screen.getByText(/we own the bulbs/i)).toBeInTheDocument();
     // Seasonal-only structure the homeowner is actually buying.
     expect(screen.getByText(/we take it down/i)).toBeInTheDocument();
@@ -457,10 +463,7 @@ describe("ClientProposalView — seasonal Christmas", () => {
         ...DOCUMENT,
         night_preview: {
           image: "data:image/jpeg;base64,FRONT",
-          images: [
-            "data:image/jpeg;base64,FRONT",
-            "data:image/jpeg;base64,BACK",
-          ],
+          images: ["data:image/jpeg;base64,FRONT", "data:image/jpeg;base64,BACK"],
         },
       } as unknown as Record<string, unknown>,
     });

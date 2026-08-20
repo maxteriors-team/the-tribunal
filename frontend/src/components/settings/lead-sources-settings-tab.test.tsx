@@ -8,15 +8,15 @@ import {
   LeadSourcesSettingsTab,
 } from "@/components/settings/lead-sources-settings-tab";
 import type { LeadSource } from "@/lib/api/lead-sources";
+import { selectOption } from "@/test/select-option";
 
-const { listMock, createMock, updateMock, deleteMock, useWorkspaceIdMock } =
-  vi.hoisted(() => ({
-    listMock: vi.fn(),
-    createMock: vi.fn(),
-    updateMock: vi.fn(),
-    deleteMock: vi.fn(),
-    useWorkspaceIdMock: vi.fn(),
-  }));
+const { listMock, createMock, updateMock, deleteMock, useWorkspaceIdMock } = vi.hoisted(() => ({
+  listMock: vi.fn(),
+  createMock: vi.fn(),
+  updateMock: vi.fn(),
+  deleteMock: vi.fn(),
+  useWorkspaceIdMock: vi.fn(),
+}));
 
 vi.mock("@/lib/api/lead-sources", () => ({
   leadSourcesApi: {
@@ -99,9 +99,7 @@ describe("call-booking readiness", () => {
     });
 
     expect(result.callBookingReady).toBe(true);
-    expect(result.blockers).toEqual([
-      "Google Calendar is not connected for video calls",
-    ]);
+    expect(result.blockers).toEqual(["Google Calendar is not connected for video calls"]);
   });
 });
 
@@ -130,26 +128,21 @@ describe("LeadSourcesSettingsTab", () => {
   });
 
   it("creates a source with the selected channel in the API payload", async () => {
+    const user = userEvent.setup();
     listMock.mockResolvedValue([]);
     createMock.mockResolvedValue(source());
 
     renderTab();
 
     await screen.findByText("No lead sources yet");
-    await userEvent.click(screen.getByRole("button", { name: /add source/i }));
+    await user.click(screen.getByRole("button", { name: /add source/i }));
 
-    await userEvent.type(
-      await screen.findByLabelText("Name"),
-      "Pricing Page Leads",
-    );
+    await user.type(await screen.findByLabelText("Name"), "Pricing Page Leads");
 
     // Pick the acquisition channel via the reusable SourceTypePicker.
-    await userEvent.click(screen.getByRole("combobox", { name: "Channel" }));
-    await userEvent.click(
-      await screen.findByRole("option", { name: "Facebook Ads" }),
-    );
+    await selectOption(screen.getByRole("combobox", { name: "Channel" }), "Facebook Ads");
 
-    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() =>
       expect(createMock).toHaveBeenCalledWith(

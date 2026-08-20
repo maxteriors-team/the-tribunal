@@ -6,10 +6,7 @@ import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import { AdvertiserDetail } from "@/components/ad-library/advertiser-detail";
-import {
-  AdvertiserTable,
-  AdvertiserTableToolbar,
-} from "@/components/ad-library/advertiser-table";
+import { AdvertiserTable, AdvertiserTableToolbar } from "@/components/ad-library/advertiser-table";
 import { MonitorsPanel } from "@/components/ad-library/monitors";
 import {
   AdLibrarySearchForm,
@@ -18,11 +15,7 @@ import {
 } from "@/components/ad-library/search-form";
 import { ProviderNotConfiguredBanner } from "@/components/shared/provider-not-configured-banner";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   adLibraryApi,
@@ -31,9 +24,7 @@ import {
   type AdLibraryJob,
 } from "@/lib/api/ad-library";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorCode, getApiErrorMessage } from "@/lib/utils/errors";
-
-const PROVIDER_UNAVAILABLE_CODE = "ad_library_provider_unavailable";
+import { getApiErrorMessage, isProviderConfigurationError } from "@/lib/utils/errors";
 
 export function AdLibraryClient() {
   const workspaceId = useWorkspaceId();
@@ -101,9 +92,10 @@ export function AdLibraryClient() {
       if (!workspaceId) throw new Error("No workspace");
       return adLibraryApi.search(workspaceId, toSearchRequest(values));
     },
-    // Search failures are handled below without discarding the user's form or
-    // the rest of the module. Override the global 5xx route-boundary behavior.
+    // Keep search failures in this module so a retry preserves the form values.
+    // Setup failures get the banner below; transient failures keep the Search action.
     throwOnError: false,
+    onMutate: () => setNotConfigured(false),
     onSuccess: (created) => {
       setNotConfigured(false);
       setJob(created);
@@ -112,7 +104,7 @@ export function AdLibraryClient() {
     onError: (error) => {
       // A missing Meta/Google provider token is an actionable config gap, not a
       // transient failure — show a persistent banner pointing at Settings.
-      if (getApiErrorCode(error) === PROVIDER_UNAVAILABLE_CODE) {
+      if (isProviderConfigurationError(error)) {
         setNotConfigured(true);
         return;
       }
@@ -146,8 +138,8 @@ export function AdLibraryClient() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Ad Library</h1>
         <p className="text-sm text-muted-foreground">
-          Find advertisers already spending on ads who run the same creatives for
-          months — the people you can help start proper creative testing.
+          Find advertisers already spending on ads who run the same creatives for months — the
+          people you can help start proper creative testing.
         </p>
       </div>
 
@@ -159,7 +151,9 @@ export function AdLibraryClient() {
       {notConfigured && (
         <ProviderNotConfiguredBanner
           title="Ad Library needs a provider token"
-          description="Add a Meta Ad Library access token in Settings to track advertisers."
+          description="Connect a Meta or Google ad-library provider in Settings."
+          restrictedDescription="Ask a workspace owner or admin to connect an ad-library provider."
+          settingsLabel="Set up ad-library access"
         />
       )}
 

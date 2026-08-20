@@ -62,6 +62,25 @@ export function getApiErrorStatus(err: unknown): number | null {
 }
 
 /**
+ * Maps sign-in failures to non-enumerating, actionable copy without exposing
+ * Axios transport details or backend internals.
+ */
+export function getLoginErrorMessage(err: unknown): string {
+  const status = getApiErrorStatus(err);
+
+  if (status === 401) {
+    return "Email or password is incorrect. Try again or reset your password.";
+  }
+  if (status === 429) {
+    return "Too many sign-in attempts. Wait a few minutes, then try again.";
+  }
+  if (status === null) {
+    return "We couldn't reach the sign-in service. Check your connection and try again.";
+  }
+  return "We couldn't sign you in right now. Try again in a moment.";
+}
+
+/**
  * Extracts the structured `details` payload from the canonical backend error
  * envelope (`{ code, message, details, request_id }`) on an Axios-style error.
  *
@@ -78,4 +97,44 @@ export function getApiErrorDetails(err: unknown): unknown {
     return axErr.response?.data?.details ?? null;
   }
   return null;
+}
+
+const PROVIDER_CONFIGURATION_ERROR_CODES = new Set([
+  "provider_not_configured",
+  "provider_configuration_missing",
+  "telnyx_not_configured",
+  "telnyx_provider_not_configured",
+  "openai_not_configured",
+  "openai_provider_not_configured",
+  "ad_library_provider_not_configured",
+  // This backend code is intentionally configuration-only: it is emitted by
+  // the ad-library preflight when no usable workspace/provider credentials exist.
+  "ad_library_provider_unavailable",
+  "scraping_provider_not_configured",
+  "people_search_provider_not_configured",
+]);
+
+const LEGACY_CONFIGURATION_MESSAGE =
+  /(?:not|isn['’]t|is not) configured|no [^.]*credentials configured|(?:missing|needs?) (?:an? )?[^.]*api key/i;
+
+/**
+ * Identifies provider setup failures that retrying cannot repair.
+ *
+ * New endpoints should return a machine-readable code above. The message fallback
+ * keeps older deployed backends actionable during rolling frontend deployments.
+ */
+export function isProviderConfigurationError(err: unknown): boolean {
+  const code = getApiErrorCode(err);
+  if (code && PROVIDER_CONFIGURATION_ERROR_CODES.has(code)) return true;
+
+  return LEGACY_CONFIGURATION_MESSAGE.test(getApiErrorMessage(err, ""));
+}
+
+/**
+ * Matches the app-wide React Query error-boundary policy while keeping expected
+ * provider setup failures inside the feature that can explain how to fix them.
+ */
+export function shouldThrowProviderError(err: unknown): boolean {
+  const status = getApiErrorStatus(err);
+  return status !== null && status >= 500 && !isProviderConfigurationError(err);
 }

@@ -30,7 +30,17 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/providers/workspace-provider", () => ({
   useWorkspace: () => ({
     currentWorkspaceId: "9029c83b-7a2a-44ce-b6b9-5567ac75cc3f",
-    currentWorkspace: { workspace: { name: "Maxteriors" } },
+    currentWorkspace: {
+      workspace: {
+        name: "Northstar Workspace",
+        settings: {
+          proposal_template: {
+            business_name: "Northstar Outdoor Lighting",
+            logo_url: "https://northstar.example/logo.svg",
+          },
+        },
+      },
+    },
     isPending: false,
   }),
 }));
@@ -148,7 +158,8 @@ describe("LightingProjectEditor", () => {
     expect(designerProps).toHaveBeenLastCalledWith(
       expect.objectContaining({
         workspaceId: WORKSPACE_ID,
-        workspaceName: "Maxteriors",
+        workspaceName: "Northstar Outdoor Lighting",
+        workspaceLogoUrl: "https://northstar.example/logo.svg",
         focus: "landscape",
         landscapeProject: expect.objectContaining({
           initialDraft: expect.objectContaining({ activeShotId: "shot-1" }),

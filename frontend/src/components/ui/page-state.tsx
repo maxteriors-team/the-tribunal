@@ -1,10 +1,10 @@
-import { AlertCircle, Inbox, Loader2 } from "lucide-react"
-import * as React from "react"
+import { AlertCircle, Inbox, Loader2 } from "lucide-react";
+import * as React from "react";
 
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-type PageStateWrapperProps = React.HTMLAttributes<HTMLDivElement>
+type PageStateWrapperProps = React.HTMLAttributes<HTMLDivElement>;
 
 function PageStateWrapper({ className, ...props }: PageStateWrapperProps) {
   return (
@@ -16,29 +16,27 @@ function PageStateWrapper({ className, ...props }: PageStateWrapperProps) {
       )}
       {...props}
     />
-  )
+  );
 }
 
 export interface PageLoadingStateProps extends PageStateWrapperProps {
-  message?: string
+  message?: string;
 }
 
 export function PageLoadingState({ message, ...props }: PageLoadingStateProps) {
   return (
     <PageStateWrapper {...props}>
       <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      {message ? (
-        <p className="text-sm text-muted-foreground">{message}</p>
-      ) : null}
+      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
     </PageStateWrapper>
-  )
+  );
 }
 
 export interface PageErrorStateProps extends PageStateWrapperProps {
-  title?: string
-  message?: string
-  onRetry?: () => void
-  retryLabel?: string
+  title?: string;
+  message?: string;
+  onRetry?: () => void;
+  retryLabel?: string;
 }
 
 export function PageErrorState({
@@ -51,24 +49,22 @@ export function PageErrorState({
   return (
     <PageStateWrapper {...props}>
       <AlertCircle className="size-8 text-destructive" />
-      <div className="space-y-1">
-        {title ? <h3 className="text-base font-medium">{title}</h3> : null}
-        <p className="text-sm text-muted-foreground">{message}</p>
-      </div>
+      {title ? <h2 className="text-base font-medium">{title}</h2> : null}
+      <p className="text-sm text-muted-foreground">{message}</p>
       {onRetry ? (
         <Button variant="outline" size="sm" onClick={onRetry}>
           {retryLabel}
         </Button>
       ) : null}
     </PageStateWrapper>
-  )
+  );
 }
 
 export interface PageEmptyStateProps extends PageStateWrapperProps {
-  title: string
-  description?: string
-  icon?: React.ReactNode
-  action?: React.ReactNode
+  title: string;
+  description?: string;
+  icon?: React.ReactNode;
+  action?: React.ReactNode;
 }
 
 export function PageEmptyState({
@@ -80,16 +76,12 @@ export function PageEmptyState({
 }: PageEmptyStateProps) {
   return (
     <PageStateWrapper {...props}>
-      <div className="text-muted-foreground">
-        {icon ?? <Inbox className="size-8" />}
-      </div>
+      <div className="text-muted-foreground">{icon ?? <Inbox className="size-8" />}</div>
       <div className="space-y-1">
         <h3 className="text-base font-medium">{title}</h3>
-        {description ? (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        ) : null}
+        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
       </div>
       {action}
     </PageStateWrapper>
-  )
+  );
 }

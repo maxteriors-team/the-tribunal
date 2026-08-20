@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { JobNeighborsPanel } from "@/components/jobs/job-neighbors-panel";
 import type { NeighborBatch, NeighborEntry } from "@/lib/api/jobs";
 import { can as roleCan, roleTier, type Capability } from "@/lib/permissions";
+import { selectOption } from "@/test/select-option";
 
 /**
  * The "Neighbors" tab on a completed job.
@@ -16,14 +17,15 @@ import { can as roleCan, roleTier, type Capability } from "@/lib/permissions";
  * error. The export is built in the browser because the rows are customer PII.
  */
 
-const { neighborsMock, generateMock, updateEntryMock, exportMock, capabilitiesMock } =
-  vi.hoisted(() => ({
+const { neighborsMock, generateMock, updateEntryMock, exportMock, capabilitiesMock } = vi.hoisted(
+  () => ({
     neighborsMock: vi.fn(),
     generateMock: vi.fn(),
     updateEntryMock: vi.fn(),
     exportMock: vi.fn(),
     capabilitiesMock: vi.fn(),
-  }));
+  }),
+);
 
 vi.mock("@/lib/api/jobs", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/jobs")>("@/lib/api/jobs");
@@ -156,16 +158,12 @@ describe("JobNeighborsPanel", () => {
     neighborsMock.mockResolvedValue(batch([entry()]));
     renderPanel();
 
-    expect(
-      await screen.findByText("No messaging consent — print only"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("No messaging consent — print only")).toBeInTheDocument();
     expect(screen.queryByText(/Can be messaged/)).not.toBeInTheDocument();
   });
 
   it("says opted-out neighbours are print-only rather than hiding the reason", async () => {
-    neighborsMock.mockResolvedValue(
-      batch([entry({ messaging_blocked_reason: "global_opt_out" })]),
-    );
+    neighborsMock.mockResolvedValue(batch([entry({ messaging_blocked_reason: "global_opt_out" })]));
     renderPanel();
 
     expect(await screen.findByText("Opted out — print only")).toBeInTheDocument();
@@ -173,9 +171,7 @@ describe("JobNeighborsPanel", () => {
 
   it("only marks a neighbour messageable when the server says so", async () => {
     neighborsMock.mockResolvedValue(
-      batch([
-        entry({ messageable: true, channel: "sms", messaging_blocked_reason: null }),
-      ]),
+      batch([entry({ messageable: true, channel: "sms", messaging_blocked_reason: null })]),
     );
     renderPanel();
 
@@ -183,13 +179,11 @@ describe("JobNeighborsPanel", () => {
   });
 
   it("advances an entry's status", async () => {
-    const user = userEvent.setup();
     neighborsMock.mockResolvedValue(batch([entry()]));
     updateEntryMock.mockResolvedValue(entry({ status: "contacted" }));
     renderPanel();
 
-    await user.click(await screen.findByLabelText("Status for Dana Ruiz"));
-    await user.click(await screen.findByRole("option", { name: "Contacted" }));
+    await selectOption(await screen.findByLabelText("Status for Dana Ruiz"), "Contacted");
 
     await waitFor(() =>
       expect(updateEntryMock).toHaveBeenCalledWith("ws-1", "job-1", "entry-1", {
@@ -247,10 +241,11 @@ describe("JobNeighborsPanel", () => {
       ],
     });
 
-    const createObjectURL = vi.fn((_blob: Blob) => "blob:neighbors");
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => "blob:neighbors");
     const revokeObjectURL = vi.fn();
     vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
 
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     renderPanel();
     await user.click(await screen.findByRole("button", { name: /Export list/i }));
 
@@ -258,6 +253,7 @@ describe("JobNeighborsPanel", () => {
     const blob = createObjectURL.mock.calls[0][0];
     expect(blob.type).toContain("text/csv");
     await expect(blob.text()).resolves.toContain("102 Oak St");
+    anchorClick.mockRestore();
     vi.unstubAllGlobals();
   });
 });

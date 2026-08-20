@@ -16,7 +16,7 @@
  * Saving PUTs the whole `upsell` block back (the endpoint replaces blocks
  * wholesale), so a field this editor doesn't expose round-trips untouched.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -26,10 +26,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { UpsellConfig, UpsellRankConfig } from "@/types/sales-wizard";
 
 // One editable rank. Numbers are held as strings so a half-typed threshold never
@@ -95,14 +95,13 @@ export function UpsellRanksSettingsCard() {
     );
   }
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (upsell: UpsellConfig) => salesWizardApi.updatePricing(workspaceId!, { upsell }),
+    successMessage: "Field selling settings are up to date.",
+    errorMessage: "We couldn't save field selling settings. Check your connection and try again.",
     onSuccess: (updated) => {
       queryClient.setQueryData(queryKeys.salesWizard.pricing(workspaceId ?? ""), updated);
-      toast.success("Field selling settings saved");
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to save field selling settings")),
   });
 
   const disabled = mutation.isPending || !serverUpsell || !rows;

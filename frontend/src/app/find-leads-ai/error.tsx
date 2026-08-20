@@ -3,7 +3,8 @@
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
-import { PageErrorState } from "@/components/ui/page-state";
+import { ProviderPageErrorState } from "@/components/shared/provider-error-state";
+import { isProviderConfigurationError } from "@/lib/utils/errors";
 
 export default function FindLeadsAiError({
   error,
@@ -13,12 +14,17 @@ export default function FindLeadsAiError({
   unstable_retry: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    if (!isProviderConfigurationError(error)) {
+      Sentry.captureException(error);
+    }
   }, [error]);
 
   return (
-    <PageErrorState
-      message="We couldn't load find leads AI. Please try again."
+    <ProviderPageErrorState
+      error={error}
+      provider="openai"
+      transientTitle="AI lead discovery is temporarily unavailable"
+      transientMessage="OpenAI or the lead-search provider didn't respond. Retry your request."
       onRetry={unstable_retry}
     />
   );
