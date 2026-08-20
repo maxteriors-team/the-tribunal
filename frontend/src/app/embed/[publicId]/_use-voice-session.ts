@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { embedFetch } from "@/lib/embed/request";
 import {
   closeAudioAnalysis,
   closeWebRTCResources,
@@ -225,11 +226,10 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
       : 0;
 
     try {
-      await fetch(`/api/v1/p/embed/${publicId}/transcript`, {
+      await embedFetch(`/api/v1/p/embed/${publicId}/transcript`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Origin: window.location.origin,
         },
         body: JSON.stringify({
           session_id: sessionIdRef.current,
@@ -281,11 +281,10 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
     setAgentState("idle");
 
     try {
-      const tokenRes = await fetch(`/api/v1/p/embed/${publicId}/token`, {
+      const tokenRes = await embedFetch(`/api/v1/p/embed/${publicId}/token`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Origin: window.location.origin,
         },
         signal: abortController.signal,
       });
@@ -389,13 +388,12 @@ export function useVoiceSession(options: UseVoiceSessionOptions): UseVoiceSessio
         args: Record<string, unknown>
       ) => {
         try {
-          const toolResponse = await fetch(
+          const toolResponse = await embedFetch(
             `/api/v1/p/embed/${publicId}/tool-call`,
             {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Origin: window.location.origin,
               },
               body: JSON.stringify({ tool_name: toolName, arguments: args }),
             }

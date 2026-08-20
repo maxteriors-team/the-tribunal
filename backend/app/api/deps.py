@@ -4,7 +4,7 @@ import hashlib
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 import structlog
 from fastapi import Depends, HTTPException, Request, status
@@ -348,6 +348,40 @@ def require_capability(
             )
         return membership
 
+    # Route-policy tests inspect this marker instead of duplicating FastAPI's
+    # dependency-resolution internals. Keeping the capability on the dependency
+    # also makes accidental membership-only routes mechanically detectable.
+    cast(Any, _require).required_capabilities = frozenset(required)
+    return _require
+
+
+def require_route_capabilities(
+    read: Capability,
+    write: Capability,
+) -> Callable[[Request, WorkspaceMembership], Awaitable[WorkspaceMembership]]:
+    """Build one fail-closed read/write gate for every route on a feature router.
+
+    GET/HEAD/OPTIONS use ``read``; every other method uses ``write``. Attach this
+    dependency to an :class:`~fastapi.APIRouter` when all of its endpoints share
+    one policy so newly added routes cannot silently fall back to membership-only
+    access.
+    """
+
+    async def _require(
+        request: Request,
+        membership: Annotated[WorkspaceMembership, Depends(get_membership)],
+    ) -> WorkspaceMembership:
+        required = read if request.method in {"GET", "HEAD", "OPTIONS"} else write
+        if not role_can(membership.role, required):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action",
+            )
+        return membership
+
+    marker = cast(Any, _require)
+    marker.read_capability = read
+    marker.write_capability = write
     return _require
 
 
@@ -408,6 +442,7 @@ def require_active_workspace_capability(
             )
         return membership
 
+    cast(Any, _require).required_capabilities = frozenset(required)
     return _require
 
 
@@ -468,6 +503,9 @@ CanWriteOutreach = Annotated[
 CanWritePipelineOwn = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.PIPELINE_WRITE_OWN))
 ]
+CanWritePipeline = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.PIPELINE_WRITE))
+]
 CanSendComms = Annotated[WorkspaceMembership, Depends(require_capability(Capability.COMMS_SEND))]
 CanManageComms = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.COMMS_MANAGE))
@@ -499,10 +537,18 @@ CanManageLocations = Annotated[
 # membership's ``role`` through so it can.
 CanUpsell = Annotated[WorkspaceMembership, Depends(require_capability(Capability.UPSELL_SELL))]
 
-# Capability gate for routes that act on the caller's active workspace without a
-# ``workspace_id`` path parameter (self-serve onboarding). Adds no parameters to
-# the route signature, so the published OpenAPI contract is unchanged.
+# Capability gates for routes that act on the caller's active workspace without
+# a ``workspace_id`` path parameter. They add no parameters to the published
+# OpenAPI contract.
 CanManageActiveWorkspace = Annotated[
     WorkspaceMembership | None,
     Depends(require_active_workspace_capability(Capability.WORKSPACE_MANAGE)),
+]
+CanReadActiveBilling = Annotated[
+    WorkspaceMembership | None,
+    Depends(require_active_workspace_capability(Capability.BILLING_READ)),
+]
+CanWriteActiveBilling = Annotated[
+    WorkspaceMembership | None,
+    Depends(require_active_workspace_capability(Capability.BILLING_WRITE)),
 ]

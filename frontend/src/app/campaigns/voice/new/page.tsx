@@ -14,10 +14,7 @@ import { PageLoadingState } from "@/components/ui/page-state";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { agentsApi } from "@/lib/api/agents";
 import { phoneNumbersApi } from "@/lib/api/phone-numbers";
-import {
-  voiceCampaignsApi,
-  type CreateVoiceCampaignRequest,
-} from "@/lib/api/voice-campaigns";
+import { voiceCampaignsApi, type CreateVoiceCampaignRequest } from "@/lib/api/voice-campaigns";
 import { messages } from "@/lib/messages";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -93,7 +90,7 @@ export default function NewVoiceCampaignPage() {
 
   const handleSubmit = async (
     data: CreateVoiceCampaignRequest,
-    contactIds: Set<number>
+    contactIds: Set<number>,
   ): Promise<VoiceCampaign> => {
     setIsSubmitting(true);
     try {
@@ -113,27 +110,21 @@ export default function NewVoiceCampaignPage() {
   const phoneNumbers = Array.isArray(phoneNumbersData) ? phoneNumbersData : [];
 
   // Separate voice and text agents
-  const voiceAgents = agents.filter(
-    (a) => a.channel_mode === "voice" || a.channel_mode === "both"
-  );
-  const textAgents = agents.filter(
-    (a) => a.channel_mode === "text" || a.channel_mode === "both"
-  );
+  const voiceAgents = agents.filter((a) => a.channel_mode === "voice" || a.channel_mode === "both");
+  const textAgents = agents.filter((a) => a.channel_mode === "text" || a.channel_mode === "both");
 
   return (
     <AppSidebar>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
         {/* Header */}
-        <div className="flex items-center gap-4 px-6 py-4 border-b bg-background">
+        <div className="flex items-center gap-3 border-b bg-background px-4 py-4 sm:gap-4 sm:px-6">
           <Button variant="ghost" size="icon" asChild>
             <Link href="/campaigns" aria-label="Back to campaigns">
               <ArrowLeft className="size-5" />
             </Link>
           </Button>
-          <div>
-            <h1 className="text-xl font-semibold">
-              Create Voice Campaign with SMS Fallback
-            </h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold">Create Voice Campaign with SMS Fallback</h1>
             <p className="text-sm text-muted-foreground">
               Set up outbound AI calls with automatic SMS when calls fail
             </p>

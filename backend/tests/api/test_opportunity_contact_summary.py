@@ -15,6 +15,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from fastapi import HTTPException
 
 from app.core.encryption import hash_phone
 from app.db.session import AsyncSessionLocal, engine
@@ -22,6 +23,7 @@ from app.models.contact import Contact
 from app.models.opportunity import Opportunity
 from app.models.pipeline import Pipeline, PipelineStage
 from app.models.workspace import Workspace
+from app.schemas.opportunity import OpportunityCreate, OpportunityUpdate
 from app.services.opportunities import OpportunityService
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -170,3 +172,59 @@ async def test_summary_omits_contact_fields_the_board_has_no_use_for() -> None:
             "email",
             "status",
         }
+
+
+async def test_create_and_relink_contacts_are_workspace_scoped() -> None:
+    """A guessed contact id must not bridge one workspace into another."""
+    async with AsyncSessionLocal() as db:
+        workspace = await _workspace(db)
+        other_workspace = await _workspace(db)
+        pipeline, stage = await _pipeline(db, workspace.id)
+        original = await _contact(db, workspace.id, phone="+15125550201")
+        replacement = await _contact(db, workspace.id, phone="+15125550202")
+        foreign = await _contact(db, other_workspace.id, phone="+15125550203")
+        service = OpportunityService(db)
+
+        created = await service.create_opportunity(
+            workspace.id,
+            OpportunityCreate(
+                name="Scoped customer deal",
+                pipeline_id=pipeline.id,
+                stage_id=stage.id,
+                primary_contact_id=original.id,
+            ),
+        )
+        assert created.primary_contact_id == original.id
+        assert created.primary_contact is not None
+        assert created.primary_contact.id == original.id
+
+        relinked = await service.update_opportunity(
+            workspace.id,
+            created.id,
+            OpportunityUpdate(primary_contact_id=replacement.id),
+            user_id=1,
+        )
+        assert relinked.primary_contact_id == replacement.id
+        assert relinked.primary_contact is not None
+        assert relinked.primary_contact.id == replacement.id
+
+        with pytest.raises(HTTPException) as update_error:
+            await service.update_opportunity(
+                workspace.id,
+                created.id,
+                OpportunityUpdate(primary_contact_id=foreign.id),
+                user_id=1,
+            )
+        assert update_error.value.status_code == 404
+
+        with pytest.raises(HTTPException) as create_error:
+            await service.create_opportunity(
+                workspace.id,
+                OpportunityCreate(
+                    name="Foreign customer deal",
+                    pipeline_id=pipeline.id,
+                    stage_id=stage.id,
+                    primary_contact_id=foreign.id,
+                ),
+            )
+        assert create_error.value.status_code == 404

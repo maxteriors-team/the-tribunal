@@ -9,11 +9,18 @@ a customer receives.
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import DB, CanReadCRM, CanWriteOutreach, CurrentUser
+from app.api.deps import (
+    DB,
+    CanReadCRM,
+    CanWriteOutreach,
+    CurrentUser,
+    require_route_capabilities,
+)
+from app.core.permissions import Capability
 from app.db.scope import apply_workspace_scope
 from app.models.email_template import EmailTemplate
 from app.schemas.email_template import (
@@ -27,7 +34,11 @@ from app.schemas.email_template import (
 )
 from app.services.email_templates import render_template
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.OUTREACH_WRITE))
+    ]
+)
 
 # Stand-in opt-out link used only for previews. A marketing template refuses to
 # render without one, and a preview must show the operator the footer their

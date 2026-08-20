@@ -4,13 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,10 +30,7 @@ export function ProposalSettingsTab() {
     mutationFn: (data: UpdateProposalTemplateRequest) =>
       proposalTemplateApi.update(workspaceId!, data),
     onSuccess: (updated) => {
-      queryClient.setQueryData(
-        queryKeys.proposalTemplate.settings(workspaceId ?? ""),
-        updated,
-      );
+      queryClient.setQueryData(queryKeys.proposalTemplate.settings(workspaceId ?? ""), updated);
       toast.success("Proposal settings saved");
     },
     onError: (err: unknown) =>
@@ -63,9 +54,8 @@ export function ProposalSettingsTab() {
         <CardHeader>
           <CardTitle>Proposal Branding</CardTitle>
           <CardDescription>
-            These control how your client-facing proposals look. Edit them
-            anytime — every proposal you send re-renders with the latest
-            branding, no developer needed.
+            These control how your client-facing proposals look. Edit them anytime — every proposal
+            you send re-renders with the latest branding, no developer needed.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -117,12 +107,14 @@ export function ProposalSettingsTab() {
                   disabled={disabled}
                   aria-label="Brand color"
                 />
+                <Label className="sr-only" htmlFor="brand-color-hex">
+                  Brand color hex value
+                </Label>
                 <Input
+                  id="brand-color-hex"
                   className="w-28"
                   defaultValue={settings.brand_color}
-                  onBlur={(e) =>
-                    e.target.value && update({ brand_color: e.target.value })
-                  }
+                  onBlur={(e) => e.target.value && update({ brand_color: e.target.value })}
                   disabled={disabled}
                 />
               </div>
@@ -139,12 +131,14 @@ export function ProposalSettingsTab() {
                   disabled={disabled}
                   aria-label="Accent color"
                 />
+                <Label className="sr-only" htmlFor="accent-color-hex">
+                  Accent color hex value
+                </Label>
                 <Input
+                  id="accent-color-hex"
                   className="w-28"
                   defaultValue={settings.accent_color}
-                  onBlur={(e) =>
-                    e.target.value && update({ accent_color: e.target.value })
-                  }
+                  onBlur={(e) => e.target.value && update({ accent_color: e.target.value })}
                   disabled={disabled}
                 />
               </div>
@@ -167,9 +161,7 @@ export function ProposalSettingsTab() {
               id="business-address"
               placeholder="123 Main St, Springfield, IL"
               defaultValue={settings.business_address ?? ""}
-              onBlur={(e) =>
-                update({ business_address: e.target.value || null })
-              }
+              onBlur={(e) => update({ business_address: e.target.value || null })}
               disabled={disabled}
             />
           </div>
@@ -180,9 +172,7 @@ export function ProposalSettingsTab() {
                 id="business-phone"
                 placeholder="(555) 010-0100"
                 defaultValue={settings.business_phone ?? ""}
-                onBlur={(e) =>
-                  update({ business_phone: e.target.value || null })
-                }
+                onBlur={(e) => update({ business_phone: e.target.value || null })}
                 disabled={disabled}
               />
             </div>
@@ -192,9 +182,7 @@ export function ProposalSettingsTab() {
                 id="business-email"
                 placeholder="hello@maxteriors.com"
                 defaultValue={settings.business_email ?? ""}
-                onBlur={(e) =>
-                  update({ business_email: e.target.value || null })
-                }
+                onBlur={(e) => update({ business_email: e.target.value || null })}
                 disabled={disabled}
               />
             </div>
@@ -206,8 +194,8 @@ export function ProposalSettingsTab() {
         <CardHeader>
           <CardTitle>Proposal Content</CardTitle>
           <CardDescription>
-            Default copy applied to every proposal. A specific quote can still
-            override its own notes and terms.
+            Default copy applied to every proposal. A specific quote can still override its own
+            notes and terms.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

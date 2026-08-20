@@ -21,13 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { knowledgeDocumentsApi } from "@/lib/api/knowledge-documents";
 import { queryKeys } from "@/lib/query-keys";
@@ -105,6 +100,8 @@ interface KnowledgeBaseTabProps {
 
 export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canManageKnowledge = can("workspace:manage");
   const queryClient = useQueryClient();
   const [showAddDialog, setShowAddDialog] = useState(false);
 
@@ -134,8 +131,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
       });
       closeDialog();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to add document")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to add document")),
   });
 
   const deleteMutation = useMutation({
@@ -149,8 +145,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
         queryKey: queryKeys.agents.knowledgeDocs(workspaceId ?? "", agentId),
       });
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to delete document")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to delete document")),
   });
 
   const closeDialog = () => {
@@ -159,6 +154,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
   };
 
   const handleCreate = (data: DocFormValues) => {
+    if (!canManageKnowledge) return;
     createMutation.mutate({
       title: data.title,
       content: data.content,
@@ -184,14 +180,18 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
       {/* Token Budget */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <CardTitle>Knowledge Base</CardTitle>
               <CardDescription>
                 Documents that give your agent context and expertise
               </CardDescription>
             </div>
-            <Button onClick={() => setShowAddDialog(true)}>
+            <Button
+              className="w-full sm:w-auto"
+              onClick={() => setShowAddDialog(true)}
+              disabled={!canManageKnowledge}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add Document
             </Button>
@@ -199,7 +199,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <span className="text-muted-foreground">Token usage</span>
               <span className="font-medium">
                 {formatNumber(totalTokens)} / {formatNumber(tokenBudget)} tokens
@@ -228,7 +228,8 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
             <BookOpen className="mb-4 h-12 w-12 text-muted-foreground" />
             <h3 className="mb-2 text-lg font-semibold">No Documents</h3>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Add documents to give your agent knowledge about your business, products, and processes.
+              Add documents to give your agent knowledge about your business, products, and
+              processes.
             </p>
           </CardContent>
         </Card>
@@ -241,9 +242,9 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
                   <FileText className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-medium leading-tight">{doc.title}</h3>
-                    <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="flex flex-col items-start gap-2 sm:flex-row sm:justify-between">
+                    <h3 className="break-words font-medium leading-tight">{doc.title}</h3>
+                    <div className="flex max-w-full flex-wrap items-center gap-1.5">
                       <Badge
                         className={`text-xs ${DOC_TYPE_STYLES[doc.doc_type] || DOC_TYPE_STYLES.general}`}
                       >
@@ -259,12 +260,9 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
                       )}
                     </div>
                   </div>
-                  <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {doc.content}
-                  </p>
+                  <p className="line-clamp-2 text-sm text-muted-foreground">{doc.content}</p>
                   <p className="text-xs text-muted-foreground">
-                    Added{" "}
-                    {formatRelative(doc.created_at)}
+                    Added {formatRelative(doc.created_at)}
                   </p>
                 </div>
                 <AlertDialog>
@@ -273,6 +271,8 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      disabled={!canManageKnowledge}
+                      aria-label={`Delete ${doc.title}`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -281,14 +281,15 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Delete document?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will permanently remove &ldquo;{doc.title}&rdquo; from the
-                        knowledge base.
+                        This will permanently remove &ldquo;{doc.title}&rdquo; from the knowledge
+                        base.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={() => deleteMutation.mutate(doc.id)}
+                        disabled={!canManageKnowledge || deleteMutation.isPending}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
                         Delete
@@ -304,7 +305,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
 
       {/* Add Document Dialog */}
       <Dialog
-        open={showAddDialog}
+        open={canManageKnowledge && showAddDialog}
         onOpenChange={(open) => {
           if (!open) closeDialog();
           else setShowAddDialog(true);
@@ -342,7 +343,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
                       <FormLabel>Document Type</FormLabel>
                       <Select value={field.value} onValueChange={field.onChange}>
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger aria-label="Document type">
                             <SelectValue />
                           </SelectTrigger>
                         </FormControl>
@@ -388,11 +389,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
                   <FormItem>
                     <FormLabel>Content</FormLabel>
                     <FormControl>
-                      <Textarea
-                        placeholder="Enter the document content..."
-                        rows={10}
-                        {...field}
-                      />
+                      <Textarea placeholder="Enter the document content..." rows={10} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -402,7 +399,7 @@ export function KnowledgeBaseTab({ agentId }: KnowledgeBaseTabProps) {
                 <Button type="button" variant="outline" onClick={closeDialog}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createMutation.isPending}>
+                <Button type="submit" disabled={!canManageKnowledge || createMutation.isPending}>
                   {createMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />

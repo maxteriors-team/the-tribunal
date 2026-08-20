@@ -153,9 +153,7 @@ export function LeadMagnetSelector({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <FileText className="size-4" />
-          <span>
-            Add bonus lead magnets to your offer ({activeLeadMagnets.length} available)
-          </span>
+          <span>Add bonus lead magnets to your offer ({activeLeadMagnets.length} available)</span>
         </div>
 
         {onCreateLeadMagnet && (
@@ -177,15 +175,13 @@ export function LeadMagnetSelector({
                     id="magnet-name"
                     placeholder="e.g., Free ROI Calculator"
                     value={newMagnet.name}
-                    onChange={(e) =>
-                      setNewMagnet({ ...newMagnet, name: e.target.value })
-                    }
+                    onChange={(e) => setNewMagnet({ ...newMagnet, name: e.target.value })}
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Type</Label>
+                    <Label htmlFor="offer-lead-magnet-type">Type</Label>
                     <Select
                       value={newMagnet.magnet_type}
                       onValueChange={(v) =>
@@ -195,7 +191,7 @@ export function LeadMagnetSelector({
                         })
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="offer-lead-magnet-type">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -212,7 +208,7 @@ export function LeadMagnetSelector({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Delivery</Label>
+                    <Label htmlFor="offer-lead-magnet-delivery">Delivery</Label>
                     <Select
                       value={newMagnet.delivery_method}
                       onValueChange={(v) =>
@@ -222,7 +218,7 @@ export function LeadMagnetSelector({
                         })
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger id="offer-lead-magnet-delivery">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -241,9 +237,7 @@ export function LeadMagnetSelector({
                     id="content-url"
                     placeholder="https://example.com/download/guide.pdf"
                     value={newMagnet.content_url}
-                    onChange={(e) =>
-                      setNewMagnet({ ...newMagnet, content_url: e.target.value })
-                    }
+                    onChange={(e) => setNewMagnet({ ...newMagnet, content_url: e.target.value })}
                   />
                 </div>
 
@@ -273,9 +267,7 @@ export function LeadMagnetSelector({
                     id="magnet-description"
                     placeholder="Brief description of what they'll get..."
                     value={newMagnet.description}
-                    onChange={(e) =>
-                      setNewMagnet({ ...newMagnet, description: e.target.value })
-                    }
+                    onChange={(e) => setNewMagnet({ ...newMagnet, description: e.target.value })}
                     rows={2}
                   />
                 </div>
@@ -359,9 +351,7 @@ export function LeadMagnetSelector({
                           {magnet.delivery_method.replace("_", " ")}
                         </span>
                       </div>
-                      {magnet.download_count > 0 && (
-                        <span>{magnet.download_count} downloads</span>
-                      )}
+                      {magnet.download_count > 0 && <span>{magnet.download_count} downloads</span>}
                     </div>
                   </div>
                 </div>
@@ -374,11 +364,7 @@ export function LeadMagnetSelector({
               <FileText className="size-12 mb-2 opacity-50" />
               <p>No lead magnets available</p>
               {onCreateLeadMagnet && (
-                <Button
-                  variant="link"
-                  onClick={() => setShowCreateDialog(true)}
-                  className="mt-1"
-                >
+                <Button variant="link" onClick={() => setShowCreateDialog(true)} className="mt-1">
                   Create your first lead magnet
                 </Button>
               )}

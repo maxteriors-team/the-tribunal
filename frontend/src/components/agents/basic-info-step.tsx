@@ -2,7 +2,6 @@
 
 import type { UseFormReturn } from "react-hook-form";
 
-
 import { Card, CardContent } from "@/components/ui/card";
 import {
   FormControl,
@@ -42,9 +41,7 @@ export function BasicInfoStep({ form, pricingTier, availableLanguages }: BasicIn
       <CardContent className="space-y-4 p-6">
         <div className="mb-2">
           <h2 className="text-lg font-medium">Basic Information</h2>
-          <p className="text-sm text-muted-foreground">
-            Give your agent a name and identity
-          </p>
+          <p className="text-sm text-muted-foreground">Give your agent a name and identity</p>
         </div>
 
         <FormField
@@ -90,7 +87,7 @@ export function BasicInfoStep({ form, pricingTier, availableLanguages }: BasicIn
                 <FormLabel>Language ({availableLanguages.length} available)</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger aria-label="Agent language">
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
@@ -115,7 +112,7 @@ export function BasicInfoStep({ form, pricingTier, availableLanguages }: BasicIn
                 <FormLabel>Channel Mode</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger aria-label="Agent channel mode">
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
@@ -153,7 +150,7 @@ export function BasicInfoStep({ form, pricingTier, availableLanguages }: BasicIn
                   <FormLabel>Voice</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger aria-label="Agent voice">
                         <SelectValue placeholder="Select voice" />
                       </SelectTrigger>
                     </FormControl>

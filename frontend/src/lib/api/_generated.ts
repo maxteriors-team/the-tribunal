@@ -844,6 +844,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/payments/checkout-sessions/{session_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Public Checkout Session
+         * @description Return payment state only after local ownership and Stripe both agree.
+         */
+        post: operations["verify_public_checkout_session_api_v1_p_payments_checkout_sessions__session_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/quotes/{token}": {
         parameters: {
             query?: never;
@@ -4018,6 +4038,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append Contact Note
+         * @description Append an internal client note without replacing prior note history.
+         */
+        post: operations["append_contact_note_api_v1_workspaces__workspace_id__contacts__contact_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/qualification": {
         parameters: {
             query?: never;
@@ -5788,6 +5828,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/pricing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job Pricing
+         * @description Return priced scope only to roles with billing visibility.
+         */
+        get: operations["get_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_get"];
+        /**
+         * Replace Job Pricing
+         * @description Atomically replace job pricing for billing-authorized operators.
+         */
+        put: operations["replace_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/profitability": {
         parameters: {
             query?: never;
@@ -5914,6 +5978,45 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Job Visits
+         * @description List visits after applying the same job visibility boundary as job detail.
+         */
+        get: operations["list_job_visits_api_v1_workspaces__workspace_id__jobs__job_id__visits_get"];
+        put?: never;
+        /** Create Job Visit */
+        post: operations["create_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits/{visit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Job Visit */
+        delete: operations["delete_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits__visit_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Job Visit */
+        patch: operations["update_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits__visit_id__patch"];
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_id}/lead-magnets": {
@@ -15396,6 +15499,14 @@ export interface components {
             total: number;
         };
         /**
+         * ContactNoteCreate
+         * @description Append-only internal note input for a workspace contact.
+         */
+        ContactNoteCreate: {
+            /** Body */
+            body: string;
+        };
+        /**
          * ContactResponse
          * @description Schema for contact response.
          */
@@ -19285,6 +19396,75 @@ export interface components {
             /** Total Hours */
             total_hours: number;
         };
+        /** JobPricedLineItemInput */
+        JobPricedLineItemInput: {
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity: number | string;
+            /**
+             * Taxable
+             * @default true
+             */
+            taxable: boolean;
+            /** Unit Price */
+            unit_price: number | string;
+        };
+        /** JobPricedLineItemResponse */
+        JobPricedLineItemResponse: {
+            /** Description */
+            description: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Position */
+            position: number;
+            /** Quantity */
+            quantity: string;
+            /** Taxable */
+            taxable: boolean;
+            /** Total */
+            total: string;
+            /** Unit Price */
+            unit_price: string;
+        };
+        /**
+         * JobPricingReplace
+         * @description Replace priced scope atomically; omitted rows are deleted.
+         */
+        JobPricingReplace: {
+            /** Items */
+            items?: components["schemas"]["JobPricedLineItemInput"][];
+            /**
+             * Tax Rate
+             * @default 0.00
+             */
+            tax_rate: number | string;
+        };
+        /** JobPricingResponse */
+        JobPricingResponse: {
+            /** Items */
+            items: components["schemas"]["JobPricedLineItemResponse"][];
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Subtotal */
+            subtotal: string;
+            /** Tax */
+            tax: string;
+            /** Tax Rate */
+            tax_rate: string;
+            /** Total */
+            total: string;
+        };
         /**
          * JobProfitability
          * @description Computed P&L for a single job.
@@ -19482,6 +19662,83 @@ export interface components {
             status?: components["schemas"]["JobStatus"] | null;
             /** Title */
             title?: string | null;
+        };
+        /**
+         * JobVisitCreate
+         * @description Add a scheduled visit to a job.
+         */
+        JobVisitCreate: {
+            /**
+             * Anytime
+             * @default false
+             */
+            anytime: boolean;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Instructions */
+            instructions?: string | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+        };
+        /** JobVisitResponse */
+        JobVisitResponse: {
+            /** Anytime */
+            anytime: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Instructions */
+            instructions: string | null;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * JobVisitUpdate
+         * @description Update a visit window, instructions, or lifecycle status.
+         */
+        JobVisitUpdate: {
+            /** Anytime */
+            anytime?: boolean | null;
+            /** Ends At */
+            ends_at?: string | null;
+            /** Instructions */
+            instructions?: string | null;
+            /** Starts At */
+            starts_at?: string | null;
+            status?: components["schemas"]["JobStatus"] | null;
         };
         /**
          * KnowledgeBaseStats
@@ -22620,6 +22877,8 @@ export interface components {
             lost_reason?: string | null;
             /** Name */
             name?: string | null;
+            /** Primary Contact Id */
+            primary_contact_id?: number | null;
             /** Referral Partner Id */
             referral_partner_id?: string | null;
             /** Source */
@@ -25723,6 +25982,17 @@ export interface components {
             urgency_type?: string | null;
             /** Value Stack Items */
             value_stack_items?: components["schemas"]["ValueStackItem"][] | null;
+        };
+        /**
+         * PublicPaymentVerification
+         * @description Non-sensitive Stripe Checkout state for the generic return page.
+         */
+        PublicPaymentVerification: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "paid" | "pending" | "expired" | "failed";
         };
         /**
          * PublicPermanentComparison
@@ -32883,6 +33153,52 @@ export interface operations {
             };
         };
     };
+    verify_public_checkout_session_api_v1_p_payments_checkout_sessions__session_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stripe Checkout Session identifier returned by Checkout */
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPaymentVerification"];
+                };
+            };
+            /** @description Unknown or invalid Checkout Session */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Stripe verification is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     get_public_proposal_api_v1_p_quotes__token__get: {
         parameters: {
             query?: never;
@@ -39562,6 +39878,42 @@ export interface operations {
             };
         };
     };
+    append_contact_note_api_v1_workspaces__workspace_id__contacts__contact_id__notes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactNoteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_contact_qualification_api_v1_workspaces__workspace_id__contacts__contact_id__qualification_get: {
         parameters: {
             query?: never;
@@ -43165,6 +43517,74 @@ export interface operations {
             };
         };
     };
+    get_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobPricingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobPricingReplace"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobPricingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     job_profitability_api_v1_workspaces__workspace_id__jobs__job_id__profitability_get: {
         parameters: {
             query?: never;
@@ -43388,6 +43808,142 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_job_visits_api_v1_workspaces__workspace_id__jobs__job_id__visits_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobVisitResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobVisitCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobVisitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits__visit_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                visit_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_job_visit_api_v1_workspaces__workspace_id__jobs__job_id__visits__visit_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                visit_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobVisitUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobVisitResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

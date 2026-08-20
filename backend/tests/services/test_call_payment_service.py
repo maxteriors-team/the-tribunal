@@ -83,6 +83,38 @@ async def test_expire_checkout_session_only_expires_open_sessions(
 
 
 @pytest.mark.asyncio
+async def test_retrieve_checkout_session_details_converts_stripe_metadata() -> None:
+    client = MagicMock()
+    client.checkout.sessions.retrieve_async = AsyncMock(
+        return_value=SimpleNamespace(
+            payment_status="paid",
+            status="complete",
+            payment_intent="pi_test_xyz",
+            mode="payment",
+            metadata=SimpleNamespace(
+                to_dict=lambda: {"kind": "in_call_payment", "workspace_id": "workspace-123"}
+            ),
+            amount_total=7500,
+            currency="USD",
+        )
+    )
+
+    with patch.object(call_payment_service, "_stripe_client", return_value=client):
+        result = await call_payment_service.retrieve_checkout_session_details("cs_test_abc")
+
+    client.checkout.sessions.retrieve_async.assert_awaited_once_with("cs_test_abc")
+    assert result == call_payment_service.CheckoutSessionDetails(
+        payment_status="paid",
+        status="complete",
+        payment_intent_id="pi_test_xyz",
+        mode="payment",
+        metadata={"kind": "in_call_payment", "workspace_id": "workspace-123"},
+        amount_total=7500,
+        currency="usd",
+    )
+
+
+@pytest.mark.asyncio
 async def test_webhook_marks_payment_paid_and_notifies_once() -> None:
     payment = _make_payment()
     session = _Session(payment)

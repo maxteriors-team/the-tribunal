@@ -1,14 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import {
-  Globe,
-  Linkedin,
-  Loader2,
-  Search,
-  Sparkles,
-  Users,
-} from "lucide-react";
+import { Globe, Linkedin, Loader2, Search, Sparkles, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -181,6 +174,7 @@ export function FindLeadsAIPage() {
         {/* Search Bar */}
         <div className="flex gap-2 max-w-2xl">
           <Input
+            aria-label="Describe the leads to find"
             placeholder="e.g., plumbers in Austin TX, restaurants in downtown Seattle"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -188,7 +182,7 @@ export function FindLeadsAIPage() {
             className="flex-1"
           />
           <Select value={maxResults.toString()} onValueChange={(v) => setMaxResults(parseInt(v))}>
-            <SelectTrigger className="w-24">
+            <SelectTrigger className="w-24" aria-label="Maximum search results">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -307,7 +301,7 @@ export function FindLeadsAIPage() {
                   value={minLeadScore.toString()}
                   onValueChange={(v) => setMinLeadScore(parseInt(v))}
                 >
-                  <SelectTrigger className="w-28 h-8">
+                  <SelectTrigger className="w-28 h-8" aria-label="Minimum lead quality">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -322,7 +316,7 @@ export function FindLeadsAIPage() {
               <div className="flex items-center gap-2">
                 <Label className="text-sm">Import as:</Label>
                 <Select value={defaultStatus} onValueChange={setDefaultStatus}>
-                  <SelectTrigger className="w-28 h-8">
+                  <SelectTrigger className="w-28 h-8" aria-label="Imported lead status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

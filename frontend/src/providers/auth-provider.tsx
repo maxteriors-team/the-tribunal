@@ -36,7 +36,7 @@ const PASSWORD_RECOVERY_PATHS = ["/forgot-password", "/reset-password"];
 // deliberately not in that list: signed-in operators testing a payment should
 // see the page too, not get bounced to "/".
 const CUSTOMER_PATHS = ["/payment-complete", "/payment-cancelled"];
-const PUBLIC_PATH_PREFIXES = ["/invite/", "/p/"];
+const PUBLIC_PATH_PREFIXES = ["/invite/", "/p/", "/embed/"];
 
 function isPublicPathname(pathname: string): boolean {
   return (

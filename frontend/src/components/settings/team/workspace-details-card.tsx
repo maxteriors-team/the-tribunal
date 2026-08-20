@@ -98,9 +98,7 @@ export function WorkspaceDetailsCard({
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all() });
       toast.success("Workspace deleted successfully");
       setDeleteDialogOpen(false);
-      const remaining = workspaces.filter(
-        (ws) => ws.workspace.id !== workspaceId,
-      );
+      const remaining = workspaces.filter((ws) => ws.workspace.id !== workspaceId);
       if (remaining.length > 0) {
         setCurrentWorkspace(remaining[0].workspace.id);
       } else {
@@ -135,9 +133,7 @@ export function WorkspaceDetailsCard({
       <Card>
         <CardHeader>
           <CardTitle>Workspace Settings</CardTitle>
-          <CardDescription>
-            Manage your workspace details and configuration
-          </CardDescription>
+          <CardDescription>Manage your workspace details and configuration</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -162,17 +158,16 @@ export function WorkspaceDetailsCard({
           <Separator />
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Default Workspace</Label>
+              <Label htmlFor="default-workspace">Default Workspace</Label>
               <p className="text-sm text-muted-foreground">
                 Set this as your default workspace when you log in
               </p>
             </div>
             <Switch
+              id="default-workspace"
               checked={currentWorkspace?.is_default ?? false}
               onCheckedChange={() => setDefaultMutation.mutate()}
-              disabled={
-                setDefaultMutation.isPending || currentWorkspace?.is_default
-              }
+              disabled={setDefaultMutation.isPending || currentWorkspace?.is_default}
             />
           </div>
           {!canEditWorkspace && (
@@ -205,10 +200,7 @@ export function WorkspaceDetailsCard({
             )}
           </div>
           {canDeleteWorkspace && (
-            <AlertDialog
-              open={deleteDialogOpen}
-              onOpenChange={setDeleteDialogOpen}
-            >
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
               <AlertDialogTrigger asChild>
                 <Button type="button" variant="destructive">
                   <Trash2 className="mr-2 size-4" />
@@ -220,9 +212,8 @@ export function WorkspaceDetailsCard({
                   <AlertDialogTitle>Delete Workspace</AlertDialogTitle>
                   <AlertDialogDescription>
                     Are you sure you want to delete &quot;
-                    {currentWorkspace?.workspace.name}&quot;? This action cannot
-                    be undone. All data including contacts, campaigns, and team
-                    members will be permanently removed.
+                    {currentWorkspace?.workspace.name}&quot;? This action cannot be undone. All data
+                    including contacts, campaigns, and team members will be permanently removed.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

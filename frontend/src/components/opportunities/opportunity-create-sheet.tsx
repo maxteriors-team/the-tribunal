@@ -9,9 +9,11 @@ import { toast } from "sonner";
 import * as z from "zod";
 
 import { Button } from "@/components/ui/button";
+import { FormContactPicker, type ContactPickerSelection } from "@/components/ui/contact-combobox";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -41,6 +43,7 @@ import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { Opportunity, PipelineStage } from "@/types";
 
 const createOpportunitySchema = z.object({
+  contact_id: z.string().min(1, { error: "Select a customer" }),
   name: z.string().trim().min(1, { error: "Name is required" }),
   stage_id: z.string().min(1, { error: "Please select a stage" }),
   assigned_user_id: z.number().nullable(),
@@ -68,6 +71,8 @@ interface OpportunityCreateSheetProps {
    * has to reattach by hand.
    */
   contactId?: number;
+  /** Contact identity shown when the shortcut starts from a contact sidebar. */
+  contact?: ContactPickerSelection | null;
   /** Deal name to pre-fill (e.g. the contact's name). */
   defaultName?: string;
   canAssignOwners: boolean;
@@ -81,6 +86,7 @@ export function OpportunityCreateSheet({
   stages,
   defaultStageId,
   contactId,
+  contact = null,
   defaultName,
   canAssignOwners,
   open,
@@ -93,6 +99,7 @@ export function OpportunityCreateSheet({
   const form = useForm<CreateOpportunityFormValues>({
     resolver: zodResolver(createOpportunitySchema),
     defaultValues: {
+      contact_id: contactId ? String(contactId) : "",
       name: initialName,
       stage_id: initialStageId,
       assigned_user_id: null,
@@ -106,6 +113,7 @@ export function OpportunityCreateSheet({
   useEffect(() => {
     if (open) {
       form.reset({
+        contact_id: contactId ? String(contactId) : "",
         name: initialName,
         stage_id: initialStageId,
         assigned_user_id: null,
@@ -114,7 +122,7 @@ export function OpportunityCreateSheet({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialStageId, initialName]);
+  }, [open, initialStageId, initialName, contactId]);
 
   const createMutation = useMutation({
     mutationFn: (values: CreateOpportunityFormValues): Promise<Opportunity> => {
@@ -123,7 +131,7 @@ export function OpportunityCreateSheet({
         name: values.name.trim(),
         pipeline_id: pipelineId,
         stage_id: values.stage_id,
-        primary_contact_id: contactId,
+        primary_contact_id: Number(values.contact_id),
         description: values.description.trim() || undefined,
         amount: amount === "" ? undefined : Number(amount),
         assigned_user_id: canAssignOwners ? values.assigned_user_id : undefined,
@@ -136,8 +144,7 @@ export function OpportunityCreateSheet({
       });
       onOpenChange(false);
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to create opportunity")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to create opportunity")),
   });
 
   const handleOpenChange = (next: boolean) => {
@@ -150,9 +157,7 @@ export function OpportunityCreateSheet({
       <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Add Opportunity</SheetTitle>
-          <SheetDescription>
-            Create a new deal and place it in a pipeline stage.
-          </SheetDescription>
+          <SheetDescription>Create a new deal and place it in a pipeline stage.</SheetDescription>
         </SheetHeader>
 
         <Form {...form}>
@@ -160,6 +165,30 @@ export function OpportunityCreateSheet({
             onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}
             className="space-y-4 px-4 pb-6"
           >
+            <FormField
+              control={form.control}
+              name="contact_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Customer *</FormLabel>
+                  <FormContactPicker
+                    workspaceId={workspaceId}
+                    value={field.value}
+                    onChange={(nextContactId) => field.onChange(nextContactId)}
+                    initialContact={contact ?? (contactId ? { id: contactId } : null)}
+                    placeholder="Search customers by name, phone, or email…"
+                    disabled={createMutation.isPending}
+                    required
+                    data-testid="opportunity-customer-picker"
+                  />
+                  <FormDescription>
+                    Required. Add new customers from Contacts first.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="name"
@@ -186,10 +215,7 @@ export function OpportunityCreateSheet({
                   <FormLabel>Stage *</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger
-                        className="w-full"
-                        data-testid="opportunity-stage-select"
-                      >
+                      <SelectTrigger className="w-full" data-testid="opportunity-stage-select">
                         <SelectValue placeholder="Select a stage" />
                       </SelectTrigger>
                     </FormControl>
@@ -272,9 +298,7 @@ export function OpportunityCreateSheet({
                 Cancel
               </Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
+                {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {createMutation.isPending ? "Creating..." : "Create Opportunity"}
               </Button>
             </SheetFooter>

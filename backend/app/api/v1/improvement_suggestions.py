@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import extract, func, select
 
 from app.api.crud import get_or_404
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
+from app.core.permissions import Capability
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
 from app.models.agent import Agent
@@ -24,7 +25,11 @@ from app.schemas.improvement_suggestion import (
 )
 from app.services.ai.prompt_improvement_service import PromptImprovementService
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.WORKSPACE_MANAGE))
+    ]
+)
 
 
 @router.get("", response_model=ImprovementSuggestionListResponse)

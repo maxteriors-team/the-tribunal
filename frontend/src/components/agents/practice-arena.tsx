@@ -9,19 +9,9 @@ import { RehearsalChat } from "@/components/agents/rehearsal-chat";
 import { RehearsalReport } from "@/components/agents/rehearsal-report";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Select,
   SelectContent,
@@ -36,12 +26,11 @@ import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { RehearsalRun, RehearseeType } from "@/types/roleplay";
 
-const difficultyVariant: Record<string, "secondary" | "default" | "destructive"> =
-  {
-    easy: "secondary",
-    medium: "default",
-    hard: "destructive",
-  };
+const difficultyVariant: Record<string, "secondary" | "default" | "destructive"> = {
+  easy: "secondary",
+  medium: "default",
+  hard: "destructive",
+};
 
 export function PracticeArena({
   initialAgentId = "",
@@ -131,10 +120,8 @@ export function PracticeArena({
 
   const canRun = !!agentId && !!personaId && !runMutation.isPending;
   const showReport =
-    activeRun &&
-    (activeRun.status === "completed" || activeRun.status === "failed");
-  const showChat =
-    activeRun && activeRun.rehearsee === "human" && activeRun.status === "running";
+    activeRun && (activeRun.status === "completed" || activeRun.status === "failed");
+  const showChat = activeRun && activeRun.rehearsee === "human" && activeRun.status === "running";
 
   return (
     <div className="space-y-6 p-6">
@@ -144,8 +131,8 @@ export function PracticeArena({
           Practice Arena
         </h1>
         <p className="text-sm text-muted-foreground">
-          Rehearse an agent (or yourself) against synthetic prospects and get a
-          scored report before talking to real leads.
+          Rehearse an agent (or yourself) against synthetic prospects and get a scored report before
+          talking to real leads.
         </p>
       </div>
 
@@ -159,16 +146,15 @@ export function PracticeArena({
           <CardHeader>
             <CardTitle className="text-base">Set up a rehearsal</CardTitle>
             <CardDescription>
-              Pick an agent, choose a prospect persona, and run a simulated
-              conversation.
+              Pick an agent, choose a prospect persona, and run a simulated conversation.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Agent</Label>
+                <Label htmlFor="practice-agent">Agent</Label>
                 <Select value={agentId} onValueChange={setAgentId}>
-                  <SelectTrigger>
+                  <SelectTrigger id="practice-agent">
                     <SelectValue placeholder="Select an agent" />
                   </SelectTrigger>
                   <SelectContent>
@@ -182,9 +168,9 @@ export function PracticeArena({
               </div>
 
               <div className="space-y-2">
-                <Label>Prospect persona</Label>
+                <Label htmlFor="practice-persona">Prospect persona</Label>
                 <Select value={personaId} onValueChange={setPersonaId}>
-                  <SelectTrigger>
+                  <SelectTrigger id="practice-persona">
                     <SelectValue placeholder="Select a persona" />
                   </SelectTrigger>
                   <SelectContent>
@@ -202,21 +188,13 @@ export function PracticeArena({
               <div className="rounded-md border bg-muted/40 p-3 text-sm">
                 <div className="mb-1 flex items-center gap-2">
                   <span className="font-medium">{selectedPersona.name}</span>
-                  <Badge
-                    variant={
-                      difficultyVariant[selectedPersona.difficulty] ?? "default"
-                    }
-                  >
+                  <Badge variant={difficultyVariant[selectedPersona.difficulty] ?? "default"}>
                     {selectedPersona.difficulty}
                   </Badge>
-                  {selectedPersona.is_builtin ? (
-                    <Badge variant="secondary">built-in</Badge>
-                  ) : null}
+                  {selectedPersona.is_builtin ? <Badge variant="secondary">built-in</Badge> : null}
                 </div>
                 {selectedPersona.description ? (
-                  <p className="text-muted-foreground">
-                    {selectedPersona.description}
-                  </p>
+                  <p className="text-muted-foreground">{selectedPersona.description}</p>
                 ) : null}
                 {selectedPersona.objections.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1">
@@ -238,6 +216,7 @@ export function PracticeArena({
                     type="button"
                     variant={mode === "ai" ? "default" : "outline"}
                     onClick={() => setMode("ai")}
+                    aria-pressed={mode === "ai"}
                     className="flex-1"
                   >
                     <Sparkles className="size-4" />
@@ -247,6 +226,7 @@ export function PracticeArena({
                     type="button"
                     variant={mode === "human" ? "default" : "outline"}
                     onClick={() => setMode("human")}
+                    aria-pressed={mode === "human"}
                     className="flex-1"
                   >
                     <UserRound className="size-4" />
@@ -257,12 +237,9 @@ export function PracticeArena({
 
               {mode === "ai" ? (
                 <div className="space-y-2">
-                  <Label>Conversation length</Label>
-                  <Select
-                    value={String(maxTurns)}
-                    onValueChange={(v) => setMaxTurns(Number(v))}
-                  >
-                    <SelectTrigger>
+                  <Label htmlFor="practice-length">Conversation length</Label>
+                  <Select value={String(maxTurns)} onValueChange={(v) => setMaxTurns(Number(v))}>
+                    <SelectTrigger id="practice-length">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -297,8 +274,7 @@ export function PracticeArena({
             </Button>
             {mode === "ai" && runMutation.isPending ? (
               <p className="text-xs text-muted-foreground">
-                Simulating the full conversation and scoring it — this can take a
-                moment.
+                Simulating the full conversation and scoring it — this can take a moment.
               </p>
             ) : null}
           </CardContent>

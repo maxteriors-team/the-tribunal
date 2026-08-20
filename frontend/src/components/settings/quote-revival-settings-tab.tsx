@@ -1,27 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ExternalLink,
-  History,
-  Loader2,
-  Plus,
-  Trash2,
-  Wallet,
-} from "lucide-react";
+import { ExternalLink, History, Loader2, Plus, Trash2, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -64,18 +51,11 @@ export function QuoteRevivalSettingsTab() {
       page: 1,
       page_size: 100,
     }),
-    queryFn: () =>
-      messageTemplatesApi.list(workspaceId!, { page: 1, page_size: 100 }),
+    queryFn: () => messageTemplatesApi.list(workspaceId!, { page: 1, page_size: 100 }),
     enabled: !!workspaceId,
   });
 
-  if (
-    !workspaceId ||
-    settingsPending ||
-    templatesPending ||
-    !settings ||
-    !templatesPage
-  ) {
+  if (!workspaceId || settingsPending || templatesPending || !settings || !templatesPage) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -98,31 +78,22 @@ interface QuoteRevivalFormProps {
   templates: MessageTemplate[];
 }
 
-function QuoteRevivalForm({
-  workspaceId,
-  initialSettings,
-  templates,
-}: QuoteRevivalFormProps) {
+function QuoteRevivalForm({ workspaceId, initialSettings, templates }: QuoteRevivalFormProps) {
   const queryClient = useQueryClient();
   const [enabled, setEnabled] = useState(initialSettings.enabled);
-  const [threshold, setThreshold] = useState(
-    initialSettings.high_value_threshold,
-  );
+  const [threshold, setThreshold] = useState(initialSettings.high_value_threshold);
   const [maxTouches, setMaxTouches] = useState(initialSettings.max_touches);
   const [quietStart, setQuietStart] = useState(
     initialSettings.quiet_hours_start?.slice(0, 5) ?? "",
   );
-  const [quietEnd, setQuietEnd] = useState(
-    initialSettings.quiet_hours_end?.slice(0, 5) ?? "",
-  );
+  const [quietEnd, setQuietEnd] = useState(initialSettings.quiet_hours_end?.slice(0, 5) ?? "");
   const [timezone, setTimezone] = useState(initialSettings.timezone ?? "");
   const [touches, setTouches] = useState<QuoteRevivalTouch[]>(
     initialSettings.touches.map((touch) => ({ ...touch })),
   );
 
   const mutation = useMutation({
-    mutationFn: (data: QuoteRevivalSettings) =>
-      settingsApi.updateQuoteRevival(workspaceId, data),
+    mutationFn: (data: QuoteRevivalSettings) => settingsApi.updateQuoteRevival(workspaceId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.quoteRevival(workspaceId),
@@ -148,13 +119,8 @@ function QuoteRevivalForm({
   };
 
   const addTouch = () => {
-    const lastOffset = touches.length
-      ? Math.max(...touches.map((touch) => touch.offset_days))
-      : 0;
-    const offset = Math.min(
-      Math.max(lastOffset + 30, MIN_OFFSET_DAYS),
-      MAX_OFFSET_DAYS,
-    );
+    const lastOffset = touches.length ? Math.max(...touches.map((touch) => touch.offset_days)) : 0;
+    const offset = Math.min(Math.max(lastOffset + 30, MIN_OFFSET_DAYS), MAX_OFFSET_DAYS);
     if (touches.some((touch) => touch.offset_days === offset)) {
       toast.error("Pick a different day for the next touch");
       return;
@@ -171,9 +137,7 @@ function QuoteRevivalForm({
   };
 
   const save = () => {
-    const sortedTouches = [...touches].sort(
-      (left, right) => left.offset_days - right.offset_days,
-    );
+    const sortedTouches = [...touches].sort((left, right) => left.offset_days - right.offset_days);
     const offsets = sortedTouches.map((touch) => touch.offset_days);
     if (new Set(offsets).size !== offsets.length) {
       toast.error("Each touch needs a different day");
@@ -191,10 +155,7 @@ function QuoteRevivalForm({
     }
     // Only the touches that can actually run need copy, matching the API.
     const executable = sortedTouches.slice(0, maxTouches);
-    if (
-      enabled &&
-      executable.some((touch) => touch.channel !== "call" && !touch.template_id)
-    ) {
+    if (enabled && executable.some((touch) => touch.channel !== "call" && !touch.template_id)) {
       toast.error("Choose a saved template for every SMS and email touch");
       return;
     }
@@ -227,20 +188,20 @@ function QuoteRevivalForm({
             <History className="size-5" /> Unsold quote revival
           </CardTitle>
           <CardDescription>
-            Work quotes that were issued and went quiet. The ladder stops on a
-            decision, a reply, an opt-out, or a booked appointment.
+            Work quotes that were issued and went quiet. The ladder stops on a decision, a reply, an
+            opt-out, or a booked appointment.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label>Enable unsold quote revival</Label>
+              <Label htmlFor="quote-revival-enabled">Enable unsold quote revival</Label>
               <p className="text-sm text-muted-foreground">
-                Runs from the quote&apos;s issue date, long after estimate
-                follow-up has ended.
+                Runs from the quote&apos;s issue date, long after estimate follow-up has ended.
               </p>
             </div>
             <Switch
+              id="quote-revival-enabled"
               checked={enabled}
               onCheckedChange={setEnabled}
               disabled={mutation.isPending}
@@ -249,9 +210,7 @@ function QuoteRevivalForm({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="quote-revival-threshold">
-                High-value quote threshold
-              </Label>
+              <Label htmlFor="quote-revival-threshold">High-value quote threshold</Label>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">$</span>
                 <Input
@@ -294,18 +253,15 @@ function QuoteRevivalForm({
             <Wallet className="size-5" /> The 30/60/90 ladder
           </CardTitle>
           <CardDescription>
-            Day {MIN_OFFSET_DAYS} is the earliest legal step, so this ladder can
-            never collide with the first-14-days estimate cadence.
+            Day {MIN_OFFSET_DAYS} is the earliest legal step, so this ladder can never collide with
+            the first-14-days estimate cadence.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {templates.length === 0 && (
             <Alert>
               <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-                <span>
-                  Save at least one message template before enabling SMS or
-                  email.
-                </span>
+                <span>Save at least one message template before enabling SMS or email.</span>
                 <Button asChild size="sm" variant="outline">
                   <Link href="/experiments">
                     Manage templates <ExternalLink className="ml-2 size-3.5" />
@@ -326,9 +282,7 @@ function QuoteRevivalForm({
               disabled={mutation.isPending}
               onChange={(patch) => updateTouch(index, patch)}
               onRemove={() =>
-                setTouches((current) =>
-                  current.filter((_, touchIndex) => touchIndex !== index),
-                )
+                setTouches((current) => current.filter((_, touchIndex) => touchIndex !== index))
               }
             />
           ))}
@@ -343,10 +297,9 @@ function QuoteRevivalForm({
           </Button>
 
           <p className="text-xs text-muted-foreground">
-            Template placeholders: {"{first_name}"}, {"{last_name}"},{" "}
-            {"{quote_number}"}, {"{quote_total}"}, {"{proposal_url}"},{" "}
-            {"{company_name}"}, {"{days_since_quote}"}, and {"{expiry_date}"} —
-            enough to write price-validity, seasonal-slot, or financing copy.
+            Template placeholders: {"{first_name}"}, {"{last_name}"}, {"{quote_number}"},{" "}
+            {"{quote_total}"}, {"{proposal_url}"}, {"{company_name}"}, {"{days_since_quote}"}, and{" "}
+            {"{expiry_date}"} — enough to write price-validity, seasonal-slot, or financing copy.
           </p>
         </CardContent>
       </Card>
@@ -355,8 +308,8 @@ function QuoteRevivalForm({
         <CardHeader>
           <CardTitle>Quiet hours</CardTitle>
           <CardDescription>
-            Automated customer messages wait until outside this local window.
-            Human call tasks can still be queued for the team.
+            Automated customer messages wait until outside this local window. Human call tasks can
+            still be queued for the team.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -391,9 +344,7 @@ function QuoteRevivalForm({
           </div>
 
           <Button onClick={save} disabled={mutation.isPending}>
-            {mutation.isPending && (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            )}
+            {mutation.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
             Save revival ladder
           </Button>
         </CardContent>
@@ -437,22 +388,18 @@ function TouchRow({
             max={MAX_OFFSET_DAYS}
             value={touch.offset_days}
             disabled={disabled}
-            onChange={(event) =>
-              onChange({ offset_days: Number(event.target.value) })
-            }
+            onChange={(event) => onChange({ offset_days: Number(event.target.value) })}
           />
         </div>
 
         <div className="space-y-2">
-          <Label>Channel</Label>
+          <Label htmlFor={`quote-revival-channel-${index}`}>Channel</Label>
           <Select
             value={touch.channel}
             disabled={disabled}
-            onValueChange={(value) =>
-              onChange({ channel: value as QuoteRevivalChannel })
-            }
+            onValueChange={(value) => onChange({ channel: value as QuoteRevivalChannel })}
           >
-            <SelectTrigger>
+            <SelectTrigger id={`quote-revival-channel-${index}`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -464,8 +411,9 @@ function TouchRow({
         </div>
 
         <div className="space-y-2">
-          <Label>Standard template</Label>
+          <Label htmlFor={`quote-revival-template-${index}`}>Standard template</Label>
           <TemplateSelect
+            id={`quote-revival-template-${index}`}
             value={touch.template_id}
             templates={templates}
             disabled={disabled || isCall}
@@ -475,15 +423,14 @@ function TouchRow({
         </div>
 
         <div className="space-y-2">
-          <Label>High-value template</Label>
+          <Label htmlFor={`quote-revival-high-value-template-${index}`}>High-value template</Label>
           <TemplateSelect
+            id={`quote-revival-high-value-template-${index}`}
             value={touch.high_value_template_id}
             templates={templates}
             disabled={disabled || isCall}
             placeholder={isCall ? "Not needed for calls" : "Same as standard"}
-            onChange={(high_value_template_id) =>
-              onChange({ high_value_template_id })
-            }
+            onChange={(high_value_template_id) => onChange({ high_value_template_id })}
           />
         </div>
 
@@ -509,6 +456,7 @@ function TouchRow({
 }
 
 interface TemplateSelectProps {
+  id: string;
   value: string | null;
   templates: MessageTemplate[];
   disabled: boolean;
@@ -517,6 +465,7 @@ interface TemplateSelectProps {
 }
 
 function TemplateSelect({
+  id,
   value,
   templates,
   disabled,
@@ -527,11 +476,9 @@ function TemplateSelect({
     <Select
       value={value ?? NONE_TEMPLATE}
       disabled={disabled}
-      onValueChange={(next) =>
-        onChange(next === NONE_TEMPLATE ? null : next)
-      }
+      onValueChange={(next) => onChange(next === NONE_TEMPLATE ? null : next)}
     >
-      <SelectTrigger>
+      <SelectTrigger id={id}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

@@ -32,6 +32,7 @@ from app.services.onboarding.exceptions import (
 )
 from app.services.reactivation.drip_bootstrap import auto_create_drip_for_imports
 from app.services.telephony.telnyx import PhoneNumberInfo, TelnyxSMSService
+from app.services.workspaces.default_sales_setup import ensure_default_sales_setup
 from app.services.workspaces.membership import resolve_active_membership
 
 logger = structlog.get_logger()
@@ -171,6 +172,7 @@ async def complete_onboarding(
     workspace = await get_managed_user_workspace(current_user_id, db)
     workspace_id = workspace.id
 
+    await ensure_default_sales_setup(db, workspace, created_by_id=current_user_id)
     agent = await create_reactivation_agent(db=db, workspace_id=workspace_id)
     await ensure_owner_bookable_staff(
         db=db,

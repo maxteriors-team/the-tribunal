@@ -15,10 +15,7 @@ import { formatDate } from "@/lib/utils/date";
 import { formatCurrency } from "@/lib/utils/number";
 import type { PreBookingLeadTimeStatus, PreBookingReservationStatus } from "@/types";
 
-const LEAD_TIME_STYLES: Record<
-  PreBookingLeadTimeStatus,
-  { className: string; label: string }
-> = {
+const LEAD_TIME_STYLES: Record<PreBookingLeadTimeStatus, { className: string; label: string }> = {
   ample: {
     className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700",
     label: "Good runway",
@@ -107,7 +104,7 @@ export function PreBookingPanel({ campaignId }: { campaignId: string }) {
               {sold} of {offer.slot_cap} sold
             </span>
           </div>
-          <Progress value={fillPercent} className="h-2" />
+          <Progress value={fillPercent} aria-label="Season slots sold" className="h-2" />
           <div className="flex gap-4 text-xs text-muted-foreground">
             <span>{offer.slots_confirmed} confirmed (deposit paid)</span>
             <span>{offer.slots_held} held</span>

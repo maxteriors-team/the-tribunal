@@ -125,7 +125,7 @@ export default function NewSMSCampaignPage() {
 
   const handleSubmit = async (
     data: CreateSMSCampaignRequest,
-    contactIds: Set<number>
+    contactIds: Set<number>,
   ): Promise<SMSCampaign> => {
     setIsSubmitting(true);
     try {
@@ -148,15 +148,15 @@ export default function NewSMSCampaignPage() {
 
   return (
     <AppSidebar>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
         {/* Header */}
-        <div className="flex items-center gap-4 px-6 py-4 border-b bg-background">
+        <div className="flex items-center gap-3 border-b bg-background px-4 py-4 sm:gap-4 sm:px-6">
           <Button variant="ghost" size="icon" asChild>
             <Link href="/campaigns" aria-label="Back to campaigns">
               <ArrowLeft className="size-5" />
             </Link>
           </Button>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-semibold">Create SMS Campaign</h1>
             <p className="text-sm text-muted-foreground">
               Set up a new SMS or iMessage campaign to reach your contacts

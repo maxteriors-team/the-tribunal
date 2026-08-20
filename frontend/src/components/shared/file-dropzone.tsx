@@ -109,7 +109,7 @@ export function FileDropzone({
       setError(null);
       onFile(file);
     },
-    [accept, onFile, onReject]
+    [accept, onFile, onReject],
   );
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
@@ -146,6 +146,10 @@ export function FileDropzone({
     e.target.value = "";
   };
 
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target !== inputRef.current) openPicker();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (disabled) return;
     if (e.key === "Enter" || e.key === " ") {
@@ -164,17 +168,15 @@ export function FileDropzone({
         className={cn(
           "border-2 border-dashed rounded-lg p-8 flex flex-col items-center justify-center gap-3 text-center transition-colors outline-none",
           "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          disabled
-            ? "opacity-50 cursor-not-allowed border-border"
-            : "cursor-pointer",
+          disabled ? "opacity-50 cursor-not-allowed border-border" : "cursor-pointer",
           !disabled && dragActive
             ? "border-primary bg-primary/5"
             : !disabled && !error
               ? "border-border hover:border-primary/50 hover:bg-muted/30"
               : null,
-          error && !dragActive ? "border-destructive/50 bg-destructive/5" : null
+          error && !dragActive ? "border-destructive/50 bg-destructive/5" : null,
         )}
-        onClick={openPicker}
+        onClick={handleClick}
         onKeyDown={handleKeyDown}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
@@ -184,9 +186,7 @@ export function FileDropzone({
         {icon ?? <Upload className="size-8 text-muted-foreground" />}
         <div>
           <p className="font-medium">{placeholder}</p>
-          {subtext && (
-            <p className="text-sm text-muted-foreground mt-1">{subtext}</p>
-          )}
+          {subtext && <p className="text-sm text-muted-foreground mt-1">{subtext}</p>}
         </div>
         <input
           ref={inputRef}

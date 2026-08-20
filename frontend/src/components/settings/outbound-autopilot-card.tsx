@@ -3,13 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -80,8 +74,7 @@ export function OutboundAutopilotCard({ workspaceId }: { workspaceId: string }) 
     // Enabling with exactly one active offer: preselect it so autopilot can
     // actually draft instead of immediately nudging about a missing offer.
     const offerId =
-      autopilot.offer_id ??
-      (enabled && activeOffers.length === 1 ? activeOffers[0].id : null);
+      autopilot.offer_id ?? (enabled && activeOffers.length === 1 ? activeOffers[0].id : null);
     mutation.mutate({ enabled, offer_id: offerId });
   };
 
@@ -96,9 +89,8 @@ export function OutboundAutopilotCard({ workspaceId }: { workspaceId: string }) 
           <div>
             <CardTitle>Outbound Autopilot</CardTitle>
             <CardDescription>
-              Every morning, draft an outreach campaign from fresh ad-library
-              contacts and park it for your approval. Nothing sends without
-              you.
+              Every morning, draft an outreach campaign from fresh ad-library contacts and park it
+              for your approval. Nothing sends without you.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -115,13 +107,13 @@ export function OutboundAutopilotCard({ workspaceId }: { workspaceId: string }) 
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        <Label>Default offer for drafted campaigns</Label>
+        <Label htmlFor="outbound-autopilot-offer">Default offer for drafted campaigns</Label>
         <Select
           value={autopilot.offer_id ?? ""}
           onValueChange={handleOfferChange}
           disabled={workspacePending || mutation.isPending || activeOffers.length === 0}
         >
-          <SelectTrigger className="max-w-md">
+          <SelectTrigger id="outbound-autopilot-offer" className="max-w-md">
             <SelectValue
               placeholder={
                 activeOffers.length === 0
@@ -140,8 +132,7 @@ export function OutboundAutopilotCard({ workspaceId }: { workspaceId: string }) 
         </Select>
         {autopilot.enabled && !autopilot.offer_id && (
           <p className="text-xs text-amber-600">
-            Autopilot is on but has no offer — morning drafts will be skipped
-            until you pick one.
+            Autopilot is on but has no offer — morning drafts will be skipped until you pick one.
           </p>
         )}
         {mutation.isError && (

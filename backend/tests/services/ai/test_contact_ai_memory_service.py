@@ -157,7 +157,7 @@ async def test_record_event_supersedes_replayed_fact_and_updates_summary() -> No
     new_fact = db.add.call_args.args[0]
     assert isinstance(new_fact, ContactAIMemoryFact)
     assert new_fact.value == "Afternoon texts"
-    assert old_fact.superseded_by_id == new_fact.id
+    assert old_fact.superseded_by is new_fact
     db.flush.assert_awaited_once()
 
 
@@ -420,7 +420,7 @@ async def test_operator_correction_supersedes_only_the_generated_fact() -> None:
     assert replacement.confidence == 1.0
     assert fact.value == "Roof cleaning"
     assert fact.supersession_state == FactSupersessionState.SUPERSEDED.value
-    assert fact.superseded_by_id == replacement.id
+    assert fact.superseded_by is replacement
     db.flush.assert_awaited_once()
 
 

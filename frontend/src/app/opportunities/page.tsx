@@ -4,15 +4,14 @@ import { OpportunitiesBoard } from "@/components/opportunities/opportunities-boa
 export default function OpportunitiesRoute() {
   return (
     <AppSidebar>
-      <div className="flex h-full flex-col overflow-hidden">
-        <div className="p-6 pb-3">
+      <div className="flex h-full min-w-0 flex-col overflow-hidden">
+        <div className="p-4 pb-3 sm:p-6 sm:pb-3">
           <h1 className="text-2xl font-semibold tracking-tight">Opportunities</h1>
           <p className="text-sm text-muted-foreground">
-            Track deals across your pipeline. Drag a card or use its menu to move
-            it between stages.
+            Track deals across your pipeline. Drag a card or use its menu to move it between stages.
           </p>
         </div>
-        <div className="min-h-0 flex-1 px-6 pb-6">
+        <div className="min-h-0 min-w-0 flex-1 px-4 pb-4 sm:px-6 sm:pb-6">
           <OpportunitiesBoard />
         </div>
       </div>

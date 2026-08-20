@@ -63,9 +63,7 @@ function EmbedDialogContent({
 }) {
   const queryClient = useQueryClient();
   const [newDomain, setNewDomain] = useState("");
-  const [localChanges, setLocalChanges] = useState<Partial<EmbedFormValues>>(
-    {},
-  );
+  const [localChanges, setLocalChanges] = useState<Partial<EmbedFormValues>>({});
 
   const { data: embedSettings, isPending } = useQuery({
     queryKey: queryKeys.agents.embed(workspaceId, agentId),
@@ -100,9 +98,7 @@ function EmbedDialogContent({
       setLocalChanges({});
     },
     onError: (err) => {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to save settings",
-      );
+      toast.error(err instanceof Error ? err.message : "Failed to save settings");
     },
   });
 
@@ -143,18 +139,12 @@ function EmbedDialogContent({
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const publicId = embedSettings?.public_id || "";
   const savedEmbedEnabled = embedSettings?.embed_enabled === true;
-  const hasSavedAllowedDomain = hasConfiguredDomain(
-    embedSettings?.allowed_domains,
-  );
+  const hasSavedAllowedDomain = hasConfiguredDomain(embedSettings?.allowed_domains);
   const hasSavedPublicId = Boolean(publicId);
   const hasUnsavedAccessChanges =
-    localChanges.embedEnabled !== undefined ||
-    localChanges.allowedDomains !== undefined;
+    localChanges.embedEnabled !== undefined || localChanges.allowedDomains !== undefined;
   const canCopySnippets =
-    savedEmbedEnabled &&
-    hasSavedAllowedDomain &&
-    hasSavedPublicId &&
-    !hasUnsavedAccessChanges;
+    savedEmbedEnabled && hasSavedAllowedDomain && hasSavedPublicId && !hasUnsavedAccessChanges;
   const embedCodeBlockedReason = !savedEmbedEnabled
     ? "Enable embedding and save this agent before copying the installation code."
     : !hasSavedAllowedDomain
@@ -189,12 +179,15 @@ function EmbedDialogContent({
         {/* Enable toggle */}
         <div className="flex items-center justify-between rounded-lg border p-4">
           <div className="space-y-0.5">
-            <Label className="text-base font-medium">Enable Embedding</Label>
+            <Label htmlFor="agent-embed-enabled" className="text-base font-medium">
+              Enable Embedding
+            </Label>
             <p className="text-sm text-muted-foreground">
               Allow this agent to be embedded on external websites
             </p>
           </div>
           <Switch
+            id="agent-embed-enabled"
             checked={values.embedEnabled}
             onCheckedChange={(v) => handleChange({ embedEnabled: v })}
           />
@@ -221,11 +214,7 @@ function EmbedDialogContent({
               />
             </div>
 
-            <EmbedPreviewLazy
-              values={values}
-              baseUrl={baseUrl}
-              publicId={publicId}
-            />
+            <EmbedPreviewLazy values={values} baseUrl={baseUrl} publicId={publicId} />
           </div>
         )}
 

@@ -17,8 +17,8 @@ interface BasicsStepProps {
 export function BasicsStep({ formData, onFieldChange, workspaceId }: BasicsStepProps) {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-1">
           <h4 className="font-medium">Basic Information</h4>
           <p className="text-sm text-muted-foreground">
             Define your offer or generate content with AI
@@ -64,9 +64,7 @@ export function BasicsStep({ formData, onFieldChange, workspaceId }: BasicsStepP
           value={formData.headline}
           onChange={(e) => onFieldChange({ headline: e.target.value })}
         />
-        <p className="text-xs text-muted-foreground">
-          A compelling headline that grabs attention
-        </p>
+        <p className="text-xs text-muted-foreground">A compelling headline that grabs attention</p>
       </div>
 
       <div className="space-y-2">

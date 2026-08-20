@@ -34,6 +34,7 @@ export type ContactSortBy =
 export type ContactCreatePayload = Schemas["ContactCreate"];
 export type ManualContactCreatePayload = Schemas["ManualContactCreate"];
 export type ContactUpdatePayload = Schemas["ContactUpdate"];
+export type ContactNoteCreate = Schemas["ContactNoteCreate"];
 export type ContactResponse = Schemas["ContactResponse"];
 export type ContactListResponse = Schemas["ContactListResponse"];
 /** Back-compat alias — prefer `ContactListResponse`. */
@@ -200,6 +201,16 @@ const baseApi = createApiClient<Contact, CreateContactRequest, UpdateContactRequ
 export const contactsApi = {
   ...baseApi,
 
+  appendNote: async (
+    workspaceId: string,
+    contactId: number,
+    data: ContactNoteCreate,
+  ): Promise<ContactResponse> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/notes", {
+      path: { workspace_id: workspaceId, contact_id: contactId },
+      body: data,
+    }),
+
   manualCreate: async (
     workspaceId: string,
     data: ManualContactCreatePayload,
@@ -210,7 +221,10 @@ export const contactsApi = {
     });
   },
 
-  listIds: async (workspaceId: string, params: ContactIdsParams = {}): Promise<ContactIdsResponse> => {
+  listIds: async (
+    workspaceId: string,
+    params: ContactIdsParams = {},
+  ): Promise<ContactIdsResponse> => {
     return apiClient.get("/api/v1/workspaces/{workspace_id}/contacts/ids", {
       path: { workspace_id: workspaceId },
       query: params,
@@ -308,12 +322,9 @@ export const contactsApi = {
     workspaceId: string,
     contactId: number,
   ): Promise<ContactAIKnowledgeResponse> => {
-    return apiClient.get(
-      "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge",
-      {
-        path: { workspace_id: workspaceId, contact_id: contactId },
-      },
-    );
+    return apiClient.get("/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai-knowledge", {
+      path: { workspace_id: workspaceId, contact_id: contactId },
+    });
   },
 
   updateAIMemorySummary: async (
@@ -354,13 +365,10 @@ export const contactsApi = {
     contactId: number,
     enabled: boolean,
   ): Promise<AIToggleResponse> => {
-    return apiClient.post(
-      "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai/toggle",
-      {
-        path: { workspace_id: workspaceId, contact_id: contactId },
-        body: { enabled },
-      },
-    );
+    return apiClient.post("/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/ai/toggle", {
+      path: { workspace_id: workspaceId, contact_id: contactId },
+      body: { enabled },
+    });
   },
 
   assignAgent: async (
@@ -411,16 +419,13 @@ export const contactsApi = {
       formData.append("column_mapping", JSON.stringify(options.column_mapping));
     }
 
-    const response = await apiClient.post(
-      "/api/v1/workspaces/{workspace_id}/contacts/import",
-      {
-        path: { workspace_id: workspaceId },
-        config: {
-          data: formData,
-          headers: { "Content-Type": "multipart/form-data" },
-        },
+    const response = await apiClient.post("/api/v1/workspaces/{workspace_id}/contacts/import", {
+      path: { workspace_id: workspaceId },
+      config: {
+        data: formData,
+        headers: { "Content-Type": "multipart/form-data" },
       },
-    );
+    });
     return response as unknown as ImportResult;
   },
 };

@@ -97,6 +97,70 @@ def _agent(strategy: str = "round_robin") -> Any:
     )
 
 
+@pytest.mark.parametrize(
+    "confirmation_args",
+    [{}, {"customer_confirmed": False}],
+    ids=["missing", "false"],
+)
+@pytest.mark.asyncio
+async def test_book_appointment_rejects_unconfirmed_before_assignment(
+    confirmation_args: dict[str, bool],
+) -> None:
+    executor = VoiceToolExecutor(agent=_agent())
+
+    result = await executor.execute(
+        "book_appointment",
+        {
+            "date": "2099-01-15",
+            "time": "14:00",
+            "email": "caller@example.com",
+            **confirmation_args,
+        },
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "Explicit customer confirmation is required before booking"
+    assert "exact date, time, timezone, duration, and invite email" in result["message"]
+    assert executor.assigned_staff is None
+
+
+@pytest.mark.asyncio
+async def test_confirmed_booking_rechecks_and_rejects_new_google_conflict() -> None:
+    _FakeBookingService.captured_workspace_id = None
+    staff = _FakeStaff("Busy Rep")
+    executor = VoiceToolExecutor(agent=_agent())
+
+    with (
+        patch.object(
+            db_session_module,
+            "AsyncSessionLocal",
+            return_value=_FakeSession([staff]),
+        ),
+        patch.object(base_tool_executor, "BookingService", _FakeBookingService),
+        patch(
+            "app.services.google_calendar.is_time_available",
+            return_value=False,
+        ) as availability_recheck,
+    ):
+        result = await executor.execute(
+            "book_appointment",
+            {
+                "date": "2099-01-15",
+                "time": "14:00",
+                "email": "caller@example.com",
+                "customer_confirmed": True,
+            },
+        )
+
+    assert result == {
+        "success": False,
+        "error": "That time is no longer available",
+        "message": "Please offer another available time",
+    }
+    availability_recheck.assert_awaited_once()
+    assert _FakeBookingService.captured_workspace_id is None
+
+
 @pytest.mark.asyncio
 async def test_book_appointment_routes_to_selected_staff() -> None:
     _FakeBookingService.captured_workspace_id = None
@@ -123,6 +187,7 @@ async def test_book_appointment_routes_to_selected_staff() -> None:
                 "date": "2099-01-15",
                 "time": "14:00",
                 "email": "caller@example.com",
+                "customer_confirmed": True,
             },
         )
 
@@ -155,6 +220,7 @@ async def test_default_agent_routes_to_team_enabled_staff() -> None:
                 "date": "2099-01-15",
                 "time": "14:00",
                 "email": "caller@example.com",
+                "customer_confirmed": True,
             },
         )
 

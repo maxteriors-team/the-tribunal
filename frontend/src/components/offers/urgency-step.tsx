@@ -24,21 +24,17 @@ export function UrgencyStep({ formData, onFieldChange }: UrgencyStepProps) {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Label>Urgency Type</Label>
+        <Label htmlFor="offer-urgency-type">Urgency Type</Label>
         <Select
           value={formData.urgency_type}
-          onValueChange={(v) =>
-            onFieldChange({ urgency_type: v as UrgencyType })
-          }
+          onValueChange={(v) => onFieldChange({ urgency_type: v as UrgencyType })}
         >
-          <SelectTrigger>
+          <SelectTrigger id="offer-urgency-type">
             <SelectValue placeholder="Select urgency type (optional)" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="limited_time">Limited Time Offer</SelectItem>
-            <SelectItem value="limited_quantity">
-              Limited Quantity
-            </SelectItem>
+            <SelectItem value="limited_quantity">Limited Quantity</SelectItem>
             <SelectItem value="expiring">Expiring Soon</SelectItem>
           </SelectContent>
         </Select>
@@ -52,9 +48,7 @@ export function UrgencyStep({ formData, onFieldChange }: UrgencyStepProps) {
               id="urgency_text"
               placeholder="e.g., Offer ends Friday at midnight!"
               value={formData.urgency_text}
-              onChange={(e) =>
-                onFieldChange({ urgency_text: e.target.value })
-              }
+              onChange={(e) => onFieldChange({ urgency_text: e.target.value })}
             />
           </div>
 

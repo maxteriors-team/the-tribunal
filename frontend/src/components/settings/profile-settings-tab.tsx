@@ -83,9 +83,7 @@ export function ProfileSettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Profile Information</CardTitle>
-          <CardDescription>
-            Update your personal details and preferences
-          </CardDescription>
+          <CardDescription>Update your personal details and preferences</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {profileLoading ? (
@@ -117,9 +115,7 @@ export function ProfileSettingsTab() {
                   disabled
                   className="bg-muted"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Email cannot be changed
-                </p>
+                <p className="text-xs text-muted-foreground">Email cannot be changed</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Phone Number</Label>
@@ -140,11 +136,9 @@ export function ProfileSettingsTab() {
                 <Label htmlFor="timezone">Timezone</Label>
                 <Select
                   value={profileForm.timezone}
-                  onValueChange={(value) =>
-                    setLocalEdits((prev) => ({ ...prev, timezone: value }))
-                  }
+                  onValueChange={(value) => setLocalEdits((prev) => ({ ...prev, timezone: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="timezone">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -187,34 +181,29 @@ export function ProfileSettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Appearance</CardTitle>
-          <CardDescription>
-            Customize the look and feel of the application
-          </CardDescription>
+          <CardDescription>Customize the look and feel of the application</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Dark Mode</Label>
-              <p className="text-sm text-muted-foreground">
-                Use dark theme across the application
-              </p>
+              <Label htmlFor="appearance-dark-mode">Dark Mode</Label>
+              <p className="text-sm text-muted-foreground">Use dark theme across the application</p>
             </div>
             <Switch
-                checked={isDark}
-                onCheckedChange={(checked) =>
-                  setTheme(checked ? "dark" : "light")
-                }
-              />
+              id="appearance-dark-mode"
+              checked={isDark}
+              onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+            />
           </div>
           <Separator />
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Compact Mode</Label>
+              <Label htmlFor="appearance-compact-mode">Compact Mode</Label>
               <p className="text-sm text-muted-foreground">
                 Reduce spacing for more content on screen
               </p>
             </div>
-            <Switch />
+            <Switch id="appearance-compact-mode" />
           </div>
         </CardContent>
       </Card>

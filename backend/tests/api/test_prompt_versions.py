@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import prompt_versions as prompt_versions_module
 from app.schemas.prompt_version import PromptVersionResponse
 from app.services.exceptions import NotFoundError, ValidationError
@@ -89,6 +89,9 @@ def _make_app(
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[get_workspace] = override_get_workspace
+    app.dependency_overrides[get_membership] = lambda: MagicMock(
+        role="owner", workspace_id=workspace_id
+    )
     app.include_router(
         prompt_versions_module.router,
         prefix="/api/v1/workspaces/{workspace_id}/agents/{agent_id}/prompts",

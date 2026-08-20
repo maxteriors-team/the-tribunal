@@ -25,6 +25,21 @@ const SECURITY_HEADERS = [
   },
 ];
 
+// Voice embeds need microphone access within their own document. The host
+// iframe still has to delegate it explicitly with `allow="microphone"`.
+const EMBED_SECURITY_HEADERS = SECURITY_HEADERS.map((header) =>
+  header.key === "Permissions-Policy"
+    ? { ...header, value: "geolocation=(), microphone=(self), camera=()" }
+    : header,
+);
+
+// Production embeds require HTTPS parents. Local HTTP parents remain available
+// in `next dev` so the real iframe flow can be exercised by Playwright.
+const EMBED_FRAME_ANCESTORS =
+  process.env.NODE_ENV === "development"
+    ? "frame-ancestors http: https:"
+    : "frame-ancestors https:";
+
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@prestyj/pixel"],
   turbopack: { root: __dirname },
@@ -99,13 +114,14 @@ const nextConfig: NextConfig = {
         // /embed/[publicId] is the chat/voice widget that customers embed in
         // an <iframe> on their own websites. Sending X-Frame-Options: DENY or
         // frame-ancestors 'none' here would break every live customer embed.
-        // We still require the parent page to be served over HTTPS.
+        // Production parents must use HTTPS; backend domain validation still
+        // authorizes each parent before any config or provider call succeeds.
         source: "/embed/:path*",
         headers: [
-          ...SECURITY_HEADERS,
+          ...EMBED_SECURITY_HEADERS,
           {
             key: "Content-Security-Policy",
-            value: "frame-ancestors https:",
+            value: EMBED_FRAME_ANCESTORS,
           },
         ],
       },

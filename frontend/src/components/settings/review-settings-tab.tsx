@@ -4,13 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, Loader2 } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -38,8 +32,7 @@ export function ReviewSettingsTab() {
   });
 
   const mutation = useMutation({
-    mutationFn: (data: UpdateReviewSettings) =>
-      reviewsApi.updateSettings(workspaceId!, data),
+    mutationFn: (data: UpdateReviewSettings) => reviewsApi.updateSettings(workspaceId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.reviews.settings(workspaceId ?? ""),
@@ -65,20 +58,20 @@ export function ReviewSettingsTab() {
         <CardHeader>
           <CardTitle>Reputation Engine</CardTitle>
           <CardDescription>
-            Automatically request reviews after completed appointments. Happy
-            customers are sent to your public review page; unhappy ones are
-            routed to a private feedback form.
+            Automatically request reviews after completed appointments. Happy customers are sent to
+            your public review page; unhappy ones are routed to a private feedback form.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Enable reputation engine</Label>
+              <Label htmlFor="reputation-engine-enabled">Enable reputation engine</Label>
               <p className="text-sm text-muted-foreground">
                 Master switch for review requests and collection
               </p>
             </div>
             <Switch
+              id="reputation-engine-enabled"
               checked={enabled}
               onCheckedChange={(checked) => update({ enabled: checked })}
               disabled={mutation.isPending}
@@ -88,16 +81,15 @@ export function ReviewSettingsTab() {
           {enabled && (
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Auto-request after completed jobs</Label>
+                <Label htmlFor="review-auto-request">Auto-request after completed jobs</Label>
                 <p className="text-sm text-muted-foreground">
                   Send a review request when an appointment is marked completed
                 </p>
               </div>
               <Switch
+                id="review-auto-request"
                 checked={settings?.auto_request_on_completion ?? true}
-                onCheckedChange={(checked) =>
-                  update({ auto_request_on_completion: checked })
-                }
+                onCheckedChange={(checked) => update({ auto_request_on_completion: checked })}
                 disabled={mutation.isPending}
               />
             </div>
@@ -110,20 +102,18 @@ export function ReviewSettingsTab() {
           <CardHeader>
             <CardTitle>Rating Gate</CardTitle>
             <CardDescription>
-              Choose the minimum star rating that routes a customer to your
-              public review page. Lower ratings go to private feedback.
+              Choose the minimum star rating that routes a customer to your public review page.
+              Lower ratings go to private feedback.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <Label>Positive threshold</Label>
+              <Label htmlFor="review-positive-threshold">Positive threshold</Label>
               <Select
                 value={String(settings?.positive_threshold ?? 4)}
-                onValueChange={(value) =>
-                  update({ positive_threshold: Number(value) })
-                }
+                onValueChange={(value) => update({ positive_threshold: Number(value) })}
               >
-                <SelectTrigger className="w-48">
+                <SelectTrigger id="review-positive-threshold" className="w-48">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -140,9 +130,7 @@ export function ReviewSettingsTab() {
                 id="google-url"
                 placeholder="https://g.page/r/…/review"
                 defaultValue={settings?.google_review_url ?? ""}
-                onBlur={(e) =>
-                  update({ google_review_url: e.target.value || null })
-                }
+                onBlur={(e) => update({ google_review_url: e.target.value || null })}
                 disabled={mutation.isPending}
               />
             </div>
@@ -153,23 +141,19 @@ export function ReviewSettingsTab() {
                 id="facebook-url"
                 placeholder="https://facebook.com/…/reviews"
                 defaultValue={settings?.facebook_review_url ?? ""}
-                onBlur={(e) =>
-                  update({ facebook_review_url: e.target.value || null })
-                }
+                onBlur={(e) => update({ facebook_review_url: e.target.value || null })}
                 disabled={mutation.isPending}
               />
             </div>
 
-            {!settings?.google_review_url &&
-              !settings?.facebook_review_url && (
-                <Alert>
-                  <Info className="size-4" />
-                  <AlertDescription>
-                    Add at least one public review URL so positive ratings have
-                    somewhere to go.
-                  </AlertDescription>
-                </Alert>
-              )}
+            {!settings?.google_review_url && !settings?.facebook_review_url && (
+              <Alert>
+                <Info className="size-4" />
+                <AlertDescription>
+                  Add at least one public review URL so positive ratings have somewhere to go.
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
       )}
@@ -178,9 +162,7 @@ export function ReviewSettingsTab() {
         <Card>
           <CardHeader>
             <CardTitle>Message &amp; Timing</CardTitle>
-            <CardDescription>
-              Customize the review-request SMS and when it is sent.
-            </CardDescription>
+            <CardDescription>Customize the review-request SMS and when it is sent.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
@@ -189,9 +171,7 @@ export function ReviewSettingsTab() {
                 id="business-name"
                 placeholder="Acme Plumbing"
                 defaultValue={settings?.business_name ?? ""}
-                onBlur={(e) =>
-                  update({ business_name: e.target.value || null })
-                }
+                onBlur={(e) => update({ business_name: e.target.value || null })}
                 disabled={mutation.isPending}
               />
             </div>
@@ -203,14 +183,12 @@ export function ReviewSettingsTab() {
                 rows={3}
                 placeholder="Hi {first_name}, thanks for choosing {business_name}! How did we do? {link}"
                 defaultValue={settings?.request_message_template ?? ""}
-                onBlur={(e) =>
-                  update({ request_message_template: e.target.value || null })
-                }
+                onBlur={(e) => update({ request_message_template: e.target.value || null })}
                 disabled={mutation.isPending}
               />
               <p className="text-xs text-muted-foreground">
-                Placeholders: {"{first_name}"}, {"{business_name}"}, {"{link}"}.
-                The link is added automatically if you omit it.
+                Placeholders: {"{first_name}"}, {"{business_name}"}, {"{link}"}. The link is added
+                automatically if you omit it.
               </p>
             </div>
 
@@ -225,8 +203,7 @@ export function ReviewSettingsTab() {
                 defaultValue={settings?.request_delay_minutes ?? 60}
                 onBlur={(e) => {
                   const val = Number(e.target.value);
-                  if (val >= 0 && val <= 10080)
-                    update({ request_delay_minutes: val });
+                  if (val >= 0 && val <= 10080) update({ request_delay_minutes: val });
                 }}
                 disabled={mutation.isPending}
               />

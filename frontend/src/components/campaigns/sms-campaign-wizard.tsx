@@ -36,35 +36,20 @@ import {
 } from "./sms-steps";
 import type { WizardStep } from "./wizard-types";
 
-
-
-type StepId =
-  | "basics"
-  | "contacts"
-  | "message"
-  | "agent"
-  | "schedule"
-  | "review";
+type StepId = "basics" | "contacts" | "message" | "agent" | "schedule" | "review";
 
 interface SMSCampaignWizardProps {
   workspaceId: string;
   agents: Agent[];
   offers: Offer[];
   phoneNumbers: PhoneNumber[];
-  onSubmit: (
-    data: CreateSMSCampaignRequest,
-    contactIds: Set<number>
-  ) => Promise<SMSCampaign>;
+  onSubmit: (data: CreateSMSCampaignRequest, contactIds: Set<number>) => Promise<SMSCampaign>;
   onCreateOffer?: (offer: Partial<Offer>) => Promise<void>;
   onCancel?: () => void;
   isSubmitting?: boolean;
 }
 
-interface SMSFormData
-  extends BasicsFields,
-    ScheduleFields,
-    MessageStepFields,
-    AgentStepFields {
+interface SMSFormData extends BasicsFields, ScheduleFields, MessageStepFields, AgentStepFields {
   messages_per_minute: number;
   max_messages_per_contact: number;
 }
@@ -95,9 +80,7 @@ export function SMSCampaignWizard({
   onCancel,
   isSubmitting = false,
 }: SMSCampaignWizardProps) {
-  const [selectedContactIds, setSelectedContactIds] = useState<Set<number>>(
-    new Set()
-  );
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<number>>(new Set());
 
   const steps = useMemo<ReadonlyArray<WizardStep<StepId, SMSFormData>>>(
     () => [
@@ -132,14 +115,12 @@ export function SMSCampaignWizard({
             <h4 className="font-medium">Rate Limiting</h4>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Messages per Minute</Label>
+                <Label htmlFor="sms-messages-per-minute">Messages per Minute</Label>
                 <Select
                   value={String(formData.messages_per_minute)}
-                  onValueChange={(v) =>
-                    updateField("messages_per_minute", parseInt(v))
-                  }
+                  onValueChange={(v) => updateField("messages_per_minute", parseInt(v))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="sms-messages-per-minute">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -151,14 +132,12 @@ export function SMSCampaignWizard({
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Max Messages per Contact</Label>
+                <Label htmlFor="sms-max-messages-per-contact">Max Messages per Contact</Label>
                 <Select
                   value={String(formData.max_messages_per_contact)}
-                  onValueChange={(v) =>
-                    updateField("max_messages_per_contact", parseInt(v))
-                  }
+                  onValueChange={(v) => updateField("max_messages_per_contact", parseInt(v))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="sms-max-messages-per-contact">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -203,26 +182,21 @@ export function SMSCampaignWizard({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="p-4 bg-muted rounded-lg">
-                    <p className="whitespace-pre-wrap">
-                      {formData.initial_message}
-                    </p>
+                    <p className="whitespace-pre-wrap">{formData.initial_message}</p>
                   </div>
                   {selectedOffer && (
                     <div className="flex items-center gap-2">
                       <Tag className="size-4 text-success" />
                       <span className="text-sm">Attached offer:</span>
-                      <Badge
-                        variant="secondary"
-                        className="bg-success/10 text-success"
-                      >
+                      <Badge variant="secondary" className="bg-success/10 text-success">
                         {selectedOffer.name}
                       </Badge>
                     </div>
                   )}
                   {formData.follow_up_enabled && (
                     <div className="text-sm text-muted-foreground">
-                      Follow-up enabled: {formData.max_follow_ups} message(s)
-                      after {formData.follow_up_delay_hours} hours
+                      Follow-up enabled: {formData.max_follow_ups} message(s) after{" "}
+                      {formData.follow_up_delay_hours} hours
                     </div>
                   )}
                 </CardContent>
@@ -247,19 +221,14 @@ export function SMSCampaignWizard({
                         </div>
                       ) : (
                         <p className="text-sm text-destructive">
-                          AI is enabled but no agent is selected. Choose an
-                          agent in the AI Agent step or turn off AI responses
-                          before launching.
+                          AI is enabled but no agent is selected. Choose an agent in the AI Agent
+                          step or turn off AI responses before launching.
                         </p>
                       )}
                       {formData.qualification_criteria && (
                         <div className="mt-2">
-                          <p className="text-sm text-muted-foreground">
-                            Qualification criteria:
-                          </p>
-                          <p className="text-sm">
-                            {formData.qualification_criteria}
-                          </p>
+                          <p className="text-sm text-muted-foreground">Qualification criteria:</p>
+                          <p className="text-sm">{formData.qualification_criteria}</p>
                         </div>
                       )}
                     </div>
@@ -275,14 +244,7 @@ export function SMSCampaignWizard({
         },
       }),
     ],
-    [
-      workspaceId,
-      agents,
-      offers,
-      phoneNumbers,
-      onCreateOffer,
-      selectedContactIds,
-    ]
+    [workspaceId, agents, offers, phoneNumbers, onCreateOffer, selectedContactIds],
   );
 
   const handleSubmit = async (formData: SMSFormData) => {

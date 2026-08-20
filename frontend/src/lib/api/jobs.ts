@@ -18,6 +18,11 @@ export type JobTechnician = Schemas["TechnicianSummary"];
 export type JobCrew = Schemas["CrewResponse"];
 export type JobCrewList = Schemas["CrewListResponse"];
 export type JobInstallationPlan = Schemas["JobInstallationPlanResponse"];
+export type JobVisit = Schemas["JobVisitResponse"];
+export type JobVisitCreate = Schemas["JobVisitCreate"];
+export type JobVisitUpdate = Schemas["JobVisitUpdate"];
+export type JobPricing = Schemas["JobPricingResponse"];
+export type JobPricingReplace = Schemas["JobPricingReplace"];
 
 // Field execution: time tracking, expenses, profitability.
 export type TimeEntry = Schemas["TimeEntryResponse"];
@@ -86,6 +91,49 @@ export const jobsApi = {
     apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/installation-plan", {
       path: { workspace_id: workspaceId, job_id: jobId },
     }),
+
+  listVisits: (workspaceId: string, jobId: string): Promise<JobVisit[]> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  createVisit: (workspaceId: string, jobId: string, body: JobVisitCreate): Promise<JobVisit> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+      body,
+    }),
+
+  updateVisit: (
+    workspaceId: string,
+    jobId: string,
+    visitId: string,
+    body: JobVisitUpdate,
+  ): Promise<JobVisit> =>
+    apiClient.patch("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits/{visit_id}", {
+      path: { workspace_id: workspaceId, job_id: jobId, visit_id: visitId },
+      body,
+    }),
+
+  deleteVisit: (workspaceId: string, jobId: string, visitId: string): Promise<void> =>
+    apiClient.del("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits/{visit_id}", {
+      path: { workspace_id: workspaceId, job_id: jobId, visit_id: visitId },
+    }),
+
+  getPricing: (workspaceId: string, jobId: string): Promise<JobPricing> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/pricing", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  replacePricing: (
+    workspaceId: string,
+    jobId: string,
+    body: JobPricingReplace,
+  ): Promise<JobPricing> =>
+    apiClient.put("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/pricing", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+      body,
+    }),
+
   create: (workspaceId: string, body: JobCreateRequest): Promise<Job> =>
     apiClient.post(BASE, { path: { workspace_id: workspaceId }, body }),
 

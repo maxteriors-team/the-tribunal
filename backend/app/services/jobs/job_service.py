@@ -24,6 +24,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -41,7 +42,9 @@ from app.models.field_service import (
     Crew,
     Job,
     JobAssignment,
+    JobLineItem,
     JobStatus,
+    JobVisit,
     ServiceLocation,
     Technician,
 )
@@ -55,7 +58,10 @@ from app.schemas.job import (
     JobCustomerSummary,
     JobInstallationPlanResponse,
     JobLineItemSummary,
+    JobPricedLineItemResponse,
+    JobPricingResponse,
     JobResponse,
+    JobVisitResponse,
     TechnicianSummary,
 )
 from app.schemas.lighting_project import LandscapeDraftDocument
@@ -89,6 +95,174 @@ class JobService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def _get_job_for_children(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> Job:
+        job = await self.db.scalar(
+            select(Job).where(Job.id == job_id, Job.workspace_id == workspace_id)
+        )
+        if job is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        return job
+
+    async def list_visits(
+        self, job_id: uuid.UUID, workspace_id: uuid.UUID
+    ) -> list[JobVisitResponse]:
+        await self._get_job_for_children(job_id, workspace_id)
+        visits = (
+            (
+                await self.db.execute(
+                    select(JobVisit)
+                    .where(JobVisit.job_id == job_id)
+                    .order_by(JobVisit.starts_at, JobVisit.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [JobVisitResponse.model_validate(visit) for visit in visits]
+
+    async def create_visit(
+        self, job_id: uuid.UUID, workspace_id: uuid.UUID, data: dict[str, Any]
+    ) -> JobVisitResponse:
+        job = await self._get_job_for_children(job_id, workspace_id)
+        visit = JobVisit(job_id=job_id, **data)
+        self.db.add(visit)
+        await self.db.flush()
+        await self._sync_primary_visit(job)
+        await self.db.flush()
+        return JobVisitResponse.model_validate(visit)
+
+    async def update_visit(
+        self,
+        job_id: uuid.UUID,
+        visit_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        data: dict[str, Any],
+    ) -> JobVisitResponse:
+        job = await self._get_job_for_children(job_id, workspace_id)
+        visit = await self.db.scalar(
+            select(JobVisit).where(JobVisit.id == visit_id, JobVisit.job_id == job_id)
+        )
+        if visit is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visit not found")
+        starts_at = data.get("starts_at", visit.starts_at)
+        ends_at = data.get("ends_at", visit.ends_at)
+        if ends_at <= starts_at:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="ends_at must be after starts_at",
+            )
+        next_status = data.get("status")
+        if next_status is not None:
+            if next_status == JobStatus.UNSCHEDULED:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="A visit cannot be unscheduled",
+                )
+            data["status"] = next_status.value
+        for key, value in data.items():
+            setattr(visit, key, value)
+        await self.db.flush()
+        await self._sync_primary_visit(job)
+        await self.db.flush()
+        return JobVisitResponse.model_validate(visit)
+
+    async def delete_visit(
+        self, job_id: uuid.UUID, visit_id: uuid.UUID, workspace_id: uuid.UUID
+    ) -> None:
+        job = await self._get_job_for_children(job_id, workspace_id)
+        visit = await self.db.scalar(
+            select(JobVisit).where(JobVisit.id == visit_id, JobVisit.job_id == job_id)
+        )
+        if visit is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visit not found")
+        await self.db.delete(visit)
+        await self.db.flush()
+        await self._sync_primary_visit(job)
+
+    async def _sync_primary_visit(self, job: Job) -> None:
+        primary = await self.db.scalar(
+            select(JobVisit)
+            .where(
+                JobVisit.job_id == job.id,
+                JobVisit.status.not_in([JobStatus.COMPLETED.value, JobStatus.CANCELLED.value]),
+            )
+            .order_by(JobVisit.starts_at, JobVisit.id)
+            .limit(1)
+        )
+        job.scheduled_start = primary.starts_at if primary else None
+        job.scheduled_end = primary.ends_at if primary else None
+        if job.status not in {JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.IN_PROGRESS}:
+            job.status = JobStatus.SCHEDULED if primary else JobStatus.UNSCHEDULED
+
+    async def get_pricing(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> JobPricingResponse:
+        job = await self._get_job_for_children(job_id, workspace_id)
+        items = (
+            (
+                await self.db.execute(
+                    select(JobLineItem)
+                    .where(JobLineItem.job_id == job_id)
+                    .order_by(JobLineItem.position, JobLineItem.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return self._pricing_response(job, items)
+
+    async def replace_pricing(
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        tax_rate: Decimal,
+        items: list[dict[str, Any]],
+    ) -> JobPricingResponse:
+        job = await self._get_job_for_children(job_id, workspace_id)
+        await self.db.execute(delete(JobLineItem).where(JobLineItem.job_id == job_id))
+        job.tax_rate = tax_rate
+        replacements = [
+            JobLineItem(job_id=job_id, position=position, **item)
+            for position, item in enumerate(items)
+        ]
+        self.db.add_all(replacements)
+        await self.db.flush()
+        return self._pricing_response(job, replacements)
+
+    @staticmethod
+    def _pricing_response(job: Job, items: Sequence[JobLineItem]) -> JobPricingResponse:
+        cent = Decimal("0.01")
+        response_items: list[JobPricedLineItemResponse] = []
+        subtotal = Decimal("0.00")
+        taxable_subtotal = Decimal("0.00")
+        for item in items:
+            line_total = (item.quantity * item.unit_price).quantize(cent, rounding=ROUND_HALF_UP)
+            subtotal += line_total
+            if item.taxable:
+                taxable_subtotal += line_total
+            response_items.append(
+                JobPricedLineItemResponse(
+                    id=item.id,
+                    name=item.name,
+                    description=item.description,
+                    quantity=item.quantity,
+                    unit_price=item.unit_price,
+                    taxable=item.taxable,
+                    position=item.position,
+                    total=line_total,
+                )
+            )
+        subtotal = subtotal.quantize(cent, rounding=ROUND_HALF_UP)
+        tax = (taxable_subtotal * job.tax_rate / Decimal("100")).quantize(
+            cent, rounding=ROUND_HALF_UP
+        )
+        return JobPricingResponse(
+            job_id=job.id,
+            tax_rate=job.tax_rate,
+            items=response_items,
+            subtotal=subtotal,
+            tax=tax,
+            total=subtotal + tax,
+        )
 
     async def assignment_recipient_user_ids(
         self, job_id: uuid.UUID, workspace_id: uuid.UUID
@@ -624,6 +798,15 @@ class JobService:
         )
         self.db.add(job)
         await self.db.flush()
+        if job.scheduled_start is not None and job.scheduled_end is not None:
+            self.db.add(
+                JobVisit(
+                    job_id=job.id,
+                    starts_at=job.scheduled_start,
+                    ends_at=job.scheduled_end,
+                    instructions=job.description,
+                )
+            )
 
         for technician_id in dict.fromkeys(technician_ids):
             self.db.add(JobAssignment(job_id=job.id, technician_id=technician_id))
@@ -675,6 +858,20 @@ class JobService:
         """Set the time window; flip ``unscheduled`` -> ``scheduled``."""
         job = await self._load(job_id, workspace_id)
         prior_status = job.status
+        primary_visit = await self.db.scalar(
+            select(JobVisit)
+            .where(
+                JobVisit.job_id == job.id,
+                JobVisit.status.not_in([JobStatus.COMPLETED.value, JobStatus.CANCELLED.value]),
+            )
+            .order_by(JobVisit.starts_at, JobVisit.id)
+            .limit(1)
+        )
+        if primary_visit is None:
+            self.db.add(JobVisit(job_id=job.id, starts_at=start, ends_at=end))
+        else:
+            primary_visit.starts_at = start
+            primary_visit.ends_at = end
         job.scheduled_start = start
         job.scheduled_end = end
         if job.status == JobStatus.UNSCHEDULED:

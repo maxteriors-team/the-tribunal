@@ -9,6 +9,7 @@ import { JobBrief } from "@/components/jobs/job-brief";
 import { JobCostingPanel } from "@/components/jobs/job-costing-panel";
 import { JobMaterialsPanel } from "@/components/jobs/job-materials-panel";
 import { JobNeighborsPanel } from "@/components/jobs/job-neighbors-panel";
+import { JobVisitsPricing } from "@/components/jobs/job-visits-pricing";
 import { TechnicianSelect } from "@/components/jobs/technician-select";
 import {
   AlertDialog,
@@ -205,11 +206,20 @@ export function JobDetailDialog({
         </DialogHeader>
 
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className={`grid w-full ${showNeighbors ? "grid-cols-4" : "grid-cols-3"}`}>
+          <TabsList
+            className={`grid w-full ${
+              job.lighting_project_id && showNeighbors
+                ? "grid-cols-5"
+                : job.lighting_project_id || showNeighbors
+                  ? "grid-cols-4"
+                  : "grid-cols-3"
+            }`}
+          >
             <TabsTrigger value="details">{readOnly ? "Details" : "Dispatch"}</TabsTrigger>
             {job.lighting_project_id ? (
               <TabsTrigger value="installation-plan">Installation plan</TabsTrigger>
             ) : null}
+            <TabsTrigger value="visits-pricing">Visits & pricing</TabsTrigger>
             <TabsTrigger value="field-work">Field work</TabsTrigger>
             {showNeighbors && <TabsTrigger value="neighbors">Neighbors</TabsTrigger>}
           </TabsList>
@@ -348,6 +358,9 @@ export function JobDetailDialog({
               <InstallationPlanPanel workspaceId={workspaceId} jobId={job.id} />
             </TabsContent>
           ) : null}
+          <TabsContent value="visits-pricing" className="pt-2">
+            <JobVisitsPricing workspaceId={workspaceId} jobId={job.id} readOnly={readOnly} />
+          </TabsContent>
           <TabsContent value="field-work" className="space-y-5 pt-2">
             <JobCostingPanel workspaceId={workspaceId} jobId={job.id} />
             {/* Materials sit beside time and expenses: same tab, separate

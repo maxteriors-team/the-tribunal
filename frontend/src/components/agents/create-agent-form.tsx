@@ -29,10 +29,7 @@ import {
   createAgentFormSchema,
   type CreateAgentFormValues,
 } from "@/lib/agents/agent-form";
-import {
-  getVoiceProviderForTier,
-  resolveVoiceForProvider,
-} from "@/lib/agents/agent-voice";
+import { getVoiceProviderForTier, resolveVoiceForProvider } from "@/lib/agents/agent-voice";
 import { agentsApi, type Agent, type CreateAgentRequest } from "@/lib/api/agents";
 import { getLanguagesForTier, getFallbackLanguage } from "@/lib/languages";
 import { PRICING_TIERS } from "@/lib/pricing-tiers";
@@ -96,13 +93,10 @@ export function CreateAgentForm() {
 
   const selectedTier = useMemo(
     () => PRICING_TIERS.find((t) => t.id === pricingTier),
-    [pricingTier]
+    [pricingTier],
   );
 
-  const availableLanguages = useMemo(
-    () => getLanguagesForTier(pricingTier),
-    [pricingTier]
-  );
+  const availableLanguages = useMemo(() => getLanguagesForTier(pricingTier), [pricingTier]);
 
   // Reset language if invalid for new tier
   useEffect(() => {
@@ -172,12 +166,10 @@ export function CreateAgentForm() {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
             <Check className="h-7 w-7 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {createdAgent.name} is ready
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight">{createdAgent.name} is ready</h1>
           <p className="mt-2 text-muted-foreground">
-            Rehearse it against built-in prospect personas in the Practice Arena
-            before it talks to real leads — no live sends, just a scored report.
+            Rehearse it against built-in prospect personas in the Practice Arena before it talks to
+            real leads — no live sends, just a scored report.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Button asChild>
@@ -207,7 +199,7 @@ export function CreateAgentForm() {
         </div>
 
         {/* Progress Bar */}
-        <div className="mb-6">
+        <nav className="mb-6" aria-label="Agent setup progress">
           <div className="grid grid-cols-[1fr_1rem_1fr_1rem_1fr_1rem_1fr_1rem_1fr] items-center">
             {WIZARD_STEPS.map((s, idx) => {
               const Icon = s.icon;
@@ -220,33 +212,35 @@ export function CreateAgentForm() {
                     type="button"
                     onClick={() => s.id < step && setStep(s.id)}
                     disabled={s.id > step}
+                    aria-current={isActive ? "step" : undefined}
+                    aria-label={`Step ${s.id}: ${s.label} (${
+                      isActive ? "current" : isCompleted ? "completed" : "upcoming"
+                    })`}
                     className={cn(
                       "relative z-10 flex items-center gap-2 rounded-lg border p-2 transition-all duration-300",
                       isActive && "border-primary bg-primary/10 ring-1 ring-primary",
-                      isCompleted && "cursor-pointer border-primary bg-primary/5 hover:bg-primary/10",
-                      !isActive && !isCompleted && "cursor-not-allowed border-border bg-muted/30"
+                      isCompleted &&
+                        "cursor-pointer border-primary bg-primary/5 hover:bg-primary/10",
+                      !isActive && !isCompleted && "cursor-not-allowed border-border bg-muted/30",
                     )}
                   >
                     <div
+                      aria-hidden="true"
                       className={cn(
                         "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-all",
                         isActive && "bg-primary text-primary-foreground",
                         isCompleted && "bg-primary text-primary-foreground",
-                        !isActive && !isCompleted && "bg-muted text-muted-foreground"
+                        !isActive && !isCompleted && "bg-muted text-muted-foreground",
                       )}
                     >
-                      {isCompleted ? (
-                        <Check className="h-3 w-3" />
-                      ) : (
-                        <Icon className="h-3 w-3" />
-                      )}
+                      {isCompleted ? <Check className="h-3 w-3" /> : <Icon className="h-3 w-3" />}
                     </div>
                     <span
                       className={cn(
                         "hidden text-xs font-medium sm:block",
                         isActive && "text-foreground",
                         isCompleted && "text-foreground",
-                        !isActive && !isCompleted && "text-muted-foreground"
+                        !isActive && !isCompleted && "text-muted-foreground",
                       )}
                     >
                       {s.label}
@@ -254,35 +248,50 @@ export function CreateAgentForm() {
                   </button>
 
                   {idx < WIZARD_STEPS.length - 1 && (
-                    <div className="relative h-0.5">
+                    <div className="relative h-0.5" aria-hidden="true">
                       <div className="absolute inset-0 bg-border" />
-                      {isCompleted && (
-                        <div className="absolute inset-0 bg-primary" />
-                      )}
+                      {isCompleted && <div className="absolute inset-0 bg-primary" />}
                     </div>
                   )}
                 </Fragment>
               );
             })}
           </div>
-        </div>
+        </nav>
 
         {/* Form Content */}
         <Form {...form}>
           <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
             {step === 1 && <PricingTierStep form={form} pricingTier={pricingTier} />}
-            {step === 2 && <BasicInfoStep form={form} pricingTier={pricingTier} availableLanguages={availableLanguages} />}
+            {step === 2 && (
+              <BasicInfoStep
+                form={form}
+                pricingTier={pricingTier}
+                availableLanguages={availableLanguages}
+              />
+            )}
             {step === 3 && <SystemPromptStep form={form} />}
-            {step === 4 && <ToolsIntegrationsStep form={form} pricingTier={pricingTier} enabledToolIds={enabledToolIds} />}
-            {step === 5 && <SettingsReviewStep form={form} pricingTier={pricingTier} agentName={agentName} systemPrompt={systemPrompt} enabledTools={enabledTools} selectedTier={selectedTier} />}
+            {step === 4 && (
+              <ToolsIntegrationsStep
+                form={form}
+                pricingTier={pricingTier}
+                enabledToolIds={enabledToolIds}
+              />
+            )}
+            {step === 5 && (
+              <SettingsReviewStep
+                form={form}
+                pricingTier={pricingTier}
+                agentName={agentName}
+                systemPrompt={systemPrompt}
+                enabledTools={enabledTools}
+                selectedTier={selectedTier}
+              />
+            )}
 
             {/* Navigation */}
             <div className="flex items-center justify-between border-t pt-6">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleBack}
-              >
+              <Button type="button" variant="outline" onClick={handleBack}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 {step === 1 ? "Cancel" : "Back"}
               </Button>

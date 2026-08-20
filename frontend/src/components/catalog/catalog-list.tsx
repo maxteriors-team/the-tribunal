@@ -13,11 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Table,
   TableBody,
@@ -26,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { catalogApi } from "@/lib/api/catalog";
 import { queryKeys } from "@/lib/query-keys";
@@ -38,6 +35,8 @@ import { CatalogItemDialog } from "./catalog-item-dialog";
 
 export function CatalogList() {
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canManageCatalog = can("billing:write");
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
@@ -69,8 +68,7 @@ export function CatalogList() {
       toast.success("Item deleted");
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to delete item")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to delete item")),
   });
 
   const openCreate = () => {
@@ -83,12 +81,12 @@ export function CatalogList() {
     setDialogOpen(true);
   };
 
-  const newItemButton = (
+  const newItemButton = canManageCatalog ? (
     <Button onClick={openCreate} size="sm">
       <Plus className="mr-1.5 h-4 w-4" />
       New item
     </Button>
-  );
+  ) : undefined;
 
   let body: React.ReactNode;
   if (!workspaceId || query.isLoading) {
@@ -130,9 +128,7 @@ export function CatalogList() {
                 <TableCell className="font-medium">
                   <div className="flex items-center gap-2">
                     {item.name}
-                    {!item.is_active && (
-                      <Badge variant="outline">archived</Badge>
-                    )}
+                    {!item.is_active && <Badge variant="outline">archived</Badge>}
                   </div>
                   {item.description && (
                     <div className="max-w-[28rem] truncate text-xs text-muted-foreground">
@@ -143,41 +139,39 @@ export function CatalogList() {
                 <TableCell>
                   <Badge variant="secondary">{item.kind}</Badge>
                 </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {item.sku || "—"}
-                </TableCell>
-                <TableCell className="text-right">
-                  {formatCurrency(item.unit_price)}
-                </TableCell>
+                <TableCell className="text-muted-foreground">{item.sku || "—"}</TableCell>
+                <TableCell className="text-right">{formatCurrency(item.unit_price)}</TableCell>
                 <TableCell className="text-muted-foreground">
                   {item.taxable ? "Yes" : "No"}
                 </TableCell>
                 <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        disabled={deleteMutation.isPending}
-                        aria-label="Actions"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEdit(item)}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => deleteMutation.mutate(item.id)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {canManageCatalog && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          disabled={deleteMutation.isPending}
+                          aria-label="Actions"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEdit(item)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => deleteMutation.mutate(item.id)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -191,11 +185,9 @@ export function CatalogList() {
     <div className="space-y-4">
       <div className="flex items-center justify-end">{newItemButton}</div>
       {body}
-      <CatalogItemDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        item={editing}
-      />
+      {canManageCatalog && (
+        <CatalogItemDialog open={dialogOpen} onOpenChange={setDialogOpen} item={editing} />
+      )}
     </div>
   );
 }

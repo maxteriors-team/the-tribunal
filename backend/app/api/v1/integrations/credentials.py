@@ -9,7 +9,13 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import DB, CurrentUser, WorkspaceAccess, WorkspaceAdminAccess
+from app.api.deps import (
+    DB,
+    CanManageWorkspace,
+    CurrentUser,
+    WorkspaceAccess,
+    WorkspaceAdminAccess,
+)
 from app.core.config import settings
 from app.core.encryption import encrypt_json
 from app.models.workspace import WorkspaceIntegration
@@ -58,6 +64,7 @@ def mask_credentials(credentials: dict[str, Any]) -> dict[str, str]:
 async def list_integrations(
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanManageWorkspace,
 ) -> list[IntegrationWithMaskedCredentials]:
     """List all integrations for a workspace with masked credentials."""
     result = await db.execute(
@@ -93,6 +100,7 @@ async def get_integration(
     integration_type: str,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanManageWorkspace,
 ) -> IntegrationWithMaskedCredentials:
     """Get a specific integration by type."""
     result = await db.execute(
@@ -204,6 +212,7 @@ async def create_integration(
     workspace: WorkspaceAdminAccess,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanManageWorkspace,
 ) -> IntegrationWithMaskedCredentials:
     """Create a new integration for the workspace."""
     # Check if integration already exists
@@ -265,6 +274,7 @@ async def update_integration(
     workspace: WorkspaceAdminAccess,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanManageWorkspace,
 ) -> IntegrationWithMaskedCredentials:
     """Update an existing integration's credentials."""
     result = await db.execute(
@@ -348,6 +358,7 @@ async def delete_integration(
     workspace: WorkspaceAdminAccess,
     current_user: CurrentUser,
     db: DB,
+    _gate: CanManageWorkspace,
 ) -> None:
     """Delete an integration."""
     result = await db.execute(
@@ -660,6 +671,7 @@ async def test_integration(
     integration_type: str,
     workspace: WorkspaceAccess,
     db: DB,
+    _gate: CanManageWorkspace,
     body: IntegrationTestRequest | None = None,
 ) -> IntegrationTestResult:
     """Test an integration's connection.

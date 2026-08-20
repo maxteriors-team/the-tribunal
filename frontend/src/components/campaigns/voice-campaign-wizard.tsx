@@ -36,34 +36,20 @@ import {
 } from "./voice-steps";
 import type { WizardStep } from "./wizard-types";
 
-
-
-type StepId =
-  | "basics"
-  | "contacts"
-  | "voice"
-  | "fallback"
-  | "schedule"
-  | "review";
+type StepId = "basics" | "contacts" | "voice" | "fallback" | "schedule" | "review";
 
 interface VoiceCampaignWizardProps {
   workspaceId: string;
   voiceAgents: Agent[];
   textAgents: Agent[];
   phoneNumbers: PhoneNumber[];
-  onSubmit: (
-    data: CreateVoiceCampaignRequest,
-    contactIds: Set<number>
-  ) => Promise<VoiceCampaign>;
+  onSubmit: (data: CreateVoiceCampaignRequest, contactIds: Set<number>) => Promise<VoiceCampaign>;
   onCancel?: () => void;
   isSubmitting?: boolean;
 }
 
 interface VoiceFormData
-  extends BasicsFields,
-    ScheduleFields,
-    VoiceAgentStepFields,
-    SMSFallbackStepFields {
+  extends BasicsFields, ScheduleFields, VoiceAgentStepFields, SMSFallbackStepFields {
   ai_enabled: boolean;
   qualification_criteria: string;
   calls_per_minute: number;
@@ -95,9 +81,7 @@ export function VoiceCampaignWizard({
   onCancel,
   isSubmitting = false,
 }: VoiceCampaignWizardProps) {
-  const [selectedContactIds, setSelectedContactIds] = useState<Set<number>>(
-    new Set()
-  );
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<number>>(new Set());
 
   const steps = useMemo<ReadonlyArray<WizardStep<StepId, VoiceFormData>>>(
     () => [
@@ -130,14 +114,12 @@ export function VoiceCampaignWizard({
           <div className="space-y-4">
             <h4 className="font-medium">Rate Limiting</h4>
             <div className="space-y-2">
-              <Label>Calls per Minute</Label>
+              <Label htmlFor="voice-calls-per-minute">Calls per Minute</Label>
               <Select
                 value={String(formData.calls_per_minute)}
-                onValueChange={(v) =>
-                  updateField("calls_per_minute", parseInt(v))
-                }
+                onValueChange={(v) => updateField("calls_per_minute", parseInt(v))}
               >
-                <SelectTrigger>
+                <SelectTrigger id="voice-calls-per-minute">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -160,15 +142,11 @@ export function VoiceCampaignWizard({
         selectedContactIds,
         recipientsLabel: "contacts will receive calls",
         scheduleHoursLabel: "Calling hours",
-        renderRateDescription: (formData) => (
-          <>{formData.calls_per_minute} calls/min</>
-        ),
+        renderRateDescription: (formData) => <>{formData.calls_per_minute} calls/min</>,
         renderChannelCards: (formData) => {
-          const selectedVoiceAgent = voiceAgents.find(
-            (a) => a.id === formData.voice_agent_id
-          );
+          const selectedVoiceAgent = voiceAgents.find((a) => a.id === formData.voice_agent_id);
           const selectedFallbackAgent = textAgents.find(
-            (a) => a.id === formData.sms_fallback_agent_id
+            (a) => a.id === formData.sms_fallback_agent_id,
           );
           return (
             <>
@@ -180,18 +158,12 @@ export function VoiceCampaignWizard({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {selectedVoiceAgent && (
-                    <Badge variant="default">{selectedVoiceAgent.name}</Badge>
-                  )}
+                  {selectedVoiceAgent && <Badge variant="default">{selectedVoiceAgent.name}</Badge>}
                   <div className="text-sm text-muted-foreground">
-                    Machine detection:{" "}
-                    {formData.enable_machine_detection
-                      ? "Enabled"
-                      : "Disabled"}
+                    Machine detection: {formData.enable_machine_detection ? "Enabled" : "Disabled"}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    Max call duration:{" "}
-                    {formData.max_call_duration_seconds / 60} minute(s)
+                    Max call duration: {formData.max_call_duration_seconds / 60} minute(s)
                   </div>
                 </CardContent>
               </Card>
@@ -206,20 +178,14 @@ export function VoiceCampaignWizard({
                 <CardContent>
                   {formData.sms_fallback_enabled ? (
                     <div className="space-y-2">
-                      <Badge
-                        variant="secondary"
-                        className="bg-success/10 text-success"
-                      >
-                        {formData.sms_fallback_mode === "ai"
-                          ? "AI-Generated"
-                          : "Template"}
+                      <Badge variant="secondary" className="bg-success/10 text-success">
+                        {formData.sms_fallback_mode === "ai" ? "AI-Generated" : "Template"}
                       </Badge>
-                      {formData.sms_fallback_mode === "ai" &&
-                        selectedFallbackAgent && (
-                          <p className="text-sm text-muted-foreground">
-                            Using agent: {selectedFallbackAgent.name}
-                          </p>
-                        )}
+                      {formData.sms_fallback_mode === "ai" && selectedFallbackAgent && (
+                        <p className="text-sm text-muted-foreground">
+                          Using agent: {selectedFallbackAgent.name}
+                        </p>
+                      )}
                       {formData.sms_fallback_mode === "template" && (
                         <p className="text-sm text-muted-foreground line-clamp-2">
                           {formData.sms_fallback_template}
@@ -227,9 +193,7 @@ export function VoiceCampaignWizard({
                       )}
                     </div>
                   ) : (
-                    <p className="text-muted-foreground">
-                      SMS fallback is disabled
-                    </p>
+                    <p className="text-muted-foreground">SMS fallback is disabled</p>
                   )}
                 </CardContent>
               </Card>
@@ -238,13 +202,7 @@ export function VoiceCampaignWizard({
         },
       }),
     ],
-    [
-      workspaceId,
-      voiceAgents,
-      textAgents,
-      phoneNumbers,
-      selectedContactIds,
-    ]
+    [workspaceId, voiceAgents, textAgents, phoneNumbers, selectedContactIds],
   );
 
   const handleSubmit = async (formData: VoiceFormData) => {
@@ -257,14 +215,10 @@ export function VoiceCampaignWizard({
       max_call_duration_seconds: formData.max_call_duration_seconds,
       sms_fallback_enabled: formData.sms_fallback_enabled,
       sms_fallback_template:
-        formData.sms_fallback_mode === "template"
-          ? formData.sms_fallback_template
-          : undefined,
+        formData.sms_fallback_mode === "template" ? formData.sms_fallback_template : undefined,
       sms_fallback_use_ai: formData.sms_fallback_mode === "ai",
       sms_fallback_agent_id:
-        formData.sms_fallback_mode === "ai"
-          ? formData.sms_fallback_agent_id
-          : undefined,
+        formData.sms_fallback_mode === "ai" ? formData.sms_fallback_agent_id : undefined,
       ai_enabled: formData.ai_enabled,
       qualification_criteria: formData.qualification_criteria || undefined,
       ...mapScheduleToRequest(formData),

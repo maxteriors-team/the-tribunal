@@ -176,7 +176,10 @@ export function OutboundWorkflowCard({
             </div>
             <div className="grid gap-2">
               {details.messagePreviews.map((message) => (
-                <div key={`${message.channel}-${message.label}`} className="rounded-lg border bg-muted/20 p-3">
+                <div
+                  key={`${message.channel}-${message.label}`}
+                  className="rounded-lg border bg-muted/20 p-3"
+                >
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <Badge variant="secondary" className="capitalize">
                       {message.channel.replaceAll("_", " ")}
@@ -207,10 +210,18 @@ export function OutboundWorkflowCard({
             icon={<Rocket className="size-4" />}
             label="Campaign launch"
             title={details.campaignName ?? "Outbound campaign"}
-            description={details.launchStatus ? `Status: ${details.launchStatus.replaceAll("_", " ")}` : undefined}
+            description={
+              details.launchStatus
+                ? `Status: ${details.launchStatus.replaceAll("_", " ")}`
+                : undefined
+            }
           >
             {typeof details.launchProgress === "number" ? (
-              <Progress value={details.launchProgress} className="mt-2 h-2" />
+              <Progress
+                value={details.launchProgress}
+                aria-label="Campaign launch progress"
+                className="mt-2 h-2"
+              />
             ) : null}
           </WorkflowSection>
           <WorkflowSection
@@ -245,7 +256,11 @@ export function OutboundWorkflowCard({
                 disabled={isApproving || isRejecting}
                 className="bg-green-600 hover:bg-green-700"
               >
-                {isApproving ? <Clock className="mr-1 size-3.5 animate-spin" /> : <Check className="mr-1 size-3.5" />}
+                {isApproving ? (
+                  <Clock className="mr-1 size-3.5 animate-spin" />
+                ) : (
+                  <Check className="mr-1 size-3.5" />
+                )}
                 Approve launch
               </Button>
               <Button
@@ -255,7 +270,11 @@ export function OutboundWorkflowCard({
                 disabled={isApproving || isRejecting}
                 className="text-destructive"
               >
-                {isRejecting ? <Clock className="mr-1 size-3.5 animate-spin" /> : <X className="mr-1 size-3.5" />}
+                {isRejecting ? (
+                  <Clock className="mr-1 size-3.5 animate-spin" />
+                ) : (
+                  <X className="mr-1 size-3.5" />
+                )}
                 Request changes
               </Button>
             </div>
@@ -309,23 +328,38 @@ function getWorkflowDetails({
   payload: Record<string, unknown>;
   context: Record<string, unknown>;
 }): OutboundWorkflowDetails {
-  const segment = getRecord(payload.segment) ?? getRecord(context.segment) ?? getRecord(payload.segment_preview);
-  const offer = getRecord(payload.offer) ?? getRecord(context.offer) ?? getRecord(payload.selected_offer);
+  const segment =
+    getRecord(payload.segment) ?? getRecord(context.segment) ?? getRecord(payload.segment_preview);
+  const offer =
+    getRecord(payload.offer) ?? getRecord(context.offer) ?? getRecord(payload.selected_offer);
   const campaign = getRecord(payload.campaign) ?? getRecord(context.campaign);
   const responder =
     getRecord(payload.responder_agent) ??
     getRecord(payload.assigned_responder_agent) ??
     getRecord(context.responder_agent) ??
     getRecord(context.agent);
-  const handoff = getRecord(payload.warm_lead_handoff) ?? getRecord(context.warm_lead_handoff) ?? getRecord(payload.handoff);
+  const handoff =
+    getRecord(payload.warm_lead_handoff) ??
+    getRecord(context.warm_lead_handoff) ??
+    getRecord(payload.handoff);
 
   const messagePreviews = getMessagePreviews(payload, context);
-  const launchStatus = getString(payload.launch_status) ?? getString(campaign?.status) ?? getString(action?.execution_result?.status);
+  const launchStatus =
+    getString(payload.launch_status) ??
+    getString(campaign?.status) ??
+    getString(action?.execution_result?.status);
   const launchProgress = getNumber(payload.launch_progress) ?? getNumber(campaign?.progress);
-  const segmentCount = getNumber(segment?.contact_count) ?? getNumber(segment?.count) ?? getNumber(payload.contact_count);
+  const segmentCount =
+    getNumber(segment?.contact_count) ??
+    getNumber(segment?.count) ??
+    getNumber(payload.contact_count);
 
   return {
-    title: getString(payload.title) ?? getString(campaign?.name) ?? action?.description ?? "Outbound workflow ready",
+    title:
+      getString(payload.title) ??
+      getString(campaign?.name) ??
+      action?.description ??
+      "Outbound workflow ready",
     summary:
       getString(payload.summary) ??
       getString(context.summary) ??
@@ -334,7 +368,10 @@ function getWorkflowDetails({
     segmentCount,
     segmentDescription: getString(segment?.description) ?? getString(payload.segment_description),
     offerName: getString(offer?.name) ?? getString(payload.offer_name),
-    offerSummary: getString(offer?.headline) ?? getString(offer?.description) ?? getString(payload.offer_summary),
+    offerSummary:
+      getString(offer?.headline) ??
+      getString(offer?.description) ??
+      getString(payload.offer_summary),
     messagePreviews,
     approvalLabel: getString(payload.approval_label) ?? getString(context.approval_label),
     approvalStatus: action?.status ?? getString(payload.approval_status),
@@ -342,8 +379,14 @@ function getWorkflowDetails({
     launchStatus,
     launchProgress,
     responderAgentName: getString(responder?.name) ?? getString(payload.responder_agent_name),
-    responderAgentRole: getString(responder?.role) ?? getString(responder?.description) ?? getString(payload.responder_agent_role),
-    handoffTitle: getString(handoff?.title) ?? getString(payload.handoff_title) ?? "Warm-lead handoff notification",
+    responderAgentRole:
+      getString(responder?.role) ??
+      getString(responder?.description) ??
+      getString(payload.responder_agent_role),
+    handoffTitle:
+      getString(handoff?.title) ??
+      getString(payload.handoff_title) ??
+      "Warm-lead handoff notification",
     handoffDescription:
       getString(handoff?.description) ??
       getString(handoff?.message) ??
@@ -369,12 +412,18 @@ function getWorkflowMetrics(
 
   if (metrics.length > 0) return metrics;
 
-  const estimatedReplies = getNumber(payload.estimated_replies) ?? getNumber(context.estimated_replies);
-  const expectedAppointments = getNumber(payload.expected_appointments) ?? getNumber(context.expected_appointments);
+  const estimatedReplies =
+    getNumber(payload.estimated_replies) ?? getNumber(context.estimated_replies);
+  const expectedAppointments =
+    getNumber(payload.expected_appointments) ?? getNumber(context.expected_appointments);
 
   return [
-    typeof segmentCount === "number" ? { label: "Audience", value: formatNumber(segmentCount) } : null,
-    typeof estimatedReplies === "number" ? { label: "Est. replies", value: formatNumber(estimatedReplies), tone: "success" } : null,
+    typeof segmentCount === "number"
+      ? { label: "Audience", value: formatNumber(segmentCount) }
+      : null,
+    typeof estimatedReplies === "number"
+      ? { label: "Est. replies", value: formatNumber(estimatedReplies), tone: "success" }
+      : null,
     typeof expectedAppointments === "number"
       ? { label: "Est. appointments", value: formatNumber(expectedAppointments), tone: "success" }
       : null,
@@ -385,9 +434,10 @@ function getMessagePreviews(
   payload: Record<string, unknown>,
   context: Record<string, unknown>,
 ): WorkflowMessagePreview[] {
-  const previewSource = getArray(payload.message_previews).length > 0
-    ? getArray(payload.message_previews)
-    : getArray(context.message_previews);
+  const previewSource =
+    getArray(payload.message_previews).length > 0
+      ? getArray(payload.message_previews)
+      : getArray(context.message_previews);
 
   const previews = previewSource
     .map((item, index) => {
@@ -408,8 +458,12 @@ function getMessagePreviews(
     })
     .filter((preview): preview is WorkflowMessagePreview => Boolean(preview));
 
-  const initialMessage = getString(payload.initial_message) ?? getString(payload.message) ?? getString(context.initial_message);
-  const followUpMessage = getString(payload.follow_up_message) ?? getString(context.follow_up_message);
+  const initialMessage =
+    getString(payload.initial_message) ??
+    getString(payload.message) ??
+    getString(context.initial_message);
+  const followUpMessage =
+    getString(payload.follow_up_message) ?? getString(context.follow_up_message);
 
   if (previews.length > 0) return previews;
 
@@ -422,15 +476,15 @@ function getMessagePreviews(
 function hasWorkflowSignals(source: Record<string, unknown>) {
   return Boolean(
     source.segment ||
-      source.segment_preview ||
-      source.offer ||
-      source.selected_offer ||
-      source.message_previews ||
-      source.launch_status ||
-      source.responder_agent ||
-      source.assigned_responder_agent ||
-      source.warm_lead_handoff ||
-      source.handoff,
+    source.segment_preview ||
+    source.offer ||
+    source.selected_offer ||
+    source.message_previews ||
+    source.launch_status ||
+    source.responder_agent ||
+    source.assigned_responder_agent ||
+    source.warm_lead_handoff ||
+    source.handoff,
   );
 }
 

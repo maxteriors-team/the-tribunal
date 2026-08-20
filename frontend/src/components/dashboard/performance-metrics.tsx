@@ -12,20 +12,10 @@ import { memo } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import type {
-  AgentStat,
-  AppointmentStats,
-  CampaignStat,
-} from "@/lib/api/dashboard";
+import type { AgentStat, AppointmentStats, CampaignStat } from "@/lib/api/dashboard";
 
 interface AppointmentStatsCardProps {
   appointmentStats: AppointmentStats | undefined;
@@ -116,9 +106,7 @@ export const AppointmentStatsCard = memo(function AppointmentStatsCard({
               <div className="space-y-1 text-center">
                 <div className="flex items-center justify-center gap-1 text-destructive">
                   <UserX className="size-4" />
-                  <span className="text-2xl font-bold">
-                    {appointmentStats?.no_shows_30d ?? 0}
-                  </span>
+                  <span className="text-2xl font-bold">{appointmentStats?.no_shows_30d ?? 0}</span>
                 </div>
                 <p className="text-xs font-medium">No-Shows</p>
                 <p className="text-xs text-muted-foreground">Last 30 days</p>
@@ -145,9 +133,7 @@ export const ActiveCampaignsCard = memo(function ActiveCampaignsCard({
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle className="gradient-heading">Active Campaigns</CardTitle>
-          <CardDescription>
-            Currently running and scheduled campaigns
-          </CardDescription>
+          <CardDescription>Currently running and scheduled campaigns</CardDescription>
         </div>
         <Button variant="outline" size="sm" asChild>
           <Link href="/campaigns">
@@ -177,10 +163,7 @@ export const ActiveCampaignsCard = memo(function ActiveCampaignsCard({
           </div>
         ) : (
           campaigns.map((campaign) => (
-            <div
-              key={campaign.id}
-              className="flex items-center gap-4 p-3 rounded-lg border"
-            >
+            <div key={campaign.id} className="flex items-center gap-4 p-3 rounded-lg border">
               <div className="flex-1 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -200,7 +183,11 @@ export const ActiveCampaignsCard = memo(function ActiveCampaignsCard({
                     {campaign.sent}/{campaign.total}
                   </span>
                 </div>
-                <Progress value={campaign.progress} className="h-2" />
+                <Progress
+                  value={campaign.progress}
+                  aria-label={`${campaign.name} delivery progress`}
+                  className="h-2"
+                />
               </div>
             </div>
           ))
@@ -215,10 +202,7 @@ interface AgentsCardProps {
   isPending: boolean;
 }
 
-export const AgentsCard = memo(function AgentsCard({
-  agents,
-  isPending,
-}: AgentsCardProps) {
+export const AgentsCard = memo(function AgentsCard({ agents, isPending }: AgentsCardProps) {
   return (
     <Card>
       <CardHeader>
@@ -248,9 +232,7 @@ export const AgentsCard = memo(function AgentsCard({
             ))}
           </>
         ) : agents.length === 0 ? (
-          <div className="text-center py-6 text-muted-foreground">
-            No agents configured yet.
-          </div>
+          <div className="text-center py-6 text-muted-foreground">No agents configured yet.</div>
         ) : (
           agents.map((agent, index) => (
             <div key={agent.id} className="flex items-center justify-between">

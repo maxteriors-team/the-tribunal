@@ -295,7 +295,7 @@ export function PermanentPricingSettingsCard() {
         </div>
 
         <div className="flex justify-end">
-          <Button type="button" onClick={save} disabled={disabled}>
+          <Button className="w-full sm:w-auto" type="button" onClick={save} disabled={disabled}>
             {mutation.isPending ? (
               <>
                 <Loader2 className="size-4 animate-spin" /> Saving…

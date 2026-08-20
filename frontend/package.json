@@ -20,6 +20,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
+    "e2e:a11y": "playwright test e2e/accessibility.spec.ts",
     "e2e:ui": "playwright test --ui",
     "visual": "playwright test --config playwright.visual.config.ts",
     "visual:gallery": "node scripts/build-visual-gallery.mjs",
@@ -79,6 +80,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",

@@ -3,19 +3,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  settingsApi,
-  type NotificationSettings,
-} from "@/lib/api/settings";
+import { settingsApi, type NotificationSettings } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
 export function NotificationsSettingsTab() {
   const queryClient = useQueryClient();
@@ -34,10 +25,7 @@ export function NotificationsSettingsTab() {
     },
   });
 
-  const handleNotificationChange = (
-    key: keyof NotificationSettings,
-    value: boolean
-  ) => {
+  const handleNotificationChange = (key: keyof NotificationSettings, value: boolean) => {
     notificationsMutation.mutate({ [key]: value });
   };
 
@@ -84,9 +72,7 @@ export function NotificationsSettingsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Email Notifications</CardTitle>
-          <CardDescription>
-            Configure which emails you want to receive
-          </CardDescription>
+          <CardDescription>Configure which emails you want to receive</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {notificationsLoading ? (
@@ -96,12 +82,13 @@ export function NotificationsSettingsTab() {
           ) : (
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Email Notifications</Label>
+                <Label htmlFor="notification-email">Email Notifications</Label>
                 <p className="text-sm text-muted-foreground">
                   Receive email notifications for important events
                 </p>
               </div>
               <Switch
+                id="notification-email"
                 checked={notifications?.notification_email ?? true}
                 onCheckedChange={(checked) =>
                   handleNotificationChange("notification_email", checked)
@@ -126,16 +113,13 @@ export function NotificationsSettingsTab() {
           ) : (
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>SMS Notifications</Label>
-                <p className="text-sm text-muted-foreground">
-                  Get SMS alerts for critical events
-                </p>
+                <Label htmlFor="notification-sms">SMS Notifications</Label>
+                <p className="text-sm text-muted-foreground">Get SMS alerts for critical events</p>
               </div>
               <Switch
+                id="notification-sms"
                 checked={notifications?.notification_sms ?? true}
-                onCheckedChange={(checked) =>
-                  handleNotificationChange("notification_sms", checked)
-                }
+                onCheckedChange={(checked) => handleNotificationChange("notification_sms", checked)}
                 disabled={notificationsMutation.isPending}
               />
             </div>
@@ -156,12 +140,13 @@ export function NotificationsSettingsTab() {
           ) : (
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Push Notifications</Label>
+                <Label htmlFor="notification-push">Push Notifications</Label>
                 <p className="text-sm text-muted-foreground">
                   Receive push notifications in your browser
                 </p>
               </div>
               <Switch
+                id="notification-push"
                 checked={notifications?.notification_push ?? true}
                 onCheckedChange={(checked) =>
                   handleNotificationChange("notification_push", checked)
@@ -187,21 +172,15 @@ export function NotificationsSettingsTab() {
             </div>
           ) : (
             eventTypeToggles.map((toggle) => (
-              <div
-                key={toggle.key}
-                className="flex items-center justify-between"
-              >
+              <div key={toggle.key} className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>{toggle.label}</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {toggle.description}
-                  </p>
+                  <Label htmlFor={`notification-event-${toggle.key}`}>{toggle.label}</Label>
+                  <p className="text-sm text-muted-foreground">{toggle.description}</p>
                 </div>
                 <Switch
+                  id={`notification-event-${toggle.key}`}
                   checked={notifications?.[toggle.key] ?? true}
-                  onCheckedChange={(checked) =>
-                    handleNotificationChange(toggle.key, checked)
-                  }
+                  onCheckedChange={(checked) => handleNotificationChange(toggle.key, checked)}
                   disabled={notificationsMutation.isPending}
                 />
               </div>

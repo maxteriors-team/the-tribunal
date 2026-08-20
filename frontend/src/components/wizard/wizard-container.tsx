@@ -46,7 +46,7 @@ export function WizardContainer<TStepId extends string>({
   children,
 }: WizardContainerProps<TStepId>) {
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-w-0 flex-col">
       <WizardStepIndicator
         steps={steps}
         currentStepIndex={currentStepIndex}
@@ -54,7 +54,7 @@ export function WizardContainer<TStepId extends string>({
         onStepClick={onStepClick}
       />
       <ScrollArea className="flex-1">
-        <div className="p-6 max-w-4xl mx-auto">
+        <div className="mx-auto max-w-4xl p-4 sm:p-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentStepId}

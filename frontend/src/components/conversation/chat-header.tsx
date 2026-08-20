@@ -1,18 +1,10 @@
 "use client";
 
-import {
-  Phone,
-  MoreVertical,
-  History,
-  Loader2,
-  Bot,
-  Check,
-  User,
-  Trash2,
-} from "lucide-react";
+import { Phone, MoreVertical, History, Loader2, Bot, Check, User, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { ClientNoteDialog } from "@/components/contacts/client-note-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,10 +24,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import type { Conversation } from "@/types";
 import type { Agent } from "@/types/agent";
 
 interface ChatHeaderProps {
+  workspaceId: string;
   contactId: number;
   contactName?: string;
   phoneNumber?: string | null;
@@ -53,6 +47,7 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({
+  workspaceId,
   contactId,
   contactName,
   phoneNumber,
@@ -68,6 +63,8 @@ export function ChatHeader({
   onClearHistory,
   onMarkRead,
 }: ChatHeaderProps) {
+  const { can } = useCapabilities();
+  const [showClientNoteDialog, setShowClientNoteDialog] = useState(false);
   const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false);
 
   const handleConfirmClear = () => {
@@ -78,7 +75,7 @@ export function ChatHeader({
   const unreadCount = conversation?.unread_count ?? 0;
 
   const assignedAgentName = conversation?.assigned_agent_id
-    ? agents.find((a) => a.id === conversation.assigned_agent_id)?.name ?? "Agent"
+    ? (agents.find((a) => a.id === conversation.assigned_agent_id)?.name ?? "Agent")
     : "No Agent";
 
   return (
@@ -111,9 +108,7 @@ export function ChatHeader({
             ) : (
               <Bot className="h-3.5 w-3.5" />
             )}
-            <span className="text-xs">
-              {conversation?.ai_enabled ? "AI On" : "AI Off"}
-            </span>
+            <span className="text-xs">{conversation?.ai_enabled ? "AI On" : "AI Off"}</span>
           </Button>
           {/* Agent Selector */}
           <DropdownMenu>
@@ -145,19 +140,12 @@ export function ChatHeader({
               ))}
               {agents.length === 0 && (
                 <DropdownMenuItem disabled>
-                  <span className="text-muted-foreground text-sm">
-                    No agents available
-                  </span>
+                  <span className="text-muted-foreground text-sm">No agents available</span>
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
-            aria-label="Call contact"
-          >
+          <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Call contact">
             <Phone className="h-4 w-4" />
           </Button>
           <DropdownMenu>
@@ -179,7 +167,11 @@ export function ChatHeader({
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem>Schedule appointment</DropdownMenuItem>
-              <DropdownMenuItem>Add note</DropdownMenuItem>
+              {can("crm:write") && (
+                <DropdownMenuItem onSelect={() => setShowClientNoteDialog(true)}>
+                  Add note
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={onMarkRead}
                 disabled={unreadCount === 0 || isMarkReadPending}
@@ -200,25 +192,20 @@ export function ChatHeader({
                 <Trash2 className="h-4 w-4 mr-2" />
                 Clear history
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive">
-                Archive
-              </DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive">Archive</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
 
       {/* Clear History Confirmation Dialog */}
-      <AlertDialog
-        open={showClearHistoryDialog}
-        onOpenChange={setShowClearHistoryDialog}
-      >
+      <AlertDialog open={showClearHistoryDialog} onOpenChange={setShowClearHistoryDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Clear conversation history?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete all messages in this conversation.
-              This action cannot be undone.
+              This will permanently delete all messages in this conversation. This action cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -228,14 +215,19 @@ export function ChatHeader({
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={isClearHistoryPending}
             >
-              {isClearHistoryPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : null}
+              {isClearHistoryPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Clear history
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <ClientNoteDialog
+        workspaceId={workspaceId}
+        contactId={contactId}
+        contactName={contactName}
+        open={showClientNoteDialog}
+        onOpenChange={setShowClientNoteDialog}
+      />
     </>
   );
 }

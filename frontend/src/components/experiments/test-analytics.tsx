@@ -21,13 +21,7 @@ import * as z from "zod";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -137,7 +131,8 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
       setShowConvertDialog(false);
       convertForm.reset(defaultConvertValues);
     },
-    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to convert to campaign")),
+    onError: (err: unknown) =>
+      toast.error(getApiErrorMessage(err, "Failed to convert to campaign")),
   });
 
   const handleConvert = (data: ConvertCampaignValues) => {
@@ -164,7 +159,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
   const getBestVariant = (): VariantAnalytics | null => {
     if (analytics.variants.length === 0) return null;
     return analytics.variants.reduce((best, v) =>
-      v.response_rate > best.response_rate ? v : best
+      v.response_rate > best.response_rate ? v : best,
     );
   };
 
@@ -190,9 +185,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatNumber(analytics.total_contacts)}
-            </div>
+            <div className="text-2xl font-bold">{formatNumber(analytics.total_contacts)}</div>
           </CardContent>
         </Card>
 
@@ -204,9 +197,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatNumber(analytics.messages_sent)}
-            </div>
+            <div className="text-2xl font-bold">{formatNumber(analytics.messages_sent)}</div>
           </CardContent>
         </Card>
 
@@ -218,9 +209,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {analytics.overall_response_rate.toFixed(1)}%
-            </div>
+            <div className="text-2xl font-bold">{analytics.overall_response_rate.toFixed(1)}%</div>
           </CardContent>
         </Card>
 
@@ -232,9 +221,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatNumber(analytics.contacts_qualified)}
-            </div>
+            <div className="text-2xl font-bold">{formatNumber(analytics.contacts_qualified)}</div>
           </CardContent>
         </Card>
       </div>
@@ -249,9 +236,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
                   <Trophy className="size-6 text-success" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">
-                    Winner: {winnerVariant.variant_name}
-                  </h3>
+                  <h3 className="font-semibold">Winner: {winnerVariant.variant_name}</h3>
                   <p className="text-sm text-muted-foreground">
                     {winnerVariant.response_rate.toFixed(1)}% response rate
                   </p>
@@ -273,9 +258,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
             <div className="flex items-center gap-3">
               <TrendingUp className="size-5 text-info" />
               <div>
-                <p className="font-medium">
-                  Statistical significance reached
-                </p>
+                <p className="font-medium">Statistical significance reached</p>
                 <p className="text-sm text-muted-foreground">
                   You have enough data to confidently select a winner
                 </p>
@@ -289,15 +272,12 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
       <Card>
         <CardHeader>
           <CardTitle>Variant Performance</CardTitle>
-          <CardDescription>
-            Compare how each message variant is performing
-          </CardDescription>
+          <CardDescription>Compare how each message variant is performing</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {analytics.variants.map((variant) => {
             const isBest = bestVariant?.variant_id === variant.variant_id;
-            const isWinner =
-              analytics.winning_variant_id === variant.variant_id;
+            const isWinner = analytics.winning_variant_id === variant.variant_id;
 
             return (
               <div
@@ -306,8 +286,8 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
                   isWinner
                     ? "border-success bg-success/10"
                     : isBest
-                    ? "border-primary bg-primary/5"
-                    : ""
+                      ? "border-primary bg-primary/5"
+                      : ""
                 }`}
               >
                 <div className="flex items-center justify-between mb-4">
@@ -346,51 +326,42 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
                 <div className="grid grid-cols-4 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Contacts</p>
-                    <p className="text-lg font-semibold">
-                      {variant.contacts_assigned}
-                    </p>
+                    <p className="text-lg font-semibold">{variant.contacts_assigned}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Sent</p>
-                    <p className="text-lg font-semibold">
-                      {variant.messages_sent}
-                    </p>
+                    <p className="text-lg font-semibold">{variant.messages_sent}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Replies</p>
-                    <p className="text-lg font-semibold">
-                      {variant.replies_received}
-                    </p>
+                    <p className="text-lg font-semibold">{variant.replies_received}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Qualified</p>
-                    <p className="text-lg font-semibold">
-                      {variant.contacts_qualified}
-                    </p>
+                    <p className="text-lg font-semibold">{variant.contacts_qualified}</p>
                   </div>
                 </div>
 
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Response Rate</span>
-                    <span className="font-medium">
-                      {variant.response_rate.toFixed(1)}%
-                    </span>
+                    <span className="font-medium">{variant.response_rate.toFixed(1)}%</span>
                   </div>
-                  <Progress value={variant.response_rate} className="h-2" />
+                  <Progress
+                    value={variant.response_rate}
+                    aria-label={`${variant.variant_name} response rate`}
+                    className="h-2"
+                  />
                 </div>
 
                 <div className="mt-2 space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Qualification Rate
-                    </span>
-                    <span className="font-medium">
-                      {variant.qualification_rate.toFixed(1)}%
-                    </span>
+                    <span className="text-muted-foreground">Qualification Rate</span>
+                    <span className="font-medium">{variant.qualification_rate.toFixed(1)}%</span>
                   </div>
                   <Progress
                     value={variant.qualification_rate}
+                    aria-label={`${variant.variant_name} qualification rate`}
                     className="h-2"
                   />
                 </div>
@@ -406,27 +377,19 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
           <DialogHeader>
             <DialogTitle>Select Winner</DialogTitle>
             <DialogDescription>
-              Selecting this variant as the winner will mark the test as having
-              a winning message. You can then convert this test to a full
-              campaign.
+              Selecting this variant as the winner will mark the test as having a winning message.
+              You can then convert this test to a full campaign.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowWinnerDialog(false)}
-            >
+            <Button variant="outline" onClick={() => setShowWinnerDialog(false)}>
               Cancel
             </Button>
             <Button
-              onClick={() =>
-                selectedWinnerId && selectWinnerMutation.mutate(selectedWinnerId)
-              }
+              onClick={() => selectedWinnerId && selectWinnerMutation.mutate(selectedWinnerId)}
               disabled={selectWinnerMutation.isPending}
             >
-              {selectWinnerMutation.isPending && (
-                <Loader2 className="size-4 mr-2 animate-spin" />
-              )}
+              {selectWinnerMutation.isPending && <Loader2 className="size-4 mr-2 animate-spin" />}
               Confirm Winner
             </Button>
           </DialogFooter>
@@ -439,16 +402,12 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
           <DialogHeader>
             <DialogTitle>Convert to Campaign</DialogTitle>
             <DialogDescription>
-              Create a full SMS campaign using the winning message from this
-              test.
+              Create a full SMS campaign using the winning message from this test.
             </DialogDescription>
           </DialogHeader>
 
           <Form {...convertForm}>
-            <form
-              onSubmit={convertForm.handleSubmit(handleConvert)}
-              className="space-y-4"
-            >
+            <form onSubmit={convertForm.handleSubmit(handleConvert)} className="space-y-4">
               <FormField
                 control={convertForm.control}
                 name="campaign_name"
@@ -456,10 +415,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
                   <FormItem>
                     <FormLabel>Campaign Name</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="e.g., Summer Outreach Campaign"
-                        {...field}
-                      />
+                      <Input placeholder="e.g., Summer Outreach Campaign" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -479,6 +435,7 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
                     </div>
                     <FormControl>
                       <Switch
+                        aria-label="Use winning message"
                         checked={field.value}
                         onCheckedChange={field.onChange}
                       />
@@ -493,15 +450,14 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
                 render={({ field }) => (
                   <FormItem className="flex items-center justify-between p-3 bg-muted/50 rounded-lg space-y-0">
                     <div>
-                      <p className="font-medium text-sm">
-                        Include Remaining Contacts
-                      </p>
+                      <p className="font-medium text-sm">Include Remaining Contacts</p>
                       <p className="text-xs text-muted-foreground">
                         Add contacts that haven&apos;t been messaged yet
                       </p>
                     </div>
                     <FormControl>
                       <Switch
+                        aria-label="Include remaining contacts"
                         checked={field.value}
                         onCheckedChange={field.onChange}
                       />
@@ -511,17 +467,10 @@ export function TestAnalytics({ testId }: TestAnalyticsProps) {
               />
 
               <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowConvertDialog(false)}
-                >
+                <Button type="button" variant="outline" onClick={() => setShowConvertDialog(false)}>
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={convertToCampaignMutation.isPending}
-                >
+                <Button type="submit" disabled={convertToCampaignMutation.isPending}>
                   {convertToCampaignMutation.isPending && (
                     <Loader2 className="size-4 mr-2 animate-spin" />
                   )}

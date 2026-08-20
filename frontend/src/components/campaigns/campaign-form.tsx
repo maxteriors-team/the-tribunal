@@ -2,115 +2,78 @@
 
 import {
   ArrowLeft,
+  ArrowRight,
   CalendarClock,
-  MessageSquare,
+  Layers3,
   Mail,
+  MessageSquare,
   Phone,
-  Layers,
-  Save,
-  Play,
-  Clock,
   type LucideIcon,
 } from "lucide-react";
-import { motion } from "motion/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import type { CampaignType } from "@/types";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-/**
- * What this chooser offers, which is not the same thing as a `CampaignType`.
- *
- * Pre-booking is an ordinary `sms` campaign with a seasonal offer attached, so
- * it deliberately never becomes a campaign type on the wire — it is a different
- * *wizard*, not a different channel.
- */
-type CampaignChoice = CampaignType | "pre_booking";
+interface AvailableCampaignOption {
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  href: string;
+  unavailable?: false;
+}
 
-const campaignTypes: { value: CampaignChoice; label: string; icon: LucideIcon; description: string }[] = [
+interface UnavailableCampaignOption {
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  unavailable: true;
+  href?: never;
+}
+
+type CampaignOption = AvailableCampaignOption | UnavailableCampaignOption;
+
+const campaignOptions: readonly CampaignOption[] = [
   {
-    value: "sms",
-    label: "SMS",
+    label: "SMS Campaign",
+    description: "Send a text campaign with contact selection, offers, AI replies, and scheduling.",
     icon: MessageSquare,
-    description: "Send text messages to your contacts",
+    href: "/campaigns/sms/new",
   },
   {
-    value: "email",
-    label: "Email",
+    label: "Email Campaign",
+    description: "Create an email, choose recipients, then save a draft or send it now.",
     icon: Mail,
-    description: "Send email campaigns to your contacts",
+    href: "/campaigns/email/new",
   },
   {
-    value: "voice",
-    label: "Voice",
+    label: "Voice Campaign",
+    description: "Run AI-powered calls with an optional SMS fallback for missed connections.",
     icon: Phone,
-    description: "AI-powered voice calls to contacts",
+    href: "/campaigns/voice/new",
   },
   {
-    value: "pre_booking",
-    label: "Pre-Booking",
+    label: "Pre-Booking Campaign",
+    description: "Sell next season's work with an offer, deposit, and dedicated booking flow.",
     icon: CalendarClock,
-    description: "Sell next season's work now, at a discount, for a deposit",
+    href: "/campaigns/pre-booking/new",
   },
   {
-    value: "multi_channel",
-    label: "Multi-Channel",
-    icon: Layers,
-    description: "Combine SMS, email, and voice",
+    label: "Multi-Channel Campaign",
+    description:
+      "A persisted workflow spanning SMS, email, and voice is not available yet. Create one campaign per channel for now.",
+    icon: Layers3,
+    unavailable: true,
   },
 ];
 
-interface CampaignFormProps {
-  campaignId?: string;
-}
+const optionClassName =
+  "relative flex min-h-48 flex-col rounded-xl border bg-card p-5 text-left shadow-sm transition-colors";
 
-export function CampaignForm({ campaignId }: CampaignFormProps) {
-  const router = useRouter();
-  const isEditing = !!campaignId;
-
-  const [campaignType, setCampaignType] = useState<CampaignChoice>("sms");
-  const [enableSchedule, setEnableSchedule] = useState(false);
-
-  const handleSave = () => {
-    // Redirect to appropriate wizard based on campaign type
-    if (campaignType === "sms") {
-      router.push("/campaigns/sms/new");
-    } else if (campaignType === "voice") {
-      router.push("/campaigns/voice/new");
-    } else if (campaignType === "email") {
-      router.push("/campaigns/email/new");
-    } else if (campaignType === "pre_booking") {
-      router.push("/campaigns/pre-booking/new");
-    } else {
-      // multi_channel is not yet available; return to the list.
-      router.push("/campaigns");
-    }
-  };
-
+export function CampaignForm() {
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
+    <div className="mx-auto max-w-5xl space-y-6 p-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
           <Link href="/campaigns" aria-label="Back to campaigns">
@@ -118,276 +81,73 @@ export function CampaignForm({ campaignId }: CampaignFormProps) {
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {isEditing ? "Edit Campaign" : "Create Campaign"}
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight">Create Campaign</h1>
           <p className="text-muted-foreground">
-            {isEditing
-              ? "Modify your campaign settings"
-              : "Set up a new outreach campaign"}
+            Choose a workflow, then enter and save its details in the channel-specific wizard.
           </p>
         </div>
       </div>
 
-      {/* Campaign Type Selection */}
       <Card>
         <CardHeader>
-          <CardTitle>Campaign Type</CardTitle>
+          <CardTitle>Choose a campaign workflow</CardTitle>
           <CardDescription>
-            Choose how you want to reach your contacts
+            Every available option opens the real builder. This page does not collect temporary
+            campaign data.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {campaignTypes.map((type) => {
-              const Icon = type.icon;
-              const isSelected = campaignType === type.value;
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {campaignOptions.map((option) => {
+              const Icon = option.icon;
+
+              if (option.unavailable) {
+                return (
+                  <div
+                    key={option.label}
+                    aria-disabled="true"
+                    className={`${optionClassName} cursor-not-allowed border-dashed bg-muted/40 text-muted-foreground`}
+                  >
+                    <Badge variant="secondary" className="absolute right-4 top-4">
+                      Coming soon
+                    </Badge>
+                    <Icon className="mb-4 size-7" aria-hidden="true" />
+                    <h2 className="pr-24 font-semibold text-foreground">{option.label}</h2>
+                    <p className="mt-2 text-sm leading-relaxed">{option.description}</p>
+                    <span className="mt-auto pt-5 text-sm font-medium">Unavailable</span>
+                  </div>
+                );
+              }
 
               return (
-                <motion.button
-                  key={type.value}
-                  onClick={() => setCampaignType(type.value)}
-                  className={`relative p-4 rounded-lg border-2 text-left transition-colors ${
-                    isSelected
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <Link
+                  key={option.label}
+                  href={option.href}
+                  className={`${optionClassName} group hover:border-primary/60 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
                 >
-                  <Icon
-                    className={`size-6 mb-2 ${
-                      isSelected ? "text-primary" : "text-muted-foreground"
-                    }`}
-                  />
-                  <div className="font-medium">{type.label}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {type.description}
-                  </div>
-                </motion.button>
+                  <Icon className="mb-4 size-7 text-primary" aria-hidden="true" />
+                  <h2 className="font-semibold">{option.label}</h2>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    {option.description}
+                  </p>
+                  <span className="mt-auto flex items-center gap-2 pt-5 text-sm font-medium text-primary">
+                    Open builder
+                    <ArrowRight
+                      className="size-4 transition-transform group-hover:translate-x-1"
+                      aria-hidden="true"
+                    />
+                  </span>
+                </Link>
               );
             })}
           </div>
         </CardContent>
       </Card>
 
-      {/* Basic Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Basic Information</CardTitle>
-          <CardDescription>
-            Name and describe your campaign
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Campaign Name</Label>
-            <Input
-              id="name"
-              placeholder="e.g., Spring Property Showcase"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Describe the purpose of this campaign..."
-              rows={3}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Message Templates */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Message Content</CardTitle>
-          <CardDescription>
-            Create your message templates. Use {"{{variable}}"} for personalization.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="sms" className="w-full">
-            <TabsList className="mb-4">
-              {(campaignType === "sms" || campaignType === "multi_channel") && (
-                <TabsTrigger value="sms">
-                  <MessageSquare className="size-4 mr-2" />
-                  SMS
-                </TabsTrigger>
-              )}
-              {(campaignType === "email" || campaignType === "multi_channel") && (
-                <TabsTrigger value="email">
-                  <Mail className="size-4 mr-2" />
-                  Email
-                </TabsTrigger>
-              )}
-              {(campaignType === "voice" || campaignType === "multi_channel") && (
-                <TabsTrigger value="voice">
-                  <Phone className="size-4 mr-2" />
-                  Voice
-                </TabsTrigger>
-              )}
-            </TabsList>
-
-            <TabsContent value="sms" className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="sms-template">SMS Message</Label>
-                <Textarea
-                  id="sms-template"
-                  placeholder="Hi {{first_name}}, check out our new listings!"
-                  rows={4}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Available variables: {"{{first_name}}"}, {"{{last_name}}"}, {"{{company_name}}"}
-                </p>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="email" className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email-subject">Email Subject</Label>
-                <Input
-                  id="email-subject"
-                  placeholder="Exclusive Offer for {{first_name}}"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email-template">Email Body</Label>
-                <Textarea
-                  id="email-template"
-                  placeholder="<p>Dear {{first_name}},</p><p>We have exciting news...</p>"
-                  rows={8}
-                />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="voice" className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="voice-agent">AI Agent</Label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an AI agent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="agent-1">Sarah - Sales Agent</SelectItem>
-                    <SelectItem value="agent-2">Mike - Support Agent</SelectItem>
-                    <SelectItem value="agent-3">Emma - Scheduler</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="voice-script">Voice Script</Label>
-                <Textarea
-                  id="voice-script"
-                  placeholder="Hello {{first_name}}, I'm calling from..."
-                  rows={6}
-                />
-                <p className="text-xs text-muted-foreground">
-                  This script guides the AI agent during the call
-                </p>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-
-      {/* Scheduling */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Scheduling</CardTitle>
-              <CardDescription>
-                Configure when to run this campaign
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="enable-schedule">Enable Scheduling</Label>
-              <Switch
-                id="enable-schedule"
-                checked={enableSchedule}
-                onCheckedChange={setEnableSchedule}
-              />
-            </div>
-          </div>
-        </CardHeader>
-        {enableSchedule && (
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="start-date">Start Date & Time</Label>
-                <Input id="start-date" type="datetime-local" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="end-date">End Date & Time (Optional)</Label>
-                <Input id="end-date" type="datetime-local" />
-              </div>
-            </div>
-          </CardContent>
-        )}
-      </Card>
-
-      {/* Rate Limiting */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Rate Limiting</CardTitle>
-          <CardDescription>
-            Control the pace of your outreach
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="messages-per-hour">Messages per Hour</Label>
-              <Input
-                id="messages-per-hour"
-                type="number"
-                placeholder="200"
-                defaultValue={200}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="max-retries">Max Retries</Label>
-              <Input
-                id="max-retries"
-                type="number"
-                placeholder="3"
-                defaultValue={3}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="retry-delay">Retry Delay (minutes)</Label>
-              <Input
-                id="retry-delay"
-                type="number"
-                placeholder="60"
-                defaultValue={60}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-4">
+      <div className="flex justify-end">
         <Button variant="outline" asChild>
           <Link href="/campaigns">Cancel</Link>
         </Button>
-        <Button variant="outline" onClick={handleSave}>
-          <Save className="mr-2 size-4" />
-          Save as Draft
-        </Button>
-        {enableSchedule ? (
-          <Button onClick={handleSave}>
-            <Clock className="mr-2 size-4" />
-            Schedule Campaign
-          </Button>
-        ) : (
-          <Button onClick={handleSave}>
-            <Play className="mr-2 size-4" />
-            Start Campaign
-          </Button>
-        )}
       </div>
     </div>
   );

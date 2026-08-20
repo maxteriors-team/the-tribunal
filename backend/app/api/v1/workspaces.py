@@ -31,6 +31,7 @@ from app.services.agents import ensure_default_agent
 from app.services.field_service import ensure_member_on_roster, retire_member_from_roster
 from app.services.opportunities import ensure_default_pipeline
 from app.services.workspaces import bulk_create_members, set_default_membership
+from app.services.workspaces.default_sales_setup import ensure_default_sales_setup
 
 router = APIRouter()
 
@@ -103,6 +104,7 @@ async def create_workspace(
     # Provision a default pipeline so opportunities (e.g. ad-library promotions)
     # land in a real pipeline and the opportunities board has columns to render.
     await ensure_default_pipeline(db, workspace.id)
+    await ensure_default_sales_setup(db, workspace, created_by_id=current_user.id)
 
     # Seed a working AI follow-up agent from an existing template so a brand-new
     # workspace's /agents experience "just works" without authoring a prompt.

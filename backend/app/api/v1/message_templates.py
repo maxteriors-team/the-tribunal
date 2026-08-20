@@ -6,7 +6,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
+from app.core.permissions import Capability
 from app.db.pagination import paginate
 from app.models.message_template import MessageTemplate
 from app.models.workspace import Workspace
@@ -17,7 +18,11 @@ from app.schemas.message_template import (
     PaginatedMessageTemplates,
 )
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_route_capabilities(Capability.CRM_READ, Capability.OUTREACH_WRITE))
+    ]
+)
 
 
 @router.get("", response_model=PaginatedMessageTemplates)

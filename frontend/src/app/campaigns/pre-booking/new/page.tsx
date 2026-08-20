@@ -150,14 +150,14 @@ export default function NewPreBookingCampaignPage() {
 
   return (
     <AppSidebar>
-      <div className="flex h-full min-h-0 flex-col">
-        <div className="flex items-center gap-4 px-6 py-4 border-b bg-background">
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
+        <div className="flex items-center gap-3 border-b bg-background px-4 py-4 sm:gap-4 sm:px-6">
           <Button variant="ghost" size="icon" asChild>
             <Link href="/campaigns" aria-label="Back to campaigns">
               <ArrowLeft className="size-5" />
             </Link>
           </Button>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-semibold">Create Pre-Booking Campaign</h1>
             <p className="text-sm text-muted-foreground">
               Sell next season&apos;s work now — a discount for a deposit, months ahead
