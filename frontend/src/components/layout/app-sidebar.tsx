@@ -16,6 +16,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { SalesRepOnboardingGate } from "@/components/onboarding/sales-rep-onboarding-gate";
 import { SetupGate } from "@/components/onboarding/setup-gate";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -554,6 +555,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         </header>
         {commandMounted && <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />}
         <main className="app-scrollbar min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto">
+          <SalesRepOnboardingGate />
           <SetupGate />
           <NoWorkspaceGate>{children}</NoWorkspaceGate>
         </main>
