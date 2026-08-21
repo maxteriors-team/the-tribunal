@@ -3,9 +3,10 @@
 ``QuoteResponse`` is built from ORM objects that have sometimes never been
 inserted (the approve path serializes the in-memory quote it just mutated).
 SQLAlchemy column/server defaults only land on flush, so those objects read
-``None`` for NOT NULL defaulted columns like ``view_count`` and
-``attach_dismissals``. A pydantic field default does not cover that: it applies
-when an attribute is *missing*, not when it is present and null.
+``None`` for NOT NULL defaulted columns like ``view_count``,
+``attach_dismissals``, and ``selected_permanent_kits``. A pydantic field
+default does not cover that: it applies when an attribute is *missing*, not
+when it is present and null.
 
 This pins the coercion so the next defaulted column added to ``quotes`` fails
 here rather than as a 500 on a customer-facing response.
@@ -48,6 +49,7 @@ def test_unflushed_quote_serializes_with_zeroed_defaults() -> None:
     assert response.attach_count == 0
     assert response.attach_value == 0.0
     assert response.attach_dismissals == []
+    assert response.selected_permanent_kits == []
 
 
 def test_real_view_counts_survive_the_coercion() -> None:

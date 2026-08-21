@@ -2,9 +2,10 @@
 
 A workspace-scoped, token-keyed snapshot of a rep's roofline estimate so a
 homeowner can open a public page and see the permanent-vs-seasonal savings. Only
-the *inputs* the rep measured are persisted (linear feet, optional zones,
-takedown/storage); the money is recomputed from the live workspace pricing config
-on every public view, so a rate change is reflected and no stale totals are stored.
+the *inputs* the rep measured are persisted (linear feet, optional zones, run
+complexity, takedown/storage); the money is recomputed from the live workspace
+pricing config on every public view, so a rate change is reflected and no stale
+totals are stored.
 
 Linear feet is stored here for internal recompute **only** — it is deliberately
 never serialized onto the public :class:`app.schemas.estimate.PublicComparison`
@@ -14,9 +15,9 @@ payload. Mirrors the public-token pattern of :class:`app.models.quote.Quote`.
 import secrets
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -41,6 +42,12 @@ class RooflineComparison(Base):
     """A shareable permanent-vs-temporary lighting comparison for one roofline."""
 
     __tablename__ = "roofline_comparisons"
+    __table_args__ = (
+        CheckConstraint(
+            "permanent_complexity IN ('easy', 'standard', 'complex')",
+            name="ck_roofline_comparisons_permanent_complexity",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(
@@ -58,6 +65,14 @@ class RooflineComparison(Base):
     # Measured selection (INTERNAL — never serialized to the public payload).
     feet: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     channels: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # The scalar remains a fallback for legacy/no-map requests. Existing rows
+    # migrate to Standard; new mixed-complexity designs retain their measured map.
+    permanent_complexity: Mapped[Literal["easy", "standard", "complex"]] = mapped_column(
+        String(20), nullable=False, default="standard", server_default="standard"
+    )
+    permanent_complexity_feet: Mapped[
+        dict[Literal["easy", "standard", "complex"], float] | None
+    ] = mapped_column(JSONB, nullable=True)
     takedown: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     storage: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

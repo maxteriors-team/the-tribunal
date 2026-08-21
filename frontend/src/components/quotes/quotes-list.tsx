@@ -547,7 +547,7 @@ function RowActions({
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={onAddServices}>
                   <Wrench className="mr-2 h-4 w-4" />
-                  Add services
+                  Manage services
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
               </>

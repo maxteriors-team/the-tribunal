@@ -35,6 +35,7 @@ from app.schemas.pricing import (
     ChristmasPackagePricing,
     ChristmasPricing,
     FinancingEstimate,
+    PermanentKitSelection,
     PermanentPricing,
     PricingSettings,
     SeasonalItem,
@@ -571,9 +572,13 @@ def price_permanent(
     counts: dict[int, int] = {}
     for package in selected:
         counts[package.feet] = counts.get(package.feet, 0) + 1
-    package_detail = " + ".join(
-        f"{count} × {size}-ft kit" if count > 1 else f"{size}-ft kit"
+    selected_kits = [
+        PermanentKitSelection(feet=size, quantity=count)
         for size, count in sorted(counts.items(), reverse=True)
+    ]
+    package_detail = " + ".join(
+        f"{kit.quantity} × {kit.feet}-ft kit" if kit.quantity > 1 else f"{kit.feet}-ft kit"
+        for kit in selected_kits
     )
     lines = [
         _category_line(
@@ -590,6 +595,7 @@ def price_permanent(
         package_feet=package_feet,
         package_cogs=float(package_cogs),
         markup=markup,
+        selected_kits=selected_kits,
         roofline_cost=float(raw_total),
         minimum=float(gross_minimum),
         raw_total=float(raw_total),

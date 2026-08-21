@@ -257,18 +257,23 @@ class Quote(Base):
     # the historical rendering contract and never trusts client-submitted totals.
     proposal_document: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
-    # Lossless, server-validated wizard input used to reopen and reprice the full
-    # builder. ``attach_dismissal`` is deliberately omitted: dismissals are audit
-    # events on ``attach_dismissals``, not sticky defaults for a later revision.
+    # Lossless, server-validated proposal input used to reopen and reprice the
+    # rich document. ``attach_dismissal`` is deliberately omitted: dismissals are
+    # audit events, not sticky defaults for a later revision.
     proposal_input: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     proposal_input_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Exact permanent-light kit composition selected by server-side pricing. This
+    # procurement snapshot is never accepted from quote create/update requests.
+    selected_permanent_kits: Mapped[list[dict[str, int]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )
     # Changes only when customer-facing terms change. Public approval submits the
     # version it rendered so a racing in-place edit cannot accept unseen prices.
     proposal_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
 
-    # Revision lineage is append-only for protected proposals. The immediate
     # Revision lineage is append-only for protected proposals. The immediate
     # source and root both use RESTRICT so a revised customer/payment record cannot
     # later be deleted out from under its audit chain.

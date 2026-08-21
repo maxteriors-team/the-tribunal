@@ -91,7 +91,7 @@ The full CI and release-subset browser/API commands above are the current releas
 
 ### QA-005 - Fresh workspace quote builder has no sellable package lines
 
-- **Location:** `/sales-wizard`, Line Items step; onboarding/default workspace seeding
+- **Location:** Retired legacy quote-builder Line Items step; onboarding/default workspace seeding
 - **Affected element:** Landscape Lighting Design Packages and fixture quantities
 - **Expected:** A newly onboarded workspace can select Good/Better/Best package fixtures, calculate a total, preview, and send.
 - **Actual:** The Line Items screen describes package fixture counts but renders no package or fixture quantity controls. Only a free-form add-on can be entered. The QA flow could save a link only by adding an arbitrary $500 custom charge.
