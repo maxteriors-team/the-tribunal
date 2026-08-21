@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from typing import Literal
 
 import pytest
 from sqlalchemy import func, select
@@ -139,32 +140,44 @@ async def test_share_then_public_view_hides_linear_feet() -> None:
         assert "137" not in raw_json  # the measured footage must not leak anywhere
 
 
-async def test_share_then_public_view_preserves_measured_complexity() -> None:
+@pytest.mark.parametrize(
+    ("scalar_complexity", "measured_complexity", "expected_total"),
+    [
+        ("easy", "complex", 4000),
+        ("easy", "aerial", 1500),
+        ("aerial", "complex", 4000),
+    ],
+    ids=["complex-map", "aerial-pics-map", "aerial-pics-scalar"],
+)
+async def test_share_then_public_view_preserves_measured_complexity(
+    scalar_complexity: Literal["easy", "aerial"],
+    measured_complexity: Literal["complex", "aerial"],
+    expected_total: float,
+) -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
         await _use_legacy_reversed_complexity_package(db, ws)
         svc = QuoteService(db)
 
-        # Opposing the scalar fallback catches either half of the persistence bug:
-        # the public view must restore the measured map rather than repricing Standard
-        # (the old behavior) or accepting the deliberately Easy fallback.
+        # Opposing scalar and measured values catches either persistence bug: the
+        # public view must restore the map rather than silently repricing the scalar.
         share = await svc.share_comparison(
             ws.id,
             ComparisonShareRequest(
                 feet=100,
-                permanent_complexity="easy",
-                permanent_complexity_feet={"complex": 100},
+                permanent_complexity=scalar_complexity,
+                permanent_complexity_feet={measured_complexity: 100},
             ),
         )
         comparison = await db.scalar(
             select(RooflineComparison).where(RooflineComparison.public_token == share.token)
         )
         assert comparison is not None
-        assert comparison.permanent_complexity == "easy"
-        assert comparison.permanent_complexity_feet == {"complex": 100}
+        assert comparison.permanent_complexity == scalar_complexity
+        assert comparison.permanent_complexity_feet == {measured_complexity: 100}
 
         public = await svc.get_public_comparison(share.token)
-        assert public.permanent.total == 4000  # $1,000 COGS × highest (Complex) markup
+        assert public.permanent.total == expected_total
 
 
 async def test_legacy_shared_comparison_defaults_to_standard_complexity() -> None:

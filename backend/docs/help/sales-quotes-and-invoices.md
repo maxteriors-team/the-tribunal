@@ -40,7 +40,7 @@ After approval, the **Copy to Job** tab shows every selected permanent-light kit
 
 ## Use lighting estimators
 
-Route: `/quotes?tab=designer`. Open the **Light Designer** tab to trace permanent or seasonal rooflines on a customer photo, price the design from workspace settings, and save or deliver the estimate.
+Route: `/quotes?tab=designer`. Open the **Light Designer** tab to trace permanent or seasonal rooflines on a customer photo, price the design from workspace settings, and save or deliver the estimate. For a selected permanent run, **Aerial Pics · 1.5×** is available alongside Easy, Standard, and Complex and prices that run's measured feet at the fixed 1.5× multiplier.
 
 Route: `/landscape-lighting`. Sidebar label: **Landscape Lighting**. Select **New lighting project**, enter the project and customer details, and select **Create project**. Open the saved designer at `/landscape-lighting/{project_id}`. The list can show active and archived projects and can recover a browser draft when one exists.
 

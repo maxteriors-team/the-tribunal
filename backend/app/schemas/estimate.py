@@ -100,9 +100,9 @@ class LinearFeetEstimateRequest(BaseModel):
     channels: int = Field(default=0, ge=0)  # permanent zones
     takedown: bool = False  # christmas post-season takedown
     storage: bool = False  # christmas off-season storage
-    permanent_complexity: Literal["easy", "standard", "complex"] = "standard"
-    permanent_complexity_feet: dict[Literal["easy", "standard", "complex"], float] = Field(
-        default_factory=dict
+    permanent_complexity: Literal["aerial", "easy", "standard", "complex"] = "standard"
+    permanent_complexity_feet: dict[Literal["aerial", "easy", "standard", "complex"], float] = (
+        Field(default_factory=dict)
     )
     per_ft_override: float | None = Field(default=None, ge=0)  # deprecated, ignored
     christmas_per_ft_override: float | None = Field(default=None, ge=0)  # INTERNAL seasonal rate

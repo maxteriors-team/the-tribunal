@@ -372,23 +372,31 @@ def test_permanent_rounds_165_feet_up_to_200_foot_kit():
 def test_permanent_complexity_selects_configured_multiplier():
     config = _permanent_config()
 
+    aerial = pp.price_permanent(config, feet=100, complexity="aerial")
     easy = pp.price_permanent(config, feet=100, complexity="easy")
     standard = pp.price_permanent(config, feet=100, complexity="standard")
     complex_job = pp.price_permanent(config, feet=100, complexity="complex")
 
-    assert (easy.markup, standard.markup, complex_job.markup) == (2.5, 3, 3.5)
-    assert (easy.raw_total, standard.raw_total, complex_job.raw_total) == (3508, 4210, 4912)
+    assert (aerial.markup, easy.markup, standard.markup, complex_job.markup) == (1.5, 2.5, 3, 3.5)
+    assert (aerial.raw_total, easy.raw_total, standard.raw_total, complex_job.raw_total) == (
+        2105,
+        3508,
+        4210,
+        4912,
+    )
 
 
 def test_permanent_complexity_order_cannot_be_reversed_by_saved_settings():
     config = _permanent_config(easy_markup=3.5, standard_markup=3, complex_markup=2.5)
 
+    aerial = pp.price_permanent(config, feet=100, complexity="aerial")
     easy = pp.price_permanent(config, feet=100, complexity="easy")
     complex_job = pp.price_permanent(config, feet=100, complexity="complex")
 
+    assert aerial.markup == 1.5
     assert easy.markup == 2.5
     assert complex_job.markup == 3.5
-    assert easy.total < complex_job.total
+    assert aerial.total < easy.total < complex_job.total
 
 
 def test_permanent_weights_markup_by_measured_run_footage():

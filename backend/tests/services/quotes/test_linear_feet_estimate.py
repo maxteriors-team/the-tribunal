@@ -116,6 +116,17 @@ def test_all_complex_run_uses_highest_markup_in_live_comparison(
     assert easy_result.permanent.total == 2000
 
 
+def test_aerial_pics_run_uses_fixed_multiplier_in_live_comparison() -> None:
+    result = _estimate(
+        _complexity_config((2, 3, 4)),
+        100,
+        permanent_complexity_feet={"aerial": 100},
+    )
+
+    assert result.permanent.markup == 1.5
+    assert result.permanent.total == 1500
+
+
 def test_both_services_priced_from_feet() -> None:
     result = _estimate(_config(), 100)
 
@@ -558,6 +569,20 @@ def test_convert_all_complex_run_uses_highest_markup(
     assert pricing.markup == 4
     assert pricing.total == 4000
     assert _lines_sum(lines) == 4000
+
+
+def test_convert_aerial_pics_run_uses_fixed_multiplier() -> None:
+    _title, pricing, lines = _convert(
+        _complexity_config((2, 3, 4)),
+        "permanent",
+        100,
+        permanent_complexity="aerial",
+        permanent_complexity_feet={"aerial": 100},
+    )
+
+    assert pricing.markup == 1.5
+    assert pricing.total == 1500
+    assert _lines_sum(lines) == 1500
 
 
 def test_convert_seasonal_a_la_carte_itemizes_roofline_and_decor() -> None:
