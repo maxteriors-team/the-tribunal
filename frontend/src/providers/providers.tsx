@@ -50,9 +50,11 @@ export function Providers({ children }: ProvidersProps) {
             </PageErrorBoundary>
             <Toaster
               position="bottom-right"
+              visibleToasts={1}
               toastOptions={{
                 classNames: {
-                  toast: "!bg-card/90 !backdrop-blur-md !border !border-border !shadow-lg !shadow-black/10",
+                  toast:
+                    "!bg-card/90 !backdrop-blur-md !border !border-border !shadow-lg !shadow-black/10 data-[visible=false]:!hidden",
                   title: "!text-foreground !font-semibold",
                   description: "!text-muted-foreground",
                   success: "!border-l-4 !border-l-success",

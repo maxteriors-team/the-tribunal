@@ -8,13 +8,14 @@ import { ResultsSection } from "@/components/landing/results-section";
 import { SolutionSection } from "@/components/landing/solution-section";
 import { StatsSection } from "@/components/landing/stats-section";
 import { UseCasesSection } from "@/components/landing/use-cases-section";
+import { PRODUCT_BRAND } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "AI Database Reactivation | PRESTYJ",
+  title: `AI Database Reactivation | ${PRODUCT_BRAND.name}`,
   description:
     "Recover lost revenue from your existing database. AI-powered calls and texts that turn dormant leads into closed deals.",
   openGraph: {
-    title: "AI Database Reactivation | PRESTYJ",
+    title: `AI Database Reactivation | ${PRODUCT_BRAND.name}`,
     description:
       "Recover lost revenue from your existing database. AI-powered calls and texts that turn dormant leads into closed deals.",
     type: "website",

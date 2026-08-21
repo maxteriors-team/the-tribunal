@@ -1,27 +1,17 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, ShieldAlert } from "lucide-react";
-import { toast } from "sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import {
-  settingsApi,
-  type UpdateNeighborOutreachSettings,
-} from "@/lib/api/settings";
+import { settingsApi, type UpdateNeighborOutreachSettings } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 
 // Mirrors the server bounds in app/services/field_service/jobsite_radius.py.
 // Kept in sync so a value the API would 422 cannot be typed in the first place.
@@ -47,15 +37,17 @@ export function NeighborOutreachSettingsTab() {
     enabled: !!workspaceId,
   });
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (data: UpdateNeighborOutreachSettings) =>
       settingsApi.updateNeighborOutreach(workspaceId!, data),
+    successMessage: "Neighbor outreach settings are up to date.",
+    errorMessage:
+      "We couldn't save neighbor outreach settings. Check your connection and try again.",
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.settings.neighborOutreach(workspaceId ?? ""),
       });
     },
-    onError: (err) => toast.error(getApiErrorMessage(err, "Failed to save settings")),
   });
 
   const update = (data: UpdateNeighborOutreachSettings) => mutation.mutate(data);
@@ -76,9 +68,9 @@ export function NeighborOutreachSettingsTab() {
         <CardHeader>
           <CardTitle>Neighbor Outreach</CardTitle>
           <CardDescription>
-            Turn every completed job into leads from the surrounding street. The
-            neighbors who watched your crew work are the warmest audience you have —
-            it is what makes wrapped trucks and yard signs compound.
+            Turn every completed job into leads from the surrounding street. The neighbors who
+            watched your crew work are the warmest audience you have — it is what makes wrapped
+            trucks and yard signs compound.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -157,9 +149,7 @@ export function NeighborOutreachSettingsTab() {
                 }}
                 disabled={mutation.isPending}
               />
-              <p className="text-sm text-muted-foreground">
-                The closest ones are kept first.
-              </p>
+              <p className="text-sm text-muted-foreground">The closest ones are kept first.</p>
             </div>
 
             <div className="flex items-center justify-between">
@@ -172,9 +162,7 @@ export function NeighborOutreachSettingsTab() {
               <Switch
                 id="neighbors-auto"
                 checked={settings?.auto_generate_on_completion ?? true}
-                onCheckedChange={(checked) =>
-                  update({ auto_generate_on_completion: checked })
-                }
+                onCheckedChange={(checked) => update({ auto_generate_on_completion: checked })}
                 disabled={mutation.isPending}
               />
             </div>
@@ -194,18 +182,15 @@ export function NeighborOutreachSettingsTab() {
             <Alert>
               <ShieldAlert className="size-4" />
               <AlertDescription>
-                A radius search returns addresses, not permission. Neighbors are
-                exported for print and canvassing by default. Turning messaging on
-                only unlocks it for neighbors who are <strong>already contacts in
-                your CRM with recorded consent</strong> and are not opted out —
-                everyone else stays print-only.
+                A radius search returns addresses, not permission. Neighbors are exported for print
+                and canvassing by default. Turning messaging on only unlocks it for neighbors who
+                are <strong>already contacts in your CRM with recorded consent</strong> and are not
+                opted out — everyone else stays print-only.
               </AlertDescription>
             </Alert>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="neighbors-messaging">
-                  Allow SMS/email to consented neighbors
-                </Label>
+                <Label htmlFor="neighbors-messaging">Allow SMS/email to consented neighbors</Label>
                 <p className="text-sm text-muted-foreground">
                   Existing consented contacts only — never cold addresses
                 </p>

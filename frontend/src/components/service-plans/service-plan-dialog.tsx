@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import * as z from "zod";
 
@@ -43,11 +43,7 @@ import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { servicePlansApi } from "@/lib/api/service-plans";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
-import type {
-  RecurrenceFrequency,
-  ServicePlan,
-  ServicePlanType,
-} from "@/types";
+import type { RecurrenceFrequency, ServicePlan, ServicePlanType } from "@/types";
 
 const FREQUENCIES: { value: RecurrenceFrequency; label: string }[] = [
   { value: "weekly", label: "Weekly" },
@@ -133,7 +129,7 @@ function isoToLocalInput(iso: string): string {
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours()
+    d.getHours(),
   )}:${pad(d.getMinutes())}`;
 }
 
@@ -144,15 +140,19 @@ interface ServicePlanDialogProps {
   plan?: ServicePlan | null;
 }
 
-export function ServicePlanDialog({
-  open,
-  onOpenChange,
-  plan,
-}: ServicePlanDialogProps) {
+export function ServicePlanDialog({ open, onOpenChange, plan }: ServicePlanDialogProps) {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const isEdit = Boolean(plan);
-  const [technicianIds, setTechnicianIds] = useState<string[]>([]);
+  const technicianDraftKey = open ? (plan?.id ?? "new") : null;
+  const [technicianIds, setTechnicianIds] = useState<string[]>(() =>
+    open ? (plan?.default_technician_ids ?? []) : [],
+  );
+  const [loadedTechnicianDraftKey, setLoadedTechnicianDraftKey] = useState(technicianDraftKey);
+  if (loadedTechnicianDraftKey !== technicianDraftKey) {
+    setLoadedTechnicianDraftKey(technicianDraftKey);
+    setTechnicianIds(open ? (plan?.default_technician_ids ?? []) : []);
+  }
   const { data: technicianData } = useWorkspaceTechnicians(workspaceId ?? "", open);
   const technicians = useMemo(() => technicianData?.items ?? [], [technicianData?.items]);
 
@@ -180,7 +180,6 @@ export function ServicePlanDialog({
           }
         : DEFAULT_VALUES,
     );
-    setTechnicianIds(plan?.default_technician_ids ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, plan]);
 
@@ -192,7 +191,7 @@ export function ServicePlanDialog({
     );
   };
 
-  const planType = form.watch("plan_type");
+  const planType = useWatch({ control: form.control, name: "plan_type" });
 
   /**
    * Switching plan type re-seeds the schedule to that plan's shape. Only done
@@ -219,8 +218,7 @@ export function ServicePlanDialog({
         title: values.title.trim(),
         plan_type: values.plan_type,
         // Only a Care Plan carries a tier; the API rejects one anywhere else.
-        care_plan_tier:
-          values.plan_type === "lighting_care_plan" && tier ? tier : null,
+        care_plan_tier: values.plan_type === "lighting_care_plan" && tier ? tier : null,
         frequency: values.frequency,
         interval: Number(values.interval),
         duration_minutes: Number(values.duration_minutes),
@@ -247,8 +245,7 @@ export function ServicePlanDialog({
       }
       onOpenChange(false);
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to save service plan")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to save service plan")),
   });
 
   const handleOpenChange = (next: boolean) => {
@@ -260,12 +257,9 @@ export function ServicePlanDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[90vh] flex-col overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit service plan" : "New service plan"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit service plan" : "New service plan"}</DialogTitle>
           <DialogDescription>
-            Put a client on recurring work. Each plan auto-generates its next
-            visit on the schedule.
+            Put a client on recurring work. Each plan auto-generates its next visit on the schedule.
           </DialogDescription>
         </DialogHeader>
 
@@ -299,10 +293,7 @@ export function ServicePlanDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Plan type</FormLabel>
-                  <Select
-                    onValueChange={handlePlanTypeChange}
-                    value={field.value}
-                  >
+                  <Select onValueChange={handlePlanTypeChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue />
@@ -317,8 +308,8 @@ export function ServicePlanDialog({
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    Care Plans and Christmas signups are normally created
-                    automatically when a client approves their proposal.
+                    Care Plans and Christmas signups are normally created automatically when a
+                    client approves their proposal.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -336,8 +327,7 @@ export function ServicePlanDialog({
                       <Input placeholder="e.g. gold" {...field} />
                     </FormControl>
                     <FormDescription>
-                      The tier key from your pricing config, shown as a badge on
-                      the plan.
+                      The tier key from your pricing config, shown as a badge on the plan.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -411,9 +401,7 @@ export function ServicePlanDialog({
               name="next_run_at"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    {isEdit ? "Next occurrence" : "First occurrence"}
-                  </FormLabel>
+                  <FormLabel>{isEdit ? "Next occurrence" : "First occurrence"}</FormLabel>
                   <FormControl>
                     <Input type="datetime-local" {...field} />
                   </FormControl>
@@ -489,10 +477,7 @@ export function ServicePlanDialog({
               render={({ field }) => (
                 <FormItem className="flex items-center gap-2 space-y-0">
                   <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
                   <FormLabel className="!mt-0">Active</FormLabel>
                 </FormItem>
@@ -509,9 +494,7 @@ export function ServicePlanDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={saveMutation.isPending}>
-                {saveMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
+                {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isEdit ? "Save changes" : "Create"}
               </Button>
             </DialogFooter>

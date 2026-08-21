@@ -12,7 +12,7 @@
  * wholesale), so every field this editor doesn't expose (`perks`, package markers,
  * …) round-trips untouched. No code change or deploy needed.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -32,10 +32,10 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { ChristmasConfig, ChristmasPackage, SeasonalItem } from "@/types/sales-wizard";
 
 type SeasonalUnit = "each" | "per_ft";
@@ -261,15 +261,14 @@ export function SeasonalPricingSettingsTab() {
     );
   }
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (update: { christmas: ChristmasConfig; roofline_comparison_enabled: boolean }) =>
       salesWizardApi.updatePricing(workspaceId!, update),
+    successMessage: "Seasonal pricing is up to date.",
+    errorMessage: "We couldn't save seasonal pricing. Check your connection and try again.",
     onSuccess: (updated) => {
       queryClient.setQueryData(queryKeys.salesWizard.pricing(workspaceId ?? ""), updated);
-      toast.success("Seasonal pricing saved");
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to save seasonal pricing")),
   });
 
   const disabled = mutation.isPending || !serverChristmas;

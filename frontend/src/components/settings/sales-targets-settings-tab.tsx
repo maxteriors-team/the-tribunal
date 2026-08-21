@@ -31,20 +31,14 @@
  * unrealistic number obvious before it is committed rather than in October.
  */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarRange, Loader2, RotateCcw, Save, Target } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -55,6 +49,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   revenueTargetsApi,
@@ -64,7 +59,6 @@ import {
   type RevenueTargetUpsert,
 } from "@/lib/api/revenue-targets";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatNumber, formatWholeCurrency } from "@/lib/utils/number";
 
 // ---------------------------------------------------------------------------
@@ -118,16 +112,13 @@ export function backsolveFunnel(input: BacksolveInput): FunnelBacksolve {
   const goal = input.revenueGoal;
   const avgJobValue = divisor(input.avgJobValue);
   const jobs =
-    goal !== null && Number.isFinite(goal) && avgJobValue !== null
-      ? goal / avgJobValue
-      : null;
+    goal !== null && Number.isFinite(goal) && avgJobValue !== null ? goal / avgJobValue : null;
 
   const closeRate = divisor(input.closeRatePct);
   const estimates = jobs !== null && closeRate !== null ? jobs / (closeRate / 100) : null;
 
   const satRate = divisor(input.satRatePct);
-  const derivedLeads =
-    estimates !== null && satRate !== null ? estimates / (satRate / 100) : null;
+  const derivedLeads = estimates !== null && satRate !== null ? estimates / (satRate / 100) : null;
   // A hand-set lead target beats a derived one, exactly as the backend does.
   const leads =
     input.targetLeads !== null && Number.isFinite(input.targetLeads)
@@ -357,10 +348,7 @@ export function validatePlan(draft: PlanDraft): PlanErrors {
   }
 
   const closeRate = parseOptional(draft.closeRate);
-  if (
-    closeRate !== null &&
-    (Number.isNaN(closeRate) || closeRate < 1 || closeRate > 100)
-  ) {
+  if (closeRate !== null && (Number.isNaN(closeRate) || closeRate < 1 || closeRate > 100)) {
     errors.closeRate = "Close rate must be between 1 and 100.";
   }
 
@@ -503,9 +491,7 @@ export function seedFromTargets(
     if (month >= 1 && month <= 12) byMonth.set(month, target);
   }
 
-  const plannable = [...byMonth.entries()].filter(([month]) =>
-    isPlannable(year, month, today),
-  );
+  const plannable = [...byMonth.entries()].filter(([month]) => isPlannable(year, month, today));
   const pool = plannable.length > 0 ? plannable : [...byMonth.entries()];
 
   // Plurality vote on the stored plan, earliest month winning a tie.
@@ -549,28 +535,14 @@ export function seedFromTargets(
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function BacksolveReadoutPanel({
-  draft,
-  label,
-}: {
-  draft: PlanDraft;
-  label: string;
-}) {
+function BacksolveReadoutPanel({ draft, label }: { draft: PlanDraft; label: string }) {
   const readout = describeBacksolve(draftToInput(draft));
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="rounded-lg border bg-muted/30 p-4"
-    >
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
+    <div role="status" aria-live="polite" className="rounded-lg border bg-muted/30 p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       {readout.sentence !== "" && (
-        <p className="mt-1 text-sm font-semibold text-foreground">
-          {readout.sentence}
-        </p>
+        <p className="mt-1 text-sm font-semibold text-foreground">{readout.sentence}</p>
       )}
       {readout.missing !== null && (
         <p className="mt-1 text-sm text-muted-foreground">{readout.missing}</p>
@@ -669,16 +641,12 @@ function MonthTile({
       </span>
       <span
         className={
-          goal === null
-            ? "text-sm text-muted-foreground"
-            : "text-sm font-medium text-foreground"
+          goal === null ? "text-sm text-muted-foreground" : "text-sm font-medium text-foreground"
         }
       >
         {goal === null ? "Not set" : formatWholeCurrency(goal)}
       </span>
-      {isPast && (
-        <span className="text-[11px] text-muted-foreground">Already recorded</span>
-      )}
+      {isPast && <span className="text-[11px] text-muted-foreground">Already recorded</span>}
     </button>
   );
 }
@@ -710,9 +678,7 @@ export function SalesTargetsSettingsTab() {
     () => seedFromTargets([], new Date().getFullYear(), new Date()).months,
   );
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
-  const [seeded, setSeeded] = useState<{ source: RevenueTargetList; year: number } | null>(
-    null,
-  );
+  const [seeded, setSeeded] = useState<{ source: RevenueTargetList; year: number } | null>(null);
 
   // Seed/re-seed from the server, resetting when the fetched year's identity
   // changes (first load, year switch, or a save replacing the cached copy).
@@ -726,19 +692,17 @@ export function SalesTargetsSettingsTab() {
     setSelectedMonth(null);
   }
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (targets: RevenueTargetUpsert[]) =>
       revenueTargetsApi.bulkUpsert(workspaceId!, targets),
-    onSuccess: (saved) => {
+    successMessage: (saved) =>
+      `${saved.total} ${saved.total === 1 ? "month" : "months"} of ${year} saved.`,
+    errorMessage: "We couldn't save sales targets. Check your connection and try again.",
+    onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.revenueTargets.all(workspaceId ?? ""),
       });
-      toast.success(
-        `Saved ${saved.total} ${saved.total === 1 ? "month" : "months"} of ${year}`,
-      );
     },
-    onError: (error: unknown) =>
-      toast.error(getApiErrorMessage(error, "Failed to save sales targets")),
   });
 
   const defaultErrors = validatePlan(defaults);
@@ -774,9 +738,7 @@ export function SalesTargetsSettingsTab() {
   const customizeMonth = (month: number) =>
     setMonths((prev) =>
       prev.map((entry) =>
-        entry.month === month
-          ? { ...entry, touched: true, override: { ...defaults } }
-          : entry,
+        entry.month === month ? { ...entry, touched: true, override: { ...defaults } } : entry,
       ),
     );
 
@@ -822,9 +784,9 @@ export function SalesTargetsSettingsTab() {
             <Target className="size-5" /> Default month plan
           </CardTitle>
           <CardDescription>
-            The plan applied to every month from this month on, unless you give a
-            month its own numbers below. Saving writes a target for each of those
-            months, which is what the dashboard measures the month against.
+            The plan applied to every month from this month on, unless you give a month its own
+            numbers below. Saving writes a target for each of those months, which is what the
+            dashboard measures the month against.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -835,10 +797,7 @@ export function SalesTargetsSettingsTab() {
             disabled={disabled}
             onChange={patchDefaults}
           />
-          <BacksolveReadoutPanel
-            draft={defaults}
-            label="What this goal takes"
-          />
+          <BacksolveReadoutPanel draft={defaults} label="What this goal takes" />
         </CardContent>
       </Card>
 
@@ -849,9 +808,9 @@ export function SalesTargetsSettingsTab() {
             <CalendarRange className="size-5" /> Monthly plan
           </CardTitle>
           <CardDescription>
-            Exteriors work is seasonal, so a flat monthly goal is wrong most of
-            the year. Pick a month to give it its own numbers. Months marked
-            Custom override the default; the rest follow it.
+            Exteriors work is seasonal, so a flat monthly goal is wrong most of the year. Pick a
+            month to give it its own numbers. Months marked Custom override the default; the rest
+            follow it.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -944,8 +903,7 @@ export function SalesTargetsSettingsTab() {
 
               {!isPlannable(year, selected.month, today) && (
                 <p className="text-sm font-medium text-warning">
-                  This month has already been recorded. It is only rewritten if
-                  you change it here.
+                  This month has already been recorded. It is only rewritten if you change it here.
                 </p>
               )}
 
@@ -979,8 +937,8 @@ export function SalesTargetsSettingsTab() {
       {/* Save */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Saving writes {writableMonths.length} of 12 months. Months that have
-          already passed keep the goal they were set with unless you edit them.
+          Saving writes {writableMonths.length} of 12 months. Months that have already passed keep
+          the goal they were set with unless you edit them.
         </p>
         <Button onClick={save} disabled={disabled || hasErrors}>
           {mutation.isPending ? (

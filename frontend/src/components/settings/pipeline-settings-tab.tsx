@@ -1,22 +1,15 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { KanbanSquare, Loader2 } from "lucide-react";
-import { toast } from "sonner";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { type AutoPipelineSettings, settingsApi } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 
 /**
  * What lands on the Opportunities board without anyone typing it in.
@@ -37,18 +30,13 @@ export function PipelineSettingsTab() {
     enabled: !!workspaceId,
   });
 
-  const mutation = useMutation({
-    mutationFn: (data: AutoPipelineSettings) =>
-      settingsApi.updateAutoPipeline(workspaceId!, data),
+  const mutation = useSettingsSaveMutation({
+    mutationFn: (data: AutoPipelineSettings) => settingsApi.updateAutoPipeline(workspaceId!, data),
+    successMessage: "Pipeline automation is up to date.",
+    errorMessage: "We couldn't save pipeline automation. Check your connection and try again.",
     onSuccess: (saved) => {
-      queryClient.setQueryData(
-        queryKeys.settings.autoPipeline(workspaceId!),
-        saved,
-      );
-      toast.success("Pipeline automation saved");
+      queryClient.setQueryData(queryKeys.settings.autoPipeline(workspaceId!), saved);
     },
-    onError: (error: unknown) =>
-      toast.error(getApiErrorMessage(error, "Couldn't save pipeline automation")),
   });
 
   if (!workspaceId || isPending || !settings) {
@@ -59,8 +47,7 @@ export function PipelineSettingsTab() {
     );
   }
 
-  const save = (patch: Partial<AutoPipelineSettings>) =>
-    mutation.mutate({ ...settings, ...patch });
+  const save = (patch: Partial<AutoPipelineSettings>) => mutation.mutate({ ...settings, ...patch });
 
   return (
     <Card>
@@ -69,10 +56,9 @@ export function PipelineSettingsTab() {
           <KanbanSquare className="size-5" /> Automatic pipeline cards
         </CardTitle>
         <CardDescription>
-          Which events put a deal on the Opportunities board on their own. You can
-          always remove a card afterwards, and the{" "}
-          <span className="font-medium">no-automation</span> contact tag stops
-          both of these for one customer.
+          Which events put a deal on the Opportunities board on their own. You can always remove a
+          card afterwards, and the <span className="font-medium">no-automation</span> contact tag
+          stops both of these for one customer.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -81,9 +67,8 @@ export function PipelineSettingsTab() {
             <Label htmlFor="auto-pipeline-quote-sent">When a quote is sent</Label>
             <p className="text-sm text-muted-foreground">
               Moves the customer&apos;s open deal to{" "}
-              <span className="font-medium">Quote Sent / Follow Up</span>, or opens
-              one there if they have none. Fires once, on first send, and never
-              moves a deal backwards.
+              <span className="font-medium">Quote Sent / Follow Up</span>, or opens one there if
+              they have none. Fires once, on first send, and never moves a deal backwards.
             </p>
           </div>
           <Switch
@@ -98,10 +83,9 @@ export function PipelineSettingsTab() {
           <div className="space-y-0.5">
             <Label htmlFor="auto-pipeline-leads">When a new lead comes in</Label>
             <p className="text-sm text-muted-foreground">
-              Opens a card in the first stage for every inbound lead — forms, the
-              chat widget, offer opt-ins, inbound texts and calls. Off by default:
-              an uncontacted lead usually belongs in Contacts, not on the sales
-              board.
+              Opens a card in the first stage for every inbound lead — forms, the chat widget, offer
+              opt-ins, inbound texts and calls. Off by default: an uncontacted lead usually belongs
+              in Contacts, not on the sales board.
             </p>
           </div>
           <Switch

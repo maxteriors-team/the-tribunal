@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { defineConfig, devices } from "@playwright/test";
 
 /**
@@ -12,24 +14,25 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 const isCI = !!process.env.CI;
-const storageState = process.env.E2E_STORAGE_STATE;
-const usesSharedTestUser = Boolean(
-  (process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD) || storageState,
-);
+
+// Set once in the runner process, then inherit it in every Playwright worker.
+// Provisioned accounts combine this run id with `parallelIndex`, so no worker
+// logs into another worker's rotating refresh-token session.
+process.env.E2E_RUN_ID ??= randomUUID();
 
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
-  // A single seeded account has one rotating refresh-token session. Running
-  // authenticated specs in parallel makes workers invalidate each other.
-  workers: isCI || usesSharedTestUser ? 1 : undefined,
+  // Cold Turbopack route compilation competes across normal parallel workers.
+  timeout: 60_000,
+  // Keep Playwright's normal worker count. Authenticated specs either provision
+  // one account per parallel worker or use an explicitly indexed account pool.
   reporter: isCI ? [["github"], ["html", { open: "never" }]] : "list",
 
   use: {
     baseURL,
-    storageState: storageState || undefined,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",

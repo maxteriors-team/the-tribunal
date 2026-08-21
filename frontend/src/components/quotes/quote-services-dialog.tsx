@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { CatalogPicker } from "@/components/catalog/catalog-picker";
@@ -68,9 +68,16 @@ export function QuoteServicesDialog({
     setCatalogItemId(null);
   };
 
-  useEffect(() => {
-    if (open) resetDraft();
-  }, [open, quote?.id]);
+  const draftKey = open ? (quote?.id ?? null) : null;
+  const [loadedDraftKey, setLoadedDraftKey] = useState(draftKey);
+  if (loadedDraftKey !== draftKey) {
+    setLoadedDraftKey(draftKey);
+    if (draftKey) {
+      setName("");
+      setAmount("");
+      setCatalogItemId(null);
+    }
+  }
 
   const invalidate = () => {
     void queryClient.invalidateQueries({
@@ -92,8 +99,7 @@ export function QuoteServicesDialog({
       resetDraft();
       invalidate();
     },
-    onError: (error) =>
-      toast.error(getApiErrorMessage(error, "Couldn't add that service")),
+    onError: (error) => toast.error(getApiErrorMessage(error, "Couldn't add that service")),
   });
 
   const removeMutation = useMutation({
@@ -105,8 +111,7 @@ export function QuoteServicesDialog({
       toast.success("Service removed");
       invalidate();
     },
-    onError: (error) =>
-      toast.error(getApiErrorMessage(error, "Couldn't remove that service")),
+    onError: (error) => toast.error(getApiErrorMessage(error, "Couldn't remove that service")),
   });
 
   const busy = addMutation.isPending || removeMutation.isPending;
@@ -134,9 +139,7 @@ export function QuoteServicesDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            Add services{quote?.number ? ` to ${quote.number}` : ""}
-          </DialogTitle>
+          <DialogTitle>Add services{quote?.number ? ` to ${quote.number}` : ""}</DialogTitle>
           <DialogDescription>
             {alreadySent
               ? "This quote has already been sent. Adding a service updates what the customer sees on their proposal link."
@@ -166,9 +169,7 @@ export function QuoteServicesDialog({
                     className="flex items-center gap-3 rounded-md border px-3 py-2"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
-                        {service.name}
-                      </div>
+                      <div className="truncate text-sm font-medium">{service.name}</div>
                       {service.description && (
                         <div className="truncate text-xs text-muted-foreground">
                           {service.description}
@@ -238,8 +239,8 @@ export function QuoteServicesDialog({
                 // not the one typed here. Saying so beats a rep entering $850
                 // and quietly reading it back as $920.
                 <p className="text-xs text-muted-foreground">
-                  Enter the amount you keep — the finance fee is added
-                  automatically, the same as in the quote builder.
+                  Enter the amount you keep — the finance fee is added automatically, the same as in
+                  the quote builder.
                 </p>
               )}
               <Button
@@ -269,11 +270,7 @@ export function QuoteServicesDialog({
         )}
 
         <DialogFooter>
-          <Button
-            type="button"
-            onClick={() => handleOpenChange(false)}
-            disabled={busy}
-          >
+          <Button type="button" onClick={() => handleOpenChange(false)} disabled={busy}>
             Done
           </Button>
         </DialogFooter>

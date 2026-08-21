@@ -11,14 +11,15 @@ vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => "workspace-1",
 }));
 
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => ({ can: () => true }),
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-class TestErrorBoundary extends Component<
-  { children: ReactNode },
-  { hasError: boolean }
-> {
+class TestErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
 
   static getDerivedStateFromError() {
@@ -88,7 +89,7 @@ describe("AdLibraryClient", () => {
     await user.click(screen.getByRole("button", { name: "Search ad library" }));
 
     expect(await screen.findByText("Ad Library needs a provider token")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open Settings" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Set up ad-library access" })).toHaveAttribute(
       "href",
       "/settings?tab=integrations",
     );

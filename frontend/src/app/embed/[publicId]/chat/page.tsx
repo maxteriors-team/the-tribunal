@@ -4,7 +4,7 @@
 
 import { Send, X, MessageSquare, Loader2, ImagePlus } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState, useCallback, useRef, use, Suspense } from "react";
+import { Suspense, use, useEffect, useRef, useState } from "react";
 
 import { IMAGE_ACCEPT_ATTR, readImageFile } from "@/lib/ai/image-upload";
 import { postToParent, subscribeToEmbedMessages } from "@/lib/embed/messaging";
@@ -131,7 +131,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
     });
   }, [isOpen, config]);
 
-  const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
@@ -142,9 +142,9 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
     }
     setError(null);
     setImageDataUrl(dataUrl);
-  }, []);
+  };
 
-  const sendMessage = useCallback(async () => {
+  const sendMessage = async () => {
     if ((!inputValue.trim() && !imageDataUrl) || isLoading || !config) return;
 
     const attachedImage = imageDataUrl;
@@ -199,7 +199,7 @@ function ChatEmbedPageContent({ params }: ChatEmbedPageProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [inputValue, imageDataUrl, isLoading, config, messages, publicId]);
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

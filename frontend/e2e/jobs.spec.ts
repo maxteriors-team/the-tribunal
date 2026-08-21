@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { uniqueSuffix } from "./helpers";
+import { canProvisionUsers, uniqueSuffix } from "./helpers";
 
 const PASSWORD = "E2ePassw0rd!test";
 
@@ -43,6 +43,10 @@ async function createContact(page: Page) {
 }
 
 test("creates, filters, opens, and updates a job", async ({ page }) => {
+  test.skip(
+    !canProvisionUsers(),
+    "Set E2E_ALLOW_PROVISIONING=1 to create an isolated workspace for the jobs flow",
+  );
   test.setTimeout(120_000);
   await provisionOperator(page);
   const contact = await createContact(page);

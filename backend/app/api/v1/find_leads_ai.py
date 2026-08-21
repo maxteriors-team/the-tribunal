@@ -7,6 +7,7 @@ from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
+from openai import AsyncOpenAI
 from sqlalchemy import select
 
 from app.api.deps import DB, CurrentUser, get_workspace
@@ -23,9 +24,17 @@ from app.schemas.scraping import (
     BusinessSearchRequest,
     BusinessSearchResponse,
 )
+from app.services.ai.openai_credentials import (
+    OpenAICredentialError,
+    create_workspace_openai_client,
+)
 from app.services.rate_limiting.scraping_limiter import enforce_scraping_rate_limit
 from app.services.scraping.enrichment_service import enrich_contact_data
-from app.services.scraping.google_places import GooglePlacesError, GooglePlacesService
+from app.services.scraping.google_places import (
+    GooglePlacesError,
+    GooglePlacesNotConfiguredError,
+    GooglePlacesService,
+)
 from app.services.tags import TagService
 from app.utils.phone import normalize_phone_safe
 
@@ -64,6 +73,15 @@ async def search_businesses_ai(
             total_found=len(business_results),
             query=request.query,
         )
+    except GooglePlacesNotConfiguredError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "scraping_provider_not_configured",
+                "message": "Connect Google Places before searching for AI leads.",
+                "details": {"provider": "google_places", "action": "search"},
+            },
+        ) from e
     except GooglePlacesError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -116,6 +134,24 @@ async def import_leads_ai(  # noqa: PLR0912, PLR0915
     - Leads below the threshold are rejected immediately
     - No background processing for new imports
     """
+
+    openai_client: AsyncOpenAI | None = None
+    if (
+        request.enable_enrichment
+        and settings.enable_ai_enrichment
+        and any(lead.website for lead in request.leads)
+    ):
+        try:
+            openai_client = await create_workspace_openai_client(db, workspace.id)
+        except OpenAICredentialError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "code": "openai_provider_not_configured",
+                    "message": "Connect OpenAI before importing leads with AI enrichment.",
+                    "details": {"provider": "openai", "action": "enrich"},
+                },
+            ) from exc
 
     # Get existing phone numbers for duplicate detection
     phone_result = await db.execute(
@@ -192,6 +228,7 @@ async def import_leads_ai(  # noqa: PLR0912, PLR0915
                     company_name=lead.name,
                     google_places_data=google_places_data,
                     enable_ai=settings.enable_ai_enrichment,
+                    openai_client=openai_client,
                 )
 
             return {
@@ -314,6 +351,9 @@ async def import_leads_ai(  # noqa: PLR0912, PLR0915
 
     if imported > 0:
         await db.commit()
+
+    if openai_client is not None:
+        await openai_client.close()
 
     return AIImportLeadsResponse(
         total=len(request.leads),

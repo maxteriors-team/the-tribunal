@@ -39,6 +39,8 @@ const ALL_CAPABILITIES: Capability[] = [
   "billing:read",
   "billing:write",
   "reports:view",
+  "attendance:use",
+  "attendance:manage",
   "outreach:write",
   "locations:manage",
   "upsell:sell",
@@ -56,6 +58,7 @@ const MANAGER_CAPABILITIES: Capability[] = [
   "comms:send",
   "billing:read",
   "billing:write",
+  "attendance:use",
   "outreach:write",
   "locations:manage",
   "upsell:sell",
@@ -71,14 +74,22 @@ const ROLE_CAPABILITY_MATRIX = {
     "crm:read",
     "pipeline:write_own",
     "jobs:read",
+    "attendance:use",
     "comms:send",
     "outreach:write",
     "upsell:sell",
     "upsell:sell_uncapped",
   ],
-  member: ["crm:read", "jobs:read", "comms:send", "upsell:sell", "upsell:sell_uncapped"],
-  lead_technician: ["jobs:read", "upsell:sell"],
-  technician: ["jobs:read"],
+  member: [
+    "crm:read",
+    "jobs:read",
+    "attendance:use",
+    "comms:send",
+    "upsell:sell",
+    "upsell:sell_uncapped",
+  ],
+  lead_technician: ["jobs:read", "attendance:use", "upsell:sell"],
+  technician: ["jobs:read", "attendance:use"],
 } satisfies Record<string, Capability[]>;
 
 describe("eight-role capability matrix", () => {
@@ -108,8 +119,8 @@ describe("capability matrix (mirror of backend)", () => {
     }
   });
 
-  it("field technicians are operational-only (jobs:read, no selling)", () => {
-    expect(TIER_CAPABILITIES.field).toEqual(["jobs:read"]);
+  it("field technicians are operational-only (jobs and own attendance, no selling)", () => {
+    expect(TIER_CAPABILITIES.field).toEqual(["jobs:read", "attendance:use"]);
     expect(can("technician", "jobs:read")).toBe(true);
     for (const cap of [
       "crm:read",
@@ -126,7 +137,7 @@ describe("capability matrix (mirror of backend)", () => {
   it("lead technicians are field techs who may sell on site", () => {
     // The entire delta between the two roles is one capability — a lead tech is
     // still a field worker with no contact book, price book, or pipeline.
-    expect(TIER_CAPABILITIES.lead).toEqual(["jobs:read", "upsell:sell"]);
+    expect(TIER_CAPABILITIES.lead).toEqual(["jobs:read", "attendance:use", "upsell:sell"]);
     expect(can("lead_technician", "upsell:sell")).toBe(true);
     for (const cap of [
       "crm:read",
@@ -171,6 +182,26 @@ describe("capability matrix (mirror of backend)", () => {
     // Unknown roles fail closed to field, which cannot sell.
     expect(can("wizard", "upsell:sell")).toBe(false);
     expect(can("wizard", "crm:read")).toBe(false);
+  });
+
+  it("attendance is self-service for every role and admin-managed only", () => {
+    for (const role of [
+      "owner",
+      "admin",
+      "manager",
+      "dispatcher",
+      "sales_rep",
+      "member",
+      "lead_technician",
+      "technician",
+    ]) {
+      expect(can(role, "attendance:use")).toBe(true);
+    }
+    expect(can("owner", "attendance:manage")).toBe(true);
+    expect(can("admin", "attendance:manage")).toBe(true);
+    for (const role of ["manager", "dispatcher", "sales_rep", "member", "technician"]) {
+      expect(can(role, "attendance:manage")).toBe(false);
+    }
   });
 
   it("reports:view is admin-only", () => {

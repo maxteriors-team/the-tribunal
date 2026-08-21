@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Save, Check, Loader2 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useState } from "react";
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useIsMounted } from "@/hooks/useMounted";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { settingsApi } from "@/lib/api/settings";
 import { TIMEZONE_OPTIONS } from "@/lib/constants";
 import { queryKeys } from "@/lib/query-keys";
@@ -59,8 +60,10 @@ export function ProfileSettingsTab() {
   };
 
   // Profile mutation
-  const profileMutation = useMutation({
+  const profileMutation = useSettingsSaveMutation({
     mutationFn: settingsApi.updateProfile,
+    successMessage: "Your profile is up to date.",
+    errorMessage: "We couldn't save your profile. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings.profile() });
       setLocalEdits({});

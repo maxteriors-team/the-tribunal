@@ -1,24 +1,34 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Info } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  CakeSlice,
+  CalendarDays,
+  ClipboardList,
+  Gem,
+  Info,
+  Loader2,
+  RefreshCw,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { nudgesApi } from "@/lib/api/nudges";
 import { queryKeys } from "@/lib/query-keys";
 import type { UpdateNudgeSettings, NudgeType } from "@/types/nudge";
 
-const NUDGE_TYPE_OPTIONS: { type: NudgeType; label: string; emoji: string }[] = [
-  { type: "birthday", label: "Birthdays", emoji: "🎂" },
-  { type: "anniversary", label: "Anniversaries", emoji: "💍" },
-  { type: "custom", label: "Custom Dates", emoji: "📅" },
-  { type: "cooling", label: "Relationship Cooling", emoji: "🔄" },
-  { type: "follow_up", label: "Follow-ups", emoji: "📋" },
+const NUDGE_TYPE_OPTIONS: { type: NudgeType; label: string; icon: LucideIcon }[] = [
+  { type: "birthday", label: "Birthdays", icon: CakeSlice },
+  { type: "anniversary", label: "Anniversaries", icon: Gem },
+  { type: "custom", label: "Custom Dates", icon: CalendarDays },
+  { type: "cooling", label: "Relationship Cooling", icon: RefreshCw },
+  { type: "follow_up", label: "Follow-ups", icon: ClipboardList },
 ];
 
 export function NudgeSettingsTab() {
@@ -31,8 +41,10 @@ export function NudgeSettingsTab() {
     enabled: !!workspaceId,
   });
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (data: UpdateNudgeSettings) => nudgesApi.updateSettings(workspaceId!, data),
+    successMessage: "Nudge settings are up to date.",
+    errorMessage: "We couldn't save nudge settings. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.nudges.settings(workspaceId ?? "") });
     },
@@ -148,8 +160,9 @@ export function NudgeSettingsTab() {
             {NUDGE_TYPE_OPTIONS.map((opt) => (
               <div key={opt.type} className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label htmlFor={`nudge-type-${opt.type}`}>
-                    {opt.emoji} {opt.label}
+                  <Label htmlFor={`nudge-type-${opt.type}`} className="flex items-center gap-2">
+                    <opt.icon className="size-4 text-muted-foreground" aria-hidden="true" />
+                    {opt.label}
                   </Label>
                 </div>
                 <Switch

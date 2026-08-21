@@ -1,4 +1,4 @@
-import type { DesignerShot } from "@/components/estimator/proposal-host";
+import type { DesignerShot } from "@/lib/estimator/types";
 
 export const MAX_LANDSCAPE_SHEETS = 6;
 
@@ -55,11 +55,7 @@ export function duplicateLandscapeSheet(
     ...copy.sheet,
     label: `${source.sheet?.label || `Aerial plan ${index + 1}`} copy`,
   };
-  return relabelLandscapeSheets([
-    ...shots.slice(0, index + 1),
-    copy,
-    ...shots.slice(index + 1),
-  ]);
+  return relabelLandscapeSheets([...shots.slice(0, index + 1), copy, ...shots.slice(index + 1)]);
 }
 
 export function deleteLandscapeSheet(
@@ -98,7 +94,12 @@ export function recountLandscapeFixtures(
   for (const shot of shots) {
     for (const item of shot.design.items) {
       if (!isFixture(item.productId)) continue;
-      rows.push({ number: rows.length + 1, shotId: shot.id, itemId: item.id, productId: item.productId });
+      rows.push({
+        number: rows.length + 1,
+        shotId: shot.id,
+        itemId: item.id,
+        productId: item.productId,
+      });
     }
   }
   return rows;

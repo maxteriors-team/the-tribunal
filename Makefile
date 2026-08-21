@@ -196,10 +196,12 @@ ci.migrations: ci.backend.deps ## Run migration CI parity against the configured
 	# alembic/env.py imports app.core.config, and migrations that touch encrypted
 	# columns import app.core.encryption -- both fail closed without these. See
 	# MIGRATION_KEY_ENV: real keys from backend/.env locally, throwaway ones in CI.
-	cd $(BACKEND_DIR) && $(MIGRATION_KEY_ENV) uv run alembic upgrade head
-	cd $(BACKEND_DIR) && $(MIGRATION_KEY_ENV) uv run alembic check
-	cd $(BACKEND_DIR) && $(MIGRATION_KEY_ENV) uv run alembic downgrade -1
-	cd $(BACKEND_DIR) && $(MIGRATION_KEY_ENV) uv run alembic upgrade head
+	# Treat migration warnings as failures so cyclic constraints cannot regress silently.
+	cd $(BACKEND_DIR) && PYTHONWARNINGS=error $(MIGRATION_KEY_ENV) uv run alembic upgrade head
+	cd $(BACKEND_DIR) && PYTHONWARNINGS=error $(MIGRATION_KEY_ENV) uv run alembic check
+	cd $(BACKEND_DIR) && PYTHONWARNINGS=error $(MIGRATION_KEY_ENV) uv run pytest tests/integration/test_attendance.py -m integration
+	cd $(BACKEND_DIR) && PYTHONWARNINGS=error $(MIGRATION_KEY_ENV) uv run alembic downgrade -1
+	cd $(BACKEND_DIR) && PYTHONWARNINGS=error $(MIGRATION_KEY_ENV) uv run alembic upgrade head
 
 .PHONY: ci.all
 ci.all: codegen/check ci.backend ci.frontend ci.migrations ## Run all CI parity targets.
@@ -292,6 +294,10 @@ audit.security: ## Scan for known CVEs in backend (pip-audit) and frontend prod 
 	@echo
 	@echo "▶ frontend — npm audit --omit=dev"
 	cd $(FRONTEND_DIR) && npm audit --omit=dev
+
+.PHONY: audit.handoff
+audit.handoff: ## Validate the SaaS handoff audit structure and compliance-register linkage.
+	python3 scripts/qa/validate_saas_handoff_audit.py
 
 .PHONY: audit.secrets
 audit.secrets: ## Scan the working tree for committed secrets (gitleaks).

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, History, Loader2, Plus, Trash2, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { messageTemplatesApi } from "@/lib/api/message-templates";
 import {
@@ -28,7 +29,6 @@ import {
   settingsApi,
 } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
-import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { MessageTemplate } from "@/types";
 
 // Day 0-14 belongs to the post-estimate cadence; revival may never reach back
@@ -92,16 +92,15 @@ function QuoteRevivalForm({ workspaceId, initialSettings, templates }: QuoteRevi
     initialSettings.touches.map((touch) => ({ ...touch })),
   );
 
-  const mutation = useMutation({
+  const mutation = useSettingsSaveMutation({
     mutationFn: (data: QuoteRevivalSettings) => settingsApi.updateQuoteRevival(workspaceId, data),
+    successMessage: "Quote revival settings are up to date.",
+    errorMessage: "We couldn't save quote revival settings. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.settings.quoteRevival(workspaceId),
       });
-      toast.success("Quote revival settings saved");
     },
-    onError: (error: unknown) =>
-      toast.error(getApiErrorMessage(error, "Couldn't save quote revival")),
   });
 
   const updateTouch = (index: number, patch: Partial<QuoteRevivalTouch>) => {

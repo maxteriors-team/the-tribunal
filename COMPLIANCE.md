@@ -808,3 +808,103 @@ Code snapshot: `036b0a52` on `release/crm-operations-20260819-final`; this regis
 - Existing `BOOK-001`, `REM-*`, `OBS-001`, `MSG-001`, `LOG-001`, `PRIV-001`, `MIN-001`, `AI-001`, `LL-005/006`, and `QR-005/006` remain open; this release does not claim to resolve or certify them.
 - Counsel/product must confirm consumer terms, minors/capacity policy, AI/synthetic-voice disclosure, privacy/vendor/retention facts, messaging consent/quiet hours, and the exact operating entity.
 - Automated accessibility and security checks cover only observable source/test behavior; dashboard-injected scripts, provider-side retention, assistive-technology behavior, and jurisdiction-specific legal facts were not re-verified.
+
+## Subscription SaaS and buyer-handoff review — 19 August 2026
+
+**Scope:** `release/crm-operations-20260819` at `b32376066eb64feac05add9c9359db86fea868f6`, 7 commits ahead and 10 behind `origin/main`, plus pre-existing uncommitted work. Production was observed at `a805fa50ca2c391c65d8bee21b7a5cbccf2b2892`.
+
+**Full audit and mandatory coverage ledger:** `docs/saas-subscription-handoff-audit-2026-08-19.md`
+
+This review supersedes the earlier `V1` value-movement `n-a` conclusion **for the proposed multi-tenant SaaS model**. Hosted Stripe Checkout is safe for card-data handling, but the current global Stripe account would receive unrelated subscriber merchants' customer payments. That combined product model creates a payments-authorization gate even though the source contains no wallet or payout table.
+
+### Assumed exposure profile
+
+- **Confirmed:** Public production registration, real CRM/contact data, AI voice/SMS/email, hosted customer payments, and a deployed worldwide-reachable frontend/API.
+- **Confirmed:** Intended customers are home-service businesses; the current UI does not technically restrict signup to businesses, adults, the United States, or invitees.
+- **Assumed:** No country blocking; US and EU/UK duties therefore remain in scope until reach is technically and contractually narrowed.
+- **Assumed:** The selling legal entity, processor agreements, tax posture, insurance, and contributor IP assignments are not transfer-ready because the repository cannot establish those facts.
+- **Assumed:** Under-18 use is possible but unintended because no technical age gate exists.
+
+### Findings added or materially reframed
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| PAY-US-001 | ILLEGAL *(conditional)* | Subscriber customer payments enter the platform's single Stripe account | CODE: invoice and in-call Checkout sessions use the global Stripe key without connected accounts or destination charges | Disable multi-merchant collection until Stripe and US payments counsel approve a Connect/payment-facilitator structure | Open — feature must not be sold multi-tenant | Integration test must assert each merchant payment is created on/for that tenant's approved connected account |
+| PAY-EU-001 | ILLEGAL *(conditional)* | The same funds-flow is globally reachable | DEDUCED: source inspection found no country gate or EU/UK merchant-payment architecture | Keep EU/UK merchant collection disabled pending payments counsel and an authorized design | Open — feature must not be sold in scope | Jurisdiction/merchant onboarding gate plus payment-routing integration test |
+| BILL-001 | BLOCKER | SaaS payment is not an access control | CODE: caller-controlled Stripe `price_id`; `subscribed` is not referenced by product authorization | Server-owned plans, full lifecycle reconciliation, and API-level entitlements | Open | Stripe test-clock matrix plus unpaid/past-due/canceled denial tests |
+| COST-001 | BLOCKER | Public owners can trigger platform-paid Telnyx/OpenAI work | CODE: onboarding and phone purchase use the global Telnyx key; OpenAI falls back to the global key; no subscription/quota gate | Require paid entitlement before provider work and use workspace-owned billing or hard quotas | Open | Test that an unpaid workspace produces zero provider calls |
+| AI-VENDOR-001 | BLOCKER | Product presents Codex/ChatGPT OAuth as a supported SaaS integration | CODE: source uses the consumer/Codex flow; official OpenAI billing documentation says ChatGPT and API billing are separate | Remove the consumer/Codex OAuth path; use supported API projects/keys | Open | No `ChatGPT-Account-ID`/Codex OAuth client path in production build; provider contract review |
+| MSG-US-001 | BLOCKER | Artificial-voice campaigns lack source-enforced voice consent/DNC/AI identity | CODE: SMS consent exists, but voice campaign gate has no equivalent evidence and the prompt does not require AI identity | Prior consent, DNC suppression, caller/AI disclosure, local-time enforcement, and counsel-approved scripts | Open | Campaign send test must fail without jurisdiction-appropriate evidence |
+| MSG-EU-001 | BLOCKER | Worldwide AI/direct marketing has no country policy gate | DEDUCED: source inspection found no jurisdictional gate | Disable EU/UK marketing until ePrivacy/PECR and AI-disclosure rules are implemented | Open | Recipient-country policy matrix and denial tests |
+| DATA-001 | HIGH | Lead discovery scrapes public sources, traces contacts, and infers email patterns | CODE: raw self-scraping is config-gated but available; provenance is partial | Use only official/licensed sources, keep provenance/verification, honor rights/suppression, and apply recipient-country outreach policy | Open — counsel/vendor review | Test that unverified/suppressed prospects cannot enter outbound sends and every promoted record retains source evidence |
+| PRIV-LOG-001 | HIGH | Conversation content and recipient identifiers use log keys outside the redaction set | CODE: `user_said`, `agent_said`, and `to_email` are not redacted | Minimize logs, set retention, and prove representative PII never reaches sinks | Open | Structured-log capture test |
+| TELEMETRY-001 | HIGH | Global EZ Pixel sends browser errors to a hardcoded external Workers endpoint | CODE: unconditional root-layout initialization; no processor/retention/transfer facts | Remove it or transfer to a buyer-owned contracted service; document/gate telemetry | Open | Production network test must show only approved processors |
+| AUTH-001 | HIGH | Public registration enumerates email and activates unverified owner accounts; no MFA | CODE: registration/auth implementation | Non-enumerating registration, email verification before spend, and owner/admin MFA | Open | Auth response-equivalence and activation/MFA tests |
+| PRIV-RIGHTS-001 | HIGH | Workspace deletion is soft deactivation and no complete export/purge exists | CODE: route and repository search | Build export, staged cancellation, purge, legal hold, and vendor/backup propagation | Open | End-to-end tenant offboarding test |
+| OPS-RESTORE-001 | HIGH | Backup scripts exist without automated schedule or restore-drill evidence | DEDUCED: no schedule or completed drill artifact was found | Automated encrypted backups/PITR, key escrow, and measured restore rehearsal | Open | Periodic restore job/tabletop artifact |
+| IP-001 | BLOCKER | License, repository owner, CODEOWNERS, brand, and selling entity are not aligned | DEDUCED: source ownership artifacts conflict and assignments were not supplied | Resolve contributor assignments and asset ownership before sale | Open — lawyer/owner | Signed asset schedule and assignments in buyer data room |
+
+### Implemented in this pass
+
+- Wrote the audit/register and added `make audit.handoff`, a persistent structural guard; **no compliance claim is made**.
+- Fixed four frontend test failures by giving every repeated upsell-rank field a unique accessible name (`Rank N name`, `Rank N target`, and `Rank N bonus`).
+- Separately rerun recognized gates exited 0: `make audit.security`; `make ci.backend` (4,659 passed, 21 skipped); and `make ci.frontend` (lint with 36 warnings/0 errors, typecheck, 1,457 tests in 162 files, production build).
+- Runtime checks observed production `/version`, `/readyz`, and public `/register`.
+
+### Open — needs a decision from the owner
+
+- Confirm the selling legal entity, US-only B2B launch scope, age restriction, and whether tenant customer payments are removed or rebuilt with Stripe Connect.
+- Confirm the recommended pilot model: invite-only `$497/workspace/month`, no free provider usage, and workspace-owned Telnyx/OpenAI/Resend billing.
+- Identify every customer, contributor, vendor account, processor agreement, domain, support mailbox, encryption key, backup key, and assignable contract for the handoff data room.
+
+### Needs a lawyer/accountant
+
+- Payments authorization, AI telemarketing/recording, B2B Terms and data-processing terms, IP/transaction assignments, customer-data transfer, US sales tax, and any EU/UK VAT/privacy launch scope.
+
+### Re-verify before relying
+
+- The working tree was dirty and its branch had diverged from `origin/main` before this review; production runs an older SHA. Reconcile without discarding work, then re-run the ledger after remediation is committed and deployed.
+- No authenticated production workflow, real payment, phone purchase/call/message, provider dashboard, restore, penetration test, or full manual assistive-technology audit was performed.
+
+## Focused addendum — internal time and attendance (2026-08-20)
+
+Snapshot: 20 August 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
+
+Scope: authenticated employee clock-in/out/pause/resume, employee self-access, owner/admin review and correction, append-only audit events, generic payroll CSV export, and an owner/admin technician activity scorecard. This is an engineering gate for these employment-data features, not a wage-and-hour legal opinion or product-wide re-audit.
+
+### Exposure profile
+
+- **Reach — Confirmed:** invite-only authenticated workspace members; owner/admin team access is capability-gated.
+- **Personal data — Confirmed:** employee name, email, shift and pause timestamps, job assignments, job-time totals, optional notes, correction reasons, and payroll export activity.
+- **Monitoring — Confirmed limited:** the feature records staff identity, server timestamps, and optional staff-entered notes. It does not collect precise location, screenshots, keystrokes, device activity, or biometric data.
+- **Employment/pay — Confirmed:** recorded time can affect wages after an administrator imports it into payroll.
+- **Jurisdiction — Unknown:** company work locations, employee work locations, workweek/overtime rules, break rules, rounding policy, notice/acknowledgement requirements, and record-retention periods were not supplied.
+- **Payroll processor — Unknown:** no payroll vendor is configured in the repository; export is deliberately generic and requires admin review/mapping.
+
+### Findings
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| TNA-001 | LAWYER | Recorded hours feed employee payroll | CODE: export contains raw completed intervals and explicitly does not classify regular/overtime, rates, breaks, or leave | Employment counsel/payroll professional must define workweek, overtime, break, rounding, approval, and correction rules for every employee location | Open; product avoids inventing wage rules | UI/export documentation says raw hours only; open/void entries excluded |
+| TNA-002 | HIGH | One worker could read/change another worker's time or export the team | RUNTIME: five PostgreSQL integration tests proved self-only reads plus admin-only cross-role/workspace operations; an unauthenticated local HTTP probe returned `401` | Enforce user- and workspace-level authorization at the backend, not only navigation | Implemented and tested | Cross-user, cross-role, and cross-workspace API/service tests |
+| TNA-003 | HIGH | Retries, overlaps, edits, or deletion could corrupt wage evidence | RUNTIME: idempotency, overlap, audit, and void-not-delete tests passed; migration upgrade/check/downgrade/upgrade passed | Preserve original records, prevent duplicate/overlapping intervals, and make corrections attributable | Implemented and tested | PostgreSQL constraints, transactional audit events, integration tests, and migration CI |
+| TNA-004 | MEDIUM | Payroll CSV exposes employee identifiers and free-text notes | RUNTIME: the admin-only export test proved open/void/cross-workspace exclusion, formula neutralization, checksum metadata, and no retained CSV content | Minimize access, avoid spreadsheet injection, set secure handling/retention rules with the payroll processor | Engineering controls tested; organizational handling remains open | Capability gate, CSV injection test, no server-side CSV retention |
+| TNA-005 | MEDIUM | Employees need notice, access, and a correction route for their recorded time | RUNTIME + CODE: own-record isolation and UI role/action tests passed; admins can add/correct/void with an audited reason | Provide an employer-approved notice and a timely correction/dispute process without retaliation or silent alteration | Self-access and auditable correction implemented; policy/notice review open | Own-record UI, permanent event trail, no hard delete |
+| TNA-006 | MEDIUM | Historical wage records require a retention policy and may conflict with account deletion | DEDUCED: attendance rows are preserved and user deletion is restricted, but no jurisdiction-specific retention/purge schedule was supplied | Set and document retention/legal-hold/offboarding rules with employment/privacy counsel | Open | No attendance delete API; encrypted notes/reasons; existing encrypted backup process |
+| TNA-007 | MEDIUM | Staff may clock time from phone/keyboard and admins use forms/dialogs/tables | RUNTIME + CODE: labelled native controls, focus-managed tabs/dialogs, text status labels, mobile cards, and explicit states passed frontend lint, type checks, 1,421 tests, production build, and serious/critical Axe checks at desktop/mobile widths | Verify keyboard, zoom/reflow, screen-reader output, contrast, and touch behavior before deployment | Automated checks passed; manual assistive-technology review remains open | Component flow tests, authenticated Playwright, and frontend CI |
+| TNA-008 | MEDIUM | Payroll vendors do not share a universal CSV contract | CODE + official vendor research: QuickBooks templates are case-sensitive and product-specific; Gusto maps customer spreadsheets; ADP inputs depend on tenant identifiers/earning codes | Do not advertise direct vendor compatibility until the customer's exact import template is tested end-to-end | Implemented as Generic payroll CSV only | Vendor-neutral contract doc and UI copy; provider adapter requires separate acceptance fixture |
+| TNA-009 | LAWYER | Employee-initiated pauses are subtracted from exported worked time | RUNTIME + CODE: six PostgreSQL attendance integration tests covered retry-safe pause/resume, frozen worked time, automatic pause closure, audit events, and pause-adjusted export; authenticated browser coverage exercised desktop/mobile pause controls | Employment counsel/payroll must decide which meal/rest/other pauses are compensable in every employee location and how missed/late pauses are corrected | Engineering preserves gross, paused, and net values; pay-policy decision remains open | Immutable pause intervals, gross/paused/net export columns, admin void-and-re-enter correction trail |
+| TNA-010 | MEDIUM | Supervisors can compare technician job and attendance activity | RUNTIME + CODE: service/API tests and authenticated browser coverage verified the `reports:view` gate, populated responsive cards, and serious/critical Axe checks; no composite score, ranking, revenue attribution, quality label, or utilization ratio exists | Give staff notice, limit access, verify source records, and do not use these totals alone for pay, discipline, scheduling, or automated employment decisions | Limited scorecard implemented; employer notice/use policy remains open | Admin-only API/nav gate and explicit non-rating UI/help copy |
+| TNA-011 | MEDIUM | Principal-scoped React Query data could survive a soft logout on a shared browser | CODE + RUNTIME: independent security review confirmed the root QueryClient persisted across account changes; auth-provider tests and authenticated E2E passed after the fix | Purge in-memory server data whenever authentication ends or a new identity is established | Fixed | `queryClient.clear()` on logout, successful login, and failed session recovery; 20 auth-provider regression tests |
+
+### Open decisions before payroll reliance
+
+- Have employment counsel or the payroll professional confirm workweek start, daily/weekly overtime, breaks, rounding, leave, approval, correction/dispute, notice/acknowledgement, retention, and final-pay rules for every location where staff work.
+- Identify the actual payroll product and tenant import template, then test one non-production payroll with known regular/overtime/break cases before importing real wages.
+- Set a written retention period and secure process for downloaded CSV files. The repository cannot establish the employer's legal retention facts or payroll vendor settings.
+- Define paid versus unpaid pause categories, required meal/rest periods, missed-pause correction, manager approval, and whether employees must attest to pauses; test those rules with payroll counsel before relying on `total_hours`.
+- Adopt a technician-scorecard notice and manager-use policy. The direct activity totals must not become an unexplained ranking or sole basis for compensation, discipline, or scheduling.
+
+### Verification boundary
+
+Backend CI passed 4,666 tests (21 skipped); frontend CI passed lint, type checks, 1,421 tests, and production build; attendance integration passed six PostgreSQL tests; migration upgrade/check/downgrade/upgrade passed; and authenticated Playwright passed two desktop/mobile scenarios with pause, correction, export, scorecard, navigation-permission, overflow, and serious/critical Axe assertions. An independent static security review found no Critical/High issue; its confirmed Medium cross-account cache finding was fixed and re-verified by frontend CI plus authenticated E2E. Evidence is stored under `.ezcoder/eyes/out/attendance/`. No production payroll import, live employee notice, payroll-vendor sandbox, manual screen-reader session, or legal review was performed.

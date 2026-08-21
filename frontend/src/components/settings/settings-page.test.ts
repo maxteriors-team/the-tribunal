@@ -2,34 +2,34 @@ import { describe, expect, it } from "vitest";
 
 import { can } from "@/lib/permissions";
 
-import { canSeeSettingsTab, settingsTabs } from "./settings-page";
+import { canSeeSettingsTab, groupSettingsTabs, settingsTabs } from "./settings-page";
 
 const SELF_TABS = ["profile", "notifications", "calendar"];
 const MANAGER_TABS = [
   "profile",
-  "tags",
   "notifications",
+  "calendar",
+  "tags",
   "proposals",
   "pricing",
+  "locations",
+  "lead-sources",
   "attach-rules",
   "pipeline",
   "speed-to-lead",
   "estimate-followup",
   "quote-revival",
   "neighbors",
-  "calendar",
   "billing",
-  "locations",
-  "lead-sources",
 ];
 const SALES_TABS = [
   "profile",
   "notifications",
+  "calendar",
   "speed-to-lead",
   "estimate-followup",
   "quote-revival",
   "neighbors",
-  "calendar",
 ];
 
 const EXPECTED_TABS_BY_ROLE: Record<string, string[]> = {
@@ -63,5 +63,21 @@ describe("Settings tab capability matrix", () => {
         expect(tab.requires, tab.value).toBeDefined();
       }
     }
+  });
+
+  it("groups every visible label into a stable Settings category", () => {
+    const groups = groupSettingsTabs(settingsTabs);
+
+    expect(groups.map((group) => group.label)).toEqual([
+      "Personal",
+      "CRM",
+      "Automation",
+      "Integrations",
+      "Workspace",
+    ]);
+    expect(groups.flatMap((group) => group.tabs.map((tab) => tab.value))).toEqual(
+      settingsTabs.map((tab) => tab.value),
+    );
+    expect(groups.flatMap((group) => group.tabs)).toHaveLength(20);
   });
 });

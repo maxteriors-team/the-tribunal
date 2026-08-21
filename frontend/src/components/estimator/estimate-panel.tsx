@@ -27,16 +27,9 @@ import {
   type CustomLineDraft,
   type CustomLineSide,
 } from "@/lib/estimator/custom-lines";
-import {
-  packageName,
-  resolveSelectedPackage,
-  seasonalTotal,
-} from "@/lib/estimator/packages";
+import { packageName, resolveSelectedPackage, seasonalTotal } from "@/lib/estimator/packages";
 import { formatCurrency } from "@/lib/utils/number";
-import type {
-  ChristmasPackagePricing,
-  LinearFeetEstimateResult,
-} from "@/types/estimate";
+import type { ChristmasPackagePricing, LinearFeetEstimateResult } from "@/types/estimate";
 
 /** Which halves of the comparison this workspace actually sells. */
 export interface EstimateSides {
@@ -56,12 +49,6 @@ interface EstimatePanelProps {
   customLines: CustomLineDraft[];
   onChangeCustomLines: (lines: CustomLineDraft[]) => void;
   sides: EstimateSides;
-  /**
-   * Whether this estimate is the one being sold. False when the Quote Builder
-   * hosts the designer: that flow prices from the wizard's own document, so a
-   * line typed here would never reach the quote — better absent than dropped.
-   */
-  allowCustomLines: boolean;
 }
 
 export function EstimatePanel({
@@ -75,7 +62,6 @@ export function EstimatePanel({
   customLines,
   onChangeCustomLines,
   sides,
-  allowCustomLines,
 }: EstimatePanelProps) {
   const permanent = estimate?.permanent;
   const christmas = estimate?.christmas;
@@ -101,11 +87,8 @@ export function EstimatePanel({
 
       {!hasDesign ? (
         <p className="ep-empty">
-          Pick a product on the left and trace it onto the photo. Pricing updates
-          live as you draw
-          {allowCustomLines
-            ? " — or add a line item below for work that isn’t on the photo."
-            : "."}
+          Pick a product on the left and trace it onto the photo. Pricing updates live as you draw —
+          or add a line item below for work that isn’t on the photo.
         </p>
       ) : (
         <>
@@ -130,8 +113,8 @@ export function EstimatePanel({
             <div className="ep-packages">
               <div className="ep-lines-head">Recommended package</div>
               <p className="ep-pkg-hint">
-                The client sees all three. This is the one you&rsquo;re
-                recommending, highlighted on their page.
+                The client sees all three. This is the one you&rsquo;re recommending, highlighted on
+                their page.
               </p>
               <div className="ep-pkgs">
                 {packages.map((pkg) => {
@@ -146,19 +129,11 @@ export function EstimatePanel({
                       aria-pressed={isSelected}
                       onClick={() => onSelectPackage(pkg.key)}
                     >
-                      {pkg.popular ? (
-                        <span className="ep-pkg-pop">Most Popular</span>
-                      ) : null}
-                      {pkg.value_tag ? (
-                        <span className="ep-pkg-tag">{pkg.value_tag}</span>
-                      ) : null}
-                      {pkg.marker ? (
-                        <span className="ep-pkg-marker">{pkg.marker}</span>
-                      ) : null}
+                      {pkg.popular ? <span className="ep-pkg-pop">Most Popular</span> : null}
+                      {pkg.value_tag ? <span className="ep-pkg-tag">{pkg.value_tag}</span> : null}
+                      {pkg.marker ? <span className="ep-pkg-marker">{pkg.marker}</span> : null}
                       <span className="ep-pkg-name">{pkg.name ?? pkg.label}</span>
-                      <span className="ep-pkg-total">
-                        {formatCurrency(pkg.pricing.total)}
-                      </span>
+                      <span className="ep-pkg-total">{formatCurrency(pkg.pricing.total)}</span>
                       <span className="ep-pkg-per">Per season</span>
                       {pkg.experience ? (
                         <span className="ep-pkg-blurb">{pkg.experience}</span>
@@ -182,16 +157,14 @@ export function EstimatePanel({
         </>
       )}
 
-      {allowCustomLines ? (
-        <CustomLines
-          lines={customLines}
-          onChange={onChangeCustomLines}
-          sides={sides}
-          permanentTotal={permanent?.custom_total ?? 0}
-          seasonalTotal={christmas?.custom_total ?? 0}
-          packages={packages}
-        />
-      ) : null}
+      <CustomLines
+        lines={customLines}
+        onChange={onChangeCustomLines}
+        sides={sides}
+        permanentTotal={permanent?.custom_total ?? 0}
+        seasonalTotal={christmas?.custom_total ?? 0}
+        packages={packages}
+      />
 
       {hasDesign ? (
         <>
@@ -199,17 +172,13 @@ export function EstimatePanel({
             {permanent?.enabled ? (
               <div className="ep-total-row">
                 <span>Permanent · one-time</span>
-                <span className="ep-total-amount">
-                  {formatCurrency(permanent.total)}
-                </span>
+                <span className="ep-total-amount">{formatCurrency(permanent.total)}</span>
               </div>
             ) : null}
             {christmas?.enabled ? (
               <div className="ep-total-row ep-total-grand">
                 <span>Seasonal · per year</span>
-                <span className="ep-total-amount">
-                  {formatCurrency(seasonalHeadline)}
-                </span>
+                <span className="ep-total-amount">{formatCurrency(seasonalHeadline)}</span>
               </div>
             ) : null}
           </div>
@@ -217,8 +186,8 @@ export function EstimatePanel({
           {bothOffered && savings > 0 ? (
             <div className="ep-savings">
               <span className="ep-savings-label">
-                {permanentWins ? "Permanent saves" : "Difference"} over{" "}
-                {estimate?.years ?? 5} seasons
+                {permanentWins ? "Permanent saves" : "Difference"} over {estimate?.years ?? 5}{" "}
+                seasons
               </span>
               <span className="ep-savings-amount">{formatCurrency(savings)}</span>
             </div>
@@ -327,9 +296,7 @@ function CustomLines({
                 className="est-select ep-custom-side"
                 value={line.side}
                 aria-label="Line item applies to"
-                onChange={(e) =>
-                  patch(line.id, { side: e.target.value as CustomLineSide })
-                }
+                onChange={(e) => patch(line.id, { side: e.target.value as CustomLineSide })}
               >
                 <option value="seasonal">Per season</option>
                 <option value="permanent">One-time</option>
@@ -343,9 +310,7 @@ function CustomLines({
               className="est-select ep-custom-pkg"
               value={line.packageKey ?? ""}
               aria-label="Line item package"
-              onChange={(e) =>
-                patch(line.id, { packageKey: e.target.value || null })
-              }
+              onChange={(e) => patch(line.id, { packageKey: e.target.value || null })}
             >
               <option value="">All packages</option>
               {packages.map((pkg) => (
@@ -362,11 +327,7 @@ function CustomLines({
         type="button"
         className="est-btn ep-custom-add"
         disabled={atCap}
-        title={
-          atCap
-            ? `An estimate carries up to ${MAX_CUSTOM_LINES} line items`
-            : undefined
-        }
+        title={atCap ? `An estimate carries up to ${MAX_CUSTOM_LINES} line items` : undefined}
         onClick={() => onChange([...lines, newCustomLineDraft(defaultSide)])}
       >
         <Plus aria-hidden="true" /> Add line item
@@ -377,17 +338,13 @@ function CustomLines({
           {seasonalCustomTotal > 0 ? (
             <div className="ep-line">
               <span className="ep-line-name">Line items · per season</span>
-              <span className="ep-line-amount">
-                {formatCurrency(seasonalCustomTotal)}
-              </span>
+              <span className="ep-line-amount">{formatCurrency(seasonalCustomTotal)}</span>
             </div>
           ) : null}
           {permanentTotal > 0 ? (
             <div className="ep-line">
               <span className="ep-line-name">Line items · one-time</span>
-              <span className="ep-line-amount">
-                {formatCurrency(permanentTotal)}
-              </span>
+              <span className="ep-line-amount">{formatCurrency(permanentTotal)}</span>
             </div>
           ) : null}
         </div>

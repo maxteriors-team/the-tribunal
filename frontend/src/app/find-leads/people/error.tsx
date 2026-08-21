@@ -3,7 +3,8 @@
 import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
-import { PageErrorState } from "@/components/ui/page-state";
+import { ProviderPageErrorState } from "@/components/shared/provider-error-state";
+import { isProviderConfigurationError } from "@/lib/utils/errors";
 
 export default function PeopleSearchError({
   error,
@@ -13,12 +14,17 @@ export default function PeopleSearchError({
   unstable_retry: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    if (!isProviderConfigurationError(error)) {
+      Sentry.captureException(error);
+    }
   }, [error]);
 
   return (
-    <PageErrorState
-      message="We couldn't load people search. Please try again."
+    <ProviderPageErrorState
+      error={error}
+      provider="people-search"
+      transientTitle="People search is temporarily unavailable"
+      transientMessage="The people-search provider didn't respond. Retry your search."
       onRetry={unstable_retry}
     />
   );

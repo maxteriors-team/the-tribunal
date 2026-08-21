@@ -1,17 +1,29 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ScorecardPage } from "@/components/scorecard/scorecard-page";
-import type { ReceptionistScorecard } from "@/lib/api/scorecard";
+import type {
+  ReceptionistScorecard,
+  TechnicianActivityScorecardRow,
+} from "@/lib/api/scorecard";
 
-const { getScorecardMock, useWorkspaceIdMock } = vi.hoisted(() => ({
-  getScorecardMock: vi.fn(),
-  useWorkspaceIdMock: vi.fn(),
-}));
+const { getScorecardMock, getTechniciansMock, useWorkspaceIdMock, canMock } = vi.hoisted(
+  () => ({
+    getScorecardMock: vi.fn(),
+    getTechniciansMock: vi.fn(),
+    useWorkspaceIdMock: vi.fn(),
+    canMock: vi.fn(() => true),
+  }),
+);
 
 vi.mock("@/lib/api/scorecard", () => ({
-  scorecardApi: { get: getScorecardMock },
+  scorecardApi: { get: getScorecardMock, getTechnicians: getTechniciansMock },
+}));
+
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => ({ can: canMock }),
 }));
 
 vi.mock("@/hooks/useWorkspaceId", () => ({
@@ -54,6 +66,21 @@ function sampleScorecard(
   };
 }
 
+function sampleTechnicians(): TechnicianActivityScorecardRow[] {
+  return [
+    {
+      id: "tech-1",
+      name: "Taylor Tech",
+      active: true,
+      assigned_jobs: 7,
+      completed_job_time_entries: 5,
+      job_logged_seconds: 18_000,
+      attendance_worked_seconds: 25_200,
+      attendance_paused_seconds: 1_800,
+    },
+  ];
+}
+
 function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -68,6 +95,21 @@ function renderPage() {
 }
 
 describe("ScorecardPage", () => {
+  beforeEach(() => {
+    canMock.mockReset().mockReturnValue(true);
+  });
+
+  it("fails closed without reports access", () => {
+    canMock.mockReturnValue(false);
+    useWorkspaceIdMock.mockReturnValue("ws-1");
+
+    renderPage();
+
+    expect(screen.getByText("Access denied")).toBeVisible();
+    expect(getScorecardMock).not.toHaveBeenCalled();
+    expect(getTechniciansMock).not.toHaveBeenCalled();
+  });
+
   it("renders the receptionist scorecard metrics", async () => {
     useWorkspaceIdMock.mockReturnValue("ws-1");
     getScorecardMock.mockResolvedValue(sampleScorecard());
@@ -84,6 +126,26 @@ describe("ScorecardPage", () => {
     expect(screen.getByText("66.7% recovery rate")).toBeInTheDocument();
     expect(screen.getByText("pricing")).toBeInTheDocument();
     expect(screen.getByText("booking")).toBeInTheDocument();
+  });
+
+  it("shows pause-adjusted technician activity without a rating", async () => {
+    useWorkspaceIdMock.mockReturnValue("ws-1");
+    getScorecardMock.mockResolvedValue(sampleScorecard());
+    getTechniciansMock.mockResolvedValue(sampleTechnicians());
+
+    renderPage();
+    await userEvent.click(screen.getByRole("tab", { name: "Technicians" }));
+
+    expect(await screen.findByRole("heading", { name: "Technician Scorecard" })).toBeInTheDocument();
+    expect(await screen.findByText("Taylor Tech")).toBeInTheDocument();
+    expect(screen.getByText("7.0h")).toBeInTheDocument();
+    expect(screen.getByText("0.5h")).toBeInTheDocument();
+    expect(screen.getByText("Activity context—not an employee rating")).toBeInTheDocument();
+    expect(screen.queryByText("Employee score")).not.toBeInTheDocument();
+    expect(getTechniciansMock).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({ start_date: expect.any(String), end_date: expect.any(String) }),
+    );
   });
 
   it("shows an empty state for top reasons when none exist", async () => {

@@ -149,14 +149,14 @@ class JobService:
         ends_at = data.get("ends_at", visit.ends_at)
         if ends_at <= starts_at:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="ends_at must be after starts_at",
             )
         next_status = data.get("status")
         if next_status is not None:
             if next_status == JobStatus.UNSCHEDULED:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="A visit cannot be unscheduled",
                 )
             data["status"] = next_status.value

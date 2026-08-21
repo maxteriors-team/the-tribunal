@@ -14,10 +14,7 @@ import {
 import { LeadResultsList } from "@/components/contacts/shared/lead-results-list";
 import { ProviderNotConfiguredBanner } from "@/components/shared/provider-not-configured-banner";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,13 +27,13 @@ import {
 } from "@/components/ui/select";
 import { useLeadImport } from "@/hooks/useLeadImport";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import {
-  scrapingApi,
-  type BusinessResult,
-  type ImportLeadsResponse,
-} from "@/lib/api/scraping";
+import { scrapingApi, type BusinessResult, type ImportLeadsResponse } from "@/lib/api/scraping";
 import { messages } from "@/lib/messages";
-import { getApiErrorCode, getApiErrorMessage } from "@/lib/utils/errors";
+import {
+  getApiErrorMessage,
+  isProviderConfigurationError,
+  shouldThrowProviderError,
+} from "@/lib/utils/errors";
 
 export function FindLeadsPage() {
   const workspaceId = useWorkspaceId();
@@ -61,21 +58,21 @@ export function FindLeadsPage() {
       if (!workspaceId) throw new Error("No workspace");
       return scrapingApi.search(workspaceId, query, maxResults);
     },
+    throwOnError: shouldThrowProviderError,
+    onMutate: () => setNotConfigured(false),
     onSuccess: (data) => {
       setNotConfigured(false);
       setResults(data.results);
       setHasSearched(true);
       setImportResult(null);
-      const withPhone = new Set(
-        data.results.filter((r) => r.has_phone).map((r) => r.place_id)
-      );
+      const withPhone = new Set(data.results.filter((r) => r.has_phone).map((r) => r.place_id));
       setSelectedIds(withPhone);
       toast.success(messages.findLeads.found(data.results.length));
     },
     onError: (error) => {
-      // Surface a missing Google Places key as a persistent, actionable banner
-      // instead of a generic toast the user can't act on.
-      if (getApiErrorCode(error) === "provider_not_configured") {
+      // Setup failures stay in this feature; transient 5xx failures keep the
+      // route-level retry state configured above.
+      if (isProviderConfigurationError(error)) {
         setNotConfigured(true);
         return;
       }
@@ -124,7 +121,7 @@ export function FindLeadsPage() {
   };
 
   const selectedCount = [...selectedIds].filter((id) =>
-    filteredResults.some((r) => r.place_id === id)
+    filteredResults.some((r) => r.place_id === id),
   ).length;
 
   return (
@@ -142,7 +139,9 @@ export function FindLeadsPage() {
         {notConfigured && (
           <ProviderNotConfiguredBanner
             title="Find Leads needs a Google Places API key"
-            description="Add a Google Places API key in Settings to search for businesses."
+            description="Connect Google Places in Settings, then retry your search."
+            restrictedDescription="Ask a workspace owner or admin to connect Google Places."
+            settingsLabel="Set up lead search"
           />
         )}
 

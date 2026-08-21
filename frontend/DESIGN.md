@@ -610,10 +610,10 @@ assistive-technology results are recorded after implementation rather than claim
 
 ### Responsive states and proof boundary
 
-The semantic contract is identical at 1440 x 900 and 390 x 844. Text can hide visually in a mobile
-stepper or Settings tab only when an equivalent accessible name remains. Disabled decrement buttons
-keep their item-specific name; current steps expose `aria-current="step"`; pending actions keep a
-stable action name.
+The semantic contract is identical at 1440 x 900 and 390 x 844. Stepper text can hide visually only
+when an equivalent accessible name remains; Settings tab labels stay visible at both widths. Disabled
+decrement buttons keep their item-specific name; current steps expose `aria-current="step"`; pending
+actions keep a stable action name.
 
 `e2e/accessibility.spec.ts` runs axe with WCAG 2.2 A/AA tags over representative desktop and mobile
 CRM routes and automates keyboard checks for tabs, steppers, and report scrolling. Focused Vitest
@@ -621,6 +621,76 @@ coverage pins proposal package and quantity-control keyboard behavior. The human
 `e2e/accessibility-keyboard-checklist.md` cover visible focus, complete tab order, reflow, dialog
 focus return, and assistive-technology output. These scoped checks are regression evidence, not a
 product-wide WCAG or legal conformance claim.
+
+## Settings information architecture and save feedback (2026-08-19)
+
+### Design read
+
+- **Surface:** a data-dense CRM Settings workspace plus the public sign-in form.
+- **Audience:** workspace operators with mixed technical expertise, including keyboard and screen-reader
+  users on narrow touch screens.
+- **Single job:** find the right setting quickly, change it, and know whether the API persisted it.
+- **Risk:** twenty ungrouped destinations increase search cost; silent or raw transport errors leave an
+  operator unsure whether business-critical outreach, pricing, or profile changes took effect.
+- **Constraints:** preserve deep-link tab values, capability filtering, Radix tab behavior, Lucide icons,
+  existing cards and typography, and every visible mobile tab label.
+
+### Thesis and reuse map
+
+Keep one Radix tablist and its existing arrow-key model, but organize its twenty destinations into five
+functional categories: Personal, CRM, Automation, Integrations, and Workspace. Category dividers and labels
+supply scan hierarchy without adding a second navigation level. The tablist becomes a five-column grouped
+layout at wide widths and remains one locally scrollable sequence on mobile; icons supplement full text but
+never replace it.
+
+All Settings form-save mutations use `useSettingsSaveMutation`, which preserves the initiating control's focus,
+keeps recoverable API failures inside the active tab, and emits one shared Sonner pattern: **Changes saved**
+or **Changes not saved**, followed by specific outcome or recovery copy. Sonner's existing polite live region
+is the screen-reader announcement surface. The login form uses a focused `role="alert"` for assertive
+credential and network failure recovery; raw Axios status text never reaches the user.
+
+### Complete states and proof boundary
+
+Pending controls remain disabled using their existing mutation state. A successful save announces the
+specific persisted setting. A failed save leaves the tab mounted, removes raw transport text, gives a retry
+step, and returns the control to its enabled state. Login failures move focus to the actionable alert; grouped
+tabs retain visible focus, arrow-key selection, full labels, and active-item reveal.
+
+Focused Vitest coverage verifies login API rejection copy and focus, Settings live-region success and failure
+announcements, 5xx recovery without an error-boundary takeover, focus retention, category completeness, and
+grouped-tab arrow keys. Playwright repeats login failure focus, real save success/failure, and 390px
+label/keyboard checks. These checks are scoped regression evidence, not an assistive-technology or legal
+conformance claim.
+
+### Rendered critique and revision
+
+Rendered evidence: `.ezcoder/screenshots/settings-mobile-390.png`,
+`.ezcoder/screenshots/settings-mobile-api-failure.png`, `.ezcoder/screenshots/settings-desktop-1440.png`, and
+`.ezcoder/screenshots/login-error-390.png`. The first browser pass exposed two quality-floor defects: disabling
+a focused save button moved focus to the document body, and semantic group wrappers broke the tablist's
+required ARIA parent/child relationships. The revision restores focus only when disabling the initiating
+control caused focus loss, and uses presentational layout wrappers plus `aria-describedby` category context.
+A second 390px and 1440px Axe run reported 0 violations; browser assertions confirmed 20 named tabs, all five
+categories, the mounted failure recovery state, and focused save controls after both 200 and 500 responses.
+The unnecessary decorative emoji set in Nudge categories was also removed in favor of the existing Lucide
+family.
+
+Final rubric: **22/24**.
+
+1. **Brief specificity 2/2:** CRM labels and settings outcomes identify the product task without branding.
+2. **Information hierarchy 2/2:** categories lead to the active tab, then its form and save action.
+3. **Composition 2/2:** grouped columns align to one content rail and become one contained mobile sequence.
+4. **Consistency and flow 2/2:** existing Tabs, cards, icons, query state, and one save pattern are reused.
+5. **Typography 2/2:** existing heading, utility-label, form, and muted-copy roles remain intact.
+6. **Material logic 2/2:** dividers communicate categories; cards contain forms; toasts contain transient state.
+7. **State completeness 2/2:** pending, success, 500 failure, retry, focus, and mounted-content continuity pass.
+8. **Responsive behavior 2/2:** full tab text remains visible and reachable at 390px and 1440px.
+9. **Accessibility 1/2:** Axe, keyboard, focus, roles, names, descriptions, and live regions pass; a real
+   screen-reader session, forced colors, and the complete per-criterion audit remain unverified.
+10. **Motion purpose 2/2:** no motion was added; focus restoration prevents scroll jumps.
+11. **Content authenticity 2/2:** labels and outcome copy describe real CRM settings and observed API states.
+12. **Visual distinctiveness 1/2:** CRM-specific grouping and one icon family are clear but intentionally stay
+    within the established dashboard language rather than introducing a new visual signature.
 
 ---
 
@@ -662,8 +732,8 @@ wizard state, so Radix and route-specific controls preserve their established se
   fully visible.
 - **Content extremes:** assistant starter prompts use normal wrapping; offer/document names use min-width
   and word-breaking rules; populated opportunity and offer cards retain local containment.
-- **Desktop:** the existing sidebar, content widths, multi-column layouts, and wrapped Settings tab set are
-  preserved at 1440px.
+- **Desktop:** the existing sidebar, content widths, multi-column layouts, and categorized Settings tab
+  layout are preserved at 1440px.
 
 ### States and interaction
 

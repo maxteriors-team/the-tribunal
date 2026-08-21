@@ -92,7 +92,9 @@ async def _post_optin(app: FastAPI, payload: dict) -> object:
 
 @pytest.fixture
 def db() -> AsyncMock:
-    return AsyncMock()
+    session = AsyncMock()
+    session.add = MagicMock()
+    return session
 
 
 async def test_submit_without_consent_succeeds_and_does_not_opt_in(db: AsyncMock) -> None:

@@ -3,7 +3,7 @@
  *
  * The dangerous parts of this dialog are the ones that are invisible when they
  * break: clearing a deposit has to be expressed as 0 (the API treats null as
- * "leave it alone"), and a sales-wizard quote must never have its tax/discount
+ * "leave it alone"), and a proposal-backed quote must never have its tax/discount
  * moved from here — the customer's page prices from the stored document, so a
  * header-level reprice would show up on the dashboard and nowhere else. Both
  * are pinned below, along with the fact that the copy tells the operator their
@@ -79,9 +79,7 @@ describe("QuoteEditDialog on a sent quote", () => {
 
     renderDialog();
 
-    expect(
-      await screen.findByText(/link the customer already has/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/link the customer already has/i)).toBeInTheDocument();
   });
 
   it("calls a draft a draft instead", async () => {
@@ -90,9 +88,7 @@ describe("QuoteEditDialog on a sent quote", () => {
 
     renderDialog(draft);
 
-    expect(
-      await screen.findByText(/Update this draft before it goes out/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Update this draft before it goes out/i)).toBeInTheDocument();
   });
 
   it("saves the header and clears an emptied note with an empty string", async () => {
@@ -132,9 +128,7 @@ describe("QuoteEditDialog deposits", () => {
 
     renderDialog();
 
-    await userEvent.click(
-      await screen.findByRole("combobox", { name: "Deposit" }),
-    );
+    await userEvent.click(await screen.findByRole("combobox", { name: "Deposit" }));
     await userEvent.click(await screen.findByRole("option", { name: "No deposit" }));
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
@@ -150,9 +144,7 @@ describe("QuoteEditDialog deposits", () => {
 
     renderDialog();
 
-    await userEvent.click(
-      await screen.findByRole("combobox", { name: "Deposit" }),
-    );
+    await userEvent.click(await screen.findByRole("combobox", { name: "Deposit" }));
     await userEvent.click(await screen.findByRole("option", { name: "Fixed amount" }));
     const amount = screen.getByLabelText("Amount");
     await userEvent.clear(amount);
@@ -172,34 +164,26 @@ describe("QuoteEditDialog deposits", () => {
 
     renderDialog();
 
-    expect(
-      await screen.findByText(/won.t refund or charge the difference/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/won.t refund or charge the difference/i)).toBeInTheDocument();
   });
 });
 
 describe("QuoteEditDialog and wizard pricing", () => {
   it("never offers to reprice a wizard quote from the header", async () => {
-    getMock.mockResolvedValue(
-      quote({ proposal_document: { selected_tier: "better" } }),
-    );
+    getMock.mockResolvedValue(quote({ proposal_document: { selected_tier: "better" } }));
 
     renderDialog();
 
     await screen.findByLabelText("Title");
     expect(screen.queryByLabelText("Tax")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Discount")).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/comes from the sales wizard/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/comes from the sales wizard/i)).toBeInTheDocument();
   });
 
   it("omits tax and discount from a wizard quote's payload", async () => {
     // Belt and braces: even if the fields reappeared, the request must not carry
     // a total the customer's proposal page would never show.
-    getMock.mockResolvedValue(
-      quote({ proposal_document: { selected_tier: "better" } }),
-    );
+    getMock.mockResolvedValue(quote({ proposal_document: { selected_tier: "better" } }));
 
     renderDialog();
 

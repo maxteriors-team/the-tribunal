@@ -21,7 +21,7 @@ def onboarding_error_to_http_exception(exc: OnboardingServiceError) -> HTTPExcep
     if isinstance(exc, OnboardingPermissionError):
         status_code = status.HTTP_403_FORBIDDEN
     elif isinstance(exc, OnboardingUnprocessableError):
-        status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+        status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     elif isinstance(exc, OnboardingExternalServiceError):
         status_code = status.HTTP_502_BAD_GATEWAY
     else:

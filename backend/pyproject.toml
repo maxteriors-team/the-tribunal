@@ -204,6 +204,11 @@ asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-m 'not integration and not eval'"
+filterwarnings = [
+    "error",
+    "ignore::ResourceWarning",
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.:starlette.exceptions.StarletteDeprecationWarning",
+]
 markers = [
     "integration: integration tests that hit real external services (skipped by default; run with -m integration)",
     "smoke: live-deployment smoke tests; skipped unless SMOKE_BASE_URL is set (run with -m smoke)",

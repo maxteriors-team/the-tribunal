@@ -196,7 +196,7 @@ def resolve_window(
     end = date_to or month_end
     if end < start:
         raise HTTPException(
-            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=http_status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"date_to ({end.isoformat()}) is before date_from ({start.isoformat()}).",
         )
     return start, end

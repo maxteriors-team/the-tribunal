@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { uniqueSuffix } from "./helpers";
+import { canProvisionUsers, uniqueSuffix } from "./helpers";
 
 const PASSWORD = "E2ePassw0rd!test";
 
@@ -21,6 +21,10 @@ async function provisionOperator(page: Page) {
 }
 
 test("creates a client with notes", async ({ page }) => {
+  test.skip(
+    !canProvisionUsers(),
+    "Set E2E_ALLOW_PROVISIONING=1 to create an isolated workspace for the client-notes flow",
+  );
   test.setTimeout(120_000);
   await provisionOperator(page);
   await page.goto("/contacts");

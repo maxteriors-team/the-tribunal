@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CatalogItemDialog } from "@/components/catalog/catalog-item-dialog";
+import { selectOption } from "@/test/select-option";
 import type { CatalogItem } from "@/types";
 
 /**
@@ -57,7 +58,7 @@ function renderDialog(item?: CatalogItem) {
   render(
     <QueryClientProvider client={client}>
       <CatalogItemDialog open onOpenChange={vi.fn()} item={item} />
-    </QueryClientProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -69,23 +70,19 @@ beforeEach(() => {
 
 describe("CatalogItemDialog", () => {
   it("sends the category and attach targets picked for a new item", async () => {
+    const user = userEvent.setup();
     renderDialog();
 
-    await userEvent.type(screen.getByLabelText("Name"), "Gutter guard");
+    await user.type(screen.getByLabelText("Name"), "Gutter guard");
 
-    await userEvent.click(
-      screen.getByRole("combobox", { name: "Service category" })
-    );
-    await userEvent.click(await screen.findByRole("option", { name: "Gutters" }));
+    await selectOption(screen.getByRole("combobox", { name: "Service category" }), "Gutters");
 
     // Targets stay hidden until the item is marked attachable.
     expect(screen.queryByText("Attaches to")).not.toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("switch", { name: "Can be attached to other jobs" })
-    );
-    await userEvent.click(screen.getByRole("checkbox", { name: "Roof" }));
+    await user.click(screen.getByRole("switch", { name: "Can be attached to other jobs" }));
+    await user.click(screen.getByRole("checkbox", { name: "Roof" }));
 
-    await userEvent.click(screen.getByRole("button", { name: "Add item" }));
+    await user.click(screen.getByRole("button", { name: "Add item" }));
 
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
     expect(createMock.mock.calls[0][1]).toMatchObject({
@@ -97,20 +94,15 @@ describe("CatalogItemDialog", () => {
   });
 
   it("keeps a workspace's own category and clears targets when unattached", async () => {
-    renderDialog(
-      makeItem({ service_category: "holiday-lighting", attach_targets: ["trim"] })
-    );
+    const user = userEvent.setup();
+    renderDialog(makeItem({ service_category: "holiday-lighting", attach_targets: ["trim"] }));
 
     // A category outside the shared defaults reopens as free text, not dropped.
-    expect(screen.getByLabelText("Category name")).toHaveValue(
-      "holiday-lighting"
-    );
+    expect(screen.getByLabelText("Category name")).toHaveValue("holiday-lighting");
     expect(screen.getByRole("checkbox", { name: "Trim" })).toBeChecked();
 
-    await userEvent.click(
-      screen.getByRole("switch", { name: "Can be attached to other jobs" })
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(screen.getByRole("switch", { name: "Can be attached to other jobs" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
     expect(updateMock.mock.calls[0][2]).toMatchObject({
@@ -121,15 +113,11 @@ describe("CatalogItemDialog", () => {
   });
 
   it("uncategorizes an item with an explicit null", async () => {
+    const user = userEvent.setup();
     renderDialog(makeItem());
 
-    await userEvent.click(
-      screen.getByRole("combobox", { name: "Service category" })
-    );
-    await userEvent.click(
-      await screen.findByRole("option", { name: "Uncategorized" })
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await selectOption(screen.getByRole("combobox", { name: "Service category" }), "Uncategorized");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
     expect(updateMock.mock.calls[0][2]).toMatchObject({

@@ -35,8 +35,9 @@ describe("PageErrorState", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("renders a custom message", () => {
-    render(<PageErrorState message="Failed to load calls" />);
+  it("renders a custom title and message", () => {
+    render(<PageErrorState title="Access denied" message="Failed to load calls" />);
+    expect(screen.getByRole("heading", { name: "Access denied" })).toBeInTheDocument();
     expect(screen.getByText("Failed to load calls")).toBeInTheDocument();
   });
 

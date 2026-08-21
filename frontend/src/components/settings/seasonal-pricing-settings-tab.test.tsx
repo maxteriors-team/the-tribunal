@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SeasonalPricingSettingsTab } from "@/components/settings/seasonal-pricing-settings-tab";
+import { selectOption } from "@/test/select-option";
 import type {
   ChristmasConfig,
   ChristmasPackage,
@@ -21,13 +22,12 @@ import type {
  * package markers) round-trip untouched.
  */
 
-const { getPricingMock, updatePricingMock, useWorkspaceIdMock, toastError } =
-  vi.hoisted(() => ({
-    getPricingMock: vi.fn(),
-    updatePricingMock: vi.fn(),
-    useWorkspaceIdMock: vi.fn(),
-    toastError: vi.fn(),
-  }));
+const { getPricingMock, updatePricingMock, useWorkspaceIdMock, toastError } = vi.hoisted(() => ({
+  getPricingMock: vi.fn(),
+  updatePricingMock: vi.fn(),
+  useWorkspaceIdMock: vi.fn(),
+  toastError: vi.fn(),
+}));
 
 vi.mock("@/lib/api/sales-wizard", () => ({
   salesWizardApi: {
@@ -88,9 +88,7 @@ function christmas(overrides: Partial<ChristmasConfig> = {}): ChristmasConfig {
     maintenance_through_day: 23,
     minimum: 0,
     perks: ["We hang it, we take it down"],
-    value_props: [
-      { title: "A Worry-Free Christmas", body: "Maintenance through Dec 23." },
-    ],
+    value_props: [{ title: "A Worry-Free Christmas", body: "Maintenance through Dec 23." }],
     packages_enabled: false,
     package_order: ["premier"],
     packages: [seasonalPackage()],
@@ -144,30 +142,16 @@ describe("SeasonalPricingSettingsTab", () => {
 
     renderTab();
 
-    expect(
-      await screen.findByRole("switch", { name: "Offer Christmas lighting" }),
-    ).toBeChecked();
-    expect(screen.getByLabelText("Offering name")).toHaveValue(
-      "Holiday Lighting",
-    );
+    expect(await screen.findByRole("switch", { name: "Offer Christmas lighting" })).toBeChecked();
+    expect(screen.getByLabelText("Offering name")).toHaveValue("Holiday Lighting");
     expect(screen.getByLabelText("Job minimum ($)")).toHaveValue(850);
-    expect(
-      screen.getByRole("switch", { name: "Offer post-season takedown" }),
-    ).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Offer post-season takedown" })).toBeChecked();
     // Stored as a 0..1 fraction, shown to the operator as a percent.
-    expect(screen.getByLabelText("Takedown rate (% of install)")).toHaveValue(
-      30,
-    );
-    expect(screen.getByLabelText("Off-season storage price ($)")).toHaveValue(
-      75,
-    );
-    expect(
-      screen.getByRole("combobox", { name: "Install month" }),
-    ).toHaveTextContent("October");
+    expect(screen.getByLabelText("Takedown rate (% of install)")).toHaveValue(30);
+    expect(screen.getByLabelText("Off-season storage price ($)")).toHaveValue(75);
+    expect(screen.getByRole("combobox", { name: "Install month" })).toHaveTextContent("October");
     expect(screen.getByLabelText("Install day")).toHaveValue(20);
-    expect(
-      screen.getByRole("combobox", { name: "Takedown month" }),
-    ).toHaveTextContent("February");
+    expect(screen.getByRole("combobox", { name: "Takedown month" })).toHaveTextContent("February");
     expect(screen.getByLabelText("Takedown day")).toHaveValue(3);
   });
 
@@ -182,9 +166,7 @@ describe("SeasonalPricingSettingsTab", () => {
     const user = userEvent.setup({ delay: null });
     renderTab();
 
-    await user.click(
-      await screen.findByRole("switch", { name: "Offer Christmas lighting" }),
-    );
+    await user.click(await screen.findByRole("switch", { name: "Offer Christmas lighting" }));
 
     const label = screen.getByLabelText("Offering name");
     await user.clear(label);
@@ -202,16 +184,13 @@ describe("SeasonalPricingSettingsTab", () => {
     await user.clear(storage);
     await user.type(storage, "75");
 
-    await user.click(screen.getByRole("combobox", { name: "Install month" }));
-    await user.click(await screen.findByRole("option", { name: "October" }));
+    await selectOption(screen.getByRole("combobox", { name: "Install month" }), "October");
 
     const installDay = screen.getByLabelText("Install day");
     await user.clear(installDay);
     await user.type(installDay, "20");
 
-    await user.click(
-      screen.getByRole("button", { name: /save seasonal pricing/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /save seasonal pricing/i }));
 
     await waitFor(() =>
       expect(updatePricingMock).toHaveBeenCalledWith("ws-1", {
@@ -251,22 +230,14 @@ describe("SeasonalPricingSettingsTab", () => {
   });
 
   it("turns the offering off and stops selling takedown", async () => {
-    getPricingMock.mockResolvedValue(
-      pricing(christmas({ enabled: true, takedown_enabled: true })),
-    );
+    getPricingMock.mockResolvedValue(pricing(christmas({ enabled: true, takedown_enabled: true })));
     updatePricingMock.mockResolvedValue(pricing(christmas()));
 
     renderTab();
 
-    await userEvent.click(
-      await screen.findByRole("switch", { name: "Offer Christmas lighting" }),
-    );
-    await userEvent.click(
-      screen.getByRole("switch", { name: "Offer post-season takedown" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: /save seasonal pricing/i }),
-    );
+    await userEvent.click(await screen.findByRole("switch", { name: "Offer Christmas lighting" }));
+    await userEvent.click(screen.getByRole("switch", { name: "Offer post-season takedown" }));
+    await userEvent.click(screen.getByRole("button", { name: /save seasonal pricing/i }));
 
     await waitFor(() => expect(updatePricingMock).toHaveBeenCalled());
     expect(updatePricingMock.mock.calls[0][1].christmas).toMatchObject({
@@ -277,9 +248,7 @@ describe("SeasonalPricingSettingsTab", () => {
 
   it("clamps a season day to one the chosen month actually has", async () => {
     getPricingMock.mockResolvedValue(
-      pricing(
-        christmas({ season_install_month: 11, season_takedown_month: 1 }),
-      ),
+      pricing(christmas({ season_install_month: 11, season_takedown_month: 1 })),
     );
     updatePricingMock.mockResolvedValue(pricing(christmas()));
 
@@ -299,17 +268,10 @@ describe("SeasonalPricingSettingsTab", () => {
     await userEvent.type(takedownDay, "31");
     expect(takedownDay).toHaveValue(31);
 
-    await userEvent.click(
-      screen.getByRole("combobox", { name: "Takedown month" }),
-    );
-    await userEvent.click(
-      await screen.findByRole("option", { name: "February" }),
-    );
+    await selectOption(screen.getByRole("combobox", { name: "Takedown month" }), "February");
     expect(takedownDay).toHaveValue(28);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: /save seasonal pricing/i }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /save seasonal pricing/i }));
 
     await waitFor(() => expect(updatePricingMock).toHaveBeenCalled());
     expect(updatePricingMock.mock.calls[0][1].christmas).toMatchObject({
@@ -327,9 +289,7 @@ describe("SeasonalPricingSettingsTab", () => {
 
     const label = await screen.findByLabelText("Offering name");
     await userEvent.clear(label);
-    await userEvent.click(
-      screen.getByRole("button", { name: /save seasonal pricing/i }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /save seasonal pricing/i }));
 
     await waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(updatePricingMock).not.toHaveBeenCalled();
@@ -343,9 +303,7 @@ describe("SeasonalPricingSettingsTab", () => {
     const rate = await screen.findByLabelText("Takedown rate (% of install)");
     await userEvent.clear(rate);
     await userEvent.type(rate, "125");
-    await userEvent.click(
-      screen.getByRole("button", { name: /save seasonal pricing/i }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /save seasonal pricing/i }));
 
     await waitFor(() => expect(toastError).toHaveBeenCalled());
     expect(updatePricingMock).not.toHaveBeenCalled();

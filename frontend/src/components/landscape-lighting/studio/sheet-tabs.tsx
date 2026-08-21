@@ -2,8 +2,8 @@
 
 import { Copy, Plus, Trash2 } from "lucide-react";
 
-import type { DesignerShot } from "@/components/estimator/proposal-host";
 import { Button } from "@/components/ui/button";
+import type { DesignerShot } from "@/lib/estimator/types";
 import { cn } from "@/lib/utils";
 
 export function SheetTabs({
@@ -27,8 +27,13 @@ export function SheetTabs({
 }) {
   const active = shots.find((shot) => shot.id === activeShotId);
   return (
-    <div className="flex min-w-max items-center gap-1 border-b bg-neutral-800 px-2 py-1.5 text-white" aria-label="Drawing sheets">
-      <span className="px-2 text-[10px] font-bold uppercase tracking-[0.15em] text-neutral-400">Sheets</span>
+    <div
+      className="flex min-w-max items-center gap-1 border-b bg-neutral-800 px-2 py-1.5 text-white"
+      aria-label="Drawing sheets"
+    >
+      <span className="px-2 text-[10px] font-bold uppercase tracking-[0.15em] text-neutral-400">
+        Sheets
+      </span>
       {shots.map((shot, index) => (
         <button
           key={shot.id}
@@ -45,9 +50,39 @@ export function SheetTabs({
           {shot.sheet?.label || `Sheet ${index + 1}`}
         </button>
       ))}
-      <Button type="button" size="icon-sm" variant="ghost" disabled={atLimit} onClick={onAdd} aria-label="Add drawing sheet" className="text-white hover:bg-white/10 hover:text-white"><Plus aria-hidden="true" /></Button>
-      <Button type="button" size="icon-sm" variant="ghost" disabled={!active || atLimit} onClick={onDuplicate} aria-label="Duplicate active drawing sheet" className="text-white hover:bg-white/10 hover:text-white"><Copy aria-hidden="true" /></Button>
-      <Button type="button" size="icon-sm" variant="ghost" disabled={shots.length <= 1} onClick={onDelete} aria-label="Delete active drawing sheet" className="text-white hover:bg-white/10 hover:text-white"><Trash2 aria-hidden="true" /></Button>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        disabled={atLimit}
+        onClick={onAdd}
+        aria-label="Add drawing sheet"
+        className="text-white hover:bg-white/10 hover:text-white"
+      >
+        <Plus aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        disabled={!active || atLimit}
+        onClick={onDuplicate}
+        aria-label="Duplicate active drawing sheet"
+        className="text-white hover:bg-white/10 hover:text-white"
+      >
+        <Copy aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        disabled={shots.length <= 1}
+        onClick={onDelete}
+        aria-label="Delete active drawing sheet"
+        className="text-white hover:bg-white/10 hover:text-white"
+      >
+        <Trash2 aria-hidden="true" />
+      </Button>
       {active ? (
         <label className="ml-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
           Label

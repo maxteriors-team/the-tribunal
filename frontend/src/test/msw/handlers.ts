@@ -61,6 +61,7 @@ export const stubAgentsList: AgentsListResponse = {
 
 export const stubDashboard: DashboardResponse = {
   stats: {
+    leads_last_24_hours: 0,
     total_contacts: 0,
     active_campaigns: 0,
     calls_today: 0,
@@ -192,6 +193,14 @@ export const handlers = [
   // Workspaces
   ...both("/api/v1/workspaces").map((url) =>
     http.get(url, () => HttpResponse.json([stubWorkspace])),
+  ),
+
+  // Lead-source controls used by contact creation and list filters.
+  ...both("/api/v1/settings/workspaces/:workspaceId/lead-source-capture").map((url) =>
+    http.get(url, () => HttpResponse.json({ require_lead_source_on_manual_create: false })),
+  ),
+  ...both("/api/v1/workspaces/:workspaceId/lead-sources").map((url) =>
+    http.get(url, () => HttpResponse.json([])),
   ),
 
   // Contacts list

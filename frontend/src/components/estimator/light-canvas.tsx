@@ -26,10 +26,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { fileToResizedDataUrl } from "@/components/sales-wizard/image-resize";
 import { indexProducts } from "@/lib/estimator/catalog";
 import { designScale, formatFeet } from "@/lib/estimator/design";
 import { distance, distToPolyline, polylineLength, snapAngle } from "@/lib/estimator/geometry";
+import { fileToResizedDataUrl } from "@/lib/estimator/image-resize";
 import { fileToPhoto, loadImage } from "@/lib/estimator/photo";
 import {
   MAX_DUSK,
@@ -135,7 +135,8 @@ export function LightCanvas({
   const dragRef = useRef<Drag | null>(null);
   const fittedRef = useRef(false);
 
-  const [imgLoaded, setImgLoaded] = useState(false);
+  const [loadedPhotoDataUrl, setLoadedPhotoDataUrl] = useState<string | null>(null);
+  const imgLoaded = loadedPhotoDataUrl === photo.dataUrl;
   const [planImageElements, setPlanImageElements] = useState<Map<string, HTMLImageElement>>(
     () => new Map(),
   );
@@ -171,12 +172,11 @@ export function LightCanvas({
   // ---- photo loading ------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
-    setImgLoaded(false);
     fittedRef.current = false;
     void loadImage(photo.dataUrl).then((img) => {
       if (cancelled) return;
       imgRef.current = img;
-      setImgLoaded(true);
+      setLoadedPhotoDataUrl(photo.dataUrl);
     });
     return () => {
       cancelled = true;
@@ -241,13 +241,17 @@ export function LightCanvas({
     if (imgLoaded && (isAerial || !fittedRef.current)) fitView();
   }, [fitView, imgLoaded, isAerial]);
 
-  // Reset interaction state when the tool changes.
-  useEffect(() => {
+  // Reset interaction drafts during render so a new tool never paints stale guides.
+  const toolDraftKey =
+    tool.type === "draw" || tool.type === "place" ? `${tool.type}:${tool.productId}` : tool.type;
+  const [activeToolDraftKey, setActiveToolDraftKey] = useState(toolDraftKey);
+  if (activeToolDraftKey !== toolDraftKey) {
+    setActiveToolDraftKey(toolDraftKey);
     setDraft([]);
     setDraftHighlight(null);
     setCalDraft(null);
     setHoverPt(null);
-  }, [tool]);
+  }
 
   // ---- drawing ------------------------------------------------------------
   const draw = useCallback(() => {
@@ -594,7 +598,9 @@ export function LightCanvas({
 
   // ---- keyboard -----------------------------------------------------------
   const kbRef = useRef({ draft, calDraft, selection, tool, commitDraft, design, photo });
-  kbRef.current = { draft, calDraft, selection, tool, commitDraft, design, photo };
+  useEffect(() => {
+    kbRef.current = { draft, calDraft, selection, tool, commitDraft, design, photo };
+  });
 
   useEffect(() => {
     const isTyping = () => {

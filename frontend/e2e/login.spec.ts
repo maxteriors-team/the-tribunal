@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { hasTestUser, loginViaUI, uniqueSuffix } from "./helpers";
+import { canProvisionUsers, hasTestUser, loginViaUI, uniqueSuffix } from "./helpers";
 
 /**
  * Auth + workspace bootstrap.
@@ -12,9 +12,8 @@ import { hasTestUser, loginViaUI, uniqueSuffix } from "./helpers";
  *      the user lands on an authenticated page (dashboard / onboarding /
  *      contacts depending on workspace state).
  *
- * Signup is exercised only when /register actually renders a form because the
- * route is currently a placeholder in the codebase; the test skips otherwise
- * so the suite remains useful in environments where signup ships later.
+ * Signup mutates backend state, so it runs only when provisioning is explicitly
+ * enabled. Read-only login checks remain safe in public-only environments.
  */
 
 test.describe("Authentication", () => {
@@ -23,41 +22,37 @@ test.describe("Authentication", () => {
     await expect(page.getByText(/welcome back/i)).toBeVisible();
     await expect(page.getByLabel(/email/i)).toBeVisible();
     await expect(page.getByLabel(/password/i)).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: /sign in/i }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
   });
 
   test("invalid credentials surface an inline error", async ({ page }) => {
+    await page.route("**/api/v1/auth/login", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Incorrect email or password" }),
+      });
+    });
     await page.goto("/login");
     await page.getByLabel(/email/i).fill(`nobody-${uniqueSuffix()}@example.com`);
     await page.getByLabel(/password/i).fill("definitely-wrong-password");
     await page.getByRole("button", { name: /sign in/i }).click();
 
-    // Either an inline error renders or the form stays on /login. We accept
-    // both shapes — anything that *isn't* a silent navigation away.
     await expect(page).toHaveURL(/\/login/);
+    await expect(page.locator("#login-error")).toContainText("Email or password is incorrect");
   });
 
   test("signup → workspace creation → dashboard", async ({ page }) => {
+    test.skip(
+      !canProvisionUsers(),
+      "Set E2E_ALLOW_PROVISIONING=1 to exercise account creation against this backend",
+    );
     await page.goto("/register");
 
-    // /register is currently a reserved public path with no form shipped. If
-    // the route 404s or does not render a signup form, skip without failing.
-    const signupHeading = page
-      .getByRole("heading", { name: /sign up|create.*account|get started/i })
-      .first();
-    const headingVisible = await signupHeading
-      .waitFor({ state: "visible", timeout: 3_000 })
-      .then(() => true)
-      .catch(() => false);
-
-    test.skip(
-      !headingVisible,
-      "/register page is not implemented yet — signup flow cannot be exercised",
-    );
+    await expect(page.getByText(/create your account/i)).toBeVisible();
 
     const suffix = uniqueSuffix();
+    await page.getByLabel(/full name/i).fill("Signup E2E");
     await page.getByLabel(/email/i).fill(`e2e-${suffix}@example.com`);
     await page.getByLabel(/password/i).fill(`Test-${suffix}-Pass!`);
 
@@ -72,9 +67,7 @@ test.describe("Authentication", () => {
     await expect(page).toHaveURL(/\/(onboarding|dashboard|realtor-dashboard|contacts|\/?$)/);
   });
 
-  test("seeded user can log in and reach an authenticated page", async ({
-    page,
-  }) => {
+  test("seeded user can log in and reach an authenticated page", async ({ page }) => {
     test.skip(
       !hasTestUser(),
       "E2E_USER_EMAIL / E2E_USER_PASSWORD not set — skipping authenticated login",

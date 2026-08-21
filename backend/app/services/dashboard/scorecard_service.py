@@ -24,6 +24,11 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment
+from app.models.attendance import (
+    ATTENDANCE_STATUS_COMPLETE,
+    AttendanceEntry,
+    AttendancePause,
+)
 from app.models.call_outcome import CallOutcome
 from app.models.contact import Contact
 from app.models.conversation import (
@@ -32,9 +37,16 @@ from app.models.conversation import (
     MessageChannel,
     MessageDirection,
 )
+from app.models.field_service import Job, JobAssignment, Technician
+from app.models.job_costing import TimeEntry
 from app.models.quote import Quote
 from app.models.workspace import Workspace
-from app.schemas.scorecard import CallReasonStat, DailyLeadCount, ReceptionistScorecard
+from app.schemas.scorecard import (
+    CallReasonStat,
+    DailyLeadCount,
+    ReceptionistScorecard,
+    TechnicianActivityScorecardRow,
+)
 from app.services.reporting.booked_revenue import get_booked_revenue_totals
 from app.services.reporting.time_windows import local_date_bounds_utc
 from app.services.telephony.missed_call_textback import MISSED_CALL_OUTCOMES
@@ -113,6 +125,30 @@ class LeadRow:
     """A contact (lead) created within the range."""
 
     created_at: datetime
+
+
+@dataclass(slots=True, frozen=True)
+class _AttendanceDurationRow:
+    """Completed attendance interval used by the scorecard-only aggregator."""
+
+    user_id: int
+    started_at: datetime
+    ended_at: datetime
+    paused_seconds: int
+
+
+def _aggregate_attendance_seconds(
+    rows: list[_AttendanceDurationRow],
+) -> tuple[dict[int, int], dict[int, int]]:
+    """Return pause-adjusted worked and paused seconds grouped by user."""
+    worked_totals: Counter[int] = Counter()
+    paused_totals: Counter[int] = Counter()
+    for row in rows:
+        gross_seconds = max(0, int((row.ended_at - row.started_at).total_seconds()))
+        paused_seconds = min(gross_seconds, max(0, row.paused_seconds))
+        worked_totals[row.user_id] += gross_seconds - paused_seconds
+        paused_totals[row.user_id] += paused_seconds
+    return dict(worked_totals), dict(paused_totals)
 
 
 def _resolve_tz(workspace: Workspace) -> ZoneInfo:
@@ -323,7 +359,7 @@ def resolve_range(
 
 
 class ScorecardService:
-    """Builds the receptionist scorecard from workspace data."""
+    """Builds supervisor scorecards from workspace-scoped activity data."""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -373,6 +409,168 @@ class ScorecardService:
             leads=leads,
             tz=tz,
         )
+
+    async def get_technician_activity(
+        self,
+        workspace: Workspace,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> list[TechnicianActivityScorecardRow]:
+        """Return alphabetical, non-ranked activity context for every technician."""
+        tz = _resolve_tz(workspace)
+        resolved_start, resolved_end = resolve_range(
+            start_date,
+            end_date,
+            today=datetime.now(tz).date(),
+        )
+        window_start, window_end = local_date_bounds_utc(
+            resolved_start,
+            resolved_end,
+            tz.key,
+        )
+
+        technician_result = await self.db.execute(
+            select(Technician)
+            .where(Technician.workspace_id == workspace.id)
+            .order_by(func.lower(Technician.name), Technician.id)
+        )
+        technicians = list(technician_result.scalars().all())
+        if not technicians:
+            return []
+
+        technician_ids = [technician.id for technician in technicians]
+        assigned_job_ids: dict[uuid.UUID, set[uuid.UUID]] = {
+            technician_id: set() for technician_id in technician_ids
+        }
+
+        # Direct dispatch tags and crew-routed jobs are both assignments in the
+        # field-service schedule. Sets prevent a job using both paths from being
+        # counted twice for the same technician.
+        direct_assignments = await self.db.execute(
+            select(JobAssignment.technician_id, JobAssignment.job_id)
+            .join(Job, Job.id == JobAssignment.job_id)
+            .where(
+                Job.workspace_id == workspace.id,
+                JobAssignment.technician_id.in_(technician_ids),
+                Job.scheduled_start >= window_start,
+                Job.scheduled_start < window_end,
+            )
+        )
+        for technician_id, job_id in direct_assignments.all():
+            assigned_job_ids[technician_id].add(job_id)
+
+        crew_assignments = await self.db.execute(
+            select(Technician.id, Job.id)
+            .select_from(Technician)
+            .join(Job, Job.crew_id == Technician.crew_id)
+            .where(
+                Technician.workspace_id == workspace.id,
+                Technician.id.in_(technician_ids),
+                Technician.crew_id.is_not(None),
+                Job.workspace_id == workspace.id,
+                Job.scheduled_start >= window_start,
+                Job.scheduled_start < window_end,
+            )
+        )
+        for technician_id, job_id in crew_assignments.all():
+            assigned_job_ids[technician_id].add(job_id)
+
+        completed_time_entries: Counter[uuid.UUID] = Counter()
+        job_logged_seconds: Counter[uuid.UUID] = Counter()
+        time_entries = await self.db.execute(
+            select(
+                TimeEntry.technician_id,
+                TimeEntry.started_at,
+                TimeEntry.ended_at,
+            ).where(
+                TimeEntry.workspace_id == workspace.id,
+                TimeEntry.technician_id.in_(technician_ids),
+                TimeEntry.started_at >= window_start,
+                TimeEntry.started_at < window_end,
+                TimeEntry.ended_at.is_not(None),
+            )
+        )
+        for technician_id, entry_started_at, entry_ended_at in time_entries.all():
+            if entry_ended_at is None:
+                continue
+            completed_time_entries[technician_id] += 1
+            job_logged_seconds[technician_id] += max(
+                0,
+                int((entry_ended_at - entry_started_at).total_seconds()),
+            )
+
+        user_ids = [
+            technician.user_id for technician in technicians if technician.user_id is not None
+        ]
+        attendance_by_user: dict[int, int] = {}
+        paused_by_user: dict[int, int] = {}
+        if user_ids:
+            pause_totals = (
+                select(
+                    AttendancePause.entry_id.label("entry_id"),
+                    func.sum(
+                        func.extract(
+                            "epoch",
+                            AttendancePause.ended_at - AttendancePause.started_at,
+                        )
+                    ).label("paused_seconds"),
+                )
+                .where(AttendancePause.ended_at.is_not(None))
+                .group_by(AttendancePause.entry_id)
+                .subquery()
+            )
+            attendance_result = await self.db.execute(
+                select(
+                    AttendanceEntry.user_id,
+                    AttendanceEntry.started_at,
+                    AttendanceEntry.ended_at,
+                    func.coalesce(pause_totals.c.paused_seconds, 0),
+                )
+                .outerjoin(pause_totals, pause_totals.c.entry_id == AttendanceEntry.id)
+                .where(
+                    AttendanceEntry.workspace_id == workspace.id,
+                    AttendanceEntry.user_id.in_(user_ids),
+                    AttendanceEntry.started_at >= window_start,
+                    AttendanceEntry.started_at < window_end,
+                    AttendanceEntry.status == ATTENDANCE_STATUS_COMPLETE,
+                    AttendanceEntry.ended_at.is_not(None),
+                )
+            )
+            attendance_rows = [
+                _AttendanceDurationRow(
+                    user_id=user_id,
+                    started_at=entry_started_at,
+                    ended_at=entry_ended_at,
+                    paused_seconds=int(paused_seconds),
+                )
+                for user_id, entry_started_at, entry_ended_at, paused_seconds in (
+                    attendance_result.all()
+                )
+                if entry_ended_at is not None
+            ]
+            attendance_by_user, paused_by_user = _aggregate_attendance_seconds(attendance_rows)
+
+        return [
+            TechnicianActivityScorecardRow(
+                id=technician.id,
+                name=technician.name,
+                active=technician.is_active,
+                assigned_jobs=len(assigned_job_ids[technician.id]),
+                completed_job_time_entries=completed_time_entries[technician.id],
+                job_logged_seconds=job_logged_seconds[technician.id],
+                attendance_worked_seconds=(
+                    attendance_by_user.get(technician.user_id, 0)
+                    if technician.user_id is not None
+                    else 0
+                ),
+                attendance_paused_seconds=(
+                    paused_by_user.get(technician.user_id, 0)
+                    if technician.user_id is not None
+                    else 0
+                ),
+            )
+            for technician in technicians
+        ]
 
     async def _fetch_calls(
         self,

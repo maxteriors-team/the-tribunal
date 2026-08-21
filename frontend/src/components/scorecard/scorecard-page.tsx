@@ -13,15 +13,23 @@ import {
   MessageSquareReply,
   ListChecks,
   UserPlus,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import { scorecardApi, type ReceptionistScorecard } from "@/lib/api/scorecard";
+import {
+  scorecardApi,
+  type ReceptionistScorecard,
+  type TechnicianActivityScorecardRow,
+} from "@/lib/api/scorecard";
 import { queryKeys } from "@/lib/query-keys";
 import { REALTIME } from "@/lib/query-options";
 import { formatCurrency, formatNumber } from "@/lib/utils/number";
@@ -59,6 +67,10 @@ function formatSeconds(seconds: number | null): string {
   return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 }
 
+function formatHours(seconds: number): string {
+  return `${(seconds / 3600).toFixed(1)}h`;
+}
+
 /** Render an API date (YYYY-MM-DD) without letting the local timezone shift it.
  *
  * `new Date("2026-01-05")` parses as UTC midnight, which renders as Jan 4 for
@@ -75,20 +87,39 @@ function formatDayLabel(isoDate: string): string {
 
 export function ScorecardPage() {
   const workspaceId = useWorkspaceId();
+  const { can } = useCapabilities();
+  const canViewReports = can("reports:view");
   const [preset, setPreset] = useState<RangePreset>("30");
+  const [view, setView] = useState<"receptionist" | "technicians">("receptionist");
 
   const range = useMemo(() => rangeFromPreset(Number(preset)), [preset]);
 
-  const { data, isPending, isError, refetch } = useQuery({
+  const receptionistQuery = useQuery({
     queryKey: queryKeys.scorecard.range(workspaceId ?? "", range),
     queryFn: () => {
       if (!workspaceId) throw new Error("No workspace");
       return scorecardApi.get(workspaceId, range);
     },
-    enabled: !!workspaceId,
+    enabled: !!workspaceId && canViewReports && view === "receptionist",
     ...REALTIME,
     placeholderData: (prev) => prev,
   });
+  const technicianQuery = useQuery({
+    queryKey: queryKeys.scorecard.technicians(workspaceId ?? "", range),
+    queryFn: () => {
+      if (!workspaceId) throw new Error("No workspace");
+      return scorecardApi.getTechnicians(workspaceId, range);
+    },
+    enabled: !!workspaceId && canViewReports && view === "technicians",
+    ...REALTIME,
+    placeholderData: (prev) => prev,
+  });
+
+  const heading = view === "receptionist" ? "Receptionist Scorecard" : "Technician Scorecard";
+
+  if (!canViewReports) {
+    return <PageErrorState title="Access denied" message="Your role cannot view scorecards." />;
+  }
 
   return (
     <div
@@ -97,14 +128,16 @@ export function ScorecardPage() {
       aria-labelledby="scorecard-heading"
       className="h-full overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
     >
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 id="scorecard-heading" className="text-2xl font-semibold tracking-tight">
-              Receptionist Scorecard
+              {heading}
             </h1>
             <p className="text-sm text-muted-foreground">
-              How your AI receptionist captured, recovered, and booked demand.
+              {view === "receptionist"
+                ? "How your AI receptionist captured, recovered, and booked demand."
+                : "Recorded field activity by technician—without rankings or quality judgments."}
             </p>
           </div>
           <div
@@ -128,16 +161,95 @@ export function ScorecardPage() {
           </div>
         </div>
 
-        {isError && !data ? (
-          <PageErrorState
-            message="We couldn't load the scorecard. Please try again."
-            onRetry={() => refetch()}
-          />
-        ) : isPending || !data ? (
-          <PageLoadingState message="Loading scorecard…" />
-        ) : (
-          <ScorecardBody data={data} />
-        )}
+        <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
+          <TabsList aria-label="Scorecard type">
+            <TabsTrigger value="receptionist">AI receptionist</TabsTrigger>
+            <TabsTrigger value="technicians">Technicians</TabsTrigger>
+          </TabsList>
+          <TabsContent value="receptionist" className="mt-6">
+            {receptionistQuery.isError && !receptionistQuery.data ? (
+              <PageErrorState
+                message="We couldn't load the receptionist scorecard. Please try again."
+                onRetry={() => receptionistQuery.refetch()}
+              />
+            ) : receptionistQuery.isPending || !receptionistQuery.data ? (
+              <PageLoadingState message="Loading scorecard…" />
+            ) : (
+              <ScorecardBody data={receptionistQuery.data} />
+            )}
+          </TabsContent>
+          <TabsContent value="technicians" className="mt-6">
+            {technicianQuery.isError && !technicianQuery.data ? (
+              <PageErrorState
+                message="We couldn't load technician activity. Please try again."
+                onRetry={() => technicianQuery.refetch()}
+              />
+            ) : technicianQuery.isPending || !technicianQuery.data ? (
+              <PageLoadingState message="Loading technician activity…" />
+            ) : (
+              <TechnicianScorecardBody data={technicianQuery.data} />
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
+function TechnicianScorecardBody({ data }: { data: TechnicianActivityScorecardRow[] }) {
+  if (data.length === 0) {
+    return (
+      <PageEmptyState
+        icon={<Users className="size-8" />}
+        title="No technicians yet"
+        description="Add a technician to the field-service roster to see recorded activity here."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+        <p className="font-medium">Activity context—not an employee rating</p>
+        <p className="mt-1 text-muted-foreground">
+          These totals show assignments and recorded time only. They do not measure work quality,
+          pay, productivity, or customer satisfaction.
+        </p>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2" role="list" aria-label="Technician activity">
+        {data.map((technician) => {
+          const metrics = [
+            { label: "Assigned jobs", value: formatNumber(technician.assigned_jobs) },
+            {
+              label: "Completed job logs",
+              value: formatNumber(technician.completed_job_time_entries),
+            },
+            { label: "Job time", value: formatHours(technician.job_logged_seconds) },
+            {
+              label: "Attendance time",
+              value: formatHours(technician.attendance_worked_seconds),
+            },
+            { label: "Paused time", value: formatHours(technician.attendance_paused_seconds) },
+          ];
+          return (
+            <Card key={technician.id} role="listitem">
+              <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+                <CardTitle className="min-w-0 truncate text-base">{technician.name}</CardTitle>
+                <Badge variant={technician.active ? "secondary" : "outline"}>
+                  {technician.active ? "Active" : "Inactive"}
+                </Badge>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+                {metrics.map((metric) => (
+                  <div key={metric.label} className="min-w-0">
+                    <p className="text-xs text-muted-foreground">{metric.label}</p>
+                    <p className="mt-1 text-lg font-semibold tabular-nums">{metric.value}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

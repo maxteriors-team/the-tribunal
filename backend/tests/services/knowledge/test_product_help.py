@@ -153,7 +153,15 @@ class TestCorpus:
         settings_source = (
             repo_root / "frontend/src/components/settings/settings-page.tsx"
         ).read_text(encoding="utf-8")
-        settings_tabs = re.findall(r'\{ value: "([^"]+)", label: "([^"]+)"', settings_source)
+        settings_tabs_block = settings_source.partition("export const settingsTabs:")[2].partition(
+            "\n];"
+        )[0]
+        assert settings_tabs_block
+        settings_tabs = re.findall(
+            r'\{\s*value:\s*"([^"]+)",\s*label:\s*"([^"]+)"',
+            settings_tabs_block,
+            flags=re.DOTALL,
+        )
         assert len(settings_tabs) >= 18
         corpus = "\n".join(document.content for document in load_help_documents())
 

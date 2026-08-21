@@ -33,6 +33,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { workspacesApi } from "@/lib/api/workspaces";
 import { queryKeys } from "@/lib/query-keys";
 import {
@@ -78,17 +79,15 @@ export function WorkspaceDetailsCard({
     });
   }, [currentWorkspace, form]);
 
-  const updateMutation = useMutation({
+  const updateMutation = useSettingsSaveMutation({
     mutationFn: (data: { name?: string; description?: string }) =>
       workspacesApi.update(workspaceId!, data),
+    successMessage: "Workspace details are up to date.",
+    errorMessage: "We couldn't save workspace details. Check your connection and try again.",
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.workspaces.all() });
       setSaved(true);
-      toast.success("Workspace updated successfully");
       setTimeout(() => setSaved(false), 2000);
-    },
-    onError: (err: unknown) => {
-      toast.error(getApiErrorMessage(err, "Failed to update workspace"));
     },
   });
 

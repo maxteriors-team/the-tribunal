@@ -9,6 +9,7 @@ import {
   SyncFromTelnyxButton,
   type PhoneNumbersTableVariant,
 } from "@/components/settings/phone-numbers-views";
+import { ProviderNotConfiguredBanner } from "@/components/shared/provider-not-configured-banner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { usePhoneNumberManager } from "@/hooks/usePhoneNumberManager";
@@ -35,6 +36,7 @@ export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
     isPurchasing,
     isUpdating,
     isSyncing,
+    providerNotConfigured,
     handleSearch,
     purchase,
     updateAttribution,
@@ -43,6 +45,14 @@ export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
   } = usePhoneNumberManager();
 
   const syncButton = <SyncFromTelnyxButton variant={variant} isSyncing={isSyncing} onSync={sync} />;
+  const providerBanner = providerNotConfigured ? (
+    <ProviderNotConfiguredBanner
+      title="Phone number actions need Telnyx"
+      description="Connect Telnyx in Settings, then retry this action."
+      restrictedDescription="Ask a workspace owner or admin to connect Telnyx."
+      settingsLabel="Set up Telnyx"
+    />
+  ) : null;
 
   const ownedNumbersContent = (
     <OwnedNumbersContent
@@ -99,6 +109,7 @@ export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {providerBanner}
           <div className="space-y-3">
             <h4 className="text-sm font-medium">Your Phone Numbers</h4>
             {ownedNumbersContent}
@@ -127,6 +138,8 @@ export function PhoneNumbersTable({ variant }: PhoneNumbersTableProps) {
         </div>
         {syncButton}
       </div>
+
+      {providerBanner}
 
       <Card>
         <CardHeader>

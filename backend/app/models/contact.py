@@ -186,9 +186,10 @@ class Contact(Base):
     # later clicks an ad. Set on capture and carried onto the lead's
     # opportunities by ``snapshot_contact_attribution_on_opportunity``, so the
     # partner scoreboard reads the same attribution path lead sources use.
+    # ``use_alter`` breaks the metadata cycle with referral_partners.contact_id.
     referral_partner_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("referral_partners.id", ondelete="SET NULL"),
+        ForeignKey("referral_partners.id", ondelete="SET NULL", use_alter=True),
         nullable=True,
         index=True,
     )

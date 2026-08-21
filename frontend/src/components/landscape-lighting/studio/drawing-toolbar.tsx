@@ -79,6 +79,7 @@ export type DrawingStudioAction =
   | "help";
 
 interface DrawingToolbarProps {
+  workspaceName: string;
   paperSize: LandscapePaperSize;
   activeAction?: DrawingStudioAction;
   hasAerial: boolean;
@@ -221,9 +222,13 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
       aria-label="Drawing toolbar"
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-2 py-2 sm:px-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2" role="group" aria-label="Drawing sheet">
+        <div
+          className="flex min-w-0 flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Drawing sheet"
+        >
           <strong className="px-1 text-[11px] font-black uppercase tracking-[0.24em] text-[#f2f0eb]">
-            Maxteriors
+            {props.workspaceName}
           </strong>
           <label className="flex min-w-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#aaa69e]">
             Sheet

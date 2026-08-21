@@ -29,8 +29,7 @@ CATEGORY_ORDER = ("landscape", "permanent", "bistro", "christmas")
 # The three service paths a quote can come from, each mapping to the product
 # lines it owns. A quote is single-service in the rep experience: landscape
 # lighting, year-round permanent LED track, and seasonal Christmas are separate
-# branches, not toggles on one form. The frontend mirrors this map in
-# ``frontend/src/components/sales-wizard/use-sales-wizard.ts``.
+# branches, not toggles on one form.
 SERVICE_CATEGORIES: dict[str, tuple[str, ...]] = {
     "landscape": ("landscape", "bistro"),
     "permanent": ("permanent",),

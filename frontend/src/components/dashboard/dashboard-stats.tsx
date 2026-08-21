@@ -4,6 +4,7 @@ import {
   Phone,
   TrendingDown,
   TrendingUp,
+  UserPlus,
   Users,
 } from "lucide-react";
 import { motion } from "motion/react";
@@ -29,13 +30,14 @@ import type { DashboardStats } from "@/lib/api/dashboard";
 interface StatCardProps {
   title: string;
   value: number;
-  change: string;
+  change?: string;
+  period?: string;
   href: string;
   icon: React.ReactNode;
 }
 
-function StatCard({ title, value, change, href, icon }: StatCardProps) {
-  const trendUp = isTrendUp(change);
+function StatCard({ title, value, change, period, href, icon }: StatCardProps) {
+  const trendUp = change ? isTrendUp(change) : false;
 
   return (
     <Link href={href}>
@@ -51,18 +53,22 @@ function StatCard({ title, value, change, href, icon }: StatCardProps) {
             <div className="text-2xl font-bold tabular-nums">
               <AnimatedNumber value={value} />
             </div>
-            <div
-              className={`flex items-center text-sm ${
-                trendUp ? "text-success" : "text-destructive"
-              }`}
-            >
-              {trendUp ? (
-                <TrendingUp className="mr-1 size-4" />
-              ) : (
-                <TrendingDown className="mr-1 size-4" />
-              )}
-              {change}
-            </div>
+            {change ? (
+              <div
+                className={`flex items-center text-sm ${
+                  trendUp ? "text-success" : "text-destructive"
+                }`}
+              >
+                {trendUp ? (
+                  <TrendingUp className="mr-1 size-4" />
+                ) : (
+                  <TrendingDown className="mr-1 size-4" />
+                )}
+                {change}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">{period}</div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -98,8 +104,8 @@ export const DashboardStatsGrid = memo(function DashboardStatsGrid({
 }: DashboardStatsGridProps) {
   if (isPending) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {[1, 2, 3, 4, 5].map((i) => (
           <StatCardSkeleton key={i} />
         ))}
       </div>
@@ -110,11 +116,20 @@ export const DashboardStatsGrid = memo(function DashboardStatsGrid({
 
   return (
     <motion.div
-      className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+      className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
     >
+      <motion.div variants={itemVariants}>
+        <StatCard
+          title="Leads Received"
+          value={stats.leads_last_24_hours}
+          period="Last 24 hours"
+          href="/contacts"
+          icon={<UserPlus className="size-4 text-primary" />}
+        />
+      </motion.div>
       <motion.div variants={itemVariants}>
         <StatCard
           title="Total Contacts"

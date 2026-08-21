@@ -1,9 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { hasTestUser, loginViaUI } from "./helpers";
+import { hasParallelTestUser, loginViaUI } from "./helpers";
 
-const storedAuthPath = process.env.E2E_STORAGE_STATE;
-const hasAuthenticatedFixture = hasTestUser() || Boolean(storedAuthPath);
+const hasAuthenticatedFixture = hasParallelTestUser();
 const MOBILE_VIEWPORT = { width: 390, height: 844 } as const;
 
 const mobileRoutes: Array<{
@@ -109,19 +108,12 @@ test.use({
   hasTouch: true,
   isMobile: true,
   colorScheme: "dark",
-  storageState: storedAuthPath || undefined,
 });
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  if (hasTestUser()) {
-    await loginViaUI(page);
-  }
-});
-
-test.afterEach(async ({ context }) => {
-  if (storedAuthPath) {
-    await context.storageState({ path: storedAuthPath });
+  if (hasAuthenticatedFixture) {
+    await loginViaUI(page, testInfo);
   }
 });
 
@@ -143,7 +135,7 @@ async function expectInsideViewport(locator: Locator) {
 test.describe("390px responsive shell", () => {
   test.skip(
     !hasAuthenticatedFixture,
-    "Set E2E credentials or E2E_STORAGE_STATE to test authenticated responsive routes.",
+    "Configure per-worker E2E users or enable opt-in provisioning for responsive routes.",
   );
 
   test("keeps target routes and primary actions inside the viewport, with mobile screenshots", async ({
