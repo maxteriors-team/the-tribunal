@@ -25,7 +25,11 @@ from app.schemas.conversation import (
     PaginatedConversations,
     UnreadSummary,
 )
-from app.services.ai.openai_credentials import get_openai_bearer_token
+from app.services.ai.openai_credentials import (
+    OpenAICredentialContext,
+    OpenAICredentialError,
+    resolve_openai_credentials,
+)
 from app.services.ai.text_response_generator import generate_followup_message
 from app.services.campaigns.conversation_syncer import CampaignConversationSyncer
 from app.services.telephony.text_provider import (
@@ -420,6 +424,18 @@ class ConversationService:
             last_followup_at=conversation.last_followup_at,
         )
 
+    async def _resolve_followup_openai_credential(
+        self,
+        workspace_id: uuid.UUID,
+    ) -> OpenAICredentialContext:
+        try:
+            return await resolve_openai_credentials(self.db, workspace_id)
+        except OpenAICredentialError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service not configured",
+            ) from exc
+
     async def generate_followup(
         self,
         conversation_id: uuid.UUID,
@@ -429,18 +445,13 @@ class ConversationService:
         """Generate a follow-up message preview (does not send)."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
 
-        openai_key = get_openai_bearer_token()
-        if not openai_key:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="AI service not configured",
-            )
-
+        credential = await self._resolve_followup_openai_credential(workspace_id)
         message = await generate_followup_message(
             conversation=conversation,
             db=self.db,
-            openai_api_key=openai_key,
+            openai_api_key=credential.bearer_token,
             custom_instructions=custom_instructions,
+            credential=credential,
         )
 
         if not message:
@@ -466,18 +477,13 @@ class ConversationService:
 
         message_body = message
         if not message_body:
-            openai_key = get_openai_bearer_token()
-            if not openai_key:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="AI service not configured",
-                )
-
+            credential = await self._resolve_followup_openai_credential(workspace_id)
             message_body = await generate_followup_message(
                 conversation=conversation,
                 db=self.db,
-                openai_api_key=openai_key,
+                openai_api_key=credential.bearer_token,
                 custom_instructions=custom_instructions,
+                credential=credential,
             )
 
             if not message_body:

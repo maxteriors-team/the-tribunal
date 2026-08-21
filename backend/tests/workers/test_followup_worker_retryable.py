@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
+from app.services.ai.openai_credentials import OpenAICredentialContext
 from app.workers.base import BaseWorker
 from app.workers.followup_worker import FollowupWorker
 from app.workers.retryable import RetryableWorker
@@ -22,6 +23,44 @@ def test_retry_configuration() -> None:
     assert FollowupWorker.COMPONENT_NAME == "followup_worker"
     assert FollowupWorker.max_retries == 3
     assert FollowupWorker.backoff_base_seconds == 2.0
+
+
+@pytest.mark.asyncio
+async def test_followup_uses_workspace_openai_credential() -> None:
+    worker = FollowupWorker()
+    conversation = MagicMock(
+        id=uuid4(),
+        workspace_id=uuid4(),
+        followup_delay_hours=1,
+    )
+    db = MagicMock()
+    db.commit = AsyncMock()
+    credential = OpenAICredentialContext(
+        bearer_token="workspace-token",
+        source="workspace_api_key",
+    )
+
+    with (
+        patch(
+            "app.workers.followup_worker.resolve_openai_credentials",
+            new=AsyncMock(return_value=credential),
+        ) as resolve_credential,
+        patch(
+            "app.workers.followup_worker.generate_followup_message",
+            new=AsyncMock(return_value=None),
+        ) as generate_message,
+    ):
+        result = await worker._process_conversation_followup(conversation, db)
+
+    assert result is False
+    resolve_credential.assert_awaited_once_with(db, conversation.workspace_id)
+    generate_message.assert_awaited_once_with(
+        conversation=conversation,
+        db=db,
+        openai_api_key=credential.bearer_token,
+        credential=credential,
+    )
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio

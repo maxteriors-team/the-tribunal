@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.ai.message_context_builder import ContactGenerationContext
+from app.services.ai.openai_credentials import OpenAICredentialContext
 from app.services.ai.text_response_generator import generate_followup_message
 
 
@@ -36,6 +37,10 @@ async def test_followup_blocks_mutable_claim_without_fresh_tools() -> None:
     )
     client = MagicMock()
     client.chat.completions.create = AsyncMock(return_value=completion)
+    credential = OpenAICredentialContext(
+        bearer_token="workspace-token",
+        source="workspace_api_key",
+    )
 
     with (
         patch(
@@ -52,16 +57,18 @@ async def test_followup_blocks_mutable_claim_without_fresh_tools() -> None:
             ),
         ),
         patch(
-            "app.services.ai.text_response_generator.AsyncOpenAI",
+            "app.services.ai.text_response_generator.build_async_openai_client",
             return_value=client,
-        ),
+        ) as build_client,
     ):
         response = await generate_followup_message(
             conversation,
             db,
-            openai_api_key="test-key",
+            openai_api_key=credential.bearer_token,
+            credential=credential,
         )
 
+    build_client.assert_called_once_with(credential)
     assert response == "Hi Morgan, just checking in - is there anything you'd like help with?"
     system_prompt = client.chat.completions.create.await_args.kwargs["messages"][0]["content"]
     assert "<LIVE_CRM>quote=approved</LIVE_CRM>" in system_prompt
