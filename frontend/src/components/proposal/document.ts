@@ -7,8 +7,8 @@
  * `ProposalDoc` shape to render across all product lines (landscape tiers,
  * permanent/christmas/bistro category sections, care plan, financing).
  *
- * Self-contained: imports the contract straight from the generated client so it
- * survives the removal of the old sales-wizard builder.
+ * Imports the contract straight from the generated client so saved proposals
+ * remain decoupled from internal editors.
  */
 import type { components } from "@/lib/api/_generated";
 
@@ -33,12 +33,7 @@ export type ProposalValueProp = Schemas["ValueProp"];
  * call site. A quote spanning several service paths is `mixed`, which stays
  * neutral: a landscape package must not arrive wrapped in garland.
  */
-export type ProposalService =
-  | "landscape"
-  | "permanent"
-  | "bistro"
-  | "christmas"
-  | "mixed";
+export type ProposalService = "landscape" | "permanent" | "bistro" | "christmas" | "mixed";
 
 export interface ProposalTier {
   key: string;
@@ -77,8 +72,10 @@ export interface ProposalBistroView extends Omit<BistroPricing, "lines"> {
   lines: NonNullable<BistroPricing["lines"]>;
 }
 
-export interface ProposalCategoryView
-  extends Omit<ProposalCategorySection, "lines" | "value_props"> {
+export interface ProposalCategoryView extends Omit<
+  ProposalCategorySection,
+  "lines" | "value_props"
+> {
   lines: CategoryLine[];
   value_props: ProposalValueProp[];
 }
@@ -155,9 +152,7 @@ export function normalizeProposalDocument(doc: ProposalDocument): ProposalDoc {
           selected: doc.care_plan.selected ?? null,
         }
       : null,
-    bistro: doc.bistro
-      ? { ...doc.bistro, lines: doc.bistro.lines ?? [] }
-      : null,
+    bistro: doc.bistro ? { ...doc.bistro, lines: doc.bistro.lines ?? [] } : null,
     financing: doc.financing
       ? {
           enabled: doc.financing.enabled,
@@ -171,21 +166,16 @@ export function normalizeProposalDocument(doc: ProposalDocument): ProposalDoc {
           disclaimer: doc.financing.disclaimer ?? null,
         }
       : null,
-    night_preview:
-      (doc.night_preview as Record<string, unknown> | null | undefined) ?? null,
-    mockups: (doc.mockups ?? []).filter(
-      (m): m is ProposalMockup => Boolean(m?.image),
-    ),
+    night_preview: (doc.night_preview as Record<string, unknown> | null | undefined) ?? null,
+    mockups: (doc.mockups ?? []).filter((m): m is ProposalMockup => Boolean(m?.image)),
     categories: doc.categories ?? [],
-    category_sections: (doc.category_sections ?? []).map(
-      (section: ProposalCategorySection) => ({
-        ...section,
-        lines: section.lines ?? [],
-        // Absent on every snapshot saved before value props existed. Empty is
-        // the honest read: render nothing, never an empty promise block.
-        value_props: section.value_props ?? [],
-      }),
-    ),
+    category_sections: (doc.category_sections ?? []).map((section: ProposalCategorySection) => ({
+      ...section,
+      lines: section.lines ?? [],
+      // Absent on every snapshot saved before value props existed. Empty is
+      // the honest read: render nothing, never an empty promise block.
+      value_props: section.value_props ?? [],
+    })),
     selected_financed_total: doc.selected_financed_total ?? 0,
     selected_cash_total: doc.selected_cash_total ?? 0,
     selected_monthly_payment: doc.selected_monthly_payment ?? 0,
@@ -206,8 +196,7 @@ export function parseProposalDocument(
   if (!raw || typeof raw !== "object") return null;
   const doc = raw as unknown as ProposalDocument;
   const hasTiers = Array.isArray(doc.tiers) && doc.tiers.length > 0;
-  const hasSections =
-    Array.isArray(doc.category_sections) && doc.category_sections.length > 0;
+  const hasSections = Array.isArray(doc.category_sections) && doc.category_sections.length > 0;
   const hasBistro = Boolean(doc.bistro && (doc.bistro.total ?? 0) > 0);
   if (!hasTiers && !hasSections && !hasBistro) return null;
   return normalizeProposalDocument(doc);
@@ -247,9 +236,7 @@ export function proposalValueProps(doc: ProposalDoc): ProposalValueProp[] {
  * before that carry a single `image`. Reading both keeps those proposals
  * rendering their one photo instead of silently going blank.
  */
-export function nightImages(
-  nightPreview: Record<string, unknown> | null | undefined,
-): string[] {
+export function nightImages(nightPreview: Record<string, unknown> | null | undefined): string[] {
   const many = nightPreview?.images;
   if (Array.isArray(many)) {
     const images = many.filter((img): img is string => typeof img === "string");

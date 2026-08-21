@@ -2,6 +2,7 @@ import { apiGet } from "@/lib/api";
 import type { LeadSourceType } from "@/lib/api/lead-sources";
 
 export interface DashboardStats {
+  leads_last_24_hours: number;
   total_contacts: number;
   active_campaigns: number;
   calls_today: number;

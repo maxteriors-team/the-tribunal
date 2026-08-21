@@ -7,19 +7,16 @@ import {
   Copy,
   Eye,
   ExternalLink,
-  FilePenLine,
   FileText,
   Mail,
   MessageSquare,
   MoreHorizontal,
   Pencil,
-  Plus,
   Trash2,
   UserRound,
   Wrench,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -85,7 +82,6 @@ const STATUS_VARIANT: Record<QuoteStatus, "default" | "secondary" | "destructive
 
 export function QuotesList() {
   const workspaceId = useWorkspaceId();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [convertQuote, setConvertQuote] = useState<Quote | null>(null);
   const [recordDepositQuote, setRecordDepositQuote] = useState<Quote | null>(null);
@@ -214,16 +210,6 @@ export function QuotesList() {
     if (url) window.open(`${url}?preview=1`, "_blank", "noopener,noreferrer");
   };
 
-  // Consolidated entry point: every new quote is built in the sales wizard (the
-  // single quoting system), which prices every line server-side and saves one
-  // Quote with its rich proposal snapshot.
-  const newQuoteButton = (
-    <Button onClick={() => router.push("/sales-wizard")} size="sm">
-      <Plus className="mr-1.5 h-4 w-4" />
-      New quote
-    </Button>
-  );
-
   let body: React.ReactNode;
   if (!workspaceId || query.isLoading) {
     body = <PageLoadingState message="Loading quotes..." />;
@@ -241,8 +227,7 @@ export function QuotesList() {
         <PageEmptyState
           icon={<FileText className="size-8" />}
           title="No quotes yet"
-          description="Create your first quote to send a customer an estimate."
-          action={newQuoteButton}
+          description="Quotes created from Light Designer and saved lighting projects appear here."
         />
       );
     } else {
@@ -328,9 +313,6 @@ export function QuotesList() {
                     quote={quote}
                     busy={busy}
                     onAssign={() => openAssignment(quote)}
-                    onOpenBuilder={() =>
-                      router.push(`/sales-wizard?quote=${encodeURIComponent(quote.id)}`)
-                    }
                     onEdit={() => setEditing(quote)}
                     onSend={() => sendMutation.mutate(quote.id)}
                     onDeliver={(channel) => deliverMutation.mutate({ id: quote.id, channel })}
@@ -354,7 +336,6 @@ export function QuotesList() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end">{newQuoteButton}</div>
       {body}
       <ConvertQuoteDialog
         workspaceId={workspaceId ?? ""}
@@ -486,7 +467,6 @@ interface RowActionsProps {
   quote: Quote;
   busy: boolean;
   onAssign: () => void;
-  onOpenBuilder: () => void;
   onEdit: () => void;
   onSend: () => void;
   onDeliver: (channel: QuoteDeliverChannel) => void;
@@ -510,7 +490,6 @@ function RowActions({
   quote,
   busy,
   onAssign,
-  onOpenBuilder,
   onEdit,
   onSend,
   onDeliver,
@@ -526,8 +505,8 @@ function RowActions({
   const isOpen = quote.status === "draft" || quote.status === "sent";
   const canChangeTerms = Boolean(
     isOpen &&
-      !quote.deposit_paid &&
-      (!quote.is_wizard_quote || quote.wizard_edit_mode === "update"),
+    !quote.deposit_paid &&
+    (!quote.is_wizard_quote || quote.wizard_edit_mode === "update"),
   );
   const isApproved = quote.status === "approved";
   const alreadyConverted = Boolean(quote.converted_job_id && quote.converted_invoice_id);
@@ -546,17 +525,6 @@ function RowActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {quote.is_wizard_quote && (
-          <>
-            <DropdownMenuItem onClick={onOpenBuilder}>
-              <FilePenLine className="mr-2 h-4 w-4" />
-              {quote.wizard_edit_mode === "revise"
-                ? "Create revised quote"
-                : "Edit in quote builder"}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
-        )}
         <DropdownMenuItem onClick={onAssign}>
           <UserRound className="mr-2 h-4 w-4" />
           Assign owner
@@ -572,9 +540,7 @@ function RowActions({
           <>
             {canChangeTerms && (
               <>
-                {/* Header/date/deposit copy remains available separately from
-                    the full priced-selection builder. Both preserve the live
-                    link only while its customer/payment terms remain mutable. */}
+                {/* Basic details remain editable while customer and payment terms are mutable. */}
                 <DropdownMenuItem onClick={onEdit}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Edit basic details

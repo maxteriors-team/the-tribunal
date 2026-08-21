@@ -1,5 +1,5 @@
-import type { DesignerShot } from "@/components/estimator/proposal-host";
 import type {
+  DesignerShot,
   LandscapeBomLineItem,
   LandscapeLegendSettings,
   LandscapePaperSize,

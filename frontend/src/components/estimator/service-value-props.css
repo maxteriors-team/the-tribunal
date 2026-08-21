@@ -1,10 +1,8 @@
 /**
  * Client-facing value propositions — one block per service being sold.
  *
- * Rendered in two theme scopes (the Light Designer's `.cmp-view` and the sales
- * wizard's `.sales-wizard`), which define the same custom-property names. These
- * rules therefore reference only those shared vars, so the block adopts
- * whichever palette hosts it instead of hardcoding one.
+ * Rendered inside the Light Designer's `.cmp-view` theme and built entirely from
+ * its custom properties so the block follows the active service palette.
  */
 .svp {
   max-width: 1180px;

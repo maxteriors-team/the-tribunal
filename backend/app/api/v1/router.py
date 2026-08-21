@@ -8,6 +8,7 @@ from app.api.v1 import (
     agents,
     api_keys,
     appointments,
+    attendance,
     auth,
     automations,
     billing,
@@ -86,6 +87,11 @@ api_router.include_router(settings.router, prefix="/settings", tags=["Settings"]
 api_router.include_router(realtime.router, prefix="/realtime", tags=["Realtime"])
 api_router.include_router(device_tokens.router, prefix="/settings", tags=["Settings"])
 api_router.include_router(workspaces.router, prefix="/workspaces", tags=["Workspaces"])
+api_router.include_router(
+    attendance.router,
+    prefix="/workspaces/{workspace_id}/attendance",
+    tags=["Attendance"],
+)
 api_router.include_router(
     api_keys.router,
     prefix="/workspaces/{workspace_id}/api-keys",

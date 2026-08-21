@@ -1,28 +1,16 @@
 "use client";
 
 /**
- * Seasonal Christmas Lights hub — a dedicated, visually distinct home for the
- * holiday-lighting workflow. It routes to the three real seasonal surfaces
- * (design/render, quote builder, pricing) and previews the distinct option
- * icons customers see on a quote, so the whole seasonal flow is one obvious tab.
+ * Seasonal Christmas Lights hub — a dedicated home for the seasonal workflow.
+ * It routes to renewal, design/render, and pricing while previewing the option
+ * icons customers see on an estimate.
  */
-import {
-  ArrowRight,
-  History,
-  Ruler,
-  Settings2,
-  Sparkles,
-  TreePine,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, History, Settings2, Sparkles, TreePine, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  seasonalIconForCategory,
-  tintSurface,
-} from "@/lib/estimator/seasonal-icons";
+import { seasonalIconForCategory, tintSurface } from "@/lib/estimator/seasonal-icons";
 
 interface HubAction {
   title: string;
@@ -45,13 +33,6 @@ const HUB_ACTIONS: HubAction[] = [
       "Trace roofline and place decor on a customer photo, then generate a realistic after-dark preview.",
     href: "/estimator",
     Icon: Sparkles,
-  },
-  {
-    title: "Build a Quote",
-    description:
-      "Pick a Good / Better / Best package, measure the roofline once, and add trees, wreaths and garland.",
-    href: "/sales-wizard",
-    Icon: Ruler,
   },
   {
     title: "Seasonal Pricing & Packages",
@@ -86,13 +67,10 @@ export default function ChristmasLightsRoute() {
                 <TreePine className="size-6" />
               </span>
               <div className="min-w-0">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                  Christmas Light Estimator
-                </h1>
+                <h1 className="text-2xl font-semibold tracking-tight">Christmas Light Estimator</h1>
                 <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  Your seasonal command center. Win back last season&rsquo;s
-                  homes, design a lit-up render, build a package quote, and set
-                  holiday pricing, all in one place.
+                  Your seasonal command center. Win back last season&rsquo;s homes, design a lit-up
+                  render, and set holiday pricing, all in one place.
                 </p>
               </div>
             </div>
@@ -115,9 +93,7 @@ export default function ChristmasLightsRoute() {
                     </span>
                     <div className="flex-1">
                       <h2 className="font-medium">{title}</h2>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {description}
-                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
                     </div>
                     <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-600 dark:text-emerald-400">
                       Open
@@ -134,8 +110,8 @@ export default function ChristmasLightsRoute() {
               How options appear on a quote
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Each product type carries a distinct icon so customers can tell a
-              wreath from a tree or a roofline run at a glance.
+              Each product type carries a distinct icon so customers can tell a wreath from a tree
+              or a roofline run at a glance.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {LEGEND_CATEGORIES.map((key) => {

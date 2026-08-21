@@ -1,11 +1,9 @@
 /**
- * Client-side image downscaling for proposal mockups.
+ * Client-side image downscaling for saved lighting designs.
  *
- * Mockups are stored inline in the proposal snapshot as data URLs (this
- * deployment has no object storage), so keeping them small matters: we cap the
- * longest edge and re-encode as JPEG before they ever leave the browser. A
- * 1600px q0.78 photo lands around 250–500 KB — sharp on screen and in print,
- * light enough that several fit comfortably in one saved quote.
+ * Images are stored inline as data URLs (this deployment has no object storage),
+ * so keeping them small matters: cap the longest edge and re-encode as JPEG
+ * before they leave the browser. A 1600px q0.78 photo is typically 250–500 KB.
  */
 
 const MAX_EDGE = 1600;

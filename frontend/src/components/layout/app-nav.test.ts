@@ -99,6 +99,11 @@ describe("isFieldOperationalPath", () => {
     expect(isFieldOperationalPath("/jobs/123")).toBe(true);
   });
 
+  it("allows the personal time clock", () => {
+    expect(isFieldOperationalPath("/time")).toBe(true);
+    expect(isFieldOperationalPath("/time/history")).toBe(true);
+  });
+
   it("blocks every other CRM surface", () => {
     for (const path of ["/contacts", "/opportunities", "/campaigns", "/billing", "/", "/jobsy"]) {
       expect(isFieldOperationalPath(path)).toBe(false);
@@ -107,9 +112,10 @@ describe("isFieldOperationalPath", () => {
 });
 
 describe("canSeeNavItem — field technician is fail-closed to operational routes", () => {
-  it("shows only jobs/calendar to field techs, even with all capabilities", () => {
+  it("shows only operational routes to field techs, even with all capabilities", () => {
     expect(canSeeNavItem(navItem("/jobs"), "field", canAll)).toBe(true);
     expect(canSeeNavItem(navItem("/calendar"), "field", canAll)).toBe(true);
+    expect(canSeeNavItem(navItem("/time", "attendance:use"), "field", canAll)).toBe(true);
     // Non-operational items are hidden regardless of capability grants.
     expect(canSeeNavItem(navItem("/contacts"), "field", canAll)).toBe(false);
     expect(canSeeNavItem(navItem("/campaigns"), "field", canAll)).toBe(false);
@@ -143,6 +149,7 @@ describe("canSeeNavItem — the crew lead is fail-closed too", () => {
   it("shows the lead exactly the on-site surface", () => {
     expect(canSeeNavItem(navItem("/jobs"), "lead", canAll)).toBe(true);
     expect(canSeeNavItem(navItem("/calendar"), "lead", canAll)).toBe(true);
+    expect(canSeeNavItem(navItem("/time", "attendance:use"), "lead", canAll)).toBe(true);
   });
 
   it("a newly added CRM nav item does not leak to leads either", () => {
@@ -154,10 +161,15 @@ describe("real nav items under the on-site tiers", () => {
   const contacts = allNavItems.find((i) => i.url === "/contacts")!;
   const calendar = allNavItems.find((i) => i.url === "/calendar")!;
   const upsell = allNavItems.find((i) => i.url === "/upsell")!;
+  const time = allNavItems.find((i) => i.url === "/time")!;
+  const scorecard = allNavItems.find((i) => i.url === "/scorecard")!;
 
-  it("hides Contacts/Campaigns but shows the Calendar", () => {
+  it("hides CRM surfaces but shows Calendar and Time & Attendance", () => {
     expect(canSeeNavItem(contacts, "field", canAll)).toBe(false);
     expect(canSeeNavItem(calendar, "field", canAll)).toBe(true);
+    expect(canSeeNavItem(time, "field", (capability) => capability === "attendance:use")).toBe(
+      true,
+    );
   });
 
   it("has one schedule entry, not a separate Jobs board", () => {
@@ -174,6 +186,13 @@ describe("real nav items under the on-site tiers", () => {
     const jobsOnly = (c: string) => c === "jobs:read";
     expect(canSeeNavItem(upsell, "lead", canSell as typeof canAll)).toBe(true);
     expect(canSeeNavItem(upsell, "field", jobsOnly as typeof canAll)).toBe(false);
+  });
+
+  it("keeps employee activity scorecards behind reports access", () => {
+    const canReport = (capability: string) => capability === "reports:view";
+    expect(canSeeNavItem(scorecard, "admin", canReport as typeof canAll)).toBe(true);
+    expect(canSeeNavItem(scorecard, "manager", () => false)).toBe(false);
+    expect(canSeeNavItem(scorecard, "field", canAll)).toBe(false);
   });
 });
 
@@ -274,6 +293,7 @@ describe("canonical direct-route capability matrix", () => {
     "/onboarding",
     "/calendar",
     "/upsell",
+    "/time",
   ] as const;
 
   const expectedByRole: Record<string, readonly (typeof routes)[number][]> = {
@@ -298,6 +318,7 @@ describe("canonical direct-route capability matrix", () => {
       "/settings",
       "/calendar",
       "/upsell",
+      "/time",
     ],
     member: [
       "/agents",
@@ -309,9 +330,10 @@ describe("canonical direct-route capability matrix", () => {
       "/settings",
       "/calendar",
       "/upsell",
+      "/time",
     ],
-    lead_technician: ["/calendar", "/upsell"],
-    technician: ["/calendar"],
+    lead_technician: ["/calendar", "/upsell", "/time"],
+    technician: ["/calendar", "/time"],
   };
 
   it.each(Object.entries(expectedByRole))(

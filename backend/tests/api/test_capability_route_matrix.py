@@ -90,6 +90,10 @@ UNIFORM_ROUTE_POLICIES = {
         Capability.REPORTS_VIEW,
         Capability.REPORTS_VIEW,
     ),
+    "/api/v1/workspaces/{workspace_id}/scorecard": (
+        Capability.REPORTS_VIEW,
+        Capability.REPORTS_VIEW,
+    ),
     "/api/v1/workspaces/{workspace_id}/revenue-targets": (
         Capability.REPORTS_VIEW,
         Capability.WORKSPACE_MANAGE,

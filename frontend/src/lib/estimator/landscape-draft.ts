@@ -1,4 +1,3 @@
-import type { DesignerShot } from "@/components/estimator/proposal-host";
 import {
   createLandscapeDocument,
   defaultLandscapeProposal,
@@ -7,6 +6,7 @@ import {
   type LandscapeDocumentV2,
 } from "@/lib/estimator/landscape-document";
 import type {
+  DesignerShot,
   LandscapeBomLineItem,
   LandscapePreconState,
   LandscapeProcurementState,

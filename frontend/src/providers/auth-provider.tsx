@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
 import {
   createContext,
@@ -83,6 +84,7 @@ function loginPathReturningTo(destination: string): string {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -107,11 +109,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userData = await getCurrentUser();
       setUser(userData);
     } catch {
+      queryClient.clear();
       setUser(null);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -144,23 +147,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // cookies automatically (axios is configured with withCredentials).
     await loginApi(credentials);
     const userData = await getCurrentUser();
+    queryClient.clear();
     setUser(userData);
     // Honour where the user was headed. "Sign in to Accept" on an invitation
     // sends them to /login?redirect=/invite/<token>; hard-coding "/" here
     // dropped them on the dashboard with the invitation still unaccepted.
     router.replace(options?.redirectTo ?? requestedRedirect() ?? "/");
-  }, [router]);
+  }, [queryClient, router]);
 
   const logout = useCallback(() => {
-    // Backend clears both auth cookies.
+    // Backend clears both auth cookies. Purge principal-scoped server data before another
+    // account can reuse this in-memory QueryClient on a shared browser.
     api.post("/api/v1/auth/logout").catch(() => {});
+    queryClient.clear();
     setUser(null);
     // Signing out *from an invitation* means "wrong account, let me switch" — the
     // only reason to be on that page signed in as someone else. Come back to it
     // after the next sign-in instead of stranding the invite unaccepted.
     const returnTo = pathname.startsWith("/invite/") ? pathname : null;
     router.replace(returnTo ? loginPathReturningTo(returnTo) : "/login");
-  }, [pathname, router]);
+  }, [pathname, queryClient, router]);
 
   const value = useMemo(
     () => ({

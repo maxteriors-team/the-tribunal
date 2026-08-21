@@ -11,11 +11,13 @@ tags:
 
 # Scorecard, Reports, and Sales Performance
 
-## Receptionist Scorecard
+## Scorecards
 
-Route: `/scorecard`. Sidebar label: **Scorecard**. Page title: **Receptionist Scorecard**.
+Route: `/scorecard`. Sidebar label: **Scorecard**. This surface requires `reports:view` and is normally available to workspace owners and admins.
 
-Choose a date-range preset to review how the AI receptionist captured, recovered, and booked demand. The scorecard summarizes the underlying contact, communication, and booking activity for that window. A scorecard metric is an aggregate, so open the source contact, call, campaign, or appointment when record-level confirmation matters.
+Use **AI receptionist** to review how the receptionist captured, recovered, and booked demand for the selected date range. Use **Technicians** to review assigned jobs, completed job-time records, job time, attendance worked time, and paused time for each field-service technician.
+
+Technician totals are activity context, not an employee rating. The page does not rank workers or infer work quality, productivity, pay, or customer satisfaction. Job assignments, job-costing timers, and attendance records have different operational meanings; investigate the source records before using a total in coaching, discipline, scheduling, or compensation decisions.
 
 ## Reports
 

@@ -165,6 +165,13 @@ const preBooking = {
 };
 
 export const queryKeys = {
+  attendance: {
+    all: (workspaceId: string) => ["attendance", workspaceId] as const,
+    mine: (workspaceId: string, params?: QueryKeyParams | null) =>
+      ["attendance", workspaceId, "mine", normalizeQueryKeyParams(params)] as const,
+    team: (workspaceId: string, params?: QueryKeyParams | null) =>
+      ["attendance", workspaceId, "team", normalizeQueryKeyParams(params)] as const,
+  },
   salesWizard,
   attachRules,
   estimator,
@@ -504,6 +511,8 @@ export const queryKeys = {
     all: (workspaceId: string) => ["scorecard", workspaceId] as const,
     range: (workspaceId: string, params?: QueryKeyParams | null) =>
       ["scorecard", workspaceId, normalizeQueryKeyParams(params)] as const,
+    technicians: (workspaceId: string, params?: QueryKeyParams | null) =>
+      ["scorecard", workspaceId, "technicians", normalizeQueryKeyParams(params)] as const,
   },
   scraping: createResourceQueryKeys("scraping"),
   segments: {

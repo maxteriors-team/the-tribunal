@@ -4718,6 +4718,437 @@
         "title": "AttachWarning",
         "type": "object"
       },
+      "AttendanceAdminReportResponse": {
+        "properties": {
+          "employee_count": {
+            "title": "Employee Count",
+            "type": "integer"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceEntryResponse"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "open_count": {
+            "title": "Open Count",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "total_seconds": {
+            "title": "Total Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "timezone",
+          "entries",
+          "total_seconds",
+          "open_count",
+          "employee_count"
+        ],
+        "title": "AttendanceAdminReportResponse",
+        "type": "object"
+      },
+      "AttendanceClockInRequest": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "AttendanceClockInRequest",
+        "type": "object"
+      },
+      "AttendanceClockOutRequest": {
+        "properties": {
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "AttendanceClockOutRequest",
+        "type": "object"
+      },
+      "AttendanceEntryResponse": {
+        "properties": {
+          "calculated_at": {
+            "format": "date-time",
+            "title": "Calculated At",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_hours": {
+            "title": "Duration Hours",
+            "type": "number"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "integer"
+          },
+          "employee_email": {
+            "title": "Employee Email",
+            "type": "string"
+          },
+          "employee_name": {
+            "title": "Employee Name",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "gross_duration_seconds": {
+            "title": "Gross Duration Seconds",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_paused": {
+            "title": "Is Paused",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "pause_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pause Started At"
+          },
+          "paused_seconds": {
+            "title": "Paused Seconds",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "clock",
+              "manual",
+              "admin"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "complete",
+              "void"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "employee_name",
+          "employee_email",
+          "started_at",
+          "ended_at",
+          "status",
+          "source",
+          "note",
+          "duration_seconds",
+          "duration_hours",
+          "gross_duration_seconds",
+          "paused_seconds",
+          "is_paused",
+          "pause_started_at",
+          "calculated_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AttendanceEntryResponse",
+        "type": "object"
+      },
+      "AttendanceEntryUpdateRequest": {
+        "properties": {
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reason": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "request_id",
+          "reason"
+        ],
+        "title": "AttendanceEntryUpdateRequest",
+        "type": "object"
+      },
+      "AttendanceExportRequest": {
+        "description": "Raw hours export; payroll software must classify regular and overtime hours.",
+        "properties": {
+          "date_from": {
+            "format": "date",
+            "title": "Date From",
+            "type": "string"
+          },
+          "date_to": {
+            "format": "date",
+            "title": "Date To",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "date_from",
+          "date_to",
+          "request_id"
+        ],
+        "title": "AttendanceExportRequest",
+        "type": "object"
+      },
+      "AttendanceManualEntryRequest": {
+        "properties": {
+          "ended_at": {
+            "format": "date-time",
+            "title": "Ended At",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reason": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "user_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request_id",
+          "reason",
+          "user_id",
+          "started_at",
+          "ended_at"
+        ],
+        "title": "AttendanceManualEntryRequest",
+        "type": "object"
+      },
+      "AttendancePauseRequest": {
+        "properties": {
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "AttendancePauseRequest",
+        "type": "object"
+      },
+      "AttendanceReportResponse": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceEntryResponse"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "open_entry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttendanceEntryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "total_seconds": {
+            "title": "Total Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "timezone",
+          "entries",
+          "total_seconds",
+          "open_entry"
+        ],
+        "title": "AttendanceReportResponse",
+        "type": "object"
+      },
+      "AttendanceVoidRequest": {
+        "properties": {
+          "reason": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "reason"
+        ],
+        "title": "AttendanceVoidRequest",
+        "type": "object"
+      },
       "AttributionConfidenceLevel": {
         "description": "Human-readable confidence bucket for lead-source attribution.",
         "enum": [
@@ -14690,6 +15121,10 @@
             "title": "Contacts Change",
             "type": "string"
           },
+          "leads_last_24_hours": {
+            "title": "Leads Last 24 Hours",
+            "type": "integer"
+          },
           "messages_change": {
             "title": "Messages Change",
             "type": "string"
@@ -14704,6 +15139,7 @@
           }
         },
         "required": [
+          "leads_last_24_hours",
           "total_contacts",
           "active_campaigns",
           "calls_today",
@@ -50080,6 +50516,56 @@
         "title": "TeamMemberResponse",
         "type": "object"
       },
+      "TechnicianActivityScorecardRow": {
+        "description": "Recorded activity for one technician in the selected local-date range.\n\nThese fields are context only, not a quality, compensation, or ranking signal.",
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "assigned_jobs": {
+            "title": "Assigned Jobs",
+            "type": "integer"
+          },
+          "attendance_paused_seconds": {
+            "title": "Attendance Paused Seconds",
+            "type": "integer"
+          },
+          "attendance_worked_seconds": {
+            "title": "Attendance Worked Seconds",
+            "type": "integer"
+          },
+          "completed_job_time_entries": {
+            "title": "Completed Job Time Entries",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_logged_seconds": {
+            "title": "Job Logged Seconds",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "active",
+          "assigned_jobs",
+          "completed_job_time_entries",
+          "job_logged_seconds",
+          "attendance_worked_seconds",
+          "attendance_paused_seconds"
+        ],
+        "title": "TechnicianActivityScorecardRow",
+        "type": "object"
+      },
       "TechnicianCreate": {
         "description": "Create a technician.",
         "properties": {
@@ -63821,6 +64307,647 @@
         "summary": "Get Assistant History",
         "tags": [
           "CRM Assistant"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/attendance/clock-in": {
+      "post": {
+        "description": "Start the caller's UTC server clock; request_id retries return the same entry.",
+        "operationId": "clock_in_api_v1_workspaces__workspace_id__attendance_clock_in_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttendanceClockInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Clock In",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/attendance/clock-out": {
+      "post": {
+        "description": "Stop the caller's UTC server clock; request_id retries return the same entry.",
+        "operationId": "clock_out_api_v1_workspaces__workspace_id__attendance_clock_out_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttendanceClockOutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Clock Out",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/attendance/entries": {
+      "get": {
+        "description": "List all workspace entries, optionally restricted to one active member.",
+        "operationId": "list_entries_api_v1_workspaces__workspace_id__attendance_entries_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceAdminReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Entries",
+        "tags": [
+          "Attendance"
+        ]
+      },
+      "post": {
+        "description": "Create a completed manual interval for an active workspace member.",
+        "operationId": "create_manual_entry_api_v1_workspaces__workspace_id__attendance_entries_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttendanceManualEntryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Manual Entry",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/attendance/entries/{entry_id}": {
+      "patch": {
+        "description": "Correct timestamps or an encrypted note, recording the mandatory reason.",
+        "operationId": "update_entry_api_v1_workspaces__workspace_id__attendance_entries__entry_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttendanceEntryUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Entry",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/attendance/entries/{entry_id}/void": {
+      "post": {
+        "description": "Void an interval without deleting it, recording the mandatory reason.",
+        "operationId": "void_entry_api_v1_workspaces__workspace_id__attendance_entries__entry_id__void_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttendanceVoidRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Void Entry",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/attendance/exports": {
+      "post": {
+        "description": "Export completed raw hours and persist only audit metadata, never CSV content.",
+        "operationId": "export_attendance_api_v1_workspaces__workspace_id__attendance_exports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttendanceExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {}
+            },
+            "description": "Generic UTF-8 CSV containing raw completed hours. Payroll software must classify regular and overtime hours; no vendor compatibility is implied."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Export Attendance",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/attendance/me": {
+      "get": {
+        "description": "Return the caller's entries and current clock state for a local date range.",
+        "operationId": "get_my_attendance_api_v1_workspaces__workspace_id__attendance_me_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_from",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Date To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get My Attendance",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/attendance/pause": {
+      "post": {
+        "description": "Pause the caller's active shift without ending it.",
+        "operationId": "pause_shift_api_v1_workspaces__workspace_id__attendance_pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttendancePauseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Pause Shift",
+        "tags": [
+          "Attendance"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/attendance/resume": {
+      "post": {
+        "description": "Resume the caller's paused active shift.",
+        "operationId": "resume_shift_api_v1_workspaces__workspace_id__attendance_resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttendancePauseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Resume Shift",
+        "tags": [
+          "Attendance"
         ]
       }
     },
@@ -91333,6 +92460,93 @@
           }
         ],
         "summary": "Get Receptionist Scorecard",
+        "tags": [
+          "Receptionist Scorecard"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/scorecard/technicians": {
+      "get": {
+        "description": "Return activity context for each workspace technician over the date range.",
+        "operationId": "get_technician_activity_scorecard_api_v1_workspaces__workspace_id__scorecard_technicians_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TechnicianActivityScorecardRow"
+                  },
+                  "title": "Response Get Technician Activity Scorecard Api V1 Workspaces  Workspace Id  Scorecard Technicians Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Technician Activity Scorecard",
         "tags": [
           "Receptionist Scorecard"
         ]

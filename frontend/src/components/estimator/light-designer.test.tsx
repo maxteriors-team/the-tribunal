@@ -7,7 +7,6 @@ import {
   LightDesigner,
   type LandscapeProjectPersistenceAdapter,
 } from "@/components/estimator/light-designer";
-import type { DesignerProposalHost } from "@/components/estimator/proposal-host";
 import { estimatorApi } from "@/lib/api/estimator";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { designToEstimateInputs } from "@/lib/estimator/design";
@@ -228,7 +227,6 @@ function stubCanvas() {
 }
 
 function renderEstimator(
-  proposal?: DesignerProposalHost,
   focus: "all" | "landscape" = "all",
   landscapeProject?: LandscapeProjectPersistenceAdapter,
   workspace: { id: string; name?: string; logoUrl?: string | null } = { id: "ws_1" },
@@ -242,7 +240,6 @@ function renderEstimator(
         workspaceId={workspace.id}
         workspaceName={workspace.name}
         workspaceLogoUrl={workspace.logoUrl}
-        proposal={proposal}
         focus={focus}
         landscapeProject={landscapeProject}
       />
@@ -405,7 +402,7 @@ describe("LightDesigner", () => {
   });
 
   it("keeps a second workspace brand on internal and customer-facing estimator surfaces", async () => {
-    const { container } = renderEstimator(undefined, "landscape", undefined, {
+    const { container } = renderEstimator("landscape", undefined, {
       id: "ws_2",
       name: "Northstar Outdoor Lighting",
       logoUrl: "https://northstar.example/logo.svg",
@@ -481,7 +478,7 @@ describe("LightDesigner", () => {
   });
 
   it("accepts a downloaded aerial dragged onto an empty drawing sheet", async () => {
-    renderEstimator(undefined, "landscape");
+    renderEstimator("landscape");
     const dropZone = await screen.findByRole("region", {
       name: "Aerial plan file drop zone",
     });
@@ -755,64 +752,6 @@ describe("LightDesigner", () => {
     expect(await screen.findByText(/add one under Settings/i)).toBeInTheDocument();
   });
 
-  // ── Quote Builder host: the one photo tool, embedded in the wizard ────────
-
-  it("swaps the standalone share flow for save-to-proposal when the Quote Builder hosts it", async () => {
-    const proposal: DesignerProposalHost = {
-      onSave: vi.fn(),
-      onShotsChange: vi.fn(),
-      onClose: vi.fn(),
-    };
-    const { container } = renderEstimator(proposal);
-    await uploadPhoto(container);
-
-    expect(proposal.onShotsChange).toHaveBeenCalledWith([
-      expect.objectContaining({
-        photo: expect.objectContaining({ width: 1200 }),
-      }),
-    ]);
-    expect(screen.getByRole("button", { name: /save to proposal/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /back to quote/i })).toBeInTheDocument();
-    // The wizard owns the customer and the quote, so the standalone share and
-    // convert flows stay out of the way.
-    expect(screen.queryByText("Save to customer")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /client preview/i })).not.toBeInTheDocument();
-  });
-
-  it("hands the host the composite plus the measured fixtures on save", async () => {
-    vi.mocked(designToEstimateInputs).mockReturnValue({
-      feet: 100,
-      christmas_items: {},
-      fixtures: { uplight: 4 },
-      bistro_feet: 32,
-    });
-
-    const onSave = vi.fn();
-    const proposal: DesignerProposalHost = {
-      onSave,
-      onShotsChange: vi.fn(),
-      onClose: vi.fn(),
-    };
-    const { container } = renderEstimator(proposal);
-    await uploadPhoto(container);
-
-    fireEvent.click(screen.getByRole("button", { name: /save to proposal/i }));
-
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-    // Counts leave the designer keyed by fixture *type*; the host resolves each
-    // type to the product its chosen package sells.
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({
-        shots: [expect.objectContaining({ image: "data:image/jpeg;base64,LIT" })],
-        fixtures: { uplight: 4 },
-        services: ["landscape"],
-        rooflineFeet: 100,
-        bistroFeet: 32,
-      }),
-    );
-    expect(await screen.findByText(/Saved 1 design to the proposal at/i)).toBeInTheDocument();
-  });
-
   it("tallies drawn fixture types against the product the package sells", async () => {
     vi.mocked(designToEstimateInputs).mockReturnValue({
       feet: 0,
@@ -1068,21 +1007,6 @@ describe("LightDesigner", () => {
     expect(screen.queryByLabelText(/Line item package/i)).toBeNull();
   });
 
-  it("hides the line-item editor when the Quote Builder hosts the designer", async () => {
-    // That flow prices from the wizard's own document, so a line typed here
-    // would never reach the quote. Absent beats silently dropped.
-    const { container } = renderEstimator({
-      onSave: vi.fn(),
-      onShotsChange: vi.fn(),
-      onClose: vi.fn(),
-      tierKey: "best",
-    });
-    await uploadPhoto(container);
-    await screen.findByRole("heading", { name: /^Tools$/i });
-
-    expect(screen.queryByRole("button", { name: /Add line item/i })).toBeNull();
-  });
-
   // ── Several photos in one design ────────────────────────────────────
 
   it("adds a photo instead of replacing the one already designed", async () => {
@@ -1124,48 +1048,20 @@ describe("LightDesigner", () => {
     );
   });
 
-  it("sends every drawn photo to the proposal in one save", async () => {
-    const onSave = vi.fn();
-    const { container } = renderEstimator({
-      onSave,
-      onShotsChange: vi.fn(),
-      onClose: vi.fn(),
-    });
-    await uploadPhoto(container);
-    await uploadPhoto(container);
-
-    fireEvent.click(screen.getByRole("button", { name: /save 2 designs to proposal/i }));
-
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-    expect(onSave.mock.calls[0][0].shots).toHaveLength(2);
-    expect(await screen.findByText(/Saved 2 designs to the proposal at/i)).toBeInTheDocument();
-  });
-
   it("drops a removed photo from the totals and the strip", async () => {
-    const onSave = vi.fn();
-    const onShotsChange = vi.fn();
-    const { container } = renderEstimator({
-      onSave,
-      onShotsChange,
-      onClose: vi.fn(),
-    });
+    const { container } = renderEstimator();
     await uploadPhoto(container);
     await uploadPhoto(container);
 
     fireEvent.click(screen.getByRole("button", { name: /remove photo 2/i }));
 
     expect(shotTabs()).toHaveLength(1);
-    expect(onShotsChange).toHaveBeenLastCalledWith([
-      expect.objectContaining({ photo: expect.anything() }),
-    ]);
-    // What the quote is measured from, not just what's on screen: the deleted
-    // photo's 100 ft must leave with it.
-    fireEvent.click(screen.getByRole("button", { name: /save to proposal/i }));
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-    expect(onSave.mock.calls[0][0]).toMatchObject({
-      rooflineFeet: 100,
-      shots: [expect.anything()],
-    });
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ feet: 100 }),
+      ),
+    );
   });
 
   it("returns to the welcome screen when the last photo is removed", async () => {
@@ -1176,61 +1072,6 @@ describe("LightDesigner", () => {
 
     expect(container.querySelector("canvas")).toBeNull();
     expect(screen.getByText(/Design their lights on a photo/i)).toBeInTheDocument();
-  });
-
-  it("hands the photos to the host on the way back to the quote", async () => {
-    // The editor unmounts when the rep steps back to the quote, so the host is
-    // the only thing that can hold the work — saved or not.
-    const onShotsChange = vi.fn();
-    const { container } = renderEstimator({
-      onSave: vi.fn(),
-      onShotsChange,
-      onClose: vi.fn(),
-    });
-    await uploadPhoto(container);
-    await uploadPhoto(container);
-    onShotsChange.mockClear();
-
-    fireEvent.click(screen.getByRole("button", { name: /back to quote/i }));
-
-    expect(onShotsChange).toHaveBeenCalledWith([
-      expect.objectContaining({ photo: expect.anything() }),
-      expect.objectContaining({ photo: expect.anything() }),
-    ]);
-  });
-
-  it("resumes every photo the host held from the last visit", async () => {
-    // Leaving the designer for the quote and coming back must restore the whole
-    // set, not just the shot that happened to be saved.
-    const photo = {
-      dataUrl: "data:image/png;base64,AAAA",
-      width: 1200,
-      height: 800,
-    };
-    renderEstimator({
-      onSave: vi.fn(),
-      onShotsChange: vi.fn(),
-      onClose: vi.fn(),
-      initial: {
-        shots: [
-          {
-            id: "s1",
-            photo,
-            design: { runs: [], items: [], calibration: null },
-            dusk: 0.52,
-          },
-          {
-            id: "s2",
-            photo,
-            design: { runs: [], items: [], calibration: null },
-            dusk: 0.52,
-          },
-        ],
-      },
-    });
-
-    expect(shotTabs()).toHaveLength(2);
-    expect(activeShotIndex()).toBe(0);
   });
 
   it("uses the server-project adapter without restoring or saving the workspace browser draft", async () => {
@@ -1288,7 +1129,7 @@ describe("LightDesigner", () => {
       resetKey: 0,
     };
 
-    renderEstimator(undefined, "landscape", adapter);
+    renderEstimator("landscape", adapter);
     expect(await screen.findByLabelText("Top-down aerial lighting plan canvas")).toHaveAttribute(
       "data-viewport-policy",
       "locked",
@@ -1355,7 +1196,7 @@ describe("LightDesigner", () => {
       persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
       resetKey: 0,
     };
-    renderEstimator(undefined, "landscape", adapter);
+    renderEstimator("landscape", adapter);
 
     const user = userEvent.setup();
     expect(screen.getByText(/No additional materials yet/)).toBeInTheDocument();
@@ -1405,7 +1246,7 @@ describe("LightDesigner", () => {
       persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
       resetKey: 0,
     };
-    renderEstimator(undefined, "landscape", adapter);
+    renderEstimator("landscape", adapter);
 
     await waitFor(() => expect(onLandscapeDraftChange).toHaveBeenCalled(), { timeout: 1_500 });
     const quoteBuilder = screen.getByRole("region", {
@@ -1595,7 +1436,7 @@ describe("LightDesigner", () => {
       resetKey: 0,
     };
 
-    renderEstimator(undefined, "landscape", adapter);
+    renderEstimator("landscape", adapter);
     await openProposalPreview();
 
     expect(await screen.findByRole("button", { name: /Good.*\$950\.00/i })).toBeInTheDocument();
@@ -1697,7 +1538,7 @@ describe("LightDesigner", () => {
       resetKey: 0,
     };
 
-    renderEstimator(undefined, "landscape", adapter);
+    renderEstimator("landscape", adapter);
     expect(
       await screen.findByRole("button", { name: "Use L-1 as installation sheet" }),
     ).toBeInTheDocument();

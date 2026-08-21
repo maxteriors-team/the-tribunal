@@ -36,7 +36,7 @@ vi.mock("@/lib/estimator/photo", () => ({
   }),
 }));
 
-vi.mock("@/components/sales-wizard/image-resize", () => ({
+vi.mock("@/lib/estimator/image-resize", () => ({
   fileToResizedDataUrl: vi.fn().mockResolvedValue("data:image/jpeg;base64,RESIZED"),
 }));
 

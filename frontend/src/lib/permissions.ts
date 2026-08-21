@@ -42,6 +42,8 @@ export type Capability =
   | "billing:read"
   | "billing:write"
   | "reports:view"
+  | "attendance:use"
+  | "attendance:manage"
   | "members:manage"
   | "workspace:manage"
   | "locations:manage"
@@ -74,6 +76,8 @@ const ALL_CAPABILITIES: Capability[] = [
   "billing:read",
   "billing:write",
   "reports:view",
+  "attendance:use",
+  "attendance:manage",
   "members:manage",
   "workspace:manage",
   "locations:manage",
@@ -94,6 +98,7 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
     "comms:send",
     "billing:read",
     "billing:write",
+    "attendance:use",
     "locations:manage",
     "upsell:sell",
     "upsell:sell_uncapped",
@@ -105,17 +110,25 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
     "outreach:write",
     "pipeline:write_own",
     "jobs:read",
+    "attendance:use",
     "comms:send",
     "upsell:sell",
     "upsell:sell_uncapped",
   ],
-  tech: ["crm:read", "jobs:read", "comms:send", "upsell:sell", "upsell:sell_uncapped"],
+  tech: [
+    "crm:read",
+    "jobs:read",
+    "attendance:use",
+    "comms:send",
+    "upsell:sell",
+    "upsell:sell_uncapped",
+  ],
   // Crew lead: the field tier's visibility exactly, plus the authority to sell
   // on site, held to the workspace's proposal limit. Still no contact book,
   // price book, or pipeline.
-  lead: ["jobs:read", "upsell:sell"],
-  // Field technicians: the jobs schedule and nothing else. No selling.
-  field: ["jobs:read"],
+  lead: ["jobs:read", "attendance:use", "upsell:sell"],
+  // Field technicians: job operations plus their own attendance clock.
+  field: ["jobs:read", "attendance:use"],
 };
 
 /** Resolve a role string to its access tier (unknown/legacy → `field`, fail-closed). */

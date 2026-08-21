@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * New Email Campaign — styled to match the sales/quote builder ("index") look:
- * the scoped `.sales-wizard` dark/gold theme (Cormorant + Montserrat) for the
+ * New Email Campaign — styled to match the client proposal look:
+ * the scoped `.proposal-view` dark/gold theme (Cormorant + Montserrat) for the
  * hand-built header, message fields, and action buttons. The shared
- * `VirtualContactSelector` is shadcn-based and can't live inside `.sales-wizard`
+ * `VirtualContactSelector` is shadcn-based and can't live inside `.proposal-view`
  * (its universal padding reset would break the component), so it renders in the
  * app's own `dark` theme on the same near-black surface for a cohesive result.
  */
@@ -16,7 +16,7 @@ import { toast } from "sonner";
 
 import { VirtualContactSelector } from "@/components/campaigns/virtual-contact-selector";
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { salesWizardFontVars } from "@/components/sales-wizard/fonts";
+import { proposalFontVars } from "@/components/proposal/proposal-fonts";
 import { emailCampaignsApi, type CreateEmailCampaignRequest } from "@/lib/api/email-campaigns";
 import { resolveWorkspaceBrand } from "@/lib/brand";
 import { messages } from "@/lib/messages";
@@ -24,7 +24,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { useWorkspace } from "@/providers/workspace-provider";
 
-import "@/components/sales-wizard/theme.css";
+import "@/components/proposal/proposal-theme.css";
 
 export default function NewEmailCampaignPage() {
   const router = useRouter();
@@ -85,11 +85,11 @@ export default function NewEmailCampaignPage() {
   return (
     <AppSidebar>
       <div
-        className={`dark h-full overflow-y-auto ${salesWizardFontVars}`}
+        className={`dark h-full overflow-y-auto ${proposalFontVars}`}
         style={{ background: "#0a0a0a" }}
       >
         {/* Themed top nav */}
-        <div className="sales-wizard" style={{ minHeight: 0 }}>
+        <div className="proposal-view" style={{ minHeight: 0 }}>
           <div className="present-nav">
             <Link href="/campaigns" className="back-btn">
               &#8592;&nbsp; Campaigns
@@ -99,8 +99,8 @@ export default function NewEmailCampaignPage() {
         </div>
 
         <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px 100px" }}>
-          {/* Header + message fields (hand-built → safe inside .sales-wizard) */}
-          <div className="sales-wizard" style={{ minHeight: 0 }}>
+          {/* Header + message fields (hand-built → safe inside .proposal-view) */}
+          <div className="proposal-view" style={{ minHeight: 0 }}>
             <div className="calc-header" style={{ marginBottom: 32 }}>
               <div className="calc-wordmark">
                 <div className="calc-wordmark-line" />
@@ -181,7 +181,7 @@ export default function NewEmailCampaignPage() {
             </div>
           </div>
 
-          {/* Recipients selector — app dark theme (shadcn), outside .sales-wizard */}
+          {/* Recipients selector — app dark theme (shadcn), outside .proposal-view */}
           {workspaceId ? (
             <VirtualContactSelector
               workspaceId={workspaceId}
@@ -191,7 +191,7 @@ export default function NewEmailCampaignPage() {
           ) : null}
 
           {/* Themed action buttons */}
-          <div className="sales-wizard" style={{ minHeight: 0 }}>
+          <div className="proposal-view" style={{ minHeight: 0 }}>
             <div className="wizard-nav" style={{ marginTop: 24 }}>
               <button
                 type="button"

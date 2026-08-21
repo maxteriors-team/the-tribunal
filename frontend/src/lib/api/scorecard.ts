@@ -5,6 +5,8 @@ import type { Schemas } from "@/lib/api/_client";
 export type ReceptionistScorecard = Schemas["ReceptionistScorecard"];
 export type CallReasonStat = Schemas["CallReasonStat"];
 
+export type TechnicianActivityScorecardRow = Schemas["TechnicianActivityScorecardRow"];
+
 export interface ScorecardParams {
   /** Inclusive ISO date (YYYY-MM-DD). Defaults to 30 days ago server-side. */
   start_date?: string;
@@ -19,6 +21,15 @@ export const scorecardApi = {
   ): Promise<ReceptionistScorecard> => {
     return apiGet<ReceptionistScorecard>(
       `/api/v1/workspaces/${workspaceId}/scorecard`,
+      { params }
+    );
+  },
+  getTechnicians: async (
+    workspaceId: string,
+    params: ScorecardParams = {}
+  ): Promise<TechnicianActivityScorecardRow[]> => {
+    return apiGet<TechnicianActivityScorecardRow[]>(
+      `/api/v1/workspaces/${workspaceId}/scorecard/technicians`,
       { params }
     );
   },

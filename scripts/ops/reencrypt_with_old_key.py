@@ -141,6 +141,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
     quietly no-op.
     """
     from app.models.agent_training_example import AgentTrainingExample
+    from app.models.attendance import AttendanceEntry, AttendanceEvent
     from app.models.caller_memory import CallerMemory
     from app.models.contact import Contact
     from app.models.contact_ai_memory import ContactAIMemory, ContactAIMemoryFact
@@ -241,6 +242,8 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
             AgentTrainingExample,
             ("customer_message", "ai_response", "ideal_response", "operator_note"),
         ),
+        RotationTarget(AttendanceEntry, ("note",)),
+        RotationTarget(AttendanceEvent, ("reason",)),
     )
 
 

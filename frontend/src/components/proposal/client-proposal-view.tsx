@@ -3,15 +3,13 @@
 /**
  * Client-facing proposal view (dark/gold premium presentation).
  *
- * Renders the saved `proposal_document` snapshot for any product line the quote
- * builder produces — landscape packages, permanent holiday, bistro/string, and
- * seasonal Christmas — from one generalized layout. Operator controls are
- * swapped for the client's Approve / Decline actions. Plain line-item quotes
- * never reach this component; the page renders them with its simple light sheet.
+ * Renders the saved `proposal_document` snapshot across landscape packages,
+ * permanent holiday, bistro/string, and seasonal Christmas from one generalized
+ * layout. Operator controls are swapped for the client's Approve / Decline
+ * actions. Plain line-item quotes never reach this component; the page renders
+ * them with its simple light sheet.
  *
- * Self-contained: styling + fonts + document helpers all live in this module
- * (`./proposal-theme.css`, `./proposal-fonts`, `./document`), independent of the
- * disposable sales-wizard builder.
+ * Styling, fonts, and document helpers live beside this component.
  */
 import { useMemo, useState } from "react";
 

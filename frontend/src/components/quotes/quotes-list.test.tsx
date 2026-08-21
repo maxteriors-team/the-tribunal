@@ -19,7 +19,6 @@ const {
   getMock,
   deleteMock,
   assignMock,
-  pushMock,
   useWorkspaceIdMock,
   toastMock,
 } = vi.hoisted(() => ({
@@ -30,7 +29,6 @@ const {
   getMock: vi.fn(),
   deleteMock: vi.fn(),
   assignMock: vi.fn(),
-  pushMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
   toastMock: { success: vi.fn(), error: vi.fn() },
 }));
@@ -78,10 +76,6 @@ vi.mock("@/components/workspaces/team-member-picker", () => ({
 
 vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => useWorkspaceIdMock(),
-}));
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
 }));
 
 function quote(overrides: Partial<Quote> = {}): Quote {
@@ -482,77 +476,6 @@ describe("QuotesList editing and deleting", () => {
     await openMenu();
     await screen.findByText("Preview client proposal");
 
-    expect(screen.queryByText("Edit basic details")).not.toBeInTheDocument();
-    expect(screen.queryByText("Delete quote")).not.toBeInTheDocument();
-  });
-});
-
-describe("QuotesList full-builder revisions", () => {
-  const listOne = (overrides: Partial<Quote>) =>
-    listMock.mockResolvedValue({
-      items: [quote(overrides)],
-      total: 1,
-      page: 1,
-      page_size: 100,
-      pages: 1,
-    });
-
-  it("opens a mutable wizard quote from the keyboard and keeps basic edits", async () => {
-    const user = userEvent.setup();
-    listOne({
-      is_wizard_quote: true,
-      wizard_edit_mode: "update",
-      status: "sent",
-    });
-    renderList();
-    await screen.findByText("QUO-000123");
-
-    const trigger = screen.getByRole("button", { name: "Actions" });
-    trigger.focus();
-    await user.keyboard("{Enter}");
-    const builderAction = await screen.findByRole("menuitem", {
-      name: "Edit in quote builder",
-    });
-    expect(screen.getByRole("menuitem", { name: "Edit basic details" })).toBeInTheDocument();
-
-    builderAction.focus();
-    await user.keyboard("{Enter}");
-    expect(pushMock).toHaveBeenCalledWith("/sales-wizard?quote=quote-1");
-  });
-
-  it("offers a revision for a decided quote without exposing destructive edits", async () => {
-    listOne({
-      is_wizard_quote: true,
-      wizard_edit_mode: "revise",
-      status: "approved",
-      converted_invoice_id: "invoice-1",
-    });
-    renderList();
-    await screen.findByText("QUO-000123");
-    await userEvent.click(screen.getByRole("button", { name: "Actions" }));
-
-    expect(
-      screen.getByRole("menuitem", { name: "Create revised quote" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Edit basic details")).not.toBeInTheDocument();
-    expect(screen.queryByText("Delete quote")).not.toBeInTheDocument();
-    expect(screen.getByText("Preview client proposal")).toBeInTheDocument();
-  });
-
-  it("keeps a paid sent quote link but allows only a protected revision", async () => {
-    listOne({
-      is_wizard_quote: true,
-      wizard_edit_mode: "revise",
-      status: "sent",
-      deposit_paid: true,
-      deposit_required: false,
-    });
-    renderList();
-    await screen.findByText("QUO-000123");
-    await userEvent.click(screen.getByRole("button", { name: "Actions" }));
-
-    expect(screen.getByText("Create revised quote")).toBeInTheDocument();
-    expect(screen.getByText("Copy client link")).toBeInTheDocument();
     expect(screen.queryByText("Edit basic details")).not.toBeInTheDocument();
     expect(screen.queryByText("Delete quote")).not.toBeInTheDocument();
   });

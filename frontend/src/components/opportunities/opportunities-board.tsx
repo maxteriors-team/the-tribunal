@@ -286,8 +286,8 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
 
   return (
     <>
-      <div className="flex h-full flex-col gap-4">
-        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex h-full min-h-0 min-w-0 flex-col gap-4">
+        <div className="flex shrink-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-sm font-medium text-muted-foreground">{pipeline.name}</span>
           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <Button
@@ -312,7 +312,7 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
           </div>
         </div>
 
-        <div className="w-full max-w-sm space-y-1.5">
+        <div className="w-full max-w-sm shrink-0 space-y-1.5">
           <Label htmlFor="opportunity-customer-filter" className="text-xs">
             Filter by customer
           </Label>
@@ -330,10 +330,11 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <HorizontalScroll
             aria-label="Opportunity stages, scroll horizontally"
-            className="flex-1"
+            className="min-h-0 flex-1"
+            viewportClassName="h-full overflow-y-hidden"
             data-testid="opportunity-board-scroll"
           >
-            <div className="flex min-w-max gap-4 pr-1">
+            <div className="flex h-full min-w-max gap-4 pr-1">
               {stages.map((stage) => (
                 <StageColumn
                   key={stage.id}
@@ -470,11 +471,11 @@ function StageColumn({
       ref={setNodeRef}
       data-testid={`stage-column-${stage.id}`}
       className={cn(
-        "flex w-72 shrink-0 flex-col rounded-lg border bg-muted/30",
+        "flex h-full min-h-0 w-72 shrink-0 flex-col rounded-lg border bg-muted/30",
         isOver && "ring-2 ring-primary",
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2.5">
         <div className="flex items-center gap-2">
           <span
             className={cn(
@@ -489,7 +490,10 @@ function StageColumn({
         </Badge>
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2">
+      <div
+        data-slot="opportunity-stage-scroll"
+        className="app-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 [scrollbar-gutter:stable]"
+      >
         {opportunities.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-2 py-6 text-center">
             <p className="text-xs text-muted-foreground">No opportunities</p>

@@ -54,7 +54,7 @@ not override the term can begin requesting real money.
 
 ### 1. Draft creation and delivery
 
-`LightDesigner` builds a `ProposalWizardPayload` and calls the sales-wizard save
+`LightDesigner` builds a `ProposalWizardPayload` and calls the shared proposal-save
 endpoint. `buildLandscapeProposalPayload()` copies the workspace deposit config
 into the payload only when it is enabled and positive. The backend also falls
 back to that same workspace config when the payload has no explicit deposit.

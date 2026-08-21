@@ -8,6 +8,7 @@ coverage, and the average time spent handling a call.
 """
 
 from datetime import date
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -24,6 +25,22 @@ class DailyLeadCount(BaseModel):
 
     date: date
     count: int
+
+
+class TechnicianActivityScorecardRow(BaseModel):
+    """Recorded activity for one technician in the selected local-date range.
+
+    These fields are context only, not a quality, compensation, or ranking signal.
+    """
+
+    id: UUID
+    name: str
+    active: bool
+    assigned_jobs: int
+    completed_job_time_entries: int
+    job_logged_seconds: int
+    attendance_worked_seconds: int
+    attendance_paused_seconds: int
 
 
 class ReceptionistScorecard(BaseModel):

@@ -81,19 +81,19 @@ export function SetupGate() {
   };
 
   return (
-    <div className="border-b bg-gradient-to-r from-yellow-400/10 to-amber-500/10 px-6 py-4">
-      <div className="mx-auto flex max-w-5xl items-center gap-4">
+    <div className="border-b bg-gradient-to-r from-yellow-400/10 to-amber-500/10 px-4 py-4 sm:px-6">
+      <div className="mx-auto grid max-w-5xl grid-cols-[auto_1fr_auto] items-start gap-x-3 gap-y-3 sm:flex sm:items-center sm:gap-4">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-yellow-400 to-amber-500 text-black shadow-sm">
           <Rocket className="size-5" />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 sm:flex-1">
           <p className="font-semibold">Finish setting up your workspace</p>
           <p className="text-sm text-muted-foreground">
             Connect your CRM and calendar, import leads, and launch your first campaign — it only
             takes a few minutes.
           </p>
         </div>
-        <Button asChild size="sm">
+        <Button asChild size="sm" className="col-start-2 row-start-2 justify-self-start">
           <Link href="/onboarding">
             <Rocket className="size-4" />
             Get started
@@ -102,6 +102,7 @@ export function SetupGate() {
         <Button
           variant="ghost"
           size="icon"
+          className="col-start-3 row-start-1"
           onClick={handleDismiss}
           aria-label="Dismiss setup reminder"
         >

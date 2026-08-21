@@ -7,9 +7,9 @@ import {
   CalendarSync,
   Bot,
   Boxes,
-  Calculator,
   Calendar,
   ClipboardCheck,
+  Clock3,
   CreditCard,
   ClipboardList,
   Drama,
@@ -116,6 +116,14 @@ export const workspaceNavItems: AppNavItem[] = [
     commandPalette: true,
   },
   {
+    title: "Time & Attendance",
+    url: "/time",
+    icon: Clock3,
+    sidebar: true,
+    commandPalette: true,
+    requires: "attendance:use",
+  },
+  {
     title: "Dashboard",
     url: "/dashboard",
     icon: LayoutDashboard,
@@ -160,14 +168,6 @@ export const salesNavItems: AppNavItem[] = [
     title: "Quotes & Estimates",
     url: "/quotes",
     icon: FileText,
-    sidebar: true,
-    commandPalette: true,
-    requires: "billing:read",
-  },
-  {
-    title: "Quote Builder",
-    url: "/sales-wizard",
-    icon: Calculator,
     sidebar: true,
     commandPalette: true,
     requires: "billing:read",
@@ -250,6 +250,7 @@ export const insightsNavItems: AppNavItem[] = [
     icon: ClipboardList,
     sidebar: true,
     commandPalette: true,
+    requires: "reports:view",
   },
   {
     title: "Reports",
@@ -577,7 +578,7 @@ export const breadcrumbLabels: Record<string, string> = {
   campaigns: "Campaigns",
   campaign: "Campaign",
   calls: "Calls",
-  scorecard: "Receptionist Scorecard",
+  scorecard: "Scorecards",
   reports: "Reports",
   sales: "Sales Performance",
   dashboard: "Dashboard",
@@ -609,9 +610,9 @@ export const breadcrumbLabels: Record<string, string> = {
   "find-leads-ai": "Find Leads AI",
   "ad-library": "Ad Library",
   "pending-actions": "Pending Actions",
+  time: "Time & Attendance",
   opportunities: "Opportunities",
   quotes: "Quotes & Estimates",
-  "sales-wizard": "Quote Builder",
   estimator: "Light Designer",
   "landscape-lighting": "Landscape Lighting",
   invoices: "Invoices",
@@ -644,7 +645,12 @@ export function isNavItemVisible(item: AppNavItem) {
  * but is additionally capability-gated in {@link canSeeNavItem}, so only a crew
  * lead sees it.
  */
-export const FIELD_OPERATIONAL_PREFIXES: readonly string[] = ["/jobs", "/calendar", "/upsell"];
+export const FIELD_OPERATIONAL_PREFIXES: readonly string[] = [
+  "/jobs",
+  "/calendar",
+  "/upsell",
+  "/time",
+];
 
 /** Whether a path is inside the field-technician operational allowlist. */
 export function isFieldOperationalPath(pathname: string): boolean {

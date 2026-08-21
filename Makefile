@@ -199,6 +199,7 @@ ci.migrations: ci.backend.deps ## Run migration CI parity against the configured
 	# Treat migration warnings as failures so cyclic constraints cannot regress silently.
 	cd $(BACKEND_DIR) && PYTHONWARNINGS=error $(MIGRATION_KEY_ENV) uv run alembic upgrade head
 	cd $(BACKEND_DIR) && PYTHONWARNINGS=error $(MIGRATION_KEY_ENV) uv run alembic check
+	cd $(BACKEND_DIR) && PYTHONWARNINGS=error $(MIGRATION_KEY_ENV) uv run pytest tests/integration/test_attendance.py -m integration
 	cd $(BACKEND_DIR) && PYTHONWARNINGS=error $(MIGRATION_KEY_ENV) uv run alembic downgrade -1
 	cd $(BACKEND_DIR) && PYTHONWARNINGS=error $(MIGRATION_KEY_ENV) uv run alembic upgrade head
 
