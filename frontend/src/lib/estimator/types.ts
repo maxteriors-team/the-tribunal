@@ -445,3 +445,13 @@ export interface PhotoInfo {
   width: number;
   height: number;
 }
+
+/** One saved photo/design pair in a multi-elevation lighting project. */
+export interface DesignerShot {
+  id: string;
+  photo: PhotoInfo;
+  design: Design;
+  dusk: number;
+  /** Drawing-sheet title, revision, and proposal-zone metadata. */
+  sheet?: LandscapeSheetMetadata;
+}

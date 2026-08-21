@@ -26,10 +26,10 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { fileToResizedDataUrl } from "@/components/sales-wizard/image-resize";
 import { indexProducts } from "@/lib/estimator/catalog";
 import { designScale, formatFeet } from "@/lib/estimator/design";
 import { distance, distToPolyline, polylineLength, snapAngle } from "@/lib/estimator/geometry";
+import { fileToResizedDataUrl } from "@/lib/estimator/image-resize";
 import { fileToPhoto, loadImage } from "@/lib/estimator/photo";
 import {
   MAX_DUSK,

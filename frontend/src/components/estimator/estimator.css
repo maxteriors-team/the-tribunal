@@ -488,7 +488,7 @@
 /* Rep-only light designer (HHC-style three-pane editor)                    */
 /* ======================================================================== */
 
-/* Fills its host (the Quotes tab or the Quote Builder) so the photo stays put
+/* Fills its host (the Quotes tab or a lighting project editor) so the photo stays put
    and only the estimate rail scrolls — a rep mid-pitch should never have to
    scroll the house out of view to read a number. */
 .est-app {
@@ -660,22 +660,6 @@
   .est-shot-hint {
     display: none;
   }
-}
-
-/* Confirmation strip shown when the Quote Builder hosts the designer. */
-.est-hosted-status {
-  flex: 0 0 auto;
-  padding: 9px 18px;
-  font-size: 12px;
-  color: #9fe3bd;
-  background: rgba(63, 166, 106, 0.1);
-  border-bottom: 1px solid rgba(76, 175, 125, 0.4);
-}
-
-.est-hosted-status.error {
-  color: #ffb4a8;
-  background: rgba(220, 90, 74, 0.1);
-  border-bottom-color: rgba(220, 90, 74, 0.45);
 }
 
 .est-main {

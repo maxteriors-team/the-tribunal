@@ -8,6 +8,7 @@ from app.schemas.lead_source import LeadSourceROIStats
 class DashboardStats(BaseModel):
     """Core dashboard statistics."""
 
+    leads_last_24_hours: int
     total_contacts: int
     active_campaigns: int
     calls_today: int

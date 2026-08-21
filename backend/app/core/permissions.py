@@ -73,6 +73,9 @@ class Capability(StrEnum):
     PIPELINE_WRITE_OWN = "pipeline:write_own"
     JOBS_READ = "jobs:read"
     JOBS_WRITE = "jobs:write"
+    # Every member can use their own clock; only the admin tier can manage others.
+    ATTENDANCE_USE = "attendance:use"
+    ATTENDANCE_MANAGE = "attendance:manage"
     # ``comms:send`` = use workspace numbers to text/call customers (every tier);
     # ``comms:manage`` = provision numbers (search/purchase/release) — admin only,
     # because it spends money.
@@ -189,9 +192,11 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
     }
 
     # Invariants, enforced here rather than trusting each tier's hand-written set:
+    #   * every workspace member can use their own attendance clock;
     #   * anyone who can write any opportunity can write their own;
     #   * anyone who can write contacts (crm:write) can author outreach.
     for tier, caps in matrix.items():
+        caps.add(Capability.ATTENDANCE_USE)
         if Capability.PIPELINE_WRITE in caps:
             caps.add(Capability.PIPELINE_WRITE_OWN)
         if Capability.CRM_WRITE in caps:

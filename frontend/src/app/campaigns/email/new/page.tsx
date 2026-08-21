@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * New Email Campaign — styled to match the sales/quote builder ("index") look:
- * the scoped `.sales-wizard` dark/gold theme (Cormorant + Montserrat) for the
+ * New Email Campaign — styled to match the client proposal look:
+ * the scoped `.proposal-view` dark/gold theme (Cormorant + Montserrat) for the
  * hand-built header, message fields, and action buttons. The shared
- * `VirtualContactSelector` is shadcn-based and can't live inside `.sales-wizard`
+ * `VirtualContactSelector` is shadcn-based and can't live inside `.proposal-view`
  * (its universal padding reset would break the component), so it renders in the
  * app's own `dark` theme on the same near-black surface for a cohesive result.
  */
@@ -16,22 +16,21 @@ import { toast } from "sonner";
 
 import { VirtualContactSelector } from "@/components/campaigns/virtual-contact-selector";
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { salesWizardFontVars } from "@/components/sales-wizard/fonts";
-import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import {
-  emailCampaignsApi,
-  type CreateEmailCampaignRequest,
-} from "@/lib/api/email-campaigns";
+import { proposalFontVars } from "@/components/proposal/proposal-fonts";
+import { emailCampaignsApi, type CreateEmailCampaignRequest } from "@/lib/api/email-campaigns";
+import { resolveWorkspaceBrand } from "@/lib/brand";
 import { messages } from "@/lib/messages";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
+import { useWorkspace } from "@/providers/workspace-provider";
 
-import "@/components/sales-wizard/theme.css";
+import "@/components/proposal/proposal-theme.css";
 
 export default function NewEmailCampaignPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const workspaceId = useWorkspaceId();
+  const { currentWorkspace, currentWorkspaceId: workspaceId } = useWorkspace();
+  const workspaceBrand = resolveWorkspaceBrand(currentWorkspace?.workspace);
 
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
@@ -86,11 +85,11 @@ export default function NewEmailCampaignPage() {
   return (
     <AppSidebar>
       <div
-        className={`dark h-full overflow-y-auto ${salesWizardFontVars}`}
+        className={`dark h-full overflow-y-auto ${proposalFontVars}`}
         style={{ background: "#0a0a0a" }}
       >
         {/* Themed top nav */}
-        <div className="sales-wizard" style={{ minHeight: 0 }}>
+        <div className="proposal-view" style={{ minHeight: 0 }}>
           <div className="present-nav">
             <Link href="/campaigns" className="back-btn">
               &#8592;&nbsp; Campaigns
@@ -100,21 +99,19 @@ export default function NewEmailCampaignPage() {
         </div>
 
         <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px 100px" }}>
-          {/* Header + message fields (hand-built → safe inside .sales-wizard) */}
-          <div className="sales-wizard" style={{ minHeight: 0 }}>
+          {/* Header + message fields (hand-built → safe inside .proposal-view) */}
+          <div className="proposal-view" style={{ minHeight: 0 }}>
             <div className="calc-header" style={{ marginBottom: 32 }}>
               <div className="calc-wordmark">
                 <div className="calc-wordmark-line" />
-                <div className="calc-wordmark-text">Maxteriors</div>
+                <div className="calc-wordmark-text">{workspaceBrand.businessName}</div>
                 <div className="calc-wordmark-line" />
               </div>
               <div className="calc-title">
                 <em>Email</em>&nbsp;Campaign
               </div>
               <div className="calc-rule" />
-              <div className="calc-sub">
-                Compose the broadcast, choose recipients, then send
-              </div>
+              <div className="calc-sub">Compose the broadcast, choose recipients, then send</div>
             </div>
 
             <div className="fields-block">
@@ -140,7 +137,7 @@ export default function NewEmailCampaignPage() {
                 <input
                   id="subject"
                   className="field-input"
-                  placeholder="Hi {first_name}, an update from Maxteriors"
+                  placeholder={`Hi {first_name}, an update from ${workspaceBrand.businessName}`}
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                 />
@@ -166,9 +163,9 @@ export default function NewEmailCampaignPage() {
                   }}
                 />
                 <div className="wizard-copy" style={{ marginTop: 10 }}>
-                  Use {"{first_name}"} and {"{company_name}"} to personalize the
-                  subject and body. An unsubscribe link is added automatically to
-                  every email (required for marketing mail).
+                  Use {"{first_name}"} and {"{company_name}"} to personalize the subject and body.
+                  An unsubscribe link is added automatically to every email (required for marketing
+                  mail).
                 </div>
               </div>
             </div>
@@ -184,7 +181,7 @@ export default function NewEmailCampaignPage() {
             </div>
           </div>
 
-          {/* Recipients selector — app dark theme (shadcn), outside .sales-wizard */}
+          {/* Recipients selector — app dark theme (shadcn), outside .proposal-view */}
           {workspaceId ? (
             <VirtualContactSelector
               workspaceId={workspaceId}
@@ -194,7 +191,7 @@ export default function NewEmailCampaignPage() {
           ) : null}
 
           {/* Themed action buttons */}
-          <div className="sales-wizard" style={{ minHeight: 0 }}>
+          <div className="proposal-view" style={{ minHeight: 0 }}>
             <div className="wizard-nav" style={{ marginTop: 24 }}>
               <button
                 type="button"
@@ -215,10 +212,7 @@ export default function NewEmailCampaignPage() {
                 disabled={!canSubmit || selectedIds.size === 0}
                 style={{
                   opacity: !canSubmit || selectedIds.size === 0 ? 0.5 : 1,
-                  cursor:
-                    !canSubmit || selectedIds.size === 0
-                      ? "not-allowed"
-                      : "pointer",
+                  cursor: !canSubmit || selectedIds.size === 0 ? "not-allowed" : "pointer",
                 }}
               >
                 Create &amp; Send

@@ -16,9 +16,7 @@ interface PublicProposalPageProps {
   params: Promise<{ token: string }>;
 }
 
-export default function PublicProposalPage({
-  params,
-}: PublicProposalPageProps) {
+export default function PublicProposalPage({ params }: PublicProposalPageProps) {
   const { token } = use(params);
   const queryClient = useQueryClient();
 
@@ -48,19 +46,12 @@ export default function PublicProposalPage({
     // edit gets a 409 and a refetch instead of accepting prices they never saw.
     mutationFn: (selectedTier: string | null) => {
       if (!data) throw new Error("Proposal is still loading");
-      return publicProposalsApi.approve(
-        token,
-        data.proposal_version,
-        selectedTier,
-      );
+      return publicProposalsApi.approve(token, data.proposal_version, selectedTier);
     },
     onSuccess: (result) => {
       queryClient.setQueryData<PublicProposal | undefined>(
         queryKeys.publicProposals.byToken(token),
-        (prev) =>
-          prev
-            ? { ...prev, status: result.status, is_decided: true }
-            : prev,
+        (prev) => (prev ? { ...prev, status: result.status, is_decided: true } : prev),
       );
       // Accept = pay: when a deposit is owed, roll straight into Stripe so the
       // customer never has to hunt for a second button.
@@ -74,15 +65,11 @@ export default function PublicProposalPage({
   });
 
   const declineMutation = useMutation({
-    mutationFn: (reason?: string) =>
-      publicProposalsApi.decline(token, reason || undefined),
+    mutationFn: (reason?: string) => publicProposalsApi.decline(token, reason || undefined),
     onSuccess: (result) => {
       queryClient.setQueryData<PublicProposal | undefined>(
         queryKeys.publicProposals.byToken(token),
-        (prev) =>
-          prev
-            ? { ...prev, status: result.status, is_decided: true }
-            : prev,
+        (prev) => (prev ? { ...prev, status: result.status, is_decided: true } : prev),
       );
     },
   });
@@ -145,17 +132,14 @@ export default function PublicProposalPage({
   }
 
   if (error || !data) {
-    return (
-      <DeadPublicLink subject="proposal" />
-    );
+    return <DeadPublicLink subject="proposal" />;
   }
 
-  const busy =
-    approveMutation.isPending || declineMutation.isPending || payingDeposit;
+  const busy = approveMutation.isPending || declineMutation.isPending || payingDeposit;
   const justApproved = approveMutation.isSuccess || data.status === "approved";
   const justDeclined = declineMutation.isSuccess || data.status === "declined";
   const actionError = approveMutation.isError || declineMutation.isError;
-  // Builder proposals (landscape, permanent, bistro, christmas) render the
+  // Rich proposals (landscape, permanent, bistro, christmas) render the
   // multi-tier presentation; plain line-item quotes render the itemized quote.
   // Both share the dark/gold client theme so every recipient sees one brand.
   const proposalDocument = parseProposalDocument(data.proposal_document);

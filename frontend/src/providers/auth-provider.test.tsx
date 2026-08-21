@@ -6,15 +6,25 @@ import { AuthProvider, safeRedirectPath, useAuth } from "@/providers/auth-provid
 
 // --- Hoisted mocks -------------------------------------------------------
 
-const { replaceMock, pathnameMock, loginApiMock, getCurrentUserMock, apiPostMock } = vi.hoisted(
-  () => ({
-    replaceMock: vi.fn(),
-    pathnameMock: vi.fn<() => string>(),
-    loginApiMock: vi.fn(),
-    getCurrentUserMock: vi.fn(),
-    apiPostMock: vi.fn(),
-  }),
-);
+const {
+  replaceMock,
+  pathnameMock,
+  loginApiMock,
+  getCurrentUserMock,
+  apiPostMock,
+  queryClientClearMock,
+} = vi.hoisted(() => ({
+  replaceMock: vi.fn(),
+  pathnameMock: vi.fn<() => string>(),
+  loginApiMock: vi.fn(),
+  getCurrentUserMock: vi.fn(),
+  apiPostMock: vi.fn(),
+  queryClientClearMock: vi.fn(),
+}));
+
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ clear: queryClientClearMock }),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: replaceMock, push: vi.fn() }),
@@ -65,6 +75,7 @@ beforeEach(() => {
   loginApiMock.mockReset().mockResolvedValue(undefined);
   getCurrentUserMock.mockReset();
   apiPostMock.mockReset().mockResolvedValue({});
+  queryClientClearMock.mockReset();
   setUrl("/");
 });
 
@@ -198,6 +209,7 @@ describe("AuthProvider redirects", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "logout" }));
 
+    expect(queryClientClearMock).toHaveBeenCalledTimes(1);
     expect(replaceMock).toHaveBeenCalledWith("/login");
   });
 
@@ -207,6 +219,7 @@ describe("AuthProvider redirects", () => {
     await waitFor(() => {
       expect(replaceMock).toHaveBeenCalledWith("/invite/tok123");
     });
+    expect(queryClientClearMock).toHaveBeenCalledTimes(1);
   });
 
   it("refuses an off-site ?redirect= after login", async () => {

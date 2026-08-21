@@ -67,7 +67,6 @@ Offer creation uses `/offers/new`; offer detail uses `/offers/{offer_id}`. Refer
 | --- | --- | --- |
 | Opportunities | `/opportunities` | Manage the pipeline board |
 | Quotes & Estimates | `/quotes` | Create, send, and track proposals |
-| Quote Builder | `/sales-wizard` | Guided quote-building workflow |
 | Landscape Lighting | `/landscape-lighting` | Manage synced customer lighting projects and designs |
 | Christmas Light Estimator | `/christmas-lights` | Build a seasonal lighting estimate |
 | Invoices | `/invoices` | Create, send, track, and manage invoices |
@@ -89,7 +88,7 @@ A landscape-lighting project uses `/landscape-lighting/{project_id}`. Quotes and
 
 | UI label | Route | Purpose |
 | --- | --- | --- |
-| Scorecard | `/scorecard` | AI receptionist demand and booking scorecard |
+| Scorecard | `/scorecard` | AI receptionist results and technician activity totals |
 | Reports | `/reports` | Workspace and campaign reporting |
 | Sales Performance | `/reports/sales` | Revenue, quote, close-rate, and attribution reporting |
 

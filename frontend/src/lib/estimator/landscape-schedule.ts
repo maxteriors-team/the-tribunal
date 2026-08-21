@@ -1,5 +1,4 @@
-import type { DesignerShot } from "@/components/estimator/proposal-host";
-import type { Product } from "@/lib/estimator/types";
+import type { DesignerShot, Product } from "@/lib/estimator/types";
 import type { CatalogItemResponse } from "@/types/sales-wizard";
 
 import { recountLandscapeFixtures } from "./landscape-sheets";

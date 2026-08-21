@@ -22,9 +22,8 @@
  *   comparison; "Client preview" renders the exact feet-free comparison the
  *   homeowner gets and "Save & share" mints a public link.
  * - Landscape fixtures resolve to real price-book items, so each one carries its
- *   SKU and bill-of-materials through to the quote and the technician's parts
- *   list. When the Quote Builder hosts this tool (the `proposal` prop) the
- *   counts flow straight into the wizard, which prices the tier server-side.
+ *   SKU and bill-of-materials through to saved project pricing and the technician's
+ *   parts list.
  *
  * Layout: tool/product palette (left), photo design stage (center), itemized
  * estimate + customer/share (right).
@@ -64,7 +63,6 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { Children, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
@@ -86,6 +84,7 @@ import { ContactCombobox } from "@/components/ui/contact-combobox";
 import { estimatorApi } from "@/lib/api/estimator";
 import { quotesApi } from "@/lib/api/quotes";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
+import { DEFAULT_WORKSPACE_BRAND_NAME } from "@/lib/brand";
 import { buildBistroCatalog, buildCatalog, indexProducts } from "@/lib/estimator/catalog";
 import { toEstimateCustomLines, type CustomLineDraft } from "@/lib/estimator/custom-lines";
 import {
@@ -155,6 +154,7 @@ import {
 import {
   beamAngleFor,
   type Design,
+  type DesignerShot,
   type LandscapeBomLineItem,
   type LandscapePaperSize,
   type LandscapePlanFit,
@@ -188,7 +188,6 @@ import {
 } from "./editor-store";
 import { EstimatePanel } from "./estimate-panel";
 import { LightCanvas } from "./light-canvas";
-import type { DesignerProposalHost, DesignerShot } from "./proposal-host";
 import { ServiceValueProps } from "./service-value-props";
 import { ToolPalette } from "./tool-palette";
 import "./estimator.css";
@@ -196,9 +195,8 @@ import "./estimator.css";
 type ViewMode = "rep" | "client";
 
 /**
- * How many photos one design session can carry. Every shot rides into the saved
- * proposal as its own full-size composite, so this is the cap that keeps a
- * snapshot row sane rather than a limit on how the rep works.
+ * How many photos one design session can carry. The cap keeps saved project
+ * records bounded while covering the usual front, side, and back elevations.
  */
 export const MAX_SHOTS = 6;
 
@@ -229,11 +227,7 @@ export interface LandscapeProjectPersistenceAdapter {
 interface LightDesignerProps {
   workspaceId: string;
   workspaceName?: string;
-  /**
-   * Set when the Quote Builder hosts the designer: the drawing is saved onto the
-   * in-progress proposal instead of shared as a standalone estimate.
-   */
-  proposal?: DesignerProposalHost;
+  workspaceLogoUrl?: string | null;
   /**
    * Locks the dedicated landscape-lighting section to its fixture catalog and
    * removes seasonal estimate controls that do not belong in that workflow.
@@ -342,6 +336,7 @@ function LandscapeSheetTitleBlock({
   calibrated,
   sheetNumber,
   workspaceName,
+  workspaceLogoUrl,
   projectName,
   contactName,
 }: {
@@ -349,20 +344,19 @@ function LandscapeSheetTitleBlock({
   calibrated: boolean;
   sheetNumber: number;
   workspaceName: string;
+  workspaceLogoUrl: string | null;
   projectName: string;
   contactName: string;
 }) {
   return (
     <aside className="ll-title-block" aria-label="Design sheet details">
       <div className="ll-title-brand">
-        <Image
-          src="/logo.png"
-          alt="Maxteriors Exterior Lighting"
-          width={180}
-          height={40}
-          sizes="180px"
-        />
-        <span className="sr-only">{workspaceName}</span>
+        {workspaceLogoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- workspace-configured logo URL
+          <img src={workspaceLogoUrl} alt={workspaceName} />
+        ) : (
+          <span>{workspaceName}</span>
+        )}
       </div>
       <dl>
         <div>
@@ -426,12 +420,14 @@ function LandscapeWelcome({
   onUpload,
   onDropFile,
   workspaceName,
+  workspaceLogoUrl,
   projectName,
   contactName,
 }: {
   onUpload: () => void;
   onDropFile: (file: File) => void;
   workspaceName: string;
+  workspaceLogoUrl: string | null;
   projectName: string;
   contactName: string;
 }) {
@@ -515,6 +511,7 @@ function LandscapeWelcome({
             calibrated={false}
             sheetNumber={1}
             workspaceName={workspaceName}
+            workspaceLogoUrl={workspaceLogoUrl}
             projectName={projectName}
             contactName={contactName}
           />
@@ -2102,14 +2099,13 @@ function LandscapeWorkspacePanel({
 
 export function LightDesigner({
   workspaceId,
-  workspaceName = "Maxteriors",
-  proposal,
+  workspaceName = DEFAULT_WORKSPACE_BRAND_NAME,
+  workspaceLogoUrl = null,
   focus = "all",
   landscapeProject,
 }: LightDesignerProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const projectImportRef = useRef<HTMLInputElement>(null);
-  const hosted = Boolean(proposal);
   const serverBacked = Boolean(landscapeProject);
   const projectInitialDraft = landscapeProject?.initialDraft;
   const projectResetKey = landscapeProject?.resetKey;
@@ -2123,10 +2119,14 @@ export function LightDesigner({
     projectInitialDraft?.activeWorkflowTab ?? "drawing",
   );
   const landscapeTab = landscapeProject?.activeWorkflowTab ?? localLandscapeTab;
-  const setLandscapeTab = (tab: LandscapeWorkspaceTab) => {
-    setLocalLandscapeTab(tab);
-    landscapeProject?.onActiveWorkflowTabChange?.(tab);
-  };
+  const onActiveWorkflowTabChange = landscapeProject?.onActiveWorkflowTabChange;
+  const setLandscapeTab = useCallback(
+    (tab: LandscapeWorkspaceTab) => {
+      setLocalLandscapeTab(tab);
+      onActiveWorkflowTabChange?.(tab);
+    },
+    [onActiveWorkflowTabChange],
+  );
   const [landscapeToolsOpen, setLandscapeToolsOpen] = useState(false);
   const [landscapeLegendOpen, setLandscapeLegendOpen] = useState(
     initialLandscapeSettings.legend.visible,
@@ -2328,7 +2328,7 @@ export function LightDesigner({
         setLandscapeHelpOpen((value) => !value);
     }
   };
-  const [draftReady, setDraftReady] = useState(!landscapeOnly || hosted || serverBacked);
+  const [draftReady, setDraftReady] = useState(!landscapeOnly || serverBacked);
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>("loading");
   const [autosavedAt, setAutosavedAt] = useState<string | null>(null);
   const [proposalPreviews, setProposalPreviews] = useState<Record<string, string>>({});
@@ -2355,15 +2355,13 @@ export function LightDesigner({
   // shot's drawing lives in the editor reducer (that's what the canvas, palette
   // and undo stack act on); the others hold theirs here until they're switched
   // back to. `liveShots` below is the one place both halves are read together.
-  const [shots, setShots] = useState<DesignerShot[]>(
-    () => proposal?.initial?.shots ?? projectInitialDraft?.shots ?? [],
-  );
+  const [shots, setShots] = useState<DesignerShot[]>(() => projectInitialDraft?.shots ?? []);
   const [activeShotId, setActiveShotId] = useState<string | null>(
-    () => proposal?.initial?.shots?.[0]?.id ?? projectInitialDraft?.activeShotId ?? null,
+    () => projectInitialDraft?.activeShotId ?? null,
   );
   const [state, dispatch] = useReducer(editorReducer, undefined, () => {
     const base = initialEditorState();
-    const first = proposal?.initial?.shots?.[0] ?? projectInitialDraft?.shots[0];
+    const first = projectInitialDraft?.shots[0];
     return {
       ...base,
       design: first?.design ?? base.design,
@@ -2456,9 +2454,7 @@ export function LightDesigner({
   const [viewMode, setViewMode] = useState<ViewMode>("rep");
   // Which services this design covers. Multi-select in the shared designer; the
   // dedicated landscape builder deliberately fixes this to landscape fixtures.
-  const [services, setServices] = useState<ServiceKey[]>(() =>
-    landscapeOnly ? ["landscape"] : (proposal?.initial?.services ?? ["landscape"]),
-  );
+  const [services, setServices] = useState<ServiceKey[]>(["landscape"]);
   const sells = useCallback((key: ServiceKey) => services.includes(key), [services]);
   const toggleService = (key: ServiceKey) => {
     if (landscapeOnly) return;
@@ -2474,10 +2470,10 @@ export function LightDesigner({
     });
   };
 
-  // The standalone builder restores the latest workspace draft from IndexedDB.
-  // Quote-hosted and server-project sessions keep their host as the source of truth.
+  // Browser-only landscape sessions restore the latest workspace draft from IndexedDB.
+  // Server projects keep their project record as the source of truth.
   useEffect(() => {
-    if (!landscapeOnly || hosted || serverBacked) return;
+    if (!landscapeOnly || serverBacked) return;
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
@@ -2540,12 +2536,12 @@ export function LightDesigner({
     return () => {
       cancelled = true;
     };
-  }, [hosted, landscapeOnly, serverBacked, workspaceId]);
+  }, [landscapeOnly, serverBacked, setLandscapeTab, workspaceId]);
 
   // Save every drawing mutation after a short quiet period. IndexedDB is used
   // because full-resolution property photos regularly exceed localStorage limits.
   useEffect(() => {
-    if (!landscapeOnly || hosted || serverBacked || !draftReady) return;
+    if (!landscapeOnly || serverBacked || !draftReady) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       setAutosaveStatus("saving");
@@ -2575,7 +2571,6 @@ export function LightDesigner({
   }, [
     activeShot?.id,
     draftReady,
-    hosted,
     landscapeLiveState,
     landscapeOnly,
     liveShots,
@@ -2735,15 +2730,6 @@ export function LightDesigner({
   // with a link into Quotes). Cleared whenever the priced inputs change.
   const [quoteResult, setQuoteResult] = useState<{ number: string } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
-  const [savingProposal, setSavingProposal] = useState(false);
-  // What was last written onto the proposal, kept with the exact drawings it was
-  // rendered from: the confirmation then falls away on the next stroke instead
-  // of vouching for stale images.
-  const [saved, setSaved] = useState<{
-    at: string;
-    shots: DesignerShot[];
-  } | null>(null);
-  const [saveError, setSaveError] = useState(false);
 
   // ---- Catalog (drawable palette) ---------------------------------------
   // Independent of the current design, so products are available the moment a
@@ -2772,9 +2758,8 @@ export function LightDesigner({
     staleTime: 5 * 60_000,
   });
 
-  // Which package the fixture types resolve against. The dedicated workspace
-  // keeps its Good/Better/Best choice with the project, while the embedded
-  // quote builder continues to own its selected tier.
+  // Which package the fixture types resolve against. Dedicated landscape projects
+  // keep their Good/Better/Best choice with the saved project.
   const configuredTierKeys = pricing?.tier_order?.length
     ? pricing.tier_order
     : (pricing?.tiers ?? []).map((tier) => tier.key);
@@ -2785,9 +2770,7 @@ export function LightDesigner({
     const tier = (pricing?.tiers ?? []).find((candidate) => candidate.key === key);
     return tier ? [tier] : [];
   });
-  const tierKey =
-    proposal?.tierKey ??
-    (landscapeOnly ? effectiveLandscapeTierKey : (configuredTierKeys[0] ?? null));
+  const tierKey = landscapeOnly ? effectiveLandscapeTierKey : (configuredTierKeys[0] ?? null);
   const tierLabel =
     (pricing?.tiers ?? []).find((t) => t.key === tierKey)?.tab ??
     (pricing?.tiers ?? []).find((t) => t.key === tierKey)?.label ??
@@ -2853,12 +2836,10 @@ export function LightDesigner({
       : null;
   /** Anything drawn on the photo that's on screen (gates the AI render). */
   const activeDesignHas = hasDesign(design);
-  /** Anything drawn anywhere (gates the save — every drawn shot goes across). */
-  const designHas = liveShots.some((shot) => hasDesign(shot.design));
   const { calibrated } = designScale(design, photo?.width ?? 0);
 
   // Placed fixtures, resolved through the current package into the product the
-  // crew will actually pull. Counts only — the wizard prices them server-side.
+  // crew will actually pull. Counts only — the estimate is priced server-side.
   const fixtureLines = useMemo(
     () =>
       FIXTURE_TYPES.map((spec) => {
@@ -3230,7 +3211,7 @@ export function LightDesigner({
   );
 
   // Holiday pricing only: a landscape-only design has nothing for the roofline
-  // comparison endpoint to price, and the Quote Builder owns landscape money. A
+  // comparison endpoint to price; saved landscape projects own that pricing. A
   // standalone line item is priced on its own, with or without a drawing — that
   // is the point of it — so it counts as something to price, share, and quote.
   const hasHolidayDesign =
@@ -3325,7 +3306,6 @@ export function LightDesigner({
     if (!target) return;
     const next = commitActive(shots);
     setShots(next);
-    proposal?.onShotsChange(next);
     openShot(next.find((shot) => shot.id === id) ?? target);
   };
 
@@ -3336,7 +3316,6 @@ export function LightDesigner({
     // photo they aren't on, the one they were drawing must not lose its work.
     const next = commitActive(shots).filter((shot) => shot.id !== id);
     setShots(next);
-    proposal?.onShotsChange(next);
     if (id !== activeShot?.id) return;
     const fallback = next[index] ?? next[index - 1] ?? null;
     if (fallback) {
@@ -3363,7 +3342,6 @@ export function LightDesigner({
       ...committed.slice(sourceIndex + 1),
     ];
     setShots(next);
-    proposal?.onShotsChange(next);
     openShot(duplicate);
   };
 
@@ -3384,7 +3362,6 @@ export function LightDesigner({
       };
       const next = [...commitActive(shots), shot];
       setShots(next);
-      proposal?.onShotsChange(next);
       openShot(shot);
       // Only the first base image starts the estimate over. Later aerials/photos
       // are more of the same job, so estimate inputs stay in place.
@@ -3405,50 +3382,6 @@ export function LightDesigner({
     const file = ev.target.files?.[0];
     ev.target.value = "";
     if (file) await addPhotoFile(file);
-  };
-
-  // ---- Save onto the proposal (Quote Builder host) -----------------------
-  // Every drawn sheet is composited and sent together, so the proposal shows the
-  // whole job. Blank sheets are omitted rather than sent as unmarked base imagery.
-  const saveToProposal = async () => {
-    if (!proposal || savingProposal) return;
-    const drawn = liveShots.filter((shot) => hasDesign(shot.design));
-    if (!drawn.length) return;
-    setSavingProposal(true);
-    setSaveError(false);
-    // Park the active shot's drawing in the list (and in the host) before the
-    // await: what's saved to the proposal is what re-opens in the designer.
-    setShots(liveShots);
-    proposal.onShotsChange(liveShots);
-    try {
-      const rendered = await Promise.all(
-        drawn.map(async (shot) => ({
-          image: await exportDesignJpeg(shot.photo, shot.design, productById, {
-            dusk: shot.dusk,
-          }),
-          design: shot.design,
-          dusk: shot.dusk,
-        })),
-      );
-      proposal.onSave({
-        shots: rendered,
-        services,
-        fixtures: inputs.fixtures as Partial<Record<FixtureType, number>>,
-        rooflineFeet: feet,
-        bistroFeet: inputs.bistro_feet,
-      });
-      setSaved({
-        at: new Date().toLocaleTimeString([], {
-          hour: "numeric",
-          minute: "2-digit",
-        }),
-        shots: drawn,
-      });
-    } catch {
-      setSaveError(true);
-    } finally {
-      setSavingProposal(false);
-    }
   };
 
   // ---- Save / share / email ---------------------------------------------
@@ -3598,21 +3531,6 @@ export function LightDesigner({
     if (shareUrl) void navigator.clipboard?.writeText(shareUrl);
   };
 
-  // Derived, not stored: drawings are replaced immutably on every edit, so a
-  // reference match across the drawn shots means the saved composites still show
-  // what's on the photos. Adding or removing a shot invalidates it too.
-  const drawnShots = liveShots.filter((shot) => hasDesign(shot.design));
-  const savedAt =
-    saved &&
-    saved.shots.length === drawnShots.length &&
-    saved.shots.every(
-      (shot, i) =>
-        shot.id === drawnShots[i]?.id &&
-        shot.design === drawnShots[i]?.design &&
-        shot.dusk === drawnShots[i]?.dusk,
-    )
-      ? saved.at
-      : null;
   const autosaveLabel =
     autosaveStatus === "loading"
       ? "Restoring draft…"
@@ -3740,7 +3658,7 @@ export function LightDesigner({
             <div className="cmp-brand">Light Designer</div>
           )}
           <div className="est-topbar-actions">
-            {landscapeOnly && !hosted ? (
+            {landscapeOnly ? (
               <div
                 className={`ll-autosave-status ${autosaveStatus}`}
                 role="status"
@@ -3796,7 +3714,7 @@ export function LightDesigner({
                 ))}
               </div>
             ) : null}
-            {photo && !hosted && !landscapeOnly ? (
+            {photo && !landscapeOnly ? (
               <div className="est-mode-toggle" role="group" aria-label="View mode">
                 <button
                   type="button"
@@ -3834,7 +3752,7 @@ export function LightDesigner({
                 AI render
               </button>
             ) : null}
-            {landscapeOnly && !hosted ? (
+            {landscapeOnly ? (
               <button
                 className="est-btn primary"
                 type="button"
@@ -3843,42 +3761,6 @@ export function LightDesigner({
               >
                 Quote
               </button>
-            ) : null}
-            {proposal ? (
-              <>
-                <button
-                  className="est-btn primary"
-                  type="button"
-                  disabled={!designHas || savingProposal}
-                  title={
-                    designHas
-                      ? `Save ${drawnShots.length} design${drawnShots.length === 1 ? "" : "s"} onto the proposal`
-                      : landscapeOnly
-                        ? "Add an aerial plan and draw the design first"
-                        : "Add a photo and draw the design first"
-                  }
-                  onClick={() => void saveToProposal()}
-                >
-                  {savingProposal
-                    ? "Saving…"
-                    : drawnShots.length > 1
-                      ? `Save ${drawnShots.length} designs to proposal`
-                      : "Save to proposal"}
-                </button>
-                <button
-                  className="est-btn"
-                  type="button"
-                  // Hand the drawings over on the way out so stepping back to the
-                  // quote and returning resumes every photo mid-design, saved or
-                  // not — the editor unmounts, and the host is where they live.
-                  onClick={() => {
-                    proposal.onShotsChange(liveShots);
-                    proposal.onClose();
-                  }}
-                >
-                  Back to quote
-                </button>
-              </>
             ) : null}
           </div>
         </div>
@@ -4171,14 +4053,6 @@ export function LightDesigner({
             </div>
           ) : null}
 
-          {hosted && (savedAt || saveError) ? (
-            <div className={`est-hosted-status${saveError ? " error" : ""}`} role="status">
-              {saveError
-                ? "Couldn’t save the design — try again."
-                : `Saved ${drawnShots.length} design${drawnShots.length === 1 ? "" : "s"} to the proposal at ${savedAt}. ${drawnShots.length === 1 ? "It shows" : "They show"} on the presentation and the client’s page.`}
-            </div>
-          ) : null}
-
           {photo ? (
             <>
               {landscapeOnly ? (
@@ -4228,6 +4102,7 @@ export function LightDesigner({
                           ) + 1
                         }
                         workspaceName={workspaceName}
+                        workspaceLogoUrl={workspaceLogoUrl}
                         projectName={landscapeProjectName}
                         contactName={landscapeContactName}
                       />
@@ -4299,18 +4174,12 @@ export function LightDesigner({
                           </p>
                         ) : null}
                         <p className="ep-pkg-hint">
-                          {hosted
-                            ? `Priced as ${tierLabel}. Saving pushes these counts into the quote, where the server prices them and expands each fixture’s parts list for the crew.`
-                            : `Showing ${tierLabel} products. Landscape fixtures are priced in the Quote Builder, which expands each fixture’s parts list for the crew.`}
+                          Showing {tierLabel} products. Saved Landscape Lighting projects price
+                          fixtures server-side and expand each fixture&rsquo;s parts list.
                         </p>
-                        {!hosted ? (
-                          <Link
-                            className="est-btn est-save-btn"
-                            href="/sales-wizard?service=landscape"
-                          >
-                            Price these in Quote Builder
-                          </Link>
-                        ) : null}
+                        <Link className="est-btn est-save-btn" href="/landscape-lighting">
+                          Open Landscape Lighting
+                        </Link>
                       </div>
                     ) : null}
 
@@ -4326,11 +4195,10 @@ export function LightDesigner({
                         customLines={customLines}
                         onChangeCustomLines={setCustomLines}
                         sides={sides}
-                        allowCustomLines={!hosted}
                       />
                     ) : null}
 
-                    {!hosted && !landscapeOnly ? (
+                    {!landscapeOnly ? (
                       <>
                         <div className="est-options">
                           <label className="est-opt-check">
@@ -4585,7 +4453,7 @@ export function LightDesigner({
                 </div>
               )}
 
-              {viewMode === "client" && !hosted ? (
+              {viewMode === "client" ? (
                 // The client theme follows what's being sold: a Christmas quote gets
                 // the holiday palette, a landscape quote stays brass-on-black. The
                 // preview mirrors whatever the homeowner will actually see.
@@ -4610,6 +4478,7 @@ export function LightDesigner({
             draftReady ? (
               <LandscapeWelcome
                 workspaceName={workspaceName}
+                workspaceLogoUrl={workspaceLogoUrl}
                 projectName={landscapeProjectName}
                 contactName={landscapeContactName}
                 onUpload={() => fileRef.current?.click()}

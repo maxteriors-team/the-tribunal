@@ -3,10 +3,9 @@
 /**
  * Client-facing plain line-item quote (dark/gold premium presentation).
  *
- * Renders quotes that have no sales-wizard snapshot (`proposal_document` is
- * null) in the same luxury theme as `ClientProposalView`, so every recipient —
- * builder proposal or simple itemized quote — gets one consistent brand
- * experience. Shares `proposal-theme.css` tokens, fonts, and the Approve /
+ * Renders quotes whose `proposal_document` is null in the same luxury theme as
+ * `ClientProposalView`, so every recipient — rich proposal or simple itemized
+ * quote — gets one consistent brand experience. Shares `proposal-theme.css`
  * Decline CTA pattern; only the itemized table + totals are bespoke.
  */
 import { useState } from "react";
@@ -64,15 +63,9 @@ export function PlainQuoteView({
   return (
     <div className={`proposal-view ${proposalFontVars}`}>
       <div className="present-nav no-print">
-        <div className="present-nav-brand">
-          {`${brandName} \u00b7 Proposal ${data.number}`}
-        </div>
+        <div className="present-nav-brand">{`${brandName} \u00b7 Proposal ${data.number}`}</div>
         <div className="present-nav-actions">
-          <button
-            type="button"
-            className="send-email-nav-btn"
-            onClick={() => window.print()}
-          >
+          <button type="button" className="send-email-nav-btn" onClick={() => window.print()}>
             &#9113; Save as PDF
           </button>
         </div>
@@ -80,9 +73,7 @@ export function PlainQuoteView({
 
       <div className="present-body">
         {justApproved ? (
-          <div className="pp-banner ok">
-            &#10003;&nbsp; You approved this proposal. Thank you!
-          </div>
+          <div className="pp-banner ok">&#10003;&nbsp; You approved this proposal. Thank you!</div>
         ) : justDeclined ? (
           <div className="pp-banner no">
             You declined this proposal. Thanks for letting us know.
@@ -145,13 +136,9 @@ export function PlainQuoteView({
                     {formatCurrency(item.unit_price, currency)}
                   </td>
                   <td className="pq-num pq-col-detail muted">
-                    {item.discount
-                      ? `\u2212${formatCurrency(item.discount, currency)}`
-                      : "\u2014"}
+                    {item.discount ? `\u2212${formatCurrency(item.discount, currency)}` : "\u2014"}
                   </td>
-                  <td className="pq-amount">
-                    {formatCurrency(item.total, currency)}
-                  </td>
+                  <td className="pq-amount">{formatCurrency(item.total, currency)}</td>
                 </tr>
               ))}
             </tbody>
@@ -210,13 +197,9 @@ export function PlainQuoteView({
         <div className="cta-section no-print">
           {decided ? (
             <>
-              <div className="cta-eyebrow">
-                {approved ? "Approved" : "Response Recorded"}
-              </div>
+              <div className="cta-eyebrow">{approved ? "Approved" : "Response Recorded"}</div>
               <div className="cta-heading">
-                {approved
-                  ? "Thank you."
-                  : "Thanks for letting us know."}
+                {approved ? "Thank you." : "Thanks for letting us know."}
               </div>
               <div className="cta-sub">
                 {contactLine
@@ -296,9 +279,7 @@ export function PlainQuoteView({
             </>
           )}
           {actionError ? (
-            <div className="pp-error">
-              Something went wrong. Please refresh and try again.
-            </div>
+            <div className="pp-error">Something went wrong. Please refresh and try again.</div>
           ) : null}
         </div>
 
@@ -313,9 +294,7 @@ export function PlainQuoteView({
           ) : null}
         </div>
         {branding.footer ? (
-          <div className="pp-footer-note">
-            {renderTextWithLinks(branding.footer)}
-          </div>
+          <div className="pp-footer-note">{renderTextWithLinks(branding.footer)}</div>
         ) : null}
       </div>
     </div>

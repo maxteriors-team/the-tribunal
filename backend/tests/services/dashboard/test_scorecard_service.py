@@ -5,14 +5,19 @@ fabricated rows, so the metric maths is covered without a database.
 """
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
 from zoneinfo import ZoneInfo
 
+from app.models.attendance import ATTENDANCE_STATUS_COMPLETE
+from app.models.field_service import Technician
+from app.models.workspace import Workspace
 from app.services.dashboard.scorecard_service import (
     AppointmentRow,
     CallRow,
     InboundReplyRow,
     LeadRow,
+    ScorecardService,
     TextbackRow,
     aggregate_scorecard,
     resolve_range,
@@ -279,3 +284,124 @@ def test_resolve_range_uses_now_when_no_today() -> None:
     start, end = resolve_range(None, None)
     assert end <= datetime.now(UTC).date()
     assert start <= end
+
+
+def _mock_result(
+    *,
+    scalars: list[object] | None = None,
+    rows: list[tuple[object, ...]] | None = None,
+) -> MagicMock:
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = scalars or []
+    result.all.return_value = rows or []
+    return result
+
+
+async def test_technician_activity_returns_scoped_unranked_context() -> None:
+    workspace_id = uuid.uuid4()
+    workspace = Workspace(
+        id=workspace_id,
+        name="Test workspace",
+        slug="test-workspace",
+        settings={"timezone": "UTC"},
+    )
+    alex = Technician(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        user_id=101,
+        name="Alex Tech",
+        is_active=True,
+    )
+    blair = Technician(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        name="Blair Tech",
+        is_active=False,
+    )
+    job_one = uuid.uuid4()
+    job_two = uuid.uuid4()
+    crew_job = uuid.uuid4()
+    entry_start = datetime(2026, 1, 10, 9, 0, tzinfo=UTC)
+
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _mock_result(scalars=[alex, blair]),
+        _mock_result(rows=[(alex.id, job_one), (alex.id, job_two)]),
+        # job_one is also crew-routed and must still count only once.
+        _mock_result(rows=[(alex.id, job_one), (blair.id, crew_job)]),
+        _mock_result(
+            rows=[
+                (alex.id, entry_start, entry_start + timedelta(hours=1)),
+                (alex.id, entry_start, entry_start + timedelta(minutes=30)),
+                # A malformed negative interval is completed context but adds no time.
+                (blair.id, entry_start, entry_start - timedelta(minutes=5)),
+            ]
+        ),
+        _mock_result(
+            rows=[
+                (101, entry_start, entry_start + timedelta(hours=8), 3_600),
+                (101, entry_start, entry_start - timedelta(minutes=1), 120),
+            ]
+        ),
+    ]
+
+    rows = await ScorecardService(db).get_technician_activity(
+        workspace,
+        date(2026, 1, 1),
+        date(2026, 1, 31),
+    )
+
+    assert [row.name for row in rows] == ["Alex Tech", "Blair Tech"]
+    assert rows[0].model_dump() == {
+        "id": alex.id,
+        "name": "Alex Tech",
+        "active": True,
+        "assigned_jobs": 2,
+        "completed_job_time_entries": 2,
+        "job_logged_seconds": 5_400,
+        "attendance_worked_seconds": 25_200,
+        "attendance_paused_seconds": 3_600,
+    }
+    assert rows[1].model_dump() == {
+        "id": blair.id,
+        "name": "Blair Tech",
+        "active": False,
+        "assigned_jobs": 1,
+        "completed_job_time_entries": 1,
+        "job_logged_seconds": 0,
+        "attendance_worked_seconds": 0,
+        "attendance_paused_seconds": 0,
+    }
+
+    # Every source query carries the workspace boundary; no cross-workspace rows
+    # can enter through unscoped assignments, time entries, or attendance.
+    statements = [call.args[0] for call in db.execute.await_args_list]
+    assert len(statements) == 5
+    for statement in statements:
+        assert workspace_id in statement.compile().params.values()
+
+    attendance_statement = statements[-1]
+    attendance_params = attendance_statement.compile().params.values()
+    assert ATTENDANCE_STATUS_COMPLETE in attendance_params
+    attendance_sql = str(attendance_statement)
+    assert "attendance_entries.ended_at IS NOT NULL" in attendance_sql
+
+
+async def test_technician_activity_keeps_empty_roster_to_one_query() -> None:
+    workspace = Workspace(
+        id=uuid.uuid4(),
+        name="Empty workspace",
+        slug="empty-workspace",
+        settings={"timezone": "UTC"},
+    )
+    db = AsyncMock()
+    db.execute.return_value = _mock_result(scalars=[])
+
+    rows = await ScorecardService(db).get_technician_activity(
+        workspace,
+        date(2026, 1, 1),
+        date(2026, 1, 31),
+    )
+
+    assert rows == []
+    db.execute.assert_awaited_once()

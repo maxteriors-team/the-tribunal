@@ -96,7 +96,7 @@ export interface Quote {
    * a list row uses `is_wizard_quote` instead of carrying this large document.
    */
   proposal_document?: Record<string, unknown> | null;
-  /** Exact validated builder input; authenticated detail responses only. */
+  /** Exact validated proposal input; authenticated detail responses only. */
   proposal_input?: components["schemas"]["ProposalWizardPayload"] | null;
   proposal_input_version?: number | null;
 }
@@ -105,7 +105,7 @@ export interface Quote {
  * A service an operator added to an existing quote.
  *
  * Server-projected into one shape from whichever place the quote stores its
- * money — a `proposal_document` add-on charge on a sales-wizard quote, a line
+ * money — a `proposal_document` add-on charge on a proposal-backed quote, a line
  * item on a plain one — so nothing here has to know which. `id` is whatever
  * `quotesApi.removeService` needs in order to take it off again.
  */

@@ -45,6 +45,7 @@ _MANAGER_CAPABILITIES = frozenset(
         Capability.PIPELINE_WRITE,
         Capability.JOBS_READ,
         Capability.JOBS_WRITE,
+        Capability.ATTENDANCE_USE,
         Capability.COMMS_SEND,
         Capability.BILLING_READ,
         Capability.BILLING_WRITE,
@@ -64,6 +65,7 @@ ROLE_CAPABILITY_MATRIX: dict[str, frozenset[Capability]] = {
             Capability.CRM_READ,
             Capability.PIPELINE_WRITE_OWN,
             Capability.JOBS_READ,
+            Capability.ATTENDANCE_USE,
             Capability.COMMS_SEND,
             Capability.OUTREACH_WRITE,
             Capability.UPSELL_SELL,
@@ -74,13 +76,16 @@ ROLE_CAPABILITY_MATRIX: dict[str, frozenset[Capability]] = {
         {
             Capability.CRM_READ,
             Capability.JOBS_READ,
+            Capability.ATTENDANCE_USE,
             Capability.COMMS_SEND,
             Capability.UPSELL_SELL,
             Capability.UPSELL_SELL_UNCAPPED,
         }
     ),
-    "lead_technician": frozenset({Capability.JOBS_READ, Capability.UPSELL_SELL}),
-    "technician": frozenset({Capability.JOBS_READ}),
+    "lead_technician": frozenset(
+        {Capability.JOBS_READ, Capability.ATTENDANCE_USE, Capability.UPSELL_SELL}
+    ),
+    "technician": frozenset({Capability.JOBS_READ, Capability.ATTENDANCE_USE}),
 }
 
 
@@ -121,6 +126,12 @@ def test_admin_has_every_capability() -> None:
     assert capabilities_for("owner") == frozenset(Capability)
 
 
+def test_attendance_use_is_universal_and_manage_is_admin_only() -> None:
+    for role in ALL_ROLES:
+        assert role_can(role, Capability.ATTENDANCE_USE), role
+        assert role_can(role, Capability.ATTENDANCE_MANAGE) is (role in {"owner", "admin"})
+
+
 def test_capabilities_are_graded_admin_superset_of_all() -> None:
     admin = capabilities_for("admin")
     manager = capabilities_for("manager")
@@ -141,6 +152,7 @@ def test_manager_runs_operations_but_not_reports_or_members() -> None:
         Capability.PIPELINE_WRITE_OWN,
         Capability.JOBS_READ,
         Capability.JOBS_WRITE,
+        Capability.ATTENDANCE_USE,
         Capability.COMMS_SEND,
         Capability.BILLING_READ,
         Capability.BILLING_WRITE,
@@ -165,6 +177,7 @@ def test_sales_owns_pipeline_and_authors_outreach() -> None:
             Capability.OUTREACH_WRITE,
             Capability.PIPELINE_WRITE_OWN,
             Capability.JOBS_READ,
+            Capability.ATTENDANCE_USE,
             Capability.COMMS_SEND,
             Capability.UPSELL_SELL,
             Capability.UPSELL_SELL_UNCAPPED,
@@ -207,6 +220,7 @@ def test_member_is_read_plus_messaging_only() -> None:
         {
             Capability.CRM_READ,
             Capability.JOBS_READ,
+            Capability.ATTENDANCE_USE,
             Capability.COMMS_SEND,
             Capability.UPSELL_SELL,
             Capability.UPSELL_SELL_UNCAPPED,
@@ -215,9 +229,11 @@ def test_member_is_read_plus_messaging_only() -> None:
 
 
 def test_field_technician_is_operational_only() -> None:
-    # A field technician sees the jobs schedule and nothing else — no CRM,
-    # pipeline, campaigns, billing/pricing, comms, reports, and no selling.
-    assert capabilities_for("technician") == frozenset({Capability.JOBS_READ})
+    # A field technician sees jobs and their own attendance clock — no CRM,
+    # pipeline, campaigns, billing/pricing, comms, reports, or selling.
+    assert capabilities_for("technician") == frozenset(
+        {Capability.JOBS_READ, Capability.ATTENDANCE_USE}
+    )
     for denied in (
         Capability.CRM_READ,
         Capability.CRM_WRITE,
@@ -290,10 +306,12 @@ class TestUpsellSell:
                 continue
             assert role_can(role, Capability.UPSELL_SELL), role
 
-    def test_field_tier_is_exactly_jobs_read(self) -> None:
-        # Field is the floor of the matrix: anything added here is granted to
-        # every other tier, so it stays deliberately empty of selling power.
-        assert capabilities_for("technician") == frozenset({Capability.JOBS_READ})
+    def test_field_tier_is_exactly_jobs_and_own_attendance(self) -> None:
+        # Field is the floor of the matrix: every other tier inherits these
+        # operational capabilities, while selling power remains excluded.
+        assert capabilities_for("technician") == frozenset(
+            {Capability.JOBS_READ, Capability.ATTENDANCE_USE}
+        )
 
     def test_upsell_does_not_smuggle_in_crm_billing_or_comms(self) -> None:
         # Regression guard for the tempting shortcut of "just give the seller
@@ -330,6 +348,7 @@ class TestLeadTechnician:
         assert capabilities_for("lead_technician") == frozenset(
             {
                 Capability.JOBS_READ,
+                Capability.ATTENDANCE_USE,
                 Capability.UPSELL_SELL,
             }
         )

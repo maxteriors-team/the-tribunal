@@ -165,13 +165,19 @@ class DashboardService:
         today = now.astimezone(zone).date()
         today_start = _local_midnight_utc(today, zone)
         yesterday_start = _local_midnight_utc(today - timedelta(days=1), zone)
+        day_ago = now - timedelta(hours=24)
         week_ago = now - timedelta(days=7)
         two_weeks_ago = now - timedelta(days=14)
 
-        total_contacts_result = await self.db.execute(
-            select(func.count()).select_from(Contact).where(Contact.workspace_id == workspace.id)
+        contacts_result = await self.db.execute(
+            select(
+                func.count(),
+                func.count().filter(Contact.created_at >= day_ago),
+            )
+            .select_from(Contact)
+            .where(Contact.workspace_id == workspace.id)
         )
-        total_contacts = total_contacts_result.scalar() or 0
+        total_contacts, leads_last_24_hours = contacts_result.one()
 
         contacts_last_week_result = await self.db.execute(
             select(func.count())
@@ -292,6 +298,7 @@ class DashboardService:
         messages_last_week = messages_last_week_result.scalar() or 0
 
         return DashboardStats(
+            leads_last_24_hours=leads_last_24_hours,
             total_contacts=total_contacts,
             active_campaigns=active_campaigns,
             calls_today=calls_today,

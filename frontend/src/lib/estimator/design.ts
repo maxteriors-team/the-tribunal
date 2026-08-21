@@ -12,9 +12,8 @@
  * - A placed `christmas` `each` item (tree, bush, wreath) →
  *   `christmas_items[category][option]` as a +1 count.
  * - A placed `landscape` fixture → a +1 count for that fixture *type*. The
- *   chosen package resolves the type to a real price-book product, so the
- *   Quote Builder can set that product's quantity and price it server-side.
- * - A `bistro` run → linear feet for the wizard's string-lighting add-on.
+ *   chosen package resolves the type to a real price-book product for server pricing.
+ * - A `bistro` run → linear feet for the string-lighting add-on.
  *
  * Scale comes from the design's calibration line; uncalibrated photos fall back
  * to an assumed width so a rep still gets a ballpark before setting the scale.
@@ -46,11 +45,7 @@ export function designScale(design: Design, photoWidth: number): DesignScale {
   }
   const ftPerPx = photoWidth > 0 ? ASSUMED_PHOTO_WIDTH_FT / photoWidth : 0;
   const pxPerFt =
-    ftPerPx > 0
-      ? 1 / ftPerPx
-      : photoWidth > 0
-        ? photoWidth / ASSUMED_PHOTO_WIDTH_FT
-        : 1;
+    ftPerPx > 0 ? 1 / ftPerPx : photoWidth > 0 ? photoWidth / ASSUMED_PHOTO_WIDTH_FT : 1;
   return { ftPerPx, pxPerFt, calibrated: false };
 }
 
@@ -139,9 +134,7 @@ export function designToEstimateInputs(
  * before it gets here, so the totals are a straight sum — the only shared unit
  * is feet/counts, never pixels.
  */
-export function sumEstimateInputs(
-  parts: DesignEstimateInputs[],
-): DesignEstimateInputs {
+export function sumEstimateInputs(parts: DesignEstimateInputs[]): DesignEstimateInputs {
   const total: DesignEstimateInputs = {
     feet: 0,
     christmas_items: {},

@@ -23,7 +23,6 @@ const AUDITED_ROUTES = [
   "/scorecard",
   "/referral-partners",
   "/service-plans",
-  "/sales-wizard",
   "/settings?tab=profile",
   "/settings?tab=proposals",
   "/settings?tab=pricing",

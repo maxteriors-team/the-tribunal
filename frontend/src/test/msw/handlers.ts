@@ -61,6 +61,7 @@ export const stubAgentsList: AgentsListResponse = {
 
 export const stubDashboard: DashboardResponse = {
   stats: {
+    leads_last_24_hours: 0,
     total_contacts: 0,
     active_campaigns: 0,
     calls_today: 0,

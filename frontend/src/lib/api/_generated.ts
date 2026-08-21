@@ -2645,6 +2645,190 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/attendance/clock-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clock In
+         * @description Start the caller's UTC server clock; request_id retries return the same entry.
+         */
+        post: operations["clock_in_api_v1_workspaces__workspace_id__attendance_clock_in_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/attendance/clock-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clock Out
+         * @description Stop the caller's UTC server clock; request_id retries return the same entry.
+         */
+        post: operations["clock_out_api_v1_workspaces__workspace_id__attendance_clock_out_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/attendance/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Entries
+         * @description List all workspace entries, optionally restricted to one active member.
+         */
+        get: operations["list_entries_api_v1_workspaces__workspace_id__attendance_entries_get"];
+        put?: never;
+        /**
+         * Create Manual Entry
+         * @description Create a completed manual interval for an active workspace member.
+         */
+        post: operations["create_manual_entry_api_v1_workspaces__workspace_id__attendance_entries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/attendance/entries/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Entry
+         * @description Correct timestamps or an encrypted note, recording the mandatory reason.
+         */
+        patch: operations["update_entry_api_v1_workspaces__workspace_id__attendance_entries__entry_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/attendance/entries/{entry_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void Entry
+         * @description Void an interval without deleting it, recording the mandatory reason.
+         */
+        post: operations["void_entry_api_v1_workspaces__workspace_id__attendance_entries__entry_id__void_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/attendance/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Attendance
+         * @description Export completed raw hours and persist only audit metadata, never CSV content.
+         */
+        post: operations["export_attendance_api_v1_workspaces__workspace_id__attendance_exports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/attendance/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Attendance
+         * @description Return the caller's entries and current clock state for a local date range.
+         */
+        get: operations["get_my_attendance_api_v1_workspaces__workspace_id__attendance_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/attendance/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause Shift
+         * @description Pause the caller's active shift without ending it.
+         */
+        post: operations["pause_shift_api_v1_workspaces__workspace_id__attendance_pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/attendance/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Shift
+         * @description Resume the caller's paused active shift.
+         */
+        post: operations["resume_shift_api_v1_workspaces__workspace_id__attendance_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/automations": {
         parameters: {
             query?: never;
@@ -9192,6 +9376,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/scorecard/technicians": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Technician Activity Scorecard
+         * @description Return activity context for each workspace technician over the date range.
+         */
+        get: operations["get_technician_activity_scorecard_api_v1_workspaces__workspace_id__scorecard_technicians_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/scraping/import": {
         parameters: {
             query?: never;
@@ -12280,6 +12484,188 @@ export interface components {
             require_dismissal_reason: boolean;
             /** Suggested Categories */
             suggested_categories: string[];
+        };
+        /** AttendanceAdminReportResponse */
+        AttendanceAdminReportResponse: {
+            /** Employee Count */
+            employee_count: number;
+            /** Entries */
+            entries: components["schemas"]["AttendanceEntryResponse"][];
+            /** Open Count */
+            open_count: number;
+            /** Timezone */
+            timezone: string;
+            /** Total Seconds */
+            total_seconds: number;
+        };
+        /** AttendanceClockInRequest */
+        AttendanceClockInRequest: {
+            /** Note */
+            note?: string | null;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** AttendanceClockOutRequest */
+        AttendanceClockOutRequest: {
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** AttendanceEntryResponse */
+        AttendanceEntryResponse: {
+            /**
+             * Calculated At
+             * Format: date-time
+             */
+            calculated_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Duration Hours */
+            duration_hours: number;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Employee Email */
+            employee_email: string;
+            /** Employee Name */
+            employee_name: string;
+            /** Ended At */
+            ended_at: string | null;
+            /** Gross Duration Seconds */
+            gross_duration_seconds: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Paused */
+            is_paused: boolean;
+            /** Note */
+            note: string | null;
+            /** Pause Started At */
+            pause_started_at: string | null;
+            /** Paused Seconds */
+            paused_seconds: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "clock" | "manual" | "admin";
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "complete" | "void";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** User Id */
+            user_id: number;
+        };
+        /** AttendanceEntryUpdateRequest */
+        AttendanceEntryUpdateRequest: {
+            /** Ended At */
+            ended_at?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Started At */
+            started_at?: string | null;
+        };
+        /**
+         * AttendanceExportRequest
+         * @description Raw hours export; payroll software must classify regular and overtime hours.
+         */
+        AttendanceExportRequest: {
+            /**
+             * Date From
+             * Format: date
+             */
+            date_from: string;
+            /**
+             * Date To
+             * Format: date
+             */
+            date_to: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** User Id */
+            user_id?: number | null;
+        };
+        /** AttendanceManualEntryRequest */
+        AttendanceManualEntryRequest: {
+            /**
+             * Ended At
+             * Format: date-time
+             */
+            ended_at: string;
+            /** Note */
+            note?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** User Id */
+            user_id: number;
+        };
+        /** AttendancePauseRequest */
+        AttendancePauseRequest: {
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+        };
+        /** AttendanceReportResponse */
+        AttendanceReportResponse: {
+            /** Entries */
+            entries: components["schemas"]["AttendanceEntryResponse"][];
+            open_entry: components["schemas"]["AttendanceEntryResponse"] | null;
+            /** Timezone */
+            timezone: string;
+            /** Total Seconds */
+            total_seconds: number;
+        };
+        /** AttendanceVoidRequest */
+        AttendanceVoidRequest: {
+            /** Reason */
+            reason: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
         };
         /**
          * AttributionConfidenceLevel
@@ -16183,6 +16569,8 @@ export interface components {
             campaigns_change: string;
             /** Contacts Change */
             contacts_change: string;
+            /** Leads Last 24 Hours */
+            leads_last_24_hours: number;
             /** Messages Change */
             messages_change: string;
             /** Messages Sent */
@@ -29857,6 +30245,33 @@ export interface components {
             role: string;
         };
         /**
+         * TechnicianActivityScorecardRow
+         * @description Recorded activity for one technician in the selected local-date range.
+         *
+         *     These fields are context only, not a quality, compensation, or ranking signal.
+         */
+        TechnicianActivityScorecardRow: {
+            /** Active */
+            active: boolean;
+            /** Assigned Jobs */
+            assigned_jobs: number;
+            /** Attendance Paused Seconds */
+            attendance_paused_seconds: number;
+            /** Attendance Worked Seconds */
+            attendance_worked_seconds: number;
+            /** Completed Job Time Entries */
+            completed_job_time_entries: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Job Logged Seconds */
+            job_logged_seconds: number;
+            /** Name */
+            name: string;
+        };
+        /**
          * TechnicianCreate
          * @description Create a technician.
          */
@@ -37028,6 +37443,357 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssistantConversationResponse"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clock_in_api_v1_workspaces__workspace_id__attendance_clock_in_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendanceClockInRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clock_out_api_v1_workspaces__workspace_id__attendance_clock_out_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendanceClockOutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_entries_api_v1_workspaces__workspace_id__attendance_entries_get: {
+        parameters: {
+            query: {
+                date_from: string;
+                date_to: string;
+                user_id?: number | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceAdminReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_manual_entry_api_v1_workspaces__workspace_id__attendance_entries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendanceManualEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_entry_api_v1_workspaces__workspace_id__attendance_entries__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendanceEntryUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_entry_api_v1_workspaces__workspace_id__attendance_entries__entry_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendanceVoidRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_attendance_api_v1_workspaces__workspace_id__attendance_exports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendanceExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Generic UTF-8 CSV containing raw completed hours. Payroll software must classify regular and overtime hours; no vendor compatibility is implied. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_attendance_api_v1_workspaces__workspace_id__attendance_me_get: {
+        parameters: {
+            query: {
+                date_from: string;
+                date_to: string;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_shift_api_v1_workspaces__workspace_id__attendance_pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendancePauseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_shift_api_v1_workspaces__workspace_id__attendance_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttendancePauseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceEntryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -50890,6 +51656,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReceptionistScorecard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_technician_activity_scorecard_api_v1_workspaces__workspace_id__scorecard_technicians_get: {
+        parameters: {
+            query?: {
+                start_date?: string | null;
+                end_date?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianActivityScorecardRow"][];
                 };
             };
             /** @description Validation Error */
