@@ -14,7 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 from app.models.conversation import Conversation
-from app.services.ai.openai_credentials import get_openai_bearer_token
+from app.services.ai.openai_credentials import (
+    OpenAICredentialError,
+    resolve_openai_credentials,
+)
 from app.services.ai.text_response_generator import generate_followup_message
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
 from app.services.telephony.text_provider import get_text_message_provider
@@ -89,9 +92,9 @@ class FollowupWorker(RetryableWorker, BaseWorker):
         """
         log = self.logger.bind(conversation_id=str(conversation.id))
 
-        # Check for required credentials
-        openai_key = get_openai_bearer_token()
-        if not openai_key:
+        try:
+            credential = await resolve_openai_credentials(db, conversation.workspace_id)
+        except OpenAICredentialError:
             log.warning("No OpenAI credential configured")
             return False
 
@@ -99,7 +102,8 @@ class FollowupWorker(RetryableWorker, BaseWorker):
         message_body = await generate_followup_message(
             conversation=conversation,
             db=db,
-            openai_api_key=openai_key,
+            openai_api_key=credential.bearer_token,
+            credential=credential,
         )
 
         if not message_body:

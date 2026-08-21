@@ -896,6 +896,8 @@ async def generate_followup_message(
     db: AsyncSession,
     openai_api_key: str,
     custom_instructions: str | None = None,
+    *,
+    credential: OpenAICredentialContext | None = None,
 ) -> str | None:
     """Generate an AI follow-up message for a conversation.
 
@@ -905,8 +907,9 @@ async def generate_followup_message(
     Args:
         conversation: The conversation to generate a follow-up for
         db: Database session
-        openai_api_key: OpenAI API key
+        openai_api_key: OpenAI API key (used when ``credential`` is not supplied)
         custom_instructions: Optional custom instructions to guide the message
+        credential: Resolved workspace-aware OpenAI credential context
 
     Returns:
         Generated follow-up message text, or None if generation failed
@@ -974,8 +977,12 @@ Recent conversation:
 
     user_prompt += "\n\nWrite a short, friendly follow-up message:"
 
-    # Create OpenAI client
-    client = AsyncOpenAI(api_key=openai_api_key)
+    # Prefer the workspace credential so OAuth connections retain required headers.
+    client = (
+        build_async_openai_client(credential)
+        if credential is not None
+        else AsyncOpenAI(api_key=openai_api_key)
+    )
 
     try:
         response = await asyncio.wait_for(
