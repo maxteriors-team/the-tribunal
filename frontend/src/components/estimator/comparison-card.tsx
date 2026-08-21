@@ -11,11 +11,7 @@
  */
 import { formatCurrency } from "@/lib/utils/number";
 
-import {
-  PackageGrid,
-  type ComparisonPackageView,
-  type PackageSectionCopy,
-} from "./package-grid";
+import { PackageGrid, type ComparisonPackageView, type PackageSectionCopy } from "./package-grid";
 
 // Re-exported so existing importers (and the settings preview) have one place to
 // get the client-facing package view from.
@@ -24,6 +20,7 @@ export type { ComparisonPackageView, PackageSectionCopy };
 export interface ComparisonView {
   currency?: string;
   clientName?: string | null;
+  discountAmount?: number;
   permanent: { enabled: boolean; total: number };
   christmas: { enabled: boolean; total: number };
   // Name of the seasonal package the rep selected (Good/Better/Best), shown above
@@ -106,13 +103,25 @@ function Perks({ perks }: { perks?: string[] }) {
 export function ComparisonCard({ view }: { view: ComparisonView }) {
   const currency = view.currency || "USD";
   const bothOffered = view.permanent.enabled && view.christmas.enabled;
+  const permanentOnly = view.permanent.enabled && !view.christmas.enabled;
+  const seasonalOnly = view.christmas.enabled && !view.permanent.enabled;
   // Permanent is the upsell whenever it wins over the horizon.
   const permanentWins = bothOffered && view.multi_year_savings > 0;
   const savings = Math.abs(view.multi_year_savings);
   const greeting = view.clientName ? `Prepared for ${view.clientName}` : null;
-  const packages = view.christmasPackages ?? [];
-  const roofline = view.roofline ?? null;
+  const packages = view.christmas.enabled ? (view.christmasPackages ?? []) : [];
+  const roofline = bothOffered ? (view.roofline ?? null) : null;
   const customLines = view.customLines ?? [];
+  const heading = permanentOnly
+    ? "Permanent Lighting Proposal"
+    : seasonalOnly
+      ? "Seasonal Lighting Proposal"
+      : "Permanent vs. Seasonal Lighting";
+  const intro = permanentOnly
+    ? "A permanent lighting package designed for your home — installed once and ready year-round."
+    : seasonalOnly
+      ? "A seasonal lighting package designed for your home and this year’s display."
+      : "Two ways to light your home for the holidays — here’s what each costs and how they compare over time.";
   // Permanent wins the roofline-only comparison when paying every season costs
   // more over the horizon than installing once.
   const rooflineSavings = roofline && roofline.savings > 0 ? roofline.savings : 0;
@@ -121,21 +130,23 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
     <div className="cmp-wrap">
       <div className="cmp-head">
         {greeting ? <div className="cmp-brand">{greeting}</div> : null}
-        <h1>Permanent vs. Seasonal Lighting</h1>
-        <p>
-          Two ways to light your home for the holidays — here&apos;s what each
-          costs and how they compare over time.
-        </p>
+        <h1>{heading}</h1>
+        <p>{intro}</p>
       </div>
+
+      {(view.discountAmount ?? 0) > 0 ? (
+        <div className="cmp-discount" role="status">
+          <span>Proposal discount applied</span>
+          <strong>−{formatCurrency(view.discountAmount ?? 0, currency)}</strong>
+        </div>
+      ) : null}
 
       {bothOffered && savings > 0 ? (
         <div className="cmp-savings">
           <div className="cmp-savings-label">
             {permanentWins ? "Your savings with permanent" : "Cost difference"}
           </div>
-          <div className="cmp-savings-amount">
-            {formatCurrency(savings, currency)}
-          </div>
+          <div className="cmp-savings-amount">{formatCurrency(savings, currency)}</div>
           <div className="cmp-savings-sub">
             {permanentWins
               ? `Over ${view.years} seasons, permanent lighting saves you ${formatCurrency(
@@ -156,47 +167,31 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
         </div>
       ) : null}
 
-      <div className="cmp-cards">
-        <div className={`cmp-card${permanentWins ? " recommended" : ""}`}>
-          {permanentWins ? (
-            <span className="cmp-card-tag">Best value over time</span>
-          ) : null}
-          <h2>Permanent Lighting</h2>
-          <div className="cmp-card-kind">One-time install</div>
-          {view.permanent.enabled ? (
-            <>
-              <div className="cmp-price">
-                {formatCurrency(view.permanent.total, currency)}
-              </div>
-              <div className="cmp-price-note">Paid once — yours for years</div>
-            </>
-          ) : (
-            <p className="cmp-unavailable">Not offered in your area yet.</p>
-          )}
-          <Perks perks={view.permanent_perks} />
-        </div>
+      <div className={`cmp-cards${bothOffered ? "" : " single"}`}>
+        {view.permanent.enabled ? (
+          <div className={`cmp-card${permanentWins ? " recommended" : ""}`}>
+            {permanentWins ? <span className="cmp-card-tag">Best value over time</span> : null}
+            <h2>Permanent Lighting</h2>
+            <div className="cmp-card-kind">One-time install</div>
+            <div className="cmp-price">{formatCurrency(view.permanent.total, currency)}</div>
+            <div className="cmp-price-note">Paid once — yours for years</div>
+            <Perks perks={view.permanent_perks} />
+          </div>
+        ) : null}
 
-        <div className="cmp-card">
-          <h2>Seasonal Lighting</h2>
-          <div className="cmp-card-kind">Per season</div>
-          {view.christmas.enabled ? (
-            <>
-              {view.christmasName ? (
-                <div className="cmp-card-pkg">{view.christmasName}</div>
-              ) : null}
-              <div className="cmp-price">
-                {formatCurrency(view.christmas.total, currency)}
-              </div>
-              <div className="cmp-price-note">
-                Every season · {formatCurrency(view.temporary_multi_year, currency)} over{" "}
-                {view.years} years
-              </div>
-            </>
-          ) : (
-            <p className="cmp-unavailable">Not offered in your area yet.</p>
-          )}
-          <Perks perks={view.christmas_perks} />
-        </div>
+        {view.christmas.enabled ? (
+          <div className="cmp-card">
+            <h2>Seasonal Lighting</h2>
+            <div className="cmp-card-kind">Per season</div>
+            {view.christmasName ? <div className="cmp-card-pkg">{view.christmasName}</div> : null}
+            <div className="cmp-price">{formatCurrency(view.christmas.total, currency)}</div>
+            <div className="cmp-price-note">
+              Every season · {formatCurrency(view.temporary_multi_year, currency)} over {view.years}{" "}
+              years
+            </div>
+            <Perks perks={view.christmas_perks} />
+          </div>
+        ) : null}
       </div>
 
       {roofline ? (
@@ -204,14 +199,12 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
           <div className="cmp-pkg-head">
             <h2>Roofline, side by side</h2>
             <p>
-              The same run of roofline lights, priced both ways — decor left out
-              on purpose, so you&apos;re comparing like for like.
+              The same run of roofline lights, priced both ways — decor left out on purpose, so
+              you&apos;re comparing like for like.
             </p>
           </div>
           <div className="cmp-cards">
-            <div
-              className={`cmp-card${rooflineSavings > 0 ? " recommended" : ""}`}
-            >
+            <div className={`cmp-card${rooflineSavings > 0 ? " recommended" : ""}`}>
               {rooflineSavings > 0 ? (
                 <span className="cmp-card-tag">
                   Saves {formatCurrency(rooflineSavings, currency)}
@@ -219,23 +212,16 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
               ) : null}
               <h2>Permanent roofline</h2>
               <div className="cmp-card-kind">One-time install</div>
-              <div className="cmp-price">
-                {formatCurrency(roofline.permanent_total, currency)}
-              </div>
-              <div className="cmp-price-note">
-                Paid once — lit every holiday after that
-              </div>
+              <div className="cmp-price">{formatCurrency(roofline.permanent_total, currency)}</div>
+              <div className="cmp-price-note">Paid once — lit every holiday after that</div>
             </div>
 
             <div className="cmp-card">
               <h2>Seasonal roofline</h2>
               <div className="cmp-card-kind">Per season</div>
-              <div className="cmp-price">
-                {formatCurrency(roofline.seasonal_total, currency)}
-              </div>
+              <div className="cmp-price">{formatCurrency(roofline.seasonal_total, currency)}</div>
               <div className="cmp-price-note">
-                Every season ·{" "}
-                {formatCurrency(roofline.seasonal_multi_year, currency)} over{" "}
+                Every season · {formatCurrency(roofline.seasonal_multi_year, currency)} over{" "}
                 {view.years} seasons
               </div>
             </div>
@@ -247,10 +233,7 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
         <div className="cmp-pkg-section">
           <div className="cmp-pkg-head">
             <h2>Also included in your price</h2>
-            <p>
-              Work we added for your home specifically — already counted in the
-              totals above.
-            </p>
+            <p>Work we added for your home specifically — already counted in the totals above.</p>
           </div>
           <div className="cmp-addons">
             {customLines.map((line, i) => (
@@ -282,11 +265,7 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
         </div>
       ) : null}
 
-      <PackageGrid
-        packages={packages}
-        currency={currency}
-        copy={view.packageSection}
-      />
+      <PackageGrid packages={packages} currency={currency} copy={view.packageSection} />
     </div>
   );
 }

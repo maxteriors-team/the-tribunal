@@ -66,20 +66,27 @@ export function EstimatePanel({
   const permanent = estimate?.permanent;
   const christmas = estimate?.christmas;
   const decor = christmas?.items ?? [];
-  const bothOffered = !!permanent?.enabled && !!christmas?.enabled;
-  const savings = Math.abs(estimate?.multi_year_savings ?? 0);
-  const permanentWins = bothOffered && (estimate?.multi_year_savings ?? 0) > 0;
+  const bothOffered = sides.permanent && sides.seasonal;
 
-  // Good/Better/Best seasonal packages (empty unless the workspace sells them).
-  // The rep picks one; when active, that package's total is the seasonal headline
-  // in place of the à la carte roofline+decor total.
-  const packages = christmas?.enabled ? (estimate?.christmas_packages ?? []) : [];
+  // Rep controls follow workspace capabilities; customer visibility is filtered upstream.
+  const packages = sides.seasonal ? (estimate?.christmas_packages ?? []) : [];
   const hasPackages = packages.length > 0;
   const selectedPkg = resolveSelectedPackage(packages, selectedPackage);
-  const seasonalHeadline = seasonalTotal(
-    { total: christmas?.total ?? 0, custom_total: christmas?.custom_total },
+  const seasonalSubtotal = seasonalTotal(
+    { total: christmas?.subtotal ?? 0, custom_total: christmas?.custom_total },
     selectedPkg,
   );
+  const seasonalHeadline = Math.max(
+    0,
+    seasonalSubtotal -
+      (estimate?.proposal_side === "seasonal" || estimate?.proposal_side === "comparison"
+        ? (estimate?.discount_amount ?? 0)
+        : 0),
+  );
+  const permanentTotal = sides.permanent ? (permanent?.total ?? 0) : 0;
+  const seasonalMultiYear = seasonalHeadline * (estimate?.years ?? 0);
+  const savings = bothOffered ? Math.abs(seasonalMultiYear - permanentTotal) : 0;
+  const permanentWins = bothOffered && seasonalMultiYear > permanentTotal;
 
   return (
     <div className="ep-panel">
@@ -109,7 +116,7 @@ export function EstimatePanel({
             </div>
           ) : null}
 
-          {hasPackages ? (
+          {hasPackages && !isFetching ? (
             <div className="ep-packages">
               <div className="ep-lines-head">Recommended package</div>
               <p className="ep-pkg-hint">
@@ -133,7 +140,18 @@ export function EstimatePanel({
                       {pkg.value_tag ? <span className="ep-pkg-tag">{pkg.value_tag}</span> : null}
                       {pkg.marker ? <span className="ep-pkg-marker">{pkg.marker}</span> : null}
                       <span className="ep-pkg-name">{pkg.name ?? pkg.label}</span>
-                      <span className="ep-pkg-total">{formatCurrency(pkg.pricing.total)}</span>
+                      <span className="ep-pkg-total">
+                        {formatCurrency(
+                          Math.max(
+                            0,
+                            pkg.pricing.total -
+                              (estimate?.proposal_side === "seasonal" ||
+                              estimate?.proposal_side === "comparison"
+                                ? (estimate?.discount_amount ?? 0)
+                                : 0),
+                          ),
+                        )}
+                      </span>
                       <span className="ep-pkg-per">Per season</span>
                       {pkg.experience ? (
                         <span className="ep-pkg-blurb">{pkg.experience}</span>
@@ -143,7 +161,7 @@ export function EstimatePanel({
                 })}
               </div>
             </div>
-          ) : christmas?.enabled && decor.length > 0 ? (
+          ) : !isFetching && sides.seasonal && decor.length > 0 ? (
             <div className="ep-lines">
               <div className="ep-lines-head">Seasonal add-ons</div>
               {decor.map((line) => (
@@ -167,34 +185,36 @@ export function EstimatePanel({
       />
 
       {hasDesign ? (
-        <>
-          <div className="ep-totals">
-            {permanent?.enabled ? (
-              <div className="ep-total-row">
-                <span>Permanent · one-time</span>
-                <span className="ep-total-amount">{formatCurrency(permanent.total)}</span>
-              </div>
-            ) : null}
-            {christmas?.enabled ? (
-              <div className="ep-total-row ep-total-grand">
-                <span>Seasonal · per year</span>
-                <span className="ep-total-amount">{formatCurrency(seasonalHeadline)}</span>
-              </div>
-            ) : null}
-          </div>
-
-          {bothOffered && savings > 0 ? (
-            <div className="ep-savings">
-              <span className="ep-savings-label">
-                {permanentWins ? "Permanent saves" : "Difference"} over {estimate?.years ?? 5}{" "}
-                seasons
-              </span>
-              <span className="ep-savings-amount">{formatCurrency(savings)}</span>
+        isFetching ? (
+          <p className="ep-empty">Pricing…</p>
+        ) : (
+          <>
+            <div className="ep-totals">
+              {sides.permanent ? (
+                <div className="ep-total-row">
+                  <span>Permanent · one-time</span>
+                  <span className="ep-total-amount">{formatCurrency(permanentTotal)}</span>
+                </div>
+              ) : null}
+              {sides.seasonal ? (
+                <div className="ep-total-row ep-total-grand">
+                  <span>Seasonal · per year</span>
+                  <span className="ep-total-amount">{formatCurrency(seasonalHeadline)}</span>
+                </div>
+              ) : null}
             </div>
-          ) : null}
 
-          {isFetching && !estimate ? <p className="ep-empty">Pricing…</p> : null}
-        </>
+            {bothOffered && savings > 0 ? (
+              <div className="ep-savings">
+                <span className="ep-savings-label">
+                  {permanentWins ? "Permanent saves" : "Difference"} over {estimate?.years ?? 5}{" "}
+                  seasons
+                </span>
+                <span className="ep-savings-amount">{formatCurrency(savings)}</span>
+              </div>
+            ) : null}
+          </>
+        )
       ) : null}
     </div>
   );

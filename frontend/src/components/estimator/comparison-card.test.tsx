@@ -1,10 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import {
-  ComparisonCard,
-  type ComparisonView,
-} from "@/components/estimator/comparison-card";
+import { ComparisonCard, type ComparisonView } from "@/components/estimator/comparison-card";
 
 // A both-services-offered comparison; individual tests layer the seasonal
 // package ladder on top to exercise the client-facing Good/Better/Best grid.
@@ -92,12 +89,39 @@ describe("ComparisonCard seasonal package ladder", () => {
   it("omits the package section for à la carte seasonal (no packages)", () => {
     render(<ComparisonCard view={BASE} />);
 
-    expect(
-      screen.queryByText(/Choose your seasonal package/i),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Choose your seasonal package/i)).not.toBeInTheDocument();
     // The single seasonal summary card still renders its total.
     expect(screen.getByText("Seasonal Lighting")).toBeInTheDocument();
     expect(screen.getByText("$1,100.00")).toBeInTheDocument();
+  });
+});
+
+describe("ComparisonCard single-side proposals", () => {
+  it("renders a discounted permanent package without seasonal comparison UI", () => {
+    render(
+      <ComparisonCard
+        view={{
+          ...BASE,
+          discountAmount: 500,
+          permanent: { enabled: true, total: 3700 },
+          christmas: { enabled: false, total: 0 },
+          christmasPackages: PACKAGES,
+          christmas_perks: [],
+          difference: 0,
+          temporary_multi_year: 0,
+          multi_year_savings: 0,
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Permanent Lighting Proposal" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Proposal discount applied")).toBeInTheDocument();
+    expect(screen.getByText("−$500.00")).toBeInTheDocument();
+    expect(screen.getByText("$3,700.00")).toBeInTheDocument();
+    expect(screen.queryByText("Seasonal Lighting")).not.toBeInTheDocument();
+    expect(screen.queryByText("The Premier")).not.toBeInTheDocument();
   });
 });
 
@@ -114,18 +138,14 @@ describe("ComparisonCard roofline cost comparison", () => {
   it("renders both roofline costs and the multi-year projection when present", () => {
     render(<ComparisonCard view={{ ...BASE, roofline: ROOFLINE }} />);
 
-    expect(
-      screen.getByRole("heading", { name: /Roofline, side by side/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Roofline, side by side/i })).toBeInTheDocument();
     expect(screen.getByText("Permanent roofline")).toBeInTheDocument();
     expect(screen.getByText("Seasonal roofline")).toBeInTheDocument();
     // Roofline-only costs, distinct from the headline totals above ($4,200/$1,100).
     expect(screen.getByText("$3,000.00")).toBeInTheDocument();
     expect(screen.getByText("$800.00")).toBeInTheDocument();
     // The seasonal side shows what paying every season adds up to.
-    expect(
-      screen.getByText(/\$4,000\.00 over 5 seasons/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/\$4,000\.00 over 5 seasons/i)).toBeInTheDocument();
   });
 
   it("tags the permanent roofline as the saver when it wins the horizon", () => {
@@ -134,9 +154,7 @@ describe("ComparisonCard roofline cost comparison", () => {
     const tag = screen.getByText(/Saves \$1,000\.00/i);
     const card = tag.closest(".cmp-card");
     expect(card).toHaveClass("recommended");
-    expect(
-      within(card as HTMLElement).getByText("Permanent roofline"),
-    ).toBeInTheDocument();
+    expect(within(card as HTMLElement).getByText("Permanent roofline")).toBeInTheDocument();
   });
 
   it("omits the saver tag when seasonal is not more expensive over the horizon", () => {
@@ -157,13 +175,9 @@ describe("ComparisonCard roofline cost comparison", () => {
     // The flag defaults off server-side, so `roofline` is null/absent and the
     // page renders exactly as it did before the feature existed.
     const { rerender } = render(<ComparisonCard view={BASE} />);
-    expect(
-      screen.queryByText(/Roofline, side by side/i),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Roofline, side by side/i)).not.toBeInTheDocument();
 
     rerender(<ComparisonCard view={{ ...BASE, roofline: null }} />);
-    expect(
-      screen.queryByText(/Roofline, side by side/i),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Roofline, side by side/i)).not.toBeInTheDocument();
   });
 });

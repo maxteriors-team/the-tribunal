@@ -16,9 +16,7 @@ interface PublicComparisonPageProps {
   params: Promise<{ token: string }>;
 }
 
-export default function PublicComparisonPage({
-  params,
-}: PublicComparisonPageProps) {
+export default function PublicComparisonPage({ params }: PublicComparisonPageProps) {
   const { token } = use(params);
 
   const { data, isPending, error } = useQuery({
@@ -37,9 +35,7 @@ export default function PublicComparisonPage({
   }
 
   if (error || !data) {
-    return (
-      <DeadPublicLink subject="comparison" />
-    );
+    return <DeadPublicLink subject="comparison" />;
   }
 
   // The festive palette is fixed (warm gold / holly / evergreen) so the holiday
@@ -70,15 +66,14 @@ export default function PublicComparisonPage({
         view={{
           currency: data.currency,
           clientName: data.client_name,
+          discountAmount: data.discount_amount,
           permanent: data.permanent,
           // Feet-free by construction: `christmas.total` already reflects the
           // recommended Good/Better/Best package (folded server-side), and
           // `christmasName` labels that tier from the package payload — still no
           // per-ft or feet, so the client sees prices, never the measurement.
           christmas: data.christmas,
-          christmasName: recommended
-            ? (recommended.name ?? recommended.label)
-            : null,
+          christmasName: recommended ? (recommended.name ?? recommended.label) : null,
           difference: data.difference,
           years: data.years,
           temporary_multi_year: data.temporary_multi_year,

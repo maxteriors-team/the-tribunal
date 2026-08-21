@@ -284,6 +284,8 @@ const CATALOG_PARAMS: LinearFeetEstimateRequest = {
   storage: false,
   permanent_complexity: "standard",
   permanent_complexity_feet: {},
+  proposal_side: "comparison",
+  discount_amount: 0,
   per_ft_override: null,
   christmas_per_ft_override: null,
   christmas_items: {},
@@ -2745,6 +2747,7 @@ export function LightDesigner({
   // package, matching the server so the preview and the shared page agree.
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [christmasPerFtOverride, setChristmasPerFtOverride] = useState<number | null>(null);
+  const [discountAmount, setDiscountAmount] = useState<number | null>(null);
   // Standalone lines the rep typed for work the price book doesn't carry. Held
   // as raw drafts; only complete rows are priced (see `toEstimateCustomLines`).
   const [customLines, setCustomLines] = useState<CustomLineDraft[]>([]);
@@ -3183,6 +3186,13 @@ export function LightDesigner({
   }, [landscapeOnly, landscapeTab, liveShots, productById]);
 
   const customLineInputs = useMemo(() => toEstimateCustomLines(customLines), [customLines]);
+  const proposalSide: LinearFeetEstimateRequest["proposal_side"] = sells("permanent")
+    ? sells("christmas")
+      ? "comparison"
+      : "permanent"
+    : sells("christmas")
+      ? "seasonal"
+      : "comparison";
 
   const estimateParams: LinearFeetEstimateRequest = {
     feet,
@@ -3191,6 +3201,8 @@ export function LightDesigner({
     storage,
     permanent_complexity: dominantPermanentComplexity(permanentComplexityFeet),
     permanent_complexity_feet: permanentComplexityFeet,
+    proposal_side: proposalSide,
+    discount_amount: discountAmount ?? 0,
     per_ft_override: null,
     christmas_per_ft_override: christmasPerFtOverride,
     christmas_items: inputs.christmas_items,
@@ -3215,8 +3227,14 @@ export function LightDesigner({
   // is the point of it — so it counts as something to price, share, and quote.
   const hasHolidayDesign =
     feet > 0 || Object.keys(inputs.christmas_items).length > 0 || customLineInputs.length > 0;
+  const hasHolidayProposal = hasHolidayDesign && (sells("permanent") || sells("christmas"));
 
-  const { data: estimate, isFetching } = useQuery({
+  const {
+    data: estimate,
+    isFetching,
+    isError: estimateFailed,
+    error: estimateError,
+  } = useQuery({
     queryKey: queryKeys.estimator.compute(workspaceId, estimateParams),
     queryFn: () => estimatorApi.estimate(workspaceId, estimateParams),
     enabled: Boolean(photo) && hasHolidayDesign,
@@ -3224,12 +3242,15 @@ export function LightDesigner({
     staleTime: 60_000,
   });
 
-  // Which sides a line item can be billed on. Falls back to the catalog probe so
-  // the editor is available before anything is drawn — the standalone case, and
-  // the reason this reads from a query rather than from what's on the photo.
   const sides = {
     permanent: Boolean((estimate ?? catalog)?.permanent.enabled),
     seasonal: Boolean((estimate ?? catalog)?.christmas.enabled),
+  };
+  // Customer-facing totals follow the selected service tabs, not every service
+  // the workspace happens to support.
+  const proposalSides = {
+    permanent: sells("permanent") && sides.permanent,
+    seasonal: sells("christmas") && sides.seasonal,
   };
 
   // Resolve the seasonal package the rep is selling (explicit pick, else the
@@ -3238,13 +3259,20 @@ export function LightDesigner({
   // adopt it in place of the à la carte roofline+decor total.
   const selectedPkg = resolveSelectedPackage(estimate?.christmas_packages ?? [], selectedPackage);
   // The package's own total plus any standalone lines (which sit outside every
-  // package); à la carte already includes them. Same rule the server applies.
-  const christmasTotal = seasonalTotal(
+  // package); à la carte uses its undiscounted subtotal. The flat discount is
+  // then applied exactly once to the proposal side the rep selected.
+  const christmasSubtotal = seasonalTotal(
     {
-      total: estimate?.christmas.total ?? 0,
+      total: estimate?.christmas.subtotal ?? 0,
       custom_total: estimate?.christmas.custom_total,
     },
     selectedPkg,
+  );
+  const christmasTotal = round2(
+    Math.max(
+      0,
+      christmasSubtotal - (proposalSides.seasonal ? (estimate?.discount_amount ?? 0) : 0),
+    ),
   );
 
   // Mirror of the server's ``build_public_roofline_comparison`` so the preview
@@ -3254,7 +3282,7 @@ export function LightDesigner({
   // which is $0 for a package that excludes the roofline.
   const rooflineView = useMemo(() => {
     if (!pricing?.roofline_comparison_enabled || !estimate) return null;
-    if (!estimate.permanent.enabled || !estimate.christmas.enabled) return null;
+    if (!proposalSides.permanent || !proposalSides.seasonal) return null;
     const seasonal = estimate.christmas.roofline_cost;
     const multiYear = round2(seasonal * estimate.years);
     return {
@@ -3263,7 +3291,12 @@ export function LightDesigner({
       seasonal_multi_year: multiYear,
       savings: round2(multiYear - estimate.permanent.roofline_cost),
     };
-  }, [pricing?.roofline_comparison_enabled, estimate]);
+  }, [
+    pricing?.roofline_comparison_enabled,
+    estimate,
+    proposalSides.permanent,
+    proposalSides.seasonal,
+  ]);
 
   const resetShare = () => {
     setShareUrl(null);
@@ -3360,6 +3393,7 @@ export function LightDesigner({
         setTakedown(false);
         setStorage(false);
         setChristmasPerFtOverride(null);
+        setDiscountAmount(null);
         setSelectedPackage(null);
         setCustomLines([]);
       }
@@ -3434,7 +3468,7 @@ export function LightDesigner({
     ? getApiErrorMessage(sendFailure, "Couldn’t send the estimate — try again.")
     : null;
   const canSend = (channel: SendChannel) =>
-    hasHolidayDesign && (channel === "email" ? clientEmail : clientPhone).trim().length > 0;
+    hasHolidayProposal && (channel === "email" ? clientEmail : clientPhone).trim().length > 0;
   const sendEstimate = async (channel: SendChannel) => {
     if (!canSend(channel) || sendPending) return;
     setSendingChannel(channel);
@@ -3471,52 +3505,65 @@ export function LightDesigner({
       ? "permanent"
       : "seasonal";
 
-  const clientView: ComparisonView | null = estimate
-    ? {
-        currency: "USD",
-        permanent: estimate.permanent,
-        christmas: { enabled: estimate.christmas.enabled, total: christmasTotal },
-        christmasName: selectedPkg ? packageName(selectedPkg) : null,
-        difference: estimate.difference,
-        years: estimate.years,
-        temporary_multi_year: estimate.temporary_multi_year,
-        permanent_one_time: estimate.permanent_one_time,
-        multi_year_savings: estimate.multi_year_savings,
-        permanent_perks: estimate.permanent_perks,
-        christmas_perks: estimate.christmas_perks,
-        // Feet-free ladder for the client preview: only each package's total
-        // crosses over (never the roofline breakdown), so the rep sees exactly
-        // the Good/Better/Best cards the homeowner gets, with their pick flagged.
-        christmasPackages: (estimate.christmas_packages ?? []).map((pkg) => ({
-          key: pkg.key,
-          name: packageName(pkg),
-          marker: pkg.marker,
-          total: pkg.pricing.total,
-          valueTag: pkg.value_tag,
-          popular: pkg.popular,
-          recommended: pkg.key === selectedPkg?.key,
-          points: pkg.points,
-          experience: pkg.experience,
-        })),
-        roofline: rooflineView,
-        // Server-priced add-ons, itemized for the client exactly as the shared
-        // page lists them — the preview is what the homeowner will see. A line
-        // scoped to a tier they aren't being sold is already inside a different
-        // card's total, so it is filtered out here the same way
-        // ``get_public_comparison`` filters it, and the preview can't promise
-        // work that isn't on this price.
-        customLines: (estimate.custom_lines ?? [])
-          .filter((line) => !line.package_key || line.package_key === selectedPkg?.key)
-          .map((line) => ({
-            label: line.label,
-            description: line.description,
-            quantity: line.quantity,
-            amount: line.amount,
-            side: line.side,
-            packageKey: line.package_key,
-          })),
-      }
-    : null;
+  const clientPermanentTotal = proposalSides.permanent ? (estimate?.permanent.total ?? 0) : 0;
+  const clientSeasonalTotal = proposalSides.seasonal ? christmasTotal : 0;
+  const clientShowsBoth = proposalSides.permanent && proposalSides.seasonal;
+  const clientTemporaryMultiYear = round2(clientSeasonalTotal * (estimate?.years ?? 0));
+  const clientView: ComparisonView | null =
+    estimate && !isFetching && (proposalSides.permanent || proposalSides.seasonal)
+      ? {
+          currency: "USD",
+          discountAmount: estimate.discount_amount,
+          permanent: { ...estimate.permanent, enabled: proposalSides.permanent },
+          christmas: { enabled: proposalSides.seasonal, total: clientSeasonalTotal },
+          christmasName: proposalSides.seasonal && selectedPkg ? packageName(selectedPkg) : null,
+          difference: clientShowsBoth
+            ? round2(Math.abs(clientPermanentTotal - clientSeasonalTotal))
+            : 0,
+          years: estimate.years,
+          temporary_multi_year: clientTemporaryMultiYear,
+          permanent_one_time: clientPermanentTotal,
+          multi_year_savings: clientShowsBoth
+            ? round2(clientTemporaryMultiYear - clientPermanentTotal)
+            : 0,
+          permanent_perks: proposalSides.permanent ? estimate.permanent_perks : [],
+          christmas_perks: proposalSides.seasonal ? estimate.christmas_perks : [],
+          // Feet-free ladder for the client preview: only each package's total
+          // crosses over (never the roofline breakdown), so the rep sees exactly
+          // the Good/Better/Best cards the homeowner gets, with their pick flagged.
+          christmasPackages: proposalSides.seasonal
+            ? (estimate.christmas_packages ?? []).map((pkg) => ({
+                key: pkg.key,
+                name: packageName(pkg),
+                marker: pkg.marker,
+                total: round2(Math.max(0, pkg.pricing.total - estimate.discount_amount)),
+                valueTag: pkg.value_tag,
+                popular: pkg.popular,
+                recommended: pkg.key === selectedPkg?.key,
+                points: pkg.points,
+                experience: pkg.experience,
+              }))
+            : [],
+          roofline: clientShowsBoth ? rooflineView : null,
+          // Server-priced add-ons are restricted to the proposal side and chosen
+          // package, matching the shared customer payload.
+          customLines: (estimate.custom_lines ?? [])
+            .filter(
+              (line) =>
+                (!line.package_key || line.package_key === selectedPkg?.key) &&
+                ((line.side === "permanent" && proposalSides.permanent) ||
+                  (line.side === "seasonal" && proposalSides.seasonal)),
+            )
+            .map((line) => ({
+              label: line.label,
+              description: line.description,
+              quantity: line.quantity,
+              amount: line.amount,
+              side: line.side,
+              packageKey: line.package_key,
+            })),
+        }
+      : null;
 
   const copyLink = () => {
     if (shareUrl) void navigator.clipboard?.writeText(shareUrl);
@@ -4193,23 +4240,27 @@ export function LightDesigner({
                     {!landscapeOnly ? (
                       <>
                         <div className="est-options">
-                          <label className="est-opt-check">
-                            <input
-                              type="checkbox"
-                              checked={takedown}
-                              onChange={(e) => setTakedown(e.target.checked)}
-                            />
-                            Include seasonal takedown
-                          </label>
-                          <label className="est-opt-check">
-                            <input
-                              type="checkbox"
-                              checked={storage}
-                              onChange={(e) => setStorage(e.target.checked)}
-                            />
-                            Include off-season storage
-                          </label>
-                          {estimate?.permanent.enabled ? (
+                          {sides.seasonal ? (
+                            <>
+                              <label className="est-opt-check">
+                                <input
+                                  type="checkbox"
+                                  checked={takedown}
+                                  onChange={(e) => setTakedown(e.target.checked)}
+                                />
+                                Include seasonal takedown
+                              </label>
+                              <label className="est-opt-check">
+                                <input
+                                  type="checkbox"
+                                  checked={storage}
+                                  onChange={(e) => setStorage(e.target.checked)}
+                                />
+                                Include off-season storage
+                              </label>
+                            </>
+                          ) : null}
+                          {sides.permanent ? (
                             selectedPermanentRun ? (
                               <label className="est-opt-rate">
                                 <span>Selected run complexity</span>
@@ -4242,7 +4293,7 @@ export function LightDesigner({
                               </p>
                             )
                           ) : null}
-                          {estimate?.christmas.enabled ? (
+                          {sides.seasonal ? (
                             <label className="est-opt-rate">
                               <span>Seasonal $/ft</span>
                               <input
@@ -4252,12 +4303,43 @@ export function LightDesigner({
                                 step={1}
                                 inputMode="decimal"
                                 value={christmasPerFtOverride ?? ""}
-                                placeholder={String(estimate.christmas.per_ft)}
+                                placeholder={String(
+                                  estimate?.christmas.per_ft ?? catalog?.christmas.per_ft ?? "",
+                                )}
                                 onChange={(e) => onChristmasRateChange(e.target.value)}
                                 aria-label="Internal seasonal linear-foot rate override"
                               />
                               <span className="est-internal-badge">Internal</span>
                             </label>
+                          ) : null}
+                          {sides.permanent || sides.seasonal ? (
+                            <label className="est-opt-rate">
+                              <span>Overall proposal discount</span>
+                              <input
+                                className="est-input"
+                                type="number"
+                                min={0}
+                                step={1}
+                                inputMode="decimal"
+                                value={discountAmount ?? ""}
+                                placeholder="0"
+                                onChange={(event) => {
+                                  const value = Number(event.target.value);
+                                  setDiscountAmount(
+                                    event.target.value === "" || Number.isNaN(value)
+                                      ? null
+                                      : Math.max(0, value),
+                                  );
+                                }}
+                                aria-label="Overall proposal discount"
+                              />
+                              <span className="est-internal-badge">USD</span>
+                            </label>
+                          ) : null}
+                          {estimateFailed ? (
+                            <p className="est-send-error">
+                              {getApiErrorMessage(estimateError, "Unable to price this proposal.")}
+                            </p>
                           ) : null}
                         </div>
 
@@ -4348,7 +4430,7 @@ export function LightDesigner({
                           <button
                             className="est-btn est-save-btn"
                             type="button"
-                            disabled={!hasHolidayDesign || shareMutation.isPending}
+                            disabled={!hasHolidayProposal || shareMutation.isPending}
                             onClick={() => shareMutation.mutate()}
                           >
                             {shareMutation.isPending ? "Saving…" : "Save & share link only"}
@@ -4359,13 +4441,12 @@ export function LightDesigner({
                             </div>
                           ) : null}
 
-                          {estimate &&
-                          (estimate.permanent.enabled || estimate.christmas.enabled) ? (
+                          {estimate && (sides.permanent || sides.seasonal) ? (
                             <div className="est-quote-convert">
                               <div className="est-quote-convert-title">
                                 Turn this design into a quote
                               </div>
-                              {estimate.permanent.enabled ? (
+                              {sides.permanent ? (
                                 <button
                                   className="est-btn primary est-save-btn"
                                   type="button"
@@ -4374,12 +4455,12 @@ export function LightDesigner({
                                 >
                                   {quotePending
                                     ? "Creating…"
-                                    : estimate.christmas.enabled
+                                    : sides.seasonal
                                       ? "Create permanent quote"
                                       : "Create quote"}
                                 </button>
                               ) : null}
-                              {estimate.christmas.enabled ? (
+                              {sides.seasonal ? (
                                 <button
                                   className="est-btn est-save-btn"
                                   type="button"
@@ -4388,7 +4469,7 @@ export function LightDesigner({
                                 >
                                   {quotePending
                                     ? "Creating…"
-                                    : estimate.permanent.enabled
+                                    : sides.permanent
                                       ? "Create seasonal quote"
                                       : "Create quote"}
                                 </button>

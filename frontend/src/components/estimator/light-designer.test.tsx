@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -102,9 +102,12 @@ vi.mock("@/lib/estimator/design", async (importOriginal) => ({
 
 const ESTIMATE: LinearFeetEstimateResult = {
   feet: 100,
+  proposal_side: "comparison",
+  discount_amount: 0,
   permanent: {
     enabled: true,
     total: 3300,
+    subtotal: 3300,
     per_ft: 0,
     package_feet: 100,
     package_cogs: 1249,
@@ -115,6 +118,7 @@ const ESTIMATE: LinearFeetEstimateResult = {
   christmas: {
     enabled: true,
     total: 900,
+    subtotal: 900,
     per_ft: 6,
     roofline_cost: 600,
     custom_total: 0,
@@ -559,6 +563,7 @@ describe("LightDesigner", () => {
     vi.mocked(estimatorApi.estimate).mockResolvedValue(WITH_PACKAGES);
     const { container } = renderEstimator();
     await uploadPhoto(container);
+    enableService(/^Christmas$/);
     await screen.findByRole("button", { name: /Premier/i });
 
     // Save & share without an explicit pick persists the resolved default
@@ -656,6 +661,48 @@ describe("LightDesigner", () => {
     );
   });
 
+  it("hides the previous total while a pricing change is being recomputed", async () => {
+    let resolveReprice: ((value: LinearFeetEstimateResult) => void) | undefined;
+    vi.mocked(estimatorApi.estimate).mockImplementation(async (_workspaceId, request) => {
+      if (request.discount_amount === 500) {
+        return new Promise<LinearFeetEstimateResult>((resolve) => {
+          resolveReprice = resolve;
+        });
+      }
+      return {
+        ...ESTIMATE,
+        proposal_side: request.proposal_side,
+        discount_amount: request.discount_amount,
+      };
+    });
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    await waitFor(() => expect(container.querySelector(".ep-totals")).not.toBeNull());
+    expect(container.querySelector(".ep-totals")).toHaveTextContent("$3,300");
+
+    fireEvent.change(screen.getByLabelText(/Overall proposal discount/i), {
+      target: { value: "500" },
+    });
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ discount_amount: 500 }),
+      ),
+    );
+    expect(screen.getByText("Pricing…")).toBeInTheDocument();
+    expect(container.querySelector(".ep-totals")).toBeNull();
+
+    await act(async () => {
+      resolveReprice?.({
+        ...ESTIMATE,
+        discount_amount: 500,
+        permanent: { ...ESTIMATE.permanent, total: 2800 },
+      });
+    });
+    await waitFor(() => expect(container.querySelector(".ep-totals")).not.toBeNull());
+    expect(container.querySelector(".ep-totals")).toHaveTextContent("$2,800");
+  });
+
   it("converts the permanent side when the permanent quote button is used", async () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
@@ -685,6 +732,7 @@ describe("LightDesigner", () => {
 
     const { container } = renderEstimator();
     await uploadPhoto(container);
+    enableService(/^Permanent$/);
 
     // The email button is there immediately, disabled until an email is typed —
     // the rep never has to press "Save & share" first.
@@ -731,6 +779,7 @@ describe("LightDesigner", () => {
 
     const { container } = renderEstimator();
     await uploadPhoto(container);
+    enableService(/^Permanent$/);
 
     // Same deal as email: present from the start, disabled until there's a
     // number to send to.
@@ -774,6 +823,7 @@ describe("LightDesigner", () => {
 
     const { container } = renderEstimator();
     await uploadPhoto(container);
+    enableService(/^Permanent$/);
     fireEvent.change(screen.getByLabelText(/Customer phone/i), {
       target: { value: "+15551234567" },
     });
@@ -854,6 +904,49 @@ describe("LightDesigner", () => {
     // Permanent isn't being sold here, so its pitch stays off the page.
     expect(screen.queryByText("Never hang lights again")).toBeNull();
   });
+
+  it("shares a discounted permanent proposal without exposing seasonal pricing", async () => {
+    vi.mocked(estimatorApi.estimate).mockImplementation(async (_workspaceId, request) => ({
+      ...ESTIMATE,
+      proposal_side: request.proposal_side,
+      discount_amount: request.discount_amount,
+      permanent: {
+        ...ESTIMATE.permanent,
+        total: Math.max(0, ESTIMATE.permanent.subtotal - request.discount_amount),
+      },
+    }));
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    enableService(/^Permanent$/);
+
+    fireEvent.change(screen.getByLabelText(/Overall proposal discount/i), {
+      target: { value: "500" },
+    });
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ proposal_side: "permanent", discount_amount: 500 }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Client preview/i }));
+    const preview = await waitFor(() => {
+      const element = container.querySelector(".est-client-preview");
+      expect(element).not.toBeNull();
+      return element as HTMLElement;
+    });
+    expect(preview).toHaveTextContent("$2,800");
+    expect(preview).not.toHaveTextContent("$900");
+
+    fireEvent.click(screen.getByRole("button", { name: /Save & share link only/i }));
+    await waitFor(() =>
+      expect(estimatorApi.share).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ proposal_side: "permanent", discount_amount: 500 }),
+      ),
+    );
+  });
+
   // ---- Standalone line items (independent of packages) -------------------
 
   /** Fill the newest line-item row with a label and a price. */
@@ -931,6 +1024,7 @@ describe("LightDesigner", () => {
   it("removes a line item from the estimate", async () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
+    enableService(/^Permanent$/);
 
     await fillLineItem("Bucket truck day", "150");
     await waitFor(() =>
@@ -1588,6 +1682,7 @@ describe("LightDesigner", () => {
     });
     const { container } = renderEstimator();
     await uploadPhoto(container);
+    enableService(/^Permanent$/);
 
     const share = () => screen.getByRole("button", { name: /Save & share link only/i });
     expect(share()).toBeDisabled();

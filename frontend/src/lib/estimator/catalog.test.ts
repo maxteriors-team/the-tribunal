@@ -6,15 +6,26 @@ import { BULB_SIZE_OPTIONS, buildCatalog, bulbSizeNameFor } from "./catalog";
 
 // A minimal but complete rep estimate. Overrides let each test flip one knob
 // (permanent enabled, catalog contents) without restating the whole shape.
-function estimate(
-  overrides: Partial<LinearFeetEstimateResult> = {},
-): LinearFeetEstimateResult {
+function estimate(overrides: Partial<LinearFeetEstimateResult> = {}): LinearFeetEstimateResult {
   return {
     feet: 0,
-    permanent: { enabled: false, total: 0, per_ft: 0, package_feet: 0, package_cogs: 0, markup: 3.5, roofline_cost: 0, custom_total: 0 },
+    proposal_side: "comparison",
+    discount_amount: 0,
+    permanent: {
+      enabled: false,
+      total: 0,
+      subtotal: 0,
+      per_ft: 0,
+      package_feet: 0,
+      package_cogs: 0,
+      markup: 3.5,
+      roofline_cost: 0,
+      custom_total: 0,
+    },
     christmas: {
       enabled: true,
       total: 0,
+      subtotal: 0,
       per_ft: 6,
       roofline_cost: 0,
       custom_total: 0,
@@ -77,7 +88,17 @@ describe("buildCatalog permanent roofline", () => {
   it("omits the permanent roofline when permanent lighting is disabled", () => {
     const catalog = buildCatalog(
       estimate({
-        permanent: { enabled: false, total: 0, per_ft: 0, package_feet: 0, package_cogs: 0, markup: 3.5, roofline_cost: 0, custom_total: 0 },
+        permanent: {
+          enabled: false,
+          total: 0,
+          subtotal: 0,
+          per_ft: 0,
+          package_feet: 0,
+          package_cogs: 0,
+          markup: 3.5,
+          roofline_cost: 0,
+          custom_total: 0,
+        },
       }),
     );
     expect(catalog.find((p) => p.id === "roofline-permanent")).toBeUndefined();
@@ -86,7 +107,17 @@ describe("buildCatalog permanent roofline", () => {
   it("adds a permanent roofline using a package-derived display hint", () => {
     const catalog = buildCatalog(
       estimate({
-        permanent: { enabled: true, total: 4371.5, per_ft: 0, package_feet: 100, package_cogs: 1249, markup: 3.5, roofline_cost: 4371.5, custom_total: 0 },
+        permanent: {
+          enabled: true,
+          total: 4371.5,
+          subtotal: 4371.5,
+          per_ft: 0,
+          package_feet: 100,
+          package_cogs: 1249,
+          markup: 3.5,
+          roofline_cost: 4371.5,
+          custom_total: 0,
+        },
       }),
     );
     const perm = catalog.find((p) => p.id === "roofline-permanent");
@@ -101,9 +132,6 @@ describe("buildCatalog permanent roofline", () => {
   });
 
   it("never adds the permanent roofline for a null estimate", () => {
-    expect(
-      buildCatalog(null).find((p) => p.id === "roofline-permanent"),
-    ).toBeUndefined();
+    expect(buildCatalog(null).find((p) => p.id === "roofline-permanent")).toBeUndefined();
   });
 });
-

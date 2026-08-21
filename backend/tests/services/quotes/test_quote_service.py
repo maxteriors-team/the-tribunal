@@ -1054,6 +1054,48 @@ async def test_create_quote_from_estimate_persists_priced_lines_and_contact() ->
         ]
 
 
+async def test_create_quote_from_complex_estimate_persists_overall_discount() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        svc = QuoteService(db)
+
+        quote = await svc.create_quote_from_estimate(
+            ws.id,
+            EstimateQuoteRequest(
+                side="permanent",
+                proposal_side="permanent",
+                feet=100,
+                permanent_complexity="complex",
+                permanent_complexity_feet={"complex": 100},
+                discount_amount=500,
+            ),
+        )
+
+        assert quote.subtotal == 4371.5
+        assert quote.discount_amount == 500
+        assert quote.total == 3871.5
+        assert round(sum(line.total for line in quote.line_items), 2) == quote.subtotal
+
+
+async def test_create_quote_from_estimate_rejects_discount_above_total() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        svc = QuoteService(db)
+
+        with pytest.raises(ValidationError, match="Discount cannot exceed"):
+            await svc.create_quote_from_estimate(
+                ws.id,
+                EstimateQuoteRequest(
+                    side="seasonal",
+                    proposal_side="seasonal",
+                    feet=100,
+                    discount_amount=601,
+                ),
+            )
+
+
 async def test_create_quote_from_estimate_seasonal_itemizes_decor() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)

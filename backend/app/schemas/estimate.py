@@ -100,6 +100,8 @@ class LinearFeetEstimateRequest(BaseModel):
     channels: int = Field(default=0, ge=0)  # permanent zones
     takedown: bool = False  # christmas post-season takedown
     storage: bool = False  # christmas off-season storage
+    proposal_side: Literal["permanent", "seasonal", "comparison"] = "comparison"
+    discount_amount: float = Field(default=0, ge=0, le=1_000_000)
     permanent_complexity: Literal["aerial", "easy", "standard", "complex"] = "standard"
     permanent_complexity_feet: dict[Literal["aerial", "easy", "standard", "complex"], float] = (
         Field(default_factory=dict)
@@ -128,6 +130,7 @@ class PermanentEstimate(BaseModel):
 
     enabled: bool
     total: float
+    subtotal: float = 0
     package_feet: int = 0
     package_cogs: float = 0
     markup: float = 0
@@ -148,6 +151,7 @@ class ChristmasEstimate(BaseModel):
 
     enabled: bool
     total: float
+    subtotal: float = 0
     per_ft: float
     roofline_cost: float = 0
     custom_total: float = 0
@@ -163,6 +167,8 @@ class LinearFeetEstimateResult(BaseModel):
     """
 
     feet: float  # INTERNAL — rep tool only, never serialized to the client page
+    proposal_side: Literal["permanent", "seasonal", "comparison"] = "comparison"
+    discount_amount: float = Field(default=0, ge=0)
     permanent: PermanentEstimate
     christmas: ChristmasEstimate
     difference: float
@@ -300,6 +306,7 @@ class PublicPermanentComparison(BaseModel):
 
     enabled: bool
     total: float
+    subtotal: float = 0
 
 
 class PublicChristmasComparison(BaseModel):
@@ -307,6 +314,7 @@ class PublicChristmasComparison(BaseModel):
 
     enabled: bool
     total: float
+    subtotal: float = 0
 
 
 class PublicComparisonPackage(BaseModel):
@@ -386,6 +394,8 @@ class PublicComparison(BaseModel):
     logo_url: str | None = None
     client_name: str | None = None
     currency: str = "USD"
+    proposal_side: Literal["permanent", "seasonal", "comparison"] = "comparison"
+    discount_amount: float = Field(default=0, ge=0)
     permanent: PublicPermanentComparison
     christmas: PublicChristmasComparison
     difference: float

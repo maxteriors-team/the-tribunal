@@ -15247,6 +15247,11 @@ export interface components {
              * @default 0
              */
             roofline_cost: number;
+            /**
+             * Subtotal
+             * @default 0
+             */
+            subtotal: number;
             /** Total */
             total: number;
         };
@@ -15513,6 +15518,11 @@ export interface components {
             client_phone?: string | null;
             /** Custom Lines */
             custom_lines?: components["schemas"]["EstimateCustomLine"][];
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
             /** Feet */
             feet: number;
             /** Label */
@@ -15529,6 +15539,12 @@ export interface components {
             permanent_complexity_feet?: {
                 [key: string]: number;
             };
+            /**
+             * Proposal Side
+             * @default comparison
+             * @enum {string}
+             */
+            proposal_side: "permanent" | "seasonal" | "comparison";
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -17584,6 +17600,11 @@ export interface components {
             client_phone?: string | null;
             /** Custom Lines */
             custom_lines?: components["schemas"]["EstimateCustomLine"][];
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
             /** Feet */
             feet: number;
             /** Label */
@@ -17600,6 +17621,12 @@ export interface components {
             permanent_complexity_feet?: {
                 [key: string]: number;
             };
+            /**
+             * Proposal Side
+             * @default comparison
+             * @enum {string}
+             */
+            proposal_side: "permanent" | "seasonal" | "comparison";
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -21223,6 +21250,11 @@ export interface components {
             christmas_per_ft_override?: number | null;
             /** Custom Lines */
             custom_lines?: components["schemas"]["EstimateCustomLine"][];
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
             /** Feet */
             feet: number;
             /** Per Ft Override */
@@ -21237,6 +21269,12 @@ export interface components {
             permanent_complexity_feet?: {
                 [key: string]: number;
             };
+            /**
+             * Proposal Side
+             * @default comparison
+             * @enum {string}
+             */
+            proposal_side: "permanent" | "seasonal" | "comparison";
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -21270,6 +21308,11 @@ export interface components {
             custom_lines?: components["schemas"]["EstimateCustomLineCost"][];
             /** Difference */
             difference: number;
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
             /** Feet */
             feet: number;
             /** Multi Year Savings */
@@ -21279,6 +21322,12 @@ export interface components {
             permanent_one_time: number;
             /** Permanent Perks */
             permanent_perks?: string[];
+            /**
+             * Proposal Side
+             * @default comparison
+             * @enum {string}
+             */
+            proposal_side: "permanent" | "seasonal" | "comparison";
             /** Temporary Multi Year */
             temporary_multi_year: number;
             /** Years */
@@ -24380,6 +24429,11 @@ export interface components {
              * @default 0
              */
             roofline_cost: number;
+            /**
+             * Subtotal
+             * @default 0
+             */
+            subtotal: number;
             /** Total */
             total: number;
         };
@@ -26056,6 +26110,11 @@ export interface components {
         PublicChristmasComparison: {
             /** Enabled */
             enabled: boolean;
+            /**
+             * Subtotal
+             * @default 0
+             */
+            subtotal: number;
             /** Total */
             total: number;
         };
@@ -26090,6 +26149,11 @@ export interface components {
             custom_lines?: components["schemas"]["PublicComparisonLine"][];
             /** Difference */
             difference: number;
+            /**
+             * Discount Amount
+             * @default 0
+             */
+            discount_amount: number;
             /** Logo Url */
             logo_url?: string | null;
             /** Multi Year Savings */
@@ -26099,6 +26163,12 @@ export interface components {
             permanent_one_time: number;
             /** Permanent Perks */
             permanent_perks?: string[];
+            /**
+             * Proposal Side
+             * @default comparison
+             * @enum {string}
+             */
+            proposal_side: "permanent" | "seasonal" | "comparison";
             roofline?: components["schemas"]["PublicRooflineComparison"] | null;
             /** Temporary Multi Year */
             temporary_multi_year: number;
@@ -26399,6 +26469,11 @@ export interface components {
         PublicPermanentComparison: {
             /** Enabled */
             enabled: boolean;
+            /**
+             * Subtotal
+             * @default 0
+             */
+            subtotal: number;
             /** Total */
             total: number;
         };

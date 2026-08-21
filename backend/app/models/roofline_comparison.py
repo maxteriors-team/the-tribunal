@@ -15,9 +15,19 @@ payload. Mirrors the public-token pattern of :class:`app.models.quote.Quote`.
 import secrets
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Literal
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -46,6 +56,14 @@ class RooflineComparison(Base):
         CheckConstraint(
             "permanent_complexity IN ('aerial', 'easy', 'standard', 'complex')",
             name="ck_roofline_comparisons_permanent_complexity",
+        ),
+        CheckConstraint(
+            "proposal_side IN ('permanent', 'seasonal', 'comparison')",
+            name="ck_roofline_comparisons_proposal_side",
+        ),
+        CheckConstraint(
+            "discount_amount >= 0",
+            name="ck_roofline_comparisons_discount_amount_nonnegative",
         ),
     )
 
@@ -104,6 +122,15 @@ class RooflineComparison(Base):
     # :class:`app.schemas.estimate.EstimateCustomLine` — and re-priced on every
     # public view like the rest of the estimate. NULL means none were added.
     custom_lines: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, nullable=True)
+
+    # Controls which customer package the shared link opens. Historical rows keep
+    # the old comparison behavior; Light Designer links select one explicit side.
+    proposal_side: Mapped[Literal["permanent", "seasonal", "comparison"]] = mapped_column(
+        String(20), nullable=False, default="comparison", server_default="comparison"
+    )
+    discount_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=Decimal("0"), server_default="0"
+    )
 
     # Optional presentation context shown to the client / used internally.
     client_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
