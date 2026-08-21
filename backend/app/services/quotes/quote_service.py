@@ -2657,6 +2657,31 @@ class QuoteService:
         )
 
     @staticmethod
+    def _validated_estimate_discount(
+        req: LinearFeetEstimateRequest,
+        *,
+        permanent_total: float,
+        seasonal_total: float,
+        permanent_enabled: bool,
+        seasonal_enabled: bool,
+    ) -> float:
+        """Validate a flat proposal discount against every side it can price."""
+        amount = round(float(req.discount_amount), 2)
+        if amount <= 0:
+            return 0.0
+
+        totals: list[float] = []
+        if req.proposal_side in {"permanent", "comparison"} and permanent_enabled:
+            totals.append(permanent_total)
+        if req.proposal_side in {"seasonal", "comparison"} and seasonal_enabled:
+            totals.append(seasonal_total)
+        if not totals:
+            raise ValidationError("The selected proposal has no enabled pricing to discount")
+        if amount > min(totals):
+            raise ValidationError("Discount cannot exceed the selected proposal total")
+        return amount
+
+    @staticmethod
     def _compute_comparison(
         config: PricingSettings, req: LinearFeetEstimateRequest
     ) -> LinearFeetEstimateResult:
@@ -2749,10 +2774,44 @@ class QuoteService:
         xmas_enabled = bool(config.christmas.enabled)
         perm_total = float(perm.total) if perm_enabled else 0.0
         xmas_total = float(xmas.total) if xmas_enabled else 0.0
+        recommended_package = _resolve_recommended_package(christmas_packages, req.selected_package)
+        # The public proposal substitutes the selected/recommended package for
+        # à-la-carte seasonal pricing, then adds global seasonal lines. Validate
+        # against that same customer-visible total so a discount can never make
+        # the shared proposal negative.
+        selected_seasonal_total = (
+            round(
+                float(recommended_package.pricing.total)
+                + sum(float(line.amount) for line in xmas_custom),
+                2,
+            )
+            if recommended_package is not None
+            else xmas_total
+        )
+
+        discount = QuoteService._validated_estimate_discount(
+            req,
+            permanent_total=perm_total,
+            seasonal_total=selected_seasonal_total,
+            permanent_enabled=perm_enabled,
+            seasonal_enabled=xmas_enabled,
+        )
+        discounted_permanent = round(
+            perm_total - discount
+            if req.proposal_side in {"permanent", "comparison"}
+            else perm_total,
+            2,
+        )
+        discounted_seasonal = round(
+            xmas_total - discount
+            if req.proposal_side in {"seasonal", "comparison"}
+            else xmas_total,
+            2,
+        )
 
         years = int(config.comparison_years)
-        temporary_multi_year = round(xmas_total * years, 2)
-        permanent_one_time = perm_total
+        temporary_multi_year = round(discounted_seasonal * years, 2)
+        permanent_one_time = discounted_permanent
         # Only a meaningful figure when both options are actually offered.
         multi_year_savings = (
             round(temporary_multi_year - permanent_one_time, 2)
@@ -2760,14 +2819,19 @@ class QuoteService:
             else 0.0
         )
         difference = (
-            round(abs(perm_total - xmas_total), 2) if (perm_enabled and xmas_enabled) else 0.0
+            round(abs(discounted_permanent - discounted_seasonal), 2)
+            if (perm_enabled and xmas_enabled)
+            else 0.0
         )
 
         return LinearFeetEstimateResult(
             feet=float(req.feet),
+            proposal_side=req.proposal_side,
+            discount_amount=discount,
             permanent=PermanentEstimate(
                 enabled=perm_enabled,
-                total=perm_total,
+                total=discounted_permanent,
+                subtotal=perm_total,
                 package_feet=perm.package_feet if perm_enabled else 0,
                 package_cogs=perm.package_cogs if perm_enabled else 0.0,
                 markup=perm.markup if perm_enabled else 0.0,
@@ -2779,7 +2843,8 @@ class QuoteService:
             ),
             christmas=ChristmasEstimate(
                 enabled=xmas_enabled,
-                total=xmas_total,
+                total=discounted_seasonal,
+                subtotal=xmas_total,
                 per_ft=float(xmas_config.christmas.roofline_per_ft),
                 roofline_cost=float(xmas.roofline_cost) if xmas_enabled else 0.0,
                 custom_total=(
@@ -2959,6 +3024,9 @@ class QuoteService:
         config = get_pricing_config(workspace)
 
         title, pricing = self._price_estimate_side(config, req)
+        discount = round(float(req.discount_amount), 2)
+        if discount > float(pricing.total):
+            raise ValidationError("Discount cannot exceed the selected proposal total")
         line_items = self._estimate_line_items(pricing)
         if not line_items:
             raise ValidationError("This estimate has nothing to quote yet — draw the design first.")
@@ -2979,6 +3047,7 @@ class QuoteService:
                 contact_id=contact_id,
                 title=req.label or title,
                 currency="USD",
+                discount_amount=discount,
                 line_items=line_items,
             ),
             created_by_id=created_by_id,
@@ -3033,7 +3102,8 @@ class QuoteService:
         Only the measured inputs are stored; prices are recomputed from live config
         on every public view so a rate change is always reflected.
         """
-        await get_or_404(self.db, Workspace, workspace_id)
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        self._compute_comparison(get_pricing_config(workspace), req)
 
         # Save onto a CRM customer when the rep supplied contact details. Splits
         # the free-text client name into first/last for a new contact; resolve/
@@ -3070,6 +3140,8 @@ class QuoteService:
             # recomputed on each public view so a fixed typo shows up on the link
             # the client already has.
             custom_lines=[line.model_dump() for line in req.custom_lines] or None,
+            proposal_side=req.proposal_side,
+            discount_amount=Decimal(str(round(float(req.discount_amount), 2))),
             client_name=req.client_name,
             label=req.label,
             contact_id=contact_id,
@@ -3217,6 +3289,8 @@ class QuoteService:
                 permanent_complexity_feet=comparison.permanent_complexity_feet or {},
                 takedown=comparison.takedown,
                 storage=comparison.storage,
+                proposal_side=comparison.proposal_side,
+                discount_amount=float(comparison.discount_amount or 0),
                 per_ft_override=comparison.per_ft_override,
                 christmas_per_ft_override=comparison.christmas_per_ft_override,
                 christmas_items=comparison.christmas_items or {},
@@ -3241,26 +3315,47 @@ class QuoteService:
         recommended = _resolve_recommended_package(
             computed.christmas_packages, comparison.selected_package
         )
-        # A package total covers that package's scope plus any line scoped to it,
-        # so only the *global* standalone lines are added back here — without this
-        # the client's headline would quietly drop every add-on the moment
-        # packages are on, and with a scoped line counted twice it would overbill.
-        # ``custom_total`` is global-only by construction, which is what keeps
-        # this addition safe.
-        christmas_total = (
+        # A package total covers that package's scope plus any global add-ons.
+        christmas_subtotal = (
             round(recommended.pricing.total + computed.christmas.custom_total, 2)
             if recommended is not None
-            else computed.christmas.total
+            else computed.christmas.subtotal
         )
-        # The client sees the add-ons on the price they're actually being quoted:
-        # the global lines plus the ones scoped to the recommended tier. Lines
-        # scoped to a tier they aren't being sold are already inside a different
-        # card's total and would only confuse the itemization here.
+        discount = float(comparison.discount_amount or 0)
+        side = comparison.proposal_side
+        show_permanent = side in {"permanent", "comparison"}
+        show_seasonal = side in {"seasonal", "comparison"}
+        permanent_visible = show_permanent and computed.permanent.enabled
+        seasonal_visible = show_seasonal and computed.christmas.enabled
+        permanent_total = computed.permanent.total if permanent_visible else 0.0
+        christmas_total = round(christmas_subtotal - discount, 2) if seasonal_visible else 0.0
+        if seasonal_visible and discount:
+            christmas_packages = [
+                package.model_copy(update={"total": round(max(0.0, package.total - discount), 2)})
+                for package in christmas_packages
+            ]
+        elif not seasonal_visible:
+            christmas_packages = []
+
+        both_visible = permanent_visible and seasonal_visible
+        years = computed.years
+        temporary_multi_year = round(christmas_total * years, 2) if seasonal_visible else 0.0
+        permanent_one_time = permanent_total if permanent_visible else 0.0
+        difference = round(abs(permanent_total - christmas_total), 2) if both_visible else 0.0
+        multi_year_savings = (
+            round(temporary_multi_year - permanent_one_time, 2) if both_visible else 0.0
+        )
+
+        # The client sees only add-ons belonging to the proposal side in this link.
         recommended_key = recommended.key if recommended is not None else None
         client_lines = [
             line
             for line in computed.custom_lines
-            if line.package_key is None or line.package_key == recommended_key
+            if (line.package_key is None or line.package_key == recommended_key)
+            and (
+                (line.side == "permanent" and permanent_visible)
+                or (line.side == "seasonal" and seasonal_visible)
+            )
         ]
 
         return PublicComparison(
@@ -3270,23 +3365,27 @@ class QuoteService:
             logo_url=template.logo_url,
             client_name=comparison.client_name,
             currency="USD",
+            proposal_side=side,
+            discount_amount=discount,
             permanent=PublicPermanentComparison(
-                enabled=computed.permanent.enabled, total=computed.permanent.total
+                enabled=permanent_visible,
+                total=permanent_total,
+                subtotal=computed.permanent.subtotal if permanent_visible else 0.0,
             ),
             christmas=PublicChristmasComparison(
-                enabled=computed.christmas.enabled, total=christmas_total
+                enabled=seasonal_visible,
+                total=christmas_total,
+                subtotal=christmas_subtotal if seasonal_visible else 0.0,
             ),
-            difference=computed.difference,
-            years=computed.years,
-            temporary_multi_year=computed.temporary_multi_year,
-            permanent_one_time=computed.permanent_one_time,
-            multi_year_savings=computed.multi_year_savings,
-            permanent_perks=computed.permanent_perks,
-            christmas_perks=computed.christmas_perks,
+            difference=difference,
+            years=years,
+            temporary_multi_year=temporary_multi_year,
+            permanent_one_time=permanent_one_time,
+            multi_year_savings=multi_year_savings,
+            permanent_perks=computed.permanent_perks if permanent_visible else [],
+            christmas_perks=computed.christmas_perks if seasonal_visible else [],
             christmas_packages=christmas_packages,
-            # Opt-in roofline-vs-roofline cost block; None keeps today's payload.
-            roofline=build_public_roofline_comparison(config, computed),
-            # Itemized so the client sees what the add-ons on their price are.
+            roofline=(build_public_roofline_comparison(config, computed) if both_visible else None),
             custom_lines=[
                 PublicComparisonLine(
                     label=line.label,

@@ -112,8 +112,11 @@ async def test_share_then_public_view_hides_linear_feet() -> None:
 
         share = await svc.share_comparison(
             ws.id,
-            ComparisonShareRequest(feet=LEAK_FEET, client_name="Dana Homeowner"),
-            created_by_id=None,
+            ComparisonShareRequest(
+                feet=LEAK_FEET,
+                client_name="Dana Homeowner",
+                permanent_complexity="easy",
+            ),
         )
         assert share.token
         assert share.url.endswith(f"/p/compare/{share.token}")
@@ -121,10 +124,11 @@ async def test_share_then_public_view_hides_linear_feet() -> None:
         public = await svc.get_public_comparison(share.token)
         assert isinstance(public, PublicComparison)
 
-        # Prices are recomputed and present.
+        # Prices are recomputed and present; exact permanent package pricing is
+        # covered by the pricing tests and may change with the workspace price book.
         assert public.business_name == "Maxteriors Lighting Co."
         assert public.client_name == "Dana Homeowner"
-        assert public.permanent.total == 137 * 30 + 300  # 4410
+        assert public.permanent.total > 0
         assert public.christmas.total == 137 * 6  # 822
         assert public.years == 5
         assert public.temporary_multi_year == round(822 * 5, 2)
@@ -138,6 +142,48 @@ async def test_share_then_public_view_hides_linear_feet() -> None:
         assert "channels" not in dumped
         raw_json = public.model_dump_json()
         assert "137" not in raw_json  # the measured footage must not leak anywhere
+
+
+async def test_permanent_proposal_link_hides_seasonal_price_and_persists_discount() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=100,
+                proposal_side="permanent",
+                permanent_complexity="easy",
+                discount_amount=500,
+                custom_lines=[
+                    {
+                        "label": "Seasonal-only add-on",
+                        "quantity": 1,
+                        "unit_price": 50,
+                        "side": "seasonal",
+                    }
+                ],
+            ),
+        )
+        saved = await db.scalar(
+            select(RooflineComparison).where(RooflineComparison.public_token == share.token)
+        )
+        assert saved is not None
+        assert saved.proposal_side == "permanent"
+        assert float(saved.discount_amount) == 500
+
+        public = await svc.get_public_comparison(share.token)
+        assert public.proposal_side == "permanent"
+        assert public.discount_amount == 500
+        assert public.permanent.enabled is True
+        assert public.permanent.subtotal > 500
+        assert public.permanent.total == pytest.approx(public.permanent.subtotal - 500)
+        assert public.christmas.enabled is False
+        assert public.christmas.total == 0
+        assert public.christmas_packages == []
+        assert public.christmas_perks == []
+        assert public.custom_lines == []
 
 
 @pytest.mark.parametrize(
@@ -221,23 +267,23 @@ async def test_disabled_permanent_shows_not_configured_side() -> None:
         assert public.multi_year_savings == 0
 
 
-async def test_internal_per_ft_override_recomputes_public_total_without_leaking_rate() -> None:
+async def test_deprecated_per_ft_override_does_not_change_package_or_leak_rate() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
         svc = QuoteService(db)
+        baseline_share = await svc.share_comparison(ws.id, ComparisonShareRequest(feet=100))
+        baseline = await svc.get_public_comparison(baseline_share.token)
 
-        # Rep tunes the permanent rate up to $45/ft for this one job (internal).
+        # Permanent pricing now comes from server-owned kits and complexity markups;
+        # legacy per-foot overrides are accepted for old clients but deliberately ignored.
         share = await svc.share_comparison(
             ws.id, ComparisonShareRequest(feet=100, per_ft_override=45)
         )
         public = await svc.get_public_comparison(share.token)
+        assert public.permanent.total == baseline.permanent.total
 
-        # The homeowner's price reflects the internal rate ($45), not the $30
-        # standard configured rate: 100ft * $45 + $300 controller = $4,800.
-        assert public.permanent.total == 100 * 45 + 300
-
-        # The rate itself is a private input: neither the per-foot rate nor the
-        # override is a field on the client payload.
+        # The legacy rate remains private: neither it nor any per-foot rate is a
+        # field on the client payload.
         dumped = public.model_dump()
         assert "per_ft" not in dumped
         assert "per_ft_override" not in dumped
@@ -249,6 +295,8 @@ async def test_internal_christmas_per_ft_override_recomputes_public_total_withou
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
         svc = QuoteService(db)
+        baseline_share = await svc.share_comparison(ws.id, ComparisonShareRequest(feet=100))
+        baseline = await svc.get_public_comparison(baseline_share.token)
 
         # Rep tunes the seasonal roofline rate up to $9/ft for this one job.
         share = await svc.share_comparison(
@@ -258,8 +306,8 @@ async def test_internal_christmas_per_ft_override_recomputes_public_total_withou
 
         # Seasonal price reflects the internal rate ($9), not the $6 standard.
         assert public.christmas.total == 100 * 9
-        # Permanent side untouched by the seasonal override.
-        assert public.permanent.total == 100 * 30 + 300
+        # Permanent package pricing is untouched by the seasonal override.
+        assert public.permanent.total == baseline.permanent.total
         # No per-foot rate or override field on the client payload.
         dumped = public.model_dump()
         assert "per_ft" not in dumped
@@ -553,6 +601,8 @@ async def test_custom_lines_survive_the_share_and_reach_the_client_itemized() ->
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
         svc = QuoteService(db)
+        baseline_share = await svc.share_comparison(ws.id, ComparisonShareRequest(feet=100))
+        baseline = await svc.get_public_comparison(baseline_share.token)
 
         share = await svc.share_comparison(
             ws.id,
@@ -566,9 +616,9 @@ async def test_custom_lines_survive_the_share_and_reach_the_client_itemized() ->
         )
         public = await svc.get_public_comparison(share.token)
 
-        # Seasonal roofline 100*6=600 plus 2 x $150; permanent 3300 plus $90.
-        assert public.christmas.total == 900
-        assert public.permanent.total == 3390
+        # Seasonal roofline plus 2 × $150; permanent package plus $90.
+        assert public.christmas.total == baseline.christmas.total + 300
+        assert public.permanent.total == baseline.permanent.total + 90
         # Itemized rather than folded silently into the headline: an unexplained
         # bump in the price is the fastest way to lose a signature.
         assert [(line.label, line.amount, line.side) for line in public.custom_lines] == [

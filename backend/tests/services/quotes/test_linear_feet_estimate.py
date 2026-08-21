@@ -127,6 +127,39 @@ def test_aerial_pics_run_uses_fixed_multiplier_in_live_comparison() -> None:
     assert result.permanent.total == 1500
 
 
+def test_flat_discount_applies_only_to_selected_proposal_side() -> None:
+    permanent = _estimate(
+        _complexity_config((2, 3, 4)),
+        100,
+        proposal_side="permanent",
+        discount_amount=500,
+        permanent_complexity_feet={"complex": 100},
+    )
+    seasonal = _estimate(
+        _complexity_config((2, 3, 4)),
+        100,
+        proposal_side="seasonal",
+        discount_amount=100,
+    )
+
+    assert permanent.permanent.subtotal == 4000
+    assert permanent.permanent.total == 3500
+    assert permanent.christmas.total == 600
+    assert seasonal.permanent.total == 3000
+    assert seasonal.christmas.subtotal == 600
+    assert seasonal.christmas.total == 500
+
+
+def test_flat_discount_cannot_exceed_selected_proposal_total() -> None:
+    with pytest.raises(ValidationError, match="Discount cannot exceed"):
+        _estimate(
+            _config(),
+            100,
+            proposal_side="seasonal",
+            discount_amount=601,
+        )
+
+
 def test_both_services_priced_from_feet() -> None:
     result = _estimate(_config(), 100)
 
@@ -339,6 +372,18 @@ def test_selected_package_total_differs_from_a_la_carte() -> None:
     # The middle package's total is what the public comparison substitutes.
     selected = next(p for p in result.christmas_packages if p.key == "middle")
     assert selected.pricing.total == 1120
+
+
+def test_discount_cannot_exceed_selected_seasonal_package() -> None:
+    with pytest.raises(ValidationError, match="Discount cannot exceed"):
+        _estimate(
+            _packages_config(),
+            100,
+            proposal_side="seasonal",
+            selected_package="middle",
+            discount_amount=1121,
+            christmas_items={"trees": {"medium": 2}, "garland": {"standard": 50}},
+        )
 
 
 # --------------------------------------------------------------------------- #

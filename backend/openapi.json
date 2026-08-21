@@ -11200,6 +11200,11 @@
             "title": "Roofline Cost",
             "type": "number"
           },
+          "subtotal": {
+            "default": 0,
+            "title": "Subtotal",
+            "type": "number"
+          },
           "total": {
             "title": "Total",
             "type": "number"
@@ -11762,6 +11767,13 @@
             "title": "Custom Lines",
             "type": "array"
           },
+          "discount_amount": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Discount Amount",
+            "type": "number"
+          },
           "feet": {
             "minimum": 0.0,
             "title": "Feet",
@@ -11816,6 +11828,16 @@
             },
             "title": "Permanent Complexity Feet",
             "type": "object"
+          },
+          "proposal_side": {
+            "default": "comparison",
+            "enum": [
+              "permanent",
+              "seasonal",
+              "comparison"
+            ],
+            "title": "Proposal Side",
+            "type": "string"
           },
           "selected_package": {
             "anyOf": [
@@ -17502,6 +17524,13 @@
             "title": "Custom Lines",
             "type": "array"
           },
+          "discount_amount": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Discount Amount",
+            "type": "number"
+          },
           "feet": {
             "minimum": 0.0,
             "title": "Feet",
@@ -17556,6 +17585,16 @@
             },
             "title": "Permanent Complexity Feet",
             "type": "object"
+          },
+          "proposal_side": {
+            "default": "comparison",
+            "enum": [
+              "permanent",
+              "seasonal",
+              "comparison"
+            ],
+            "title": "Proposal Side",
+            "type": "string"
           },
           "selected_package": {
             "anyOf": [
@@ -26552,6 +26591,13 @@
             "title": "Custom Lines",
             "type": "array"
           },
+          "discount_amount": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Discount Amount",
+            "type": "number"
+          },
           "feet": {
             "minimum": 0.0,
             "title": "Feet",
@@ -26594,6 +26640,16 @@
             },
             "title": "Permanent Complexity Feet",
             "type": "object"
+          },
+          "proposal_side": {
+            "default": "comparison",
+            "enum": [
+              "permanent",
+              "seasonal",
+              "comparison"
+            ],
+            "title": "Proposal Side",
+            "type": "string"
           },
           "selected_package": {
             "anyOf": [
@@ -26661,6 +26717,12 @@
             "title": "Difference",
             "type": "number"
           },
+          "discount_amount": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Discount Amount",
+            "type": "number"
+          },
           "feet": {
             "title": "Feet",
             "type": "number"
@@ -26682,6 +26744,16 @@
             },
             "title": "Permanent Perks",
             "type": "array"
+          },
+          "proposal_side": {
+            "default": "comparison",
+            "enum": [
+              "permanent",
+              "seasonal",
+              "comparison"
+            ],
+            "title": "Proposal Side",
+            "type": "string"
           },
           "temporary_multi_year": {
             "title": "Temporary Multi Year",
@@ -35355,6 +35427,11 @@
             "title": "Roofline Cost",
             "type": "number"
           },
+          "subtotal": {
+            "default": 0,
+            "title": "Subtotal",
+            "type": "number"
+          },
           "total": {
             "title": "Total",
             "type": "number"
@@ -40050,6 +40127,11 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "subtotal": {
+            "default": 0,
+            "title": "Subtotal",
+            "type": "number"
+          },
           "total": {
             "title": "Total",
             "type": "number"
@@ -40121,6 +40203,12 @@
             "title": "Difference",
             "type": "number"
           },
+          "discount_amount": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Discount Amount",
+            "type": "number"
+          },
           "logo_url": {
             "anyOf": [
               {
@@ -40149,6 +40237,16 @@
             },
             "title": "Permanent Perks",
             "type": "array"
+          },
+          "proposal_side": {
+            "default": "comparison",
+            "enum": [
+              "permanent",
+              "seasonal",
+              "comparison"
+            ],
+            "title": "Proposal Side",
+            "type": "string"
           },
           "roofline": {
             "anyOf": [
@@ -40902,6 +41000,11 @@
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
+          },
+          "subtotal": {
+            "default": 0,
+            "title": "Subtotal",
+            "type": "number"
           },
           "total": {
             "title": "Total",
