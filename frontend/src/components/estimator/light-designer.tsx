@@ -2632,7 +2632,7 @@ export function LightDesigner({
     return () => {
       cancelled = true;
     };
-  }, [projectInitialDraft, projectResetKey, serverBacked]);
+  }, [projectInitialDraft, projectResetKey, serverBacked, setLandscapeTab]);
 
   // Fixture placement is the highest-value edit in this workflow. Queue it for
   // server persistence immediately; all other drawing edits keep the quiet-period

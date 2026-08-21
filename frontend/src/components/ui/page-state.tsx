@@ -35,12 +35,14 @@ export function PageLoadingState({ message, ...props }: PageLoadingStateProps) {
 }
 
 export interface PageErrorStateProps extends PageStateWrapperProps {
+  title?: string
   message?: string
   onRetry?: () => void
   retryLabel?: string
 }
 
 export function PageErrorState({
+  title,
   message = "Something went wrong.",
   onRetry,
   retryLabel = "Try again",
@@ -49,7 +51,10 @@ export function PageErrorState({
   return (
     <PageStateWrapper {...props}>
       <AlertCircle className="size-8 text-destructive" />
-      <p className="text-sm text-muted-foreground">{message}</p>
+      <div className="space-y-1">
+        {title ? <h3 className="text-base font-medium">{title}</h3> : null}
+        <p className="text-sm text-muted-foreground">{message}</p>
+      </div>
       {onRetry ? (
         <Button variant="outline" size="sm" onClick={onRetry}>
           {retryLabel}
