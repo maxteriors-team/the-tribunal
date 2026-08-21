@@ -19,6 +19,12 @@ Route: `/onboarding`. Sidebar reminder label: **Finish setup**.
 
 Follow the guided setup to configure the workspace profile, connect the supported CRM and calendar services, import leads, prepare agents and sending resources, and launch the first workflow. Owners and admins can return to `/onboarding`; field users are not forced into owner-only setup. Completing an item should be verified by the status shown in the setup wizard.
 
+## Finish sales-rep setup
+
+Route: `/sales-onboarding`.
+
+Sales reps use this walkthrough to review their profile and notifications, connect the Google Calendar that owns their appointments, and learn the daily Today → Contact → Opportunity → Calendar workflow. The setup reminder remains visible until the walkthrough is completed; a manager must separately enable Booking Calendar access and confirm working hours in Team settings.
+
 ## Find a Settings tab
 
 Route: `/settings`. Sidebar label: **Settings**.

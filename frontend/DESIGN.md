@@ -790,3 +790,54 @@ Quality-rubric score from the revised 390px and 1440px captures: **22/24**.
   or Settings Pricing.
 - Assistive-technology speech output, forced-colors rendering, browser zoom, and legal conformance remain
   unverified; this section makes no product-wide WCAG or legal compliance claim.
+
+## Sales rep onboarding (Aug 2026)
+
+### Design read
+
+- **Surface:** a one-time application setup flow outside the normal CRM shell.
+- **Audience:** a newly invited sales rep who knows the trade but may not know Tribunal.
+- **Single job:** connect the rep's identity and calendar, then teach the shortest safe path through a first assigned lead.
+- **Risk:** an unclear setup can cause missed appointments or practice messages sent to live customers; the walkthrough explicitly uses a manager-created test lead.
+- **Platform:** one shared content rail works from phone to desktop, with keyboard, touch, reduced-motion, and narrow reflow support.
+
+### Evidence and thesis
+
+The flow reuses the local owner-onboarding wizard rather than inventing another navigation system. The aligned external observations are Linear's predictable setup sequencing and Superhuman's concise guided setup; Intercom is the contrast because a support-hub layout would add unnecessary branches for a five-step first run.
+
+One steady rail leads from Welcome to Profile, Calendar, Daily flow, and Ready. The product-specific device is the first-lead path: Today → Contact → Opportunity → Calendar. Borders express sequence and containment; elevation is limited to the single wizard surface, and the existing type, color, icon, spacing, focus, and control tokens remain unchanged.
+
+### Components and states
+
+- `/sales-onboarding` uses `WizardContainer`, `WizardStepIndicator`, `WizardFooter`, and `GoogleCalendarCard`. Profile and notification actions deep-link to their established Settings tabs.
+- `SalesRepOnboardingGate` redirects a sales rep once after joining, then leaves a non-blocking setup reminder until completion. Browser-local flags are keyed by user and workspace so one member cannot dismiss another member's setup.
+- Google OAuth returns directly to the Calendar step. Calendar loading, disconnected, connected, and API error states remain owned by the shared calendar card.
+- Non-sales roles fail closed to Today; skipping never loops; finishing removes the reminder and lands on Today.
+- Step labels remain visible on wide screens and retain icon plus accessible names on narrow screens. Shared wizard motion becomes immediate when reduced motion is requested.
+
+### Responsive and accessibility contract
+
+The representative state keeps the step sequence, current heading, and Next action in one bounded card. Content scrolls inside the wizard; footer actions stay in a consistent order; native headings, lists, links, buttons, `nav`, and `aria-current="step"` carry structure without ARIA tabs. Long workspace names and emails wrap inside the rail. Unit tests cover role gating, one-time redirect, workspace/user scoping, OAuth step return, full step navigation, and completion.
+
+### Rendered critique and verification
+
+Evidence: `.ezcoder/screenshots/sales-rep-onboarding-desktop.png`, `.ezcoder/screenshots/sales-rep-onboarding-calendar.png`, and `.ezcoder/screenshots/sales-rep-onboarding-mobile.png`. The captures use explicitly mocked sales-rep, workspace, and disconnected-calendar responses; no fixture is presented as production data.
+
+| Criterion                   | Score | Rendered evidence                                                                                                                                                                     |
+| --------------------------- | ----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Brief specificity           |     2 | Sales setup, assigned opportunities, appointments, and first-lead language identify the job without relying on the logo.                                                              |
+| Information hierarchy       |     2 | Step, heading, short explanation, task content, then one Next action remain ordered.                                                                                                  |
+| Composition                 |     2 | One rail aligns setup context, wizard navigation, content, and footer at both captured widths.                                                                                        |
+| Consistency and flow        |     2 | Existing wizard, settings, Google Calendar, Lucide, button, and card anatomy carry through every step.                                                                                |
+| Typography                  |     2 | Existing display, body, utility, and muted roles wrap cleanly with readable measures.                                                                                                 |
+| Material and surface logic  |     2 | One bounded wizard surface contains the flow; borders group ordered work without extra elevation.                                                                                     |
+| State completeness          |     1 | Welcome, selected/completed steps, disconnected calendar, OAuth return, skip, and finish are covered; offline rendering was not captured.                                             |
+| Responsive behavior         |     1 | The revised 390 px capture keeps actions reachable with internal scrolling; 320 px and 200% text reflow remain unverified.                                                            |
+| Accessibility quality floor |     1 | Semantic controls, names, list structure, keyboard-sized targets, and reduced motion are present; screen-reader, forced-colors, and complete WCAG criterion review remain unverified. |
+| Motion purpose              |     2 | The only new movement explains step continuity and becomes immediate under reduced motion.                                                                                            |
+| Content authenticity        |     2 | Copy matches current routes and permissions, avoids fabricated metrics, and labels the test-lead requirement honestly.                                                                |
+| Visual distinctiveness      |     2 | The first-lead path gives the setup a sales-operating signature beyond accent color.                                                                                                  |
+
+**Final score: 21/24.** The first mobile capture clipped the footer below a tall workflow step. The revision added the missing flex minimum constraint so content scrolls while Previous and Next remain visible, then re-captured mobile. The repeated inner setup eyebrow was removed rather than replaced with decoration.
+
+Verification passed: 9 focused unit tests, targeted ESLint, TypeScript, production build with `/sales-onboarding`, and browser captures at 1440×900 and 390×844 with no console or page errors. Assistive-technology speech output, forced colors, 200% zoom/reflow, and a complete manual WCAG review remain unverified, so no conformance claim is made.

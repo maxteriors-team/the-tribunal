@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode } from "react";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -45,6 +45,8 @@ export function WizardContainer<TStepId extends string>({
   submitIcon,
   children,
 }: WizardContainerProps<TStepId>) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <div className="flex h-full min-w-0 flex-col">
       <WizardStepIndicator
@@ -53,15 +55,15 @@ export function WizardContainer<TStepId extends string>({
         currentStepId={currentStepId}
         onStepClick={onStepClick}
       />
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto max-w-4xl p-4 sm:p-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentStepId}
-              initial={{ opacity: 0, x: 20 }}
+              initial={shouldReduceMotion ? false : { opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
+              exit={shouldReduceMotion ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
             >
               {children}
             </motion.div>
