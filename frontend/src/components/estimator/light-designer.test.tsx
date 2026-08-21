@@ -7,6 +7,7 @@ import {
   dominantPermanentComplexity,
   LightDesigner,
   type LandscapeProjectPersistenceAdapter,
+  PERMANENT_COMPLEXITY_OPTIONS,
 } from "@/components/estimator/light-designer";
 import { estimatorApi } from "@/lib/api/estimator";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
@@ -627,11 +628,32 @@ describe("LightDesigner", () => {
     expect(await screen.findByText(/Quote QUO-000007 created/i)).toBeInTheDocument();
   });
 
+  it("offers Aerial Pics as the fixed 1.5× Light Designer run option", () => {
+    expect(PERMANENT_COMPLEXITY_OPTIONS).toContainEqual({
+      value: "aerial",
+      label: "Aerial Pics · 1.5×",
+    });
+  });
+
   it("uses the hardest measured run as the scalar complexity fallback", () => {
-    expect(dominantPermanentComplexity({ easy: 100, standard: 0, complex: 0 })).toBe("easy");
-    expect(dominantPermanentComplexity({ easy: 0, standard: 0, complex: 100 })).toBe("complex");
-    expect(dominantPermanentComplexity({ easy: 50, standard: 0, complex: 50 })).toBe("complex");
-    expect(dominantPermanentComplexity({ easy: 0, standard: 0, complex: 0 })).toBe("standard");
+    expect(dominantPermanentComplexity({ aerial: 100, easy: 0, standard: 0, complex: 0 })).toBe(
+      "aerial",
+    );
+    expect(dominantPermanentComplexity({ aerial: 0, easy: 100, standard: 0, complex: 0 })).toBe(
+      "easy",
+    );
+    expect(dominantPermanentComplexity({ aerial: 0, easy: 0, standard: 0, complex: 100 })).toBe(
+      "complex",
+    );
+    expect(dominantPermanentComplexity({ aerial: 50, easy: 50, standard: 0, complex: 0 })).toBe(
+      "easy",
+    );
+    expect(dominantPermanentComplexity({ aerial: 0, easy: 50, standard: 0, complex: 50 })).toBe(
+      "complex",
+    );
+    expect(dominantPermanentComplexity({ aerial: 0, easy: 0, standard: 0, complex: 0 })).toBe(
+      "standard",
+    );
   });
 
   it("converts the permanent side when the permanent quote button is used", async () => {

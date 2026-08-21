@@ -18,7 +18,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-_COMPLEXITY_CHECK = "permanent_complexity IN ('easy', 'standard', 'complex')"
+_COMPLEXITY_CHECK = "permanent_complexity IN ('aerial', 'easy', 'standard', 'complex')"
 _COMPLEXITY_CHECK_NAME = "ck_roofline_comparisons_permanent_complexity"
 
 

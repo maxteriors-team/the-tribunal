@@ -223,8 +223,8 @@ export interface Run {
   colors?: string[];
   /** Per-run bulb-size multiplier (visual only); falls back to the product's. */
   bulbScale?: number;
-  /** Internal install difficulty used to weight permanent-lighting markup. */
-  permanentComplexity?: "easy" | "standard" | "complex";
+  /** Internal run type used to weight permanent-lighting markup. */
+  permanentComplexity?: "aerial" | "easy" | "standard" | "complex";
   /** Plan-only electrical metadata for a landscape wire circuit. */
   circuitLabel?: string;
   transformerId?: string;

@@ -247,7 +247,15 @@ interface LightDesignerProps {
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 type PermanentComplexity = LinearFeetEstimateRequest["permanent_complexity"];
-const PERMANENT_COMPLEXITIES: readonly PermanentComplexity[] = ["easy", "standard", "complex"];
+export const PERMANENT_COMPLEXITY_OPTIONS = [
+  { value: "aerial", label: "Aerial Pics · 1.5×" },
+  { value: "easy", label: "Easy" },
+  { value: "standard", label: "Standard" },
+  { value: "complex", label: "Complex" },
+] as const satisfies readonly { value: PermanentComplexity; label: string }[];
+const PERMANENT_COMPLEXITIES: readonly PermanentComplexity[] = PERMANENT_COMPLEXITY_OPTIONS.map(
+  ({ value }) => value,
+);
 
 /**
  * Preserve a truthful scalar for servers/rows that cannot consume the measured
@@ -2841,7 +2849,7 @@ export function LightDesigner({
   );
   const feet = inputs.feet;
   const permanentComplexityFeet = (() => {
-    const totals = { easy: 0, standard: 0, complex: 0 };
+    const totals = { aerial: 0, easy: 0, standard: 0, complex: 0 };
     for (const shot of liveShots) {
       const { ftPerPx } = designScale(shot.design, shot.photo.width);
       for (const run of shot.design.runs) {
@@ -4213,18 +4221,18 @@ export function LightDesigner({
                                       type: "UPDATE_RUN",
                                       id: selectedPermanentRun.id,
                                       patch: {
-                                        permanentComplexity: event.target.value as
-                                          | "easy"
-                                          | "standard"
-                                          | "complex",
+                                        permanentComplexity: event.target
+                                          .value as PermanentComplexity,
                                       },
                                     })
                                   }
                                   aria-label="Selected permanent run complexity"
                                 >
-                                  <option value="easy">Easy</option>
-                                  <option value="standard">Standard</option>
-                                  <option value="complex">Complex</option>
+                                  {PERMANENT_COMPLEXITY_OPTIONS.map(({ value, label }) => (
+                                    <option key={value} value={value}>
+                                      {label}
+                                    </option>
+                                  ))}
                                 </select>
                                 <span className="est-internal-badge">Internal</span>
                               </label>

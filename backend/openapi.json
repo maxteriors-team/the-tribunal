@@ -11794,6 +11794,7 @@
           "permanent_complexity": {
             "default": "standard",
             "enum": [
+              "aerial",
               "easy",
               "standard",
               "complex"
@@ -11807,6 +11808,7 @@
             },
             "propertyNames": {
               "enum": [
+                "aerial",
                 "easy",
                 "standard",
                 "complex"
@@ -17532,6 +17534,7 @@
           "permanent_complexity": {
             "default": "standard",
             "enum": [
+              "aerial",
               "easy",
               "standard",
               "complex"
@@ -17545,6 +17548,7 @@
             },
             "propertyNames": {
               "enum": [
+                "aerial",
                 "easy",
                 "standard",
                 "complex"
@@ -26568,6 +26572,7 @@
           "permanent_complexity": {
             "default": "standard",
             "enum": [
+              "aerial",
               "easy",
               "standard",
               "complex"
@@ -26581,6 +26586,7 @@
             },
             "propertyNames": {
               "enum": [
+                "aerial",
                 "easy",
                 "standard",
                 "complex"
