@@ -26,6 +26,26 @@ import { ConvertQuoteDialog } from "./convert-quote-dialog";
 // simplification: one request covers 500 approved records; paginate if a workspace exceeds it.
 const APPROVED_QUOTES_PARAMS = { page_size: 500, status: "approved" };
 
+function SelectedPermanentKits({ quote }: { quote: Quote }) {
+  const kits = quote.selected_permanent_kits ?? [];
+  if (kits.length === 0) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5" aria-label="Selected permanent-light kits">
+      {kits.map((kit) => (
+        <span
+          key={`${kit.feet}-${kit.quantity}`}
+          className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300"
+        >
+          <Check className="size-3.5" />
+          {kit.quantity} × {kit.feet}-ft kit
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function QuoteJobAction({
   quote,
   onCopy,
@@ -84,9 +104,9 @@ export function CopyToJobTab() {
           <div className="space-y-1">
             <h2 className="font-semibold">Turn approved work into an installation job</h2>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              The job keeps the estimate title, job description, and linked installation layout.
-              Choose the installation team and time window here; assigned members see it on their
-              calendar and track time from the job.
+              The job keeps the estimate title, job description, selected permanent-light kits, and
+              linked installation layout. Choose the installation team and time window here;
+              assigned members see it on their calendar and track time from the job.
             </p>
           </div>
         </div>
@@ -131,6 +151,16 @@ export function CopyToJobTab() {
                     </span>
                   )}
                 </div>
+                {(quote.selected_permanent_kits?.length ?? 0) > 0 ? (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Selected kit
+                    </p>
+                    <div className="mt-1">
+                      <SelectedPermanentKits quote={quote} />
+                    </div>
+                  </div>
+                ) : null}
                 <QuoteJobAction quote={quote} onCopy={() => setSelectedQuote(quote)} fullWidth />
               </article>
             ))}
@@ -143,6 +173,7 @@ export function CopyToJobTab() {
                   <TableHead>Estimate or quote</TableHead>
                   <TableHead>Job description</TableHead>
                   <TableHead>Installation layout</TableHead>
+                  <TableHead>Selected kit</TableHead>
                   <TableHead className="text-right">Job</TableHead>
                 </TableRow>
               </TableHeader>
@@ -170,6 +201,9 @@ export function CopyToJobTab() {
                           <ImageOff className="size-4" /> None linked
                         </span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <SelectedPermanentKits quote={quote} />
                     </TableCell>
                     <TableCell className="text-right">
                       <QuoteJobAction quote={quote} onCopy={() => setSelectedQuote(quote)} />

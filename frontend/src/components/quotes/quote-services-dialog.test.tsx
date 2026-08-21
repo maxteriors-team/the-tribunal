@@ -18,9 +18,10 @@ import type { Quote } from "@/types";
  * read their own number back wrong.
  */
 
-const { getMock, addServiceMock, removeServiceMock } = vi.hoisted(() => ({
+const { getMock, addServiceMock, updateLineItemMock, removeServiceMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
   addServiceMock: vi.fn(),
+  updateLineItemMock: vi.fn(),
   removeServiceMock: vi.fn(),
 }));
 
@@ -28,6 +29,7 @@ vi.mock("@/lib/api/quotes", () => ({
   quotesApi: {
     get: getMock,
     addService: addServiceMock,
+    updateLineItem: updateLineItemMock,
     removeService: removeServiceMock,
   },
 }));
@@ -68,12 +70,7 @@ function renderDialog(quote: Quote) {
   });
   return render(
     <QueryClientProvider client={client}>
-      <QuoteServicesDialog
-        workspaceId="ws-1"
-        quote={quote}
-        open
-        onOpenChange={() => {}}
-      />
+      <QuoteServicesDialog workspaceId="ws-1" quote={quote} open onOpenChange={() => {}} />
     </QueryClientProvider>,
   );
 }
@@ -111,22 +108,18 @@ describe("QuoteServicesDialog", () => {
 
     expect(await screen.findByText("Core drilling")).toBeInTheDocument();
     expect(screen.queryByText("ZDC Color Uplight")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit Core drilling" })).not.toBeInTheDocument();
   });
 
   it("sends the typed service and shows the total the server returns", async () => {
-    getMock.mockResolvedValue(
-      makeQuote({ total: 400, services: [], line_items: [] }),
-    );
+    getMock.mockResolvedValue(makeQuote({ total: 400, services: [], line_items: [] }));
     addServiceMock.mockResolvedValue(makeQuote({ total: 1000 }));
 
     const user = userEvent.setup();
     renderDialog(makeQuote());
 
     await screen.findByText("No services added yet.");
-    await user.type(
-      screen.getByPlaceholderText("e.g. Gutter cleaning"),
-      "Gutter cleaning",
-    );
+    await user.type(screen.getByPlaceholderText("e.g. Gutter cleaning"), "Gutter cleaning");
     await user.type(screen.getByLabelText("Amount"), "600");
     await user.click(screen.getByRole("button", { name: /add to quote/i }));
 
@@ -138,20 +131,64 @@ describe("QuoteServicesDialog", () => {
   });
 
   it("will not submit a service with no amount", async () => {
-    getMock.mockResolvedValue(
-      makeQuote({ services: [], line_items: [] }),
-    );
+    getMock.mockResolvedValue(makeQuote({ services: [], line_items: [] }));
 
     const user = userEvent.setup();
     renderDialog(makeQuote());
 
     await screen.findByText("No services added yet.");
-    await user.type(
-      screen.getByPlaceholderText("e.g. Gutter cleaning"),
-      "Gutter cleaning",
-    );
+    await user.type(screen.getByPlaceholderText("e.g. Gutter cleaning"), "Gutter cleaning");
 
     expect(screen.getByRole("button", { name: /add to quote/i })).toBeDisabled();
+  });
+
+  it("edits a plain line's overall amount without changing quantity or discount", async () => {
+    getMock.mockResolvedValue(
+      makeQuote({
+        total: 180,
+        services: [
+          {
+            id: "line-1",
+            name: "Permanent lighting package",
+            description: "100 ft measured; 100-ft kit",
+            amount: 180,
+          },
+        ],
+        line_items: [
+          {
+            id: "line-1",
+            quote_id: "q-1",
+            name: "Permanent lighting package",
+            description: "100 ft measured; 100-ft kit",
+            quantity: 2,
+            unit_price: 100,
+            discount: 20,
+            total: 180,
+            created_at: "2026-01-01T00:00:00Z",
+            updated_at: "2026-01-01T00:00:00Z",
+          },
+        ],
+      }),
+    );
+    updateLineItemMock.mockResolvedValue(makeQuote({ total: 260 }));
+
+    const user = userEvent.setup();
+    renderDialog(makeQuote());
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit Permanent lighting package" }),
+    );
+    const amountInput = screen.getByLabelText("Overall amount");
+    await user.clear(amountInput);
+    await user.type(amountInput, "260");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(updateLineItemMock).toHaveBeenCalledTimes(1));
+    expect(updateLineItemMock).toHaveBeenCalledWith("ws-1", "q-1", "line-1", {
+      name: "Permanent lighting package",
+      description: "100 ft measured; 100-ft kit",
+      unit_price: 140,
+    });
   });
 
   it("removes a service by the id the server gave it", async () => {
@@ -166,9 +203,7 @@ describe("QuoteServicesDialog", () => {
     const user = userEvent.setup();
     renderDialog(makeQuote());
 
-    await user.click(
-      await screen.findByRole("button", { name: "Remove Gutter cleaning" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Remove Gutter cleaning" }));
 
     await waitFor(() => expect(removeServiceMock).toHaveBeenCalledTimes(1));
     expect(removeServiceMock).toHaveBeenCalledWith("ws-1", "q-1", "chg-1");
@@ -179,15 +214,11 @@ describe("QuoteServicesDialog", () => {
 
     renderDialog(makeQuote({ status: "sent" }));
 
-    expect(
-      await screen.findByText(/updates what the customer sees/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/updates what the customer sees/i)).toBeInTheDocument();
   });
 
   it("says the amount is net only on a quote that grosses it up", async () => {
-    getMock.mockResolvedValue(
-      makeQuote({ proposal_document: { version: 1 }, services: [] }),
-    );
+    getMock.mockResolvedValue(makeQuote({ proposal_document: { version: 1 }, services: [] }));
     const { unmount } = renderDialog(makeQuote());
     expect(await screen.findByText(/the finance fee is added/i)).toBeInTheDocument();
     unmount();

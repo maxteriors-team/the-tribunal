@@ -35361,6 +35361,27 @@
         "title": "PermanentEstimate",
         "type": "object"
       },
+      "PermanentKitSelection": {
+        "description": "Procurement-safe permanent-light kit quantity selected by the pricer.",
+        "properties": {
+          "feet": {
+            "exclusiveMinimum": 0.0,
+            "title": "Feet",
+            "type": "integer"
+          },
+          "quantity": {
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "feet",
+          "quantity"
+        ],
+        "title": "PermanentKitSelection",
+        "type": "object"
+      },
       "PermanentPackage": {
         "description": "One supplier kit used to cover a measured roofline.",
         "properties": {
@@ -42721,6 +42742,13 @@
             ],
             "title": "Revision Root Quote Id"
           },
+          "selected_permanent_kits": {
+            "items": {
+              "$ref": "#/components/schemas/PermanentKitSelection"
+            },
+            "title": "Selected Permanent Kits",
+            "type": "array"
+          },
           "sent_at": {
             "anyOf": [
               {
@@ -43615,6 +43643,13 @@
               }
             ],
             "title": "Revision Root Quote Id"
+          },
+          "selected_permanent_kits": {
+            "items": {
+              "$ref": "#/components/schemas/PermanentKitSelection"
+            },
+            "title": "Selected Permanent Kits",
+            "type": "array"
           },
           "sent_at": {
             "anyOf": [

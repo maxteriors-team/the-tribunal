@@ -24384,6 +24384,16 @@ export interface components {
             total: number;
         };
         /**
+         * PermanentKitSelection
+         * @description Procurement-safe permanent-light kit quantity selected by the pricer.
+         */
+        PermanentKitSelection: {
+            /** Feet */
+            feet: number;
+            /** Quantity */
+            quantity: number;
+        };
+        /**
          * PermanentPackage
          * @description One supplier kit used to cover a measured roofline.
          */
@@ -27119,6 +27129,8 @@ export interface components {
             revision_of_quote_id?: string | null;
             /** Revision Root Quote Id */
             revision_root_quote_id?: string | null;
+            /** Selected Permanent Kits */
+            selected_permanent_kits?: components["schemas"]["PermanentKitSelection"][];
             /** Sent At */
             sent_at?: string | null;
             /** Service Location Id */
@@ -27426,6 +27438,8 @@ export interface components {
             revision_of_quote_id?: string | null;
             /** Revision Root Quote Id */
             revision_root_quote_id?: string | null;
+            /** Selected Permanent Kits */
+            selected_permanent_kits?: components["schemas"]["PermanentKitSelection"][];
             /** Sent At */
             sent_at?: string | null;
             /** Service Location Id */

@@ -1033,17 +1033,25 @@ async def test_create_quote_from_estimate_persists_priced_lines_and_contact() ->
             ),
         )
 
-        # 100ft * $30 + $300 controller = $3,300, as a real draft quote.
+        # Default 100-ft kit COGS ($1,249) × Standard (3.0), with no fee buffer.
         assert quote.number == "QUO-000001"
         assert quote.status == "draft"
         assert quote.title == "Permanent Holiday Lighting"
-        assert quote.total == 3300.0
+        assert quote.total == 3747.0
         # Client details resolved onto a CRM contact (phone-keyed).
         assert quote.contact_id is not None
+        assert [kit.model_dump() for kit in quote.selected_permanent_kits] == [
+            {"feet": 100, "quantity": 1}
+        ]
         names = [li.name for li in quote.line_items]
-        assert "100 ft permanent roofline" in names
+        assert "Permanent lighting package — covers 100 ft" in names
         # The persisted line items sum back to the quote total.
-        assert round(sum(li.total for li in quote.line_items), 2) == 3300.0
+        assert round(sum(li.total for li in quote.line_items), 2) == quote.total
+
+        listed = await svc.list_quotes(ws.id)
+        assert [kit.model_dump() for kit in listed.items[0].selected_permanent_kits] == [
+            {"feet": 100, "quantity": 1}
+        ]
 
 
 async def test_create_quote_from_estimate_seasonal_itemizes_decor() -> None:
@@ -1065,6 +1073,7 @@ async def test_create_quote_from_estimate_seasonal_itemizes_decor() -> None:
         assert quote.title == "Christmas Lighting"
         assert quote.total == 1520.0
         assert quote.contact_id is None  # no client details supplied -> unlinked
+        assert quote.selected_permanent_kits == []
         names = [li.name for li in quote.line_items]
         assert "100 ft roofline" in names
 

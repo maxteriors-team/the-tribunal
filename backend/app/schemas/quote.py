@@ -20,7 +20,7 @@ from pydantic import (
 )
 
 from app.schemas.attach_rules import AttachDismissal, AttachDismissalRequest, AttachWarning
-from app.schemas.pricing import FinancingEstimate
+from app.schemas.pricing import FinancingEstimate, PermanentKitSelection
 from app.schemas.proposal_wizard import ProposalWizardPayload
 from app.schemas.user import AssigneeSummary
 
@@ -342,6 +342,9 @@ class QuoteResponse(BaseModel):
     attach_value: float = 0.0
     # Recorded dismissals of the attach prompt, oldest first. Server-written.
     attach_dismissals: list[AttachDismissal] = Field(default_factory=list)
+    # Server-priced procurement metadata. Intentionally absent from create/update
+    # request schemas so clients cannot forge which kits were selected.
+    selected_permanent_kits: list[PermanentKitSelection] = Field(default_factory=list)
 
     @field_validator("revision_number", "proposal_version", mode="before")
     @classmethod
@@ -365,14 +368,14 @@ class QuoteResponse(BaseModel):
         """
         return 0 if value is None else value
 
-    @field_validator("attach_dismissals", mode="before")
+    @field_validator("attach_dismissals", "selected_permanent_kits", mode="before")
     @classmethod
-    def _empty_dismissals(cls, value: object) -> object:
-        """Read a null dismissal list as an empty one.
+    def _empty_defaulted_lists(cls, value: object) -> object:
+        """Read a null JSON list as empty before SQLAlchemy defaults land.
 
-        Same flush-timing reason as :meth:`_null_counter_is_zero`; the column is
-        NOT NULL with a ``'[]'`` server default, and "nobody dismissed anything"
-        is the truthful reading of an uninserted row.
+        These columns are NOT NULL with ``'[]'`` server defaults; an unflushed
+        ORM object still exposes ``None``, where an empty list is the truthful
+        value.
         """
         return [] if value is None else value
 

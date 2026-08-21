@@ -68,6 +68,7 @@ from app.schemas.pricing import (
     ChristmasPricing,
     FinancingEstimate,
     PackagePricing,
+    PermanentKitSelection,
     PermanentPricing,
     PricingSettings,
 )
@@ -974,6 +975,7 @@ class QuoteService:
         quote_in: QuoteCreate,
         *,
         created_by_id: int | None = None,
+        selected_permanent_kits: Sequence[PermanentKitSelection] | None = None,
     ) -> QuoteDetailResponse:
         """Create a draft quote with its initial line items and computed totals."""
         await self._validate_refs(
@@ -1006,6 +1008,9 @@ class QuoteService:
             terms=quote_in.terms,
             status="draft",
             created_by_id=created_by_id,
+            selected_permanent_kits=[
+                kit.model_dump(mode="json") for kit in (selected_permanent_kits or ())
+            ],
         )
         workspace = await get_or_404(self.db, Workspace, workspace_id)
         # Inherit the workspace's default deposit when the operator set none.
@@ -2523,6 +2528,7 @@ class QuoteService:
             revision_root_quote_id=source.revision_root_quote_id or source.id,
             revision_number=source.revision_number + 1,
             created_by_id=created_by_id,
+            selected_permanent_kits=list(source.selected_permanent_kits),
         )
         document, attach_warning = await self._apply_wizard_payload(revision, workspace, payload)
         self.db.add(revision)
@@ -2854,6 +2860,7 @@ class QuoteService:
                     feet=req.feet,
                     channels=req.channels,
                     complexity=req.permanent_complexity,
+                    complexity_feet=req.permanent_complexity_feet,
                 ),
                 custom,
             )
@@ -2975,6 +2982,9 @@ class QuoteService:
                 line_items=line_items,
             ),
             created_by_id=created_by_id,
+            selected_permanent_kits=(
+                pricing.selected_kits if isinstance(pricing, PermanentPricing) else None
+            ),
         )
         self.log.info(
             "quote_created_from_estimate",
@@ -3042,6 +3052,8 @@ class QuoteService:
             workspace_id=workspace_id,
             feet=float(req.feet),
             channels=int(req.channels),
+            permanent_complexity=req.permanent_complexity,
+            permanent_complexity_feet=req.permanent_complexity_feet or None,
             takedown=bool(req.takedown),
             storage=bool(req.storage),
             per_ft_override=(
@@ -3201,6 +3213,8 @@ class QuoteService:
             LinearFeetEstimateRequest(
                 feet=comparison.feet,
                 channels=comparison.channels,
+                permanent_complexity=comparison.permanent_complexity,
+                permanent_complexity_feet=comparison.permanent_complexity_feet or {},
                 takedown=comparison.takedown,
                 storage=comparison.storage,
                 per_ft_override=comparison.per_ft_override,

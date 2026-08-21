@@ -26,7 +26,7 @@ A stage change updates the CRM record. It does not send a customer message unles
 
 ## Create and send a quote or estimate
 
-Route: `/quotes`. Sidebar label: **Quotes & Estimates**. The legacy `/sales-wizard` route redirects to the **Light Designer** tab so saved bookmarks continue to work.
+Route: `/quotes`. Sidebar label: **Quotes & Estimates**.
 
 1. Create a customer estimate from **Light Designer** at `/quotes?tab=designer` or from a saved **Landscape Lighting** project.
 2. Open the **Quotes** tab and find the saved quote.
@@ -34,7 +34,9 @@ Route: `/quotes`. Sidebar label: **Quotes & Estimates**. The legacy `/sales-wiza
 4. Use **Email proposal to client** or **Text proposal to client** to deliver the customer proposal. Either action can send a draft and create its client link.
 5. Use **Preview client proposal** for a staff preview or **Copy client link** when those actions are available. The customer route is `/p/quotes/{token}`.
 
-The row menu can also offer **Assign owner**, **Edit quote**, **Add services**, **Mark as sent**, **Re-send email**, **Approve**, **Decline**, **Convert to job & invoice**, and **Delete quote** according to status. Quote editing happens in a dialog on `/quotes`; there is no separate edit route.
+The row menu can also offer **Assign owner**, **Edit quote**, **Manage services**, **Mark as sent**, **Re-send email**, **Approve**, **Decline**, **Convert to job & invoice**, and **Delete quote** according to status. **Manage services** can edit a plain quote line's name, description, and overall amount; rich proposal fixture lines remain server-priced in their originating designer. Quote editing happens in a dialog on `/quotes`; there is no separate edit route.
+
+After approval, the **Copy to Job** tab shows every selected permanent-light kit and quantity so the operator can order and track the installation package before scheduling.
 
 ## Use lighting estimators
 

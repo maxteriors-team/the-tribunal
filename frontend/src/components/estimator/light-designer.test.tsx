@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  dominantPermanentComplexity,
   LightDesigner,
   type LandscapeProjectPersistenceAdapter,
 } from "@/components/estimator/light-designer";
@@ -624,6 +625,13 @@ describe("LightDesigner", () => {
 
     // The created quote's number is confirmed inline with a link into Quotes.
     expect(await screen.findByText(/Quote QUO-000007 created/i)).toBeInTheDocument();
+  });
+
+  it("uses the hardest measured run as the scalar complexity fallback", () => {
+    expect(dominantPermanentComplexity({ easy: 100, standard: 0, complex: 0 })).toBe("easy");
+    expect(dominantPermanentComplexity({ easy: 0, standard: 0, complex: 100 })).toBe("complex");
+    expect(dominantPermanentComplexity({ easy: 50, standard: 0, complex: 50 })).toBe("complex");
+    expect(dominantPermanentComplexity({ easy: 0, standard: 0, complex: 0 })).toBe("standard");
   });
 
   it("converts the permanent side when the permanent quote button is used", async () => {

@@ -85,6 +85,25 @@ async def _make_workspace(db: AsyncSession) -> Workspace:
     return ws
 
 
+async def _use_legacy_reversed_complexity_package(db: AsyncSession, workspace: Workspace) -> None:
+    settings = dict(workspace.settings or {})
+    pricing = dict(settings.get("pricing", {}))
+    pricing["permanent"] = {
+        "enabled": True,
+        "packages": [{"feet": 100, "cost": 1000}],
+        # Legacy settings could be stored in reverse order; runtime normalization
+        # still guarantees the semantic Easy/Standard/Complex ordering.
+        "easy_markup": 4,
+        "standard_markup": 3,
+        "complex_markup": 2,
+        "markup": 3,
+        "minimum": 0,
+    }
+    settings["pricing"] = pricing
+    workspace.settings = settings
+    await db.flush()
+
+
 async def test_share_then_public_view_hides_linear_feet() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
@@ -118,6 +137,52 @@ async def test_share_then_public_view_hides_linear_feet() -> None:
         assert "channels" not in dumped
         raw_json = public.model_dump_json()
         assert "137" not in raw_json  # the measured footage must not leak anywhere
+
+
+async def test_share_then_public_view_preserves_measured_complexity() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _use_legacy_reversed_complexity_package(db, ws)
+        svc = QuoteService(db)
+
+        # Opposing the scalar fallback catches either half of the persistence bug:
+        # the public view must restore the measured map rather than repricing Standard
+        # (the old behavior) or accepting the deliberately Easy fallback.
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=100,
+                permanent_complexity="easy",
+                permanent_complexity_feet={"complex": 100},
+            ),
+        )
+        comparison = await db.scalar(
+            select(RooflineComparison).where(RooflineComparison.public_token == share.token)
+        )
+        assert comparison is not None
+        assert comparison.permanent_complexity == "easy"
+        assert comparison.permanent_complexity_feet == {"complex": 100}
+
+        public = await svc.get_public_comparison(share.token)
+        assert public.permanent.total == 4000  # $1,000 COGS × highest (Complex) markup
+
+
+async def test_legacy_shared_comparison_defaults_to_standard_complexity() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _use_legacy_reversed_complexity_package(db, ws)
+
+        # This is the post-migration shape of an old row: the NOT NULL default
+        # supplies Standard and the nullable map remains NULL (no unbounded backfill).
+        comparison = RooflineComparison(workspace_id=ws.id, feet=100, channels=0)
+        db.add(comparison)
+        await db.commit()
+        await db.refresh(comparison)
+        assert comparison.permanent_complexity == "standard"
+        assert comparison.permanent_complexity_feet is None
+
+        public = await QuoteService(db).get_public_comparison(comparison.public_token)
+        assert public.permanent.total == 3000  # $1,000 COGS × Standard markup
 
 
 async def test_disabled_permanent_shows_not_configured_side() -> None:

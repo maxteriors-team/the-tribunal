@@ -1025,6 +1025,13 @@ class CategoryLine(BaseModel):
     line_total: float = 0
 
 
+class PermanentKitSelection(BaseModel):
+    """Procurement-safe permanent-light kit quantity selected by the pricer."""
+
+    feet: int = Field(gt=0)
+    quantity: int = Field(gt=0)
+
+
 class PermanentPricing(BaseModel):
     """Computed kit-based permanent-lighting price + component breakdown."""
 
@@ -1033,6 +1040,9 @@ class PermanentPricing(BaseModel):
     package_feet: int
     package_cogs: float
     markup: float
+    # Exact kit composition is structural procurement metadata, never parsed
+    # back out of the customer-facing display line.
+    selected_kits: list[PermanentKitSelection] = Field(default_factory=list)
     # Deprecated display fields retained for API compatibility; package pricing
     # never derives the sale from a per-foot or controller rate.
     per_ft: float = 0

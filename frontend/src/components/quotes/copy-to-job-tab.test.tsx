@@ -45,7 +45,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   listMock.mockResolvedValue({
     items: [
-      quote({ lighting_project_id: "project-1" }),
+      quote({
+        lighting_project_id: "project-1",
+        selected_permanent_kits: [
+          { feet: 400, quantity: 1 },
+          { feet: 100, quantity: 2 },
+        ],
+      }),
       quote({
         id: "quote-2",
         number: "QUO-000124",
@@ -69,6 +75,8 @@ describe("CopyToJobTab", () => {
       1,
     );
     expect(screen.getAllByText("Included")[0]).toBeVisible();
+    expect(screen.getAllByText("1 × 400-ft kit")).toHaveLength(2);
+    expect(screen.getAllByText("2 × 100-ft kit")).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: /Open job/ })[0]).toHaveAttribute(
       "href",
       "/calendar?job=job-2",

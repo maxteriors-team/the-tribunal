@@ -22,6 +22,7 @@ export interface QuoteLineItem {
 }
 
 export type AssigneeSummary = components["schemas"]["AssigneeSummary"];
+export type PermanentKitSelection = components["schemas"]["PermanentKitSelection"];
 
 export interface Quote {
   id: string;
@@ -80,6 +81,8 @@ export interface Quote {
   view_count?: number;
   /** Client-proposal share token; null until the quote is first sent. */
   public_token?: string | null;
+  /** Server-selected permanent-light kits for procurement after approval. */
+  selected_permanent_kits?: PermanentKitSelection[];
   created_at: string;
   updated_at: string;
   /** Present on detail responses (get/create/update, line-item + lifecycle ops). */
@@ -92,7 +95,7 @@ export interface Quote {
    */
   services?: QuoteService[];
   /**
-   * Sales-wizard snapshot; null/absent on a plain quote. Detail responses only —
+   * Rich proposal snapshot; null/absent on a plain quote. Detail responses only —
    * a list row uses `is_wizard_quote` instead of carrying this large document.
    */
   proposal_document?: Record<string, unknown> | null;

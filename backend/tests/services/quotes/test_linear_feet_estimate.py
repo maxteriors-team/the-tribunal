@@ -69,6 +69,53 @@ def _estimate(config: PricingSettings, feet: float, **kw):
     return QuoteService._compute_comparison(config, req)
 
 
+def _complexity_config(markups: tuple[float, float, float]) -> PricingSettings:
+    easy, standard, complex_ = markups
+    return _config(
+        permanent=PermanentConfig(
+            enabled=True,
+            packages=[{"feet": 100, "cost": 1000}],
+            easy_markup=easy,
+            standard_markup=standard,
+            complex_markup=complex_,
+            markup=standard,
+            minimum=0,
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "markups",
+    [(2, 3, 4), (4, 3, 2)],
+    ids=["ordered-settings", "legacy-reversed-settings"],
+)
+def test_all_complex_run_uses_highest_markup_in_live_comparison(
+    markups: tuple[float, float, float],
+) -> None:
+    config = _complexity_config(markups)
+
+    # The measured per-run map is authoritative even if the scalar fallback says
+    # the opposite. Legacy workspaces with reversed values are normalized so a
+    # Complex run can never receive the Easy (lowest) multiplier, or vice versa.
+    complex_result = _estimate(
+        config,
+        100,
+        permanent_complexity="easy",
+        permanent_complexity_feet={"complex": 100},
+    )
+    easy_result = _estimate(
+        config,
+        100,
+        permanent_complexity="complex",
+        permanent_complexity_feet={"easy": 100},
+    )
+
+    assert complex_result.permanent.markup == 4
+    assert complex_result.permanent.total == 4000
+    assert easy_result.permanent.markup == 2
+    assert easy_result.permanent.total == 2000
+
+
 def test_both_services_priced_from_feet() -> None:
     result = _estimate(_config(), 100)
 
@@ -482,11 +529,35 @@ def test_convert_permanent_lines_sum_to_permanent_total() -> None:
     title, pricing, lines = _convert(_config(), "permanent", 100)
     assert pricing.total == 3300
     assert pricing.package_feet == 100
+    assert [kit.model_dump() for kit in pricing.selected_kits] == [{"feet": 100, "quantity": 1}]
     assert title == "Permanent Holiday Lighting"
     names = [li.name for li in lines]
     assert "Permanent lighting package — covers 100 ft" in names
     # The summed quote total equals the estimate exactly (no per-unit drift).
     assert _lines_sum(lines) == 3300
+
+
+@pytest.mark.parametrize(
+    "markups",
+    [(2, 3, 4), (4, 3, 2)],
+    ids=["ordered-settings", "legacy-reversed-settings"],
+)
+def test_convert_all_complex_run_uses_highest_markup(
+    markups: tuple[float, float, float],
+) -> None:
+    _title, pricing, lines = _convert(
+        _complexity_config(markups),
+        "permanent",
+        100,
+        # Deliberately oppose the measured map so this fails if conversion drops
+        # the map and falls back to the scalar, which was the production defect.
+        permanent_complexity="easy",
+        permanent_complexity_feet={"complex": 100},
+    )
+
+    assert pricing.markup == 4
+    assert pricing.total == 4000
+    assert _lines_sum(lines) == 4000
 
 
 def test_convert_seasonal_a_la_carte_itemizes_roofline_and_decor() -> None:

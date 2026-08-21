@@ -246,6 +246,29 @@ interface LightDesignerProps {
 // Cents-exact rounding, matching the backend's ``round(value, 2)`` on money.
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
+type PermanentComplexity = LinearFeetEstimateRequest["permanent_complexity"];
+const PERMANENT_COMPLEXITIES: readonly PermanentComplexity[] = ["easy", "standard", "complex"];
+
+/**
+ * Preserve a truthful scalar for servers/rows that cannot consume the measured
+ * per-run map. Ties choose the harder run so a fallback never silently understates
+ * a design; an unmeasured design retains the backward-compatible Standard default.
+ */
+export function dominantPermanentComplexity(
+  measuredFeet: Readonly<Record<PermanentComplexity, number>>,
+): PermanentComplexity {
+  let dominant: PermanentComplexity = "standard";
+  let longest = 0;
+  for (const complexity of PERMANENT_COMPLEXITIES) {
+    const measured = measuredFeet[complexity];
+    if (measured > longest || (measured > 0 && measured === longest)) {
+      dominant = complexity;
+      longest = measured;
+    }
+  }
+  return dominant;
+}
+
 const CATALOG_PARAMS: LinearFeetEstimateRequest = {
   feet: 0,
   channels: 0,
@@ -3158,7 +3181,7 @@ export function LightDesigner({
     channels: 0,
     takedown,
     storage,
-    permanent_complexity: "standard",
+    permanent_complexity: dominantPermanentComplexity(permanentComplexityFeet),
     permanent_complexity_feet: permanentComplexityFeet,
     per_ft_override: null,
     christmas_per_ft_override: christmasPerFtOverride,
