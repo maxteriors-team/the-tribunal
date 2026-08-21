@@ -26,7 +26,7 @@ A stage change updates the CRM record. It does not send a customer message unles
 
 ## Create and send a quote or estimate
 
-Route: `/quotes`. Sidebar label: **Quotes & Estimates**.
+Route: `/quotes`. Sidebar label: **Quotes & Estimates**. The legacy `/sales-wizard` route redirects to the **Light Designer** tab so saved bookmarks continue to work.
 
 1. Create a customer estimate from **Light Designer** at `/quotes?tab=designer` or from a saved **Landscape Lighting** project.
 2. Open the **Quotes** tab and find the saved quote.
