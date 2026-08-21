@@ -4,7 +4,7 @@ import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
-import { loginViaUI } from "./helpers";
+import { hasParallelTestUser, loginViaUI } from "./helpers";
 
 const evidenceDir = path.resolve(process.cwd(), "../.ezcoder/eyes/out/attendance");
 const seriousImpacts = new Set(["serious", "critical"]);
@@ -63,6 +63,10 @@ test.describe("authenticated Time & Attendance", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }, testInfo) => {
+    test.skip(
+      !hasParallelTestUser(),
+      "Configure per-worker E2E users or enable opt-in provisioning for Time & Attendance",
+    );
     await loginViaUI(page, testInfo);
   });
 
