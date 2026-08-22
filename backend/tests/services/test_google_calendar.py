@@ -117,10 +117,15 @@ async def test_busy_periods_includes_blocks_from_subscribed_calendars() -> None:
     )
     request = AsyncMock(
         side_effect=[
-            {"items": [{"id": "primary"}, {"id": "field-team"}]},
+            {
+                "items": [
+                    {"id": "owner-calendar", "primary": True},
+                    {"id": "field-team"},
+                ]
+            },
             {
                 "calendars": {
-                    "primary": {"busy": []},
+                    "owner-calendar": {"busy": []},
                     "field-team": {"busy": [{"start": start.isoformat(), "end": end.isoformat()}]},
                 }
             },
@@ -140,9 +145,44 @@ async def test_busy_periods_includes_blocks_from_subscribed_calendars() -> None:
 
     assert periods == [(start, end)]
     assert request.await_args_list[1].kwargs["json"]["items"] == [
-        {"id": "primary"},
+        {"id": "owner-calendar"},
         {"id": "field-team"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_busy_periods_ignores_google_calendar_not_found_entries() -> None:
+    start = datetime(2026, 8, 24, 15, 30, tzinfo=UTC)
+    end = start + timedelta(minutes=30)
+    connection = SimpleNamespace(
+        calendar_id="primary",
+        granted_scopes="https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    )
+    request = AsyncMock(
+        side_effect=[
+            {"items": [{"id": "primary"}, {"id": "holidays"}, {"id": "field-team"}]},
+            {
+                "calendars": {
+                    "primary": {"busy": []},
+                    "holidays": {"errors": [{"reason": "notFound"}]},
+                    "field-team": {"busy": [{"start": start.isoformat(), "end": end.isoformat()}]},
+                }
+            },
+        ]
+    )
+
+    with (
+        patch.object(google_calendar, "get_connection", AsyncMock(return_value=connection)),
+        patch.object(google_calendar, "_calendar_request", request),
+    ):
+        periods = await google_calendar.busy_periods(
+            AsyncMock(),
+            user_id=1,
+            starts_at=start,
+            ends_at=end,
+        )
+
+    assert periods == [(start, end)]
 
 
 @pytest.mark.asyncio
