@@ -53,6 +53,7 @@ def _appointment(agent=None, workspace=None, **overrides):
             last_name="Reyes",
         ),
         "scheduled_at": NOW + timedelta(minutes=30),
+        "anytime": False,
         "created_at": NOW - timedelta(days=1),
         "reminders_sent": [],
         "reminders_sent_email": [],
@@ -140,6 +141,20 @@ class TestReminderRendering:
         )
 
         assert body == "Join here: https://meet.google.com/abc-defg-hij"
+
+    def test_anytime_reminder_does_not_quote_placeholder_time(self) -> None:
+        appointment = _appointment(anytime=True)
+
+        body = ReminderWorker()._render_reminder_body(
+            "Your appointment is {appointment_datetime}.",
+            appointment.contact,
+            appointment,
+            appointment.workspace,
+            None,
+        )
+
+        assert "at any time" in body
+        assert "12:00" not in body
 
     def test_video_reminder_without_link_requests_follow_up(self) -> None:
         appointment = _appointment(service_type="video_call", sync_status="failed")

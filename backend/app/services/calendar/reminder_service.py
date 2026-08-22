@@ -138,7 +138,7 @@ def render_reminder_body(
     """
     local_dt = appointment.scheduled_at.astimezone(resolve_workspace_timezone(workspace))
     date_str = local_dt.strftime("%A, %B %-d")
-    time_str = local_dt.strftime("%-I:%M %p")
+    time_str = "any time" if appointment.anytime else local_dt.strftime("%-I:%M %p")
     datetime_str = f"{date_str} at {time_str}"
 
     first_name = contact.first_name or "there"

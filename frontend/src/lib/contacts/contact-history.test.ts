@@ -29,6 +29,7 @@ function makeAppointment(overrides: Partial<Appointment> = {}): Appointment {
     id: 7,
     contact_id: 1,
     scheduled_at: "2026-05-21T15:00:00.000Z",
+    anytime: false,
     duration_minutes: 60,
     status: "scheduled",
     created_at: "2026-05-01T00:00:00.000Z",

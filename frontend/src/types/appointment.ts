@@ -11,6 +11,7 @@ export interface Appointment {
   message_id?: string;
   campaign_id?: string;
   scheduled_at: string;
+  anytime: boolean;
   duration_minutes: number;
   status: "scheduled" | "completed" | "cancelled" | "no_show";
   service_type?: string;

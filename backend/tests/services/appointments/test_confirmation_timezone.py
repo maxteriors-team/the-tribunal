@@ -72,6 +72,21 @@ def test_no_workspace_at_all_still_renders_eastern() -> None:
     assert "2:00 PM" in body
 
 
+def test_anytime_confirmation_does_not_quote_placeholder_time() -> None:
+    appointment = _appointment()
+    appointment.anytime = True
+
+    body = build_confirmation_body(
+        contact=_contact(),
+        appointment=appointment,
+        workspace=_workspace({}),
+        agent=None,
+    )
+
+    assert "at any time" in body
+    assert "2:00 PM" not in body
+
+
 def test_configured_timezone_is_honoured_over_the_default() -> None:
     body = build_confirmation_body(
         contact=_contact(),

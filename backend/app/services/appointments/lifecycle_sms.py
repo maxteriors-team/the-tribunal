@@ -130,7 +130,7 @@ def build_confirmation_body(
     """
     local_dt = appointment.scheduled_at.astimezone(resolve_workspace_timezone(workspace))
     date_str = local_dt.strftime("%A, %B %-d")  # e.g. "Monday, March 24"
-    time_str = local_dt.strftime("%-I:%M %p")  # e.g. "3:00 PM"
+    time_str = "any time" if appointment.anytime else local_dt.strftime("%-I:%M %p")
 
     first_name = contact.first_name or "there"
     template = agent.reminder_template if agent is not None else None

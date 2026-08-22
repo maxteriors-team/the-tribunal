@@ -11961,6 +11961,11 @@ export interface components {
         AppointmentCreate: {
             /** Agent Id */
             agent_id?: string | null;
+            /**
+             * Anytime
+             * @default false
+             */
+            anytime: boolean;
             /** Bookable Staff Id */
             bookable_staff_id?: string | null;
             /** Contact Id */
@@ -12005,6 +12010,11 @@ export interface components {
         AppointmentResponse: {
             /** Agent Id */
             agent_id: string | null;
+            /**
+             * Anytime
+             * @default false
+             */
+            anytime: boolean;
             /** Bookable Staff Id */
             bookable_staff_id?: string | null;
             /** Business Location Id */

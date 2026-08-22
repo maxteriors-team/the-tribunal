@@ -52,9 +52,14 @@ describe("ScheduleAppointmentDialog", () => {
     expect(screen.getByRole("heading", { name: "Book appointment" })).toBeVisible();
     expect(screen.getByText(/Greg Bartlett/)).toBeVisible();
 
+    const anytimeButton = screen.getByRole("button", { name: "Any time" });
+    await user.click(anytimeButton);
+    expect(anytimeButton).toHaveAttribute("aria-pressed", "true");
+
     await user.click(screen.getByRole("button", { name: "Book appointment" }));
 
     expect(await screen.findByText("Please select a date")).toBeVisible();
+    expect(screen.queryByText("Please select a time")).not.toBeInTheDocument();
     expect(mutateMock).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));

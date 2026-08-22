@@ -97,6 +97,7 @@ describe("buildScheduledAtISO", () => {
 describe("buildCreateAppointmentRequest", () => {
   const base: AppointmentFormValues = {
     date: new Date(2025, 5, 1),
+    anytime: false,
     time: "10:00",
     duration_minutes: 45,
     service_type: "Consultation",
@@ -111,7 +112,16 @@ describe("buildCreateAppointmentRequest", () => {
     expect(req.service_type).toBe("Consultation");
     expect(req.notes).toBe("Bring docs");
     expect(req.agent_id).toBe("agent-1");
+    expect(req.anytime).toBe(false);
     expect(new Date(req.scheduled_at).getHours()).toBe(10);
+  });
+
+  it("schedules an anytime appointment on the selected date without a time", () => {
+    const req = buildCreateAppointmentRequest({ ...base, time: undefined, anytime: true }, 42);
+
+    expect(req.anytime).toBe(true);
+    expect(new Date(req.scheduled_at).getDate()).toBe(1);
+    expect(new Date(req.scheduled_at).getHours()).toBe(12);
   });
 
   it("normalizes empty optional strings to undefined", () => {
@@ -129,13 +139,14 @@ describe("appointmentFormSchema", () => {
   it("accepts a valid payload", () => {
     const result = appointmentFormSchema.safeParse({
       date: new Date(),
+      anytime: false,
       time: "09:00",
       duration_minutes: 30,
     });
     expect(result.success).toBe(true);
   });
 
-  it("requires a date and time", () => {
+  it("requires a date and a time for timed appointments", () => {
     const result = appointmentFormSchema.safeParse({
       duration_minutes: 30,
       time: "",
@@ -143,10 +154,20 @@ describe("appointmentFormSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("accepts a date without a time for anytime appointments", () => {
+    const result = appointmentFormSchema.safeParse({
+      date: new Date(),
+      anytime: true,
+      duration_minutes: 30,
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("enforces duration bounds", () => {
     expect(
       appointmentFormSchema.safeParse({
         date: new Date(),
+        anytime: false,
         time: "09:00",
         duration_minutes: 5,
       }).success,
@@ -154,6 +175,7 @@ describe("appointmentFormSchema", () => {
     expect(
       appointmentFormSchema.safeParse({
         date: new Date(),
+        anytime: false,
         time: "09:00",
         duration_minutes: 600,
       }).success,

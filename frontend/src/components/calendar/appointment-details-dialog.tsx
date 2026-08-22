@@ -93,8 +93,9 @@ export function AppointmentDetailsDialog({
               <DialogTitle>{apt.service_type || "Appointment"}</DialogTitle>
               <DialogDescription>
                 {formatDate(apt.scheduled_at, {
-                  pattern: "EEEE, MMMM d, yyyy 'at' h:mm a",
+                  pattern: apt.anytime ? "EEEE, MMMM d, yyyy" : "EEEE, MMMM d, yyyy 'at' h:mm a",
                 })}
+                {apt.anytime ? " · Any time" : null}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">

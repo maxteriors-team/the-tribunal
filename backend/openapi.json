@@ -3462,6 +3462,11 @@
             ],
             "title": "Agent Id"
           },
+          "anytime": {
+            "default": false,
+            "title": "Anytime",
+            "type": "boolean"
+          },
           "bookable_staff_id": {
             "anyOf": [
               {
@@ -3574,6 +3579,11 @@
               }
             ],
             "title": "Agent Id"
+          },
+          "anytime": {
+            "default": false,
+            "title": "Anytime",
+            "type": "boolean"
           },
           "bookable_staff_id": {
             "anyOf": [

@@ -96,7 +96,10 @@ export function ContactAppointments({
                   </p>
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {formatDate(apt.scheduled_at, { pattern: "MMM d, h:mm a" })}
+                  {formatDate(apt.scheduled_at, {
+                    pattern: apt.anytime ? "MMM d" : "MMM d, h:mm a",
+                  })}
+                  {apt.anytime ? " · Any time" : null}
                 </p>
                 {apt.meeting_url ? (
                   <a
