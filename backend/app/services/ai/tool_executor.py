@@ -395,6 +395,7 @@ class VoiceToolExecutor(BaseToolExecutor):
         from app.models.contact import Contact
         from app.models.conversation import Message as MessageModel
         from app.services.appointments.booking_finalizer import finalize_booking, load_agent
+        from app.services.google_calendar import GoogleCalendarError
 
         async with AsyncSessionLocal() as db:
             try:
@@ -440,6 +441,7 @@ class VoiceToolExecutor(BaseToolExecutor):
                     message_id=message.id,
                     notes=notes,
                     assigned_staff_id=self.assigned_staff_id(),
+                    verify_availability=True,
                 )
                 self._booked_appointment = appointment
                 self.log.info(
@@ -447,6 +449,9 @@ class VoiceToolExecutor(BaseToolExecutor):
                     appointment_id=appointment.id,
                     appointment_message_id=str(message.id),
                 )
+            except GoogleCalendarError:
+                await db.rollback()
+                raise
             except Exception as e:
                 await db.rollback()
                 self.log.error(

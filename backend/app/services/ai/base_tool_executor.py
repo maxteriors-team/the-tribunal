@@ -286,14 +286,18 @@ class BaseToolExecutor:
                 return self.format_booking_failure(result, time_str)
 
             self._booked_appointment = None
-            await self.post_booking_success(
-                result,
-                date_str,
-                time_str,
-                email,
-                duration_minutes,
-                notes,
-            )
+            try:
+                await self.post_booking_success(
+                    result,
+                    date_str,
+                    time_str,
+                    email,
+                    duration_minutes,
+                    notes,
+                )
+            except GoogleCalendarError as exc:
+                self.log.info("booking_slot_became_unavailable", error=str(exc))
+                return {"success": False, "error": str(exc), "message": str(exc)}
 
             return self.format_booking_success(
                 result,

@@ -210,6 +210,7 @@ class BookAppointmentActionHandler:
             scheduled_at=scheduled_at,
             duration_minutes=duration_minutes,
             notes=payload.get("notes"),
+            verify_availability=agent is not None,
         )
 
         logger.info(

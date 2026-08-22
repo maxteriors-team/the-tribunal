@@ -188,15 +188,23 @@ class BookingService:
                 now=now,
                 meeting_minutes=duration_minutes,
             )
-            if availability.success:
-                still_open = any(s.time == time_str for s in availability.slots)
-                if not still_open:
-                    self._log.warning("booking_slot_unavailable", requested_time=time_str)
-                    return BookingResult(
-                        success=False,
-                        error=f"The {time_str} slot is no longer available.",
-                        alternative_slots=availability.slots[:5],
-                    )
+            if not availability.success:
+                self._log.warning(
+                    "booking_availability_unverified",
+                    error=availability.error,
+                )
+                return BookingResult(
+                    success=False,
+                    error=availability.error or "Could not verify that time is available",
+                )
+            still_open = any(s.time == time_str for s in availability.slots)
+            if not still_open:
+                self._log.warning("booking_slot_unavailable", requested_time=time_str)
+                return BookingResult(
+                    success=False,
+                    error=f"The {time_str} slot is no longer available.",
+                    alternative_slots=availability.slots[:5],
+                )
 
         self._log.info(
             "booking_confirmed_local",

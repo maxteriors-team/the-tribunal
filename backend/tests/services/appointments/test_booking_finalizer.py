@@ -214,6 +214,37 @@ class TestAppointmentRow:
                 )
 
 
+class TestAvailabilityVerification:
+    async def test_blocked_google_slot_is_not_persisted(self, workspace_id, monkeypatch) -> None:
+        google_slot_open = AsyncMock(return_value=False)
+        monkeypatch.setattr(booking_finalizer, "is_time_available", google_slot_open)
+
+        async with AsyncSessionLocal() as db:
+            await _workspace(db, workspace_id)
+            contact = await _contact(db, workspace_id)
+            agent = await _agent(db, workspace_id)
+            owner = await _owner(db, workspace_id)
+            staff = await _staff(db, workspace_id, agent.id, user_id=owner.id)
+
+            with pytest.raises(GoogleCalendarError, match="no longer available"):
+                await finalize_booking(
+                    db,
+                    workspace_id=workspace_id,
+                    contact=contact,
+                    agent=agent,
+                    scheduled_at=datetime(2099, 6, 10, 14, 0, tzinfo=NEW_YORK),
+                    duration_minutes=30,
+                    assigned_staff_id=staff.id,
+                    verify_availability=True,
+                    notify=False,
+                )
+
+            appointment_count = await db.scalar(
+                select(func.count(Appointment.id)).where(Appointment.workspace_id == workspace_id)
+            )
+            assert appointment_count == 0
+
+
 class TestRepAssignment:
     async def test_round_robin_agent_gets_a_rep(self, workspace_id) -> None:
         async with AsyncSessionLocal() as db:

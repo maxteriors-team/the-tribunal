@@ -24,7 +24,7 @@ must never message a customer about an appointment whose transaction rolled back
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import select, update
@@ -47,7 +47,7 @@ from app.services.email import (
     send_appointment_booked_notification,
     send_appointment_confirmation_to_attendee,
 )
-from app.services.google_calendar import GoogleCalendarError
+from app.services.google_calendar import GoogleCalendarError, is_time_available
 from app.services.idempotency import derive_outbound_key
 from app.services.leads.funnel_transitions import mark_contact_booked
 from app.utils.background_tasks import spawn_background_task
@@ -77,6 +77,7 @@ async def finalize_booking(
     notify: bool = True,
     send_customer_sms: bool = True,
     sync_external_events_before_return: bool = False,
+    verify_availability: bool = False,
 ) -> Appointment:
     """Persist a booked appointment and trigger its downstream notifications.
 
@@ -125,11 +126,35 @@ async def finalize_booking(
             )
         return existing
 
-    staff_id = assigned_staff_id
-    if staff_id is None:
-        staff = await _resolve_staff(db, agent=agent, required_skill=required_skill)
-        staff_id = staff.id if staff is not None else None
+    staff: BookableStaff | None = None
+    if assigned_staff_id is not None:
+        staff_result = await db.execute(
+            select(BookableStaff)
+            .where(
+                BookableStaff.id == assigned_staff_id,
+                BookableStaff.workspace_id == workspace_id,
+                BookableStaff.is_active.is_(True),
+            )
+            .with_for_update()
+        )
+        staff = staff_result.scalar_one_or_none()
+    else:
+        staff = await _resolve_staff(
+            db,
+            agent=agent,
+            required_skill=required_skill,
+            require_calendar_connection=verify_availability,
+        )
 
+    if verify_availability:
+        await _require_slot_available(
+            db,
+            staff=staff,
+            scheduled_at=scheduled_at,
+            duration_minutes=duration_minutes,
+        )
+
+    staff_id = staff.id if staff is not None else None
     appointment = Appointment(
         workspace_id=workspace_id,
         contact_id=contact_id,
@@ -289,16 +314,56 @@ async def _find_duplicate(
     return result.scalar_one_or_none()
 
 
+async def _require_slot_available(
+    db: AsyncSession,
+    *,
+    staff: BookableStaff | None,
+    scheduled_at: datetime,
+    duration_minutes: int,
+) -> None:
+    """Fail closed if the assigned rep's CRM or Google calendars are busy."""
+    if staff is None or staff.user_id is None:
+        raise GoogleCalendarError("No connected sales calendar is available")
+
+    ends_at = scheduled_at + timedelta(minutes=duration_minutes)
+    result = await db.execute(
+        select(Appointment).where(
+            Appointment.bookable_staff_id == staff.id,
+            Appointment.status == AppointmentStatus.SCHEDULED,
+            Appointment.scheduled_at < ends_at,
+            # Appointment durations are capped at eight hours by the API schema.
+            Appointment.scheduled_at >= scheduled_at - timedelta(hours=8),
+        )
+    )
+    for appointment in result.scalars():
+        appointment_end = appointment.scheduled_at + timedelta(
+            minutes=appointment.duration_minutes or 30
+        )
+        if appointment_end > scheduled_at:
+            raise GoogleCalendarError("That time is no longer available")
+
+    async with AsyncSessionLocal() as calendar_db:
+        google_slot_open = await is_time_available(
+            calendar_db,
+            user_id=staff.user_id,
+            starts_at=scheduled_at,
+            ends_at=ends_at,
+        )
+    if not google_slot_open:
+        raise GoogleCalendarError("That time is no longer available")
+
+
 async def _resolve_staff(
     db: AsyncSession,
     *,
     agent: Agent | None,
     required_skill: str | None,
+    require_calendar_connection: bool = False,
 ) -> BookableStaff | None:
     """Pick the rep for this booking, or ``None`` when routing yields nobody.
 
-    Never lets a routing failure sink a confirmed booking — an unassigned
-    appointment is recoverable in the dashboard, a lost one is not.
+    Never lets a routing failure sink a confirmed booking unless availability
+    verification was requested, in which case the caller fails closed.
     """
     if agent is None:
         return None
@@ -311,8 +376,9 @@ async def _resolve_staff(
             agent=agent,
             required_skill=required_skill,
             commit=False,
+            require_calendar_connection=require_calendar_connection,
         )
-    except Exception:  # noqa: BLE001 - assignment is best-effort
+    except Exception:  # noqa: BLE001 - availability verification handles no assignment
         logger.exception("staff_assignment_failed", agent_id=str(agent.id))
         return None
 

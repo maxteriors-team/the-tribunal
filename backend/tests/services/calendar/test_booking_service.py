@@ -113,10 +113,26 @@ async def test_book_appointment_is_local_with_no_external_ids() -> None:
         time_str="14:00",
         email="a@b.com",
         contact_name="Alice",
+        pre_validate=False,
     )
     assert result.success is True
     assert result.booking_uid is None
     assert result.booking_id is None
+
+
+@pytest.mark.asyncio
+async def test_book_appointment_fails_closed_when_availability_cannot_be_checked() -> None:
+    service = BookingService(uuid.uuid4(), session_factory=_factory([]))
+
+    result = await service.book_appointment(
+        date_str="2026-07-15",
+        time_str="14:00",
+        email="a@b.com",
+        contact_name="Alice",
+    )
+
+    assert result.success is False
+    assert "Failed to check availability" in (result.error or "")
 
 
 @pytest.mark.asyncio
