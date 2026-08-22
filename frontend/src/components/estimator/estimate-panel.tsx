@@ -5,9 +5,9 @@
  *
  * Every figure here is server-authoritative — it comes straight from the
  * `quotes/estimate` response, never computed on the client. It shows the
- * measured roofline (internal-only), the per-category seasonal decor costs, both
- * headline totals, and the multi-year savings. The client-facing view is the
- * separate `ComparisonCard`.
+ * measured roofline (internal-only), per-category seasonal decor costs, headline
+ * totals, and a highlighted permanent service price. The client-facing view is
+ * the separate `ComparisonCard`.
  *
  * When the workspace sells Christmas as Good/Better/Best packages, the response
  * carries `christmas_packages`; the rep picks one here and the seasonal headline
@@ -66,7 +66,6 @@ export function EstimatePanel({
   const permanent = estimate?.permanent;
   const christmas = estimate?.christmas;
   const decor = christmas?.items ?? [];
-  const bothOffered = sides.permanent && sides.seasonal;
 
   // Rep controls follow workspace capabilities; customer visibility is filtered upstream.
   const packages = sides.seasonal ? (estimate?.christmas_packages ?? []) : [];
@@ -84,9 +83,6 @@ export function EstimatePanel({
         : 0),
   );
   const permanentTotal = sides.permanent ? (permanent?.total ?? 0) : 0;
-  const seasonalMultiYear = seasonalHeadline * (estimate?.years ?? 0);
-  const savings = bothOffered ? Math.abs(seasonalMultiYear - permanentTotal) : 0;
-  const permanentWins = bothOffered && seasonalMultiYear > permanentTotal;
 
   return (
     <div className="ep-panel">
@@ -204,13 +200,10 @@ export function EstimatePanel({
               ) : null}
             </div>
 
-            {bothOffered && savings > 0 ? (
+            {sides.permanent && permanentTotal > 0 ? (
               <div className="ep-savings">
-                <span className="ep-savings-label">
-                  {permanentWins ? "Permanent saves" : "Difference"} over {estimate?.years ?? 5}{" "}
-                  seasons
-                </span>
-                <span className="ep-savings-amount">{formatCurrency(savings)}</span>
+                <span className="ep-savings-label">Service price</span>
+                <span className="ep-savings-amount">{formatCurrency(permanentTotal)}</span>
               </div>
             ) : null}
           </>
