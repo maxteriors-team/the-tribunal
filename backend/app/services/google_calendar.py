@@ -327,6 +327,7 @@ async def _availability_calendar_ids(
         )
 
     calendar_ids: list[str] = []
+    has_primary_calendar = False
     page_token: str | None = None
     while True:
         params = {
@@ -350,6 +351,8 @@ async def _availability_calendar_ids(
             if not isinstance(item, dict):
                 continue
             calendar_id = str(item.get("id") or "").strip()
+            if calendar_id and item.get("primary") is True:
+                has_primary_calendar = True
             if calendar_id and calendar_id not in calendar_ids:
                 calendar_ids.append(calendar_id)
 
@@ -357,7 +360,10 @@ async def _availability_calendar_ids(
         if page_token is None:
             break
 
-    if connection.calendar_id not in calendar_ids:
+    configured_calendar_is_listed = connection.calendar_id in calendar_ids or (
+        connection.calendar_id == "primary" and has_primary_calendar
+    )
+    if not configured_calendar_is_listed:
         calendar_ids.append(connection.calendar_id)
     return calendar_ids
 
@@ -394,7 +400,18 @@ async def busy_periods(
             raise GoogleCalendarError("Google returned invalid calendar availability")
         for calendar_id in batch:
             calendar = calendars.get(calendar_id)
-            if not isinstance(calendar, dict) or calendar.get("errors"):
+            if not isinstance(calendar, dict):
+                raise GoogleCalendarError("Google could not read every calendar's availability")
+            errors = calendar.get("errors") or []
+            if errors:
+                # Google lists read-only holiday calendars that FreeBusy reports
+                # as notFound; they cannot supply busy intervals and must not
+                # disable scheduling for every otherwise-readable calendar.
+                if all(
+                    isinstance(error, dict) and error.get("reason") == "notFound"
+                    for error in errors
+                ):
+                    continue
                 raise GoogleCalendarError("Google could not read every calendar's availability")
             for item in calendar.get("busy") or []:
                 try:
