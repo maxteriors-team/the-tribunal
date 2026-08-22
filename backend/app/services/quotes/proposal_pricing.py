@@ -509,17 +509,14 @@ def price_permanent(
 ) -> PermanentPricing:
     """Round footage to kits and weight COGS markup by measured run type."""
     p = config.permanent
-    # Complexity names are an ordering guarantee: malformed or legacy saved
-    # settings must never make Easy cost more than Complex. Aerial Pics is the
-    # fixed 1.5× Light Designer option and intentionally is not workspace-editable.
-    easy_markup, standard_markup, complex_markup = sorted(
-        (p.easy_markup, p.standard_markup, p.complex_markup)
-    )
+    # Preserve field identity exactly: operators may intentionally price an Easy
+    # run above a Complex run. Reordering configured values silently applies one
+    # named tier's multiplier to another tier.
     markups = {
         "aerial": 1.5,
-        "easy": easy_markup,
-        "standard": standard_markup,
-        "complex": complex_markup,
+        "easy": p.easy_markup,
+        "standard": p.standard_markup,
+        "complex": p.complex_markup,
     }
     markup = markups.get(complexity, p.standard_markup)
     measured_complexity_feet = {

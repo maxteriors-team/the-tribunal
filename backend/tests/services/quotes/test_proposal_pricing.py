@@ -386,7 +386,7 @@ def test_permanent_complexity_selects_configured_multiplier():
     )
 
 
-def test_permanent_complexity_order_cannot_be_reversed_by_saved_settings():
+def test_permanent_complexity_preserves_configured_multiplier_identity():
     config = _permanent_config(easy_markup=3.5, standard_markup=3, complex_markup=2.5)
 
     aerial = pp.price_permanent(config, feet=100, complexity="aerial")
@@ -394,9 +394,9 @@ def test_permanent_complexity_order_cannot_be_reversed_by_saved_settings():
     complex_job = pp.price_permanent(config, feet=100, complexity="complex")
 
     assert aerial.markup == 1.5
-    assert easy.markup == 2.5
-    assert complex_job.markup == 3.5
-    assert aerial.total < easy.total < complex_job.total
+    assert easy.markup == 3.5
+    assert complex_job.markup == 2.5
+    assert aerial.total < complex_job.total < easy.total
 
 
 def test_permanent_weights_markup_by_measured_run_footage():

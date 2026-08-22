@@ -85,18 +85,19 @@ def _complexity_config(markups: tuple[float, float, float]) -> PricingSettings:
 
 
 @pytest.mark.parametrize(
-    "markups",
-    [(2, 3, 4), (4, 3, 2)],
-    ids=["ordered-settings", "legacy-reversed-settings"],
+    ("markups", "expected_easy", "expected_complex"),
+    [((2, 3, 4), 2, 4), ((4, 3, 2), 4, 2)],
+    ids=["ascending-settings", "descending-settings"],
 )
-def test_all_complex_run_uses_highest_markup_in_live_comparison(
+def test_run_complexity_uses_its_configured_markup_in_live_comparison(
     markups: tuple[float, float, float],
+    expected_easy: float,
+    expected_complex: float,
 ) -> None:
     config = _complexity_config(markups)
 
-    # The measured per-run map is authoritative even if the scalar fallback says
-    # the opposite. Legacy workspaces with reversed values are normalized so a
-    # Complex run can never receive the Easy (lowest) multiplier, or vice versa.
+    # The measured per-run map is authoritative even when the scalar fallback says
+    # the opposite, while each named tier retains its explicitly configured value.
     complex_result = _estimate(
         config,
         100,
@@ -110,10 +111,10 @@ def test_all_complex_run_uses_highest_markup_in_live_comparison(
         permanent_complexity_feet={"easy": 100},
     )
 
-    assert complex_result.permanent.markup == 4
-    assert complex_result.permanent.total == 4000
-    assert easy_result.permanent.markup == 2
-    assert easy_result.permanent.total == 2000
+    assert complex_result.permanent.markup == expected_complex
+    assert complex_result.permanent.total == expected_complex * 1000
+    assert easy_result.permanent.markup == expected_easy
+    assert easy_result.permanent.total == expected_easy * 1000
 
 
 def test_aerial_pics_run_uses_fixed_multiplier_in_live_comparison() -> None:
@@ -594,12 +595,13 @@ def test_convert_permanent_lines_sum_to_permanent_total() -> None:
 
 
 @pytest.mark.parametrize(
-    "markups",
-    [(2, 3, 4), (4, 3, 2)],
-    ids=["ordered-settings", "legacy-reversed-settings"],
+    ("markups", "expected_complex"),
+    [((2, 3, 4), 4), ((4, 3, 2), 2)],
+    ids=["ascending-settings", "descending-settings"],
 )
-def test_convert_all_complex_run_uses_highest_markup(
+def test_convert_all_complex_run_uses_configured_markup(
     markups: tuple[float, float, float],
+    expected_complex: float,
 ) -> None:
     _title, pricing, lines = _convert(
         _complexity_config(markups),
@@ -611,9 +613,9 @@ def test_convert_all_complex_run_uses_highest_markup(
         permanent_complexity_feet={"complex": 100},
     )
 
-    assert pricing.markup == 4
-    assert pricing.total == 4000
-    assert _lines_sum(lines) == 4000
+    assert pricing.markup == expected_complex
+    assert pricing.total == expected_complex * 1000
+    assert _lines_sum(lines) == expected_complex * 1000
 
 
 def test_convert_aerial_pics_run_uses_fixed_multiplier() -> None:
