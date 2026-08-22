@@ -157,6 +157,28 @@ describe("upcomingEntries", () => {
     );
     expect(upcomingEntries(entries, now).map((e) => e.key)).toEqual(["job-later"]);
   });
+
+  it("keeps an anytime appointment upcoming until its day ends", () => {
+    const entries = toCalendarEntries(
+      [
+        makeAppointment({
+          id: 1,
+          anytime: true,
+          scheduled_at: "2026-08-12T12:00:00.000Z",
+        }),
+      ],
+      [],
+    );
+
+    expect(
+      upcomingEntries(entries, new Date("2026-08-12T20:00:00.000Z")).map((entry) =>
+        entry.key,
+      ),
+    ).toEqual(["appointment-1"]);
+    expect(
+      upcomingEntries(entries, new Date("2026-08-13T12:00:00.000Z")),
+    ).toEqual([]);
+  });
 });
 
 describe("entryAccessibleLabel", () => {

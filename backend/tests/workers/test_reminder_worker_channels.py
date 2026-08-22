@@ -226,13 +226,14 @@ class TestEmailSend:
         sent = AsyncMock(return_value=True)
         monkeypatch.setattr("app.workers.reminder_worker.send_appointment_reminder_email", sent)
         worker = ReminderWorker()
-        appt = _appointment(_agent(reminder_channels=["email"]))
+        appt = _appointment(_agent(reminder_channels=["email"]), anytime=True)
         db = AsyncMock()
 
         await worker._send_reminder_email(appt, 60, db)
 
         assert sent.await_count == 1
         assert sent.await_args.kwargs["to_email"] == "dana@example.com"
+        assert sent.await_args.kwargs["anytime"] is True
         assert appt.reminders_sent_email == [60]
         # The SMS column is untouched, so an SMS reminder can still fire.
         assert appt.reminders_sent == []

@@ -108,12 +108,18 @@ export function todaysEntries(
   return entriesForDay(entries, now);
 }
 
-/** Entries still ahead of `now`, in time order. */
+/** Entries still ahead of `now`, plus today's anytime appointments. */
 export function upcomingEntries(
   entries: readonly CalendarEntry[],
   now: Date = new Date(),
 ): CalendarEntry[] {
-  return entries.filter((entry) => entry.startsAt.getTime() > now.getTime());
+  return entries.filter(
+    (entry) =>
+      entry.startsAt.getTime() > now.getTime() ||
+      (entry.kind === "appointment" &&
+        entry.appointment.anytime &&
+        isSameDay(entry.startsAt, now)),
+  );
 }
 
 /**

@@ -98,6 +98,17 @@ def _brand(business_name: str | None = None, logo_url: str | None = None) -> Bra
 DEFAULT_DISPLAY_TIMEZONE = "America/New_York"
 
 
+def _to_local_datetime(value: datetime, timezone: str | None = None) -> datetime:
+    """Convert a stored appointment timestamp to its workspace-local value."""
+    try:
+        tz = ZoneInfo(timezone or DEFAULT_DISPLAY_TIMEZONE)
+    except (ZoneInfoNotFoundError, ValueError):
+        tz = ZoneInfo(DEFAULT_DISPLAY_TIMEZONE)
+
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return aware.astimezone(tz)
+
+
 def format_local_datetime(value: datetime, timezone: str | None = None) -> str:
     """Render a datetime in the workspace's zone, e.g. "Monday, August 10 at 2:00 PM EDT".
 
@@ -106,13 +117,7 @@ def format_local_datetime(value: datetime, timezone: str | None = None) -> str:
     local time — a silently wrong appointment time in every notification. Naive
     values are assumed UTC, matching what the DB hands back.
     """
-    try:
-        tz = ZoneInfo(timezone or DEFAULT_DISPLAY_TIMEZONE)
-    except (ZoneInfoNotFoundError, ValueError):
-        tz = ZoneInfo(DEFAULT_DISPLAY_TIMEZONE)
-
-    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-    local = aware.astimezone(tz)
+    local = _to_local_datetime(value, timezone)
     label = local.strftime("%Z") or timezone or ""
     return f"{local.strftime('%A, %B %-d at %-I:%M %p')} {label}".strip()
 
@@ -1324,13 +1329,20 @@ async def send_appointment_reminder_email(
     appointment_time: datetime,
     timezone: str | None = None,
     idempotency_key: uuid.UUID | None = None,
+    *,
+    anytime: bool = False,
 ) -> bool:
     """Email a customer a reminder for an upcoming appointment.
 
     ``body_text`` is the same rendered copy the SMS reminder uses, so the two
-    channels can never quote different times for the same appointment.
+    channels can never quote different times for the same appointment. Anytime
+    appointments use their local date without exposing the synthetic stored time.
     """
-    formatted_time = format_local_datetime(appointment_time, timezone)
+    if anytime:
+        local_date = _to_local_datetime(appointment_time, timezone).strftime("%A, %B %-d")
+        formatted_time = f"{local_date} at any time"
+    else:
+        formatted_time = format_local_datetime(appointment_time, timezone)
     subject = f"Reminder: your appointment {formatted_time}"
 
     body_style = (

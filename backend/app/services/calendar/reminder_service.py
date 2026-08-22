@@ -214,6 +214,7 @@ async def send_appointment_reminder_email_for(
         appointment_time=appointment.scheduled_at,
         timezone=workspace_timezone_name(workspace),
         idempotency_key=derive_outbound_key("manual_appointment_reminder_email", appointment.id),
+        anytime=appointment.anytime,
     )
 
 
