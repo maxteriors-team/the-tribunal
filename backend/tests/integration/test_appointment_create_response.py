@@ -141,6 +141,7 @@ async def test_create_appointment_serializes_nested_contact() -> None:
                     "contact_id": contact_id,
                     "scheduled_at": scheduled_at.isoformat(),
                     "duration_minutes": 60,
+                    "anytime": True,
                     "service_type": "Roof Wash",
                 },
             )
@@ -152,6 +153,7 @@ async def test_create_appointment_serializes_nested_contact() -> None:
         body = response.json()
         assert body["contact_id"] == contact_id
         assert body["service_type"] == "Roof Wash"
+        assert body["anytime"] is True
         assert body["status"] == "scheduled"
         # The nested summary is the part that used to blow up.
         assert body["contact"] is not None

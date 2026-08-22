@@ -34,6 +34,7 @@ class TestAppointmentCreate:
         )
         assert appt.contact_id == 1
         assert appt.duration_minutes == 30
+        assert appt.anytime is False
 
     def test_valid_full(self) -> None:
         """All fields pass validation."""
@@ -42,10 +43,12 @@ class TestAppointmentCreate:
             agent_id=str(uuid.uuid4()),
             scheduled_at=datetime.now(UTC),
             duration_minutes=60,
+            anytime=True,
             service_type="Consultation",
             notes="First meeting",
         )
         assert appt.duration_minutes == 60
+        assert appt.anytime is True
         assert appt.service_type == "Consultation"
 
     def test_missing_contact_id_raises(self) -> None:

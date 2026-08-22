@@ -10,6 +10,7 @@ class AppointmentBase(BaseModel):
     """Base appointment schema."""
 
     duration_minutes: int = Field(default=30, ge=15, le=480)
+    anytime: bool = False
     service_type: str | None = Field(default=None, max_length=100)
     notes: str | None = None
 

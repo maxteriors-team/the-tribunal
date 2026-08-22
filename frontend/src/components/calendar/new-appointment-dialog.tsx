@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import * as z from "zod";
 
 import { AppointmentAssigneePicker } from "@/components/calendar/appointment-assignee-picker";
@@ -56,9 +56,10 @@ import {
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date";
 
-const newAppointmentFormSchema = appointmentFormSchema.extend({
-  contact_id: z.string().min(1, { error: "Please select a contact" }),
-});
+const newAppointmentFormSchema = z.intersection(
+  appointmentFormSchema,
+  z.object({ contact_id: z.string().min(1, { error: "Please select a contact" }) }),
+);
 
 type NewAppointmentFormValues = z.infer<typeof newAppointmentFormSchema>;
 
@@ -89,7 +90,7 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
       contact_id: "",
     },
   });
-
+  const anytime = useWatch({ control: form.control, name: "anytime" });
   const createAppointmentMutation = useCreateAppointment({
     workspaceId,
     onSuccess: () => {
@@ -201,21 +202,42 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
               name="time"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Time *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select time" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {timeSlots.map((slot) => (
-                        <SelectItem key={slot} value={slot}>
-                          {formatTimeSlot(slot)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Time{anytime ? "" : " *"}</FormLabel>
+                  <div className="flex gap-2">
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={anytime}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          {anytime ? (
+                            <span>Any time</span>
+                          ) : (
+                            <SelectValue placeholder="Select time" />
+                          )}
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {timeSlots.map((slot) => (
+                          <SelectItem key={slot} value={slot}>
+                            {formatTimeSlot(slot)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant={anytime ? "default" : "outline"}
+                      aria-pressed={anytime}
+                      onClick={() => {
+                        form.setValue("anytime", !anytime, { shouldValidate: true });
+                        if (!anytime) form.clearErrors("time");
+                      }}
+                    >
+                      Any time
+                    </Button>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}

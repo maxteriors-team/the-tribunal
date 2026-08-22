@@ -85,6 +85,7 @@ export function ScheduleAppointmentDialog({
   });
 
   const selectedAgentId = useWatch({ control: form.control, name: "agent_id" });
+  const anytime = useWatch({ control: form.control, name: "anytime" });
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId);
 
   const createAppointmentMutation = useCreateAppointment({
@@ -123,7 +124,7 @@ export function ScheduleAppointmentDialog({
         <DialogHeader>
           <DialogTitle>Book appointment</DialogTitle>
           <DialogDescription>
-            Choose a time and visit details for {displayName || "this contact"}.
+            Choose a date and visit details for {displayName || "this contact"}.
           </DialogDescription>
         </DialogHeader>
 
@@ -175,21 +176,42 @@ export function ScheduleAppointmentDialog({
                 name="time"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Start time *</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select time" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {timeSlots.map((slot) => (
-                          <SelectItem key={slot} value={slot}>
-                            {formatTimeSlot(slot)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Start time{anytime ? "" : " *"}</FormLabel>
+                    <div className="flex gap-2">
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={anytime}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            {anytime ? (
+                              <span>Any time</span>
+                            ) : (
+                              <SelectValue placeholder="Select time" />
+                            )}
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {timeSlots.map((slot) => (
+                            <SelectItem key={slot} value={slot}>
+                              {formatTimeSlot(slot)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant={anytime ? "default" : "outline"}
+                        aria-pressed={anytime}
+                        onClick={() => {
+                          form.setValue("anytime", !anytime, { shouldValidate: true });
+                          if (!anytime) form.clearErrors("time");
+                        }}
+                      >
+                        Any time
+                      </Button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

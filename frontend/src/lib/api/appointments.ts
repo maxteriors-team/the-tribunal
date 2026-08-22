@@ -41,6 +41,7 @@ export interface CreateAppointmentRequest {
   agent_id?: string;
   scheduled_at: string;
   duration_minutes?: number;
+  anytime?: boolean;
   service_type?: string;
   notes?: string;
   bookable_staff_id?: string;

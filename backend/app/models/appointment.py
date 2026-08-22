@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -123,6 +124,9 @@ class Appointment(Base):
     # Booking details
     scheduled_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
+    )
+    anytime: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
     )
     duration_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
     status: Mapped[AppointmentStatus] = mapped_column(

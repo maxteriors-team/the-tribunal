@@ -97,7 +97,8 @@ export function CalendarEntryChip({
   density = "comfortable",
   className,
 }: CalendarEntryChipProps) {
-  const timeLabel = formatDate(entry.startsAt, { pattern: "h:mm a" });
+  const isAnytime = entry.kind === "appointment" && entry.appointment.anytime;
+  const timeLabel = isAnytime ? "Any time" : formatDate(entry.startsAt, { pattern: "h:mm a" });
   const isCompact = density === "compact";
   const isStacked = density === "stacked";
   const isJob = entry.kind === "job";
@@ -128,7 +129,11 @@ export function CalendarEntryChip({
       <span className={cn("flex items-center", isCompact ? "gap-1" : "gap-1.5")}>
         {!isCompact && <Icon aria-hidden="true" className="size-3 shrink-0 opacity-70" />}
         <span className="shrink-0 tabular-nums opacity-80">
-          {isCompact || isStacked ? compactTime(entry.startsAt) : timeLabel}
+          {isAnytime
+            ? "Any time"
+            : isCompact || isStacked
+              ? compactTime(entry.startsAt)
+              : timeLabel}
         </span>
         {!isStacked && <span className="truncate">{entry.title}</span>}
       </span>

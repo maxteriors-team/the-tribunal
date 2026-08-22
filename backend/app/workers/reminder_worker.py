@@ -566,8 +566,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
         local_dt = appointment.scheduled_at.astimezone(resolve_workspace_timezone(workspace))
         # e.g. "Monday, March 24"
         date_str = local_dt.strftime("%A, %B %-d")
-        # e.g. "3:00 PM"
-        time_str = local_dt.strftime("%-I:%M %p")
+        time_str = "any time" if appointment.anytime else local_dt.strftime("%-I:%M %p")
         datetime_str = f"{date_str} at {time_str}"
 
         first_name = contact.first_name or "there"
@@ -638,7 +637,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
         """
         local_dt = appointment.scheduled_at.astimezone(resolve_workspace_timezone(workspace))
         date_str = local_dt.strftime("%A, %B %-d")
-        time_str = local_dt.strftime("%-I:%M %p")
+        time_str = "any time" if appointment.anytime else local_dt.strftime("%-I:%M %p")
 
         replacements: dict[str, str] = {
             "first_name": contact.first_name or "",

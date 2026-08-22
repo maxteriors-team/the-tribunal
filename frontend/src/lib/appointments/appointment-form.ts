@@ -7,18 +7,30 @@ import type { CreateAppointmentRequest } from "@/lib/api/appointments";
  * "New Appointment" dialog and the contact "Schedule Appointment" dialog.
  */
 
-export const appointmentFormSchema = z.object({
-  date: z.date({ message: "Please select a date" }),
-  time: z.string().min(1, { error: "Please select a time" }),
-  duration_minutes: z.number().min(15).max(480),
-  service_type: z.string().optional(),
-  notes: z.string().optional(),
-  agent_id: z.string().optional(),
-});
+export const appointmentFormSchema = z
+  .object({
+    date: z.date({ message: "Please select a date" }),
+    time: z.string().optional(),
+    anytime: z.boolean(),
+    duration_minutes: z.number().min(15).max(480),
+    service_type: z.string().optional(),
+    notes: z.string().optional(),
+    agent_id: z.string().optional(),
+  })
+  .superRefine((values, context) => {
+    if (!values.anytime && !values.time) {
+      context.addIssue({
+        code: "custom",
+        message: "Please select a time",
+        path: ["time"],
+      });
+    }
+  });
 
 export type AppointmentFormValues = z.infer<typeof appointmentFormSchema>;
 
 export const APPOINTMENT_FORM_DEFAULTS: Partial<AppointmentFormValues> = {
+  anytime: false,
   duration_minutes: 30,
   service_type: "",
   notes: "",
@@ -123,7 +135,12 @@ export function buildCreateAppointmentRequest(
 ): CreateAppointmentRequest {
   return {
     contact_id: contactId,
-    scheduled_at: buildScheduledAtISO(values.date, values.time),
+    // simplification: noon anchors one date; add a date-only API field for cross-timezone scheduling.
+    scheduled_at: buildScheduledAtISO(
+      values.date,
+      values.anytime ? "12:00" : (values.time ?? ""),
+    ),
+    anytime: values.anytime,
     duration_minutes: values.duration_minutes,
     service_type: values.service_type || undefined,
     notes: values.notes || undefined,
