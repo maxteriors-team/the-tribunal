@@ -898,6 +898,7 @@ class TextToolExecutor(BaseToolExecutor):
             notes=notes,
             service_type=getattr(self, "_pending_call_type", "phone_call"),
             assigned_staff_id=assigned_staff_id,
+            verify_availability=True,
             # The assistant's reply confirms the booking in this same SMS turn.
             # Suppress the generic lifecycle confirmation to avoid double-texting.
             send_customer_sms=False,
