@@ -257,6 +257,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
             appointment_time=appt.scheduled_at,
             timezone=workspace_timezone_name(workspace),
             idempotency_key=derive_outbound_key("reminder_email", appt.id, offset_minutes),
+            anytime=appt.anytime,
         )
         if not sent:
             log.warning("Reminder email not accepted by provider, will retry next tick")

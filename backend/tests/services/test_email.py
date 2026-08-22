@@ -418,3 +418,25 @@ async def test_appointment_reminder_linkifies_meeting_url(fake_resend: _FakeRese
     params = fake_resend.Emails.send_async.await_args.args[0]
     assert f'href="{meeting_url}"' in params["html"]
     assert params["html"].count(meeting_url) == 2
+
+
+@pytest.mark.asyncio
+async def test_anytime_appointment_reminder_omits_synthetic_noon(
+    fake_resend: _FakeResend,
+) -> None:
+    sent = await email.send_appointment_reminder_email(
+        to_email="customer@example.com",
+        contact_name="Dana Reyes",
+        business_name="Sparkle Exteriors",
+        body_text="Your appointment is Thursday, August 20 at any time.",
+        appointment_time=email.datetime(2026, 8, 20, 16, 0, tzinfo=email.UTC),
+        timezone="America/New_York",
+        anytime=True,
+    )
+
+    assert sent is True
+    params = fake_resend.Emails.send_async.await_args.args[0]
+    assert params["subject"] == "Reminder: your appointment Thursday, August 20 at any time"
+    assert "Thursday, August 20 at any time &middot; Sparkle Exteriors" in params["html"]
+    assert "12:00 PM" not in params["subject"]
+    assert "12:00 PM" not in params["html"]
