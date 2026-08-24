@@ -15,9 +15,9 @@ Two boundaries live here:
   leak is structurally impossible, not just omitted.
 """
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.pricing import (
     ChristmasPackagePricing,
@@ -271,6 +271,13 @@ class EstimateQuoteRequest(ComparisonShareRequest):
     """
 
     side: Literal["permanent", "seasonal"] = "seasonal"
+    deposit_percentage: float | None = Field(default=None, ge=0.01, le=100)
+
+    @model_validator(mode="after")
+    def deposit_applies_only_to_permanent_quote(self) -> Self:
+        if self.side != "permanent" and self.deposit_percentage is not None:
+            raise ValueError("A deposit percentage can only be added to a permanent quote")
+        return self
 
 
 class ComparisonDeliverRequest(BaseModel):

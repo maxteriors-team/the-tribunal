@@ -2079,6 +2079,25 @@
   margin-top: 12px;
 }
 
+.est-quote-deposit {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--t3);
+}
+
+.est-quote-deposit-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.est-quote-deposit-input .est-input {
+  min-width: 0;
+  flex: 1;
+}
+
 .est-quote-link {
   color: var(--gold);
   text-decoration: underline;

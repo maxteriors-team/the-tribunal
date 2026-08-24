@@ -1030,6 +1030,7 @@ async def test_create_quote_from_estimate_persists_priced_lines_and_contact() ->
                 feet=100,
                 client_name="Dana Rivers",
                 client_phone="+15551230000",
+                deposit_percentage=30,
             ),
         )
 
@@ -1038,6 +1039,9 @@ async def test_create_quote_from_estimate_persists_priced_lines_and_contact() ->
         assert quote.status == "draft"
         assert quote.title == "Permanent Holiday Lighting"
         assert quote.total == 3747.0
+        assert quote.deposit_percentage == 30
+        assert quote.deposit_amount == 1124.1
+        assert quote.deposit_required is True
         # Client details resolved onto a CRM contact (phone-keyed).
         assert quote.contact_id is not None
         assert [kit.model_dump() for kit in quote.selected_permanent_kits] == [

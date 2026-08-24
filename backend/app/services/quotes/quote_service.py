@@ -3116,6 +3116,7 @@ class QuoteService:
                 title=req.label or title,
                 currency="USD",
                 discount_amount=discount,
+                deposit_percentage=req.deposit_percentage,
                 line_items=line_items,
             ),
             created_by_id=created_by_id,

@@ -583,8 +583,11 @@ function RowActions({
             {isOpen && <DropdownMenuSeparator />}
             <DropdownMenuItem onClick={onPreview}>
               <ExternalLink className="mr-2 h-4 w-4" />
-              Preview client proposal
+              {quote.deposit_required && !quote.deposit_paid
+                ? "Open customer payment page"
+                : "Preview client proposal"}
             </DropdownMenuItem>
+
             <DropdownMenuItem onClick={onCopyLink}>
               <Copy className="mr-2 h-4 w-4" />
               Copy client link
