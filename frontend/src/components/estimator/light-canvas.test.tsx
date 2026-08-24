@@ -66,6 +66,20 @@ const UPLIGHT: Product = {
   target: { field: "landscape", fixtureType: "uplight" },
 };
 
+const BISTRO: Product = {
+  id: "bistro-temporary-layout",
+  name: "Temporary Bistro Lights",
+  category: "landscape",
+  kind: "linear",
+  price: 0,
+  style: "bistro",
+  colors: ["#ffd98a"],
+  spacingIn: 24,
+  sizeFt: 0,
+  sku: null,
+  target: { field: "bistro", installation: "temporary" },
+};
+
 /**
  * Mount the canvas with the place tool armed, with the canvas element mapped
  * 1:1 onto the photo (identity transform) so a client coordinate is also an
@@ -113,6 +127,34 @@ function setup(placementMarkerColor?: string) {
   return { clickAt, placed, dispatch, rerender };
 }
 
+function setupAerialTool(tool: EditorState["tool"]) {
+  const dispatch = vi.fn();
+  const { container } = render(
+    <LightCanvas
+      photo={PHOTO}
+      products={[BISTRO]}
+      state={{ ...initialEditorState(), tool }}
+      dispatch={dispatch}
+      perspective="aerial"
+    />,
+  );
+  const canvas = container.querySelector("canvas")!;
+  vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+    left: 0,
+    top: 0,
+    width: PHOTO.width,
+    height: PHOTO.height,
+    right: PHOTO.width,
+    bottom: PHOTO.height,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  } as DOMRect);
+  canvas.setPointerCapture = vi.fn();
+  canvas.releasePointerCapture = vi.fn();
+  return { canvas, dispatch };
+}
+
 describe("LightCanvas — aerial plan semantics", () => {
   it("labels the landscape canvas and scale controls as top-down aerial", async () => {
     render(
@@ -132,6 +174,20 @@ describe("LightCanvas — aerial plan semantics", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByTitle("Show the base aerial without lighting")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add detail photo" })).not.toBeInTheDocument();
+  });
+
+  it("lets a phone pan the zoomed sheet without activating canvas edits", () => {
+    const { canvas } = setupAerialTool({ type: "pan" });
+
+    expect(canvas).toHaveStyle({ cursor: "grab", touchAction: "pan-x pan-y" });
+    fireEvent.pointerDown(canvas, {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 300,
+      clientY: 300,
+      button: 0,
+    });
+    expect(canvas.setPointerCapture).not.toHaveBeenCalled();
   });
 
   it("computes a deterministic centered contain fit", () => {
@@ -503,6 +559,39 @@ describe("LightCanvas — touch gestures", () => {
     expect(placed()).toBe(0);
   });
 
+  it("traces and commits a bistro run with one finger", () => {
+    const { canvas, dispatch } = setupAerialTool({ type: "draw", productId: BISTRO.id });
+
+    fireEvent.pointerDown(canvas, touch(1, 220, 260));
+    fireEvent.pointerMove(canvas, touch(1, 300, 300));
+    fireEvent.pointerMove(canvas, touch(1, 380, 260));
+    fireEvent.pointerUp(canvas, touch(1, 380, 260));
+
+    expect(dispatch.mock.calls.map(([action]) => action)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "ADD_RUN",
+          run: expect.objectContaining({
+            productId: BISTRO.id,
+            points: expect.arrayContaining([expect.any(Object), expect.any(Object)]),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("discards a partial touch trace when the OS cancels the pointer", () => {
+    const { canvas, dispatch } = setupAerialTool({ type: "draw", productId: BISTRO.id });
+
+    fireEvent.pointerDown(canvas, touch(1, 220, 260));
+    fireEvent.pointerMove(canvas, touch(1, 320, 300));
+    fireEvent.pointerCancel(canvas, touch(1, 320, 300));
+
+    expect(
+      dispatch.mock.calls.some(([action]) => (action as EditorAction).type === "ADD_RUN"),
+    ).toBe(false);
+  });
+
   it("never leaves a stray fixture behind when a pinch begins", () => {
     // A pinch always starts as one finger landing a frame before the other. If
     // placement fired on touch-down, every zoom attempt would bill the customer
@@ -513,6 +602,13 @@ describe("LightCanvas — touch gestures", () => {
     fireEvent.pointerDown(canvas, touch(2, 500, 400));
     fireEvent.pointerUp(canvas, touch(1, 400, 400));
     fireEvent.pointerUp(canvas, touch(2, 500, 400));
+    expect(placed()).toBe(0);
+  });
+
+  it("does not place a fixture when the OS cancels a tap", () => {
+    const { canvas, placed } = setupCanvas();
+    fireEvent.pointerDown(canvas, touch(1, 420, 380));
+    fireEvent.pointerCancel(canvas, touch(1, 420, 380));
     expect(placed()).toBe(0);
   });
 

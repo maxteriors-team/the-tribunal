@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Circle } from "lucide-react";
+import { Cable, Circle } from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
 
 import { DrawingToolbar } from "./drawing-toolbar";
@@ -12,6 +12,7 @@ const renderToolbar = () => {
   const onPaperSizeChange = vi.fn();
   const onMarkerColorChange = vi.fn();
   const onFixtureSelect = vi.fn();
+  const onBistroSelect = vi.fn();
   render(
     <DrawingToolbar
       workspaceName="Northstar Outdoor Lighting"
@@ -42,10 +43,23 @@ const renderToolbar = () => {
           icon: Circle,
           onSelect: onFixtureSelect,
         },
+        {
+          id: "bistro-temporary",
+          label: "Temporary Bistro Lights",
+          icon: Cable,
+          group: "bistro",
+          onSelect: onBistroSelect,
+        },
       ]}
     />,
   );
-  return { onAction, onFixtureSelect, onMarkerColorChange, onPaperSizeChange };
+  return {
+    onAction,
+    onBistroSelect,
+    onFixtureSelect,
+    onMarkerColorChange,
+    onPaperSizeChange,
+  };
 };
 
 const clickMenuItem = async (menu: string, item: string) => {
@@ -84,6 +98,7 @@ describe("DrawingToolbar", () => {
     for (const [label, expected] of [
       ["Replace aerial", "place-aerial"],
       ["Select", "select"],
+      ["Pan", "pan"],
       ["Undo", "undo"],
       ["Wiring: Off", "wire"],
       ["Highlight", "highlight"],
@@ -99,10 +114,12 @@ describe("DrawingToolbar", () => {
   it(
     "moves fixture placement into Add and exposes only retained drawing commands",
     async () => {
-      const { onAction, onFixtureSelect } = renderToolbar();
+      const { onAction, onBistroSelect, onFixtureSelect } = renderToolbar();
 
       await clickMenuItem("Add", "Uplight");
       expect(onFixtureSelect).toHaveBeenCalledOnce();
+      await clickMenuItem("Add", "Temporary Bistro Lights");
+      expect(onBistroSelect).toHaveBeenCalledOnce();
       await clickMenuItem("Add", "Supplemental detail photo");
       expect(onAction).toHaveBeenLastCalledWith("add-photo");
 
@@ -111,7 +128,7 @@ describe("DrawingToolbar", () => {
         ["Show saved measurements", "measurements-visible"],
         ["Cover drawing area", "fit-cover"],
         ["50%", "opacity-50"],
-        ["Clear fixtures and wiring", "clear-design"],
+        ["Clear fixtures, bistro runs, and wiring", "clear-design"],
         ["Clear plan annotations", "clear-symbols"],
       ] as const;
       for (const [label, expected] of planActions) {
@@ -121,6 +138,22 @@ describe("DrawingToolbar", () => {
     },
     MENU_WALK_TIMEOUT_MS,
   );
+
+  it("returns menu focus for keyboards without leaving a pointer focus ring", async () => {
+    const user = userEvent.setup();
+    renderToolbar();
+    const add = screen.getByRole("button", { name: "Add" });
+
+    await user.click(add);
+    await user.click(screen.getByRole("menuitem", { name: "Temporary Bistro Lights" }));
+    expect(add).not.toHaveFocus();
+
+    add.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("menuitem", { name: "Temporary Bistro Lights" })).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(add).toHaveFocus();
+  });
 
   it(
     "wires every contextual menu to a visible state change or document action",

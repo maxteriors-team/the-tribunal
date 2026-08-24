@@ -72,6 +72,14 @@ export function deterministicPhotoFit(
 
 type Drag =
   | { mode: "pan"; startX: number; startY: number; ox: number; oy: number }
+  | {
+      mode: "touch-draw";
+      pointerId: number;
+      lastX: number;
+      lastY: number;
+      moved: boolean;
+      before: Design;
+    }
   | { mode: "vertex"; runId: string; index: number; before: Design }
   | { mode: "run"; runId: string; start: Point; points: Point[]; before: Design }
   | { mode: "item"; itemId: string; offset: Point; before: Design }
@@ -144,6 +152,7 @@ export function LightCanvas({
   const [imageDragActive, setImageDragActive] = useState(false);
   const [view, setView] = useState<CanvasView>({ scale: 1, ox: 0, oy: 0 });
   const [draft, setDraft] = useState<Point[]>([]);
+  const draftRef = useRef<Point[]>([]);
   const [draftHighlight, setDraftHighlight] = useState<Point[] | null>(null);
   const [calDraft, setCalDraft] = useState<Point | null>(null);
   const [hoverPt, setHoverPt] = useState<Point | null>(null);
@@ -556,45 +565,49 @@ export function LightCanvas({
   }, [isAerial, zoomAt]);
 
   // ---- draft commit / cancel ----------------------------------------------
-  const commitDraft = useCallback(() => {
-    if (tool.type !== "draw") return;
-    const eps = 3 / view.scale;
-    const pts: Point[] = [];
-    for (const p of draft) {
-      const last = pts[pts.length - 1];
-      if (!last || distance(last, p) > eps) pts.push(p);
-    }
-    if (pts.length >= 2) {
-      const wireCircuitNumber =
-        design.runs.filter((run) => productById.get(run.productId)?.style === "wire").length + 1;
-      dispatch({
-        type: "ADD_RUN",
-        run: {
-          id: nextId("run"),
-          productId: tool.productId,
-          points: pts,
-          ...(activeProduct?.style === "wire"
-            ? {
-                circuitLabel: `C${wireCircuitNumber}`,
-                wireGauge: 12 as const,
-                sourceVoltage: defaultSourceVoltage,
-              }
-            : {}),
-        },
-      });
-    }
-    setDraft([]);
-    setHoverPt(null);
-  }, [
-    tool,
-    draft,
-    view.scale,
-    dispatch,
-    design.runs,
-    productById,
-    activeProduct,
-    defaultSourceVoltage,
-  ]);
+  const commitDraft = useCallback(
+    (source: readonly Point[] = draft) => {
+      if (tool.type !== "draw") return;
+      const eps = 3 / view.scale;
+      const pts: Point[] = [];
+      for (const p of source) {
+        const last = pts[pts.length - 1];
+        if (!last || distance(last, p) > eps) pts.push(p);
+      }
+      if (pts.length >= 2) {
+        const wireCircuitNumber =
+          design.runs.filter((run) => productById.get(run.productId)?.style === "wire").length + 1;
+        dispatch({
+          type: "ADD_RUN",
+          run: {
+            id: nextId("run"),
+            productId: tool.productId,
+            points: pts,
+            ...(activeProduct?.style === "wire"
+              ? {
+                  circuitLabel: `C${wireCircuitNumber}`,
+                  wireGauge: 12 as const,
+                  sourceVoltage: defaultSourceVoltage,
+                }
+              : {}),
+          },
+        });
+      }
+      draftRef.current = [];
+      setDraft([]);
+      setHoverPt(null);
+    },
+    [
+      tool,
+      draft,
+      view.scale,
+      dispatch,
+      design.runs,
+      productById,
+      activeProduct,
+      defaultSourceVoltage,
+    ],
+  );
 
   // ---- keyboard -----------------------------------------------------------
   const kbRef = useRef({ draft, calDraft, selection, tool, commitDraft, design, photo });
@@ -784,7 +797,7 @@ export function LightCanvas({
 
   // ---- pointer events -----------------------------------------------------
   const onPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (pendingCal) return;
+    if (pendingCal || (isAerial && tool.type === "pan")) return;
     canvasRef.current?.setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -794,6 +807,10 @@ export function LightCanvas({
       const drag = dragRef.current;
       if (drag && drag.mode !== "pan") {
         dispatch({ type: "REVERT_TRANSIENT", design: drag.before });
+      }
+      if (drag?.mode === "touch-draw") {
+        draftRef.current = [];
+        setDraft([]);
       }
       dragRef.current = null;
       tapRef.current = null;
@@ -816,13 +833,22 @@ export function LightCanvas({
     }
     if (e.button !== 0) return;
 
-    // Touch: creation waits for the finger to lift.
-    //
-    // A pinch starts as one finger touching a frame or two before the second.
-    // If "place" fired on touch-down, every attempt to zoom would leave a stray
-    // fixture on the photo — counted, priced, and sent to the crew. Deferring
-    // to release lets a second finger cancel it. Mouse and pen keep acting on
-    // press, where there is no such ambiguity and the immediacy is the feel.
+    // A finger can trace a complete run in one stroke. A tap stays as the first
+    // anchor; a second tap completes a straight run. Other creation tools still
+    // wait for release so a two-finger gesture never places billable inventory.
+    if (e.pointerType === "touch" && tool.type === "draw") {
+      if (!insidePhoto(toImage(e.clientX, e.clientY))) return;
+      applyToolPress(e.clientX, e.clientY, e.shiftKey);
+      dragRef.current = {
+        mode: "touch-draw",
+        pointerId: e.pointerId,
+        lastX: e.clientX,
+        lastY: e.clientY,
+        moved: false,
+        before: design,
+      };
+      return;
+    }
     if (e.pointerType === "touch" && tool.type !== "select" && tool.type !== "highlight") {
       tapRef.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
       return;
@@ -841,6 +867,8 @@ export function LightCanvas({
     const slack = 8 / view.scale;
 
     switch (tool.type) {
+      case "pan":
+        return;
       case "calibrate": {
         if (!insidePhoto(p)) return;
         const cal = design.calibration;
@@ -866,7 +894,11 @@ export function LightCanvas({
         if (shift && draft.length > 0) {
           p = snapAngle(draft[draft.length - 1], p);
         }
-        setDraft((d) => [...d, p]);
+        setDraft((current) => {
+          const next = [...current, p];
+          draftRef.current = next;
+          return next;
+        });
         return;
       }
       case "place": {
@@ -1019,6 +1051,22 @@ export function LightCanvas({
     }
 
     switch (drag.mode) {
+      case "touch-draw": {
+        if (drag.pointerId !== e.pointerId) return;
+        if (Math.hypot(e.clientX - drag.lastX, e.clientY - drag.lastY) < 6) return;
+        drag.lastX = e.clientX;
+        drag.lastY = e.clientY;
+        drag.moved = true;
+        p = clampToPhoto(p);
+        setDraft((current) => {
+          const previous = current[current.length - 1];
+          if (previous && distance(previous, p) < 2 / Math.max(view.scale, 0.1)) return current;
+          const next = [...current, p];
+          draftRef.current = next;
+          return next;
+        });
+        return;
+      }
       case "pan": {
         if (isAerial) {
           fitView();
@@ -1199,6 +1247,11 @@ export function LightCanvas({
     const drag = dragRef.current;
     dragRef.current = null;
     setPanning(false);
+    if (drag?.mode === "touch-draw") {
+      const points = draftRef.current;
+      if (drag.moved || points.length >= 2) commitDraft(points);
+      return;
+    }
     if (drag?.mode === "highlight") {
       const points = draftHighlight ?? [];
       setDraftHighlight(null);
@@ -1220,6 +1273,23 @@ export function LightCanvas({
     }
   };
 
+  const onPointerCancel = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    pointersRef.current.delete(e.pointerId);
+    tapRef.current = null;
+    gestureRef.current = null;
+    const drag = dragRef.current;
+    dragRef.current = null;
+    setPanning(false);
+    setHoverPt(null);
+    setDraftHighlight(null);
+    if (drag?.mode === "touch-draw") {
+      draftRef.current = [];
+      setDraft([]);
+    } else if (drag && drag.mode !== "pan") {
+      dispatch({ type: "REVERT_TRANSIENT", design: drag.before });
+    }
+  };
+
   const onDoubleClick = () => commitDraft();
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -1228,7 +1298,9 @@ export function LightCanvas({
 
   // ---- hint text ----------------------------------------------------------
   let hint = "";
-  if (tool.type === "calibrate") {
+  if (tool.type === "pan") {
+    hint = "Drag with one finger to move around the zoomed plan · switch to Select to edit";
+  } else if (tool.type === "calibrate") {
     hint = calDraft
       ? "Click the other end of your reference object · Shift = straight line"
       : design.calibration
@@ -1241,10 +1313,12 @@ export function LightCanvas({
       draft.length > 0 ? polylineLength(hoverPt ? [...draft, hoverPt] : draft) * ftPerPx : 0;
     hint =
       draft.length > 0
-        ? `${formatFeet(liveFt)} — Enter / double-click to finish · Backspace undoes a point · Esc cancels`
+        ? `${formatFeet(liveFt)} · Lift to finish on touch · Enter or double-click with a mouse`
         : activeProduct?.style === "wire"
-          ? "Click along the top-down wire route · Shift snaps angles"
-          : "Click along the roofline to add points · Shift snaps angles";
+          ? "Finger-drag the wire route, or click points with a mouse"
+          : activeProduct?.style === "bistro"
+            ? "Finger-drag the bistro run, or tap its start and end"
+            : "Finger-drag the lighting run, or click points with a mouse";
   } else if (tool.type === "place") {
     hint = `Click to place ${activeProduct?.name ?? "item"} · then switch to Select (V) to move or resize`;
   } else if (tool.type === "highlight") {
@@ -1256,13 +1330,15 @@ export function LightCanvas({
   }
 
   const cursor =
-    !isAerial && (spaceDown || panning)
-      ? panning
-        ? "grabbing"
-        : "grab"
-      : tool.type === "select"
-        ? "default"
-        : "crosshair";
+    tool.type === "pan"
+      ? "grab"
+      : !isAerial && (spaceDown || panning)
+        ? panning
+          ? "grabbing"
+          : "grab"
+        : tool.type === "select"
+          ? "default"
+          : "crosshair";
 
   const duskPercent = Math.round(dusk * 100);
 
@@ -1295,7 +1371,7 @@ export function LightCanvas({
         {isAerial ? "top-down aerial plan" : "property photo"}. Press V for Select, S for Set scale,
         and Delete to remove a selected fixture.{" "}
         {isAerial
-          ? "Use the labeled document zoom controls to enlarge or fit the sheet. "
+          ? "Use Pan to move a zoomed sheet and the labeled document zoom controls to enlarge or fit it. "
           : "Press plus or minus to zoom and 0 to fit. "}
         Drop an image file onto the plan, or use{" "}
         {isAerial ? "Supplemental detail photo" : "Add plan image"} to place a movable reference
@@ -1322,11 +1398,14 @@ export function LightCanvas({
         data-view-scale={view.scale}
         data-view-origin-x={view.ox}
         data-view-origin-y={view.oy}
-        style={{ cursor }}
+        style={{
+          cursor,
+          touchAction: isAerial && tool.type === "pan" ? "pan-x pan-y" : "none",
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
       />
