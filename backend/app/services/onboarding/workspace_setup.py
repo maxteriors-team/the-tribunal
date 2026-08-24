@@ -348,6 +348,7 @@ def _build_phone_number(workspace_id: uuid.UUID, purchased: PhoneNumberInfo) -> 
         telnyx_phone_number_id=purchased.id,
         sms_enabled=True,
         voice_enabled=True,
+        mms_enabled=True,
         is_active=True,
     )
 

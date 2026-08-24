@@ -2,12 +2,16 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.schemas.lead_source import LeadAttributionFields
 from app.schemas.tag import TagResponse
+from app.services.messaging.outbound_media import (
+    MAX_OUTBOUND_IMAGE_DATA_URL_CHARS,
+    decode_outbound_image_data_url,
+)
 
 _NOT_LOADED = object()
 
@@ -221,10 +225,24 @@ class BulkDeleteResponse(BaseModel):
 
 
 class SendMessageToContactRequest(BaseModel):
-    """Request schema for sending a message to a contact."""
+    """Request schema for sending a text or one image to a contact."""
 
-    body: str
+    body: str = ""
     from_number: str | None = None  # Optional: specific phone number to send from
+    image_data_url: str | None = Field(default=None, max_length=MAX_OUTBOUND_IMAGE_DATA_URL_CHARS)
+
+    @field_validator("image_data_url")
+    @classmethod
+    def validate_image_data_url(cls, value: str | None) -> str | None:
+        if value is not None:
+            decode_outbound_image_data_url(value)
+        return value
+
+    @model_validator(mode="after")
+    def require_content(self) -> Self:
+        if not self.body.strip() and self.image_data_url is None:
+            raise ValueError("A message or image attachment is required")
+        return self
 
 
 class MessageResponse(BaseModel):

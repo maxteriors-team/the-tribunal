@@ -33,7 +33,14 @@ from app.services.contacts.exceptions import (
 )
 from app.services.contacts.query_service import ContactQueryService
 from app.services.contacts.timeline_service import ContactTimelineService
-from app.services.telephony.text_provider import get_text_message_provider
+from app.services.exceptions import ServiceUnavailableError
+from app.services.messaging.media_storage import MMSStorageError
+from app.services.messaging.outbound_media import (
+    OutboundImageValidationError,
+    OutboundMedia,
+    store_outbound_image,
+)
+from app.services.telephony.text_provider import MacRelayMessageService, get_text_message_provider
 
 logger = structlog.get_logger()
 
@@ -300,6 +307,7 @@ class ContactService:
         workspace_id: uuid.UUID,
         message_body: str,
         from_number: str | None = None,
+        image_data_url: str | None = None,
     ) -> Any:
         """Send a configured text-channel message to a contact.
 
@@ -308,35 +316,57 @@ class ContactService:
             workspace_id: The workspace UUID
             message_body: Message text
             from_number: Optional specific phone number to send from
+            image_data_url: Optional validated image attachment
 
         Returns:
             Created message object
 
         Raises:
             ContactNotFoundError: If contact not found
-            ContactValidationError: If contact has no phone number
+            ContactValidationError: If contact or attachment is invalid
             ContactPhoneNotConfiguredError: If text messaging is not configured
         """
-        # Get contact
         contact = await self.get_contact(contact_id, workspace_id)
-
         if not contact.phone_number:
             raise ContactValidationError("Contact does not have a phone number")
 
-        # Get workspace phone number for sending
         workspace_phone = await self._get_workspace_phone(workspace_id, from_number)
-
-        sms_service = get_text_message_provider(preferred_provider_for_phone(workspace_phone))
+        sms_service = get_text_message_provider(
+            preferred_provider_for_phone(workspace_phone),
+            mac_relay_service=workspace_phone.mac_relay_service,
+        )
         try:
-            message = await sms_service.send_message(
+            media: tuple[OutboundMedia, ...] = ()
+            if image_data_url is not None:
+                if not workspace_phone.supports_mms:
+                    raise ContactValidationError("The selected sending number does not support MMS")
+                if isinstance(sms_service, MacRelayMessageService):
+                    raise ContactValidationError(
+                        "Image attachments require a Telnyx-enabled sending number"
+                    )
+                try:
+                    media = (
+                        await store_outbound_image(
+                            workspace_id=workspace_id,
+                            data_url=image_data_url,
+                        ),
+                    )
+                except OutboundImageValidationError as exc:
+                    raise ContactValidationError(str(exc)) from exc
+                except MMSStorageError as exc:
+                    raise ServiceUnavailableError(
+                        "Image attachments are temporarily unavailable"
+                    ) from exc
+
+            return await sms_service.send_message(
                 to_number=contact.phone_number,
                 from_number=sender_address_for_phone(workspace_phone),
                 body=message_body,
                 db=self.db,
                 workspace_id=workspace_id,
                 phone_number_id=workspace_phone.id,
+                media=media,
             )
-            return message
         finally:
             await sms_service.close()
 

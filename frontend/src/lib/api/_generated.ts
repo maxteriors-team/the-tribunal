@@ -30125,13 +30125,18 @@ export interface components {
         };
         /**
          * SendMessageToContactRequest
-         * @description Request schema for sending a message to a contact.
+         * @description Request schema for sending a text or one image to a contact.
          */
         SendMessageToContactRequest: {
-            /** Body */
+            /**
+             * Body
+             * @default
+             */
             body: string;
             /** From Number */
             from_number?: string | null;
+            /** Image Data Url */
+            image_data_url?: string | null;
         };
         /**
          * SequenceEnrollmentStatus

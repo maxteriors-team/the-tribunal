@@ -251,6 +251,10 @@ async def test_complete_onboarding_creates_calendar_resource_and_purchases_phone
     assert Agent in added_types
     assert BookableStaff in added_types
     assert PhoneNumber in added_types
+    added_phone = next(
+        call.args[0] for call in db.add.call_args_list if isinstance(call.args[0], PhoneNumber)
+    )
+    assert added_phone.mms_enabled is True
     db.commit.assert_awaited_once()
     # The wizard finishing is the *only* thing that marks a workspace onboarded.
     assert workspace.onboarding_completed_at is not None

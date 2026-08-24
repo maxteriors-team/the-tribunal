@@ -145,10 +145,12 @@ export const conversationsApi = {
     contactId: number,
     body: string,
     fromNumber?: string,
+    imageDataUrl?: string,
   ): Promise<Message> => {
     return apiPost<Message>(`/api/v1/workspaces/${workspaceId}/contacts/${contactId}/messages`, {
       body,
       from_number: fromNumber,
+      image_data_url: imageDataUrl,
     });
   },
 
