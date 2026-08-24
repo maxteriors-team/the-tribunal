@@ -1,7 +1,8 @@
 "use client";
 
-import { Send, Paperclip, Mic, PhoneOutgoing, Loader2 } from "lucide-react";
-import { useRef, type KeyboardEvent } from "react";
+import { Loader2, Mic, Paperclip, PhoneOutgoing, Send, X } from "lucide-react";
+import NextImage from "next/image";
+import { useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,12 +13,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  MMS_IMAGE_ACCEPT,
+  prepareOutboundMmsImage,
+  type OutboundMmsImage,
+} from "@/lib/messaging/image-upload";
 import type { PhoneNumber } from "@/types/phone";
 
 interface MessageComposerProps {
   message: string;
   onMessageChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (imageDataUrl?: string) => Promise<void>;
   isSending: boolean;
   phoneNumbers: PhoneNumber[];
   selectedFromNumber: string | undefined;
@@ -34,19 +40,58 @@ export function MessageComposer({
   onFromNumberChange,
 }: MessageComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [image, setImage] = useState<OutboundMmsImage | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [isPreparingImage, setIsPreparingImage] = useState(false);
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      onSend();
+  const selectedPhone = phoneNumbers.find(
+    (phone) => phone.phone_number === selectedFromNumber,
+  );
+  const canSendMms =
+    selectedPhone?.mms_enabled === true && selectedPhone.provider !== "mac_relay";
+  const canSend =
+    (!!message.trim() || !!image) && !isSending && !isPreparingImage && (!image || canSendMms);
+
+  const handleSend = async () => {
+    if (!canSend) return;
+    try {
+      await onSend(image?.dataUrl);
+      setImage(null);
+      setImageError(null);
+    } catch {
+      // The feed restores the draft and shows the API error; keep the image selected.
+    }
+  };
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void handleSend();
+    }
+  };
+
+  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setImageError(null);
+    setIsPreparingImage(true);
+    try {
+      setImage(await prepareOutboundMmsImage(file));
+    } catch (error) {
+      setImage(null);
+      setImageError(error instanceof Error ? error.message : "That image could not be attached.");
+    } finally {
+      setIsPreparingImage(false);
     }
   };
 
   return (
-    <div className="p-4 border-t shrink-0">
-      {/* Phone number selector */}
+    <div className="shrink-0 border-t p-4">
       {phoneNumbers.length > 1 && (
-        <div className="flex items-center gap-2 mb-2">
+        <div className="mb-2 flex items-center gap-2">
           <PhoneOutgoing className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">Send from:</span>
           <Select value={selectedFromNumber} onValueChange={onFromNumberChange}>
@@ -63,28 +108,90 @@ export function MessageComposer({
           </Select>
         </div>
       )}
+
+      {image && (
+        <div className="mb-2 flex w-fit max-w-full items-center gap-2 rounded-lg border bg-muted/40 p-2">
+          <NextImage
+            src={image.dataUrl}
+            alt="Image attachment preview"
+            width={56}
+            height={56}
+            unoptimized
+            className="size-14 rounded-md object-cover"
+          />
+          <div className="min-w-0">
+            <p className="max-w-52 truncate text-sm font-medium">{image.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {(image.sizeBytes / 1024).toFixed(0)} KB · MMS image
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8 shrink-0"
+            onClick={() => {
+              setImage(null);
+              setImageError(null);
+            }}
+            disabled={isSending}
+            aria-label="Remove image attachment"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+      )}
+
+      {image && !canSendMms && (
+        <p className="mb-2 text-xs text-destructive" role="alert">
+          The selected sending number does not support MMS.
+        </p>
+      )}
+      {imageError && (
+        <p className="mb-2 text-xs text-destructive" role="alert">
+          {imageError}
+        </p>
+      )}
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept={MMS_IMAGE_ACCEPT}
+        className="hidden"
+        onChange={(event) => void handleImageChange(event)}
+        aria-label="Choose image attachment"
+      />
+
       <div className="flex items-end gap-2">
         <Button
+          type="button"
           size="icon"
           variant="ghost"
           className="h-9 w-9 shrink-0"
-          disabled={isSending}
-          aria-label="Attach file"
+          onClick={() => imageInputRef.current?.click()}
+          disabled={isSending || isPreparingImage || !canSendMms}
+          aria-label="Attach image"
+          title={canSendMms ? "Attach image" : "Selected number does not support MMS"}
         >
-          <Paperclip className="h-4 w-4" />
+          {isPreparingImage ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Paperclip className="h-4 w-4" />
+          )}
         </Button>
-        <div className="flex-1 relative">
+        <div className="relative flex-1">
           <Textarea
             ref={textareaRef}
             value={message}
-            onChange={(e) => onMessageChange(e.target.value)}
+            onChange={(event) => onMessageChange(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
+            placeholder={image ? "Add a caption..." : "Type a message..."}
             className="min-h-[40px] max-h-[120px] resize-none pr-12"
             rows={1}
             disabled={isSending}
           />
           <Button
+            type="button"
             size="icon"
             variant="ghost"
             className="absolute right-1 bottom-1 h-8 w-8"
@@ -95,10 +202,11 @@ export function MessageComposer({
           </Button>
         </div>
         <Button
+          type="button"
           size="icon"
           className="h-9 w-9 shrink-0"
-          onClick={onSend}
-          disabled={!message.trim() || isSending}
+          onClick={() => void handleSend()}
+          disabled={!canSend}
           aria-label="Send message"
         >
           {isSending ? (

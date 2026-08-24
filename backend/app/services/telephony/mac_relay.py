@@ -78,8 +78,11 @@ class MacRelayMessageService(TelnyxSMSService):
         from_number: str,
         body: str,
         idempotency_key: uuid.UUID,
-    ) -> dict[str, str]:
+        media_urls: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Build the relay daemon send payload."""
+        if media_urls:
+            raise ValueError("Image attachments are not supported by the Mac relay")
         return {
             "to": to_number,
             "from": from_number,
@@ -90,7 +93,7 @@ class MacRelayMessageService(TelnyxSMSService):
 
     async def _post_message(
         self,
-        payload: dict[str, str],
+        payload: dict[str, Any],
         idempotency_key: uuid.UUID | None = None,
     ) -> dict[str, Any]:
         """POST to the Mac relay and normalize its response to Telnyx shape."""

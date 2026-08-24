@@ -1,10 +1,12 @@
 """Phone number schemas for phone number management endpoints."""
 
 import uuid
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.lead_source import LeadSourceType
+from app.models.phone_number import is_mms_capable
 
 
 class PhoneNumberLeadSourceResponse(BaseModel):
@@ -49,6 +51,15 @@ class PhoneNumberResponse(BaseModel):
     lead_source: PhoneNumberLeadSourceResponse | None
     lead_source_campaign: PhoneNumberLeadSourceCampaignResponse | None
     is_active: bool
+
+    @model_validator(mode="after")
+    def expose_effective_mms_capability(self) -> Self:
+        self.mms_enabled = is_mms_capable(
+            provider=self.provider,
+            sms_enabled=self.sms_enabled,
+            mms_enabled=self.mms_enabled,
+        )
+        return self
 
 
 class PaginatedPhoneNumbers(BaseModel):

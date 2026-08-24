@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.conversation import Conversation, Message
+from app.services.messaging.outbound_media import OutboundMedia
 from app.services.telephony.mac_relay import (
     MacRelayMessageService,
     build_configured_mac_relay_service,
@@ -28,6 +29,7 @@ class TextMessageProvider(Protocol):
         campaign_id: uuid.UUID | None = None,
         phone_number_id: uuid.UUID | None = None,
         idempotency_key: uuid.UUID | None = None,
+        media: tuple[OutboundMedia, ...] = (),
     ) -> Message:
         """Send and persist a text message."""
         ...

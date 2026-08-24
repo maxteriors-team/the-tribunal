@@ -49703,9 +49703,10 @@
         "type": "object"
       },
       "SendMessageToContactRequest": {
-        "description": "Request schema for sending a message to a contact.",
+        "description": "Request schema for sending a text or one image to a contact.",
         "properties": {
           "body": {
+            "default": "",
             "title": "Body",
             "type": "string"
           },
@@ -49719,11 +49720,20 @@
               }
             ],
             "title": "From Number"
+          },
+          "image_data_url": {
+            "anyOf": [
+              {
+                "maxLength": 819264,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Data Url"
           }
         },
-        "required": [
-          "body"
-        ],
         "title": "SendMessageToContactRequest",
         "type": "object"
       },

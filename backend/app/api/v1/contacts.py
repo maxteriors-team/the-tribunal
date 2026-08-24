@@ -567,6 +567,7 @@ async def send_message_to_contact(
             workspace_id=workspace_id,
             message_body=message_in.body,
             from_number=message_in.from_number,
+            image_data_url=message_in.image_data_url,
         )
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e

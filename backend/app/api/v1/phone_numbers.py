@@ -282,6 +282,7 @@ async def purchase_phone_number(
             telnyx_phone_number_id=purchased.id,
             sms_enabled=True,
             voice_enabled=True,
+            mms_enabled=True,
             is_active=True,
         )
         db.add(phone_number)
@@ -372,6 +373,7 @@ async def sync_phone_numbers(
                 telnyx_phone_number_id=tn.id,
                 sms_enabled=tn.capabilities.get("sms", False) if tn.capabilities else False,
                 voice_enabled=tn.capabilities.get("voice", False) if tn.capabilities else False,
+                mms_enabled=tn.capabilities.get("sms", False) if tn.capabilities else False,
                 is_active=True,
             )
             db.add(phone_number)

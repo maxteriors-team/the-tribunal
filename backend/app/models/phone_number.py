@@ -52,6 +52,11 @@ class PhoneNumberProvider(StrEnum):
     MAC_RELAY = "mac_relay"
 
 
+def is_mms_capable(*, provider: str, sms_enabled: bool, mms_enabled: bool) -> bool:
+    """Return effective MMS support, including legacy Telnyx SMS rows."""
+    return mms_enabled or (provider == PhoneNumberProvider.TELNYX and sms_enabled)
+
+
 class PhoneNumber(Base):
     """Phone number or sender identity assigned to a workspace."""
 
@@ -103,6 +108,16 @@ class PhoneNumber(Base):
     voice_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     mms_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     imessage_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    @property
+    def supports_mms(self) -> bool:
+        """Return effective MMS support for current and legacy Telnyx SMS numbers."""
+        return is_mms_capable(
+            provider=self.provider,
+            sms_enabled=self.sms_enabled,
+            mms_enabled=self.mms_enabled,
+        )
+
     mac_relay_service: Mapped[str] = mapped_column(String(20), default="imessage", nullable=False)
 
     # Agent assignment

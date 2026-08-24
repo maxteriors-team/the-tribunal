@@ -169,8 +169,10 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     setTeachAIMessage(item);
   };
 
-  const handleSendMessage = async () => {
-    if (!message.trim() || !selectedContact || !workspaceId || isSending) return;
+  const handleSendMessage = async (imageDataUrl?: string) => {
+    if ((!message.trim() && !imageDataUrl) || !selectedContact || !workspaceId || isSending) {
+      return;
+    }
 
     const messageBody = message.trim();
     setMessage("");
@@ -182,18 +184,18 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         selectedContact.id,
         messageBody,
         activeFromNumber,
+        imageDataUrl,
       );
 
-      // Invalidate timeline so the sent message appears immediately
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.contacts.timeline(workspaceId ?? "", selectedContact.id),
+        queryKey: queryKeys.contacts.timeline(workspaceId, selectedContact.id),
       });
-      toast.success("Message sent");
+      toast.success(imageDataUrl ? "Image sent" : "Message sent");
     } catch (error) {
-      // Restore the message if sending failed
       setMessage(messageBody);
       const errorMessage = error instanceof Error ? error.message : "Failed to send message";
       toast.error(errorMessage);
+      throw error;
     } finally {
       setIsSending(false);
     }

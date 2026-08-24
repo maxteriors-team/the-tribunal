@@ -1,6 +1,7 @@
 """Telnyx SMS service for sending and receiving messages."""
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -26,7 +27,7 @@ from app.models.conversation import (
     MessageStatus,
     advances_message_status,
 )
-from app.models.message_attachment import MessageAttachment
+from app.models.message_attachment import MESSAGE_ATTACHMENT_READY, MessageAttachment
 from app.models.phone_number import PhoneNumber
 from app.services.agents import ensure_default_agent
 from app.services.idempotency import (
@@ -35,6 +36,7 @@ from app.services.idempotency import (
     resolve_message_idempotency,
 )
 from app.services.messaging.link_shortener import shorten_urls_in_text
+from app.services.messaging.outbound_media import OutboundMedia
 from app.services.providers.http import (
     AsyncProviderHTTPClient,
     ProviderHTTPError,
@@ -83,7 +85,7 @@ def _media_filename(position: int, content_type: str) -> str:
     return f"mms-{position + 1}{extension}"
 
 
-def _media_preview(media: tuple["InboundMedia", ...]) -> str:
+def _media_preview(media: Sequence["InboundMedia | OutboundMedia"]) -> str:
     if len(media) == 1:
         content_type = media[0].content_type
         if content_type.startswith("image/"):
@@ -222,6 +224,7 @@ class TelnyxSMSService:
         campaign_id: uuid.UUID | None = None,
         phone_number_id: uuid.UUID | None = None,
         idempotency_key: uuid.UUID | None = None,
+        media: tuple[OutboundMedia, ...] = (),
     ) -> Message:
         """Send an SMS message and store it.
 
@@ -242,6 +245,7 @@ class TelnyxSMSService:
                 key is also sent to Telnyx as the ``X-Idempotency-Key``
                 header. If omitted, a fresh UUID is generated and the call
                 is effectively non-idempotent across retries.
+            media: Privately stored image metadata to send as MMS.
 
         Returns:
             Created (or pre-existing) Message record.
@@ -289,6 +293,7 @@ class TelnyxSMSService:
         effective_key = idempotency_state.effective_key
 
         message = idempotency_state.existing_message
+        is_new_message = message is None
 
         if message is None:
             message = Message(
@@ -304,6 +309,29 @@ class TelnyxSMSService:
             )
             db.add(message)
             await db.flush()
+
+        if media and is_new_message:
+            now = datetime.now(UTC)
+            for position, media_item in enumerate(media):
+                db.add(
+                    MessageAttachment(
+                        id=media_item.attachment_id,
+                        workspace_id=workspace_id,
+                        message_id=message.id,
+                        provider_position=position,
+                        source_url=media_item.provider_url,
+                        provider_content_type=media_item.content_type,
+                        provider_size_bytes=media_item.size_bytes,
+                        provider_sha256=media_item.sha256,
+                        filename=media_item.filename,
+                        content_type=media_item.content_type,
+                        size_bytes=media_item.size_bytes,
+                        storage_key=media_item.storage_key,
+                        sha256=media_item.sha256,
+                        status=MESSAGE_ATTACHMENT_READY,
+                        processed_at=now,
+                    )
+                )
 
         body = await shorten_urls_in_text(
             body,
@@ -325,6 +353,7 @@ class TelnyxSMSService:
                 from_number=from_number,
                 body=body,
                 idempotency_key=effective_key,
+                media_urls=[item.provider_url for item in media],
             )
             response_data = await self._post_message(payload, idempotency_key=effective_key)
             data = response_data.get("data", {})
@@ -349,7 +378,9 @@ class TelnyxSMSService:
             log.exception("text_send_exception", error=str(e))
 
         # Update conversation
-        conversation.last_message_preview = body[:255]
+        conversation.last_message_preview = (
+            body.strip() or (_media_preview(media) if media else "")
+        )[:255]
         conversation.last_message_at = datetime.now(UTC)
         conversation.last_message_direction = "outbound"
 
@@ -800,18 +831,23 @@ class TelnyxSMSService:
         from_number: str,
         body: str,
         idempotency_key: uuid.UUID,
-    ) -> dict[str, str]:
-        """Build provider payload for a Telnyx text message."""
-        return {
+        media_urls: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Build a Telnyx SMS or MMS provider payload."""
+        payload: dict[str, Any] = {
             "to": to_number,
             "from": from_number,
-            "text": body,
-            "type": self.provider_payload_type,
+            "type": "MMS" if media_urls else self.provider_payload_type,
         }
+        if body:
+            payload["text"] = body
+        if media_urls:
+            payload["media_urls"] = media_urls
+        return payload
 
     async def _post_message(
         self,
-        payload: dict[str, str],
+        payload: dict[str, Any],
         idempotency_key: uuid.UUID | None = None,
     ) -> dict[str, Any]:
         """POST to /messages with shared retry/error handling.
