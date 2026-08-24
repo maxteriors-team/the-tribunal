@@ -2993,6 +2993,7 @@ export function LightDesigner({
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [christmasPerFtOverride, setChristmasPerFtOverride] = useState<number | null>(null);
   const [discountAmount, setDiscountAmount] = useState<number | null>(null);
+  const [permanentDepositInput, setPermanentDepositInput] = useState("");
   // Standalone lines the rep typed for work the price book doesn't carry. Held
   // as raw drafts; only complete rows are priced (see `toEstimateCustomLines`).
   const [customLines, setCustomLines] = useState<CustomLineDraft[]>([]);
@@ -3013,7 +3014,10 @@ export function LightDesigner({
   const [savedToCustomer, setSavedToCustomer] = useState(false);
   // The draft quote just created from this design (its number is shown inline
   // with a link into Quotes). Cleared whenever the priced inputs change.
-  const [quoteResult, setQuoteResult] = useState<{ number: string } | null>(null);
+  const [quoteResult, setQuoteResult] = useState<{
+    number: string;
+    depositAmount: number | null;
+  } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
 
   // ---- Catalog (drawable palette) ---------------------------------------
@@ -3744,13 +3748,36 @@ export function LightDesigner({
     },
   });
 
+  const parsedPermanentDeposit = Number(permanentDepositInput);
+  const permanentDepositValid =
+    permanentDepositInput === "" ||
+    (Number.isFinite(parsedPermanentDeposit) &&
+      parsedPermanentDeposit > 0 &&
+      parsedPermanentDeposit <= 100);
+  const permanentDepositPercentage =
+    permanentDepositInput !== "" && permanentDepositValid ? parsedPermanentDeposit : null;
+  const permanentDepositAmount =
+    permanentDepositPercentage != null
+      ? round2((estimate?.permanent.total ?? 0) * permanentDepositPercentage * 0.01)
+      : null;
+
   // Convert the drawn design into a real draft quote. ``side`` picks which
   // priced option the customer is buying; the seasonal side carries the chosen
   // package. Every line is recomputed server-side, so this only sends inputs.
   const createQuoteMutation = useMutation({
     mutationFn: (side: "permanent" | "seasonal") =>
-      estimatorApi.createQuote(workspaceId, { ...shareParams, side }),
-    onSuccess: (quote) => setQuoteResult({ number: quote.number }),
+      estimatorApi.createQuote(workspaceId, {
+        ...shareParams,
+        side,
+        ...(side === "permanent" && permanentDepositPercentage != null
+          ? { deposit_percentage: permanentDepositPercentage }
+          : {}),
+      }),
+    onSuccess: (quote) =>
+      setQuoteResult({
+        number: quote.number,
+        depositAmount: quote.deposit_amount ?? null,
+      }),
   });
   const quotePending = createQuoteMutation.isPending;
 
@@ -4764,18 +4791,56 @@ export function LightDesigner({
                                 Turn this design into a quote
                               </div>
                               {sides.permanent ? (
-                                <button
-                                  className="est-btn primary est-save-btn"
-                                  type="button"
-                                  disabled={!hasHolidayDesign || quotePending}
-                                  onClick={() => createQuoteMutation.mutate("permanent")}
-                                >
-                                  {quotePending
-                                    ? "Creating…"
-                                    : sides.seasonal
-                                      ? "Create permanent quote"
-                                      : "Create quote"}
-                                </button>
+                                <>
+                                  <label className="est-quote-deposit">
+                                    <span>Permanent quote deposit</span>
+                                    <span className="est-quote-deposit-input">
+                                      <input
+                                        className="est-input"
+                                        type="number"
+                                        min="0.01"
+                                        max="100"
+                                        step="0.01"
+                                        inputMode="decimal"
+                                        placeholder="50"
+                                        value={permanentDepositInput}
+                                        aria-invalid={!permanentDepositValid}
+                                        onChange={(event) => {
+                                          setPermanentDepositInput(event.target.value);
+                                          setQuoteResult(null);
+                                        }}
+                                      />
+                                      <span aria-hidden="true">%</span>
+                                    </span>
+                                  </label>
+                                  <div
+                                    className={
+                                      permanentDepositValid
+                                        ? "est-customer-hint"
+                                        : "est-send-error"
+                                    }
+                                  >
+                                    {!permanentDepositValid
+                                      ? "Enter a deposit from 0.01% to 100%."
+                                      : permanentDepositAmount != null
+                                        ? `${formatCurrency(permanentDepositAmount)} due when the customer approves.`
+                                        : "Optional override. Leave blank to use the workspace default; the customer can approve and pay by card from the proposal."}
+                                  </div>
+                                  <button
+                                    className="est-btn primary est-save-btn"
+                                    type="button"
+                                    disabled={
+                                      !hasHolidayDesign || quotePending || !permanentDepositValid
+                                    }
+                                    onClick={() => createQuoteMutation.mutate("permanent")}
+                                  >
+                                    {quotePending
+                                      ? "Creating…"
+                                      : sides.seasonal
+                                        ? "Create permanent quote"
+                                        : "Create quote"}
+                                  </button>
+                                </>
                               ) : null}
                               {sides.seasonal ? (
                                 <button
@@ -4797,10 +4862,20 @@ export function LightDesigner({
                               </div>
                               {quoteResult ? (
                                 <div className="est-saved-note">
-                                  Quote {quoteResult.number} created ·{" "}
+                                  Quote {quoteResult.number} created
+                                  {quoteResult.depositAmount != null
+                                    ? ` · ${formatCurrency(quoteResult.depositAmount)} deposit`
+                                    : ""}
+                                  {" · "}
                                   <Link href="/quotes" className="est-quote-link">
                                     Open in Quotes
                                   </Link>
+                                  {quoteResult.depositAmount != null ? (
+                                    <div className="est-customer-hint">
+                                      Email or text the proposal from Quotes. Customer approval opens
+                                      secure card checkout.
+                                    </div>
+                                  ) : null}
                                 </div>
                               ) : null}
                               {createQuoteMutation.isError ? (

@@ -582,6 +582,18 @@ def _lines_sum(line_items) -> float:
     return round(sum(li.quantity * li.unit_price - li.discount for li in line_items), 2)
 
 
+def test_estimate_quote_deposit_is_bounded_and_permanent_only() -> None:
+    request = EstimateQuoteRequest(side="permanent", feet=100, deposit_percentage=30)
+    assert request.deposit_percentage == 30
+
+    with pytest.raises(ValueError, match="only be added to a permanent quote"):
+        EstimateQuoteRequest(side="seasonal", feet=100, deposit_percentage=30)
+    with pytest.raises(ValueError):
+        EstimateQuoteRequest(side="permanent", feet=100, deposit_percentage=0)
+    with pytest.raises(ValueError):
+        EstimateQuoteRequest(side="permanent", feet=100, deposit_percentage=101)
+
+
 def test_convert_permanent_lines_sum_to_permanent_total() -> None:
     title, pricing, lines = _convert(_config(), "permanent", 100)
     assert pricing.total == 3300

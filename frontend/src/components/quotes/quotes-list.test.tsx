@@ -172,6 +172,9 @@ describe("QuotesList deposits", () => {
     expect(await screen.findByText("Deposit due · $321.00")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.getByRole("menuitem", { name: "Record deposit" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitem", { name: "Open customer payment page" }),
+    ).toBeInTheDocument();
   });
 
   it("shows the recorded method and removes the action once paid", async () => {

@@ -422,6 +422,7 @@ describe("LightDesigner", () => {
     });
     vi.mocked(estimatorApi.createQuote).mockResolvedValue({
       number: "QUO-000007",
+      deposit_amount: null,
     } as Awaited<ReturnType<typeof estimatorApi.createQuote>>);
     vi.mocked(loadLandscapeDraft).mockResolvedValue(null);
     vi.mocked(saveLandscapeDraft).mockImplementation(async (workspaceId, shots) => ({
@@ -761,18 +762,33 @@ describe("LightDesigner", () => {
     expect(container.querySelector(".ep-totals")).toHaveTextContent("$2,800");
   });
 
-  it("converts the permanent side when the permanent quote button is used", async () => {
+  it("adds a deposit percentage to the permanent quote and shows the payment path", async () => {
+    vi.mocked(estimatorApi.createQuote).mockResolvedValueOnce({
+      number: "QUO-000007",
+      deposit_amount: 990,
+    } as Awaited<ReturnType<typeof estimatorApi.createQuote>>);
     const { container } = renderEstimator();
     await uploadPhoto(container);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Create permanent quote/i }));
+    fireEvent.change(
+      await screen.findByRole("spinbutton", { name: /Permanent quote deposit/i }),
+      { target: { value: "30" } },
+    );
+    expect(screen.getByText("$990.00 due when the customer approves.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Create permanent quote/i }));
 
     await waitFor(() =>
       expect(estimatorApi.createQuote).toHaveBeenCalledWith(
         "ws_1",
-        expect.objectContaining({ side: "permanent", feet: 100 }),
+        expect.objectContaining({
+          side: "permanent",
+          feet: 100,
+          deposit_percentage: 30,
+        }),
       ),
     );
+    expect(await screen.findByText(/\$990.00 deposit/i)).toBeInTheDocument();
+    expect(screen.getByText(/Customer approval opens secure card checkout/i)).toBeInTheDocument();
   });
 
   it("emails the estimate in one click, minting a share link first", async () => {

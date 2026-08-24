@@ -17809,6 +17809,8 @@ export interface components {
             client_phone?: string | null;
             /** Custom Lines */
             custom_lines?: components["schemas"]["EstimateCustomLine"][];
+            /** Deposit Percentage */
+            deposit_percentage?: number | null;
             /**
              * Discount Amount
              * @default 0

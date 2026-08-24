@@ -17699,6 +17699,19 @@
             "title": "Custom Lines",
             "type": "array"
           },
+          "deposit_percentage": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.01,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Percentage"
+          },
           "discount_amount": {
             "default": 0,
             "maximum": 1000000.0,
