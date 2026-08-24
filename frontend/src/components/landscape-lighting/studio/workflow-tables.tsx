@@ -5,8 +5,10 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 
 /* eslint-disable jsx-a11y/no-noninteractive-tabindex -- Horizontally overflowing data regions must be keyboard-scrollable. */
 
+import { formatFeet } from "@/lib/estimator/design";
 import type { LandscapeProcurementRow } from "@/lib/estimator/landscape-procurement";
 import type { LandscapeScheduleRow } from "@/lib/estimator/landscape-schedule";
+import type { BistroInstallationType } from "@/lib/estimator/types";
 import type { CatalogItemResponse } from "@/types/sales-wizard";
 
 interface FixtureScheduleTableProps {
@@ -183,6 +185,67 @@ export function LandscapeFixtureScheduleTable({
               </tr>
             );
           })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export interface LandscapeBistroRunRow {
+  runId: string;
+  number: number;
+  sheetLabel: string;
+  installation: BistroInstallationType | null;
+  productName: string;
+  sku: string | null;
+  anchorCount: number;
+  lengthFeet: number | null;
+}
+
+export function LandscapeBistroRunScheduleTable({ rows }: { rows: LandscapeBistroRunRow[] }) {
+  return (
+    <div
+      className="ll-data-table-wrap"
+      role="region"
+      aria-label="Bistro lighting run schedule"
+      tabIndex={0}
+    >
+      <table className="ll-data-table ll-bistro-schedule-table">
+        <caption className="sr-only">
+          Temporary and permanent bistro lighting runs by plan sheet
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Run</th>
+            <th scope="col">Sheet</th>
+            <th scope="col">Installation</th>
+            <th scope="col">Bistro product</th>
+            <th scope="col">Anchors</th>
+            <th scope="col">Length</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.runId}>
+              <td className="ll-row-number">B{row.number}</td>
+              <td>{row.sheetLabel}</td>
+              <td>
+                <strong>
+                  {row.installation === "temporary"
+                    ? "Temporary"
+                    : row.installation === "permanent"
+                      ? "Permanent"
+                      : "Unspecified"}
+                </strong>
+              </td>
+              <td>
+                <strong>{row.productName}</strong>
+                <span>{row.sku || "Layout-only product"}</span>
+              </td>
+              <td>{row.anchorCount}</td>
+              <td>{row.lengthFeet === null ? "Set scale" : formatFeet(row.lengthFeet)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

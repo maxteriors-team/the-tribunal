@@ -161,11 +161,13 @@ export function fixtureIconScaleFor(override?: number | null): number {
  * - `annotation` → plan-only equipment such as a transformer. It is persisted
  *   with the drawing but deliberately excluded from quote quantities.
  */
+export type BistroInstallationType = "temporary" | "permanent";
+
 export type DrawTarget =
   | { field: "roofline" }
   | { field: "christmas"; category: string; option: string }
   | { field: "landscape"; fixtureType: string }
-  | { field: "bistro" }
+  | { field: "bistro"; installation?: BistroInstallationType }
   | { field: "annotation"; annotationType: "transformer" | "wire" };
 
 export interface Product {
@@ -211,6 +213,8 @@ export interface Product {
   /** Lamp specification and included accessories from the CRM price-book item. */
   lampLabel?: string | null;
   accessoryLabels?: string[];
+  /** Keeps legacy/fallback products resolvable without duplicating palette choices. */
+  paletteHidden?: boolean;
   target: DrawTarget;
 }
 
@@ -432,6 +436,7 @@ export interface Design {
 
 export type Tool =
   | { type: "select" }
+  | { type: "pan" }
   | { type: "calibrate" }
   | { type: "draw"; productId: string }
   | { type: "place"; productId: string }

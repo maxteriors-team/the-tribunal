@@ -199,21 +199,44 @@ export function drawRunLights(
       break;
     }
     case "bistro": {
-      // Festoon hangs between the points the rep clicked, so each span sags
-      // instead of following the traced line dead straight.
+      // Festoon hangs between the points the rep traced. Temporary runs use a
+      // dashed cable; permanent runs show a heavier support cable and anchors.
+      const installation =
+        product.target.field === "bistro" ? product.target.installation : undefined;
       const spacing = Math.max(inch * (product.spacingIn || 24), 2);
       const r = Math.max(inch * 1.5, minR, 1.4) * scale;
       let index = 0;
+      ctx.save();
+      if (installation === "temporary") {
+        ctx.setLineDash([Math.max(inch * 5, 5), Math.max(inch * 3, 3)]);
+      }
       for (let i = 1; i < points.length; i += 1) {
         const curve = sagPoints(points[i - 1], points[i], spacing);
-        strokePath(ctx, curve, "rgba(20,26,38,0.45)", Math.max(inch * 0.5, 1));
+        strokePath(
+          ctx,
+          curve,
+          "rgba(20,26,38,0.55)",
+          installation === "permanent" ? Math.max(inch * 1.2, 2) : Math.max(inch * 0.5, 1),
+        );
         for (const p of curve.slice(0, -1)) {
           drawBulb(ctx, p, r, colors[index % colors.length]);
           index += 1;
         }
       }
+      ctx.restore();
       const last = points[points.length - 1];
       if (last) drawBulb(ctx, last, r, colors[index % colors.length]);
+      if (installation === "permanent") {
+        ctx.save();
+        ctx.strokeStyle = "rgba(214, 227, 236, 0.9)";
+        ctx.lineWidth = Math.max(inch * 0.5, 1);
+        for (const anchor of points) {
+          ctx.beginPath();
+          ctx.arc(anchor.x, anchor.y, Math.max(inch * 1.5, 2), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
       break;
     }
     case "c9":

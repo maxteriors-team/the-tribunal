@@ -2460,6 +2460,23 @@
   outline-offset: 3px;
 }
 
+.ll-schedule-sections {
+  display: grid;
+  gap: 32px;
+  margin-top: 28px;
+}
+
+.ll-schedule-sections h3 {
+  margin: 0;
+  color: #252c29;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ll-schedule-sections .ll-data-table-wrap {
+  margin-top: 12px;
+}
+
 .ll-data-table {
   width: 100%;
   border-collapse: collapse;
@@ -5083,12 +5100,17 @@
   }
 
   .ll-document-zoom {
-    flex-basis: 48px;
-    padding-inline: 5px;
+    flex-basis: 56px;
+    padding-inline: 6px;
   }
 
   .ll-document-zoom button {
-    width: 36px;
+    width: 44px;
+    min-height: 44px;
+  }
+
+  .ll-document-zoom input[type="range"] {
+    min-height: 44px;
   }
 
   .ll-document-paper .ll-live-sheet {

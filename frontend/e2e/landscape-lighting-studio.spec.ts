@@ -311,6 +311,22 @@ const catalog = [
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   },
+  {
+    id: "bistro-classic",
+    workspace_id: WORKSPACE_ID,
+    name: "Classic Bistro Lights",
+    description: "Warm-white festoon lighting by the foot",
+    sku: "BISTRO-CLASSIC",
+    kind: "product",
+    unit_price: 14,
+    taxable: true,
+    is_active: true,
+    is_attachable: false,
+    attributes: { bistro_product: true, supplier: "SiteOne" },
+    components: [],
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  },
 ];
 
 const pricing = {
@@ -755,6 +771,66 @@ test.describe("landscape lighting studio", () => {
     });
   });
 
+  test("draws temporary and permanent bistro runs and schedules both", async ({ page }) => {
+    const { updates } = await installStudioApi(page);
+    await page.goto(PROJECT_URL);
+
+    const canvas = page.getByLabel("Top-down aerial lighting plan canvas");
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error("Lighting canvas did not render");
+
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Permanent Classic Bistro Lights" }).click();
+    await canvas.click({ position: { x: box.width * 0.3, y: box.height * 0.35 } });
+    await canvas.click({ position: { x: box.width * 0.7, y: box.height * 0.45 } });
+    await canvas.focus();
+    await page.keyboard.press("Enter");
+
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Temporary Classic Bistro Lights" }).click();
+    await canvas.click({ position: { x: box.width * 0.25, y: box.height * 0.55 } });
+    await canvas.click({ position: { x: box.width * 0.75, y: box.height * 0.66 } });
+    await canvas.focus();
+    await page.keyboard.press("Enter");
+
+    await expect
+      .poll(() =>
+        updates.some((update) => {
+          const document = (update as { document?: typeof projectDocument }).document;
+          const productIds = document?.shots.flatMap((shot) =>
+            shot.design.runs.map((run) => run.productId),
+          );
+          return (
+            productIds?.includes("bistro-permanent-BISTRO-CLASSIC") &&
+            productIds.includes("bistro-temporary-BISTRO-CLASSIC")
+          );
+        }),
+      )
+      .toBe(true);
+
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/bistro-plan-desktop.png",
+      animations: "disabled",
+      fullPage: true,
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/bistro-plan-mobile.png",
+      animations: "disabled",
+    });
+
+    await page.getByRole("tab", { name: "Fixture Schedule" }).click();
+    await expect(page.getByRole("region", { name: "Bistro lighting run schedule" })).toBeVisible();
+    await expect(page.getByText("Permanent", { exact: true })).toBeVisible();
+    await expect(page.getByText("Temporary", { exact: true })).toBeVisible();
+
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/bistro-schedule-mobile.png",
+      animations: "disabled",
+    });
+  });
+
   test("edits fixture assignments and purchase-ready bill of materials", async ({ page }) => {
     const { updates } = await installStudioApi(page);
     await page.goto(PROJECT_URL);
@@ -902,6 +978,16 @@ test.describe("landscape lighting studio", () => {
       await expect(page.getByRole("button", { name: "Fit document" })).toBeVisible();
     }
 
+    await expect(page.getByRole("button", { name: "Pan" })).toBeVisible();
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(
+      page.getByRole("menuitem", { name: "Temporary Classic Bistro Lights" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: "Permanent Classic Bistro Lights" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+
     const mobileScale = Number(await canvas.getAttribute("data-view-scale"));
     expect(mobileScale).toBeLessThan(desktopScale);
     const toolbar = page.getByRole("region", { name: "Drawing toolbar" });
@@ -982,6 +1068,17 @@ test.describe("landscape lighting studio", () => {
             path: `../.ezcoder/screenshots/maxteriors-studio-${viewport.name}.png`,
             animations: "disabled",
           });
+          if (viewport.name === "mobile") {
+            await page.getByRole("button", { name: "Add", exact: true }).click();
+            await expect(
+              page.getByRole("menuitem", { name: "Temporary Classic Bistro Lights" }),
+            ).toBeVisible();
+            await page.screenshot({
+              path: "../.ezcoder/screenshots/bistro-tools-mobile.png",
+              animations: "disabled",
+            });
+            await page.keyboard.press("Escape");
+          }
         }
       }
     }

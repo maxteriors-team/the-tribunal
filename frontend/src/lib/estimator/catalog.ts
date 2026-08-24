@@ -19,7 +19,7 @@
 import type { LinearFeetEstimateResult } from "@/types/estimate";
 import type { CatalogItemResponse } from "@/types/sales-wizard";
 
-import type { DrawTarget, Product, RenderStyle } from "./types";
+import type { BistroInstallationType, DrawTarget, Product, RenderStyle } from "./types";
 
 export const COLOR_PRESETS: Record<string, string[]> = {
   "Warm White": ["#ffd98a"],
@@ -276,18 +276,29 @@ export function buildCatalog(estimate: LinearFeetEstimateResult | null | undefin
 }
 
 /**
- * Bistro / festoon strands from the price book. Unlike the four landscape
- * fixture *types* (see `fixtures.ts`), string lighting is traced and priced per
- * linear foot by the wizard's bistro add-on, so it stays a drawable product.
+ * Bistro / festoon strands from the price book. Landscape plans can opt into
+ * temporary/permanent variants without changing the catalog SKU used by saved
+ * legacy runs. Generic layout tools remain available when the price book has no
+ * bistro item, but proposal creation blocks those layout-only quantities.
  */
 export function buildBistroCatalog(
   items: readonly CatalogItemResponse[] | null | undefined,
+  options: { installationVariants?: boolean } = {},
 ): Product[] {
-  const products: Product[] = [];
+  const catalogProducts: Product[] = [];
   for (const item of items ?? []) {
     if (!item.is_active || item.kind === "service") continue;
-    if (!/\b(bistro|festoon|string)\b/.test(item.name.toLowerCase())) continue;
-    products.push({
+    const attributes = (item.attributes ?? null) as Record<string, unknown> | null;
+    const explicitlyBistro =
+      attributes?.bistro_product === true ||
+      [attributes?.product_type, attributes?.category, item.service_category].some(
+        (value) => typeof value === "string" && value.toLowerCase() === "bistro",
+      );
+    const name = item.name.toLowerCase();
+    const bistroLightingName =
+      /\b(bistro|festoon)\b/.test(name) || /\bstring(?:-| )?(lights?|lighting)\b/.test(name);
+    if (!explicitlyBistro && !bistroLightingName) continue;
+    catalogProducts.push({
       id: `bistro-${item.sku ?? item.id}`,
       name: item.name,
       category: "landscape",
@@ -298,10 +309,95 @@ export function buildBistroCatalog(
       spacingIn: DEFAULT_SPACING.bistro,
       sizeFt: 0,
       sku: item.sku ?? null,
+      catalogItemId: item.id,
+      catalogSku: item.sku ?? undefined,
       target: { field: "bistro" },
     });
   }
-  return products;
+  if (!options.installationVariants) return catalogProducts;
+
+  const variants = catalogProducts.flatMap((product) => {
+    const item = items?.find((candidate) => candidate.id === product.catalogItemId);
+    const attributes = (item?.attributes ?? null) as Record<string, unknown> | null;
+    const configured = attributes?.bistro_installation_type ?? attributes?.installation_type;
+    const name = product.name.toLowerCase();
+    const explicitInstallation: BistroInstallationType | null =
+      configured === "temporary" || configured === "permanent"
+        ? configured
+        : /\b(temporary|rental|seasonal)\b/.test(name)
+          ? "temporary"
+          : /\b(permanent|year[- ]round)\b/.test(name)
+            ? "permanent"
+            : null;
+    const installations: BistroInstallationType[] = explicitInstallation
+      ? [explicitInstallation]
+      : ["temporary", "permanent"];
+
+    return installations.map((installation) => ({
+      ...product,
+      id: `bistro-${installation}-${product.sku ?? product.catalogItemId}`,
+      name: name.includes(installation)
+        ? product.name
+        : `${installation === "temporary" ? "Temporary" : "Permanent"} ${product.name}`,
+      target: { field: "bistro" as const, installation },
+    }));
+  });
+
+  const layoutProducts: Product[] = (["temporary", "permanent"] as const).map((installation) => ({
+    id: `bistro-${installation}-layout`,
+    name: `${installation === "temporary" ? "Temporary" : "Permanent"} Bistro Lights`,
+    category: "landscape",
+    kind: "linear",
+    price: 0,
+    style: "bistro",
+    colors: COLOR_PRESETS["Warm White"],
+    spacingIn: DEFAULT_SPACING.bistro,
+    sizeFt: 0,
+    sku: null,
+    paletteHidden: variants.some((product) => product.target.installation === installation),
+    target: { field: "bistro", installation },
+  }));
+
+  return [
+    ...catalogProducts.map((product) => ({ ...product, paletteHidden: true })),
+    ...layoutProducts,
+    ...variants,
+  ];
+}
+
+/** Keep saved bistro geometry visible if its catalog SKU is later archived or removed. */
+export function buildSavedBistroFallbacks(
+  productIds: Iterable<string>,
+  existingProducts: readonly Product[],
+): Product[] {
+  const knownIds = new Set(existingProducts.map((product) => product.id));
+  const fallbacks: Product[] = [];
+  for (const id of productIds) {
+    if (!id.startsWith("bistro-") || knownIds.has(id)) continue;
+    knownIds.add(id);
+    const installation: BistroInstallationType | undefined = id.startsWith("bistro-temporary-")
+      ? "temporary"
+      : id.startsWith("bistro-permanent-")
+        ? "permanent"
+        : undefined;
+    fallbacks.push({
+      id,
+      name: installation
+        ? `Saved ${installation === "temporary" ? "Temporary" : "Permanent"} Bistro Lights`
+        : "Saved Bistro Lights",
+      category: "landscape",
+      kind: "linear",
+      price: 0,
+      style: "bistro",
+      colors: COLOR_PRESETS["Warm White"],
+      spacingIn: DEFAULT_SPACING.bistro,
+      sizeFt: 0,
+      sku: null,
+      paletteHidden: true,
+      target: { field: "bistro", installation },
+    });
+  }
+  return fallbacks;
 }
 
 /** Index a product list by id for O(1) render/hit-test lookups. */

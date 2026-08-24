@@ -76,8 +76,10 @@ import {
 } from "@/components/landscape-lighting/studio/drawing-toolbar";
 import { PreconChecklist } from "@/components/landscape-lighting/studio/precon-checklist";
 import {
+  LandscapeBistroRunScheduleTable,
   LandscapeBomTable as LandscapeProcurementTable,
   LandscapeFixtureScheduleTable,
+  type LandscapeBistroRunRow,
 } from "@/components/landscape-lighting/studio/workflow-tables";
 import { ConvertQuoteDialog } from "@/components/quotes/convert-quote-dialog";
 import { ContactCombobox } from "@/components/ui/contact-combobox";
@@ -85,7 +87,12 @@ import { estimatorApi } from "@/lib/api/estimator";
 import { quotesApi } from "@/lib/api/quotes";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { DEFAULT_WORKSPACE_BRAND_NAME } from "@/lib/brand";
-import { buildBistroCatalog, buildCatalog, indexProducts } from "@/lib/estimator/catalog";
+import {
+  buildBistroCatalog,
+  buildCatalog,
+  buildSavedBistroFallbacks,
+  indexProducts,
+} from "@/lib/estimator/catalog";
 import { toEstimateCustomLines, type CustomLineDraft } from "@/lib/estimator/custom-lines";
 import {
   designScale,
@@ -370,6 +377,7 @@ interface LandscapeFixtureScheduleRow {
 
 function LandscapeSheetTitleBlock({
   fixtureCount,
+  bistroRunCount,
   calibrated,
   sheetNumber,
   workspaceName,
@@ -378,6 +386,7 @@ function LandscapeSheetTitleBlock({
   contactName,
 }: {
   fixtureCount: number;
+  bistroRunCount: number;
   calibrated: boolean;
   sheetNumber: number;
   workspaceName: string;
@@ -427,6 +436,10 @@ function LandscapeSheetTitleBlock({
         <div>
           <dt>Fixtures</dt>
           <dd>{fixtureCount}</dd>
+        </div>
+        <div>
+          <dt>Bistro runs</dt>
+          <dd>{bistroRunCount}</dd>
         </div>
       </dl>
       <div className="ll-sheet-number">
@@ -545,6 +558,7 @@ function LandscapeWelcome({
           </div>
           <LandscapeSheetTitleBlock
             fixtureCount={0}
+            bistroRunCount={0}
             calibrated={false}
             sheetNumber={1}
             workspaceName={workspaceName}
@@ -639,6 +653,10 @@ function LandscapeDraftingToolbar({
   onStudioAction?: (action: DrawingStudioAction) => void;
 }) {
   const wireProduct = products.find((product) => product.style === "wire");
+  const activeDrawProduct =
+    activeTool.type === "draw"
+      ? products.find((product) => product.id === activeTool.productId)
+      : undefined;
   const fixtureTools = LANDSCAPE_LEGEND.flatMap((legend) => {
     const product = products.find((candidate) =>
       legend.id === "transformer"
@@ -647,6 +665,12 @@ function LandscapeDraftingToolbar({
     );
     return product ? [{ ...legend, product }] : [];
   });
+  const bistroTools = products.filter(
+    (product) =>
+      !product.paletteHidden &&
+      product.target.field === "bistro" &&
+      product.target.installation !== undefined,
+  );
 
   if (studio && studioSettings && onStudioAction) {
     return (
@@ -656,11 +680,13 @@ function LandscapeDraftingToolbar({
         activeAction={
           activeTool.type === "select"
             ? "select"
-            : activeTool.type === "draw"
-              ? "wire"
-              : activeTool.type === "highlight"
-                ? "highlight"
-                : undefined
+            : activeTool.type === "pan"
+              ? "pan"
+              : activeTool.type === "draw" && activeDrawProduct?.style === "wire"
+                ? "wire"
+                : activeTool.type === "highlight"
+                  ? "highlight"
+                  : undefined
         }
         hasAerial={hasPhoto}
         hasDrawing={design.runs.length > 0 || design.items.length > 0}
@@ -702,13 +728,23 @@ function LandscapeDraftingToolbar({
           else if (action === "help") onToggleHelp();
           else onStudioAction(action);
         }}
-        fixtureTools={fixtureTools.map(({ id, label, product, Icon }) => ({
-          id,
-          label,
-          icon: Icon,
-          active: activeTool.type === "place" && activeTool.productId === product.id,
-          onSelect: () => onPlaceFixture(product),
-        }))}
+        fixtureTools={[
+          ...fixtureTools.map(({ id, label, product, Icon }) => ({
+            id,
+            label,
+            icon: Icon,
+            active: activeTool.type === "place" && activeTool.productId === product.id,
+            onSelect: () => onPlaceFixture(product),
+          })),
+          ...bistroTools.map((product) => ({
+            id: product.id,
+            label: product.name,
+            icon: Cable,
+            group: "bistro" as const,
+            active: activeTool.type === "draw" && activeTool.productId === product.id,
+            onSelect: () => onStartWiring(product),
+          })),
+        ]}
       />
     );
   }
@@ -767,8 +803,12 @@ function LandscapeDraftingToolbar({
         </div>
 
         {hasPhoto ? (
-          <div className="ll-fixture-tools" role="group" aria-label="Place fixtures">
-            <span className="ll-fixture-tools-label">Place</span>
+          <div
+            className="ll-fixture-tools"
+            role="group"
+            aria-label="Place fixtures and draw bistro runs"
+          >
+            <span className="ll-fixture-tools-label">Add</span>
             {fixtureTools.map(({ id, label, product, color, Icon }) => {
               const active = activeTool.type === "place" && activeTool.productId === product.id;
               return (
@@ -783,6 +823,22 @@ function LandscapeDraftingToolbar({
                 >
                   <Icon aria-hidden="true" style={{ color }} />
                   <span>{label}</span>
+                </button>
+              );
+            })}
+            {bistroTools.map((product) => {
+              const active = activeTool.type === "draw" && activeTool.productId === product.id;
+              return (
+                <button
+                  className={`ll-fixture-tool${active ? " active" : ""}`}
+                  type="button"
+                  key={product.id}
+                  title={`Draw ${product.name}`}
+                  aria-pressed={active}
+                  onClick={() => onStartWiring(product)}
+                >
+                  <Cable aria-hidden="true" />
+                  <span>{product.name}</span>
                 </button>
               );
             })}
@@ -1380,6 +1436,7 @@ function LandscapeProposalPanel({
   shots,
   rows,
   circuits,
+  bistroRows,
   previews,
   previewsPending,
   tiers,
@@ -1406,6 +1463,7 @@ function LandscapeProposalPanel({
   shots: DesignerShot[];
   rows: LandscapeFixtureScheduleRow[];
   circuits: LandscapeCircuitLoad[];
+  bistroRows: LandscapeBistroRunRow[];
   previews: Record<string, string>;
   previewsPending: boolean;
   tiers: TierConfig[];
@@ -1553,6 +1611,23 @@ function LandscapeProposalPanel({
             </div>
           )}
         </div>
+
+        {bistroRows.length ? (
+          <div className="ll-proposal-section">
+            <div className="ll-proposal-section-heading">
+              <div>
+                <span>Saved with the drawing</span>
+                <h3>Bistro lighting layout</h3>
+              </div>
+              <strong>{bistroRows.length} runs</strong>
+            </div>
+            <LandscapeBistroRunScheduleTable rows={bistroRows} />
+            <p className="ll-panel-footnote">
+              Temporary and permanent bistro runs stay separate on the plan. CRM quote creation is
+              blocked in this release so their pricing cannot be silently omitted.
+            </p>
+          </div>
+        ) : null}
 
         {wireTotals.size ? (
           <div className="ll-proposal-section">
@@ -1877,6 +1952,7 @@ function LandscapeWorkspacePanel({
   onUpdateProcurement,
   electricalLoad,
   circuitLoads,
+  bistroRows,
   previews,
   previewsPending,
   bomLineItems,
@@ -1910,6 +1986,7 @@ function LandscapeWorkspacePanel({
   shots: DesignerShot[];
   rows: LandscapeFixtureScheduleRow[];
   scheduleRows: LandscapeScheduleRow[];
+  bistroRows: LandscapeBistroRunRow[];
   procurementRows: LandscapeProcurementRow[];
   catalogItems: CatalogItemResponse[];
   onUpdateSchedule: (
@@ -1961,7 +2038,7 @@ function LandscapeWorkspacePanel({
   const checklist = [
     { label: "Aerial plan added", complete: shots.length > 0 },
     { label: "Every aerial plan is scaled", complete: allAerialPlansScaled },
-    { label: "Fixture plan completed", complete: fixtureCount > 0 },
+    { label: "Lighting plan completed", complete: fixtureCount > 0 || bistroRows.length > 0 },
     { label: "Wire circuits drawn", complete: circuitLoads.length > 0 },
     {
       label: "Circuits assigned and calculated",
@@ -2011,21 +2088,34 @@ function LandscapeWorkspacePanel({
               <strong>
                 {tab === "bom"
                   ? `${procurementRows.length + bomLineItems.length} line items`
-                  : `${fixtureCount} fixtures`}
+                  : `${fixtureCount} fixtures · ${bistroRows.length} bistro runs`}
               </strong>
             </div>
           </header>
           {tab === "schedule" ? (
-            scheduleRows.length ? (
-              <LandscapeFixtureScheduleTable
-                rows={scheduleRows}
-                catalog={catalogItems}
-                onUpdate={onUpdateSchedule}
-                onCopyToType={onCopyScheduleType}
-              />
+            scheduleRows.length || bistroRows.length ? (
+              <div className="ll-schedule-sections">
+                {scheduleRows.length ? (
+                  <section aria-labelledby="ll-fixture-schedule-heading">
+                    <h3 id="ll-fixture-schedule-heading">Fixture schedule</h3>
+                    <LandscapeFixtureScheduleTable
+                      rows={scheduleRows}
+                      catalog={catalogItems}
+                      onUpdate={onUpdateSchedule}
+                      onCopyToType={onCopyScheduleType}
+                    />
+                  </section>
+                ) : null}
+                {bistroRows.length ? (
+                  <section aria-labelledby="ll-bistro-schedule-heading">
+                    <h3 id="ll-bistro-schedule-heading">Bistro run schedule</h3>
+                    <LandscapeBistroRunScheduleTable rows={bistroRows} />
+                  </section>
+                ) : null}
+              </div>
             ) : (
               <div className="ll-panel-inline-empty">
-                Place fixtures on the Drawing Sheet to build this table automatically.
+                Place fixtures on the Drawing Sheet or trace bistro runs there to build this table.
               </div>
             )
           ) : (
@@ -2073,6 +2163,7 @@ function LandscapeWorkspacePanel({
         shots={shots}
         rows={rows}
         circuits={circuitLoads}
+        bistroRows={bistroRows}
         previews={previews}
         previewsPending={previewsPending}
         tiers={pricingTiers}
@@ -2213,6 +2304,10 @@ export function LightDesigner({
         return;
       case "select":
         dispatch({ type: "SET_TOOL", tool: { type: "select" } });
+        return;
+      case "pan":
+        dispatch({ type: "SET_TOOL", tool: { type: "pan" } });
+        setStudioNotice("Pan mode on. Drag the zoomed plan with one finger.");
         return;
       case "undo":
         dispatch({ type: "UNDO" });
@@ -2828,20 +2923,57 @@ export function LightDesigner({
 
   // The palette carries only the selected services, so a Christmas-only quote
   // never shows uplights and a landscape-only quote never shows wreaths.
-  const products = useMemo(() => {
-    const landscape =
-      sells("landscape") && sellsLandscape
-        ? [
-            ...buildFixturePalette(fixtureResolution, transformerResolution),
-            ...buildBistroCatalog(priceBook),
-          ]
-        : [];
+  const configuredProducts = useMemo(() => {
+    const landscape = sells("landscape")
+      ? [
+          ...(sellsLandscape ? buildFixturePalette(fixtureResolution, transformerResolution) : []),
+          ...buildBistroCatalog(priceBook, { installationVariants: landscapeOnly }),
+        ]
+      : [];
     const holiday = buildCatalog(catalog).filter((product) =>
       product.style === "permanent" ? sells("permanent") : sells("christmas"),
     );
     return [...landscape, ...holiday];
-  }, [sells, sellsLandscape, fixtureResolution, transformerResolution, priceBook, catalog]);
-  const productById = useMemo(() => indexProducts(products), [products]);
+  }, [
+    sells,
+    sellsLandscape,
+    fixtureResolution,
+    transformerResolution,
+    priceBook,
+    landscapeOnly,
+    catalog,
+  ]);
+  const products = [
+    ...configuredProducts,
+    ...buildSavedBistroFallbacks(
+      liveShots.flatMap((shot) => shot.design.runs.map((run) => run.productId)),
+      configuredProducts,
+    ),
+  ];
+  const productById = indexProducts(products);
+  const bistroScheduleRows: LandscapeBistroRunRow[] = liveShots
+    .flatMap((shot, shotIndex) => {
+      const scale = designScale(shot.design, shot.photo.width);
+      return shot.design.runs.flatMap((run) => {
+        const product = productById.get(run.productId);
+        if (!product || product.style !== "bistro") return [];
+        return [
+          {
+            runId: run.id,
+            number: 0,
+            sheetLabel: `L-${shotIndex + 1}`,
+            installation:
+              product.target.field === "bistro" ? (product.target.installation ?? null) : null,
+            productName: product.name,
+            sku: product.sku ?? null,
+            anchorCount: run.points.length,
+            lengthFeet: scale.calibrated ? polylineLength(run.points) * scale.ftPerPx : null,
+          },
+        ];
+      });
+    })
+    .map((row, index) => ({ ...row, number: index + 1 }));
+  const hasBistroRuns = bistroScheduleRows.length > 0;
 
   // ---- Design → server estimate inputs ----------------------------------
   // Totalled across every photo: front elevation plus back patio is one job and
@@ -2876,21 +3008,17 @@ export function LightDesigner({
 
   // Placed fixtures, resolved through the current package into the product the
   // crew will actually pull. Counts only — the estimate is priced server-side.
-  const fixtureLines = useMemo(
-    () =>
-      FIXTURE_TYPES.map((spec) => {
-        const count = inputs.fixtures[spec.type] ?? 0;
-        const resolved = fixtureResolution[spec.type];
-        return {
-          type: spec.type,
-          label: spec.label,
-          count,
-          productName: resolved.item?.name ?? null,
-          sku: resolved.itemId,
-        };
-      }).filter((line) => line.count > 0),
-    [inputs.fixtures, fixtureResolution],
-  );
+  const fixtureLines = FIXTURE_TYPES.map((spec) => {
+    const count = inputs.fixtures[spec.type] ?? 0;
+    const resolved = fixtureResolution[spec.type];
+    return {
+      type: spec.type,
+      label: spec.label,
+      count,
+      productName: resolved.item?.name ?? null,
+      sku: resolved.itemId,
+    };
+  }).filter((line) => line.count > 0);
   // Types the rep drew that this package doesn't sell. Never substituted with a
   // product from another package — the rep is told, and picks.
   const unresolvedFixtures = fixtureLines.filter((line) => !line.sku);
@@ -3588,23 +3716,27 @@ export function LightDesigner({
   const landscapeCreateQuoteError = landscapeQuoteMutation.isError
     ? getApiErrorMessage(landscapeQuoteMutation.error, "Unable to create the draft quote.")
     : null;
+  // simplification: the quote schema has no temporary/permanent bistro rates; block
+  // conversion instead of silently omitting footage until the pricing model supports them.
   const landscapeQuoteDisabledReason = !serverBacked
     ? "Open a customer lighting project to create a CRM quote here."
     : !landscapeProject?.installationShotId
       ? "Select and save an installation sheet before creating a quote."
-      : fixtureCount === 0
-        ? "Place at least one fixture before creating a quote."
-        : unresolvedFixtures.length > 0
-          ? `Resolve ${unresolvedFixtures.map((line) => line.label).join(", ")} in this package before creating a quote.`
-          : circuitLoads.some((circuit) => circuit.lengthFeet === null)
-            ? "Set the drawing scale so traced wire routes can be priced or clearly marked unpriced."
-            : !landscapeProposalPayload
-              ? "Pricing configuration is still loading."
-              : landscapeProposalQuery.isFetching
-                ? "Pricing this package now."
-                : landscapePricingError
-                  ? "Retry proposal pricing before creating a quote."
-                  : null;
+      : hasBistroRuns
+        ? "Bistro runs are saved with this layout, but landscape packages do not price temporary or permanent bistro work yet."
+        : fixtureCount === 0
+          ? "Place at least one fixture before creating a quote."
+          : unresolvedFixtures.length > 0
+            ? `Resolve ${unresolvedFixtures.map((line) => line.label).join(", ")} in this package before creating a quote.`
+            : circuitLoads.some((circuit) => circuit.lengthFeet === null)
+              ? "Set the drawing scale so traced wire routes can be priced or clearly marked unpriced."
+              : !landscapeProposalPayload
+                ? "Pricing configuration is still loading."
+                : landscapeProposalQuery.isFetching
+                  ? "Pricing this package now."
+                  : landscapePricingError
+                    ? "Retry proposal pricing before creating a quote."
+                    : null;
   const createLandscapeQuote = async () => {
     if (!landscapeProposalPayload || landscapeQuoteDisabledReason) return;
     try {
@@ -3967,6 +4099,7 @@ export function LightDesigner({
               shots={liveShots}
               rows={fixtureScheduleRows}
               scheduleRows={perFixtureSchedule}
+              bistroRows={bistroScheduleRows}
               procurementRows={procurementRows}
               catalogItems={priceBook ?? []}
               onUpdateSchedule={(itemId, update) => {
@@ -4133,6 +4266,11 @@ export function LightDesigner({
                           (sum, row) => sum + (row.id === "transformer" ? 0 : row.count),
                           0,
                         )}
+                        bistroRunCount={
+                          design.runs.filter(
+                            (run) => productById.get(run.productId)?.style === "bistro",
+                          ).length
+                        }
                         calibrated={Boolean(design.calibration)}
                         sheetNumber={
                           Math.max(

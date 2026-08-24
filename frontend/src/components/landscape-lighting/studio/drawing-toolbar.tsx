@@ -9,6 +9,7 @@ import {
   Eye,
   FileJson,
   Fullscreen,
+  Hand,
   HelpCircle,
   Highlighter,
   ImageIcon,
@@ -21,7 +22,7 @@ import {
   Undo2,
   Upload,
 } from "lucide-react";
-import { forwardRef, useId, type ButtonHTMLAttributes, type ComponentType } from "react";
+import { forwardRef, useId, useRef, type ButtonHTMLAttributes, type ComponentType } from "react";
 
 import {
   DropdownMenu,
@@ -41,6 +42,7 @@ import { cn } from "@/lib/utils";
 export type DrawingStudioAction =
   | "place-aerial"
   | "select"
+  | "pan"
   | "undo"
   | "wire"
   | "highlight"
@@ -106,6 +108,7 @@ interface DrawingToolbarProps {
     id: string;
     label: string;
     icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+    group?: "fixture" | "bistro";
     active?: boolean;
     onSelect: () => void;
   }>;
@@ -132,7 +135,7 @@ const ToolbarButton = forwardRef<HTMLButtonElement, ToolbarButtonProps>(
       type="button"
       aria-pressed={active === undefined ? undefined : active}
       className={cn(
-        "inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded border border-white/15 bg-[#1a1a1a] px-2.5 text-[11px] font-semibold text-[#e5e3de] transition-[color,background-color,border-color] duration-150 hover:border-white/30 hover:bg-[#242424] hover:text-white focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e2b35f] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0b0b0b] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none",
+        "inline-flex h-11 min-w-11 items-center justify-center gap-1.5 rounded border border-white/15 bg-[#1a1a1a] px-2.5 text-[11px] font-semibold text-[#e5e3de] transition-[color,background-color,border-color] duration-150 hover:border-white/30 hover:bg-[#242424] hover:text-white focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e2b35f] focus-visible:ring-offset-1 focus-visible:ring-offset-[#0b0b0b] disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transition-none md:h-8 md:min-w-8",
         active &&
           "border-[#d0a153] bg-[#d0a153] text-[#15130f] hover:bg-[#ddb465] hover:text-black",
         className,
@@ -214,6 +217,25 @@ function MarkerPalette({
 
 export function DrawingToolbar(props: DrawingToolbarProps) {
   const action = props.onAction;
+  const fixtureTools = props.fixtureTools?.filter((tool) => tool.group !== "bistro") ?? [];
+  const bistroTools = props.fixtureTools?.filter((tool) => tool.group === "bistro") ?? [];
+  const menuOpenedWithPointer = useRef(false);
+  const menuTriggerModality = {
+    onPointerDown: () => {
+      menuOpenedWithPointer.current = true;
+    },
+    onKeyDown: () => {
+      menuOpenedWithPointer.current = false;
+    },
+  };
+  const handleMenuKeyDown = () => {
+    menuOpenedWithPointer.current = false;
+  };
+  const handleMenuCloseAutoFocus = (event: Event) => {
+    if (!menuOpenedWithPointer.current) return;
+    event.preventDefault();
+    menuOpenedWithPointer.current = false;
+  };
   const noAerialReason = "Place a top-down aerial before using this drawing tool.";
 
   return (
@@ -237,7 +259,7 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
               onChange={(event) =>
                 props.onPaperSizeChange(event.target.value as LandscapePaperSize)
               }
-              className="h-8 min-w-0 max-w-48 rounded border border-white/20 bg-[#1a1a1a] ps-2 pe-8 text-[11px] normal-case tracking-normal text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e2b35f]"
+              className="h-11 min-w-0 max-w-48 rounded border border-white/20 bg-[#1a1a1a] ps-2 pe-8 text-[11px] normal-case tracking-normal text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e2b35f] md:h-8"
             >
               {Object.entries(paperSizeLabels).map(([size, label]) => (
                 <option key={size} value={size}>
@@ -263,6 +285,15 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
             onClick={() => action("select")}
           >
             Select
+          </ToolbarButton>
+          <ToolbarButton
+            icon={Hand}
+            active={props.activeAction === "pan"}
+            disabled={!props.hasAerial}
+            title={props.hasAerial ? "Move around the zoomed plan on touch" : noAerialReason}
+            onClick={() => action("pan")}
+          >
+            Pan
           </ToolbarButton>
           <ToolbarButton
             icon={Undo2}
@@ -310,9 +341,14 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <MenuButton label="Plan" />
+            <MenuButton label="Plan" {...menuTriggerModality} />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuContent
+            align="start"
+            className="w-64"
+            onCloseAutoFocus={handleMenuCloseAutoFocus}
+            onKeyDown={handleMenuKeyDown}
+          >
             {!props.hasAerial ? <DropdownMenuLabel>{noAerialReason}</DropdownMenuLabel> : null}
             <DropdownMenuItem disabled={!props.hasAerial} onSelect={() => action("set-scale")}>
               <Ruler />
@@ -350,7 +386,7 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
               onSelect={() => action("clear-design")}
             >
               <RotateCcw />
-              Clear fixtures and wiring
+              Clear fixtures, bistro runs, and wiring
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={!props.hasPlanSymbols}
@@ -365,26 +401,50 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <MenuButton label="Add" />
+            <MenuButton label="Add" {...menuTriggerModality} />
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="start"
             className="max-h-[min(70vh,28rem)] w-64 overflow-y-auto"
+            onCloseAutoFocus={handleMenuCloseAutoFocus}
+            onKeyDown={handleMenuKeyDown}
           >
             {!props.hasAerial ? <DropdownMenuLabel>{noAerialReason}</DropdownMenuLabel> : null}
-            <DropdownMenuLabel>Fixture types</DropdownMenuLabel>
-            {props.fixtureTools?.map(({ id, label, icon: Icon, active, onSelect }) => (
-              <DropdownMenuItem
-                key={id}
-                disabled={!props.hasAerial}
-                onSelect={onSelect}
-                className={cn(active && "font-semibold")}
-              >
-                <Icon className="size-4" aria-hidden />
-                {label}
-                {active ? <Check className="ms-auto size-4" aria-hidden /> : null}
-              </DropdownMenuItem>
-            ))}
+            {fixtureTools.length ? (
+              <>
+                <DropdownMenuLabel>Fixtures</DropdownMenuLabel>
+                {fixtureTools.map(({ id, label, icon: Icon, active, onSelect }) => (
+                  <DropdownMenuItem
+                    key={id}
+                    disabled={!props.hasAerial}
+                    onSelect={onSelect}
+                    className={cn(active && "font-semibold")}
+                  >
+                    <Icon className="size-4" aria-hidden />
+                    {label}
+                    {active ? <Check className="ms-auto size-4" aria-hidden /> : null}
+                  </DropdownMenuItem>
+                ))}
+              </>
+            ) : null}
+            {bistroTools.length ? (
+              <>
+                {fixtureTools.length ? <DropdownMenuSeparator /> : null}
+                <DropdownMenuLabel>Bistro runs</DropdownMenuLabel>
+                {bistroTools.map(({ id, label, icon: Icon, active, onSelect }) => (
+                  <DropdownMenuItem
+                    key={id}
+                    disabled={!props.hasAerial}
+                    onSelect={onSelect}
+                    className={cn(active && "font-semibold")}
+                  >
+                    <Icon className="size-4" aria-hidden />
+                    {label}
+                    {active ? <Check className="ms-auto size-4" aria-hidden /> : null}
+                  </DropdownMenuItem>
+                ))}
+              </>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled={!props.hasAerial} onSelect={() => action("add-photo")}>
               <ImageIcon />
@@ -397,9 +457,19 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
       <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 sm:px-3">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <MenuButton label="Wiring" icon={Cable} active={props.activeAction === "wire"} />
+            <MenuButton
+              label="Wiring"
+              icon={Cable}
+              active={props.activeAction === "wire"}
+              {...menuTriggerModality}
+            />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-60">
+          <DropdownMenuContent
+            align="start"
+            className="w-60"
+            onCloseAutoFocus={handleMenuCloseAutoFocus}
+            onKeyDown={handleMenuKeyDown}
+          >
             {!props.canWire ? (
               <DropdownMenuLabel>
                 No wire product is configured in the price book.
@@ -435,9 +505,13 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <MenuButton label="Legend" />
+            <MenuButton label="Legend" {...menuTriggerModality} />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
+          <DropdownMenuContent
+            align="start"
+            onCloseAutoFocus={handleMenuCloseAutoFocus}
+            onKeyDown={handleMenuKeyDown}
+          >
             <DropdownMenuCheckboxItem
               checked={props.legendVisible}
               onCheckedChange={() => action("legend-visible")}
@@ -479,9 +553,14 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <MenuButton label="File" />
+            <MenuButton label="File" {...menuTriggerModality} />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-60">
+          <DropdownMenuContent
+            align="start"
+            className="w-60"
+            onCloseAutoFocus={handleMenuCloseAutoFocus}
+            onKeyDown={handleMenuKeyDown}
+          >
             <DropdownMenuItem onSelect={() => action("import-project")}>
               <Upload />
               Open editable project
@@ -504,9 +583,14 @@ export function DrawingToolbar(props: DrawingToolbarProps) {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <MenuButton label="Present" icon={Presentation} />
+            <MenuButton label="Present" icon={Presentation} {...menuTriggerModality} />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-64">
+          <DropdownMenuContent
+            align="start"
+            className="w-64"
+            onCloseAutoFocus={handleMenuCloseAutoFocus}
+            onKeyDown={handleMenuKeyDown}
+          >
             <DropdownMenuItem onSelect={() => action("toggle-preview")}>
               <Eye />
               {props.duskPreview ? "Show original aerial" : "Show dusk plan"}
