@@ -41,6 +41,15 @@ vi.mock("@/lib/api/sales-wizard", () => ({
   },
 }));
 
+const quoteEditDialogProps = vi.hoisted(() => vi.fn());
+
+vi.mock("@/components/quotes/quote-edit-dialog", () => ({
+  QuoteEditDialog: (props: { open: boolean; quote: { number: string } | null }) => {
+    quoteEditDialogProps(props);
+    return props.open ? <div role="dialog" aria-label="Quote payment terms" /> : null;
+  },
+}));
+
 vi.mock("@/lib/estimator/landscape-draft", () => ({
   createLandscapeDraft: vi.fn((shots, activeShotId, updatedAt, proposal, liveState) => ({
     version: 2,
@@ -1633,6 +1642,24 @@ describe("LightDesigner", () => {
     );
     expect(adapter.flushBeforeProposal).toHaveBeenCalled();
     expect(await screen.findByText(/Draft quote Q-1042 was created/i)).toBeInTheDocument();
+    expect(screen.getByText("Collect payment in three steps")).toBeVisible();
+    expect(screen.getByText(/Set the deposit due when the customer accepts/i)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Open quote & preview payment page" }),
+    ).toHaveAttribute("href", "/quotes");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Set deposit & payment terms" }));
+
+    expect(await screen.findByRole("dialog", { name: "Quote payment terms" })).toBeVisible();
+    await waitFor(() =>
+      expect(quoteEditDialogProps).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          open: true,
+          quote: expect.objectContaining({ number: "Q-1042" }),
+        }),
+      ),
+    );
   });
 
   it("requires and persists an installation-sheet selection before quoting", async () => {

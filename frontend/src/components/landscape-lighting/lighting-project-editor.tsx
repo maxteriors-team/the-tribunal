@@ -268,9 +268,10 @@ function ActiveProjectEditor({
             variant="outline"
             className="h-8 shrink-0 rounded-md border-[#d8d1c5] bg-transparent px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[#1b1a18] hover:bg-black/[0.04]"
             aria-controls="landscape-quote-builder"
+            title="Set the deposit, preview the client payment page, and send the proposal"
             onClick={openQuoteBuilder}
           >
-            Send proposal
+            Proposal & payment
           </Button>
           <Button
             type="button"

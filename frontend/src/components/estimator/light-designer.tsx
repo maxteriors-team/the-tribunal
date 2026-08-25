@@ -82,6 +82,7 @@ import {
   type LandscapeBistroRunRow,
 } from "@/components/landscape-lighting/studio/workflow-tables";
 import { ConvertQuoteDialog } from "@/components/quotes/convert-quote-dialog";
+import { QuoteEditDialog } from "@/components/quotes/quote-edit-dialog";
 import { ContactCombobox } from "@/components/ui/contact-combobox";
 import { estimatorApi } from "@/lib/api/estimator";
 import { quotesApi } from "@/lib/api/quotes";
@@ -1502,6 +1503,7 @@ function LandscapeProposalPanel({
     );
   }
   const quoteFixtureRows = rows.filter((row) => row.id !== "transformer");
+  const [paymentTermsOpen, setPaymentTermsOpen] = useState(false);
 
   return (
     <section
@@ -1900,12 +1902,30 @@ function LandscapeProposalPanel({
           </div>
         ) : null}
         {createdQuote ? (
-          <div className="ll-proposal-success" role="status">
-            <p>
+          <div className="ll-proposal-success">
+            <p role="status">
               Draft quote {createdQuote.number} was created from this package, care plan, fixture
-              pricing, and any catalog-priced wire. You can keep working in this lighting project.
+              pricing, and any catalog-priced wire.
             </p>
+            <div>
+              <strong>Collect payment in three steps</strong>
+              <ol className="list-decimal space-y-1 pl-5 text-sm">
+                <li>Set the deposit due when the customer accepts.</li>
+                <li>Open the quote to preview the client acceptance and payment page.</li>
+                <li>Email or text the proposal so the customer can accept and pay in Stripe.</li>
+              </ol>
+            </div>
             <div className="flex flex-wrap gap-2">
+              <button
+                className="est-btn primary"
+                type="button"
+                onClick={() => setPaymentTermsOpen(true)}
+              >
+                Set deposit & payment terms
+              </button>
+              <Link className="est-btn" href="/quotes">
+                Open quote & preview payment page
+              </Link>
               <button
                 className="est-btn"
                 type="button"
@@ -1924,6 +1944,11 @@ function LandscapeProposalPanel({
               </button>
             </div>
             {deliveryStatus ? <p role="status">{deliveryStatus}</p> : null}
+            <QuoteEditDialog
+              quote={createdQuote}
+              open={paymentTermsOpen}
+              onOpenChange={setPaymentTermsOpen}
+            />
           </div>
         ) : null}
       </div>
