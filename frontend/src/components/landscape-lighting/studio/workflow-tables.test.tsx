@@ -34,6 +34,11 @@ describe("LandscapeFixtureScheduleTable", () => {
       />,
     );
 
+    expect(
+      screen.getByRole("table", {
+        name: /Fixture schedule with editable lamp and accessory assignments/i,
+      }),
+    ).toBeVisible();
     const select = screen.getByRole("combobox", { name: "Fixture type for fixture 1" });
     expect(select).toBe(screen.getByLabelText("Fixture type for fixture 1"));
     expect(
