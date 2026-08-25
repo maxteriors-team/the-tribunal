@@ -6,18 +6,19 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 /* eslint-disable jsx-a11y/no-noninteractive-tabindex -- Horizontally overflowing data regions must be keyboard-scrollable. */
 
 import { formatFeet } from "@/lib/estimator/design";
+import { FIXTURE_TYPES, type FixtureType } from "@/lib/estimator/fixtures";
 import type { LandscapeProcurementRow } from "@/lib/estimator/landscape-procurement";
-import type { LandscapeScheduleRow } from "@/lib/estimator/landscape-schedule";
+import type {
+  LandscapeFixtureScheduleUpdate,
+  LandscapeScheduleRow,
+} from "@/lib/estimator/landscape-schedule";
 import type { BistroInstallationType } from "@/lib/estimator/types";
 import type { CatalogItemResponse } from "@/types/sales-wizard";
 
 interface FixtureScheduleTableProps {
   rows: LandscapeScheduleRow[];
   catalog: CatalogItemResponse[];
-  onUpdate: (
-    itemId: string,
-    update: { lampCatalogItemId?: string; accessoryCatalogItemIds?: string[] },
-  ) => void;
+  onUpdate: (itemId: string, update: LandscapeFixtureScheduleUpdate) => void;
   onCopyToType: (itemId: string) => void;
 }
 
@@ -63,7 +64,7 @@ export function LandscapeFixtureScheduleTable({
     >
       <table className="ll-data-table ll-fixture-schedule-table">
         <caption className="sr-only">
-          Fixture schedule with editable lamp and accessory assignments
+          Fixture schedule with editable fixture type, lamp, and accessory assignments
         </caption>
         <thead>
           <tr>
@@ -94,6 +95,29 @@ export function LandscapeFixtureScheduleTable({
                 <td className="ll-row-number">{row.number}</td>
                 <td>{row.sheetLabel}</td>
                 <td>
+                  <label className="ll-field-select">
+                    <span className="sr-only">Fixture type for fixture {row.number}</span>
+                    <select
+                      value={row.fixtureType}
+                      aria-label={`Fixture type for fixture ${row.number}`}
+                      onChange={(event) => {
+                        const fixtureType = event.target.value as FixtureType;
+                        onUpdate(row.itemId, {
+                          productId: `fixture-${fixtureType}`,
+                          catalogItemId: undefined,
+                          catalogSku: undefined,
+                          lampCatalogItemId: undefined,
+                          accessoryCatalogItemIds: [],
+                        });
+                      }}
+                    >
+                      {FIXTURE_TYPES.map((fixture) => (
+                        <option key={fixture.type} value={fixture.type}>
+                          {fixture.type === "pathlight" ? "Pathlight" : fixture.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <strong>{row.fixtureName}</strong>
                   <span>{row.fixtureSku || "SKU not assigned"}</span>
                   {row.unresolved.length ? (

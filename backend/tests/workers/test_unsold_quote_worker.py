@@ -68,6 +68,7 @@ def _quote(
         total=total,
         currency="USD",
         created_by_id=1,
+        assigned_user_id=2,
     )
 
 

@@ -38,6 +38,7 @@ from app.db.scope import assert_workspace_owned
 from app.models.contact import Contact
 from app.models.invoice import Invoice, InvoiceLineItem, generate_invoice_token
 from app.models.opportunity import Opportunity
+from app.models.workspace import Workspace
 from app.schemas.invoice import (
     InvoiceCreate,
     InvoiceDeliverResult,
@@ -681,9 +682,10 @@ class InvoiceService:
         invoice.status = self.derive_status(invoice)
         if invoice.status == "paid":
             invoice.paid_at = datetime.now(UTC)
+        became_paid = invoice.status == "paid" and not was_paid
         # Fire once, on the transition into fully paid (not on partial payments
         # and not on a replay that leaves an already-paid invoice paid).
-        if invoice.status == "paid" and not was_paid:
+        if became_paid:
             await emit_automation_event(
                 self.db,
                 workspace_id=invoice.workspace_id,
@@ -706,11 +708,91 @@ class InvoiceService:
             amount_paid=float(invoice.amount_paid),
             status=invoice.status,
         )
+        # Customers receive one branded receipt when the invoice first becomes
+        # fully paid. Partial payments remain visible on the stable invoice page.
+        if became_paid:
+            await self._send_payment_receipt(
+                invoice,
+                float(amount),
+                payment_intent_id=payment_intent_id,
+            )
         # Tell the company money arrived. Fires on every real payment, including
         # a partial one -- a customer paying part of the balance is still news the
         # operator needs. The early return above makes webhook replays no-ops.
         await self._notify_payment_received(invoice, float(amount))
         return True
+
+    async def _send_payment_receipt(
+        self,
+        invoice: Invoice,
+        payment_amount: float,
+        *,
+        payment_intent_id: str | None,
+    ) -> None:
+        """Email the customer after full payment without risking reconciliation."""
+        from app.services.email import send_invoice_payment_receipt
+        from app.services.idempotency import derive_outbound_key
+        from app.services.quotes.proposal_template import get_proposal_template
+
+        try:
+            contact = (
+                await self.db.get(Contact, invoice.contact_id)
+                if invoice.contact_id is not None
+                else None
+            )
+            if contact is None or not contact.email:
+                self.log.info(
+                    "invoice_payment_receipt_skipped_no_email",
+                    invoice_id=str(invoice.id),
+                )
+                return
+
+            workspace = await self.db.get(Workspace, invoice.workspace_id)
+            if workspace is None:
+                self.log.warning(
+                    "invoice_payment_receipt_skipped_no_workspace",
+                    invoice_id=str(invoice.id),
+                )
+                return
+
+            template = get_proposal_template(workspace)
+            paid_at = invoice.paid_at or datetime.now(UTC)
+            accepted = await send_invoice_payment_receipt(
+                to_email=contact.email,
+                customer_name=contact.full_name,
+                business_name=template.business_name or workspace.name,
+                invoice_number=invoice.number,
+                payment_amount=payment_amount,
+                invoice_total=float(invoice.total or 0),
+                total_paid=float(invoice.amount_paid or 0),
+                currency=invoice.currency,
+                paid_at=paid_at,
+                logo_url=template.logo_url,
+                support_email=template.business_email,
+                support_phone=template.business_phone,
+                invoice_url=(
+                    f"{settings.frontend_url}/p/invoices/{invoice.public_token}"
+                    if invoice.public_token
+                    else None
+                ),
+                idempotency_key=derive_outbound_key(
+                    "invoice_payment_receipt",
+                    invoice.id,
+                    payment_intent_id or paid_at.isoformat(),
+                    contact.email,
+                ),
+            )
+            if not accepted:
+                self.log.warning(
+                    "invoice_payment_receipt_not_accepted",
+                    invoice_id=str(invoice.id),
+                )
+        except Exception as exc:  # pragma: no cover - payment is already committed
+            self.log.warning(
+                "invoice_payment_receipt_failed",
+                invoice_id=str(invoice.id),
+                error=str(exc),
+            )
 
     async def _notify_payment_received(self, invoice: Invoice, amount: float) -> None:
         """Push + email the workspace that a customer paid (best-effort).

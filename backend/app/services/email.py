@@ -909,6 +909,81 @@ async def send_invoice_email(
     return True
 
 
+async def send_invoice_payment_receipt(
+    *,
+    to_email: str,
+    customer_name: str,
+    business_name: str,
+    invoice_number: str,
+    payment_amount: float,
+    invoice_total: float,
+    total_paid: float,
+    currency: str,
+    paid_at: datetime,
+    idempotency_key: uuid.UUID,
+    logo_url: str | None = None,
+    support_email: str | None = None,
+    support_phone: str | None = None,
+    invoice_url: str | None = None,
+) -> bool:
+    """Send a branded transactional receipt when an invoice becomes fully paid."""
+    currency_code = (currency or "USD").upper()
+    paid_label = paid_at.astimezone(UTC).strftime("%B %-d, %Y at %-I:%M %p UTC")
+    details = {
+        "Invoice": invoice_number,
+        "Payment received": f"{currency_code} {payment_amount:,.2f}",
+        "Invoice total": f"{currency_code} {invoice_total:,.2f}",
+        "Total paid": f"{currency_code} {total_paid:,.2f}",
+        "Paid": paid_label,
+        "Status": "Paid in full",
+    }
+    if support_email:
+        details["Questions"] = support_email
+    elif support_phone:
+        details["Questions"] = support_phone
+
+    blocks: list[Block] = [
+        Paragraph(f"Hi {customer_name or 'there'},"),
+        Paragraph(
+            f"Thank you. This receipt confirms your payment to {business_name} "
+            f"for invoice {invoice_number}."
+        ),
+        Details(rows=details),
+    ]
+    if invoice_url:
+        blocks.append(Button("View paid invoice", invoice_url))
+    blocks.append(
+        Paragraph(
+            "Keep this email for your records. The paid invoice includes the service "
+            "details and can be saved as a PDF."
+        )
+    )
+    rendered = render_email(
+        category=EmailCategory.TRANSACTIONAL,
+        heading="Payment received",
+        blocks=blocks,
+        brand=_brand(business_name, logo_url),
+    )
+    response = await _send(
+        {
+            "from": _from_address(),
+            "to": [to_email],
+            "subject": f"Receipt for invoice {invoice_number} from {business_name}",
+            "html": rendered.html,
+            "text": rendered.text,
+        },
+        idempotency_key=idempotency_key,
+    )
+    if response is None:
+        return False
+    logger.info(
+        "invoice_payment_receipt_sent",
+        invoice_number=invoice_number,
+        email_id=response.get("id"),
+    )
+    return True
+
+
 async def send_quote_email(
     to_email: str,
     workspace_name: str,

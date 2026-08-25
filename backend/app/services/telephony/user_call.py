@@ -308,10 +308,11 @@ async def start_user_call(
     user_id: Any,
     to_number: str,
     from_number: str,
-    rep_number: str,
     contact_phone: str | None,
     connection_id: str | None,
     webhook_url: str,
+    rep_number: str | None = None,
+    sip_username: str | None = None,
 ) -> Message:
     """Ring the rep first, then let the webhook handler dial and bridge the contact.
 
@@ -327,10 +328,11 @@ async def start_user_call(
         user_id: The operator placing the call.
         to_number: The contact's number (leg B destination).
         from_number: Workspace caller ID presented on both legs.
-        rep_number: Allowlisted number that rings the operator (leg A).
         contact_phone: Contact number used for conversation linking.
         connection_id: Telnyx connection ID, auto-discovered when None.
         webhook_url: Voice webhook URL so both legs report back to us.
+        rep_number: Allowlisted PSTN number that rings the operator.
+        sip_username: Provider-issued internal SIP identity for browser mode.
 
     Returns:
         The call's ``Message`` row — ringing on success, failed if the rep leg
@@ -338,7 +340,10 @@ async def start_user_call(
     """
     to_number = voice_service.normalize_e164(to_number)
     from_number = voice_service.normalize_e164(from_number)
-    rep_number = voice_service.normalize_e164(rep_number)
+    if (rep_number is None) == (sip_username is None):
+        raise ValueError("Exactly one operator destination is required")
+    if rep_number is not None:
+        rep_number = voice_service.normalize_e164(rep_number)
 
     log = logger.bind(service="user_call", to=to_number, from_=from_number)
 
@@ -369,14 +374,27 @@ async def start_user_call(
     db.add(message)
     await db.flush()
 
-    rep_ccid = await voice_service.dial_transfer_leg(
-        to_number=rep_number,
-        from_number=from_number,
-        connection_id=connection_id,
-        webhook_url=webhook_url,
-        client_state=make_user_call_leg_client_state(message.id),
-        timeout_secs=REP_LEG_TIMEOUT_SECONDS,
-    )
+    client_state = make_user_call_leg_client_state(message.id)
+    if sip_username is not None:
+        rep_ccid = await voice_service.dial_browser_leg(
+            sip_username=sip_username,
+            from_number=from_number,
+            connection_id=connection_id,
+            webhook_url=webhook_url,
+            client_state=client_state,
+            command_id=f"browser-rep-{message.id}",
+            timeout_secs=REP_LEG_TIMEOUT_SECONDS,
+        )
+    else:
+        assert rep_number is not None
+        rep_ccid = await voice_service.dial_transfer_leg(
+            to_number=rep_number,
+            from_number=from_number,
+            connection_id=connection_id,
+            webhook_url=webhook_url,
+            client_state=client_state,
+            timeout_secs=REP_LEG_TIMEOUT_SECONDS,
+        )
 
     conversation.channel = "voice"
     conversation.last_message_preview = "Voice call"
@@ -385,7 +403,9 @@ async def start_user_call(
     if not rep_ccid:
         message.status = MessageStatus.FAILED
         message.error_code = "USER_CALL_REP_DIAL_FAILED"
-        message.error_message = "Could not ring your phone."
+        message.error_message = (
+            "Could not ring your browser." if sip_username else "Could not ring your phone."
+        )
         await db.commit()
         await db.refresh(message)
         log.error("user_call_rep_dial_failed", message_id=str(message.id))

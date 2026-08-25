@@ -628,7 +628,7 @@ class PostEstimateFollowupWorker(RetryableWorker, BaseWorker):
                 else "medium",
                 due_date=now,
                 status="pending",
-                assigned_to_user_id=quote.created_by_id,
+                assigned_to_user_id=quote.assigned_user_id or quote.created_by_id,
                 dedup_key=dedup_key,
             )
             db.add(nudge)

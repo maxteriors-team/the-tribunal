@@ -524,6 +524,10 @@ CanReadBilling = Annotated[
 CanWriteBilling = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.BILLING_WRITE))
 ]
+CanReadQuotes = Annotated[WorkspaceMembership, Depends(require_capability(Capability.QUOTES_READ))]
+CanWriteQuotes = Annotated[
+    WorkspaceMembership, Depends(require_capability(Capability.QUOTES_WRITE))
+]
 CanViewReports = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.REPORTS_VIEW))
 ]

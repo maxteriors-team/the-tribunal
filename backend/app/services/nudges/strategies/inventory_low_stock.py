@@ -82,6 +82,7 @@ class InventoryLowStockNudgeStrategy(NudgeStrategy):
                 HumanNudge(
                     workspace_id=context.workspace_id,
                     contact_id=None,
+                    assigned_to_user_id=context.workspace_owner_user_id,
                     nudge_type=self.nudge_type,
                     title=f"\U0001f4e6 Low stock: {item.name}",
                     message=(

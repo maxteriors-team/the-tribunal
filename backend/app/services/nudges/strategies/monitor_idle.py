@@ -43,6 +43,7 @@ class MonitorIdleNudgeStrategy(NudgeStrategy):
             HumanNudge(
                 workspace_id=context.workspace_id,
                 contact_id=None,
+                assigned_to_user_id=context.workspace_owner_user_id,
                 nudge_type="monitor_idle",
                 title="\U0001f6f0\ufe0f The scraper is off — set a monitor",
                 message=(

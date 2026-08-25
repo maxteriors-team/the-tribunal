@@ -10,15 +10,19 @@ export interface CallsListParams {
 }
 
 /** Who talks to the contact on an outbound call. */
-export type CallMode = "ai" | "user";
+export type CallMode = "ai" | "user" | "browser";
+
+export interface WebRTCTokenResponse {
+  token: string;
+}
 
 export interface InitiateCallRequest {
   to_number: string;
   from_phone_number: string;
   contact_phone?: string;
-  /** Voice agent for mode="ai". Ignored when mode="user". */
+  /** Voice agent for mode="ai". Ignored for human modes. */
   agent_id?: string;
-  /** "ai" (default) hands the call to a voice agent; "user" rings your phone first. */
+  /** AI, phone callback, or authenticated browser headset. */
   mode?: CallMode;
   /**
    * Number to ring for mode="user". Must be your profile phone, the workspace
@@ -77,37 +81,31 @@ export interface CallStatsResponse {
 
 export const callsApi = {
   list: async (workspaceId: string, params: CallsListParams = {}): Promise<CallsListResponse> => {
-    return apiGet<CallsListResponse>(
-      `/api/v1/workspaces/${workspaceId}/calls`,
-      { params }
-    );
+    return apiGet<CallsListResponse>(`/api/v1/workspaces/${workspaceId}/calls`, { params });
   },
 
   get: async (workspaceId: string, id: string): Promise<CallRecord> => {
-    return apiGet<CallRecord>(
-      `/api/v1/workspaces/${workspaceId}/calls/${id}`
-    );
+    return apiGet<CallRecord>(`/api/v1/workspaces/${workspaceId}/calls/${id}`);
+  },
+
+  getWebRTCToken: async (workspaceId: string): Promise<WebRTCTokenResponse> => {
+    return apiPost<WebRTCTokenResponse>(`/api/v1/workspaces/${workspaceId}/calls/webrtc/token`);
   },
 
   initiate: async (
     workspaceId: string,
-    data: InitiateCallRequest
+    data: InitiateCallRequest,
   ): Promise<InitiateCallResponse> => {
-    return apiPost<InitiateCallResponse>(
-      `/api/v1/workspaces/${workspaceId}/calls`,
-      data
-    );
+    return apiPost<InitiateCallResponse>(`/api/v1/workspaces/${workspaceId}/calls`, data);
   },
 
   hangup: async (workspaceId: string, callId: string): Promise<{ success: boolean }> => {
     return apiPost<{ success: boolean }>(
-      `/api/v1/workspaces/${workspaceId}/calls/${callId}/hangup`
+      `/api/v1/workspaces/${workspaceId}/calls/${callId}/hangup`,
     );
   },
 
   listLive: async (workspaceId: string): Promise<LiveCallsResponse> => {
-    return apiGet<LiveCallsResponse>(
-      `/api/v1/workspaces/${workspaceId}/calls/live`
-    );
+    return apiGet<LiveCallsResponse>(`/api/v1/workspaces/${workspaceId}/calls/live`);
   },
 };

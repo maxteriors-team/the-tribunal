@@ -908,3 +908,22 @@ Scope: authenticated employee clock-in/out/pause/resume, employee self-access, o
 ### Verification boundary
 
 Backend CI passed 4,666 tests (21 skipped); frontend CI passed lint, type checks, 1,421 tests, and production build; attendance integration passed six PostgreSQL tests; migration upgrade/check/downgrade/upgrade passed; and authenticated Playwright passed two desktop/mobile scenarios with pause, correction, export, scorecard, navigation-permission, overflow, and serious/critical Axe assertions. An independent static security review found no Critical/High issue; its confirmed Medium cross-account cache finding was fixed and re-verified by frontend CI plus authenticated E2E. Evidence is stored under `.ezcoder/eyes/out/attendance/`. No production payroll import, live employee notice, payroll-vendor sandbox, manual screen-reader session, or legal review was performed.
+
+## Focused addendum — customer paid-invoice receipts (2026-08-21)
+
+Snapshot: 21 August 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
+
+Scope: the transactional customer email sent when a Stripe-backed service invoice first becomes fully paid. This is a focused engineering review, not a product-wide re-audit.
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| REC-001 | HIGH | Customers need durable proof that a service invoice was paid | CODE/tests: payment reconciliation previously notified only the operator; the new receipt records invoice number, payment amount, invoice total, total paid, paid UTC timestamp, and paid-in-full status, with a stable paid-invoice/PDF link | Send accurate, recipient-scoped proof only after provider-confirmed full payment | Fixed | Receipt-renderer test plus partial→paid→replay integration test |
+| REC-002 | MEDIUM | A transactional payment email contains customer identity and payment facts | CODE/tests: recipient comes from the invoice contact; customer-authored values use the escaped shared layout; provider IDs, card data, marketing, tracking, and unsubscribe copy are omitted | Minimize payment data and prevent content injection or marketing suppression from contaminating the receipt | Fixed | Escaping, plain-text, transactional-category, and idempotency-key assertions |
+| REC-003 | MEDIUM | Provider downtime can prevent a receipt after payment is already committed | CODE: receipt delivery is deliberately best-effort so an email outage cannot roll back or repeatedly reconcile a successful charge; no persistent receipt outbox exists | Monitor delivery failures and retain Stripe’s provider receipt plus the stable paid invoice as fallback; add a persistent outbox if guaranteed Tribunal delivery becomes a product requirement | Open operational residual | `invoice_payment_receipt_not_accepted` / `invoice_payment_receipt_failed` structured events |
+
+### Implemented and proved in this pass
+
+- A fully paid transition sends one branded transactional receipt using the workspace proposal business name, logo, and support contact; partial payments do not trigger paid-in-full copy.
+- The receipt shows the final payment, invoice total, total paid, paid timestamp, and a stable link where the customer can review service details and save the paid invoice as a PDF.
+- The provider receives a deterministic idempotency key; a replayed Stripe payment intent does not generate another application send.
+- Targeted verification passed: 23 email-service tests, 40 PostgreSQL invoice-service integration tests, Ruff, formatting, and MyPy. Runtime Resend delivery/inbox placement was not exercised in this pass.

@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { CatalogItemResponse, PricingSettings } from "@/types/sales-wizard";
 
 import {
+  aggregateBistroRuns,
   aggregateWireFeet,
   buildLandscapeProposalPayload,
   buildLandscapeProposalQuantities,
+  hasUnpriceableBistroRuns,
 } from "./landscape-proposal";
 
 function item(
@@ -89,6 +91,48 @@ describe("landscape proposal pricing payload", () => {
       [12, 62.5],
       [10, 85],
     ]);
+  });
+
+  it("aggregates temporary and permanent Bistro footage across sheets", () => {
+    const runs = [
+      { installation: "temporary" as const, lengthFeet: 32.5 },
+      { installation: "permanent" as const, lengthFeet: 20 },
+      { installation: "temporary" as const, lengthFeet: 7.5 },
+    ];
+
+    expect(aggregateBistroRuns(runs)).toEqual([
+      { installation: "temporary", feet: 40 },
+      { installation: "permanent", feet: 20 },
+    ]);
+
+    const payload = buildLandscapeProposalPayload({
+      pricing: PRICING,
+      catalog: CATALOG,
+      fixtureCounts: {},
+      wireRuns: [],
+      bistroRuns: runs,
+      selectedTierKey: "best",
+      selectedCarePlanKey: null,
+    });
+    const bistro = payload.bistro as typeof payload.bistro & {
+      runs: Array<{ installation: string; feet: number }>;
+    };
+    expect(payload.categories).toEqual(["landscape", "bistro"]);
+    expect(bistro.runs).toEqual([
+      { installation: "temporary", feet: 40 },
+      { installation: "permanent", feet: 20 },
+    ]);
+    expect(bistro.feet).toBe(60);
+  });
+
+  it("excludes uncalibrated Bistro footage and exposes the quote guard", () => {
+    const runs = [
+      { installation: "temporary" as const, lengthFeet: 25 },
+      { installation: "permanent" as const, lengthFeet: null },
+    ];
+
+    expect(hasUnpriceableBistroRuns(runs)).toBe(true);
+    expect(aggregateBistroRuns(runs)).toEqual([{ installation: "temporary", feet: 25 }]);
   });
 
   it("prices every package without multiplying SKUs reused between tiers", () => {

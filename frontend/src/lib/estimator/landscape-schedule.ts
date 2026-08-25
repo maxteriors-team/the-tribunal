@@ -96,15 +96,18 @@ export function buildLandscapeSchedule(
   });
 }
 
+export interface LandscapeFixtureScheduleUpdate {
+  productId?: string;
+  catalogItemId?: string;
+  catalogSku?: string;
+  lampCatalogItemId?: string;
+  accessoryCatalogItemIds?: string[];
+}
+
 export function updateFixtureScheduleSelection(
   shots: readonly DesignerShot[],
   itemId: string,
-  update: {
-    catalogItemId?: string;
-    catalogSku?: string;
-    lampCatalogItemId?: string;
-    accessoryCatalogItemIds?: string[];
-  },
+  update: LandscapeFixtureScheduleUpdate,
 ): DesignerShot[] {
   return shots.map((shot) => ({
     ...shot,

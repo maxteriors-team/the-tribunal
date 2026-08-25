@@ -170,7 +170,7 @@ export const salesNavItems: AppNavItem[] = [
     icon: FileText,
     sidebar: true,
     commandPalette: true,
-    requires: "billing:read",
+    requires: "quotes:read",
   },
   {
     // Landscape design is a distinct, visual sales workflow: it needs a direct
@@ -181,7 +181,7 @@ export const salesNavItems: AppNavItem[] = [
     icon: Ruler,
     sidebar: true,
     commandPalette: true,
-    requires: "billing:read",
+    requires: "quotes:read",
   },
   {
     // Seasonal launcher folded into the unified Quotes & Estimates hub; kept in
@@ -193,7 +193,7 @@ export const salesNavItems: AppNavItem[] = [
     sidebar: false,
     commandPalette: true,
     accent: "christmas",
-    requires: "billing:read",
+    requires: "quotes:read",
   },
   {
     title: "Invoices",

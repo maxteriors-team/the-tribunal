@@ -28,6 +28,8 @@ class NudgeContext:
     enabled_types: list[str]
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
     date_contacts: list[Contact] = field(default_factory=list)
+    workspace_owner_user_id: int | None = None
+    contact_owner_user_ids: dict[int, int | None] = field(default_factory=dict)
 
     @property
     def today(self) -> date:
@@ -36,6 +38,18 @@ class NudgeContext:
     @property
     def date_window_end(self) -> date:
         return self.today + timedelta(days=self.lead_days)
+
+    def resolve_assignee(
+        self, *, contact_id: int | None = None, preferred_user_id: int | None = None
+    ) -> int | None:
+        """Resolve an explicit owner, then contact owner, then workspace owner."""
+        if preferred_user_id is not None:
+            return preferred_user_id
+        if contact_id is not None:
+            contact_owner = self.contact_owner_user_ids.get(contact_id)
+            if contact_owner is not None:
+                return contact_owner
+        return self.workspace_owner_user_id
 
 
 class NudgeStrategy(ABC):
@@ -159,6 +173,7 @@ async def maybe_create_date_nudge(
     nudge = HumanNudge(
         workspace_id=context.workspace_id,
         contact_id=contact.id,
+        assigned_to_user_id=context.resolve_assignee(contact_id=contact.id),
         nudge_type=nudge_type,
         title=title,
         message=message,

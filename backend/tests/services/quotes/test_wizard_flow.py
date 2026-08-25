@@ -27,6 +27,7 @@ from app.schemas.pricing import MAINTENANCE_THROUGH_TOKEN
 from app.schemas.proposal_wizard import (
     ProposalMockup,
     ProposalWizardPayload,
+    WizardBistroRun,
     WizardBistroSelection,
     WizardCategoryCount,
     WizardCharge,
@@ -108,6 +109,16 @@ PRICING = {
     "bistro": {
         "enabled": True,
         "minimum": 2307,
+        "temporary": {
+            "label": "Temporary Bistro Lighting",
+            "lights_per_ft": 10,
+            "poles_per_ft": 4,
+        },
+        "permanent": {
+            "label": "Permanent Bistro Lighting",
+            "lights_per_ft": 20,
+            "poles_per_ft": 6,
+        },
         "tiers": [{"key": "medium", "name": "Medium", "per_ft": 18.11, "classic_per_ft": 15.50}],
         "color": {
             "name": "Color Changing Bistro Lights",
@@ -236,7 +247,37 @@ async def test_preview_computes_document_from_config_and_catalog() -> None:
         assert doc.bistro.total == 3090.0
         assert doc.bistro.min_applied is False
 
-        # Internal fulfillment aggregates SKU components for the selected tier.
+
+async def test_grouped_bistro_runs_price_and_persist_without_legacy_labels() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        payload = _payload()
+        payload.bistro = WizardBistroSelection(
+            runs=[
+                WizardBistroRun(installation="temporary", feet=100),
+                WizardBistroRun(installation="permanent", feet=50),
+                WizardBistroRun(installation="temporary", feet=25),
+            ]
+        )
+
+        svc = QuoteService(db)
+        doc = await svc.preview_from_wizard(ws.id, payload)
+
+        assert doc.bistro is not None
+        assert doc.bistro.pricing_mode == "installation"
+        assert doc.bistro.feet == 175
+        assert [row.feet for row in doc.bistro.installations] == [125, 50]
+        assert doc.bistro.lights_cost == 2528
+        assert doc.bistro.poles_cost == 899
+        assert doc.bistro.total == 3427
+
+        quote = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        bistro_line = next(line for line in quote.line_items if line.name == "Bistro Lighting")
+        assert bistro_line.description == (
+            "125 ft Temporary Bistro Lighting · 50 ft Permanent Bistro Lighting"
+        )
+        assert float(bistro_line.unit_price) == 3427
+
         skus = {part.sku: part.qty for part in doc.fulfillment}
         assert skus["59409312"] == 1.0
         assert skus["59400232"] == 12.0
@@ -528,13 +569,14 @@ async def test_combined_multi_category_quote_prices_and_saves_all_lines() -> Non
         assert [s.key for s in doc.category_sections] == ["permanent", "christmas"]
         perm = doc.category_sections[0]
         chris = doc.category_sections[1]
-        # roofline 100*30=3000->3371; controller 300->337; extra zones 3*50=150->169.
-        assert perm.financed_total == 3877.0
+        # The 100 ft kit costs 1,249; standard 3× markup = 3,747 net -> 4,210 financed.
+        # Deprecated controller/channel inputs are intentionally ignored by kit pricing.
+        assert perm.financed_total == 4210.0
         # roofline 900->1011; trees 2*260=520->584; bushes 140->157; wreaths 170->191;
         # takedown 0.25*1730=432.5->486.
         assert chris.financed_total == 2429.0
         # Grand total = landscape selected tier + both category sections.
-        assert doc.grand_financed_total == doc.selected_financed_total + 3877.0 + 2429.0
+        assert doc.grand_financed_total == doc.selected_financed_total + 4210.0 + 2429.0
 
         # The rep wizard is single-service, but the API stays permissive: a payload
         # spanning service paths still prices and is recorded as "mixed".
@@ -739,7 +781,7 @@ async def test_wizard_deposit_persists_and_shows_in_document() -> None:
         assert saved.deposit_paid is False
 
 
-async def test_landscape_wizard_uses_workspace_deposit_and_persists_project_link() -> None:
+async def test_landscape_wizard_snapshots_visual_workspace_deposit_and_link() -> None:  # noqa: PLR0915
     from datetime import UTC, datetime, timedelta
 
     from app.models.field_service import Job
@@ -796,11 +838,19 @@ async def test_landscape_wizard_uses_workspace_deposit_and_persists_project_link
         payload.bistro = None
         payload.notes = "Install path lights along the front walk."
         payload.lighting_project_id = project.id
+        preview = await svc.preview_from_wizard(ws.id, payload)
+        assert preview.deposit_value == 25
+        assert preview.deposit_amount == round(preview.grand_financed_total * 0.25, 2)
+        assert preview.mockups[0].image == "data:image/png;base64,AAAA"
+        assert preview.mockups[0].caption == "Front elevation lighting design"
+
         saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
 
         assert saved.lighting_project_id == project.id
         assert saved.deposit_percentage == 25
         assert saved.deposit_required is True
+        assert saved.proposal_document is not None
+        assert saved.proposal_document["mockups"][0]["image"] == "data:image/png;base64,AAAA"
         assert project.opportunity_id is None
 
         await svc.approve_quote(ws.id, uuid.UUID(str(saved.id)))

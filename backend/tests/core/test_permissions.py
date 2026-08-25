@@ -20,6 +20,7 @@ from app.core.permissions import (
     Tier,
     capabilities_for,
     pipeline_owner_scope,
+    quote_owner_scope,
     role_can,
     role_tier,
     upsell_job_scope_required,
@@ -49,6 +50,8 @@ _MANAGER_CAPABILITIES = frozenset(
         Capability.COMMS_SEND,
         Capability.BILLING_READ,
         Capability.BILLING_WRITE,
+        Capability.QUOTES_READ,
+        Capability.QUOTES_WRITE,
         Capability.OUTREACH_WRITE,
         Capability.LOCATIONS_MANAGE,
         Capability.UPSELL_SELL,
@@ -68,6 +71,8 @@ ROLE_CAPABILITY_MATRIX: dict[str, frozenset[Capability]] = {
             Capability.ATTENDANCE_USE,
             Capability.COMMS_SEND,
             Capability.OUTREACH_WRITE,
+            Capability.QUOTES_READ,
+            Capability.QUOTES_WRITE,
             Capability.UPSELL_SELL,
             Capability.UPSELL_SELL_UNCAPPED,
         }
@@ -156,6 +161,8 @@ def test_manager_runs_operations_but_not_reports_or_members() -> None:
         Capability.COMMS_SEND,
         Capability.BILLING_READ,
         Capability.BILLING_WRITE,
+        Capability.QUOTES_READ,
+        Capability.QUOTES_WRITE,
         Capability.LOCATIONS_MANAGE,
         Capability.UPSELL_SELL,
         Capability.UPSELL_SELL_UNCAPPED,
@@ -179,6 +186,8 @@ def test_sales_owns_pipeline_and_authors_outreach() -> None:
             Capability.JOBS_READ,
             Capability.ATTENDANCE_USE,
             Capability.COMMS_SEND,
+            Capability.QUOTES_READ,
+            Capability.QUOTES_WRITE,
             Capability.UPSELL_SELL,
             Capability.UPSELL_SELL_UNCAPPED,
         }
@@ -196,6 +205,12 @@ def test_sales_owns_pipeline_and_authors_outreach() -> None:
         Capability.COMMS_MANAGE,
     ):
         assert not role_can("sales_rep", denied)
+
+
+def test_quote_owner_scope_limits_sales_only() -> None:
+    assert quote_owner_scope("sales_rep", 42) == 42
+    for role in ("owner", "admin", "manager", "dispatcher"):
+        assert quote_owner_scope(role, 42) is None
 
 
 def test_crm_write_always_implies_outreach_write() -> None:

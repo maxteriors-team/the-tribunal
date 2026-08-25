@@ -83,6 +83,8 @@ class Capability(StrEnum):
     COMMS_MANAGE = "comms:manage"
     BILLING_READ = "billing:read"
     BILLING_WRITE = "billing:write"
+    QUOTES_READ = "quotes:read"
+    QUOTES_WRITE = "quotes:write"
     REPORTS_VIEW = "reports:view"
     MEMBERS_MANAGE = "members:manage"
     WORKSPACE_MANAGE = "workspace:manage"
@@ -150,6 +152,8 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
         Capability.COMMS_SEND,
         Capability.BILLING_READ,
         Capability.BILLING_WRITE,
+        Capability.QUOTES_READ,
+        Capability.QUOTES_WRITE,
         Capability.LOCATIONS_MANAGE,
         Capability.UPSELL_SELL,
     }
@@ -161,6 +165,8 @@ def _build_matrix() -> dict[Tier, frozenset[Capability]]:
         Capability.PIPELINE_WRITE_OWN,
         Capability.JOBS_READ,
         Capability.COMMS_SEND,
+        Capability.QUOTES_READ,
+        Capability.QUOTES_WRITE,
         Capability.UPSELL_SELL,
     }
     tech: set[Capability] = {
@@ -254,6 +260,11 @@ def pipeline_owner_scope(role: str, user_id: int) -> int | None:
     if role_can(role, Capability.PIPELINE_WRITE_OWN):
         return user_id
     return None
+
+
+def quote_owner_scope(role: str, user_id: int) -> int | None:
+    """Return the user id quote access is restricted to, or ``None``."""
+    return user_id if role_tier(role) is Tier.SALES else None
 
 
 def appointment_owner_scope(role: str, user_id: int) -> int | None:

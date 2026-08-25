@@ -210,6 +210,69 @@ async def test_partial_payment_then_idempotent_replay() -> None:
         assert float(invoice_row.amount_paid) == 200.0
 
 
+async def test_full_payment_emails_one_branded_customer_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.services.email as email_mod
+
+    receipt_calls: list[dict[str, object]] = []
+
+    async def _fake_invoice_send(**kwargs: object) -> bool:
+        return True
+
+    async def _fake_receipt_send(**kwargs: object) -> bool:
+        receipt_calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(email_mod, "send_invoice_email", _fake_invoice_send)
+    monkeypatch.setattr(
+        email_mod,
+        "send_invoice_payment_receipt",
+        _fake_receipt_send,
+    )
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        ws.settings = {
+            "proposal_template": {
+                "business_name": "Patio Lights Co",
+                "logo_url": "https://cdn.example.com/logo.png",
+                "business_email": "office@example.com",
+            }
+        }
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=200.0)],
+            ),
+        )
+        await svc.mark_sent(ws.id, inv.id)
+        invoice_row = await db.get(Invoice, inv.id)
+        assert invoice_row is not None
+
+        # A partial payment is not a paid-in-full receipt.
+        assert await svc.record_payment(invoice_row, 50.0, payment_intent_id="pi_part") is True
+        assert receipt_calls == []
+
+        # Crossing into paid sends one receipt; replaying the webhook sends none.
+        assert await svc.record_payment(invoice_row, 150.0, payment_intent_id="pi_final") is True
+        assert await svc.record_payment(invoice_row, 150.0, payment_intent_id="pi_final") is False
+        assert len(receipt_calls) == 1
+        call = receipt_calls[0]
+        assert call["to_email"] == "customer@example.com"
+        assert call["customer_name"] == "Pat"
+        assert call["business_name"] == "Patio Lights Co"
+        assert call["logo_url"] == "https://cdn.example.com/logo.png"
+        assert call["support_email"] == "office@example.com"
+        assert call["payment_amount"] == 150.0
+        assert call["invoice_total"] == 200.0
+        assert call["total_paid"] == 200.0
+        assert f"/p/invoices/{invoice_row.public_token}" in str(call["invoice_url"])
+
+
 async def test_overdue_is_derived_from_due_date() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
@@ -659,9 +722,7 @@ async def test_replacing_public_checkout_expires_the_previous_open_session(
         svc = InvoiceService(db)
         invoice = await svc.create_invoice(
             ws.id,
-            InvoiceCreate(
-                line_items=[InvoiceLineItemCreate(name="Job", unit_price=80.0)]
-            ),
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=80.0)]),
         )
         await svc.mark_sent(ws.id, invoice.id)
         stored = await db.get(Invoice, invoice.id)

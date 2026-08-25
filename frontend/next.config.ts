@@ -17,7 +17,9 @@ const SECURITY_HEADERS = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "geolocation=(), microphone=(), camera=()",
+    // Same-origin CRM code may request microphone access; the browser still
+    // requires an explicit user permission grant.
+    value: "geolocation=(), microphone=(self), camera=()",
   },
   {
     key: "Strict-Transport-Security",

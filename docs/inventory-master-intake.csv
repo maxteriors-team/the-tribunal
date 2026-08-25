@@ -1,0 +1,50 @@
+record_status,internal_sku,item_name,item_type,tracking_method,service_lines,category,brand,manufacturer_model,vendor,vendor_sku,stock_uom,purchase_uom,units_per_purchase,current_unit_cost,default_sell_price,default_location,storage_bin,quantity_on_hand,reorder_point,target_stock_level,ownership,consumption_behavior,serial_tracking,active,notes
+NEEDS_VERIFICATION,PRGB-TRACK-STRAIGHT,Permanent RGB straight track,material,length,permanent_rgb,track,,,,,ft,case,,,,,,,,sold_to_customer,consume,no,yes,Confirm profile color material and case footage
+NEEDS_VERIFICATION,PRGB-TRACK-CORNER,Permanent RGB corner track,material,length,permanent_rgb,track,,,,,ft,case,,,,,,,,sold_to_customer,consume,no,yes,Confirm inside outside and universal corner variants
+NEEDS_VERIFICATION,PRGB-LIGHT-MODULE,Permanent RGB light module,material,quantity,permanent_rgb,lighting_module,,,,,each,case,,,,,,,,sold_to_customer,consume,no,yes,Split by generation spacing voltage or color when applicable
+NEEDS_VERIFICATION,PRGB-CONTROLLER,Permanent RGB controller,material,quantity,permanent_rgb,controller,,,,,each,each,,,,,,,,sold_to_customer,consume,yes,yes,Confirm whether controller serial numbers are recorded
+NEEDS_VERIFICATION,PRGB-POWER-SUPPLY,Permanent RGB power supply,material,quantity,permanent_rgb,power,,,,,each,each,,,,,,,,sold_to_customer,consume,yes,yes,Split by wattage and voltage
+NEEDS_VERIFICATION,PRGB-POWER-INJECT,Permanent RGB power-injection component,material,quantity,permanent_rgb,power,,,,,each,pack,,,,,,,,sold_to_customer,consume,no,yes,Confirm exact component and pack quantity
+NEEDS_VERIFICATION,PRGB-STARTER-LEAD,Permanent RGB starter lead,material,quantity,permanent_rgb,wiring,,,,,each,pack,,,,,,,,sold_to_customer,consume,no,yes,
+NEEDS_VERIFICATION,PRGB-EXTENSION,Permanent RGB extension cable,material,length,permanent_rgb,wiring,,,,,ft,spool,,,,,,,,sold_to_customer,consume,no,yes,Create separate rows by gauge or connector type
+NEEDS_VERIFICATION,PRGB-SPLICE,Permanent RGB splice connector,material,quantity,permanent_rgb,connector,,,,,each,pack,,,,,,,,sold_to_customer,consume,no,yes,
+NEEDS_VERIFICATION,PRGB-END-CAP,Permanent RGB end cap,material,quantity,permanent_rgb,connector,,,,,each,pack,,,,,,,,sold_to_customer,consume,no,yes,
+NEEDS_VERIFICATION,LND-FIX-UPLIGHT,Landscape uplight fixture,material,quantity,landscape,fixture,,,,,each,case,,,,,,,,sold_to_customer,consume,no,yes,Create one row per actual fixture model and finish
+NEEDS_VERIFICATION,LND-FIX-PATH,Landscape path-light fixture,material,quantity,landscape,fixture,,,,,each,case,,,,,,,,sold_to_customer,consume,no,yes,Create one row per actual fixture model and finish
+NEEDS_VERIFICATION,LND-FIX-DOWNLIGHT,Landscape downlight fixture,material,quantity,landscape,fixture,,,,,each,case,,,,,,,,sold_to_customer,consume,no,yes,
+NEEDS_VERIFICATION,LND-FIX-WELL,Landscape well light,material,quantity,landscape,fixture,,,,,each,case,,,,,,,,sold_to_customer,consume,no,yes,
+NEEDS_VERIFICATION,LND-FIX-INGRADE,Landscape in-grade fixture,material,quantity,landscape,fixture,,,,,each,case,,,,,,,,sold_to_customer,consume,no,yes,
+NEEDS_VERIFICATION,LND-LAMP-MODULE,Landscape lamp or LED module,material,quantity,landscape,lamp_module,,,,,each,case,,,,,,,,sold_to_customer,consume,no,yes,Split by wattage beam spread and color temperature
+NEEDS_VERIFICATION,LND-TRANSFORMER-150,Landscape transformer 150 W,material,quantity,landscape,transformer,,,,,each,each,,,,,,,,sold_to_customer,consume,yes,yes,Confirm actual stocked capacities
+NEEDS_VERIFICATION,LND-TRANSFORMER-300,Landscape transformer 300 W,material,quantity,landscape,transformer,,,,,each,each,,,,,,,,sold_to_customer,consume,yes,yes,Confirm actual stocked capacities
+NEEDS_VERIFICATION,LND-WIRE-08-2,Low-voltage landscape wire 8/2,material,length,landscape,wire,,,,,ft,spool,,,,,,,,sold_to_customer,consume,no,yes,Record spool footage as units per purchase
+NEEDS_VERIFICATION,LND-WIRE-10-2,Low-voltage landscape wire 10/2,material,length,landscape,wire,,,,,ft,spool,,,,,,,,sold_to_customer,consume,no,yes,Record spool footage as units per purchase
+NEEDS_VERIFICATION,LND-WIRE-12-2,Low-voltage landscape wire 12/2,material,length,landscape,wire,,,,,ft,spool,,,,,,,,sold_to_customer,consume,no,yes,Record spool footage as units per purchase
+NEEDS_VERIFICATION,LND-WIRE-14-2,Low-voltage landscape wire 14/2,material,length,landscape,wire,,,,,ft,spool,,,,,,,,sold_to_customer,consume,no,yes,Record spool footage as units per purchase
+NEEDS_VERIFICATION,LND-CONNECTOR,Landscape wire connector,material,quantity,landscape,connector,,,,,each,pack,,,,,,,,sold_to_customer,consume,no,yes,Split by connector model
+NEEDS_VERIFICATION,LND-HUB,Landscape wiring hub,material,quantity,landscape,connector,,,,,each,pack,,,,,,,,sold_to_customer,consume,no,yes,
+NEEDS_VERIFICATION,LND-STAKE,Landscape fixture stake,material,quantity,landscape,mounting,,,,,each,case,,,,,,,,sold_to_customer,consume,no,yes,Split by fixture or stake size
+NEEDS_VERIFICATION,XMAS-C9-SOCKET,C9 socket line,material,length,christmas,roofline_lighting,,,,,ft,spool,,,,,,,,company_owned,checkout_return,no,yes,Confirm whether line is cut and dedicated to a property
+NEEDS_VERIFICATION,XMAS-C9-BULB,C9 bulb,material,quantity,christmas,bulb,,,,,each,case,,,,,,,,company_owned,checkout_return,no,yes,Create rows by color and style
+NEEDS_VERIFICATION,XMAS-ROOFLINE-CLIP,C9 roofline clip,consumable,quantity,christmas,clip,,,,,each,case,,,,,,,,company_owned,checkout_return,no,yes,Confirm whether clips are reused or expensed each season
+NEEDS_VERIFICATION,XMAS-MINI-STRAND,Mini-light strand,reusable_asset,quantity,christmas,mini_lights,,,,,strand,case,,,,,,,,company_owned,checkout_return,no,yes,Create rows by color strand length and lamp count
+NEEDS_VERIFICATION,XMAS-WREATH,Christmas wreath,reusable_asset,quantity,christmas,decor,,,,,each,each,,,,,,,,company_owned,checkout_return,yes,yes,Record size lighting type and asset tag policy
+NEEDS_VERIFICATION,XMAS-GARLAND,Christmas garland,reusable_asset,length,christmas,decor,,,,,ft,case,,,,,,,,company_owned,checkout_return,no,yes,Confirm whether tracked by section or foot
+NEEDS_VERIFICATION,XMAS-EXT-CORD,Christmas extension cord,reusable_asset,quantity,christmas,power,,,,,each,case,,,,,,,,company_owned,checkout_return,no,yes,Create rows by length color and gauge
+NEEDS_VERIFICATION,XMAS-TIMER,Christmas timer,reusable_asset,quantity,christmas,controller,,,,,each,each,,,,,,,,company_owned,checkout_return,yes,yes,
+NEEDS_VERIFICATION,XMAS-CONTROLLER,Christmas lighting controller,reusable_asset,quantity,christmas,controller,,,,,each,each,,,,,,,,company_owned,checkout_return,yes,yes,
+NEEDS_VERIFICATION,XMAS-STORAGE-BIN,Christmas customer storage bin,reusable_asset,quantity,christmas,storage,,,,,each,each,,,,,,,,company_owned,checkout_return,yes,yes,Asset tag should link bin to customer property
+NEEDS_VERIFICATION,BISTRO-SOCKET-LINE,Bistro socket line,material,length,permanent_bistro|temporary_bistro,bistro_lighting,,,,,ft,spool,,,,,,,,company_owned,review,no,yes,Create separate permanent and reusable variants if both are stocked
+NEEDS_VERIFICATION,BISTRO-BULB,Bistro bulb,material,quantity,permanent_bistro|temporary_bistro,bulb,,,,,each,case,,,,,,,,company_owned,review,no,yes,Create rows by color style and voltage
+NEEDS_VERIFICATION,BISTRO-RGB-STRAND,Rental RGB bistro strand,reusable_asset,quantity,temporary_bistro,bistro_lighting,,,,,strand,case,,,,,,,,company_owned,checkout_return,yes,yes,Record strand length and controller compatibility
+NEEDS_VERIFICATION,BISTRO-CONTROLLER,Bistro lighting controller,reusable_asset,quantity,permanent_bistro|temporary_bistro,controller,,,,,each,each,,,,,,,,company_owned,review,yes,yes,Separate sold and rental variants
+NEEDS_VERIFICATION,BISTRO-GUIDE-WIRE,Bistro guide wire,material,length,permanent_bistro|temporary_bistro,support,,,,,ft,spool,,,,,,,,company_owned,review,no,yes,Decide whether temporary-job wire is reusable
+NEEDS_VERIFICATION,BISTRO-POLE,Bistro support pole,reusable_asset,quantity,temporary_bistro,support,,,,,each,each,,,,,,,,company_owned,checkout_return,yes,yes,Record pole size finish and asset tag
+NEEDS_VERIFICATION,BISTRO-ANCHOR,Bistro anchor or attachment,material,quantity,permanent_bistro|temporary_bistro,support,,,,,each,pack,,,,,,,,company_owned,review,no,yes,Separate consumable anchors from reusable hardware
+NEEDS_VERIFICATION,SHARED-EXT-CORD,General extension cord,reusable_asset,quantity,christmas|temporary_bistro,power,,,,,each,case,,,,,,,,company_owned,checkout_return,no,yes,Create rows by length color and gauge
+NEEDS_VERIFICATION,SHARED-SEALANT,Exterior electrical sealant,consumable,quantity,permanent_rgb|landscape|permanent_bistro,consumable,,,,,tube,case,,,,,,,,company_owned,consume,no,yes,
+NEEDS_VERIFICATION,SHARED-ELEC-TAPE,Electrical tape,consumable,quantity,permanent_rgb|landscape|christmas|permanent_bistro|temporary_bistro,consumable,,,,,roll,case,,,,,,,,company_owned,consume,no,yes,
+NEEDS_VERIFICATION,SHARED-ZIP-TIE,UV-rated zip tie,consumable,quantity,permanent_rgb|landscape|christmas|permanent_bistro|temporary_bistro,fastener,,,,,each,pack,,,,,,,,company_owned,consume,no,yes,Create rows by size and color
+NEEDS_VERIFICATION,SHARED-SCREW,Exterior mounting screw,consumable,quantity,permanent_rgb|landscape|permanent_bistro,fastener,,,,,each,box,,,,,,,,company_owned,consume,no,yes,Create rows by size material and finish
+NEEDS_VERIFICATION,SHARED-JUNCTION-BOX,Exterior junction box,material,quantity,permanent_rgb|landscape|permanent_bistro,electrical,,,,,each,case,,,,,,,,sold_to_customer,consume,no,yes,Create rows by size rating and color
+NEEDS_VERIFICATION,SHARED-STORAGE-BIN,General reusable storage bin,reusable_asset,quantity,christmas|temporary_bistro,storage,,,,,each,each,,,,,,,,company_owned,checkout_return,yes,yes,Assign a unique bin asset tag

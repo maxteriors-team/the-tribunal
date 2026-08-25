@@ -33,6 +33,7 @@ from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import calls as calls_module
 from app.core.config import settings as app_settings
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
+from app.services.telephony.telnyx_webrtc import BrowserCredential
 
 WS_ID = uuid.uuid4()
 BASE = f"/api/v1/workspaces/{WS_ID}/calls"
@@ -136,6 +137,8 @@ def _build_app(db: _FakeSession, *, user_phone: str | None, ws_settings: dict[st
         user.id = 1
         user.is_active = True
         user.phone_number = user_phone
+        user.telnyx_telephony_credential_id = None
+        user.telnyx_sip_username = None
         return user
 
     async def override_get_membership() -> MagicMock:
@@ -172,6 +175,9 @@ async def _client(
 def _telnyx_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app_settings, "telnyx_api_key", "test-key")
     monkeypatch.setattr(app_settings, "telnyx_connection_id", "conn-123")
+    monkeypatch.setattr(
+        app_settings, "telnyx_webrtc_connection_id", "10000000-0000-4000-8000-000000000001"
+    )
     monkeypatch.setattr(app_settings, "api_base_url", "https://api.example.com")
 
 
@@ -345,3 +351,81 @@ async def test_user_mode_dials_the_rep_first(monkeypatch: pytest.MonkeyPatch) ->
     assert stored[0].rep_call_control_id == "v3:rep-leg-ccid"
     assert stored[0].contact_call_control_id is None
     assert stored[0].contact_number == CONTACT_NUMBER
+
+
+# --------------------------------------------------------------------------- #
+# mode="browser"
+# --------------------------------------------------------------------------- #
+
+
+async def test_browser_mode_dials_only_server_owned_sip_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The client cannot choose a paid callback or arbitrary SIP destination."""
+    db = _FakeSession(
+        [
+            _Result(scalar=_phone_record()),
+            _Result(),  # conversation lookup (none yet)
+            _Result(),  # contact lookup (none)
+        ]
+    )
+
+    credential = BrowserCredential(
+        credential_id="20000000-0000-4000-8000-000000000002",
+        sip_username="provider-issued-user",
+    )
+    browser_service = MagicMock()
+    browser_service.ensure_user_credential = AsyncMock(return_value=credential)
+    browser_service.close = AsyncMock()
+    monkeypatch.setattr(
+        calls_module, "TelnyxWebRTCService", MagicMock(return_value=browser_service)
+    )
+    monkeypatch.setattr(calls_module, "enforce_softphone_call_limits", AsyncMock(return_value=None))
+
+    dial_browser = AsyncMock(return_value="v3:browser-leg-ccid")
+    dial_phone = AsyncMock()
+    monkeypatch.setattr(TelnyxVoiceService, "dial_browser_leg", dial_browser)
+    monkeypatch.setattr(TelnyxVoiceService, "dial_transfer_leg", dial_phone)
+    monkeypatch.setattr(
+        "app.services.telephony.user_call.store_pending_user_call",
+        AsyncMock(return_value=None),
+    )
+
+    async with _client(db) as client:
+        resp = await client.post(
+            BASE,
+            json={
+                "to_number": CONTACT_NUMBER,
+                "from_phone_number": WORKSPACE_NUMBER,
+                "mode": "browser",
+                "user_phone_number": OFF_ALLOWLIST_NUMBER,
+            },
+        )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["is_ai"] is False
+    dial_phone.assert_not_awaited()
+    dial_browser.assert_awaited_once()
+    assert dial_browser.await_args.kwargs["sip_username"] == "provider-issued-user"
+
+
+async def test_webrtc_token_is_memory_only_and_not_cacheable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = _FakeSession([])
+    browser_service = MagicMock()
+    browser_service.issue_user_token = AsyncMock(return_value="header.payload.signature")
+    browser_service.close = AsyncMock()
+    monkeypatch.setattr(
+        calls_module, "TelnyxWebRTCService", MagicMock(return_value=browser_service)
+    )
+    monkeypatch.setattr(calls_module, "enforce_softphone_token_limit", AsyncMock(return_value=None))
+
+    async with _client(db) as client:
+        resp = await client.post(f"{BASE}/webrtc/token")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"token": "header.payload.signature"}
+    assert resp.headers["cache-control"] == "no-store"
+    browser_service.issue_user_token.assert_awaited_once()
+    browser_service.close.assert_awaited_once()

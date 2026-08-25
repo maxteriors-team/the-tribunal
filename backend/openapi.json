@@ -5754,7 +5754,7 @@
         "type": "object"
       },
       "BistroConfig": {
-        "description": "Optional string-lighting add-on. A lighting brand may omit it entirely.",
+        "description": "String-lighting rates plus legacy sales-wizard product configuration.",
         "properties": {
           "classic": {
             "anyOf": [
@@ -5787,6 +5787,12 @@
             "title": "Minimum",
             "type": "number"
           },
+          "permanent": {
+            "$ref": "#/components/schemas/BistroInstallationConfig"
+          },
+          "temporary": {
+            "$ref": "#/components/schemas/BistroInstallationConfig"
+          },
           "tiers": {
             "items": {
               "$ref": "#/components/schemas/BistroTier"
@@ -5796,6 +5802,86 @@
           }
         },
         "title": "BistroConfig",
+        "type": "object"
+      },
+      "BistroInstallationConfig": {
+        "description": "Measured-run rates for one temporary or permanent Bistro installation.",
+        "properties": {
+          "label": {
+            "maxLength": 120,
+            "title": "Label",
+            "type": "string"
+          },
+          "lights_per_ft": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Lights Per Ft",
+            "type": "number"
+          },
+          "poles_per_ft": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Poles Per Ft",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "BistroInstallationConfig",
+        "type": "object"
+      },
+      "BistroInstallationPricing": {
+        "description": "Server-priced light and pole allowances for one installation type.",
+        "properties": {
+          "feet": {
+            "title": "Feet",
+            "type": "number"
+          },
+          "installation": {
+            "enum": [
+              "temporary",
+              "permanent"
+            ],
+            "title": "Installation",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "lights_cost": {
+            "title": "Lights Cost",
+            "type": "number"
+          },
+          "lights_per_ft": {
+            "title": "Lights Per Ft",
+            "type": "number"
+          },
+          "poles_cost": {
+            "title": "Poles Cost",
+            "type": "number"
+          },
+          "poles_per_ft": {
+            "title": "Poles Per Ft",
+            "type": "number"
+          },
+          "total": {
+            "title": "Total",
+            "type": "number"
+          }
+        },
+        "required": [
+          "installation",
+          "label",
+          "feet",
+          "lights_per_ft",
+          "poles_per_ft",
+          "lights_cost",
+          "poles_cost",
+          "total"
+        ],
+        "title": "BistroInstallationPricing",
         "type": "object"
       },
       "BistroLine": {
@@ -5882,6 +5968,13 @@
             "title": "Hardware",
             "type": "number"
           },
+          "installations": {
+            "items": {
+              "$ref": "#/components/schemas/BistroInstallationPricing"
+            },
+            "title": "Installations",
+            "type": "array"
+          },
           "lights_cost": {
             "title": "Lights Cost",
             "type": "number"
@@ -5908,6 +6001,20 @@
           "per_ft": {
             "title": "Per Ft",
             "type": "number"
+          },
+          "poles_cost": {
+            "default": 0,
+            "title": "Poles Cost",
+            "type": "number"
+          },
+          "pricing_mode": {
+            "default": "legacy",
+            "enum": [
+              "legacy",
+              "installation"
+            ],
+            "title": "Pricing Mode",
+            "type": "string"
           },
           "product": {
             "title": "Product",
@@ -5943,7 +6050,7 @@
         "type": "object"
       },
       "BistroProduct": {
-        "description": "A bistro product (color-changing or classic) with its own hardware cost.",
+        "description": "A legacy bistro product (color-changing or classic) and its hardware cost.",
         "properties": {
           "bulb_spacing_ft": {
             "default": 2,
@@ -5993,7 +6100,7 @@
         "type": "object"
       },
       "BistroTier": {
-        "description": "Install-difficulty tier for string lighting priced per linear foot.",
+        "description": "Install-difficulty tier for legacy string lighting priced per linear foot.",
         "properties": {
           "classic_per_ft": {
             "default": 0,
@@ -7970,7 +8077,7 @@
         "type": "object"
       },
       "CallCreate": {
-        "description": "Request to initiate a call.\n\n``mode`` decides who actually talks to the contact:\n\n- ``\"ai\"`` (default): a voice agent handles the call. ``agent_id`` selects\n  it; when omitted the conversation's assigned agent or the workspace\n  default voice agent is used. A call with no resolvable agent is rejected\n  rather than dialing the contact into silence.\n- ``\"user\"``: the operator's own phone rings first, then the contact is\n  dialed and the two legs are bridged. ``agent_id`` is ignored.\n  ``user_phone_number`` picks which allowlisted number to ring.",
+        "description": "Request to initiate a call.\n\n``mode`` decides who actually talks to the contact:\n\n- ``\"ai\"`` (default): a voice agent handles the call. ``agent_id`` selects\n  it; when omitted the conversation's assigned agent or the workspace\n  default voice agent is used. A call with no resolvable agent is rejected\n  rather than dialing the contact into silence.\n- ``\"user\"``: the operator's own phone rings first, then the contact is\n  dialed and the two legs are bridged. ``agent_id`` is ignored.\n  ``user_phone_number`` picks which allowlisted number to ring.\n- ``\"browser\"``: the operator's authenticated Tribunal browser rings first;\n  the server then dials and bridges the contact. Client-supplied SIP targets\n  are never accepted.",
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -7982,7 +8089,7 @@
                 "type": "null"
               }
             ],
-            "description": "Voice agent for mode='ai'. Ignored when mode='user'.",
+            "description": "Voice agent for mode='ai'. Ignored for human modes.",
             "title": "Agent Id"
           },
           "contact_phone": {
@@ -8004,7 +8111,8 @@
             "default": "ai",
             "enum": [
               "ai",
-              "user"
+              "user",
+              "browser"
             ],
             "title": "Mode",
             "type": "string"
@@ -29382,6 +29490,20 @@
           }
         },
         "title": "NudgeActRequest",
+        "type": "object"
+      },
+      "NudgeClearAllResponse": {
+        "description": "Count of visible active nudges dismissed by Clear All.",
+        "properties": {
+          "dismissed_count": {
+            "title": "Dismissed Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dismissed_count"
+        ],
+        "title": "NudgeClearAllResponse",
         "type": "object"
       },
       "NudgeListResponse": {
@@ -54592,6 +54714,20 @@
         "title": "VoiceCampaignUpdate",
         "type": "object"
       },
+      "WebRTCTokenResponse": {
+        "description": "Short-lived browser credential; callers must keep it in memory only.",
+        "properties": {
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "WebRTCTokenResponse",
+        "type": "object"
+      },
       "WinnerDetectionResponse": {
         "description": "Schema for winner detection result.",
         "properties": {
@@ -54641,11 +54777,37 @@
         "title": "WinnerDetectionResponse",
         "type": "object"
       },
+      "WizardBistroRun": {
+        "description": "Measured footage grouped by temporary or permanent installation.",
+        "properties": {
+          "feet": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000.0,
+            "title": "Feet",
+            "type": "number"
+          },
+          "installation": {
+            "enum": [
+              "temporary",
+              "permanent"
+            ],
+            "title": "Installation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "installation",
+          "feet"
+        ],
+        "title": "WizardBistroRun",
+        "type": "object"
+      },
       "WizardBistroSelection": {
-        "description": "Optional string-lighting selection.",
+        "description": "Optional measured-run selection or compatible legacy product selection.",
         "properties": {
           "feet": {
             "default": 0,
+            "maximum": 100000.0,
             "minimum": 0.0,
             "title": "Feet",
             "type": "number"
@@ -54654,6 +54816,14 @@
             "default": "color",
             "title": "Product",
             "type": "string"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/WizardBistroRun"
+            },
+            "maxItems": 100,
+            "title": "Runs",
+            "type": "array"
           },
           "tier": {
             "default": "easy",
@@ -66071,7 +66241,7 @@
         ]
       },
       "post": {
-        "description": "Initiate an outbound voice call, handled by an AI agent or by the user.\n\n``mode=\"ai\"`` dials the contact and streams the call to a voice agent.\n``mode=\"user\"`` rings the operator's own phone first and bridges the contact\nin once they pick up, so nobody is ever dialed into silence.\n\nArgs:\n    workspace_id: Workspace ID\n    call_data: Call request data\n    current_user: Current user\n    db: Database session\n    membership: Caller's workspace membership (comms-send capability)\n    workspace: Workspace the call is billed to\n\nReturns:\n    Created Message record for the call",
+        "description": "Initiate an outbound voice call handled by AI, phone callback, or browser.\n\nHuman modes ring the operator before the contact, so nobody is dialed into\nsilence. Browser mode uses a server-derived internal SIP target only.\n\nArgs:\n    workspace_id: Workspace ID\n    call_data: Call request data\n    current_user: Current user\n    db: Database session\n    membership: Caller's workspace membership (comms-send capability)\n    workspace: Workspace the call is billed to\n\nReturns:\n    Created Message record for the call",
         "operationId": "initiate_call_api_v1_workspaces__workspace_id__calls_post",
         "parameters": [
           {
@@ -66172,6 +66342,55 @@
           }
         ],
         "summary": "List Live Calls",
+        "tags": [
+          "Voice Calls"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/calls/webrtc/token": {
+      "post": {
+        "description": "Mint a memory-only Telnyx JWT for the authenticated operator's browser.",
+        "operationId": "issue_webrtc_token_api_v1_workspaces__workspace_id__calls_webrtc_token_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebRTCTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Issue Webrtc Token",
         "tags": [
           "Voice Calls"
         ]
@@ -81964,7 +82183,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/nudges": {
       "get": {
-        "description": "List nudges for a workspace with optional filters.\n\nDefaults to showing pending and sent nudges, ordered by due_date ascending.",
+        "description": "List nudges visible to the caller with optional filters.\n\nDefaults to showing pending and sent nudges, ordered by due_date ascending.",
         "operationId": "list_nudges_api_v1_workspaces__workspace_id__nudges_get",
         "parameters": [
           {
@@ -82082,9 +82301,58 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/nudges/clear-all": {
+      "put": {
+        "description": "Dismiss every active nudge currently visible to the caller.",
+        "operationId": "clear_all_nudges_api_v1_workspaces__workspace_id__nudges_clear_all_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NudgeClearAllResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Clear All Nudges",
+        "tags": [
+          "Human Nudges"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/nudges/stats": {
       "get": {
-        "description": "Get nudge counts grouped by status.",
+        "description": "Get visible nudge counts grouped by status.",
         "operationId": "get_nudge_stats_api_v1_workspaces__workspace_id__nudges_stats_get",
         "parameters": [
           {
@@ -82133,7 +82401,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/nudges/{nudge_id}/act": {
       "put": {
-        "description": "Mark a nudge as acted upon, optionally dispatching an action like sending a card.",
+        "description": "Mark a visible nudge as acted, optionally dispatching an action.",
         "operationId": "act_on_nudge_api_v1_workspaces__workspace_id__nudges__nudge_id__act_put",
         "parameters": [
           {
@@ -82209,7 +82477,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/nudges/{nudge_id}/dismiss": {
       "put": {
-        "description": "Dismiss a nudge.",
+        "description": "Dismiss a visible nudge.",
         "operationId": "dismiss_nudge_api_v1_workspaces__workspace_id__nudges__nudge_id__dismiss_put",
         "parameters": [
           {
@@ -82268,7 +82536,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/nudges/{nudge_id}/snooze": {
       "put": {
-        "description": "Snooze a nudge until a specified time.",
+        "description": "Snooze a visible nudge until a specified time.",
         "operationId": "snooze_nudge_api_v1_workspaces__workspace_id__nudges__nudge_id__snooze_put",
         "parameters": [
           {

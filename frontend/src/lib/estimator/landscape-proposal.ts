@@ -9,12 +9,20 @@ import type {
   CatalogItemResponse,
   PricingSettings,
   ProposalWizardPayload,
+  WizardBistroRun,
 } from "@/types/sales-wizard";
 
 export interface LandscapeWireQuoteInput {
   gauge: 8 | 10 | 12 | 14;
   lengthFeet: number | null;
 }
+
+export interface LandscapeBistroQuoteInput {
+  installation: "temporary" | "permanent" | null;
+  lengthFeet: number | null;
+}
+
+export type GroupedLandscapeBistroRun = WizardBistroRun;
 
 export interface LandscapeProposalLinkage {
   contactId?: number | null;
@@ -29,6 +37,7 @@ export interface BuildLandscapeProposalPayloadOptions extends LandscapeProposalL
   catalog: CatalogItemResponse[];
   fixtureCounts: Partial<Record<FixtureType, number>>;
   wireRuns: LandscapeWireQuoteInput[];
+  bistroRuns?: LandscapeBistroQuoteInput[];
   selectedTierKey: string | null;
   selectedCarePlanKey: string | null;
   additionalLineItems?: Array<{ description: string; amount: number }>;
@@ -52,6 +61,30 @@ export function aggregateWireFeet(
     totals.set(run.gauge, (totals.get(run.gauge) ?? 0) + run.lengthFeet);
   }
   return totals;
+}
+
+export function aggregateBistroRuns(
+  runs: LandscapeBistroQuoteInput[],
+): GroupedLandscapeBistroRun[] {
+  const totals = { temporary: 0, permanent: 0 };
+  for (const run of runs) {
+    if (!run.installation || run.lengthFeet === null) continue;
+    if (!Number.isFinite(run.lengthFeet) || run.lengthFeet <= 0) continue;
+    totals[run.installation] += run.lengthFeet;
+  }
+  return (["temporary", "permanent"] as const).flatMap((installation) =>
+    totals[installation] > 0 ? [{ installation, feet: totals[installation] }] : [],
+  );
+}
+
+export function hasUnpriceableBistroRuns(runs: LandscapeBistroQuoteInput[]): boolean {
+  return runs.some(
+    (run) =>
+      !run.installation ||
+      run.lengthFeet === null ||
+      !Number.isFinite(run.lengthFeet) ||
+      run.lengthFeet <= 0,
+  );
 }
 
 /** Build all tier quantities so one server preview prices Good/Better/Best together. */
@@ -89,6 +122,7 @@ export function buildLandscapeProposalPayload({
   catalog,
   fixtureCounts,
   wireRuns,
+  bistroRuns = [],
   selectedTierKey,
   selectedCarePlanKey,
   additionalLineItems = [],
@@ -102,6 +136,7 @@ export function buildLandscapeProposalPayload({
     (total, fixture) => total + Math.max(0, fixtureCounts[fixture.type] ?? 0),
     0,
   );
+  const groupedBistroRuns = aggregateBistroRuns(bistroRuns);
   return {
     pricing_source: "price_book",
     contact_id: contactId ?? null,
@@ -109,8 +144,16 @@ export function buildLandscapeProposalPayload({
     service_location_id: serviceLocationId ?? null,
     lighting_project_id: lightingProjectId ?? null,
     title: title?.trim() || "Landscape lighting proposal",
-    categories: ["landscape"],
+    categories: groupedBistroRuns.length ? ["landscape", "bistro"] : ["landscape"],
     quantities: buildLandscapeProposalQuantities(pricing, catalog, fixtureCounts, wireRuns),
+    bistro: groupedBistroRuns.length
+      ? {
+          product: "color",
+          tier: "easy",
+          feet: groupedBistroRuns.reduce((total, run) => total + run.feet, 0),
+          runs: groupedBistroRuns,
+        }
+      : null,
     additional_charges: additionalLineItems
       .map((line) => ({
         description: line.description.trim(),
