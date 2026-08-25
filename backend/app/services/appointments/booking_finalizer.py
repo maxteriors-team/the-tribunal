@@ -60,6 +60,16 @@ DEFAULT_TIMEZONE = DEFAULT_WORKSPACE_TIMEZONE
 DEFAULT_SERVICE_SUMMARY = "Appointment"
 
 
+def _validate_booking_scope(
+    *, workspace_id: uuid.UUID, contact: Contact, agent: Agent | None
+) -> None:
+    """Reject cross-workspace objects before any appointment write."""
+    if contact.workspace_id != workspace_id:
+        raise ValueError("contact does not belong to the booking workspace")
+    if agent is not None and agent.workspace_id != workspace_id:
+        raise ValueError("agent does not belong to the booking workspace")
+
+
 async def finalize_booking(
     db: AsyncSession,
     *,
@@ -98,6 +108,8 @@ async def finalize_booking(
     if scheduled_at.tzinfo is None:
         msg = "scheduled_at must be timezone-aware; a naive value loses the customer's timezone"
         raise ValueError(msg)
+
+    _validate_booking_scope(workspace_id=workspace_id, contact=contact, agent=agent)
 
     # Read the id once, up front. ``db.rollback()`` in the recovery path below
     # expires every instance in the session, and re-reading ``contact.id`` after
