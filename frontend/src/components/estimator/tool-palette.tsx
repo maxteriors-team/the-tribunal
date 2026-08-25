@@ -293,11 +293,13 @@ function FixtureOptions({
   if (product.category !== "landscape" || !isLandscapePlanStyle(product.style)) {
     return null;
   }
+  const isBistroPole = product.style === "bistro-pole";
   const choices = products.filter(
     (candidate) =>
       candidate.category === "landscape" &&
       candidate.kind === "each" &&
-      isLandscapePlanStyle(candidate.style),
+      isLandscapePlanStyle(candidate.style) &&
+      (isBistroPole ? candidate.style === "bistro-pole" : candidate.style !== "bistro-pole"),
   );
   const circuits = design.runs.filter(
     (run) => products.find((candidate) => candidate.id === run.productId)?.style === "wire",
@@ -388,7 +390,11 @@ function FixtureOptions({
             );
           })}
         </div>
-        {product.style === "transformer" ? (
+        {isBistroPole ? (
+          <p className="tp-opt-readout">
+            Billable support marker — counted against the attached Bistro run.
+          </p>
+        ) : product.style === "transformer" ? (
           <p className="tp-opt-readout">
             Power equipment symbol — shown on the plan, not the quote.
           </p>
@@ -468,7 +474,7 @@ function FixtureOptions({
         <p className="tp-opt-readout">Changes the plan marker only. Beam throw stays unchanged.</p>
       </div>
 
-      {product.style !== "transformer" ? (
+      {product.style !== "transformer" && !isBistroPole ? (
         <div className="tp-mt">
           <p className="tp-opt-label">Transformer circuit</p>
           <select
@@ -563,14 +569,14 @@ function FixtureOptions({
             })
           }
         >
-          Duplicate fixture
+          Duplicate {isBistroPole ? "pole" : "fixture"}
         </button>
         <button
           type="button"
           className="tp-mini-btn danger"
           onClick={() => dispatch({ type: "DELETE_ITEM", id: item.id })}
         >
-          Delete fixture
+          Delete {isBistroPole ? "pole" : "fixture"}
         </button>
       </div>
     </div>

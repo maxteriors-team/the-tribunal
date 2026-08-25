@@ -126,10 +126,11 @@ class WizardFixtureQty(BaseModel):
 
 
 class WizardBistroRun(BaseModel):
-    """Measured footage grouped by temporary or permanent installation."""
+    """Measured footage and explicitly marked support poles."""
 
     installation: BistroInstallation
     feet: float = Field(gt=0, le=100_000)
+    pole_count: int = Field(default=0, ge=0, le=10_000)
 
 
 class WizardBistroSelection(BaseModel):

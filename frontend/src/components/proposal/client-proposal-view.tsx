@@ -76,7 +76,8 @@ export function ClientProposalView({
   // Packages the client may pick between, priced server-side. One package is
   // not a choice, so the cards stay presentational in that case.
   const packages = useMemo(() => data.packages ?? [], [data.packages]);
-  const choosable = packages.length > 1 && !data.is_decided;
+  const hasTiers = doc.tiers.some((tier) => tier.pricing.base > 0);
+  const choosable = hasTiers && packages.length > 1 && !data.is_decided;
   const packagesByKey = useMemo(() => new Map(packages.map((p) => [p.key, p])), [packages]);
   // Starts on the rep's recommendation and follows the client from there.
   const [chosenTier, setChosenTier] = useState<string | null>(null);
@@ -122,7 +123,6 @@ export function ClientProposalView({
       ? `The ${fullName} Residence`
       : "Your Project";
 
-  const hasTiers = doc.tiers.some((t) => t.pricing.base > 0);
   const lowestTier = useMemo(() => {
     const priced = doc.tiers.filter((tier) => tier.pricing.base > 0);
     return priced.reduce<(typeof priced)[number] | null>(
@@ -185,6 +185,17 @@ export function ClientProposalView({
   const bistroExperienceName = bistroInstallationNames.length
     ? `${bistroInstallationNames.join(" + ")} Install`
     : `${bistroTierName} Install`;
+  const bistroEstimatePoints = bistroInstallationRows.flatMap((row) => [
+    `${Number.isInteger(row.feet) ? row.feet : row.feet.toFixed(1)} ft ${row.label} lights — ${fmt(row.lights_cost)}`,
+    ...(row.pole_count
+      ? [
+          `${row.pole_count} ${row.pole_count === 1 ? "support pole" : "support poles"} — ${fmt(row.poles_cost)}`,
+        ]
+      : []),
+  ]);
+  if (bistro?.min_applied) {
+    bistroEstimatePoints.push("One Bistro project minimum applies across every measured run");
+  }
 
   // Every angle the rep designed, not just the hero shot.
   const nightPhotos = nightImages(doc.night_preview);
@@ -534,10 +545,7 @@ export function ClientProposalView({
                 <div className="pcare-points">
                   {(bistroInstallationRows.length
                     ? [
-                        ...bistroInstallationRows.map(
-                          (row) =>
-                            `${Math.round(row.feet)} ft ${row.label}, including lights and pole/support allowance`,
-                        ),
+                        ...bistroEstimatePoints,
                         "Professionally installed, weather-ready Bistro lighting for your outdoor space",
                       ]
                     : [

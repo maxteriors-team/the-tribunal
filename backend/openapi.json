@@ -5805,7 +5805,7 @@
         "type": "object"
       },
       "BistroInstallationConfig": {
-        "description": "Measured-run rates for one temporary or permanent Bistro installation.",
+        "description": "Measured light rate plus the billable rate for each marked support pole.",
         "properties": {
           "label": {
             "maxLength": 120,
@@ -5818,10 +5818,10 @@
             "title": "Lights Per Ft",
             "type": "number"
           },
-          "poles_per_ft": {
+          "poles_each": {
             "default": 0,
             "minimum": 0.0,
-            "title": "Poles Per Ft",
+            "title": "Poles Each",
             "type": "number"
           }
         },
@@ -5858,12 +5858,16 @@
             "title": "Lights Per Ft",
             "type": "number"
           },
+          "pole_count": {
+            "title": "Pole Count",
+            "type": "integer"
+          },
           "poles_cost": {
             "title": "Poles Cost",
             "type": "number"
           },
-          "poles_per_ft": {
-            "title": "Poles Per Ft",
+          "poles_each": {
+            "title": "Poles Each",
             "type": "number"
           },
           "total": {
@@ -5875,8 +5879,9 @@
           "installation",
           "label",
           "feet",
+          "pole_count",
           "lights_per_ft",
-          "poles_per_ft",
+          "poles_each",
           "lights_cost",
           "poles_cost",
           "total"
@@ -36582,6 +36587,18 @@
             ],
             "title": "Beamrotationdeg"
           },
+          "bistroRunId": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bistrorunid"
+          },
           "catalogItemId": {
             "anyOf": [
               {
@@ -54924,7 +54941,7 @@
         "type": "object"
       },
       "WizardBistroRun": {
-        "description": "Measured footage grouped by temporary or permanent installation.",
+        "description": "Measured footage and explicitly marked support poles.",
         "properties": {
           "feet": {
             "exclusiveMinimum": 0.0,
@@ -54939,6 +54956,13 @@
             ],
             "title": "Installation",
             "type": "string"
+          },
+          "pole_count": {
+            "default": 0,
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Pole Count",
+            "type": "integer"
           }
         },
         "required": [

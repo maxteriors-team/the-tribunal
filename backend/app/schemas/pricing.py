@@ -20,7 +20,7 @@ from calendar import month_name, monthrange
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # --------------------------------------------------------------------------- #
 # Money / financing knobs
@@ -297,11 +297,15 @@ class BistroProduct(BaseModel):
 
 
 class BistroInstallationConfig(BaseModel):
-    """Measured-run rates for one temporary or permanent Bistro installation."""
+    """Measured light rate plus the billable rate for each marked support pole."""
 
     label: str = Field(max_length=120)
     lights_per_ft: float = Field(default=0, ge=0)
-    poles_per_ft: float = Field(default=0, ge=0)
+    poles_each: float = Field(
+        default=0,
+        ge=0,
+        validation_alias=AliasChoices("poles_each", "poles_per_ft"),
+    )
 
 
 class BistroConfig(BaseModel):
@@ -1017,8 +1021,9 @@ class BistroInstallationPricing(BaseModel):
     installation: BistroInstallation
     label: str
     feet: float
+    pole_count: int
     lights_per_ft: float
-    poles_per_ft: float
+    poles_each: float
     lights_cost: float
     poles_cost: float
     total: float

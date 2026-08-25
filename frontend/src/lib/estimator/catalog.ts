@@ -124,6 +124,7 @@ export const SPACING_OPTIONS: Record<RenderStyle, number[]> = {
   transformer: [],
   wire: [],
   bistro: [12, 18, 24, 36],
+  "bistro-pole": [],
 };
 
 export const STYLE_LABELS: Record<RenderStyle, string> = {
@@ -143,6 +144,7 @@ export const STYLE_LABELS: Record<RenderStyle, string> = {
   transformer: "Transformer",
   wire: "Wire circuit",
   bistro: "Bistro string",
+  "bistro-pole": "Bistro support pole",
 };
 
 /** Default bulb spacing (inches) when a linear product first renders. */
@@ -163,6 +165,7 @@ const DEFAULT_SPACING: Record<RenderStyle, number> = {
   transformer: 0,
   wire: 0,
   bistro: 24,
+  "bistro-pole": 0,
 };
 
 const ROOFLINE_TARGET: DrawTarget = { field: "roofline" };
@@ -364,6 +367,20 @@ export function buildBistroCatalog(
     ...variants,
   ];
 }
+
+/** Plan marker attached to a Bistro run; the server owns its per-pole rate. */
+export const BISTRO_POLE_PRODUCT: Product = {
+  id: "bistro-support-pole",
+  name: "Bistro support pole",
+  category: "landscape",
+  kind: "each",
+  price: 0,
+  style: "bistro-pole",
+  colors: ["#f59e0b"],
+  spacingIn: 0,
+  sizeFt: 1,
+  target: { field: "bistroPole" },
+};
 
 /** Keep saved bistro geometry visible if its catalog SKU is later archived or removed. */
 export function buildSavedBistroFallbacks(

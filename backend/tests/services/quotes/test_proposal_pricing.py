@@ -338,50 +338,68 @@ def _measured_bistro_config(*, minimum: float = 0) -> PricingSettings:
     cfg = _landscape_config()
     cfg.bistro.minimum = minimum
     cfg.bistro.temporary = BistroInstallationConfig(
-        label="Temporary Bistro Lighting", lights_per_ft=10, poles_per_ft=4
+        label="Temporary Bistro Lighting", lights_per_ft=10, poles_each=400
     )
     cfg.bistro.permanent = BistroInstallationConfig(
-        label="Permanent Bistro Lighting", lights_per_ft=20, poles_per_ft=6
+        label="Permanent Bistro Lighting", lights_per_ft=20, poles_each=350
     )
     return cfg
 
 
+def test_bistro_legacy_pole_key_loads_as_per_pole_rate():
+    rates = BistroInstallationConfig.model_validate(
+        {"label": "Permanent Bistro Lighting", "lights_per_ft": 22, "poles_per_ft": 350}
+    )
+
+    assert rates.poles_each == 350
+    assert rates.model_dump()["poles_each"] == 350
+    assert "poles_per_ft" not in rates.model_dump()
+
+
 def test_bistro_temporary_run_prices_lights_and_poles_separately():
-    result = pp.price_bistro_installations(_measured_bistro_config(), {"temporary": 100})
+    result = pp.price_bistro_installations(
+        _measured_bistro_config(), {"temporary": 100}, {"temporary": 3}
+    )
 
     assert result.pricing_mode == "installation"
     assert result.feet == 100
     assert result.lights_cost == 1124
-    assert result.poles_cost == 449
-    assert result.total == 1573
+    assert result.poles_cost == 1348
+    assert result.total == 2472
     assert result.installations[0].installation == "temporary"
+    assert result.installations[0].pole_count == 3
+    assert result.installations[0].poles_each == 400
 
 
 def test_bistro_permanent_run_uses_permanent_rates():
-    result = pp.price_bistro_installations(_measured_bistro_config(), {"permanent": 80})
+    result = pp.price_bistro_installations(
+        _measured_bistro_config(), {"permanent": 80}, {"permanent": 4}
+    )
 
     assert result.lights_cost == 1798
-    assert result.poles_cost == 539
-    assert result.total == 2337
+    assert result.poles_cost == 1573
+    assert result.total == 3371
     assert result.installations[0].installation == "permanent"
+    assert result.installations[0].pole_count == 4
 
 
 def test_bistro_mixed_runs_apply_one_minimum_after_all_components():
     result = pp.price_bistro_installations(
-        _measured_bistro_config(minimum=3000),
+        _measured_bistro_config(minimum=4000),
         {"temporary": 100, "permanent": 50},
+        {"temporary": 2, "permanent": 2},
     )
 
     assert [row.installation for row in result.installations] == ["temporary", "permanent"]
     assert result.lights_cost == 2248
-    assert result.poles_cost == 786
-    assert result.raw_total == 3034
-    assert result.minimum == 3371
-    assert result.total == 3371
+    assert result.poles_cost == 1686
+    assert result.raw_total == 3934
+    assert result.minimum == 4494
+    assert result.total == 4494
     assert result.min_applied is True
 
 
-@pytest.mark.parametrize("field", ["lights_per_ft", "poles_per_ft"])
+@pytest.mark.parametrize("field", ["lights_per_ft", "poles_each"])
 def test_bistro_requested_run_fails_when_an_active_rate_is_missing(field: str):
     cfg = _measured_bistro_config()
     setattr(cfg.bistro.temporary, field, 0)
@@ -425,7 +443,7 @@ def test_permanent_pricing_ignores_bistro_installation_rates():
     baseline = _permanent_config()
     configured_bistro = _permanent_config()
     configured_bistro.bistro.permanent = BistroInstallationConfig(
-        label="Permanent Bistro Lighting", lights_per_ft=999, poles_per_ft=999
+        label="Permanent Bistro Lighting", lights_per_ft=999, poles_each=999
     )
 
     assert pp.price_permanent(configured_bistro, feet=165, channels=5) == pp.price_permanent(

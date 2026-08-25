@@ -13059,7 +13059,7 @@ export interface components {
         };
         /**
          * BistroInstallationConfig
-         * @description Measured-run rates for one temporary or permanent Bistro installation.
+         * @description Measured light rate plus the billable rate for each marked support pole.
          */
         BistroInstallationConfig: {
             /** Label */
@@ -13070,10 +13070,10 @@ export interface components {
              */
             lights_per_ft: number;
             /**
-             * Poles Per Ft
+             * Poles Each
              * @default 0
              */
-            poles_per_ft: number;
+            poles_each: number;
         };
         /**
          * BistroInstallationPricing
@@ -13093,10 +13093,12 @@ export interface components {
             lights_cost: number;
             /** Lights Per Ft */
             lights_per_ft: number;
+            /** Pole Count */
+            pole_count: number;
             /** Poles Cost */
             poles_cost: number;
-            /** Poles Per Ft */
-            poles_per_ft: number;
+            /** Poles Each */
+            poles_each: number;
             /** Total */
             total: number;
         };
@@ -24901,6 +24903,8 @@ export interface components {
             beamAngleDeg?: number | null;
             /** Beamrotationdeg */
             beamRotationDeg?: number | null;
+            /** Bistrorunid */
+            bistroRunId?: string | null;
             /** Catalogitemid */
             catalogItemId?: string | null;
             /** Catalogsku */
@@ -32104,7 +32108,7 @@ export interface components {
         };
         /**
          * WizardBistroRun
-         * @description Measured footage grouped by temporary or permanent installation.
+         * @description Measured footage and explicitly marked support poles.
          */
         WizardBistroRun: {
             /** Feet */
@@ -32114,6 +32118,11 @@ export interface components {
              * @enum {string}
              */
             installation: "temporary" | "permanent";
+            /**
+             * Pole Count
+             * @default 0
+             */
+            pole_count: number;
         };
         /**
          * WizardBistroSelection

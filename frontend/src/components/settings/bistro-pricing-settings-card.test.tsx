@@ -39,12 +39,12 @@ function pricing(overrides: Record<string, unknown> = {}): PricingSettings {
       temporary: {
         label: "Temporary Bistro Lighting",
         lights_per_ft: 10,
-        poles_per_ft: 4,
+        poles_each: 4,
       },
       permanent: {
         label: "Permanent Bistro Lighting",
         lights_per_ft: 20,
-        poles_per_ft: 6,
+        poles_each: 6,
       },
       tiers: [{ key: "easy", name: "Easy", per_ft: 18, classic_per_ft: 15 }],
       color: { name: "Color Bistro", hardware: 577, strand_lengths: [50] },
@@ -83,9 +83,9 @@ describe("BistroPricingSettingsCard", () => {
     renderCard();
 
     expect(await screen.findByLabelText("Temporary lights per foot ($)")).toHaveValue(10);
-    expect(screen.getByLabelText("Temporary poles/supports per foot ($)")).toHaveValue(4);
+    expect(screen.getByLabelText("Temporary poles/supports each ($)")).toHaveValue(4);
     expect(screen.getByLabelText("Permanent Bistro lights per foot ($)")).toHaveValue(20);
-    expect(screen.getByLabelText("Permanent Bistro poles/supports per foot ($)")).toHaveValue(6);
+    expect(screen.getByLabelText("Permanent Bistro poles/supports each ($)")).toHaveValue(6);
     expect(
       screen.getByText(/permanent holiday lighting uses its separate kit-and-COGS/i),
     ).toBeVisible();
@@ -100,9 +100,9 @@ describe("BistroPricingSettingsCard", () => {
 
     await userEvent.click(await screen.findByRole("switch", { name: "Offer Bistro lighting" }));
     await replace("Temporary lights per foot ($)", "11.5");
-    await replace("Temporary poles/supports per foot ($)", "4.5");
+    await replace("Temporary poles/supports each ($)", "4.5");
     await replace("Permanent Bistro lights per foot ($)", "22");
-    await replace("Permanent Bistro poles/supports per foot ($)", "7");
+    await replace("Permanent Bistro poles/supports each ($)", "7");
     await replace("Bistro job minimum ($)", "750");
     await userEvent.click(screen.getByRole("button", { name: /save Bistro pricing/i }));
 
@@ -114,12 +114,12 @@ describe("BistroPricingSettingsCard", () => {
           temporary: {
             label: "Temporary Bistro Lighting",
             lights_per_ft: 11.5,
-            poles_per_ft: 4.5,
+            poles_each: 4.5,
           },
           permanent: {
             label: "Permanent Bistro Lighting",
             lights_per_ft: 22,
-            poles_per_ft: 7,
+            poles_each: 7,
           },
           tiers: [{ key: "easy", name: "Easy", per_ft: 18, classic_per_ft: 15 }],
           color: { name: "Color Bistro", hardware: 577, strand_lengths: [50] },
@@ -134,7 +134,7 @@ describe("BistroPricingSettingsCard", () => {
 
     renderCard();
 
-    await replace("Temporary poles/supports per foot ($)", "0");
+    await replace("Temporary poles/supports each ($)", "0");
     await userEvent.click(screen.getByRole("button", { name: /save Bistro pricing/i }));
 
     await waitFor(() =>

@@ -43,7 +43,8 @@ export type RenderStyle =
   | "underwater"
   | "transformer"
   | "wire"
-  | "bistro";
+  | "bistro"
+  | "bistro-pole";
 
 /** Landscape fixture styles — placed, and rendered as a beam or a light pool. */
 export const LANDSCAPE_STYLES = [
@@ -59,6 +60,7 @@ export const LANDSCAPE_STYLES = [
 export const LANDSCAPE_PLAN_STYLES = [
   ...LANDSCAPE_STYLES,
   "transformer",
+  "bistro-pole",
 ] as const satisfies readonly RenderStyle[];
 
 /** Whether a style is a light-emitting landscape fixture. */
@@ -168,6 +170,7 @@ export type DrawTarget =
   | { field: "christmas"; category: string; option: string }
   | { field: "landscape"; fixtureType: string }
   | { field: "bistro"; installation?: BistroInstallationType }
+  | { field: "bistroPole" }
   | { field: "annotation"; annotationType: "transformer" | "wire" };
 
 export interface Product {
@@ -252,6 +255,8 @@ export interface PlacedItem {
   beamRotationDeg?: number;
   /** ID of the plan-only wire circuit that supplies this fixture. */
   circuitId?: string;
+  /** Bistro run this billable pole supports. */
+  bistroRunId?: string;
   /** Per-fixture construction-plan marker color; never changes light output or price. */
   markerColor?: string;
   /** Stable CRM catalog references; live catalog data remains authoritative. */

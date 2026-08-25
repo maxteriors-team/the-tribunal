@@ -89,6 +89,7 @@ import { quotesApi } from "@/lib/api/quotes";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { DEFAULT_WORKSPACE_BRAND_NAME } from "@/lib/brand";
 import {
+  BISTRO_POLE_PRODUCT,
   buildBistroCatalog,
   buildCatalog,
   buildSavedBistroFallbacks,
@@ -140,7 +141,10 @@ import {
   recountLandscapeProcurement,
   type LandscapeProcurementRow,
 } from "@/lib/estimator/landscape-procurement";
-import { buildLandscapeProposalPayload } from "@/lib/estimator/landscape-proposal";
+import {
+  buildLandscapeProposalPayload,
+  hasUnpriceableBistroRuns,
+} from "@/lib/estimator/landscape-proposal";
 import {
   buildLandscapeSchedule as buildPerFixtureSchedule,
   copyScheduleSelectionToType,
@@ -673,6 +677,12 @@ function LandscapeDraftingToolbar({
       product.target.field === "bistro" &&
       product.target.installation !== undefined,
   );
+  const hasBistroRun = design.runs.some((run) =>
+    bistroTools.some((product) => product.id === run.productId),
+  );
+  const bistroPoleTool = hasBistroRun
+    ? products.find((product) => product.target.field === "bistroPole")
+    : undefined;
 
   if (studio && studioSettings && onStudioAction) {
     return (
@@ -746,6 +756,18 @@ function LandscapeDraftingToolbar({
             active: activeTool.type === "draw" && activeTool.productId === product.id,
             onSelect: () => onStartWiring(product),
           })),
+          ...(bistroPoleTool
+            ? [
+                {
+                  id: bistroPoleTool.id,
+                  label: "Bistro pole",
+                  icon: CircleDot,
+                  group: "bistro" as const,
+                  active: activeTool.type === "place" && activeTool.productId === bistroPoleTool.id,
+                  onSelect: () => onPlaceFixture(bistroPoleTool),
+                },
+              ]
+            : []),
         ]}
       />
     );
@@ -844,6 +866,24 @@ function LandscapeDraftingToolbar({
                 </button>
               );
             })}
+            {bistroPoleTool ? (
+              <button
+                className={`ll-fixture-tool${
+                  activeTool.type === "place" && activeTool.productId === bistroPoleTool.id
+                    ? " active"
+                    : ""
+                }`}
+                type="button"
+                title="Place a billable support pole on a Bistro run"
+                aria-pressed={
+                  activeTool.type === "place" && activeTool.productId === bistroPoleTool.id
+                }
+                onClick={() => onPlaceFixture(bistroPoleTool)}
+              >
+                <CircleDot aria-hidden="true" />
+                <span>Bistro pole</span>
+              </button>
+            ) : null}
           </div>
         ) : (
           <span className="ll-toolbar-empty-hint">
@@ -1493,6 +1533,9 @@ function LandscapeProposalPanel({
   const selectedCarePlan =
     (document?.care_plan?.options ?? []).find((option) => option.key === selectedCarePlanKey) ??
     null;
+  const bistroPricing = document?.bistro?.pricing_mode === "installation" ? document.bistro : null;
+  const estimateTotal =
+    document?.grand_financed_total ?? selectedTier?.pricing.financed_total ?? null;
   const wireTotals = new Map<8 | 10 | 12 | 14, number | null>();
   for (const circuit of circuits) {
     const previous = wireTotals.get(circuit.wireGauge);
@@ -1519,7 +1562,7 @@ function LandscapeProposalPanel({
             <span>Current design, customer, and CRM pricing</span>
             <h2 id="ll-proposal-title">Landscape Lighting Quote Builder</h2>
           </div>
-          {selectedTier ? <strong>{formatCurrency(selectedTier.pricing.cash_total)}</strong> : null}
+          {estimateTotal !== null ? <strong>{formatCurrency(estimateTotal)}</strong> : null}
         </header>
 
         <fieldset className="ll-proposal-fieldset">
@@ -1610,7 +1653,9 @@ function LandscapeProposalPanel({
             </div>
           ) : (
             <div className="ll-panel-inline-empty">
-              Place fixtures on the Drawing Sheet to price them.
+              {bistroRows.length
+                ? "No landscape fixtures selected; this estimate contains Bistro lighting only."
+                : "Place fixtures on the Drawing Sheet to price them."}
             </div>
           )}
         </div>
@@ -1625,10 +1670,67 @@ function LandscapeProposalPanel({
               <strong>{bistroRows.length} runs</strong>
             </div>
             <LandscapeBistroRunScheduleTable rows={bistroRows} />
-            <p className="ll-panel-footnote">
-              Temporary and permanent bistro runs stay separate on the plan. CRM quote creation is
-              blocked in this release so their pricing cannot be silently omitted.
-            </p>
+            {bistroPricing ? (
+              <div className="ll-wire-price-list" aria-label="Bistro estimate breakdown">
+                {(bistroPricing.installations ?? []).flatMap((installation) => [
+                  <div key={`${installation.installation}-lights`}>
+                    <span>
+                      <strong>{installation.label} lights</strong>
+                      <small>
+                        {Number.isInteger(installation.feet)
+                          ? installation.feet
+                          : installation.feet.toFixed(1)}{" "}
+                        measured ft
+                      </small>
+                    </span>
+                    <span>
+                      <strong>{formatCurrency(installation.lights_cost)}</strong>
+                      <small>
+                        {formatCurrency(installation.lights_cost / installation.feet)}/ft
+                      </small>
+                    </span>
+                  </div>,
+                  ...(installation.pole_count
+                    ? [
+                        <div key={`${installation.installation}-poles`}>
+                          <span>
+                            <strong>Support poles</strong>
+                            <small>
+                              {installation.pole_count} marked{" "}
+                              {installation.pole_count === 1 ? "pole" : "poles"}
+                            </small>
+                          </span>
+                          <span>
+                            <strong>{formatCurrency(installation.poles_cost)}</strong>
+                            <small>
+                              {formatCurrency(installation.poles_cost / installation.pole_count)}{" "}
+                              each
+                            </small>
+                          </span>
+                        </div>,
+                      ]
+                    : []),
+                ])}
+                {bistroPricing.min_applied ? (
+                  <div>
+                    <span>
+                      <strong>Bistro project minimum adjustment</strong>
+                      <small>One minimum across every run</small>
+                    </span>
+                    <strong>{formatCurrency(bistroPricing.total - bistroPricing.raw_total)}</strong>
+                  </div>
+                ) : null}
+                <div>
+                  <span>
+                    <strong>Bistro estimate total</strong>
+                    <small>Server-calculated CRM pricing</small>
+                  </span>
+                  <strong>{formatCurrency(bistroPricing.total)}</strong>
+                </div>
+              </div>
+            ) : (
+              <p className="ll-panel-footnote">CRM pricing is loading for these measured runs.</p>
+            )}
           </div>
         ) : null}
 
@@ -1874,7 +1976,7 @@ function LandscapeProposalPanel({
           <div>
             <span>One-time installation</span>
             <strong>
-              {selectedTier ? formatCurrency(selectedTier.pricing.cash_total) : "Pricing pending"}
+              {estimateTotal !== null ? formatCurrency(estimateTotal) : "Pricing pending"}
             </strong>
             {selectedCarePlan ? (
               <small>
@@ -1907,8 +2009,8 @@ function LandscapeProposalPanel({
         {createdQuote ? (
           <div className="ll-proposal-success">
             <p role="status">
-              Draft quote {createdQuote.number} was created from this package, care plan, fixture
-              pricing, and any catalog-priced wire.
+              Draft quote {createdQuote.number} was created from the measured Bistro layout,
+              selected package, care plan, fixture pricing, and any catalog-priced wire.
             </p>
             <div>
               <strong>Collect payment in three steps</strong>
@@ -2956,6 +3058,7 @@ export function LightDesigner({
       ? [
           ...(sellsLandscape ? buildFixturePalette(fixtureResolution, transformerResolution) : []),
           ...buildBistroCatalog(priceBook, { installationVariants: landscapeOnly }),
+          ...(landscapeOnly ? [BISTRO_POLE_PRODUCT] : []),
         ]
       : [];
     const holiday = buildCatalog(catalog).filter((product) =>
@@ -2982,6 +3085,12 @@ export function LightDesigner({
   const bistroScheduleRows: LandscapeBistroRunRow[] = liveShots
     .flatMap((shot, shotIndex) => {
       const scale = designScale(shot.design, shot.photo.width);
+      const poleCounts = new Map<string, number>();
+      for (const item of shot.design.items) {
+        if (item.bistroRunId && productById.get(item.productId)?.target.field === "bistroPole") {
+          poleCounts.set(item.bistroRunId, (poleCounts.get(item.bistroRunId) ?? 0) + 1);
+        }
+      }
       return shot.design.runs.flatMap((run) => {
         const product = productById.get(run.productId);
         if (!product || product.style !== "bistro") return [];
@@ -2994,7 +3103,7 @@ export function LightDesigner({
               product.target.field === "bistro" ? (product.target.installation ?? null) : null,
             productName: product.name,
             sku: product.sku ?? null,
-            anchorCount: run.points.length,
+            poleCount: poleCounts.get(run.id) ?? 0,
             lengthFeet: scale.calibrated ? polylineLength(run.points) * scale.ftPerPx : null,
           },
         ];
@@ -3210,6 +3319,7 @@ export function LightDesigner({
             gauge: circuit.wireGauge,
             lengthFeet: circuit.lengthFeet,
           })),
+          bistroRuns: bistroScheduleRows,
           selectedTierKey: effectiveLandscapeTierKey,
           selectedCarePlanKey: selectedLandscapeCarePlanKey,
           additionalLineItems: landscapeAdditionalLineItems,
@@ -3223,7 +3333,11 @@ export function LightDesigner({
   const landscapeProposalQuery = useQuery({
     queryKey: queryKeys.lightingProjects.proposalPreview(workspaceId, landscapeProposalSignature),
     queryFn: () => salesWizardApi.preview(workspaceId, landscapeProposalPayload!),
-    enabled: Boolean(landscapeProposalPayload?.quantities?.length),
+    enabled: Boolean(
+      landscapeProposalPayload &&
+      (landscapeProposalPayload.quantities?.length ||
+        landscapeProposalPayload.bistro?.runs?.length),
+    ),
     placeholderData: keepPreviousData,
   });
   useEffect(() => {
@@ -3744,16 +3858,14 @@ export function LightDesigner({
   const landscapeCreateQuoteError = landscapeQuoteMutation.isError
     ? getApiErrorMessage(landscapeQuoteMutation.error, "Unable to create the draft quote.")
     : null;
-  // simplification: the quote schema has no temporary/permanent bistro rates; block
-  // conversion instead of silently omitting footage until the pricing model supports them.
   const landscapeQuoteDisabledReason = !serverBacked
     ? "Open a customer lighting project to create a CRM quote here."
     : !landscapeProject?.installationShotId
       ? "Select and save an installation sheet before creating a quote."
-      : hasBistroRuns
-        ? "Bistro runs are saved with this layout, but landscape packages do not price temporary or permanent bistro work yet."
-        : fixtureCount === 0
-          ? "Place at least one fixture before creating a quote."
+      : hasUnpriceableBistroRuns(bistroScheduleRows)
+        ? "Set the drawing scale and installation type for every Bistro run before creating a quote."
+        : fixtureCount === 0 && !hasBistroRuns
+          ? "Place at least one fixture or Bistro run before creating a quote."
           : unresolvedFixtures.length > 0
             ? `Resolve ${unresolvedFixtures.map((line) => line.label).join(", ")} in this package before creating a quote.`
             : circuitLoads.some((circuit) => circuit.lengthFeet === null)

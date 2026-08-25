@@ -320,9 +320,13 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
     if "bistro" in categories and payload.bistro is not None:
         if payload.bistro.runs:
             grouped_runs: dict[BistroInstallation, float] = {}
+            grouped_poles: dict[BistroInstallation, int] = {}
             for run in payload.bistro.runs:
                 grouped_runs[run.installation] = grouped_runs.get(run.installation, 0) + run.feet
-            bistro = pp.price_bistro_installations(config, grouped_runs)
+                grouped_poles[run.installation] = (
+                    grouped_poles.get(run.installation, 0) + run.pole_count
+                )
+            bistro = pp.price_bistro_installations(config, grouped_runs, grouped_poles)
         elif payload.bistro.feet > 0 and config.bistro.enabled:
             bistro = pp.price_bistro(
                 config,
@@ -523,7 +527,11 @@ def _bistro_quote_line(bistro: BistroPricing, config: PricingSettings) -> QuoteL
     """Describe measured runs without falling back to a legacy product label."""
     if bistro.pricing_mode == "installation":
         name = "Bistro Lighting"
-        description = " · ".join(f"{row.feet:g} ft {row.label}" for row in bistro.installations)
+        description = " · ".join(
+            f"{row.feet:g} ft {row.label} · {row.pole_count} "
+            f"{'pole' if row.pole_count == 1 else 'poles'}"
+            for row in bistro.installations
+        )
     else:
         product_cfg = config.bistro.color if bistro.product == "color" else config.bistro.classic
         name = product_cfg.name if product_cfg else "Bistro Lighting"

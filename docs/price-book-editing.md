@@ -34,10 +34,11 @@ Two things the dialog does _not_ show, which is fine:
 
 Settings → Pricing exposes **Bistro Lighting**, **seasonal (Christmas)**, and
 **permanent holiday roofline** controls. Bistro Lighting edits its enabled state,
-one job minimum, and separate temporary/permanent base prices for lights and
-poles/supports per measured linear foot. The server groups calibrated Bistro runs
-across every Light Designer sheet, applies the existing financing/commission gross-up
-to each light and support component, then applies one Bistro minimum to the whole job.
+one job minimum, separate temporary/permanent light rates per measured foot, and a
+price for each explicitly marked support pole. The server groups calibrated Bistro runs
+and their pole icons across every Light Designer sheet, applies the existing
+financing/commission gross-up to each component, then applies one Bistro minimum to
+the whole job.
 If either active rate is zero or missing, quote preview and creation stop with a
 configuration message instead of omitting or partially pricing the footage.
 

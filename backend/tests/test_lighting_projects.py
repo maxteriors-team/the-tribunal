@@ -78,6 +78,7 @@ def _document(
                             "beamAngleDeg": 40,
                             "beamRotationDeg": 0,
                             "circuitId": "run-1",
+                            "bistroRunId": "run-1",
                             "markerColor": "#F2C94C",
                         },
                         {
@@ -150,6 +151,7 @@ class TestLandscapeDraftSchema:
         assert populated.shots[0].design.plan_images[0].name == "Pool equipment detail.png"
         assert populated.shots[0].design.runs[0].wire_gauge == 12
         assert populated.shots[0].design.items[0].circuit_id == "run-1"
+        assert populated.shots[0].design.items[0].bistro_run_id == "run-1"
         assert populated.shots[0].design.items[0].marker_color == "#F2C94C"
         assert populated.shots[0].design.items[0].icon_scale == 1.4
         assert populated.proposal.selected_tier_key == "better"

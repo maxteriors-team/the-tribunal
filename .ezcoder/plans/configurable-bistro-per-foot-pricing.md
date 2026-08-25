@@ -20,20 +20,20 @@ Add backward-compatible `temporary` and `permanent` installation-rate blocks und
 
 - an operator-visible label;
 - `lights_per_ft`, the Bistro light/service base price per measured linear foot;
-- `poles_per_ft`, the pole/support allowance per measured linear foot.
+- `poles_each`, the price for each explicitly marked pole/support (`poles_per_ft` remains a read alias for existing workspace JSON).
 
 Both numeric rates default to `0` so existing workspaces load without invented pricing. A requested Bistro installation with either rate unconfigured fails closed instead of silently producing a free or partial quote. Existing `tiers`, `color`, `classic`, `hardware`, and minimum fields remain for legacy wizard payloads and saved proposals.
 
 ### Quote input and calculation
 
-Extend `WizardBistroSelection` with a bounded list of grouped run measurements containing `installation` (`temporary` or `permanent`) and `feet`. Keep the legacy `product`, `tier`, and aggregate `feet` fields for compatibility.
+Extend `WizardBistroSelection` with a bounded list of grouped run measurements containing `installation` (`temporary` or `permanent`), `feet`, and `pole_count`. Keep the legacy `product`, `tier`, and aggregate `feet` fields for compatibility.
 
 The Light Designer will group calibrated Bistro footage across every sheet by installation and send those groups in the existing `bistro` payload while adding `bistro` to `categories`. The backend, not the browser, will calculate:
 
 - temporary light amount = temporary feet × configured temporary light rate;
-- temporary pole/support amount = temporary feet × configured temporary pole rate;
+- temporary pole/support amount = marked temporary poles × configured temporary per-pole rate;
 - permanent Bistro light amount = permanent feet × configured permanent Bistro light rate;
-- permanent Bistro pole/support amount = permanent feet × configured permanent Bistro pole rate;
+- permanent Bistro pole/support amount = marked permanent poles × configured permanent per-pole rate;
 - one configured Bistro job minimum after all Bistro lines are summed.
 
 Each component is grossed up through the existing fee/commission pricing chokepoint, and the result records separate lights and poles totals plus per-installation breakdowns. Legacy payloads without grouped runs continue through the current color/classic algorithm unchanged.
@@ -46,7 +46,7 @@ Introduce a Bistro pricing-configuration domain error. Wizard preview/save/updat
 
 Add `frontend/src/components/settings/bistro-pricing-settings-card.tsx` to Settings → Pricing. It will:
 
-- edit enabled state, job minimum, and all four temporary/permanent light/pole per-foot rates;
+- edit enabled state, job minimum, two per-foot light rates, and two per-pole support rates;
 - explain that the entries are base prices and existing financing/commission adjustments still apply;
 - reject non-numeric or non-positive active rates in the UI;
 - round-trip all unexposed legacy Bistro fields when saving the whole config block;
