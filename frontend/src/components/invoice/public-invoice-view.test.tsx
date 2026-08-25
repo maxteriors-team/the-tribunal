@@ -82,6 +82,10 @@ describe("PublicInvoiceView", () => {
     expect(screen.getAllByText("Balance Due")).toHaveLength(2);
     expect(screen.getAllByText("$485.00").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /pay now/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Terms and Conditions" })).toHaveAttribute(
+      "href",
+      "https://maxteriorslighting.com/terms-and-conditions/",
+    );
   });
 
   it("shows a paid deposit as a credit so the balance isn't read as a pricing error", () => {

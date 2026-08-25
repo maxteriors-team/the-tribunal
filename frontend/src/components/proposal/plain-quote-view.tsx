@@ -10,6 +10,7 @@
  */
 import { useState } from "react";
 
+import { TermsAndConditionsLink } from "@/components/shared/terms-and-conditions-link";
 import { formatDate } from "@/lib/utils/date";
 import { formatCurrency } from "@/lib/utils/number";
 import type { PublicProposal } from "@/types/proposal";
@@ -296,6 +297,9 @@ export function PlainQuoteView({
         {branding.footer ? (
           <div className="pp-footer-note">{renderTextWithLinks(branding.footer)}</div>
         ) : null}
+        <div className="pp-footer-note">
+          <TermsAndConditionsLink />
+        </div>
       </div>
     </div>
   );
