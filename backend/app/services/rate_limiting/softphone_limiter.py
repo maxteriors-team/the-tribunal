@@ -1,4 +1,4 @@
-"""Fail-closed spend limits for authenticated browser calling."""
+"""Fail-closed spend limits for authenticated outbound calling."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ async def enforce_softphone_token_limit(*, user_id: int) -> None:
 
 
 async def enforce_softphone_call_limits(*, workspace_id: str, user_id: int) -> None:
-    """Limit paid call attempts per user and workspace."""
+    """Limit paid call attempts across browser, callback, and AI modes."""
     now = datetime.now(UTC)
     checks = (
         (f"softphone:call:user-hour:{user_id}:{now:%Y%m%d%H}", 60, 3600),
@@ -60,10 +60,10 @@ async def _check(*, key: str, limit: int, ttl_seconds: int) -> None:
         redis = await get_redis()
         result = await redis.eval(_INCREMENT_WITH_LIMIT, 1, key, limit, ttl_seconds)  # type: ignore[misc]
     except Exception as exc:
-        logger.error("softphone_rate_limit_unavailable", exc_info=exc)
+        logger.error("call_rate_limit_unavailable", exc_info=exc)
         raise SoftphoneRateLimitUnavailableError(
-            "Browser calling is unavailable while spend protection is offline"
+            "Calling is unavailable while spend protection is offline"
         ) from exc
 
     if not bool(int(result[0])):
-        raise SoftphoneRateLimitError("Browser calling limit reached; try again later")
+        raise SoftphoneRateLimitError("Calling limit reached; try again later")

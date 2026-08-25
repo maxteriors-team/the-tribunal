@@ -378,3 +378,44 @@ class TestAssignedUserOnly:
         assert request.channel == OutboundDeliveryChannel.PUSH
         assert request.user_id == 99
         assert nudge.status == "sent"
+
+
+class TestPendingClaims:
+    async def test_claims_one_nudge_per_transaction(self, delivery: NudgeDeliveryService) -> None:
+        first = _make_nudge()
+        second = _make_nudge(workspace_id=first.workspace_id)
+        db = AsyncMock()
+        db.execute = AsyncMock(
+            side_effect=[
+                _scalar_one_result(first),
+                _scalar_one_result(second),
+                _scalar_one_result(None),
+            ]
+        )
+        db.rollback = AsyncMock()
+        deliver = AsyncMock(side_effect=[True, True])
+
+        with patch.object(delivery, "deliver_nudge", deliver):
+            count = await delivery.deliver_pending_nudges(db, first.workspace_id)
+
+        assert count == 2
+        assert deliver.await_args_list[0].args[1] is first
+        assert deliver.await_args_list[1].args[1] is second
+        first_claim = db.execute.await_args_list[0].args[0]
+        assert first_claim._limit_clause.value == 1
+        assert first_claim._for_update_arg.skip_locked is True
+        db.rollback.assert_not_awaited()
+
+    async def test_releases_claim_when_delivery_is_deferred(
+        self, delivery: NudgeDeliveryService
+    ) -> None:
+        nudge = _make_nudge()
+        db = AsyncMock()
+        db.execute = AsyncMock(side_effect=[_scalar_one_result(nudge), _scalar_one_result(None)])
+        db.rollback = AsyncMock()
+
+        with patch.object(delivery, "deliver_nudge", AsyncMock(return_value=False)):
+            count = await delivery.deliver_pending_nudges(db, nudge.workspace_id)
+
+        assert count == 0
+        db.rollback.assert_awaited_once()

@@ -179,6 +179,57 @@ def _telnyx_configured(monkeypatch: pytest.MonkeyPatch) -> None:
         app_settings, "telnyx_webrtc_connection_id", "10000000-0000-4000-8000-000000000001"
     )
     monkeypatch.setattr(app_settings, "api_base_url", "https://api.example.com")
+    monkeypatch.setattr(calls_module, "enforce_softphone_call_limits", AsyncMock(return_value=None))
+
+
+@pytest.mark.parametrize("mode", ["ai", "user", "browser"])
+async def test_all_paid_call_modes_share_spend_limit(
+    monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    limiter = AsyncMock(side_effect=calls_module.SoftphoneRateLimitError("Calling limit reached"))
+    monkeypatch.setattr(calls_module, "enforce_softphone_call_limits", limiter)
+    db = _FakeSession([_Result(scalar=_phone_record())])
+
+    async with _client(db) as client:
+        response = await client.post(
+            BASE,
+            json={
+                "to_number": CONTACT_NUMBER,
+                "from_phone_number": WORKSPACE_NUMBER,
+                "mode": mode,
+            },
+        )
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "3600"
+    limiter.assert_awaited_once_with(workspace_id=str(WS_ID), user_id=1)
+    assert db.executed == 1
+
+
+async def test_call_limit_unavailable_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    limiter = AsyncMock(
+        side_effect=calls_module.SoftphoneRateLimitUnavailableError(
+            "Calling is unavailable while spend protection is offline"
+        )
+    )
+    monkeypatch.setattr(calls_module, "enforce_softphone_call_limits", limiter)
+    db = _FakeSession([_Result(scalar=_phone_record())])
+
+    async with _client(db) as client:
+        response = await client.post(
+            BASE,
+            json={
+                "to_number": CONTACT_NUMBER,
+                "from_phone_number": WORKSPACE_NUMBER,
+                "mode": "ai",
+            },
+        )
+
+    assert response.status_code == 503
+    limiter.assert_awaited_once_with(workspace_id=str(WS_ID), user_id=1)
+    assert db.executed == 1
 
 
 # --------------------------------------------------------------------------- #
