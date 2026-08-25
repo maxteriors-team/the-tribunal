@@ -196,6 +196,7 @@ import {
   type EditorState,
 } from "./editor-store";
 import { EstimatePanel } from "./estimate-panel";
+import { InventoryAvailabilityCard } from "./inventory-availability-card";
 import { LightCanvas } from "./light-canvas";
 import { ServiceValueProps } from "./service-value-props";
 import { ToolPalette } from "./tool-palette";
@@ -1866,6 +1867,8 @@ function LandscapeProposalPanel({
             </div>
           )}
         </div>
+
+        <InventoryAvailabilityCard availability={document?.inventory_availability} />
 
         <footer className="ll-proposal-total">
           <div>

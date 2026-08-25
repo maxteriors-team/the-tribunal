@@ -6,7 +6,7 @@ no-auth ``/p/quotes/{token}`` payload embeds that snapshot, so the sanitizer in
 :func:`client_safe_document` is the only thing standing between a homeowner and
 our part numbers, and these tests pin it down:
 
-* the ``fulfillment`` key and every SKU string are gone from the wire payload;
+* fulfillment and inventory-availability details are gone from the wire payload;
 * the presentation fields the client page actually renders survive;
 * the allowlist stays in sync with ``ProposalDocument`` so a newly added field
   fails here rather than silently shipping to clients.
@@ -44,7 +44,9 @@ PART_SKUS = ("59409312", "59409010", "BM-050-C-AB")
 # gutters on it"). It is preview-only and never persisted, but classifying it
 # keeps the guard honest: telling a homeowner what the business wishes it had
 # sold them is not client-facing under any circumstances.
-INTERNAL_ONLY_FIELDS = frozenset({"fulfillment", "attach_warning", "pricing_source"})
+INTERNAL_ONLY_FIELDS = frozenset(
+    {"fulfillment", "inventory_availability", "attach_warning", "pricing_source"}
+)
 
 
 def _document() -> dict[str, Any]:
@@ -62,6 +64,23 @@ def _document() -> dict[str, Any]:
             {"sku": "59409010", "description": "Luxor WiFi Module", "qty": 1},
             {"sku": "BM-050-C-AB", "description": "Mounting Bracket", "qty": 4},
         ],
+        "inventory_availability": {
+            "has_requirements": True,
+            "has_shortages": True,
+            "shortage_items": 1,
+            "not_counted_items": 0,
+            "untracked_items": 0,
+            "items": [
+                {
+                    "sku": "59409312",
+                    "inventory_item_name": "Luxor 300W Transformer",
+                    "required_quantity": 1,
+                    "quantity_on_hand": 0,
+                    "shortfall": 1,
+                    "status": "shortage",
+                }
+            ],
+        },
     }
 
 
@@ -89,6 +108,7 @@ def test_sanitizer_drops_fulfillment_and_keeps_presentation() -> None:
 
     assert safe is not None
     assert "fulfillment" not in safe
+    assert "inventory_availability" not in safe
     # Client-facing copy survives untouched.
     assert safe["selected_tier"] == "best"
     assert safe["selected_financed_total"] == 5200.0

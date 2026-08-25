@@ -281,6 +281,12 @@ async def test_grouped_bistro_runs_price_and_persist_without_legacy_labels() -> 
         skus = {part.sku: part.qty for part in doc.fulfillment}
         assert skus["59409312"] == 1.0
         assert skus["59400232"] == 12.0
+        assert doc.inventory_availability is not None
+        assert doc.inventory_availability.has_requirements is True
+        assert doc.inventory_availability.untracked_items == len(doc.fulfillment)
+        assert quote.proposal_document is not None
+        snapshot = quote.proposal_document["inventory_availability"]
+        assert snapshot["untracked_items"] == len(doc.fulfillment)
 
 
 async def test_price_book_mode_skips_finance_and_uses_catalog_prices_exactly() -> None:

@@ -48,6 +48,8 @@ export type BistroInstallationConfig = Schemas["BistroInstallationConfig"];
 export type BistroInstallationPricing = Schemas["BistroInstallationPricing"];
 export type BistroPricing = Schemas["BistroPricing"];
 export type FulfillmentPart = Schemas["FulfillmentPart"];
+export type QuoteInventoryAvailability = Schemas["QuoteInventoryAvailability"];
+export type QuoteInventoryAvailabilityItem = Schemas["QuoteInventoryAvailabilityItem"];
 
 export type QuoteDetail = Schemas["QuoteDetailResponse"];
 

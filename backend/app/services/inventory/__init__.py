@@ -7,6 +7,7 @@ from app.services.inventory.locations import (
     ensure_default_location,
     resolve_location,
 )
+from app.services.inventory.quote_availability import QuoteInventoryAvailabilityService
 from app.services.inventory.reorder_service import ReorderService
 from app.services.inventory.stock_service import StockService
 
@@ -14,6 +15,7 @@ __all__ = [
     "COGSService",
     "DEFAULT_LOCATION_NAME",
     "InventoryService",
+    "QuoteInventoryAvailabilityService",
     "ReorderService",
     "StockService",
     "ensure_default_location",

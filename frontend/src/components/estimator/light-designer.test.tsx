@@ -342,6 +342,24 @@ describe("LightDesigner", () => {
       line_count: 1,
       services: [],
       mockups: [],
+      inventory_availability: {
+        has_requirements: true,
+        has_shortages: true,
+        shortage_items: 1,
+        not_counted_items: 0,
+        untracked_items: 0,
+        items: [
+          {
+            sku: "PATH",
+            inventory_item_name: "Path light",
+            required_quantity: 2,
+            quantity_on_hand: 1,
+            shortfall: 1,
+            unit_of_measure: "each",
+            status: "shortage",
+          },
+        ],
+      },
     } as unknown as Awaited<ReturnType<typeof salesWizardApi.preview>>);
     vi.mocked(salesWizardApi.save).mockResolvedValue({
       id: "quote-1",
@@ -1529,6 +1547,24 @@ describe("LightDesigner", () => {
       line_count: 1,
       services: [],
       mockups: [],
+      inventory_availability: {
+        has_requirements: true,
+        has_shortages: true,
+        shortage_items: 1,
+        not_counted_items: 0,
+        untracked_items: 0,
+        items: [
+          {
+            sku: "PATH",
+            inventory_item_name: "Path light",
+            required_quantity: 2,
+            quantity_on_hand: 1,
+            shortfall: 1,
+            unit_of_measure: "each",
+            status: "shortage",
+          },
+        ],
+      },
     } as unknown as Awaited<ReturnType<typeof salesWizardApi.preview>>);
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {
@@ -1609,6 +1645,8 @@ describe("LightDesigner", () => {
         }),
       ),
     );
+    expect(screen.getByText("Inventory check")).toBeVisible();
+    expect(screen.getByText("1 required item is short.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: /Better.*\$1,330\.00/i }));
     fireEvent.click(screen.getByRole("button", { name: /Essential Care.*\$249\.00\/year/i }));
     const createQuote = screen.getByRole("button", { name: "Create draft quote" });

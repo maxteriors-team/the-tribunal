@@ -38820,6 +38820,16 @@
             ],
             "title": "Headline Tier"
           },
+          "inventory_availability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuoteInventoryAvailability"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "mockups": {
             "items": {
               "$ref": "#/components/schemas/ProposalMockup"
@@ -43304,6 +43314,142 @@
           "channel"
         ],
         "title": "QuoteFollowupTouchSettings",
+        "type": "object"
+      },
+      "QuoteInventoryAvailability": {
+        "description": "Live-at-quote-time inventory coverage; internal and never customer-facing.",
+        "properties": {
+          "has_requirements": {
+            "default": false,
+            "title": "Has Requirements",
+            "type": "boolean"
+          },
+          "has_shortages": {
+            "default": false,
+            "title": "Has Shortages",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QuoteInventoryAvailabilityItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "not_counted_items": {
+            "default": 0,
+            "title": "Not Counted Items",
+            "type": "integer"
+          },
+          "shortage_items": {
+            "default": 0,
+            "title": "Shortage Items",
+            "type": "integer"
+          },
+          "untracked_items": {
+            "default": 0,
+            "title": "Untracked Items",
+            "type": "integer"
+          }
+        },
+        "title": "QuoteInventoryAvailability",
+        "type": "object"
+      },
+      "QuoteInventoryAvailabilityItem": {
+        "description": "One internal fulfillment requirement compared with current workspace stock.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "inventory_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Item Id"
+          },
+          "inventory_item_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Item Name"
+          },
+          "quantity_on_hand": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity On Hand"
+          },
+          "required_quantity": {
+            "title": "Required Quantity",
+            "type": "number"
+          },
+          "shortfall": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shortfall"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "in_stock",
+              "shortage",
+              "not_counted",
+              "untracked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unit_of_measure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Of Measure"
+          }
+        },
+        "required": [
+          "sku",
+          "required_quantity",
+          "status"
+        ],
+        "title": "QuoteInventoryAvailabilityItem",
         "type": "object"
       },
       "QuoteLineItemCreate": {
