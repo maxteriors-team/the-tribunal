@@ -13,6 +13,7 @@ import {
 import { useState, use } from "react";
 
 import { LeadMagnetContent } from "@/components/lead-magnets/lead-magnet-content";
+import { TermsAndConditionsLink } from "@/components/shared/terms-and-conditions-link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -319,18 +320,21 @@ export default function PublicOfferPage({ params }: PublicOfferPageProps) {
                         }
                         className="mt-0.5"
                       />
-                      <Label
-                        htmlFor="sms-consent"
-                        className="text-xs font-normal leading-relaxed text-muted-foreground cursor-pointer"
-                      >
-                        I agree to receive text messages from{" "}
-                        {offer.business_name || "this business"} about my
-                        inquiry, including follow-ups, offers, and appointment
-                        reminders. Message frequency varies. Message & data
-                        rates may apply. Reply STOP to opt out or HELP for
-                        help. Consent is not a condition of purchase.
-                        (Optional)
-                      </Label>
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="sms-consent"
+                          className="cursor-pointer text-xs font-normal leading-relaxed text-muted-foreground"
+                        >
+                          I agree to receive text messages from{" "}
+                          {offer.business_name || "this business"} about my inquiry, including
+                          follow-ups, offers, and appointment reminders. Message frequency varies.
+                          Message & data rates may apply. Reply STOP to opt out or HELP for help.
+                          Consent is not a condition of purchase. (Optional)
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          <TermsAndConditionsLink className="underline underline-offset-2" />
+                        </p>
+                      </div>
                     </div>
                   )}
 

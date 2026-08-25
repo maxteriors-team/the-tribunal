@@ -155,6 +155,10 @@ describe("customer-facing tenant branding", () => {
 
     expect(screen.getAllByText("Northstar Outdoor Lighting")).not.toHaveLength(0);
     expect(screen.queryByText(/maxteriors/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Terms and Conditions" })).toHaveAttribute(
+      "href",
+      "https://maxteriorslighting.com/terms-and-conditions/",
+    );
   });
 });
 

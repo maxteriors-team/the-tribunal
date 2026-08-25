@@ -88,6 +88,10 @@ describe("plain quote financing", () => {
       "Payment figures are estimates, not offers, and remain subject to approval.",
     );
     expect(estimate).toHaveTextContent("Wisetack");
+    expect(screen.getByRole("link", { name: "Terms and Conditions" })).toHaveAttribute(
+      "href",
+      "https://maxteriorslighting.com/terms-and-conditions/",
+    );
   });
 
   it("shows no financing language when the quote does not qualify", () => {

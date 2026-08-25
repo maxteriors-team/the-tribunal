@@ -13,6 +13,7 @@
  */
 import { useMemo, useState } from "react";
 
+import { TermsAndConditionsLink } from "@/components/shared/terms-and-conditions-link";
 import { formatDate } from "@/lib/utils/date";
 import type { PublicProposal } from "@/types/proposal";
 
@@ -800,6 +801,9 @@ export function ClientProposalView({
         {branding.footer ? (
           <div className="pp-footer-note">{renderTextWithLinks(branding.footer)}</div>
         ) : null}
+        <div className="pp-footer-note">
+          <TermsAndConditionsLink />
+        </div>
       </div>
     </div>
   );

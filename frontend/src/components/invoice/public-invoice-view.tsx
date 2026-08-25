@@ -15,6 +15,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { TermsAndConditionsLink } from "@/components/shared/terms-and-conditions-link";
 import { publicInvoicesApi } from "@/lib/api/public-invoices";
 import { formatDate } from "@/lib/utils/date";
 import { formatCurrency } from "@/lib/utils/number";
@@ -375,6 +376,9 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
           {branding.footer ? (
             <div className="pp-footer-note">{renderTextWithLinks(branding.footer)}</div>
           ) : null}
+          <div className="pp-footer-note">
+            <TermsAndConditionsLink />
+          </div>
         </footer>
       </main>
     </div>

@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { canonicalizeTermsUrl } from "@/lib/legal";
+
 /**
  * Render operator-authored plain text with clickable links.
  *
@@ -22,10 +24,11 @@ export function renderTextWithLinks(text: string): ReactNode[] {
     }
     const trailing = part.match(/[.,;:!?)\]}'"]+$/)?.[0] ?? "";
     const href = trailing ? part.slice(0, -trailing.length) : part;
+    const canonicalHref = canonicalizeTermsUrl(href);
     return (
       <span key={index}>
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {href}
+        <a href={canonicalHref} target="_blank" rel="noopener noreferrer">
+          {canonicalHref}
         </a>
         {trailing}
       </span>
