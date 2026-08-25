@@ -504,11 +504,11 @@ describe("LightDesigner", () => {
 
     const wireTool = await screen.findByRole("button", { name: "Wire" });
     fireEvent.click(wireTool);
-    expect(wireTool).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(wireTool).toHaveAttribute("aria-pressed", "true"));
 
     const uplightTool = await screen.findByRole("button", { name: /^Uplight:/i });
     fireEvent.click(uplightTool);
-    expect(uplightTool).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(uplightTool).toHaveAttribute("aria-pressed", "true"));
     expect(screen.getByRole("img", { name: "Northstar Outdoor Lighting" })).toHaveAttribute(
       "src",
       "https://northstar.example/logo.svg",
