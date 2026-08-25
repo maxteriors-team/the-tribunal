@@ -164,6 +164,43 @@ async def test_invoice_email_omits_pay_button_without_url(fake_resend: _FakeRese
 
 
 @pytest.mark.asyncio
+async def test_invoice_payment_receipt_is_branded_transactional_and_itemized(
+    fake_resend: _FakeResend,
+) -> None:
+    key = uuid.uuid4()
+    sent = await email.send_invoice_payment_receipt(
+        to_email="dana@example.com",
+        customer_name="Dana <Homeowner>",
+        business_name="Maxteriors Lighting",
+        invoice_number="INV-000042",
+        payment_amount=150.0,
+        invoice_total=200.0,
+        total_paid=200.0,
+        currency="usd",
+        paid_at=email.datetime(2026, 8, 21, 14, 30, tzinfo=email.UTC),
+        idempotency_key=key,
+        logo_url="https://cdn.example.com/logo.png",
+        support_email="office@example.com",
+        invoice_url="https://app.example/p/invoices/token",
+    )
+
+    assert sent is True
+    call = fake_resend.Emails.send_async.await_args
+    params = call.args[0]
+    assert params["to"] == ["dana@example.com"]
+    assert params["subject"] == ("Receipt for invoice INV-000042 from Maxteriors Lighting")
+    assert "Dana &lt;Homeowner&gt;" in params["html"]
+    assert "USD 150.00" in params["html"]
+    assert "USD 200.00" in params["html"]
+    assert "Paid in full" in params["html"]
+    assert "https://cdn.example.com/logo.png" in params["html"]
+    assert "View paid invoice" in params["html"]
+    assert "service details" in params["text"]
+    assert "unsubscribe" not in params["html"].lower()
+    assert call.args[1] == {"idempotency_key": str(key)}
+
+
+@pytest.mark.asyncio
 async def test_payment_receipt_includes_minimal_client_info_and_escapes_it(
     fake_resend: _FakeResend,
 ) -> None:

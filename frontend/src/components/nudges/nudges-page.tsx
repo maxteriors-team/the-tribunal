@@ -1,17 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Bell,
-  Check,
-  X,
-  Clock,
-  Send,
-  AlarmClock,
-  Inbox,
-  CalendarIcon,
-  Mail,
-} from "lucide-react";
+import { Bell, Check, X, Clock, Send, AlarmClock, Inbox, CalendarIcon, Mail } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -103,7 +93,8 @@ export function NudgesPage() {
   });
 
   const invalidateNudges = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.nudges.root() });
+    if (!workspaceId) return;
+    void queryClient.invalidateQueries({ queryKey: queryKeys.nudges.all(workspaceId) });
   };
 
   const actMutation = useMutation({
@@ -130,6 +121,19 @@ export function NudgesPage() {
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to dismiss")),
   });
 
+  const clearAllMutation = useMutation({
+    mutationFn: () => {
+      if (!workspaceId) throw new Error("No workspace");
+      return nudgesApi.clearAll(workspaceId);
+    },
+    onSuccess: ({ dismissed_count: dismissedCount }) => {
+      toast.success(`Dismissed ${dismissedCount} nudge${dismissedCount === 1 ? "" : "s"}`);
+      setPage(1);
+      invalidateNudges();
+    },
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to clear nudges")),
+  });
+
   const snoozeMutation = useMutation({
     mutationFn: ({ nudgeId, snoozeUntil }: { nudgeId: string; snoozeUntil: string }) => {
       if (!workspaceId) throw new Error("No workspace");
@@ -143,6 +147,19 @@ export function NudgesPage() {
   });
 
   const totalPages = nudgeList ? Math.ceil(nudgeList.total / PAGE_SIZE) : 0;
+  const activeNudgeCount = stats ? stats.pending + stats.sent + stats.snoozed : 0;
+
+  const handleClearAll = () => {
+    if (
+      clearAllMutation.isPending ||
+      !window.confirm(
+        "Clear all active nudges? This dismisses your pending, sent, and snoozed nudges.",
+      )
+    ) {
+      return;
+    }
+    clearAllMutation.mutate();
+  };
 
   return (
     <div className="h-full overflow-y-auto">
@@ -155,14 +172,26 @@ export function NudgesPage() {
               Relationship reminders and follow-up prompts
             </p>
           </div>
-          {stats && stats.pending > 0 && (
-            <div className="flex items-center gap-2 rounded-lg border bg-warning/10 px-4 py-2">
-              <Bell className="h-5 w-5 text-warning" />
-              <span className="text-sm font-medium">
-                {stats.pending} pending nudge{stats.pending !== 1 && "s"}
-              </span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {activeNudgeCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClearAll}
+                disabled={clearAllMutation.isPending}
+              >
+                {clearAllMutation.isPending ? "Clearing..." : "Clear All"}
+              </Button>
+            )}
+            {stats && stats.pending > 0 && (
+              <div className="flex items-center gap-2 rounded-lg border bg-warning/10 px-4 py-2">
+                <Bell className="h-5 w-5 text-warning" />
+                <span className="text-sm font-medium">
+                  {stats.pending} pending nudge{stats.pending !== 1 && "s"}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -173,9 +202,7 @@ export function NudgesPage() {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {statsLoading ? "-" : (stats?.pending ?? 0)}
-              </div>
+              <div className="text-2xl font-bold">{statsLoading ? "-" : (stats?.pending ?? 0)}</div>
               <p className="text-xs text-muted-foreground">Awaiting action</p>
             </CardContent>
           </Card>
@@ -185,9 +212,7 @@ export function NudgesPage() {
               <Send className="h-4 w-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {statsLoading ? "-" : (stats?.sent ?? 0)}
-              </div>
+              <div className="text-2xl font-bold">{statsLoading ? "-" : (stats?.sent ?? 0)}</div>
               <p className="text-xs text-muted-foreground">Delivered</p>
             </CardContent>
           </Card>
@@ -197,9 +222,7 @@ export function NudgesPage() {
               <Check className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {statsLoading ? "-" : (stats?.acted ?? 0)}
-              </div>
+              <div className="text-2xl font-bold">{statsLoading ? "-" : (stats?.acted ?? 0)}</div>
               <p className="text-xs text-muted-foreground">Completed</p>
             </CardContent>
           </Card>
@@ -209,9 +232,7 @@ export function NudgesPage() {
               <Bell className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {statsLoading ? "-" : (stats?.total ?? 0)}
-              </div>
+              <div className="text-2xl font-bold">{statsLoading ? "-" : (stats?.total ?? 0)}</div>
               <p className="text-xs text-muted-foreground">This month</p>
             </CardContent>
           </Card>
@@ -255,7 +276,9 @@ export function NudgesPage() {
                     <NudgeCard
                       key={nudge.id}
                       nudge={nudge}
-                      onAct={(actionTaken) => actMutation.mutate({ nudgeId: nudge.id, actionTaken })}
+                      onAct={(actionTaken) =>
+                        actMutation.mutate({ nudgeId: nudge.id, actionTaken })
+                      }
                       onDismiss={() => dismissMutation.mutate(nudge.id)}
                       onSnooze={(date) =>
                         snoozeMutation.mutate({
@@ -337,9 +360,7 @@ function NudgeCard({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <h3 className="font-medium leading-tight">{nudge.title}</h3>
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {nudge.message}
-              </p>
+              <p className="text-sm text-muted-foreground line-clamp-2">{nudge.message}</p>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               <Badge className={cn("text-xs", PRIORITY_STYLES[nudge.priority])}>
@@ -499,7 +520,11 @@ function NudgeStatusBadge({ status }: { status: string }) {
         </Badge>
       );
     case "dismissed":
-      return <Badge variant="destructive" className="text-xs">Dismissed</Badge>;
+      return (
+        <Badge variant="destructive" className="text-xs">
+          Dismissed
+        </Badge>
+      );
     default:
       return (
         <Badge variant="outline" className="text-xs">

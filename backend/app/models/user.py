@@ -68,6 +68,15 @@ class User(Base):
     )
     notification_push_new_lead: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # simplification: one Telnyx credential per user supports the desktop pilot;
+    # add a user-device credential table before supporting concurrent devices.
+    telnyx_telephony_credential_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, unique=True, index=True
+    )
+    telnyx_sip_username: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, unique=True, index=True
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )

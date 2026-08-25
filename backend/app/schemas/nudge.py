@@ -56,6 +56,12 @@ class NudgeStatsResponse(BaseModel):
     total: int = 0
 
 
+class NudgeClearAllResponse(BaseModel):
+    """Count of visible active nudges dismissed by Clear All."""
+
+    dismissed_count: int
+
+
 class NudgeSnoozeRequest(BaseModel):
     """Request to snooze a nudge."""
 

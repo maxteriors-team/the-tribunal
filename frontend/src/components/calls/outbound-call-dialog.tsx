@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Bot, Loader2, PhoneCall, User } from "lucide-react";
+import { Bot, Headphones, Loader2, PhoneCall, User } from "lucide-react";
 import { useState } from "react";
 
 import { PhoneInput } from "@/components/landing/phone-input";
@@ -28,6 +28,7 @@ import type { CallMode, InitiateCallRequest } from "@/lib/api/calls";
 import { phoneNumbersApi } from "@/lib/api/phone-numbers";
 import { settingsApi } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
+import { useSoftphone } from "@/providers/softphone-provider";
 
 interface OutboundCallDialogProps {
   open: boolean;
@@ -47,6 +48,12 @@ const MODE_OPTIONS: {
   Icon: typeof Bot;
 }[] = [
   {
+    value: "browser",
+    label: "Browser headset",
+    description: "Talk inside Tribunal without a separate phone line.",
+    Icon: Headphones,
+  },
+  {
     value: "ai",
     label: "AI agent",
     description: "A voice agent runs the call and books from it.",
@@ -61,12 +68,11 @@ const MODE_OPTIONS: {
 ];
 
 /**
- * Pick who talks before dialing a contact: an AI voice agent, or the operator.
+ * Pick who talks before dialing a contact: browser operator, AI, or phone callback.
  *
- * User mode never dials the contact until the operator's own phone is answered,
- * so nobody is called into silence. The callback number is editable but the
- * backend only accepts allowlisted numbers (your profile phone, the workspace
- * transfer destination, or a workspace number).
+ * Human modes never dial the contact until the operator answers. Browser mode
+ * derives its internal SIP destination on the server; the client cannot supply
+ * a billable callback target.
  */
 export function OutboundCallDialog({
   open,
@@ -77,11 +83,14 @@ export function OutboundCallDialog({
   onSubmit,
   isSubmitting,
 }: OutboundCallDialogProps) {
-  const [mode, setMode] = useState<CallMode>("ai");
+  const softphone = useSoftphone();
+  const [mode, setMode] = useState<CallMode>("browser");
   const [fromNumberId, setFromNumberId] = useState("");
   const [agentId, setAgentId] = useState("");
   const [callbackNumber, setCallbackNumber] = useState("");
   const [callbackTouched, setCallbackTouched] = useState(false);
+  const [browserSubmitting, setBrowserSubmitting] = useState(false);
+  const [browserError, setBrowserError] = useState<string | null>(null);
 
   const { data: phoneNumbersData } = useQuery({
     queryKey: queryKeys.phoneNumbers.list(workspaceId ?? "", { voice_enabled: true }),
@@ -116,39 +125,55 @@ export function OutboundCallDialog({
   // it, and let an explicit user pick win.
   const selectedFromId = fromNumberId || phoneNumbers[0]?.id || "";
   const selectedAgentId = agentId || voiceAgents[0]?.id || "";
-  const resolvedCallback = callbackTouched
-    ? callbackNumber
-    : (profile?.phone_number ?? "");
+  const resolvedCallback = callbackTouched ? callbackNumber : (profile?.phone_number ?? "");
 
+  const submitting = isSubmitting || browserSubmitting;
   const canSubmit =
     !!contactPhone &&
     !!selectedFromId &&
-    !isSubmitting &&
-    (mode === "ai" ? !!selectedAgentId : !!resolvedCallback);
+    !submitting &&
+    (mode === "ai" ? !!selectedAgentId : mode === "user" ? !!resolvedCallback : true);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const fromPhone = phoneNumbers.find((p) => p.id === selectedFromId);
-    if (!fromPhone || !contactPhone) return;
+    if (!fromPhone || !contactPhone || !workspaceId) return;
+
+    if (mode === "browser") {
+      setBrowserSubmitting(true);
+      setBrowserError(null);
+      try {
+        await softphone.startCall({
+          workspaceId,
+          contactName: contactName || contactPhone,
+          toNumber: contactPhone,
+          fromPhoneNumber: fromPhone.phone_number,
+        });
+        onOpenChange(false);
+      } catch (error) {
+        setBrowserError(
+          error instanceof Error ? error.message : "Browser calling could not start.",
+        );
+      } finally {
+        setBrowserSubmitting(false);
+      }
+      return;
+    }
 
     onSubmit({
       to_number: contactPhone,
       from_phone_number: fromPhone.phone_number,
       contact_phone: contactPhone,
       mode,
-      ...(mode === "ai"
-        ? { agent_id: selectedAgentId }
-        : { user_phone_number: resolvedCallback }),
+      ...(mode === "ai" ? { agent_id: selectedAgentId } : { user_phone_number: resolvedCallback }),
     });
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Call {contactName || contactPhone || "contact"}</DialogTitle>
-          <DialogDescription>
-            Choose who handles this call before it dials.
-          </DialogDescription>
+          <DialogDescription>Choose who handles this call before it dials.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
@@ -177,8 +202,11 @@ export function OutboundCallDialog({
             <Label>Who talks</Label>
             <RadioGroup
               value={mode}
-              onValueChange={(value) => setMode(value as CallMode)}
-              className="grid grid-cols-2 gap-3"
+              onValueChange={(value) => {
+                setMode(value as CallMode);
+                setBrowserError(null);
+              }}
+              className="grid grid-cols-1 gap-3 sm:grid-cols-3"
             >
               {MODE_OPTIONS.map(({ value, label, description, Icon }) => (
                 <label
@@ -186,14 +214,14 @@ export function OutboundCallDialog({
                   htmlFor={`call-mode-${value}`}
                   className={`flex items-start gap-3 rounded-lg border-2 p-3 cursor-pointer transition-colors ${
                     mode === value
-                      ? "border-primary bg-primary/5"
+                      ? "border-primary bg-background"
                       : "border-border hover:border-primary/50"
                   }`}
                 >
                   <RadioGroupItem value={value} id={`call-mode-${value}`} />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 font-medium">
-                      <Icon className="size-4" />
+                      <Icon className="size-4" aria-hidden="true" />
                       {label}
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{description}</p>
@@ -220,12 +248,12 @@ export function OutboundCallDialog({
               </Select>
               {voiceAgents.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No active voice agents. Switch to &quot;My phone&quot; to take this
-                  call yourself.
+                  No active voice agents. Switch to &quot;Browser headset&quot; to take this call
+                  yourself.
                 </p>
               )}
             </div>
-          ) : (
+          ) : mode === "user" ? (
             <div className="space-y-2">
               <Label htmlFor="outbound-callback">Ring me at</Label>
               <PhoneInput
@@ -242,23 +270,48 @@ export function OutboundCallDialog({
                   : "Add a phone number to your profile, or enter a workspace number."}
               </p>
             </div>
+          ) : (
+            <div className="rounded-lg border p-3">
+              <p className="text-sm font-medium">Desktop Chrome and a headset</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Tribunal will ask for microphone access, ring this browser, then dial the contact
+                after you answer.
+              </p>
+            </div>
+          )}
+
+          {browserError && (
+            <p role="alert" className="text-sm text-destructive">
+              {browserError}
+            </p>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {isSubmitting ? (
+          <Button onClick={() => void handleSubmit()} disabled={!canSubmit}>
+            {submitting ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
-                Calling...
+                <Loader2
+                  className="mr-2 size-4 animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+                Connecting...
               </>
             ) : (
               <>
-                <PhoneCall className="mr-2 size-4" />
-                {mode === "ai" ? "Start AI call" : "Call me first"}
+                {mode === "browser" ? (
+                  <Headphones className="mr-2 size-4" aria-hidden="true" />
+                ) : (
+                  <PhoneCall className="mr-2 size-4" aria-hidden="true" />
+                )}
+                {mode === "ai"
+                  ? "Start AI call"
+                  : mode === "browser"
+                    ? "Connect headset & call"
+                    : "Call me first"}
               </>
             )}
           </Button>

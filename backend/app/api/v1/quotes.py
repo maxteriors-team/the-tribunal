@@ -2,11 +2,11 @@
 
 Thin transport layer over :class:`app.services.quotes.QuoteService`; all domain
 rules (number allocation, total computation, lifecycle guards, expiry, and
-conversion to job/invoice) live in the service. Access is capability-gated:
-reads require ``billing:read`` and mutations ``billing:write`` (see
-:mod:`app.core.permissions`); the gating dependency also resolves workspace
-membership, replacing the old ``get_workspace`` access check. Line-item
-mutations return the full quote detail because they recompute the parent totals.
+conversion to job/invoice) live in the service. Ordinary quote access uses the
+dedicated ``quotes:read/write`` capabilities; money movement, reassignment, job
+conversion, and paid rendering remain ``billing:write`` operations. Sales-tier
+quote access is owner-scoped at the database boundary. Line-item mutations
+return the full quote detail because they recompute the parent totals.
 """
 
 import uuid
@@ -14,10 +14,19 @@ from datetime import UTC
 from typing import Annotated, Literal
 
 import structlog
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 
-from app.api.deps import DB, CanReadBilling, CanWriteBilling, CurrentUser
+from app.api.deps import (
+    DB,
+    CanReadQuotes,
+    CanWriteBilling,
+    CanWriteQuotes,
+    CurrentUser,
+)
 from app.api.service_errors import ServiceErrorRoute
+from app.core.permissions import quote_owner_scope
+from app.models.quote import Quote
 from app.schemas.estimate import (
     ComparisonDeliverRequest,
     ComparisonDeliverResult,
@@ -64,6 +73,7 @@ from app.services.jobs import JobService
 from app.services.notifications import notify_workspace_event
 from app.services.payments.quote_deposit_service import record_manual_deposit
 from app.services.quotes import QuoteService
+from app.services.quotes.proposal_pricing import BistroPricingConfigurationError
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(route_class=ServiceErrorRoute)
@@ -76,12 +86,39 @@ public_router = APIRouter(route_class=ServiceErrorRoute)
 comparison_public_router = APIRouter(route_class=ServiceErrorRoute)
 
 
+async def _scoped_quote(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    current_user: CurrentUser,
+    membership: CanReadQuotes,
+    db: DB,
+) -> Quote:
+    """Load a quote only when the caller may access its owner scope."""
+    query = select(Quote).where(
+        Quote.id == quote_id,
+        Quote.workspace_id == workspace_id,
+    )
+    owner_user_id = quote_owner_scope(membership.role, current_user.id)
+    if owner_user_id is not None:
+        query = query.where(
+            (Quote.assigned_user_id == owner_user_id)
+            | (Quote.assigned_user_id.is_(None) & (Quote.created_by_id == owner_user_id))
+        )
+    quote = (await db.execute(query)).scalar_one_or_none()
+    if quote is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found")
+    return quote
+
+
+ScopedQuote = Annotated[Quote, Depends(_scoped_quote)]
+
+
 @router.get("", response_model=PaginatedQuotes)
 async def list_quotes(
     workspace_id: uuid.UUID,
     current_user: CurrentUser,
     db: DB,
-    membership: CanReadBilling,
+    membership: CanReadQuotes,
     quote_status: Annotated[str | None, Query(alias="status")] = None,
     contact_id: Annotated[int | None, Query()] = None,
     assigned_user_id: Annotated[int | None, Query()] = None,
@@ -97,6 +134,7 @@ async def list_quotes(
         status=quote_status,
         contact_id=contact_id,
         assigned_user_id=assigned_user_id,
+        owner_user_id=quote_owner_scope(membership.role, current_user.id),
     )
 
 
@@ -106,20 +144,26 @@ async def create_quote(
     quote_in: QuoteCreate,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Create a draft quote with its initial line items."""
     service = QuoteService(db)
-    return await service.create_quote(workspace_id, quote_in, created_by_id=current_user.id)
+    return await service.create_quote(
+        workspace_id,
+        quote_in,
+        created_by_id=current_user.id,
+        assigned_user_id=quote_owner_scope(membership.role, current_user.id),
+    )
 
 
 @router.get("/{quote_id}", response_model=QuoteDetailResponse)
 async def get_quote(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanReadBilling,
+    membership: CanReadQuotes,
 ) -> QuoteDetailResponse:
     """Get a specific quote with its line items."""
     service = QuoteService(db)
@@ -131,9 +175,10 @@ async def update_quote(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
     quote_in: QuoteUpdate,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Update a quote's header fields (totals are re-derived)."""
     service = QuoteService(db)
@@ -148,6 +193,7 @@ async def assign_quote(
     current_user: CurrentUser,
     db: DB,
     membership: CanWriteBilling,
+    _quote: ScopedQuote,
 ) -> QuoteDetailResponse:
     """Reassign or clear a quote's sales owner in any lifecycle state."""
     service = QuoteService(db)
@@ -158,9 +204,10 @@ async def assign_quote(
 async def delete_quote(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> None:
     """Delete a draft/sent quote. Decided or expired quotes are kept."""
     service = QuoteService(db)
@@ -172,9 +219,10 @@ async def delete_quote(
 async def send_quote(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Mark a quote as sent and email it to the quote-to contact."""
     service = QuoteService(db)
@@ -186,9 +234,10 @@ async def deliver_quote(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
     payload: QuoteDeliverRequest,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDeliverResult:
     """Send the client proposal link by email or SMS.
 
@@ -206,9 +255,10 @@ async def deliver_quote(
 async def approve_quote(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Operator approves a quote on the customer's behalf."""
     service = QuoteService(db)
@@ -220,9 +270,10 @@ async def decline_quote(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
     payload: QuoteDeclineRequest,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Operator declines a quote on the customer's behalf."""
     service = QuoteService(db)
@@ -237,6 +288,7 @@ async def record_quote_deposit(
     current_user: CurrentUser,
     db: DB,
     membership: CanWriteBilling,
+    _quote: ScopedQuote,
 ) -> QuoteDetailResponse:
     """Attest that an offline cash, check, or other deposit was received."""
     await record_manual_deposit(
@@ -257,6 +309,7 @@ async def convert_quote(
     current_user: CurrentUser,
     db: DB,
     membership: CanWriteBilling,
+    _quote: ScopedQuote,
 ) -> QuoteConvertResponse:
     """Convert an approved quote into a scheduled job and/or an invoice."""
     service = QuoteService(db)
@@ -366,11 +419,14 @@ async def preview_wizard_proposal(
     payload: ProposalWizardPayload,
     current_user: CurrentUser,
     db: DB,
-    membership: CanReadBilling,
+    membership: CanReadQuotes,
 ) -> ProposalDocument:
     """Compute the full multi-tier proposal document without saving."""
     service = QuoteService(db)
-    return await service.preview_from_wizard(workspace_id, payload)
+    try:
+        return await service.preview_from_wizard(workspace_id, payload)
+    except BistroPricingConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.post(
@@ -383,11 +439,19 @@ async def save_wizard_proposal(
     payload: ProposalWizardPayload,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Save a wizard proposal as a draft quote + its multi-tier snapshot."""
     service = QuoteService(db)
-    return await service.save_from_wizard(workspace_id, payload, created_by_id=current_user.id)
+    try:
+        return await service.save_from_wizard(
+            workspace_id,
+            payload,
+            created_by_id=current_user.id,
+            assigned_user_id=quote_owner_scope(membership.role, current_user.id),
+        )
+    except BistroPricingConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.put("/{quote_id}/wizard", response_model=QuoteDetailResponse)
@@ -395,12 +459,16 @@ async def update_wizard_proposal(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
     payload: ProposalWizardPayload,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Reprice an unpaid draft/sent wizard quote without replacing its link."""
-    return await QuoteService(db).update_from_wizard(workspace_id, quote_id, payload)
+    try:
+        return await QuoteService(db).update_from_wizard(workspace_id, quote_id, payload)
+    except BistroPricingConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 @router.post(
@@ -412,14 +480,18 @@ async def revise_wizard_proposal(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
     payload: ProposalWizardPayload,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Create a separately numbered draft from a protected wizard quote."""
-    return await QuoteService(db).revise_from_wizard(
-        workspace_id, quote_id, payload, created_by_id=current_user.id
-    )
+    try:
+        return await QuoteService(db).revise_from_wizard(
+            workspace_id, quote_id, payload, created_by_id=current_user.id
+        )
+    except BistroPricingConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 # Roofline estimator: price permanent vs seasonal for a measured linear-feet
@@ -430,7 +502,7 @@ async def estimate_linear_feet(
     payload: LinearFeetEstimateRequest,
     current_user: CurrentUser,
     db: DB,
-    membership: CanReadBilling,
+    membership: CanReadQuotes,
 ) -> LinearFeetEstimateResult:
     """Compute a permanent-vs-temporary estimate for a measured roofline."""
     service = QuoteService(db)
@@ -464,7 +536,7 @@ async def share_comparison(
     payload: ComparisonShareRequest,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> ComparisonShareResult:
     """Persist a comparison behind a token and return the client-facing link."""
     service = QuoteService(db)
@@ -481,7 +553,7 @@ async def convert_estimate_to_quote(
     payload: EstimateQuoteRequest,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Create a draft quote from a measured roofline estimate.
 
@@ -491,7 +563,10 @@ async def convert_estimate_to_quote(
     """
     service = QuoteService(db)
     return await service.create_quote_from_estimate(
-        workspace_id, payload, created_by_id=current_user.id
+        workspace_id,
+        payload,
+        created_by_id=current_user.id,
+        assigned_user_id=quote_owner_scope(membership.role, current_user.id),
     )
 
 
@@ -533,9 +608,10 @@ async def add_service(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
     payload: QuoteServiceCreate,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Add a service to an existing quote and reprice it."""
     service = QuoteService(db)
@@ -547,9 +623,10 @@ async def remove_service(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
     service_id: str,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Remove a service previously added to a quote and reprice it."""
     service = QuoteService(db)
@@ -566,9 +643,10 @@ async def add_line_item(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
     item_in: QuoteLineItemCreate,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Add a line item and recompute quote totals."""
     service = QuoteService(db)
@@ -581,9 +659,10 @@ async def update_line_item(
     quote_id: uuid.UUID,
     item_id: uuid.UUID,
     item_in: QuoteLineItemUpdate,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Update a line item and recompute quote totals."""
     service = QuoteService(db)
@@ -598,9 +677,10 @@ async def remove_line_item(
     workspace_id: uuid.UUID,
     quote_id: uuid.UUID,
     item_id: uuid.UUID,
+    _quote: ScopedQuote,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
     """Remove a line item and recompute quote totals."""
     service = QuoteService(db)

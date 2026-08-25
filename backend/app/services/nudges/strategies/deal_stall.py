@@ -76,6 +76,10 @@ class DealStallNudgeStrategy(NudgeStrategy):
             nudge = HumanNudge(
                 workspace_id=context.workspace_id,
                 contact_id=opp.primary_contact_id,
+                assigned_to_user_id=context.resolve_assignee(
+                    contact_id=opp.primary_contact_id,
+                    preferred_user_id=opp.assigned_user_id,
+                ),
                 nudge_type="deal_milestone",
                 title=f"Move {name}'s deal forward",
                 message=(
@@ -130,6 +134,10 @@ class DealStallNudgeStrategy(NudgeStrategy):
             nudge = HumanNudge(
                 workspace_id=context.workspace_id,
                 contact_id=opp.primary_contact_id,
+                assigned_to_user_id=context.resolve_assignee(
+                    contact_id=opp.primary_contact_id,
+                    preferred_user_id=opp.assigned_user_id,
+                ),
                 nudge_type="deal_milestone",
                 title=f"\u26a0\ufe0f {name}'s deal is past due",
                 message=f"{opp.name} was expected to close {days_overdue} days ago.",

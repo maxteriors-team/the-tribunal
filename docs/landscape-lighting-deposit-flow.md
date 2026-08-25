@@ -55,9 +55,16 @@ not override the term can begin requesting real money.
 ### 1. Draft creation and delivery
 
 `LightDesigner` builds a `ProposalWizardPayload` and calls the shared proposal-save
-endpoint. `buildLandscapeProposalPayload()` copies the workspace deposit config
-into the payload only when it is enabled and positive. The backend also falls
-back to that same workspace config when the payload has no explicit deposit.
+endpoint with the saved `LightingProject` ID. Without changing the designer, the
+backend validates that project against the workspace/contact, snapshots its selected
+installation-sheet image into the quote's customer mock-up gallery, and computes every
+displayed price from the existing server price book. The visual gallery shows that
+authoritative total and the configured amount due today beside the mock-up.
+
+Deposit terms still come only from an explicit quote override or the workspace pricing
+config. The designer's display-only payment-milestone text is never converted into a
+charge. When a positive deposit is configured, the mock-up action accepts the exact
+proposal first and then opens the existing Stripe Checkout flow.
 
 The saved `Quote` is linked to the `LightingProject` and stores one of these:
 

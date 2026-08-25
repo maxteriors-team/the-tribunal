@@ -2,11 +2,12 @@
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
-from app.models.workspace import Workspace
+from app.models.opportunity import Opportunity, opportunity_contact_table
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.nudges.nudge_settings import get_nudge_settings
 from app.services.nudges.strategies import (
     AnniversaryNudgeStrategy,
@@ -105,12 +106,64 @@ class NudgeGeneratorService:
         )
         date_contacts = list(result.scalars().all())
 
+        owner_result = await db.execute(
+            select(WorkspaceMembership.user_id)
+            .where(
+                WorkspaceMembership.workspace_id == workspace.id,
+                WorkspaceMembership.role == "owner",
+            )
+            .order_by(WorkspaceMembership.created_at.asc())
+            .limit(1)
+        )
+        workspace_owner_user_id = owner_result.scalar_one_or_none()
+
+        open_opportunity_contacts = union_all(
+            select(
+                Opportunity.primary_contact_id.label("contact_id"),
+                Opportunity.assigned_user_id.label("assigned_user_id"),
+                Opportunity.created_at.label("created_at"),
+            ).where(
+                Opportunity.workspace_id == workspace.id,
+                Opportunity.status == "open",
+                Opportunity.is_active.is_(True),
+                Opportunity.primary_contact_id.isnot(None),
+            ),
+            select(
+                opportunity_contact_table.c.contact_id.label("contact_id"),
+                Opportunity.assigned_user_id.label("assigned_user_id"),
+                Opportunity.created_at.label("created_at"),
+            )
+            .join(
+                Opportunity,
+                Opportunity.id == opportunity_contact_table.c.opportunity_id,
+            )
+            .where(
+                Opportunity.workspace_id == workspace.id,
+                Opportunity.status == "open",
+                Opportunity.is_active.is_(True),
+            ),
+        ).subquery()
+        opportunity_result = await db.execute(
+            select(
+                open_opportunity_contacts.c.contact_id,
+                open_opportunity_contacts.c.assigned_user_id,
+            ).order_by(
+                open_opportunity_contacts.c.contact_id.asc(),
+                open_opportunity_contacts.c.created_at.desc(),
+            )
+        )
+        contact_owner_user_ids: dict[int, int | None] = {}
+        for contact_id, assigned_user_id in opportunity_result.all():
+            contact_owner_user_ids.setdefault(contact_id, assigned_user_id)
+
         context = NudgeContext(
             workspace_id=workspace.id,
             lead_days=lead_days,
             cooling_days=cooling_days,
             enabled_types=enabled_types,
             date_contacts=date_contacts,
+            workspace_owner_user_id=workspace_owner_user_id,
+            contact_owner_user_ids=contact_owner_user_ids,
         )
 
         count = 0

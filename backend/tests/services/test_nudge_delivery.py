@@ -92,10 +92,11 @@ def _scalar_one_result(value):
     return result
 
 
-def _make_membership(user: MagicMock) -> MagicMock:
-    m = MagicMock()
-    m.user = user
-    return m
+def _make_membership(user: MagicMock, role: str = "owner") -> MagicMock:
+    membership = MagicMock()
+    membership.user = user
+    membership.role = role
+    return membership
 
 
 def _delivery_result(delivered: bool = True) -> MagicMock:
@@ -317,6 +318,36 @@ class TestNudgeMarkedSent:
         assert nudge.status == "sent"
         assert nudge.delivered_at is not None
         assert "push" in nudge.delivered_via
+
+
+class TestLegacyGlobalRecipients:
+    async def test_sales_cannot_receive_global_nudges(self, delivery: NudgeDeliveryService) -> None:
+        """Unassigned nudges exclude active roles without crm:write."""
+        nudge = _make_nudge()
+        db = AsyncMock()
+        db.execute = AsyncMock(
+            return_value=_scalar_result([_make_membership(_make_user(user_id=7), role="sales_rep")])
+        )
+
+        assert await delivery._resolve_target_users(db, nudge) == []
+
+    async def test_manager_is_the_only_global_recipient(
+        self, delivery: NudgeDeliveryService
+    ) -> None:
+        """Global nudges resolve only active CRM writers."""
+        manager = _make_user(user_id=8)
+        sales = _make_user(user_id=9)
+        db = AsyncMock()
+        db.execute = AsyncMock(
+            return_value=_scalar_result(
+                [
+                    _make_membership(sales, role="sales_rep"),
+                    _make_membership(manager, role="manager"),
+                ]
+            )
+        )
+
+        assert await delivery._resolve_target_users(db, _make_nudge()) == [manager]
 
 
 class TestAssignedUserOnly:

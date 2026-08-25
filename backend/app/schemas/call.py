@@ -33,6 +33,9 @@ class CallCreate(BaseModel):
     - ``"user"``: the operator's own phone rings first, then the contact is
       dialed and the two legs are bridged. ``agent_id`` is ignored.
       ``user_phone_number`` picks which allowlisted number to ring.
+    - ``"browser"``: the operator's authenticated Tribunal browser rings first;
+      the server then dials and bridges the contact. Client-supplied SIP targets
+      are never accepted.
     """
 
     to_number: str
@@ -40,9 +43,9 @@ class CallCreate(BaseModel):
     contact_phone: str | None = None
     agent_id: uuid.UUID | None = Field(
         default=None,
-        description="Voice agent for mode='ai'. Ignored when mode='user'.",
+        description="Voice agent for mode='ai'. Ignored for human modes.",
     )
-    mode: Literal["ai", "user"] = "ai"
+    mode: Literal["ai", "user", "browser"] = "ai"
     user_phone_number: str | None = Field(
         default=None,
         description=(
@@ -51,6 +54,12 @@ class CallCreate(BaseModel):
             "Defaults to the first of those that is configured."
         ),
     )
+
+
+class WebRTCTokenResponse(BaseModel):
+    """Short-lived browser credential; callers must keep it in memory only."""
+
+    token: str
 
 
 class CallResponse(BaseModel):

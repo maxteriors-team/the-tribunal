@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,9 +22,17 @@ from app.schemas.call import (
     LiveCallResponse,
     LiveCallsResponse,
     PaginatedCalls,
+    WebRTCTokenResponse,
 )
 from app.services.calls.live_call_registry import get_live_call_registry
+from app.services.rate_limiting.softphone_limiter import (
+    SoftphoneRateLimitError,
+    SoftphoneRateLimitUnavailableError,
+    enforce_softphone_call_limits,
+    enforce_softphone_token_limit,
+)
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
+from app.services.telephony.telnyx_webrtc import TelnyxWebRTCError, TelnyxWebRTCService
 from app.services.telephony.user_call import (
     RepNumberNotAllowedError,
     VoiceProviderUnavailableError,
@@ -91,6 +99,118 @@ async def _resolve_voice_agent_id(
     return fallback.scalars().first()
 
 
+@router.post("/webrtc/token", response_model=WebRTCTokenResponse)
+async def issue_webrtc_token(
+    workspace_id: uuid.UUID,
+    response: Response,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanSendComms,
+    workspace: WorkspaceAccess,
+) -> WebRTCTokenResponse:
+    """Mint a memory-only Telnyx JWT for the authenticated operator's browser."""
+    del membership, workspace
+    if not settings.telnyx_api_key or not settings.telnyx_webrtc_connection_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Browser calling is not configured",
+        )
+
+    try:
+        await enforce_softphone_token_limit(user_id=current_user.id)
+    except SoftphoneRateLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+            headers={"Retry-After": "3600"},
+        ) from exc
+    except SoftphoneRateLimitUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    service: TelnyxWebRTCService | None = None
+    try:
+        service = TelnyxWebRTCService(
+            settings.telnyx_api_key,
+            settings.telnyx_webrtc_connection_id,
+        )
+        token = await service.issue_user_token(db, current_user)
+    except TelnyxWebRTCError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    finally:
+        if service is not None:
+            await service.close()
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return WebRTCTokenResponse(token=token)
+
+
+async def _start_browser_operator_call(
+    *,
+    db: AsyncSession,
+    voice_service: TelnyxVoiceService,
+    workspace_id: uuid.UUID,
+    current_user: CurrentUser,
+    call_data: CallCreate,
+    connection_id: str | None,
+    webhook_url: str,
+) -> Message:
+    """Authorize, rate-limit, and dial one server-owned browser identity."""
+    if not settings.telnyx_webrtc_connection_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Browser calling is not configured",
+        )
+    try:
+        await enforce_softphone_call_limits(workspace_id=str(workspace_id), user_id=current_user.id)
+    except SoftphoneRateLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+            headers={"Retry-After": "3600"},
+        ) from exc
+    except SoftphoneRateLimitUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    browser_service: TelnyxWebRTCService | None = None
+    try:
+        browser_service = TelnyxWebRTCService(
+            settings.telnyx_api_key, settings.telnyx_webrtc_connection_id
+        )
+        credential = await browser_service.ensure_user_credential(db, current_user)
+    except TelnyxWebRTCError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    finally:
+        if browser_service is not None:
+            await browser_service.close()
+
+    try:
+        return await start_user_call(
+            db=db,
+            voice_service=voice_service,
+            workspace_id=workspace_id,
+            user_id=current_user.id,
+            to_number=call_data.to_number,
+            from_number=call_data.from_phone_number,
+            sip_username=credential.sip_username,
+            contact_phone=call_data.contact_phone,
+            connection_id=connection_id,
+            webhook_url=webhook_url,
+        )
+    except VoiceProviderUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+
 @router.post("", response_model=CallResponse, status_code=status.HTTP_201_CREATED)
 async def initiate_call(
     workspace_id: uuid.UUID,
@@ -100,11 +220,10 @@ async def initiate_call(
     membership: CanSendComms,
     workspace: WorkspaceAccess,
 ) -> CallResponse:
-    """Initiate an outbound voice call, handled by an AI agent or by the user.
+    """Initiate an outbound voice call handled by AI, phone callback, or browser.
 
-    ``mode="ai"`` dials the contact and streams the call to a voice agent.
-    ``mode="user"`` rings the operator's own phone first and bridges the contact
-    in once they pick up, so nobody is ever dialed into silence.
+    Human modes ring the operator before the contact, so nobody is dialed into
+    silence. Browser mode uses a server-derived internal SIP target only.
 
     Args:
         workspace_id: Workspace ID
@@ -183,6 +302,16 @@ async def initiate_call(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail=str(exc),
                 ) from exc
+        elif call_data.mode == "browser":
+            message = await _start_browser_operator_call(
+                db=db,
+                voice_service=voice_service,
+                workspace_id=workspace_id,
+                current_user=current_user,
+                call_data=call_data,
+                connection_id=connection_id,
+                webhook_url=webhook_url,
+            )
         else:
             # An AI call with no agent starts no audio stream, so the contact
             # answers to dead air. Refuse the call instead of burning the lead.
@@ -201,7 +330,7 @@ async def initiate_call(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=(
                         "No active voice agent available for this call. Select an agent, "
-                        "or use mode='user' to take the call yourself."
+                        "or use a human mode to take the call yourself."
                     ),
                 )
 

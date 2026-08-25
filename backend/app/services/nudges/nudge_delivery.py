@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.permissions import Capability, role_can
 from app.models.human_nudge import HumanNudge
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
@@ -51,27 +52,33 @@ class NudgeDeliveryService:
 
         delivered_via: list[str] = []
 
-        # Push notifications
+        # Push notifications are always user-targeted so legacy workspace nudges
+        # cannot broadcast to roles that lack CRM write access.
         if "push" in delivery_channels:
-            try:
-                push_result = await outbound_delivery_service.deliver(
-                    db,
-                    OutboundDeliveryRequest(
-                        workspace_id=nudge.workspace_id,
-                        channel=OutboundDeliveryChannel.PUSH,
-                        title=nudge.title,
-                        body=nudge.message,
-                        data={"type": "nudge", "nudge_id": str(nudge.id)},
-                        user_id=nudge.assigned_to_user_id,
-                        idempotency_scope="nudge_push",
-                        idempotency_parts=(nudge.id, nudge.assigned_to_user_id or "workspace"),
-                        action_type="nudge_push",
-                    ),
-                )
-                if push_result.delivered:
-                    delivered_via.append("push")
-            except Exception:
-                logger.exception("Failed to send push for nudge %s", nudge.id)
+            push_delivered = False
+            for user in users:
+                try:
+                    push_result = await outbound_delivery_service.deliver(
+                        db,
+                        OutboundDeliveryRequest(
+                            workspace_id=nudge.workspace_id,
+                            channel=OutboundDeliveryChannel.PUSH,
+                            title=nudge.title,
+                            body=nudge.message,
+                            data={"type": "nudge", "nudge_id": str(nudge.id)},
+                            user_id=user.id,
+                            idempotency_scope="nudge_push",
+                            idempotency_parts=(nudge.id, user.id),
+                            action_type="nudge_push",
+                        ),
+                    )
+                    push_delivered = push_delivered or push_result.delivered
+                except Exception:
+                    logger.exception(
+                        "Failed to send push for nudge %s to user %s", nudge.id, user.id
+                    )
+            if push_delivered:
+                delivered_via.append("push")
 
         # SMS delivery
         if "sms" in delivery_channels and not self._is_quiet_hours(workspace):
@@ -160,20 +167,33 @@ class NudgeDeliveryService:
         return sms_sent
 
     async def _resolve_target_users(self, db: AsyncSession, nudge: HumanNudge) -> list[User]:
-        """Get the user(s) who should receive this nudge."""
+        """Resolve assigned members, or CRM writers for legacy global nudges."""
         if nudge.assigned_to_user_id is not None:
-            result = await db.execute(select(User).where(User.id == nudge.assigned_to_user_id))
+            result = await db.execute(
+                select(User)
+                .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
+                .where(
+                    User.id == nudge.assigned_to_user_id,
+                    User.is_active.is_(True),
+                    WorkspaceMembership.workspace_id == nudge.workspace_id,
+                )
+            )
             user = result.scalar_one_or_none()
-            return [user] if user and user.is_active else []
+            return [user] if user else []
 
-        # All workspace members
         membership_result = await db.execute(
             select(WorkspaceMembership)
             .options(selectinload(WorkspaceMembership.user))
             .where(WorkspaceMembership.workspace_id == nudge.workspace_id)
         )
         memberships: list[WorkspaceMembership] = list(membership_result.scalars().all())
-        return [m.user for m in memberships if m.user and m.user.is_active]
+        return [
+            membership.user
+            for membership in memberships
+            if membership.user
+            and membership.user.is_active
+            and role_can(membership.role, Capability.CRM_WRITE)
+        ]
 
     def _is_quiet_hours(self, workspace: Workspace) -> bool:
         """Check if current time is within quiet hours."""

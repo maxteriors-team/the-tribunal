@@ -38,6 +38,8 @@ const ALL_CAPABILITIES: Capability[] = [
   "comms:manage",
   "billing:read",
   "billing:write",
+  "quotes:read",
+  "quotes:write",
   "reports:view",
   "attendance:use",
   "attendance:manage",
@@ -58,6 +60,8 @@ const MANAGER_CAPABILITIES: Capability[] = [
   "comms:send",
   "billing:read",
   "billing:write",
+  "quotes:read",
+  "quotes:write",
   "attendance:use",
   "outreach:write",
   "locations:manage",
@@ -77,6 +81,8 @@ const ROLE_CAPABILITY_MATRIX = {
     "attendance:use",
     "comms:send",
     "outreach:write",
+    "quotes:read",
+    "quotes:write",
     "upsell:sell",
     "upsell:sell_uncapped",
   ],
@@ -234,6 +240,8 @@ describe("capability matrix (mirror of backend)", () => {
   it("sales owns its own pipeline and authors outreach, but cannot write contacts", () => {
     expect(can("sales_rep", "pipeline:write_own")).toBe(true);
     expect(can("sales_rep", "outreach:write")).toBe(true);
+    expect(can("sales_rep", "quotes:read")).toBe(true);
+    expect(can("sales_rep", "quotes:write")).toBe(true);
     for (const cap of [
       "pipeline:write",
       "crm:write",

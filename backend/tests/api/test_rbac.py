@@ -33,12 +33,14 @@ from app.api.deps import (
     CanManageComms,
     CanManageMembers,
     CanReadBilling,
+    CanReadQuotes,
     CanSendComms,
     CanViewReports,
     CanWriteBilling,
     CanWriteCRM,
     CanWriteOutreach,
     CanWritePipelineOwn,
+    CanWriteQuotes,
     get_active_workspace_membership,
     get_current_user,
     get_db,
@@ -101,6 +103,16 @@ _MATRIX: list[tuple[Capability, list[str], list[str]]] = [
         Capability.BILLING_WRITE,
         ["owner", "admin", "manager"],
         ["sales_rep", "technician", "member"],
+    ),
+    (
+        Capability.QUOTES_READ,
+        ["owner", "admin", "manager", "dispatcher", "sales_rep"],
+        ["technician", "member", "lead_technician"],
+    ),
+    (
+        Capability.QUOTES_WRITE,
+        ["owner", "admin", "manager", "dispatcher", "sales_rep"],
+        ["technician", "member", "lead_technician"],
     ),
     (
         Capability.REPORTS_VIEW,
@@ -192,7 +204,9 @@ def test_capability_aliases_are_wired() -> None:
     aliases = [
         CanManageActiveWorkspace,
         CanReadBilling,
+        CanReadQuotes,
         CanWriteBilling,
+        CanWriteQuotes,
         CanWriteCRM,
         CanWriteOutreach,
         CanWritePipelineOwn,
@@ -296,6 +310,39 @@ async def test_invoice_create_denied_to_tech_and_sales_allowed_to_manager() -> N
         async with _client_as("manager") as client:
             resp = await client.post(_url("/invoices"), json={})
             assert resp.status_code != 403
+    finally:
+        _clear_overrides()
+
+
+async def test_sales_can_author_quotes_without_billing_access() -> None:
+    try:
+        async with _client_as("sales_rep") as client:
+            assert (await client.get(_url("/quotes"))).status_code != 403
+            assert (await client.post(_url("/quotes"), json={})).status_code != 403
+        async with _client_as("technician") as client:
+            assert (await client.get(_url("/quotes"))).status_code == 403
+            assert (await client.post(_url("/quotes"), json={})).status_code == 403
+    finally:
+        _clear_overrides()
+
+
+async def test_sensitive_quote_operations_stay_billing_gated() -> None:
+    quote_id = uuid.uuid4()
+    operations = (
+        ("PUT", f"/quotes/{quote_id}/assignment"),
+        ("POST", f"/quotes/{quote_id}/record-deposit"),
+        ("POST", f"/quotes/{quote_id}/convert"),
+        ("POST", "/quotes/estimate/comparison/test-token/send"),
+    )
+    try:
+        async with _client_as("sales_rep") as client:
+            for method, suffix in operations:
+                response = await client.request(method, _url(suffix), json={})
+                assert response.status_code == 403, suffix
+        async with _client_as("manager") as client:
+            for method, suffix in operations:
+                response = await client.request(method, _url(suffix), json={})
+                assert response.status_code != 403, suffix
     finally:
         _clear_overrides()
 

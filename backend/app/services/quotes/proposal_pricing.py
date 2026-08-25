@@ -26,6 +26,8 @@ from typing import Any
 from app.schemas.pricing import (
     DEFAULT_FINANCING_DISCLAIMER,
     BistroConfig,
+    BistroInstallation,
+    BistroInstallationPricing,
     BistroLine,
     BistroPricing,
     CarePlanPricing,
@@ -364,6 +366,10 @@ def price_care_plan(count: int, config: PricingSettings) -> list[CarePlanPricing
 # --------------------------------------------------------------------------- #
 # Bistro / string lighting (bistroCompute)
 # --------------------------------------------------------------------------- #
+class BistroPricingConfigurationError(ValueError):
+    """Requested Bistro work cannot be priced from the workspace settings."""
+
+
 def _bistro_strand_breakdown(feet: float, strand_lengths: list[int]) -> dict[int, int]:
     """Fill the run largest-first from pre-cut strands, top up the gap."""
     lengths = sorted(strand_lengths, reverse=True)
@@ -474,6 +480,101 @@ def price_bistro(
         min_applied=raw_total < gross_minimum,
         ordered_ft=float(ordered_ft),
         lines=lines,
+    )
+
+
+def price_bistro_installations(
+    config: PricingSettings,
+    runs: Mapping[BistroInstallation, float],
+) -> BistroPricing:
+    """Price measured temporary/permanent runs from configured component rates.
+
+    Every requested installation must have both rates configured before any money
+    is returned. Each component passes through the shared gross-up independently,
+    and the Bistro minimum is applied once after every installation is summed.
+    """
+    bistro = config.bistro
+    requested = {installation: max(0.0, feet) for installation, feet in runs.items() if feet > 0}
+    if not requested:
+        return BistroPricing(
+            pricing_mode="installation",
+            feet=0,
+            product="installation",
+            tier="",
+            per_ft=0,
+            hardware=0,
+            minimum=float(gross_up_price(bistro.minimum, config)),
+            lights_cost=0,
+            poles_cost=0,
+            raw_total=0,
+            total=0,
+            min_applied=False,
+            ordered_ft=0,
+        )
+    if not bistro.enabled:
+        raise BistroPricingConfigurationError(
+            "Bistro pricing is disabled. Enable it in Settings → Pricing before quoting "
+            "measured Bistro runs."
+        )
+
+    installations: list[BistroInstallationPricing] = []
+    lights_total = _ZERO
+    poles_total = _ZERO
+    for installation in ("temporary", "permanent"):
+        feet = requested.get(installation)
+        if feet is None:
+            continue
+        rates = getattr(bistro, installation)
+        missing = [
+            label
+            for label, rate in (
+                ("lights per foot", rates.lights_per_ft),
+                ("poles/supports per foot", rates.poles_per_ft),
+            )
+            if rate <= 0
+        ]
+        if missing:
+            raise BistroPricingConfigurationError(
+                f"{rates.label} is missing {', '.join(missing)}. Configure Bistro Pricing "
+                "in Settings before creating this quote."
+            )
+
+        lights_cost = gross_up_price(_d(feet) * _d(rates.lights_per_ft), config)
+        poles_cost = gross_up_price(_d(feet) * _d(rates.poles_per_ft), config)
+        lights_total += lights_cost
+        poles_total += poles_cost
+        installations.append(
+            BistroInstallationPricing(
+                installation=installation,
+                label=rates.label,
+                feet=feet,
+                lights_per_ft=rates.lights_per_ft,
+                poles_per_ft=rates.poles_per_ft,
+                lights_cost=float(lights_cost),
+                poles_cost=float(poles_cost),
+                total=float(lights_cost + poles_cost),
+            )
+        )
+
+    raw_total = lights_total + poles_total
+    gross_minimum = gross_up_price(bistro.minimum, config)
+    total = max(raw_total, gross_minimum)
+    feet_total = sum(requested.values())
+    return BistroPricing(
+        pricing_mode="installation",
+        feet=feet_total,
+        product="installation",
+        tier="",
+        per_ft=0,
+        hardware=0,
+        minimum=float(gross_minimum),
+        lights_cost=float(lights_total),
+        poles_cost=float(poles_total),
+        raw_total=float(raw_total),
+        total=float(total),
+        min_applied=raw_total < gross_minimum,
+        ordered_ft=feet_total,
+        installations=installations,
     )
 
 

@@ -223,7 +223,7 @@ describe("Landscape Lighting builder nav item", () => {
     expect(designer!.url).toBe("/landscape-lighting");
     expect(designer!.sidebar).toBe(true);
     expect(designer!.commandPalette).toBe(true);
-    expect(designer!.requires).toBe("billing:read");
+    expect(designer!.requires).toBe("quotes:read");
   });
 
   it("stays fail-closed to field techs even with all capabilities", () => {
@@ -250,14 +250,14 @@ describe("Segments nav item (folded into the campaign builder)", () => {
 describe("Christmas Lights seasonal hub nav item", () => {
   const christmas = allNavItems.find((i) => i.url === "/christmas-lights");
 
-  it("is registered with a festive accent and billing gate", () => {
+  it("is registered with a festive accent and quote gate", () => {
     expect(christmas).toBeDefined();
     // Named for the seasonal estimator workflow it fronts.
     expect(christmas!.title).toBe("Christmas Light Estimator");
     // The seasonal tab must read as visually distinct (drives the tinted icon).
     expect(christmas!.accent).toBe("christmas");
-    // Gated like the other quoting surfaces (Quotes/Estimator/Invoices).
-    expect(christmas!.requires).toBe("billing:read");
+    // Gated like the other quoting surfaces without exposing invoices.
+    expect(christmas!.requires).toBe("quotes:read");
     // Folded into the unified Quotes & Estimates hub: out of the sidebar, but
     // still reachable via the command palette (and by URL).
     expect(christmas!.sidebar).toBe(false);

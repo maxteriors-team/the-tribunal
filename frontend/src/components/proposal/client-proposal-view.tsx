@@ -173,9 +173,17 @@ export function ClientProposalView({
     : null;
 
   const bistro = doc.bistro;
+  const bistroInstallationRows =
+    bistro?.pricing_mode === "installation" ? (bistro.installations ?? []) : [];
+  const bistroInstallationNames = bistroInstallationRows.map((row) =>
+    row.installation === "temporary" ? "Temporary" : "Permanent",
+  );
   const bistroTierName = bistro?.tier
     ? bistro.tier.charAt(0).toUpperCase() + bistro.tier.slice(1)
     : "Custom";
+  const bistroExperienceName = bistroInstallationNames.length
+    ? `${bistroInstallationNames.join(" + ")} Install`
+    : `${bistroTierName} Install`;
 
   // Every angle the rep designed, not just the hero shot.
   const nightPhotos = nightImages(doc.night_preview);
@@ -193,6 +201,13 @@ export function ClientProposalView({
     : data.deposit_required
       ? (data.deposit_amount ?? null)
       : null;
+  const visualPrice = chosenPackage?.total ?? data.total;
+  const acceptActionLabel =
+    ctaDeposit && ctaDeposit > 0
+      ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} & Pay ${fmt(ctaDeposit)}`
+      : chosenLabel
+        ? `Accept ${chosenLabel}`
+        : "Approve Proposal";
 
   return (
     <div className={`proposal-view${festive ? " is-christmas" : ""} ${proposalFontVars}`}>
@@ -303,8 +318,52 @@ export function ClientProposalView({
           </div>
         ) : null}
 
+        {doc.mockups.length || nightPhotos.length ? (
+          <section className="pmock-purchase" aria-labelledby="visual-price-heading">
+            <div>
+              <div className="pmock-purchase-label" id="visual-price-heading">
+                {chosenLabel ?? "Your lighting proposal"}
+              </div>
+              <div className="pmock-purchase-price">{fmt(visualPrice)}</div>
+              <div className="pmock-purchase-meta">
+                {ctaDeposit && ctaDeposit > 0
+                  ? `${fmt(ctaDeposit)} due today; the remaining balance follows your proposal terms.`
+                  : "No online deposit is due today."}
+              </div>
+            </div>
+            <div className="pmock-purchase-action no-print">
+              {choosable ? (
+                <button
+                  type="button"
+                  className="cta-btn-primary"
+                  onClick={() =>
+                    document.getElementById("proposal-packages")?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    })
+                  }
+                >
+                  Review package options
+                </button>
+              ) : !decided ? (
+                <button
+                  type="button"
+                  className="cta-btn-primary"
+                  disabled={busy}
+                  aria-label={busy ? "Approving" : acceptActionLabel}
+                  onClick={() => onApprove(selectedTier)}
+                >
+                  {busy ? "Approving…" : acceptActionLabel}
+                </button>
+              ) : null}
+              <p>Acceptance is recorded before the existing secure payment checkout opens.</p>
+            </div>
+          </section>
+        ) : null}
+
         {hasTiers ? (
           <div
+            id="proposal-packages"
             className="pkg-grid"
             role={choosable ? "radiogroup" : undefined}
             aria-label={choosable ? "Choose your package" : undefined}
@@ -457,20 +516,37 @@ export function ClientProposalView({
               <div className="pcare-left">
                 <div className="pcare-eyebrow">Elevate Your Outdoor Living</div>
                 <div className="pcare-name">
-                  <em>{bistro.product === "color" ? "Color Changing" : "Classic"}</em> Bistro
-                  Lighting
+                  {bistroInstallationNames.length ? (
+                    <>
+                      <em>{bistroInstallationNames.join(" + ")}</em> Bistro Lighting
+                    </>
+                  ) : (
+                    <>
+                      <em>{bistro.product === "color" ? "Color Changing" : "Classic"}</em> Bistro
+                      Lighting
+                    </>
+                  )}
                 </div>
                 <div className="pcare-price">
                   {fmt(bistro.total)} <span>one-time</span>
                 </div>
                 <div className="pcare-points">
-                  {[
-                    bistro.product === "color"
-                      ? "Color-changing RGBW — set any scene or color right from your phone"
-                      : "Warm-white vintage glow — remote-controlled and fully dimmable",
-                    `${Math.round(bistro.ordered_ft)} ft of professionally hung, weatherproof string lighting`,
-                    "Commercial-grade hardware, controller & install — built to last season after season",
-                  ].map((point, i) => (
+                  {(bistroInstallationRows.length
+                    ? [
+                        ...bistroInstallationRows.map(
+                          (row) =>
+                            `${Math.round(row.feet)} ft ${row.label}, including lights and pole/support allowance`,
+                        ),
+                        "Professionally installed, weather-ready Bistro lighting for your outdoor space",
+                      ]
+                    : [
+                        bistro.product === "color"
+                          ? "Color-changing RGBW — set any scene or color right from your phone"
+                          : "Warm-white vintage glow — remote-controlled and fully dimmable",
+                        `${Math.round(bistro.ordered_ft)} ft of professionally hung, weatherproof string lighting`,
+                        "Commercial-grade hardware, controller & install — built to last season after season",
+                      ]
+                  ).map((point, i) => (
                     <div className="pcare-point" key={i}>
                       <span className="pcare-point-mark">&#9670;</span>
                       <div>{point}</div>
@@ -484,7 +560,7 @@ export function ClientProposalView({
                   className="pcare-savings-amount"
                   style={{ fontSize: "clamp(30px,4.4vw,42px)" }}
                 >
-                  {bistroTierName} Install
+                  {bistroExperienceName}
                 </div>
                 <div className="pcare-savings-unit">
                   {Math.round(bistro.feet)} linear ft &middot; patio &amp; pergola
@@ -666,29 +742,10 @@ export function ClientProposalView({
                   type="button"
                   className="cta-btn-primary"
                   disabled={busy}
-                  aria-label={
-                    busy
-                      ? "Approving"
-                      : ctaDeposit && ctaDeposit > 0
-                        ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} and pay ${fmt(ctaDeposit)}`
-                        : chosenLabel
-                          ? `Accept ${chosenLabel}`
-                          : "Approve Proposal"
-                  }
+                  aria-label={busy ? "Approving" : acceptActionLabel}
                   onClick={() => onApprove(selectedTier)}
                 >
-                  {busy ? (
-                    "Approving…"
-                  ) : (
-                    <>
-                      &#10003;&nbsp;
-                      {ctaDeposit && ctaDeposit > 0
-                        ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} \u0026 Pay ${fmt(ctaDeposit)}`
-                        : chosenLabel
-                          ? `Accept ${chosenLabel}`
-                          : "Approve Proposal"}
-                    </>
-                  )}
+                  {busy ? "Approving…" : <>&#10003;&nbsp;{acceptActionLabel}</>}
                 </button>
                 <button
                   type="button"

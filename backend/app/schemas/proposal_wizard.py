@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.attach_rules import AttachDismissalRequest, AttachWarning
 from app.schemas.pricing import (
+    BistroInstallation,
     BistroPricing,
     CarePlanPricing,
     CategoryLine,
@@ -25,6 +26,7 @@ from app.schemas.pricing import (
 
 # Product lines the unified builder can quote, in canonical display order.
 CATEGORY_ORDER = ("landscape", "permanent", "bistro", "christmas")
+MAX_PROPOSAL_MOCKUP_IMAGE_CHARS = 3_000_000
 
 # The three service paths a quote can come from, each mapping to the product
 # lines it owns. A quote is single-service in the rep experience: landscape
@@ -123,12 +125,20 @@ class WizardFixtureQty(BaseModel):
     quantity: float = Field(default=0, ge=0)
 
 
+class WizardBistroRun(BaseModel):
+    """Measured footage grouped by temporary or permanent installation."""
+
+    installation: BistroInstallation
+    feet: float = Field(gt=0, le=100_000)
+
+
 class WizardBistroSelection(BaseModel):
-    """Optional string-lighting selection."""
+    """Optional measured-run selection or compatible legacy product selection."""
 
     product: str = "color"  # "color" | "classic"
     tier: str = "easy"
-    feet: float = Field(default=0, ge=0)
+    feet: float = Field(default=0, ge=0, le=100_000)
+    runs: list[WizardBistroRun] = Field(default_factory=list, max_length=100)
 
 
 class WizardPermanentSelection(BaseModel):
@@ -175,7 +185,7 @@ class ProposalMockup(BaseModel):
     the length cap is a defensive backstop against an oversized snapshot row.
     """
 
-    image: str = Field(min_length=1, max_length=3_000_000)
+    image: str = Field(min_length=1, max_length=MAX_PROPOSAL_MOCKUP_IMAGE_CHARS)
     caption: str | None = Field(default=None, max_length=160)
 
 

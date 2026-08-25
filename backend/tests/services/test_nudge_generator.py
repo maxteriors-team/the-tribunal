@@ -80,6 +80,13 @@ def _scalar_one_result(value: Any) -> MagicMock:
     return result
 
 
+def _rows_result(value: Any) -> MagicMock:
+    """Create a mock execute result whose .all() returns rows."""
+    result = MagicMock()
+    result.all.return_value = value
+    return result
+
+
 class TestGenerateBirthdayNudge:
     async def test_generate_birthday_nudge(
         self,
@@ -104,6 +111,8 @@ class TestGenerateBirthdayNudge:
         mock_db.execute = AsyncMock(
             side_effect=[
                 _scalar_result([contact]),  # contacts query
+                _scalar_one_result(99),  # workspace owner
+                _rows_result([]),  # open opportunity owners
                 _scalar_one_result(None),  # dedup check → not found
             ]
         )
@@ -115,6 +124,7 @@ class TestGenerateBirthdayNudge:
         nudge_arg = mock_db.add.call_args[0][0]
         assert nudge_arg.nudge_type == "birthday"
         assert nudge_arg.contact_id == contact.id
+        assert nudge_arg.assigned_to_user_id == 99
         mock_db.commit.assert_awaited_once()
 
 
@@ -140,6 +150,8 @@ class TestGenerateAnniversaryNudge:
         mock_db.execute = AsyncMock(
             side_effect=[
                 _scalar_result([contact]),
+                _scalar_one_result(99),
+                _rows_result([]),
                 _scalar_one_result(None),
             ]
         )
@@ -175,6 +187,8 @@ class TestGenerateCustomDateNudge:
         mock_db.execute = AsyncMock(
             side_effect=[
                 _scalar_result([contact]),
+                _scalar_one_result(99),
+                _rows_result([]),
                 _scalar_one_result(None),
             ]
         )
@@ -208,7 +222,13 @@ class TestNoNudgeOutsideWindow:
             {"enabled": True, "lead_days": 3, "nudge_types": ["birthday"]},
         )
 
-        mock_db.execute = AsyncMock(side_effect=[_scalar_result([contact])])
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                _scalar_result([contact]),
+                _scalar_one_result(99),
+                _rows_result([]),
+            ]
+        )
 
         count = await generator.generate_for_workspace(mock_db, workspace)
 
@@ -240,6 +260,8 @@ class TestDedupPreventsDuplicate:
         mock_db.execute = AsyncMock(
             side_effect=[
                 _scalar_result([contact]),
+                _scalar_one_result(99),
+                _rows_result([]),
                 _scalar_one_result(uuid.uuid4()),  # dedup check → exists
             ]
         )
@@ -280,9 +302,11 @@ class TestCoolingNudge:
         empty = _scalar_result([])
         specific_results = [
             _scalar_result([]),  # 1. contacts (no important_dates)
-            _scalar_result([conv]),  # 2. cooling: cold conversations
-            _scalar_one_result(None),  # 3. cooling: dedup → not found
-            _scalar_one_result(contact),  # 4. cooling: load contact
+            _scalar_one_result(99),  # 2. workspace owner
+            _rows_result([(42, 77)]),  # 3. latest open opportunity owner
+            _scalar_result([conv]),  # 4. cooling: cold conversations
+            _scalar_one_result(None),  # 5. cooling: dedup → not found
+            _scalar_one_result(contact),  # 6. cooling: load contact
         ]
         call_count = 0
 
@@ -300,6 +324,7 @@ class TestCoolingNudge:
         nudge_arg = mock_db.add.call_args[0][0]
         assert nudge_arg.nudge_type == "cooling"
         assert nudge_arg.contact_id == 42
+        assert nudge_arg.assigned_to_user_id == 77
 
 
 class TestNudgeMessageContent:
@@ -378,6 +403,8 @@ class TestRespectsNudgeTypesSetting:
         mock_db.execute = AsyncMock(
             side_effect=[
                 _scalar_result([contact]),  # contacts query
+                _scalar_one_result(99),  # workspace owner
+                _rows_result([]),  # open opportunity owners
                 _scalar_result([]),  # cold conversations → none
             ]
         )

@@ -5,11 +5,18 @@ from datetime import UTC, datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import joinedload
+from sqlalchemy.sql.elements import ColumnElement
 
-from app.api.deps import DB, WorkspaceAccess, require_route_capabilities
-from app.core.permissions import Capability
+from app.api.deps import (
+    DB,
+    CurrentMembership,
+    CurrentUser,
+    WorkspaceAccess,
+    require_route_capabilities,
+)
+from app.core.permissions import Capability, role_can
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
 from app.models.contact import Contact
@@ -17,6 +24,7 @@ from app.models.human_nudge import HumanNudge
 from app.models.workspace import WorkspaceIntegration
 from app.schemas.nudge import (
     NudgeActRequest,
+    NudgeClearAllResponse,
     NudgeListResponse,
     NudgeResponse,
     NudgeSettingsResponse,
@@ -57,18 +65,32 @@ def _nudge_to_response(nudge: HumanNudge) -> NudgeResponse:
     )
 
 
+ACTIVE_NUDGE_STATUSES = ("pending", "sent", "snoozed")
+
+
+def _nudge_visibility(workspace_id: uuid.UUID, user_id: int, role: str) -> ColumnElement[bool]:
+    """Limit nudge access to the caller, plus CRM-managed legacy rows."""
+    assignment = HumanNudge.assigned_to_user_id == user_id
+    if role_can(role, Capability.CRM_WRITE):
+        assignment = or_(assignment, HumanNudge.assigned_to_user_id.is_(None))
+    return and_(HumanNudge.workspace_id == workspace_id, assignment)
+
+
 async def _get_nudge_or_404(
     db: DB,
     nudge_id: uuid.UUID,
     workspace_id: uuid.UUID,
+    user_id: int,
+    role: str,
 ) -> HumanNudge:
-    """Fetch a nudge by ID, ensuring it belongs to the workspace."""
+    """Fetch a nudge only when it is visible to the caller."""
     result = await db.execute(
-        apply_workspace_scope(
-            select(HumanNudge).options(joinedload(HumanNudge.contact)),
-            HumanNudge,
-            workspace_id,
-        ).where(HumanNudge.id == nudge_id)
+        select(HumanNudge)
+        .options(joinedload(HumanNudge.contact))
+        .where(
+            HumanNudge.id == nudge_id,
+            _nudge_visibility(workspace_id, user_id, role),
+        )
     )
     nudge = result.unique().scalar_one_or_none()
     if not nudge:
@@ -82,6 +104,8 @@ async def _get_nudge_or_404(
 @router.get("", response_model=NudgeListResponse)
 async def list_nudges(
     workspace: WorkspaceAccess,
+    current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
     status_filter: str | None = Query(None, alias="status"),
     nudge_type: str | None = Query(None),
@@ -89,15 +113,16 @@ async def list_nudges(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> NudgeListResponse:
-    """List nudges for a workspace with optional filters.
+    """List nudges visible to the caller with optional filters.
 
     Defaults to showing pending and sent nudges, ordered by due_date ascending.
     """
-    query = apply_workspace_scope(
-        select(HumanNudge).options(joinedload(HumanNudge.contact)),
-        HumanNudge,
-        workspace.id,
-    ).order_by(HumanNudge.due_date.asc())
+    query = (
+        select(HumanNudge)
+        .options(joinedload(HumanNudge.contact))
+        .where(_nudge_visibility(workspace.id, current_user.id, membership.role))
+        .order_by(HumanNudge.due_date.asc())
+    )
 
     if status_filter:
         query = query.where(HumanNudge.status == status_filter)
@@ -124,15 +149,15 @@ async def list_nudges(
 @router.get("/stats", response_model=NudgeStatsResponse)
 async def get_nudge_stats(
     workspace: WorkspaceAccess,
+    current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
 ) -> NudgeStatsResponse:
-    """Get nudge counts grouped by status."""
+    """Get visible nudge counts grouped by status."""
     result = await db.execute(
-        apply_workspace_scope(
-            select(HumanNudge.status, func.count(HumanNudge.id)),
-            HumanNudge,
-            workspace.id,
-        ).group_by(HumanNudge.status)
+        select(HumanNudge.status, func.count(HumanNudge.id))
+        .where(_nudge_visibility(workspace.id, current_user.id, membership.role))
+        .group_by(HumanNudge.status)
     )
     counts: dict[str, int] = {row[0]: row[1] for row in result.all()}
 
@@ -146,15 +171,39 @@ async def get_nudge_stats(
     )
 
 
+@router.put("/clear-all", response_model=NudgeClearAllResponse)
+async def clear_all_nudges(
+    workspace: WorkspaceAccess,
+    current_user: CurrentUser,
+    membership: CurrentMembership,
+    db: DB,
+) -> NudgeClearAllResponse:
+    """Dismiss every active nudge currently visible to the caller."""
+    result = await db.execute(
+        update(HumanNudge)
+        .where(
+            _nudge_visibility(workspace.id, current_user.id, membership.role),
+            HumanNudge.status.in_(ACTIVE_NUDGE_STATUSES),
+        )
+        .values(status="dismissed")
+        .returning(HumanNudge.id)
+    )
+    dismissed_count = len(result.scalars().all())
+    await db.commit()
+    return NudgeClearAllResponse(dismissed_count=dismissed_count)
+
+
 @router.put("/{nudge_id}/act", response_model=NudgeResponse)
 async def act_on_nudge(
     nudge_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
     body: NudgeActRequest | None = None,
 ) -> NudgeResponse:
-    """Mark a nudge as acted upon, optionally dispatching an action like sending a card."""
-    nudge = await _get_nudge_or_404(db, nudge_id, workspace.id)
+    """Mark a visible nudge as acted, optionally dispatching an action."""
+    nudge = await _get_nudge_or_404(db, nudge_id, workspace.id, current_user.id, membership.role)
 
     if body and body.action_taken == "send_card":
         # Load contact for address
@@ -236,10 +285,12 @@ async def act_on_nudge(
 async def dismiss_nudge(
     nudge_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
 ) -> NudgeResponse:
-    """Dismiss a nudge."""
-    nudge = await _get_nudge_or_404(db, nudge_id, workspace.id)
+    """Dismiss a visible nudge."""
+    nudge = await _get_nudge_or_404(db, nudge_id, workspace.id, current_user.id, membership.role)
 
     nudge.status = "dismissed"
 
@@ -254,10 +305,12 @@ async def snooze_nudge(
     nudge_id: uuid.UUID,
     body: NudgeSnoozeRequest,
     workspace: WorkspaceAccess,
+    current_user: CurrentUser,
+    membership: CurrentMembership,
     db: DB,
 ) -> NudgeResponse:
-    """Snooze a nudge until a specified time."""
-    nudge = await _get_nudge_or_404(db, nudge_id, workspace.id)
+    """Snooze a visible nudge until a specified time."""
+    nudge = await _get_nudge_or_404(db, nudge_id, workspace.id, current_user.id, membership.role)
 
     nudge.status = "snoozed"
     nudge.snoozed_until = body.snooze_until
