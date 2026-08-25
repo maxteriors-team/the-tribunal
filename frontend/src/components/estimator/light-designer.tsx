@@ -151,6 +151,7 @@ import {
   buildLandscapeSchedule as buildPerFixtureSchedule,
   copyScheduleSelectionToType,
   updateFixtureScheduleSelection,
+  type LandscapeFixtureScheduleUpdate,
   type LandscapeScheduleRow,
 } from "@/lib/estimator/landscape-schedule";
 import { DEFAULT_FIXTURE_MARKER_COLOR } from "@/lib/estimator/marker-colors";
@@ -2135,10 +2136,7 @@ function LandscapeWorkspacePanel({
   bistroRows: LandscapeBistroRunRow[];
   procurementRows: LandscapeProcurementRow[];
   catalogItems: CatalogItemResponse[];
-  onUpdateSchedule: (
-    itemId: string,
-    update: { lampCatalogItemId?: string; accessoryCatalogItemIds?: string[] },
-  ) => void;
+  onUpdateSchedule: (itemId: string, update: LandscapeFixtureScheduleUpdate) => void;
   onCopyScheduleType: (itemId: string) => void;
   onUpdateProcurement: (
     row: LandscapeProcurementRow,
