@@ -15,6 +15,7 @@ import pytest
 from app.schemas.pricing import (
     DEFAULT_FINANCING_DISCLAIMER,
     BistroConfig,
+    BistroInstallationConfig,
     BistroProduct,
     BistroTier,
     CarePlanConfig,
@@ -333,6 +334,70 @@ def test_bistro_zero_feet_is_empty():
     assert result.lines == []
 
 
+def _measured_bistro_config(*, minimum: float = 0) -> PricingSettings:
+    cfg = _landscape_config()
+    cfg.bistro.minimum = minimum
+    cfg.bistro.temporary = BistroInstallationConfig(
+        label="Temporary Bistro Lighting", lights_per_ft=10, poles_per_ft=4
+    )
+    cfg.bistro.permanent = BistroInstallationConfig(
+        label="Permanent Bistro Lighting", lights_per_ft=20, poles_per_ft=6
+    )
+    return cfg
+
+
+def test_bistro_temporary_run_prices_lights_and_poles_separately():
+    result = pp.price_bistro_installations(_measured_bistro_config(), {"temporary": 100})
+
+    assert result.pricing_mode == "installation"
+    assert result.feet == 100
+    assert result.lights_cost == 1124
+    assert result.poles_cost == 449
+    assert result.total == 1573
+    assert result.installations[0].installation == "temporary"
+
+
+def test_bistro_permanent_run_uses_permanent_rates():
+    result = pp.price_bistro_installations(_measured_bistro_config(), {"permanent": 80})
+
+    assert result.lights_cost == 1798
+    assert result.poles_cost == 539
+    assert result.total == 2337
+    assert result.installations[0].installation == "permanent"
+
+
+def test_bistro_mixed_runs_apply_one_minimum_after_all_components():
+    result = pp.price_bistro_installations(
+        _measured_bistro_config(minimum=3000),
+        {"temporary": 100, "permanent": 50},
+    )
+
+    assert [row.installation for row in result.installations] == ["temporary", "permanent"]
+    assert result.lights_cost == 2248
+    assert result.poles_cost == 786
+    assert result.raw_total == 3034
+    assert result.minimum == 3371
+    assert result.total == 3371
+    assert result.min_applied is True
+
+
+@pytest.mark.parametrize("field", ["lights_per_ft", "poles_per_ft"])
+def test_bistro_requested_run_fails_when_an_active_rate_is_missing(field: str):
+    cfg = _measured_bistro_config()
+    setattr(cfg.bistro.temporary, field, 0)
+
+    with pytest.raises(pp.BistroPricingConfigurationError, match="Configure Bistro Pricing"):
+        pp.price_bistro_installations(cfg, {"temporary": 25})
+
+
+def test_bistro_requested_run_fails_when_bistro_is_disabled():
+    cfg = _measured_bistro_config()
+    cfg.bistro.enabled = False
+
+    with pytest.raises(pp.BistroPricingConfigurationError, match="disabled"):
+        pp.price_bistro_installations(cfg, {"temporary": 25})
+
+
 # --------------------------------------------------------------------------- #
 # Tax
 # --------------------------------------------------------------------------- #
@@ -354,6 +419,18 @@ def test_tax_exclusive_and_inclusive():
 # --------------------------------------------------------------------------- #
 def _permanent_config(**overrides) -> PricingSettings:
     return _landscape_config(permanent=PermanentConfig(enabled=True, **overrides))
+
+
+def test_permanent_pricing_ignores_bistro_installation_rates():
+    baseline = _permanent_config()
+    configured_bistro = _permanent_config()
+    configured_bistro.bistro.permanent = BistroInstallationConfig(
+        label="Permanent Bistro Lighting", lights_per_ft=999, poles_per_ft=999
+    )
+
+    assert pp.price_permanent(configured_bistro, feet=165, channels=5) == pp.price_permanent(
+        baseline, feet=165, channels=5
+    )
 
 
 def test_permanent_rounds_165_feet_up_to_200_foot_kit():

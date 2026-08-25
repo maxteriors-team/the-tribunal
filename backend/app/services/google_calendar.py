@@ -32,15 +32,23 @@ GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 GOOGLE_CALENDAR_SCOPES = (
     "openid",
     "email",
-    # Google exposes read-only busy data and owned-event writes as separate least-
-    # privilege scopes. Avoid the broader full-calendar scope.
+    # Google exposes read-only busy data, subscribed-calendar discovery, and
+    # owned-event writes as separate least-privilege scopes.
     "https://www.googleapis.com/auth/calendar.events.owned",
     "https://www.googleapis.com/auth/calendar.freebusy",
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 )
 _OAUTH_STATE_PREFIX = "google-calendar-oauth:"
 _OAUTH_STATE_TTL_SECONDS = 600
 _HTTP_TIMEOUT_SECONDS = 15.0
 _REFRESH_SKEW = timedelta(minutes=2)
+_FREEBUSY_CALENDAR_LIMIT = 50
+_CALENDAR_LIST_SCOPES = {
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.calendarlist",
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+}
 
 
 class GoogleCalendarError(RuntimeError):
@@ -308,6 +316,52 @@ async def _calendar_request(
     return payload
 
 
+async def _availability_calendar_ids(
+    db: AsyncSession,
+    connection: GoogleCalendarConnection,
+) -> list[str]:
+    """Return every subscribed calendar whose busy time must block bookings."""
+    if not _CALENDAR_LIST_SCOPES.intersection(connection.granted_scopes.split()):
+        raise GoogleCalendarError(
+            "Reconnect Google Calendar so availability can include all subscribed calendars"
+        )
+
+    calendar_ids: list[str] = []
+    page_token: str | None = None
+    while True:
+        params = {
+            "maxResults": "250",
+            "minAccessRole": "freeBusyReader",
+            "showHidden": "true",
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        payload = await _calendar_request(
+            db,
+            connection,
+            "GET",
+            "/users/me/calendarList",
+            params=params,
+        )
+        items = payload.get("items") or []
+        if not isinstance(items, list):
+            raise GoogleCalendarError("Google returned an invalid calendar list")
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            calendar_id = str(item.get("id") or "").strip()
+            if calendar_id and calendar_id not in calendar_ids:
+                calendar_ids.append(calendar_id)
+
+        page_token = str(payload.get("nextPageToken") or "") or None
+        if page_token is None:
+            break
+
+    if connection.calendar_id not in calendar_ids:
+        calendar_ids.append(connection.calendar_id)
+    return calendar_ids
+
+
 async def busy_periods(
     db: AsyncSession,
     *,
@@ -315,35 +369,45 @@ async def busy_periods(
     starts_at: datetime,
     ends_at: datetime,
 ) -> list[tuple[datetime, datetime]]:
-    """Return the connected user's Google busy intervals in UTC."""
+    """Return busy intervals across the connected user's subscribed calendars."""
     connection = await get_connection(db, user_id)
     if connection is None:
         raise GoogleCalendarError("The assigned team member has not connected Google Calendar")
-    payload = await _calendar_request(
-        db,
-        connection,
-        "POST",
-        "/freeBusy",
-        json={
-            "timeMin": starts_at.astimezone(UTC).isoformat(),
-            "timeMax": ends_at.astimezone(UTC).isoformat(),
-            "items": [{"id": connection.calendar_id}],
-        },
-    )
-    calendar = (payload.get("calendars") or {}).get(connection.calendar_id) or {}
-    if calendar.get("errors"):
-        raise GoogleCalendarError("Google could not read this calendar's availability")
+
+    calendar_ids = await _availability_calendar_ids(db, connection)
     periods: list[tuple[datetime, datetime]] = []
-    for item in calendar.get("busy") or []:
-        try:
-            periods.append(
-                (
-                    datetime.fromisoformat(str(item["start"]).replace("Z", "+00:00")),
-                    datetime.fromisoformat(str(item["end"]).replace("Z", "+00:00")),
-                )
-            )
-        except (KeyError, TypeError, ValueError):
-            continue
+    for offset in range(0, len(calendar_ids), _FREEBUSY_CALENDAR_LIMIT):
+        batch = calendar_ids[offset : offset + _FREEBUSY_CALENDAR_LIMIT]
+        payload = await _calendar_request(
+            db,
+            connection,
+            "POST",
+            "/freeBusy",
+            json={
+                "timeMin": starts_at.astimezone(UTC).isoformat(),
+                "timeMax": ends_at.astimezone(UTC).isoformat(),
+                "items": [{"id": calendar_id} for calendar_id in batch],
+            },
+        )
+        calendars = payload.get("calendars")
+        if not isinstance(calendars, dict):
+            raise GoogleCalendarError("Google returned invalid calendar availability")
+        for calendar_id in batch:
+            calendar = calendars.get(calendar_id)
+            if not isinstance(calendar, dict) or calendar.get("errors"):
+                raise GoogleCalendarError("Google could not read every calendar's availability")
+            for item in calendar.get("busy") or []:
+                try:
+                    periods.append(
+                        (
+                            datetime.fromisoformat(str(item["start"]).replace("Z", "+00:00")),
+                            datetime.fromisoformat(str(item["end"]).replace("Z", "+00:00")),
+                        )
+                    )
+                except (KeyError, TypeError, ValueError):
+                    raise GoogleCalendarError(
+                        "Google returned invalid calendar availability"
+                    ) from None
     return periods
 
 

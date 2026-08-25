@@ -90,7 +90,10 @@ class Settings(BaseSettings):
     telnyx_public_key: str = ""
     skip_webhook_verification: bool = False
     # Telnyx Voice
-    telnyx_connection_id: str = ""  # Required for outbound calls
+    telnyx_connection_id: str = ""  # Call Control Application for PSTN calls
+    # Credential Connection used only for internal SIP calls to authenticated
+    # browser clients. It must not have a PSTN outbound voice profile attached.
+    telnyx_webrtc_connection_id: str = ""
 
     # Private object storage for inbound MMS media. Railway Bucket credentials
     # are exposed as BUCKET / ENDPOINT / ACCESS_KEY_ID / SECRET_ACCESS_KEY /

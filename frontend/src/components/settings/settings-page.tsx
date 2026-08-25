@@ -28,6 +28,7 @@ import { useSyncExternalStore } from "react";
 
 import { AttachRulesSettingsTab } from "@/components/settings/attach-rules-settings-tab";
 import { BillingSettingsTab } from "@/components/settings/billing-settings-tab";
+import { BistroPricingSettingsCard } from "@/components/settings/bistro-pricing-settings-card";
 import { FinancingSettingsCard } from "@/components/settings/financing-settings-card";
 import { IntegrationsSettingsTab } from "@/components/settings/integrations-settings-tab";
 import { LeadSourcesSettingsTab } from "@/components/settings/lead-sources-settings-tab";
@@ -319,6 +320,7 @@ export function SettingsPage() {
             <div className="space-y-6">
               <FinancingSettingsCard />
               <UpsellRanksSettingsCard />
+              <BistroPricingSettingsCard />
               <PermanentPricingSettingsCard />
               <SeasonalPricingSettingsTab />
             </div>

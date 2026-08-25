@@ -158,6 +158,104 @@ describe("customer-facing tenant branding", () => {
   });
 });
 
+describe("ClientProposalView — visual checkout", () => {
+  it("shows the saved mockup, server price, deposit, and connected acceptance action", async () => {
+    const onApprove = renderView({
+      packages: [],
+      proposal_document: {
+        ...DOCUMENT,
+        mockups: [
+          {
+            image: "data:image/png;base64,AAAA",
+            caption: "Front elevation lighting design",
+          },
+        ],
+      } as unknown as Record<string, unknown>,
+    }).onApprove;
+
+    expect(screen.getByRole("img", { name: "Front elevation lighting design" })).toBeVisible();
+    const visualCheckout = screen.getByRole("region", { name: "Your lighting proposal" });
+    expect(within(visualCheckout).getByText("$16,782")).toBeVisible();
+    expect(
+      within(visualCheckout).getByText(
+        /\$8,391 due today; the remaining balance follows your proposal terms/i,
+      ),
+    ).toBeVisible();
+    await userEvent.click(
+      within(visualCheckout).getByRole("button", { name: "Accept & Pay $8,391" }),
+    );
+    expect(onApprove).toHaveBeenCalledWith("best");
+    expect(
+      within(visualCheckout).getByText(
+        /acceptance is recorded before the existing secure payment checkout opens/i,
+      ),
+    ).toBeVisible();
+  });
+});
+
+describe("ClientProposalView — measured Bistro pricing", () => {
+  it("names temporary and permanent runs without legacy Classic or Color labels", () => {
+    const bistroDocument = {
+      ...DOCUMENT,
+      bistro: {
+        pricing_mode: "installation",
+        feet: 150,
+        product: "installation",
+        tier: "",
+        per_ft: 0,
+        hardware: 0,
+        minimum: 500,
+        lights_cost: 2248,
+        poles_cost: 786,
+        raw_total: 3034,
+        total: 3034,
+        min_applied: false,
+        ordered_ft: 150,
+        installations: [
+          {
+            installation: "temporary",
+            label: "Temporary Bistro Lighting",
+            feet: 100,
+            lights_per_ft: 10,
+            poles_per_ft: 4,
+            lights_cost: 1124,
+            poles_cost: 449,
+            total: 1573,
+          },
+          {
+            installation: "permanent",
+            label: "Permanent Bistro Lighting",
+            feet: 50,
+            lights_per_ft: 20,
+            poles_per_ft: 6,
+            lights_cost: 1124,
+            poles_cost: 337,
+            total: 1461,
+          },
+        ],
+        lines: [],
+      },
+    };
+
+    renderView({
+      proposal_document: bistroDocument as unknown as Record<string, unknown>,
+    });
+
+    expect(screen.getAllByText(/Temporary \+ Permanent/)).toHaveLength(2);
+    expect(
+      screen.getByText(
+        /100 ft Temporary Bistro Lighting, including lights and pole\/support allowance/i,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        /50 ft Permanent Bistro Lighting, including lights and pole\/support allowance/i,
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(/Classic Bistro|Color Changing Bistro/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("client package selection", () => {
   it("offers each package as a choice, starting on the rep's recommendation", () => {
     renderView();

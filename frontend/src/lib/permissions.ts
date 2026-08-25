@@ -41,6 +41,8 @@ export type Capability =
   | "comms:manage"
   | "billing:read"
   | "billing:write"
+  | "quotes:read"
+  | "quotes:write"
   | "reports:view"
   | "attendance:use"
   | "attendance:manage"
@@ -75,6 +77,8 @@ const ALL_CAPABILITIES: Capability[] = [
   "comms:manage",
   "billing:read",
   "billing:write",
+  "quotes:read",
+  "quotes:write",
   "reports:view",
   "attendance:use",
   "attendance:manage",
@@ -98,6 +102,8 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
     "comms:send",
     "billing:read",
     "billing:write",
+    "quotes:read",
+    "quotes:write",
     "attendance:use",
     "locations:manage",
     "upsell:sell",
@@ -112,6 +118,8 @@ export const TIER_CAPABILITIES: Record<Tier, Capability[]> = {
     "jobs:read",
     "attendance:use",
     "comms:send",
+    "quotes:read",
+    "quotes:write",
     "upsell:sell",
     "upsell:sell_uncapped",
   ],

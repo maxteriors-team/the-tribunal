@@ -80,7 +80,9 @@ from app.schemas.proposal import (
     PublicProposalPackage,
 )
 from app.schemas.proposal_wizard import (
+    MAX_PROPOSAL_MOCKUP_IMAGE_CHARS,
     ProposalDocument,
+    ProposalMockup,
     ProposalWizardPayload,
     WizardCharge,
     WizardDepositSelection,
@@ -380,6 +382,36 @@ class QuoteService:
         if project.installation_shot_id not in {shot.id for shot in document.shots}:
             raise ValidationError("Selected installation sheet is missing from the project")
         return project
+
+    @staticmethod
+    def _lighting_project_quote_defaults(
+        payload: ProposalWizardPayload, project: LightingProject
+    ) -> ProposalWizardPayload:
+        """Snapshot the saved design visual into its workspace-scoped quote."""
+        from app.schemas.lighting_project import LandscapeDraftDocument
+
+        document = LandscapeDraftDocument.model_validate(project.document)
+        selected_shot = next(
+            shot for shot in document.shots if shot.id == project.installation_shot_id
+        )
+        updates: dict[str, object] = {}
+        if (
+            not payload.mockups
+            and len(selected_shot.photo.data_url) <= MAX_PROPOSAL_MOCKUP_IMAGE_CHARS
+        ):
+            sheet_name = (
+                selected_shot.sheet.drawing_title or selected_shot.sheet.label
+                if selected_shot.sheet
+                else None
+            ) or project.name
+            updates["mockups"] = [
+                ProposalMockup(
+                    image=selected_shot.photo.data_url,
+                    caption=f"{sheet_name} lighting design",
+                )
+            ]
+
+        return payload.model_copy(update=updates) if updates else payload
 
     # ------------------------------------------------------------------
     # Derivation helpers (pure; no I/O)
@@ -946,6 +978,7 @@ class QuoteService:
         status: str | None = None,
         contact_id: int | None = None,
         assigned_user_id: int | None = None,
+        owner_user_id: int | None = None,
     ) -> PaginatedQuotes:
         """List a workspace's quotes, newest first, with optional filters."""
         await self._expire_overdue(workspace_id)
@@ -961,6 +994,11 @@ class QuoteService:
             query = query.where(Quote.contact_id == contact_id)
         if assigned_user_id is not None:
             query = query.where(Quote.assigned_user_id == assigned_user_id)
+        if owner_user_id is not None:
+            query = query.where(
+                (Quote.assigned_user_id == owner_user_id)
+                | (Quote.assigned_user_id.is_(None) & (Quote.created_by_id == owner_user_id))
+            )
         query = query.order_by(Quote.created_at.desc())
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
@@ -975,6 +1013,7 @@ class QuoteService:
         quote_in: QuoteCreate,
         *,
         created_by_id: int | None = None,
+        assigned_user_id: int | None = None,
         selected_permanent_kits: Sequence[PermanentKitSelection] | None = None,
     ) -> QuoteDetailResponse:
         """Create a draft quote with its initial line items and computed totals."""
@@ -984,11 +1023,12 @@ class QuoteService:
             service_location_id=quote_in.service_location_id,
             opportunity_id=quote_in.opportunity_id,
         )
-        assigned_user_id = await self._default_assignee_id(
-            workspace_id,
-            opportunity_id=quote_in.opportunity_id,
-            created_by_id=created_by_id,
-        )
+        if assigned_user_id is None:
+            assigned_user_id = await self._default_assignee_id(
+                workspace_id,
+                opportunity_id=quote_in.opportunity_id,
+                created_by_id=created_by_id,
+            )
         quote = Quote(
             workspace_id=workspace_id,
             contact_id=quote_in.contact_id,
@@ -2203,6 +2243,7 @@ class QuoteService:
                 id=uuid.uuid4(),
                 workspace_id=quote.workspace_id,
                 contact_id=quote.contact_id,
+                assigned_to_user_id=quote.assigned_user_id or quote.created_by_id,
                 nudge_type="quote_viewed",
                 title=f"\U0001f440 {who} opened quote {quote.number}",
                 message=(
@@ -2291,8 +2332,20 @@ class QuoteService:
         workspace = await get_or_404(self.db, Workspace, workspace_id)
         config = get_pricing_config(workspace)
         catalog = await self._resolve_wizard_catalog(workspace_id)
-        document, line_items = build_proposal_document(config, catalog, payload)
-        self._attach_deposit_to_document(document, payload, config)
+        effective_payload = payload
+        if payload.lighting_project_id is not None:
+            if payload.contact_id is None:
+                raise ValidationError("A lighting project quote requires a linked contact")
+            project = await self._validated_lighting_project(
+                workspace_id,
+                payload.lighting_project_id,
+                contact_id=payload.contact_id,
+                service_location_id=payload.service_location_id,
+                opportunity_id=payload.opportunity_id,
+            )
+            effective_payload = self._lighting_project_quote_defaults(payload, project)
+        document, line_items = build_proposal_document(config, catalog, effective_payload)
+        self._attach_deposit_to_document(document, effective_payload, config)
         document.attach_warning = await self._preview_attach_warning(
             workspace, workspace_id, line_items
         )
@@ -2366,8 +2419,6 @@ class QuoteService:
         workspace_id = workspace.id
         config = get_pricing_config(workspace)
         catalog = await self._resolve_wizard_catalog(workspace_id)
-        document, line_items = build_proposal_document(config, catalog, payload)
-        self._attach_deposit_to_document(document, payload, config)
 
         # Wizard quotes must carry a contact so an approved quote can convert into
         # a scheduled job. Use the explicit contact, else resolve/create one from
@@ -2383,6 +2434,7 @@ class QuoteService:
             contact_id = await self._resolve_wizard_contact(workspace_id, payload)
 
         lighting_project_id = None
+        effective_payload = payload
         if payload.lighting_project_id is not None:
             if contact_id is None:
                 raise ValidationError("A lighting project quote requires a linked contact")
@@ -2394,6 +2446,10 @@ class QuoteService:
                 opportunity_id=payload.opportunity_id,
             )
             lighting_project_id = lighting_project.id
+            effective_payload = self._lighting_project_quote_defaults(payload, lighting_project)
+
+        document, line_items = build_proposal_document(config, catalog, effective_payload)
+        self._attach_deposit_to_document(document, effective_payload, config)
 
         quote.contact_id = contact_id
         quote.service_location_id = payload.service_location_id
@@ -2406,7 +2462,9 @@ class QuoteService:
         quote.tax_amount = 0
         quote.discount_amount = 0
         quote.proposal_document = document.model_dump(mode="json")
-        stored_payload = payload.model_copy(update={"contact_id": contact_id, "title": quote.title})
+        stored_payload = effective_payload.model_copy(
+            update={"contact_id": contact_id, "title": quote.title}
+        )
         quote.proposal_input = stored_payload.model_dump(mode="json", exclude={"attach_dismissal"})
         quote.proposal_input_version = WIZARD_INPUT_VERSION
 
@@ -2420,7 +2478,7 @@ class QuoteService:
         # present first so percentage and fixed values can never coexist.
         quote.deposit_percentage = None
         quote.deposit_amount_fixed = None
-        selection = self._wizard_deposit_selection(payload, config)
+        selection = self._wizard_deposit_selection(effective_payload, config)
         if selection is not None:
             mode, value = selection
             if mode == "fixed":
@@ -2437,14 +2495,16 @@ class QuoteService:
         payload: ProposalWizardPayload,
         *,
         created_by_id: int | None = None,
+        assigned_user_id: int | None = None,
     ) -> QuoteDetailResponse:
         """Persist a new server-priced wizard proposal as a draft quote."""
         workspace = await get_or_404(self.db, Workspace, workspace_id)
-        assigned_user_id = await self._default_assignee_id(
-            workspace_id,
-            opportunity_id=payload.opportunity_id,
-            created_by_id=created_by_id,
-        )
+        if assigned_user_id is None:
+            assigned_user_id = await self._default_assignee_id(
+                workspace_id,
+                opportunity_id=payload.opportunity_id,
+                created_by_id=created_by_id,
+            )
         quote = Quote(
             workspace_id=workspace_id,
             assigned_user_id=assigned_user_id,
@@ -3009,6 +3069,7 @@ class QuoteService:
         req: EstimateQuoteRequest,
         *,
         created_by_id: int | None = None,
+        assigned_user_id: int | None = None,
     ) -> QuoteDetailResponse:
         """Turn a measured roofline estimate into a real draft quote.
 
@@ -3051,6 +3112,7 @@ class QuoteService:
                 line_items=line_items,
             ),
             created_by_id=created_by_id,
+            assigned_user_id=assigned_user_id,
             selected_permanent_kits=(
                 pricing.selected_kits if isinstance(pricing, PermanentPricing) else None
             ),

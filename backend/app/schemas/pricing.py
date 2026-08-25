@@ -272,8 +272,11 @@ class SavingsConfig(BaseModel):
     assumed_repair_spend_per_fixture: float = Field(default=40, ge=0)
 
 
+BistroInstallation = Literal["temporary", "permanent"]
+
+
 class BistroTier(BaseModel):
-    """Install-difficulty tier for string lighting priced per linear foot."""
+    """Install-difficulty tier for legacy string lighting priced per linear foot."""
 
     key: str
     name: str
@@ -283,7 +286,7 @@ class BistroTier(BaseModel):
 
 
 class BistroProduct(BaseModel):
-    """A bistro product (color-changing or classic) with its own hardware cost."""
+    """A legacy bistro product (color-changing or classic) and its hardware cost."""
 
     name: str
     subtitle: str | None = None
@@ -293,11 +296,25 @@ class BistroProduct(BaseModel):
     bulb_spacing_ft: float = Field(default=2, gt=0)
 
 
+class BistroInstallationConfig(BaseModel):
+    """Measured-run rates for one temporary or permanent Bistro installation."""
+
+    label: str = Field(max_length=120)
+    lights_per_ft: float = Field(default=0, ge=0)
+    poles_per_ft: float = Field(default=0, ge=0)
+
+
 class BistroConfig(BaseModel):
-    """Optional string-lighting add-on. A lighting brand may omit it entirely."""
+    """String-lighting rates plus legacy sales-wizard product configuration."""
 
     enabled: bool = False
     minimum: float = Field(default=0, ge=0)
+    temporary: BistroInstallationConfig = Field(
+        default_factory=lambda: BistroInstallationConfig(label="Temporary Bistro Lighting")
+    )
+    permanent: BistroInstallationConfig = Field(
+        default_factory=lambda: BistroInstallationConfig(label="Permanent Bistro Lighting")
+    )
     tiers: list[BistroTier] = Field(default_factory=list)
     color: BistroProduct | None = None
     classic: BistroProduct | None = None
@@ -994,9 +1011,23 @@ class BistroLine(BaseModel):
     description: str | None = None
 
 
+class BistroInstallationPricing(BaseModel):
+    """Server-priced light and pole allowances for one installation type."""
+
+    installation: BistroInstallation
+    label: str
+    feet: float
+    lights_per_ft: float
+    poles_per_ft: float
+    lights_cost: float
+    poles_cost: float
+    total: float
+
+
 class BistroPricing(BaseModel):
     """Computed bistro string-lighting price + component breakdown."""
 
+    pricing_mode: Literal["legacy", "installation"] = "legacy"
     feet: float
     product: str
     tier: str
@@ -1004,10 +1035,12 @@ class BistroPricing(BaseModel):
     hardware: float
     minimum: float
     lights_cost: float
+    poles_cost: float = 0
     raw_total: float
     total: float
     min_applied: bool
     ordered_ft: float
+    installations: list[BistroInstallationPricing] = Field(default_factory=list)
     lines: list[BistroLine] = Field(default_factory=list)
 
 

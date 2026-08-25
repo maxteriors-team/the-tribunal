@@ -3051,11 +3051,10 @@ export interface paths {
         put?: never;
         /**
          * Initiate Call
-         * @description Initiate an outbound voice call, handled by an AI agent or by the user.
+         * @description Initiate an outbound voice call handled by AI, phone callback, or browser.
          *
-         *     ``mode="ai"`` dials the contact and streams the call to a voice agent.
-         *     ``mode="user"`` rings the operator's own phone first and bridges the contact
-         *     in once they pick up, so nobody is ever dialed into silence.
+         *     Human modes ring the operator before the contact, so nobody is dialed into
+         *     silence. Browser mode uses a server-derived internal SIP target only.
          *
          *     Args:
          *         workspace_id: Workspace ID
@@ -3093,6 +3092,26 @@ export interface paths {
         get: operations["list_live_calls_api_v1_workspaces__workspace_id__calls_live_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/calls/webrtc/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue Webrtc Token
+         * @description Mint a memory-only Telnyx JWT for the authenticated operator's browser.
+         */
+        post: operations["issue_webrtc_token_api_v1_workspaces__workspace_id__calls_webrtc_token_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6934,12 +6953,32 @@ export interface paths {
         };
         /**
          * List Nudges
-         * @description List nudges for a workspace with optional filters.
+         * @description List nudges visible to the caller with optional filters.
          *
          *     Defaults to showing pending and sent nudges, ordered by due_date ascending.
          */
         get: operations["list_nudges_api_v1_workspaces__workspace_id__nudges_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/nudges/clear-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Clear All Nudges
+         * @description Dismiss every active nudge currently visible to the caller.
+         */
+        put: operations["clear_all_nudges_api_v1_workspaces__workspace_id__nudges_clear_all_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -6956,7 +6995,7 @@ export interface paths {
         };
         /**
          * Get Nudge Stats
-         * @description Get nudge counts grouped by status.
+         * @description Get visible nudge counts grouped by status.
          */
         get: operations["get_nudge_stats_api_v1_workspaces__workspace_id__nudges_stats_get"];
         put?: never;
@@ -6977,7 +7016,7 @@ export interface paths {
         get?: never;
         /**
          * Act On Nudge
-         * @description Mark a nudge as acted upon, optionally dispatching an action like sending a card.
+         * @description Mark a visible nudge as acted, optionally dispatching an action.
          */
         put: operations["act_on_nudge_api_v1_workspaces__workspace_id__nudges__nudge_id__act_put"];
         post?: never;
@@ -6997,7 +7036,7 @@ export interface paths {
         get?: never;
         /**
          * Dismiss Nudge
-         * @description Dismiss a nudge.
+         * @description Dismiss a visible nudge.
          */
         put: operations["dismiss_nudge_api_v1_workspaces__workspace_id__nudges__nudge_id__dismiss_put"];
         post?: never;
@@ -7017,7 +7056,7 @@ export interface paths {
         get?: never;
         /**
          * Snooze Nudge
-         * @description Snooze a nudge until a specified time.
+         * @description Snooze a visible nudge until a specified time.
          */
         put: operations["snooze_nudge_api_v1_workspaces__workspace_id__nudges__nudge_id__snooze_put"];
         post?: never;
@@ -12998,7 +13037,7 @@ export interface components {
         };
         /**
          * BistroConfig
-         * @description Optional string-lighting add-on. A lighting brand may omit it entirely.
+         * @description String-lighting rates plus legacy sales-wizard product configuration.
          */
         BistroConfig: {
             classic?: components["schemas"]["BistroProduct"] | null;
@@ -13013,8 +13052,53 @@ export interface components {
              * @default 0
              */
             minimum: number;
+            permanent?: components["schemas"]["BistroInstallationConfig"];
+            temporary?: components["schemas"]["BistroInstallationConfig"];
             /** Tiers */
             tiers?: components["schemas"]["BistroTier"][];
+        };
+        /**
+         * BistroInstallationConfig
+         * @description Measured-run rates for one temporary or permanent Bistro installation.
+         */
+        BistroInstallationConfig: {
+            /** Label */
+            label: string;
+            /**
+             * Lights Per Ft
+             * @default 0
+             */
+            lights_per_ft: number;
+            /**
+             * Poles Per Ft
+             * @default 0
+             */
+            poles_per_ft: number;
+        };
+        /**
+         * BistroInstallationPricing
+         * @description Server-priced light and pole allowances for one installation type.
+         */
+        BistroInstallationPricing: {
+            /** Feet */
+            feet: number;
+            /**
+             * Installation
+             * @enum {string}
+             */
+            installation: "temporary" | "permanent";
+            /** Label */
+            label: string;
+            /** Lights Cost */
+            lights_cost: number;
+            /** Lights Per Ft */
+            lights_per_ft: number;
+            /** Poles Cost */
+            poles_cost: number;
+            /** Poles Per Ft */
+            poles_per_ft: number;
+            /** Total */
+            total: number;
         };
         /**
          * BistroLine
@@ -13043,6 +13127,8 @@ export interface components {
             feet: number;
             /** Hardware */
             hardware: number;
+            /** Installations */
+            installations?: components["schemas"]["BistroInstallationPricing"][];
             /** Lights Cost */
             lights_cost: number;
             /** Lines */
@@ -13055,6 +13141,17 @@ export interface components {
             ordered_ft: number;
             /** Per Ft */
             per_ft: number;
+            /**
+             * Poles Cost
+             * @default 0
+             */
+            poles_cost: number;
+            /**
+             * Pricing Mode
+             * @default legacy
+             * @enum {string}
+             */
+            pricing_mode: "legacy" | "installation";
             /** Product */
             product: string;
             /** Raw Total */
@@ -13066,7 +13163,7 @@ export interface components {
         };
         /**
          * BistroProduct
-         * @description A bistro product (color-changing or classic) with its own hardware cost.
+         * @description A legacy bistro product (color-changing or classic) and its hardware cost.
          */
         BistroProduct: {
             /**
@@ -13093,7 +13190,7 @@ export interface components {
         };
         /**
          * BistroTier
-         * @description Install-difficulty tier for string lighting priced per linear foot.
+         * @description Install-difficulty tier for legacy string lighting priced per linear foot.
          */
         BistroTier: {
             /**
@@ -13949,11 +14046,14 @@ export interface components {
          *     - ``"user"``: the operator's own phone rings first, then the contact is
          *       dialed and the two legs are bridged. ``agent_id`` is ignored.
          *       ``user_phone_number`` picks which allowlisted number to ring.
+         *     - ``"browser"``: the operator's authenticated Tribunal browser rings first;
+         *       the server then dials and bridges the contact. Client-supplied SIP targets
+         *       are never accepted.
          */
         CallCreate: {
             /**
              * Agent Id
-             * @description Voice agent for mode='ai'. Ignored when mode='user'.
+             * @description Voice agent for mode='ai'. Ignored for human modes.
              */
             agent_id?: string | null;
             /** Contact Phone */
@@ -13965,7 +14065,7 @@ export interface components {
              * @default ai
              * @enum {string}
              */
-            mode: "ai" | "user";
+            mode: "ai" | "user" | "browser";
             /** To Number */
             to_number: string;
             /**
@@ -22259,6 +22359,14 @@ export interface components {
         NudgeActRequest: {
             /** Action Taken */
             action_taken?: string | null;
+        };
+        /**
+         * NudgeClearAllResponse
+         * @description Count of visible active nudges dismissed by Clear All.
+         */
+        NudgeClearAllResponse: {
+            /** Dismissed Count */
+            dismissed_count: number;
         };
         /**
          * NudgeListResponse
@@ -31910,6 +32018,14 @@ export interface components {
             voice_connection_id?: string | null;
         };
         /**
+         * WebRTCTokenResponse
+         * @description Short-lived browser credential; callers must keep it in memory only.
+         */
+        WebRTCTokenResponse: {
+            /** Token */
+            token: string;
+        };
+        /**
          * WinnerDetectionResponse
          * @description Schema for winner detection result.
          */
@@ -31926,8 +32042,21 @@ export interface components {
             winner_probability: number | null;
         };
         /**
+         * WizardBistroRun
+         * @description Measured footage grouped by temporary or permanent installation.
+         */
+        WizardBistroRun: {
+            /** Feet */
+            feet: number;
+            /**
+             * Installation
+             * @enum {string}
+             */
+            installation: "temporary" | "permanent";
+        };
+        /**
          * WizardBistroSelection
-         * @description Optional string-lighting selection.
+         * @description Optional measured-run selection or compatible legacy product selection.
          */
         WizardBistroSelection: {
             /**
@@ -31940,6 +32069,8 @@ export interface components {
              * @default color
              */
             product: string;
+            /** Runs */
+            runs?: components["schemas"]["WizardBistroRun"][];
             /**
              * Tier
              * @default easy
@@ -38460,6 +38591,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LiveCallsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_webrtc_token_api_v1_workspaces__workspace_id__calls_webrtc_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebRTCTokenResponse"];
                 };
             };
             /** @description Validation Error */
@@ -46576,6 +46738,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NudgeListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_all_nudges_api_v1_workspaces__workspace_id__nudges_clear_all_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NudgeClearAllResponse"];
                 };
             };
             /** @description Validation Error */

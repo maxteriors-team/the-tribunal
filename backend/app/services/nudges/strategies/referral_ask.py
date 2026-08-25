@@ -81,6 +81,7 @@ class ReferralAskNudgeStrategy(NudgeStrategy):
             nudge = HumanNudge(
                 workspace_id=context.workspace_id,
                 contact_id=contact_id,
+                assigned_to_user_id=context.resolve_assignee(contact_id=contact_id),
                 nudge_type="referral_ask",
                 title=f"Ask {name} for a referral",
                 message=(

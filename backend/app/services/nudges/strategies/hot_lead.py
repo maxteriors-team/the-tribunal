@@ -50,6 +50,7 @@ class HotLeadNudgeStrategy(NudgeStrategy):
             nudge = HumanNudge(
                 workspace_id=context.workspace_id,
                 contact_id=contact.id,
+                assigned_to_user_id=context.resolve_assignee(contact_id=contact.id),
                 nudge_type="hot_lead",
                 title=f"\U0001f525 {name} is a hot lead",
                 message=(

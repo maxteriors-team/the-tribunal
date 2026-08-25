@@ -27,6 +27,7 @@ export type ProposalWizardPayload = Schemas["ProposalWizardPayload"];
 export type WizardClient = Schemas["WizardClient"];
 export type WizardCharge = Schemas["WizardCharge"];
 export type WizardFixtureQty = Schemas["WizardFixtureQty"];
+export type WizardBistroRun = Schemas["WizardBistroRun"];
 export type WizardBistroSelection = Schemas["WizardBistroSelection"];
 export type WizardPermanentSelection = Schemas["WizardPermanentSelection"];
 export type WizardChristmasSelection = Schemas["WizardChristmasSelection"];
@@ -42,6 +43,9 @@ export type ProposalCategorySection = Schemas["ProposalCategorySection"];
 export type CategoryLine = Schemas["CategoryLine"];
 export type TierPricing = Schemas["TierPricing"];
 export type CarePlanPricing = Schemas["CarePlanPricing"];
+export type BistroConfig = Schemas["BistroConfig"];
+export type BistroInstallationConfig = Schemas["BistroInstallationConfig"];
+export type BistroInstallationPricing = Schemas["BistroInstallationPricing"];
 export type BistroPricing = Schemas["BistroPricing"];
 export type FulfillmentPart = Schemas["FulfillmentPart"];
 

@@ -841,3 +841,93 @@ Evidence: `.ezcoder/screenshots/sales-rep-onboarding-desktop.png`, `.ezcoder/scr
 **Final score: 21/24.** The first mobile capture clipped the footer below a tall workflow step. The revision added the missing flex minimum constraint so content scrolls while Previous and Next remain visible, then re-captured mobile. The repeated inner setup eyebrow was removed rather than replaced with decoration.
 
 Verification passed: 9 focused unit tests, targeted ESLint, TypeScript, production build with `/sales-onboarding`, and browser captures at 1440×900 and 390×844 with no console or page errors. Assistive-technology speech output, forced colors, 200% zoom/reflow, and a complete manual WCAG review remain unverified, so no conformance claim is made.
+
+---
+
+## Browser softphone pilot (2026-08-21)
+
+### Design read
+
+- **Surface:** authenticated CRM call dialog plus a persistent desktop call bar.
+- **Audience:** Philippines-based CSRs using desktop Chrome, a stable internet connection, and a headset.
+- **Single job:** place a customer call without Quo, WhatsApp, a personal phone number, or leaving Tribunal.
+- **Risk:** dialing the customer before the CSR is ready wastes spend and creates silence; copied credentials must not reach paid destinations; microphone failure must stop the call.
+- **Constraints:** Telnyx remains the carrier, the current Call Control lifecycle remains the system of record, and the pilot supports one active browser session per user.
+
+### Thesis and reuse map
+
+**Headset first, customer second.** Browser headset is the first mode in the existing outbound-call dialog. Tribunal establishes an authenticated internal-only SIP session, rings the CSR browser, and dials the customer only after the CSR explicitly answers. The existing phone-number selector, Radix dialog/radio semantics, Lucide icons, button variants, borders, typography, and call lifecycle remain intact.
+
+A compact fixed call bar carries the state across CRM navigation: connecting, waiting, ready to answer, active with duration, muted, ended, and recoverable error. It uses one bordered background surface rather than a new soft semantic tint, keeps decision controls at least 40 px high, announces status changes politely, labels every icon-only control, and removes motion from the loading indicator when reduced motion is requested.
+
+### Security and failure contract
+
+The browser receives a 24-hour Telnyx JWT in memory only. The long-lived SIP password is never stored or returned. Each user receives one server-owned SIP identity on a Credential Connection configured for internal SIP URI calls only and no PSTN outbound profile. The API validates workspace communication permission, derives the SIP destination from the authenticated user, rejects arbitrary SIP URIs, rate-limits token and paid-call creation through Redis, and fails closed when spend protection is unavailable.
+
+Microphone permission is requested only after the browser rings. Denial hangs up before the customer leg starts. Ending the call asks both the browser SDK and the existing server hangup endpoint to stop the provider leg. Provider, microphone, network, empty-number, and busy-call failures remain visible and recoverable without exposing provider responses or credentials.
+
+### Responsive and verification boundary
+
+Desktop Chrome with a headset is the supported pilot. The dialog becomes one column below the existing small breakpoint, and the fixed bar keeps contact, status, and essential controls within the viewport. Mobile calling, simultaneous devices, inbound CSR availability, live captions, assistive-technology speech output, forced colors, 200% zoom, and physical headset behavior remain unverified until runtime testing; no accessibility or production-readiness claim is made from automated checks alone.
+
+## Temporary and permanent Bistro lighting designer (2026-08-24)
+
+### Design read and thesis
+
+- **Surface:** the existing authenticated landscape-lighting drafting studio remains the leading
+  surface; Bistro is an added run type, not a separate application or decorative mode.
+- **Audience:** landscape-lighting reps laying out work outdoors on a phone, plus installers and
+  office staff consuming the same saved plan and schedule.
+- **Single job:** trace a Bistro run on an aerial, label it Temporary or Permanent, and carry its
+  anchors and calibrated length into the install handoff.
+- **Risk:** a lost installation type or silently omitted quote quantity can change hardware, labor,
+  and margin. Geometry therefore persists by stable product ID, while CRM quote conversion blocks
+  until the backend has installation-specific Bistro rates.
+- **Platform:** 390 px touch is a supported drafting path alongside mouse and keyboard. Physical
+  device touch, assistive-technology speech, and 200% browser zoom remain verification gaps.
+
+The thesis is **one plan, two install conventions**. Existing black/brass drafting chrome, Lucide
+icons, Add menu, canvas renderer, sheet title block, autosave, document viewport, schedule table,
+focus treatment, and responsive zoom rail are reused. Temporary cable uses a dashed plan convention;
+Permanent cable uses a heavier support line and visible anchors. The separate run schedule is the
+subject-specific device; a proposed standalone Bistro panel was discarded as duplicate workflow.
+
+### Complete flow and states
+
+- Add groups fixtures and Bistro runs separately, with explicit Temporary and Permanent names. Real
+  price-book Bistro products are used when present; two layout-only tools keep drawing available
+  when catalog setup is incomplete.
+- A finger stroke traces and commits a run on lift; tapping start then end also commits. Mouse users
+  retain point placement plus Enter or double-click completion. The existing Undo action removes a
+  completed run.
+- Pan mode releases the aerial canvas to native touch scrolling after document zoom, preventing
+  navigation gestures from placing or moving billable plan objects.
+- Saved runs survive catalog archival through hidden fallback products, while legacy generic Bistro
+  IDs remain readable. Empty, unscaled, configured-SKU, layout-only, and archived-SKU states have
+  explicit schedule output.
+- Fixture Schedule adds per-run sheet, installation, product, anchor, and calibrated-length columns.
+  The Proposal document shows the same rows. Quote creation fails closed while Temporary/Permanent
+  pricing is absent, so Bistro footage cannot disappear from a customer total.
+
+### Rendered critique and verification boundary
+
+Rendered evidence: `.ezcoder/screenshots/bistro-plan-mobile.png`,
+`.ezcoder/screenshots/bistro-tools-mobile.png`, and
+`.ezcoder/screenshots/bistro-schedule-mobile.png`. The first narrow Add-menu capture presented one
+undifferentiated tool list. The revision added explicit Fixtures and Bistro runs groups, retained
+44 px primary mobile controls, prevented closed pointer menus from leaving a false focus ring while
+preserving keyboard focus return, and recaptured the menu. The document-sheet model intentionally keeps
+tables and the plan at one scale; Fit, zoom, and Pan provide the narrow-screen recovery path rather
+than redesigning the technical sheet per viewport.
+
+Quality-rubric score from the revised desktop/tablet/mobile capture set: **21/24**. Composition and
+responsive behavior score 1 because dense drafting chrome and scaled technical sheets require zoom
+on a phone; accessibility scores 1 because semantic controls, keyboard completion, simulated touch,
+reduced motion, and forced colors passed, while physical touch, screen-reader output, and a complete
+WCAG 2.2 criterion audit remain unverified. Every other criterion scores 2; no quality-floor
+criterion scores zero.
+
+Verification passed: TypeScript; targeted ESLint with no errors; **109/109 focused Vitest tests**;
+and **7/7 Chromium landscape-studio E2E tests**, including save persistence, Bistro schedule handoff,
+390 px captures, 320 px geometry, reduced motion, and forced colors. These are scoped regression
+checks, not a product-wide accessibility or legal-conformance claim.

@@ -36,6 +36,7 @@ async def test_authorization_url_uses_offline_access_and_one_time_state() -> Non
     assert "prompt=consent" in url
     assert "calendar.freebusy" in url
     assert "calendar.events.owned" in url
+    assert "calendar.calendarlist.readonly" in url
     assert "auth%2Fcalendar+" not in url
     redis.hset.assert_awaited_once()
     redis.expire.assert_awaited_once_with(
@@ -103,6 +104,70 @@ async def test_busy_periods_requires_a_connected_calendar() -> None:
             user_id=9,
             starts_at=datetime(2026, 8, 13, 14, 0, tzinfo=UTC),
             ends_at=datetime(2026, 8, 13, 15, 0, tzinfo=UTC),
+        )
+
+
+@pytest.mark.asyncio
+async def test_busy_periods_includes_blocks_from_subscribed_calendars() -> None:
+    start = datetime(2026, 8, 24, 15, 30, tzinfo=UTC)
+    end = start + timedelta(minutes=30)
+    connection = SimpleNamespace(
+        calendar_id="primary",
+        granted_scopes="https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    )
+    request = AsyncMock(
+        side_effect=[
+            {"items": [{"id": "primary"}, {"id": "field-team"}]},
+            {
+                "calendars": {
+                    "primary": {"busy": []},
+                    "field-team": {"busy": [{"start": start.isoformat(), "end": end.isoformat()}]},
+                }
+            },
+        ]
+    )
+
+    with (
+        patch.object(google_calendar, "get_connection", AsyncMock(return_value=connection)),
+        patch.object(google_calendar, "_calendar_request", request),
+    ):
+        periods = await google_calendar.busy_periods(
+            AsyncMock(),
+            user_id=1,
+            starts_at=start,
+            ends_at=end,
+        )
+
+    assert periods == [(start, end)]
+    assert request.await_args_list[1].kwargs["json"]["items"] == [
+        {"id": "primary"},
+        {"id": "field-team"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_busy_periods_fails_closed_when_any_calendar_cannot_be_read() -> None:
+    connection = SimpleNamespace(
+        calendar_id="primary",
+        granted_scopes="https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+    )
+    request = AsyncMock(
+        side_effect=[
+            {"items": [{"id": "primary"}, {"id": "field-team"}]},
+            {"calendars": {"primary": {"busy": []}}},
+        ]
+    )
+
+    with (
+        patch.object(google_calendar, "get_connection", AsyncMock(return_value=connection)),
+        patch.object(google_calendar, "_calendar_request", request),
+        pytest.raises(GoogleCalendarError, match="every calendar"),
+    ):
+        await google_calendar.busy_periods(
+            AsyncMock(),
+            user_id=1,
+            starts_at=datetime(2026, 8, 24, 15, 30, tzinfo=UTC),
+            ends_at=datetime(2026, 8, 24, 16, 0, tzinfo=UTC),
         )
 
 

@@ -9,6 +9,7 @@ import { PageErrorBoundary } from "@/components/ui/error-boundary";
 import { POLL_60S } from "@/lib/query-options";
 
 import { AuthProvider } from "./auth-provider";
+import { SoftphoneProvider } from "./softphone-provider";
 import { WorkspaceProvider } from "./workspace-provider";
 
 interface ProvidersProps {
@@ -45,10 +46,9 @@ export function Providers({ children }: ProvidersProps) {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <WorkspaceProvider>
-            <PageErrorBoundary>
-              {children}
-            </PageErrorBoundary>
-            <Toaster
+            <SoftphoneProvider>
+              <PageErrorBoundary>{children}</PageErrorBoundary>
+              <Toaster
               position="bottom-right"
               visibleToasts={1}
               toastOptions={{
@@ -63,7 +63,8 @@ export function Providers({ children }: ProvidersProps) {
                   info: "!border-l-4 !border-l-primary",
                 },
               }}
-            />
+              />
+            </SoftphoneProvider>
           </WorkspaceProvider>
         </AuthProvider>
       </QueryClientProvider>

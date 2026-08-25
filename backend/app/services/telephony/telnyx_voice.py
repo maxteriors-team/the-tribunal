@@ -1,5 +1,6 @@
 """Telnyx voice service for making and receiving calls."""
 
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -908,6 +909,58 @@ class TelnyxVoiceService:
             return None
         except Exception as e:
             self.logger.exception("dial_transfer_leg_failed", error=str(e))
+            return None
+
+    async def dial_browser_leg(
+        self,
+        *,
+        sip_username: str,
+        from_number: str,
+        connection_id: str,
+        webhook_url: str,
+        client_state: str,
+        command_id: str,
+        timeout_secs: int = 30,
+    ) -> str | None:
+        """Dial one provider-issued WebRTC identity over internal SIP.
+
+        ``sip_username`` is validated and the Telnyx domain is fixed here, so no
+        request-controlled SIP URI or external destination reaches the provider.
+        """
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", sip_username):
+            self.logger.error("invalid_browser_sip_username")
+            return None
+
+        payload: dict[str, Any] = {
+            "connection_id": connection_id,
+            "to": f"sip:{sip_username}@telnyx.com",
+            "from": self._normalize_e164(from_number),
+            "webhook_url": webhook_url,
+            "webhook_url_method": "POST",
+            "timeout_secs": max(10, min(timeout_secs, 60)),
+            "client_state": client_state,
+            "command_id": command_id,
+        }
+
+        try:
+            with latency_ms_timer(telnyx_api_latency_ms):
+                response = await self.client.post("/calls", json=payload)
+            response.raise_for_status()
+            data = response.json().get("data", {})
+            call_control_id = data.get("call_control_id")
+            self.logger.info(
+                "browser_leg_dialed",
+                call_control_id=call_control_id,
+            )
+            return str(call_control_id) if call_control_id else None
+        except httpx.HTTPStatusError as exc:
+            self.logger.error(
+                "dial_browser_leg_http_error",
+                status_code=exc.response.status_code,
+            )
+            return None
+        except Exception as exc:
+            self.logger.exception("dial_browser_leg_failed", error=str(exc))
             return None
 
     async def speak_text(

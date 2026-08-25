@@ -51,6 +51,7 @@ class ApprovalsWaitingNudgeStrategy(NudgeStrategy):
             HumanNudge(
                 workspace_id=context.workspace_id,
                 contact_id=None,
+                assigned_to_user_id=context.workspace_owner_user_id,
                 nudge_type="approvals_waiting",
                 title=f"\u23f3 {count} approval{plural} waiting",
                 message=(

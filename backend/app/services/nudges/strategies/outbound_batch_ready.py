@@ -51,6 +51,7 @@ class OutboundBatchReadyNudgeStrategy(NudgeStrategy):
             HumanNudge(
                 workspace_id=context.workspace_id,
                 contact_id=None,
+                assigned_to_user_id=context.workspace_owner_user_id,
                 nudge_type="outbound_batch_ready",
                 title=f"\U0001f4e6 {count} fresh advertisers ready",
                 message=(

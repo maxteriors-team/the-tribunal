@@ -17,6 +17,7 @@ from typing import Any
 from app.schemas.pricing import (
     DEFAULT_FINANCING_DISCLAIMER,
     MAINTENANCE_THROUGH_TOKEN,
+    BistroInstallation,
     BistroPricing,
     ChristmasPackage,
     ChristmasPricing,
@@ -85,14 +86,14 @@ def _active_categories(payload: ProposalWizardPayload) -> list[str]:
     """Resolve the product lines this quote includes, in canonical order.
 
     Explicit ``payload.categories`` wins. When empty (legacy wizard payloads),
-    infer landscape, plus bistro when a bistro selection with footage is present,
-    so pre-existing quotes and callers keep their exact behavior.
+    infer landscape, plus bistro when a bistro selection has legacy footage or
+    grouped measured runs, so pre-existing callers keep their exact behavior.
     """
     if payload.categories:
         selected = {c for c in payload.categories if c in CATEGORY_ORDER}
     else:
         selected = {"landscape"}
-        if payload.bistro is not None and payload.bistro.feet > 0:
+        if payload.bistro is not None and (payload.bistro.feet > 0 or payload.bistro.runs):
             selected.add("bistro")
     return [c for c in CATEGORY_ORDER if c in selected]
 
@@ -313,20 +314,22 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             selected=payload.care_plan_tier,
         )
 
-    # Bistro string lighting (its own bespoke block, kept as-is).
+    # Bistro measured runs use installation rates; legacy product footage keeps
+    # the pre-existing strand/classic algorithm unchanged.
     bistro = None
-    if (
-        "bistro" in categories
-        and payload.bistro is not None
-        and payload.bistro.feet > 0
-        and config.bistro.enabled
-    ):
-        bistro = pp.price_bistro(
-            config,
-            product=payload.bistro.product,
-            tier_key=payload.bistro.tier,
-            feet=payload.bistro.feet,
-        )
+    if "bistro" in categories and payload.bistro is not None:
+        if payload.bistro.runs:
+            grouped_runs: dict[BistroInstallation, float] = {}
+            for run in payload.bistro.runs:
+                grouped_runs[run.installation] = grouped_runs.get(run.installation, 0) + run.feet
+            bistro = pp.price_bistro_installations(config, grouped_runs)
+        elif payload.bistro.feet > 0 and config.bistro.enabled:
+            bistro = pp.price_bistro(
+                config,
+                product=payload.bistro.product,
+                tier_key=payload.bistro.tier,
+                feet=payload.bistro.feet,
+            )
 
     # New per-linear-ft / decor product lines rendered as uniform sections.
     category_sections: list[ProposalCategorySection] = []
@@ -516,6 +519,24 @@ def charges_for_tier(
     return _charges_for(charges, selected, {view.key for view in tier_views})
 
 
+def _bistro_quote_line(bistro: BistroPricing, config: PricingSettings) -> QuoteLineItemCreate:
+    """Describe measured runs without falling back to a legacy product label."""
+    if bistro.pricing_mode == "installation":
+        name = "Bistro Lighting"
+        description = " · ".join(f"{row.feet:g} ft {row.label}" for row in bistro.installations)
+    else:
+        product_cfg = config.bistro.color if bistro.product == "color" else config.bistro.classic
+        name = product_cfg.name if product_cfg else "Bistro Lighting"
+        description = f"{bistro.ordered_ft:g} ft · {bistro.product}"
+    return QuoteLineItemCreate(
+        name=name,
+        description=description,
+        quantity=1,
+        unit_price=bistro.total,
+        discount=0,
+    )
+
+
 def select_tier(
     *,
     tier_views: list[ProposalTierView],
@@ -581,16 +602,7 @@ def select_tier(
             )
         )
     if bistro is not None and bistro.total > 0:
-        product_cfg = config.bistro.color if bistro.product == "color" else config.bistro.classic
-        line_items.append(
-            QuoteLineItemCreate(
-                name=(product_cfg.name if product_cfg else "Bistro Lighting"),
-                description=f"{bistro.ordered_ft:g} ft · {bistro.product}",
-                quantity=1,
-                unit_price=bistro.total,
-                discount=0,
-            )
-        )
+        line_items.append(_bistro_quote_line(bistro, config))
     # One canonical line per new category section (permanent / christmas).
     for section in category_sections:
         detail_bits = [line.label for line in section.lines]

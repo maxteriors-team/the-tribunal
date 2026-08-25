@@ -50,6 +50,10 @@ export interface NudgeListResponse {
   page_size: number;
 }
 
+export interface NudgeClearAllResponse {
+  dismissed_count: number;
+}
+
 export interface NudgeStats {
   pending: number;
   sent: number;

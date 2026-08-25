@@ -69,6 +69,7 @@ class NoShowRecoveryNudgeStrategy(NudgeStrategy):
             nudge = HumanNudge(
                 workspace_id=context.workspace_id,
                 contact_id=contact_id,
+                assigned_to_user_id=context.resolve_assignee(contact_id=contact_id),
                 nudge_type="noshow_recovery",
                 title=f"Recover no-show with {name}",
                 message=(
