@@ -927,3 +927,20 @@ Scope: the transactional customer email sent when a Stripe-backed service invoic
 - The receipt shows the final payment, invoice total, total paid, paid timestamp, and a stable link where the customer can review service details and save the paid invoice as a PDF.
 - The provider receives a deterministic idempotency key; a replayed Stripe payment intent does not generate another application send.
 - Targeted verification passed: 23 email-service tests, 40 PostgreSQL invoice-service integration tests, Ruff, formatting, and MyPy. Runtime Resend delivery/inbox placement was not exercised in this pass.
+
+## Focused addendum — operator browser calling (2026-08-24)
+
+Snapshot: 24 August 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
+
+Scope: authenticated staff-initiated AI, phone-callback, and browser calls through the existing Telnyx voice provider. This adds no automated campaign, new processor, or browser-exposed provider secret.
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| BCALL-001 | HIGH | A staff member can originate provider-billed calls | CODE/tests: all three client-selected call modes now cross one atomic per-user and per-workspace Redis spend limit before any Telnyx request; a limiter outage returns 503 | Bound provider spend and fail closed when the budget cannot be checked | Fixed before release | 429 coverage for AI/callback/browser plus 503 outage coverage |
+| BCALL-002 | HIGH | Browser registration requires a reusable Telnyx SIP identity and short-lived access token | CODE + RUNTIME: provider IDs are encrypted server-side; tokens are returned only from an authenticated capability-gated `no-store` endpoint; the configured production Credential Connection is active and permits internal SIP URI calls only | Keep provider credentials tenant-scoped, short-lived, and out of bundles, caches, logs, and user-controlled dial targets | Fixed before release | Workspace/capability tests, server-derived SIP target, Gitleaks, dependency audit, and provider-configuration check |
+| BCALL-003 | LAWYER | Human or AI calls may be recorded when a workspace enables recording | CODE: browser calling reuses the existing recording setting and signed webhook flow; jurisdiction-specific notice, consent, retention, and synthetic-voice disclosure were not changed or re-verified | Confirm calling/recording consent, do-not-call, local-time, AI identity, and retention rules wherever calls are placed | Open — product/legal decision | Keep recording disabled unless the workspace has a reviewed policy; existing `AI-001` remains open |
+| BCALL-004 | MEDIUM | Microphone calling adds keyboard, permission-prompt, device, and disconnect states | CODE/tests: native labelled controls, status text, and server-side hangup are covered; no production call, physical handset, manual screen-reader, microphone-denial, or provider media-quality session was run | Verify real-device permission, focus, audio routing, reconnect, hangup, and assistive-technology behavior before operational reliance | Automated coverage only | Authenticated browser-call runbook and physical-device accessibility check |
+
+### Verification boundary
+
+The live Telnyx configuration was read without printing credentials. No customer was called and no production CRM row was created during this review. Automated checks do not establish consent, recording legality, carrier deliverability, microphone behavior, or accessibility on a physical device.
