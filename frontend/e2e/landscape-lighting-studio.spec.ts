@@ -521,19 +521,19 @@ async function installStudioApi(page: Page) {
 test.describe("landscape lighting studio", () => {
   test.describe.configure({ mode: "serial" });
 
-  test("opens the quote builder at its package choices every time Send proposal is used", async ({
+  test("opens the quote builder at its package choices every time Proposal & payment is used", async ({
     page,
   }) => {
     const { previews, quotes, deliveries } = await installStudioApi(page);
     await page.goto(PROJECT_URL);
 
-    const sendProposal = page.getByRole("button", { name: "Send proposal" });
+    const proposalPayment = page.getByRole("button", { name: "Proposal & payment" });
     const quoteBuilder = page.locator("#landscape-quote-builder");
     const packageOptions = page.getByRole("group", { name: "Fixture package" });
     const configuredPackage = packageOptions.getByRole("button", { name: /Best/i });
-    await expect(sendProposal).toHaveAttribute("aria-controls", "landscape-quote-builder");
+    await expect(proposalPayment).toHaveAttribute("aria-controls", "landscape-quote-builder");
 
-    await sendProposal.click();
+    await proposalPayment.click();
 
     await expect(page.getByRole("tab", { name: "Proposal" })).toHaveAttribute(
       "aria-selected",
@@ -568,7 +568,7 @@ test.describe("landscape lighting studio", () => {
     });
     await expect(packageOptions).not.toBeInViewport();
 
-    await sendProposal.click();
+    await proposalPayment.click();
 
     await expect(quoteBuilder).toBeFocused();
     await expect(packageOptions).toBeInViewport();
@@ -580,7 +580,7 @@ test.describe("landscape lighting studio", () => {
     });
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await sendProposal.click();
+    await proposalPayment.click();
 
     await expect(quoteBuilder).toBeFocused();
     await expect(packageOptions).toBeInViewport();
@@ -592,7 +592,7 @@ test.describe("landscape lighting studio", () => {
     expect(deliveries).toHaveLength(0);
 
     await page.getByRole("button", { name: "Fit document" }).click();
-    await sendProposal.click();
+    await proposalPayment.click();
     await expect(quoteBuilder).toBeFocused();
     await expect(packageOptions).toBeInViewport();
     await expect(configuredPackage).toBeInViewport();
