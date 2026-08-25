@@ -213,6 +213,42 @@ class TestAppointmentRow:
                     notify=False,
                 )
 
+    async def test_contact_must_belong_to_booking_workspace(self, workspace_id) -> None:
+        other_workspace_id = uuid.uuid4()
+        async with AsyncSessionLocal() as db:
+            await _workspace(db, workspace_id)
+            await _workspace(db, other_workspace_id)
+            contact = await _contact(db, other_workspace_id)
+
+            with pytest.raises(ValueError, match="contact does not belong"):
+                await finalize_booking(
+                    db,
+                    workspace_id=workspace_id,
+                    contact=contact,
+                    scheduled_at=datetime(2099, 6, 10, 14, 0, tzinfo=NEW_YORK),
+                    duration_minutes=30,
+                    notify=False,
+                )
+
+    async def test_agent_must_belong_to_booking_workspace(self, workspace_id) -> None:
+        other_workspace_id = uuid.uuid4()
+        async with AsyncSessionLocal() as db:
+            await _workspace(db, workspace_id)
+            await _workspace(db, other_workspace_id)
+            contact = await _contact(db, workspace_id)
+            agent = await _agent(db, other_workspace_id)
+
+            with pytest.raises(ValueError, match="agent does not belong"):
+                await finalize_booking(
+                    db,
+                    workspace_id=workspace_id,
+                    contact=contact,
+                    agent=agent,
+                    scheduled_at=datetime(2099, 6, 10, 14, 0, tzinfo=NEW_YORK),
+                    duration_minutes=30,
+                    notify=False,
+                )
+
 
 class TestAvailabilityVerification:
     async def test_blocked_google_slot_is_not_persisted(self, workspace_id, monkeypatch) -> None:

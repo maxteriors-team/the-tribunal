@@ -149,24 +149,10 @@ async def issue_webrtc_token(
     return WebRTCTokenResponse(token=token)
 
 
-async def _start_browser_operator_call(
-    *,
-    db: AsyncSession,
-    voice_service: TelnyxVoiceService,
-    workspace_id: uuid.UUID,
-    current_user: CurrentUser,
-    call_data: CallCreate,
-    connection_id: str | None,
-    webhook_url: str,
-) -> Message:
-    """Authorize, rate-limit, and dial one server-owned browser identity."""
-    if not settings.telnyx_webrtc_connection_id:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Browser calling is not configured",
-        )
+async def _enforce_paid_call_limits(workspace_id: uuid.UUID, user_id: int) -> None:
+    """Apply one atomic spend guard before any client-selected call mode."""
     try:
-        await enforce_softphone_call_limits(workspace_id=str(workspace_id), user_id=current_user.id)
+        await enforce_softphone_call_limits(workspace_id=str(workspace_id), user_id=user_id)
     except SoftphoneRateLimitError as exc:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -178,6 +164,23 @@ async def _start_browser_operator_call(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
 
+
+async def _start_browser_operator_call(
+    *,
+    db: AsyncSession,
+    voice_service: TelnyxVoiceService,
+    workspace_id: uuid.UUID,
+    current_user: CurrentUser,
+    call_data: CallCreate,
+    connection_id: str | None,
+    webhook_url: str,
+) -> Message:
+    """Authorize and dial one server-owned browser identity."""
+    if not settings.telnyx_webrtc_connection_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Browser calling is not configured",
+        )
     browser_service: TelnyxWebRTCService | None = None
     try:
         browser_service = TelnyxWebRTCService(
@@ -259,6 +262,8 @@ async def initiate_call(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Phone number not found or voice not enabled",
         )
+
+    await _enforce_paid_call_limits(workspace_id, current_user.id)
 
     # Initiate call via Telnyx
     voice_service = TelnyxVoiceService(settings.telnyx_api_key)

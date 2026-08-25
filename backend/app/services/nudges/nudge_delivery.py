@@ -99,30 +99,42 @@ class NudgeDeliveryService:
         return True
 
     async def deliver_pending_nudges(self, db: AsyncSession, workspace_id: uuid.UUID) -> int:
-        """Deliver all pending nudges for a workspace. Returns count delivered.
+        """Claim and deliver due nudges one at a time.
 
-        Rows are claimed ``FOR UPDATE SKIP LOCKED`` so a second backend replica
-        cannot pick up the same pending nudge and deliver it twice. Without the
-        claim both replicas read ``status == "pending"`` before either writes
-        ``status = "sent"``, and the operator gets duplicate SMS/email.
+        Claiming one row per transaction keeps ``FOR UPDATE SKIP LOCKED`` effective
+        after :meth:`deliver_nudge` commits. Loading a whole batch first would release
+        every row lock after the first send, allowing another backend replica to
+        deliver the remaining push notifications twice during a rolling deploy.
         """
-        result = await db.execute(
-            select(HumanNudge)
-            .where(
+        attempted_ids: set[uuid.UUID] = set()
+        count = 0
+
+        while True:
+            query = select(HumanNudge).where(
                 HumanNudge.workspace_id == workspace_id,
                 HumanNudge.status == "pending",
                 HumanNudge.due_date <= datetime.now(UTC),
             )
-            .with_for_update(skip_locked=True)
-        )
-        nudges = result.scalars().all()
+            if attempted_ids:
+                query = query.where(HumanNudge.id.not_in(attempted_ids))
 
-        count = 0
-        for nudge in nudges:
+            result = await db.execute(
+                query.order_by(HumanNudge.due_date, HumanNudge.id)
+                .limit(1)
+                .with_for_update(skip_locked=True)
+            )
+            nudge = result.scalar_one_or_none()
+            if nudge is None:
+                break
+
+            attempted_ids.add(nudge.id)
             try:
                 if await self.deliver_nudge(db, nudge):
                     count += 1
+                else:
+                    await db.rollback()
             except Exception:
+                await db.rollback()
                 logger.exception("Failed to deliver nudge %s", nudge.id)
 
         if count > 0:

@@ -77,7 +77,7 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
   const workspaceIdRef = useRef<string | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
-
+  const cancelRequestedRef = useRef(false);
   const updateState = useCallback((patch: Partial<SoftphoneState>) => {
     setState((current) => {
       const next = { ...current, ...patch };
@@ -172,6 +172,7 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
         throw new Error("Finish the current browser call before starting another.");
       }
 
+      cancelRequestedRef.current = false;
       disconnectClient();
       updateState({
         phase: "preparing",
@@ -192,11 +193,21 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
           mode: "browser",
         });
         callRecordIdRef.current = callRecord.id;
+        if (cancelRequestedRef.current) {
+          await callsApi.hangup(request.workspaceId, callRecord.id).catch(() => undefined);
+          disconnectClient();
+          updateState({ phase: "ended", isMuted: false });
+          return;
+        }
         void queryClient.invalidateQueries({
           queryKey: queryKeys.calls.all(request.workspaceId),
         });
       } catch (error) {
         disconnectClient();
+        if (cancelRequestedRef.current) {
+          updateState({ phase: "ended", isMuted: false });
+          return;
+        }
         const message = error instanceof Error ? error.message : "Browser calling failed.";
         updateState({ phase: "error", error: message });
         throw error;
@@ -241,6 +252,7 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
   }, [updateState]);
 
   const hangup = useCallback(async () => {
+    cancelRequestedRef.current = true;
     const workspaceId = workspaceIdRef.current;
     const callRecordId = callRecordIdRef.current;
     const call = callRef.current;
