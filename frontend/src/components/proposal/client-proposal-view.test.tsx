@@ -220,8 +220,9 @@ describe("ClientProposalView — measured Bistro pricing", () => {
             installation: "temporary",
             label: "Temporary Bistro Lighting",
             feet: 100,
+            pole_count: 3,
             lights_per_ft: 10,
-            poles_per_ft: 4,
+            poles_each: 400,
             lights_cost: 1124,
             poles_cost: 449,
             total: 1573,
@@ -230,8 +231,9 @@ describe("ClientProposalView — measured Bistro pricing", () => {
             installation: "permanent",
             label: "Permanent Bistro Lighting",
             feet: 50,
+            pole_count: 2,
             lights_per_ft: 20,
-            poles_per_ft: 6,
+            poles_each: 350,
             lights_cost: 1124,
             poles_cost: 337,
             total: 1461,
@@ -246,17 +248,61 @@ describe("ClientProposalView — measured Bistro pricing", () => {
     });
 
     expect(screen.getAllByText(/Temporary \+ Permanent/)).toHaveLength(2);
-    expect(
-      screen.getByText(
-        /100 ft Temporary Bistro Lighting, including lights and pole\/support allowance/i,
-      ),
-    ).toBeVisible();
-    expect(
-      screen.getByText(
-        /50 ft Permanent Bistro Lighting, including lights and pole\/support allowance/i,
-      ),
-    ).toBeVisible();
+    expect(screen.getByText(/100 ft Temporary Bistro Lighting lights — \$1,124/i)).toBeVisible();
+    expect(screen.getByText(/3 support poles — \$449/i)).toBeVisible();
+    expect(screen.getByText(/50 ft Permanent Bistro Lighting lights — \$1,124/i)).toBeVisible();
+    expect(screen.getByText(/2 support poles — \$337/i)).toBeVisible();
     expect(screen.queryByText(/Classic Bistro|Color Changing Bistro/i)).not.toBeInTheDocument();
+  });
+
+  it("lets the customer accept a Bistro-only estimate without fake package choices", async () => {
+    const bistroOnlyDocument = {
+      ...DOCUMENT,
+      tiers: [tier("best", "Best", "Best", 0), tier("good", "Good", "Good", 0)],
+      bistro: {
+        pricing_mode: "installation",
+        feet: 312.5,
+        product: "installation",
+        tier: "",
+        per_ft: 0,
+        hardware: 0,
+        minimum: 0,
+        lights_cost: 7022,
+        poles_cost: 787,
+        raw_total: 7809,
+        total: 7809,
+        min_applied: false,
+        ordered_ft: 312.5,
+        installations: [
+          {
+            installation: "permanent",
+            label: "Permanent Bistro Lighting",
+            feet: 312.5,
+            pole_count: 2,
+            lights_per_ft: 20,
+            poles_each: 350,
+            lights_cost: 7022,
+            poles_cost: 787,
+            total: 7809,
+          },
+        ],
+        lines: [],
+      },
+    };
+    const { onApprove } = renderView({
+      total: 7809,
+      deposit_amount: 0,
+      deposit_required: false,
+      packages: PACKAGES.map((offer) => ({ ...offer, total: 7809, deposit_amount: 0 })),
+      proposal_document: bistroOnlyDocument as unknown as Record<string, unknown>,
+    });
+
+    expect(
+      screen.queryByRole("radiogroup", { name: /choose your package/i }),
+    ).not.toBeInTheDocument();
+    const approve = acceptButton();
+    await userEvent.click(approve);
+    expect(onApprove).toHaveBeenCalledWith("best");
   });
 });
 

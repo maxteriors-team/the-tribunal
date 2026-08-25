@@ -11,7 +11,7 @@ import {
 } from "@/components/estimator/light-designer";
 import { estimatorApi } from "@/lib/api/estimator";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
-import { designToEstimateInputs } from "@/lib/estimator/design";
+import { designScale, designToEstimateInputs } from "@/lib/estimator/design";
 import {
   defaultLandscapePrecon,
   defaultLandscapeProposal,
@@ -38,6 +38,7 @@ vi.mock("@/lib/api/sales-wizard", () => ({
     getPricing: vi.fn(),
     preview: vi.fn(),
     save: vi.fn(),
+    deliver: vi.fn(),
   },
 }));
 
@@ -299,6 +300,7 @@ describe("LightDesigner", () => {
     stubCanvas();
     // Reset the design mapping each test; landscape cases override it.
     vi.mocked(designToEstimateInputs).mockReturnValue(MAPPED);
+    vi.mocked(designScale).mockReturnValue({ ftPerPx: 0.05, pxPerFt: 20, calibrated: false });
     vi.mocked(salesWizardApi.listCatalog).mockResolvedValue(PRICE_BOOK);
     vi.mocked(salesWizardApi.getPricing).mockResolvedValue(PRICING);
     vi.mocked(salesWizardApi.preview).mockResolvedValue({
@@ -361,6 +363,11 @@ describe("LightDesigner", () => {
         ],
       },
     } as unknown as Awaited<ReturnType<typeof salesWizardApi.preview>>);
+    vi.mocked(salesWizardApi.deliver).mockResolvedValue({
+      ok: true,
+      channel: "email",
+      to: "pat@example.com",
+    });
     vi.mocked(salesWizardApi.save).mockResolvedValue({
       id: "quote-1",
       workspace_id: "workspace-1",
@@ -1682,9 +1689,10 @@ describe("LightDesigner", () => {
     expect(await screen.findByText(/Draft quote Q-1042 was created/i)).toBeInTheDocument();
     expect(screen.getByText("Collect payment in three steps")).toBeVisible();
     expect(screen.getByText(/Set the deposit due when the customer accepts/i)).toBeVisible();
-    expect(
-      screen.getByRole("link", { name: "Open quote & preview payment page" }),
-    ).toHaveAttribute("href", "/quotes");
+    expect(screen.getByRole("link", { name: "Open quote & preview payment page" })).toHaveAttribute(
+      "href",
+      "/quotes",
+    );
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Set deposit & payment terms" }));
@@ -1698,6 +1706,191 @@ describe("LightDesigner", () => {
         }),
       ),
     );
+  });
+
+  it("creates and emails a clear Bistro-only estimate from measured runs and pole markers", async () => {
+    vi.mocked(designScale).mockReturnValue({ ftPerPx: 1, pxPerFt: 1, calibrated: true });
+    vi.mocked(designToEstimateInputs).mockReturnValue({
+      feet: 0,
+      christmas_items: {},
+      fixtures: {},
+      bistro_feet: 312.5,
+    });
+    vi.mocked(salesWizardApi.getPricing).mockResolvedValue({
+      ...PRICING,
+      bistro: {
+        enabled: true,
+        minimum: 0,
+        temporary: {
+          label: "Temporary Bistro Lighting",
+          lights_per_ft: 18,
+          poles_each: 350,
+        },
+        permanent: {
+          label: "Permanent Bistro Lighting",
+          lights_per_ft: 22,
+          poles_each: 350,
+        },
+      },
+    } as Awaited<ReturnType<typeof salesWizardApi.getPricing>>);
+    vi.mocked(salesWizardApi.preview).mockResolvedValue({
+      title: "Permanent Bistro estimate",
+      tiers: [
+        {
+          key: "best",
+          label: "Best",
+          popular: true,
+          lines: [],
+          pricing: {
+            subtotal_net: 0,
+            overhead: 0,
+            commission: 0,
+            profit: 0,
+            tax: 0,
+            financed_total: 0,
+            cash_total: 0,
+            monthly_payment: 0,
+          },
+        },
+      ],
+      selection: {
+        selected_tier: "best",
+        selected_financed_total: 0,
+        selected_cash_total: 0,
+        deposit_due_now: 0,
+      },
+      bistro: {
+        pricing_mode: "installation",
+        feet: 312.5,
+        product: "installation",
+        tier: "",
+        per_ft: 0,
+        hardware: 0,
+        minimum: 0,
+        lights_cost: 7725,
+        poles_cost: 787,
+        raw_total: 8512,
+        total: 8512,
+        min_applied: false,
+        ordered_ft: 312.5,
+        installations: [
+          {
+            installation: "permanent",
+            label: "Permanent Bistro Lighting",
+            feet: 312.5,
+            pole_count: 2,
+            lights_per_ft: 22,
+            poles_each: 350,
+            lights_cost: 7725,
+            poles_cost: 787,
+            total: 8512,
+          },
+        ],
+      },
+      care_plan: { fixture_count: 0, options: [] },
+      categories: ["landscape", "bistro"],
+      line_count: 1,
+      services: [],
+      mockups: [],
+      grand_financed_total: 8512,
+      grand_cash_total: 7576,
+      grand_monthly_payment: 0,
+    } as unknown as Awaited<ReturnType<typeof salesWizardApi.preview>>);
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        activeShotId: "patio",
+        shots: [
+          {
+            id: "patio",
+            photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
+            design: {
+              calibration: {
+                a: { x: 0, y: 0 },
+                b: { x: 100, y: 0 },
+                feet: 100,
+              },
+              runs: [
+                {
+                  id: "bistro-run-1",
+                  productId: "bistro-permanent-layout",
+                  points: [
+                    { x: 0, y: 100 },
+                    { x: 312.5, y: 100 },
+                  ],
+                  colors: ["#f7e7b2"],
+                  spacingIn: 15,
+                },
+              ],
+              items: [
+                {
+                  id: "pole-1",
+                  productId: "bistro-support-pole",
+                  bistroRunId: "bistro-run-1",
+                  at: { x: 75, y: 100 },
+                  sizePx: 12,
+                },
+                {
+                  id: "pole-2",
+                  productId: "bistro-support-pole",
+                  bistroRunId: "bistro-run-1",
+                  at: { x: 250, y: 100 },
+                  sizePx: 12,
+                },
+              ],
+              planImages: [],
+            },
+            dusk: 0.4,
+          },
+        ],
+        updatedAt: "2026-08-25T12:00:00.000Z",
+      },
+      onLandscapeDraftChange: vi.fn(),
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      projectId: "project-bistro",
+      projectName: "Permanent Bistro estimate",
+      contactName: "Pat Lee",
+      contactId: 42,
+      installationShotId: "patio",
+      onSelectInstallationShot: vi.fn().mockResolvedValue(undefined),
+      flushBeforeProposal: vi.fn().mockResolvedValue(undefined),
+      resetKey: 0,
+    };
+
+    renderEstimator("landscape", adapter);
+    await openProposalPreview();
+    expect(await screen.findByText("Bistro lighting layout")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Bistro lighting run schedule" })).toHaveTextContent(
+      "313 ft",
+    );
+
+    await waitFor(() =>
+      expect(salesWizardApi.preview).toHaveBeenLastCalledWith(
+        "ws_1",
+        expect.objectContaining({
+          quantities: [],
+          bistro: expect.objectContaining({
+            runs: [{ installation: "permanent", feet: 312.5, pole_count: 2 }],
+          }),
+        }),
+      ),
+    );
+    expect(screen.getByText("Permanent Bistro Lighting lights")).toBeVisible();
+    expect(screen.getByText("2 marked poles")).toBeVisible();
+    expect(
+      screen.getByText("Bistro estimate total").parentElement?.parentElement,
+    ).toHaveTextContent("$8,512.00");
+
+    const createQuote = screen.getByRole("button", { name: "Create draft quote" });
+    expect(createQuote).toBeEnabled();
+    fireEvent.click(createQuote);
+    expect(await screen.findByText(/Draft quote Q-1042 was created/i)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Email proposal" }));
+    await waitFor(() =>
+      expect(salesWizardApi.deliver).toHaveBeenCalledWith("ws_1", "quote-1", "email"),
+    );
+    expect(await screen.findByText("Proposal emailed to pat@example.com.")).toBeVisible();
   });
 
   it("requires and persists an installation-sheet selection before quoting", async () => {

@@ -95,14 +95,14 @@ describe("landscape proposal pricing payload", () => {
 
   it("aggregates temporary and permanent Bistro footage across sheets", () => {
     const runs = [
-      { installation: "temporary" as const, lengthFeet: 32.5 },
-      { installation: "permanent" as const, lengthFeet: 20 },
-      { installation: "temporary" as const, lengthFeet: 7.5 },
+      { installation: "temporary" as const, lengthFeet: 32.5, poleCount: 2 },
+      { installation: "permanent" as const, lengthFeet: 20, poleCount: 4 },
+      { installation: "temporary" as const, lengthFeet: 7.5, poleCount: 1 },
     ];
 
     expect(aggregateBistroRuns(runs)).toEqual([
-      { installation: "temporary", feet: 40 },
-      { installation: "permanent", feet: 20 },
+      { installation: "temporary", feet: 40, pole_count: 3 },
+      { installation: "permanent", feet: 20, pole_count: 4 },
     ]);
 
     const payload = buildLandscapeProposalPayload({
@@ -115,24 +115,26 @@ describe("landscape proposal pricing payload", () => {
       selectedCarePlanKey: null,
     });
     const bistro = payload.bistro as typeof payload.bistro & {
-      runs: Array<{ installation: string; feet: number }>;
+      runs: Array<{ installation: string; feet: number; pole_count: number }>;
     };
     expect(payload.categories).toEqual(["landscape", "bistro"]);
     expect(bistro.runs).toEqual([
-      { installation: "temporary", feet: 40 },
-      { installation: "permanent", feet: 20 },
+      { installation: "temporary", feet: 40, pole_count: 3 },
+      { installation: "permanent", feet: 20, pole_count: 4 },
     ]);
     expect(bistro.feet).toBe(60);
   });
 
   it("excludes uncalibrated Bistro footage and exposes the quote guard", () => {
     const runs = [
-      { installation: "temporary" as const, lengthFeet: 25 },
-      { installation: "permanent" as const, lengthFeet: null },
+      { installation: "temporary" as const, lengthFeet: 25, poleCount: 2 },
+      { installation: "permanent" as const, lengthFeet: null, poleCount: 3 },
     ];
 
     expect(hasUnpriceableBistroRuns(runs)).toBe(true);
-    expect(aggregateBistroRuns(runs)).toEqual([{ installation: "temporary", feet: 25 }]);
+    expect(aggregateBistroRuns(runs)).toEqual([
+      { installation: "temporary", feet: 25, pole_count: 2 },
+    ]);
   });
 
   it("prices every package without multiplying SKUs reused between tiers", () => {

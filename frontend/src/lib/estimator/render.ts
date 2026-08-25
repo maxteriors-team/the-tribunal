@@ -430,6 +430,7 @@ const PLAN_SYMBOL_COLORS: Partial<Record<RenderStyle, string>> = {
   walllight: "#d56f4f",
   underwater: "#238eae",
   transformer: "#9b7ad1",
+  "bistro-pole": "#f59e0b",
 };
 
 /** Draw a compact, zoom-stable landscape drafting symbol at an item's anchor. */
@@ -465,6 +466,23 @@ function drawLandscapePlanSymbol(
     ctx.fillStyle = "#f7f8f7";
     ctx.fillText(label, 0, r + 5 / vs);
   };
+
+  if (style === "bistro-pole") {
+    ctx.beginPath();
+    ctx.arc(0, -r * 0.45, r * 0.34, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 0.1);
+    ctx.lineTo(0, r * 0.72);
+    ctx.moveTo(-r * 0.42, r * 0.72);
+    ctx.lineTo(r * 0.42, r * 0.72);
+    ctx.stroke();
+    drawTag();
+    ctx.restore();
+    return;
+  }
 
   if (style === "transformer") {
     roundRect(ctx, -r, -r * 0.82, r * 2, r * 1.64, 3 / vs);
@@ -559,9 +577,9 @@ export function drawPlacedItem(
     drawLandscapeFixture(ctx, item, product);
     return;
   }
-  // A transformer is plan equipment, not a light source. Its drafting symbol is
-  // added with editor chrome so the customer-facing dusk image remains clean.
-  if (product.style === "transformer") return;
+  // Plan equipment is not a light source. Drafting symbols are added with editor
+  // chrome so the customer-facing dusk image remains clean.
+  if (product.style === "transformer" || product.style === "bistro-pole") return;
 
   if (product.style === "treewrap") {
     const h = item.sizePx;
@@ -792,6 +810,7 @@ export function drawScene(
     walllight: "WL",
     underwater: "UW",
     transformer: "T",
+    "bistro-pole": "P",
   };
   for (const item of design.items) {
     const product = productById.get(item.productId);
@@ -836,7 +855,7 @@ export function drawScene(
       // the two grips can't be confused for each other mid-demo.
       const spreadGrip = beamHandlePos(item, product);
       if (spreadGrip) handleSquare(ctx, spreadGrip, 5 / vs, "#f5c842");
-    } else if (item && product?.style === "transformer") {
+    } else if (item && (product?.style === "transformer" || product?.style === "bistro-pole")) {
       const r = (15 * fixtureIconScaleFor(item.iconScale)) / vs;
       ctx.save();
       ctx.strokeStyle = "rgba(245,200,66,0.95)";

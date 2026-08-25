@@ -42,7 +42,7 @@ import {
   resizeHandlePos,
 } from "@/lib/estimator/render";
 import { isLandscapeStyle } from "@/lib/estimator/types";
-import type { Design, PhotoInfo, Point, Product } from "@/lib/estimator/types";
+import type { Design, PhotoInfo, Point, Product, Run } from "@/lib/estimator/types";
 
 import { EMPTY_DESIGN, nextId, type EditorAction, type EditorState } from "./editor-store";
 
@@ -50,6 +50,24 @@ export interface CanvasView {
   scale: number;
   ox: number;
   oy: number;
+}
+
+export function closestBistroRun(
+  point: Point,
+  design: Design,
+  productById: ReadonlyMap<string, Product>,
+): Run | undefined {
+  let closest: Run | undefined;
+  let closestDistance = Infinity;
+  for (const run of design.runs) {
+    if (productById.get(run.productId)?.target.field !== "bistro") continue;
+    const runDistance = distToPolyline(point, run.points);
+    if (runDistance < closestDistance) {
+      closest = run;
+      closestDistance = runDistance;
+    }
+  }
+  return closest;
 }
 
 export function deterministicPhotoFit(
@@ -903,6 +921,11 @@ export function LightCanvas({
       }
       case "place": {
         if (!activeProduct || !insidePhoto(p)) return;
+        const bistroRun =
+          activeProduct.target.field === "bistroPole"
+            ? closestBistroRun(p, design, productById)
+            : undefined;
+        if (activeProduct.target.field === "bistroPole" && !bistroRun) return;
         const sizePx = Math.max(12, activeProduct.sizeFt * pxPerFt);
         dispatch({
           type: "ADD_ITEM",
@@ -911,6 +934,7 @@ export function LightCanvas({
             productId: tool.productId,
             at: p,
             sizePx,
+            ...(bistroRun ? { bistroRunId: bistroRun.id } : {}),
             ...(placementMarkerColor ? { markerColor: placementMarkerColor } : {}),
             catalogItemId: activeProduct.catalogItemId,
             catalogSku: activeProduct.catalogSku,
@@ -1122,14 +1146,22 @@ export function LightCanvas({
         return;
       }
       case "item": {
+        const at = clampToPhoto({
+          x: p.x - drag.offset.x,
+          y: p.y - drag.offset.y,
+        });
+        const item = design.items.find((candidate) => candidate.id === drag.itemId);
+        const product = item ? productById.get(item.productId) : undefined;
+        const bistroRun =
+          product?.target.field === "bistroPole"
+            ? closestBistroRun(at, design, productById)
+            : undefined;
         dispatch({
           type: "UPDATE_ITEM",
           id: drag.itemId,
           patch: {
-            at: clampToPhoto({
-              x: p.x - drag.offset.x,
-              y: p.y - drag.offset.y,
-            }),
+            at,
+            ...(bistroRun ? { bistroRunId: bistroRun.id } : {}),
           },
           transient: true,
         });

@@ -157,6 +157,30 @@ function withDesign(state: EditorState, design: Design, transient?: boolean): Ed
   return { ...state, design, ...pushHistory(state, state.design) };
 }
 
+function updateRun(design: Design, id: string, patch: Partial<Run>): Design {
+  const current = design.runs.find((run) => run.id === id);
+  let items = design.items;
+  if (current && patch.points?.length === current.points.length && current.points.length > 0) {
+    const dx = patch.points[0].x - current.points[0].x;
+    const dy = patch.points[0].y - current.points[0].y;
+    const translated = current.points.every(
+      (point, index) =>
+        Math.abs(patch.points![index].x - point.x - dx) < 0.001 &&
+        Math.abs(patch.points![index].y - point.y - dy) < 0.001,
+    );
+    if (translated && (dx !== 0 || dy !== 0)) {
+      items = items.map((item) =>
+        item.bistroRunId === id ? { ...item, at: { x: item.at.x + dx, y: item.at.y + dy } } : item,
+      );
+    }
+  }
+  return {
+    ...design,
+    runs: design.runs.map((run) => (run.id === id ? { ...run, ...patch } : run)),
+    items,
+  };
+}
+
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case "SET_TOOL":
@@ -175,22 +199,17 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         selection: { kind: "run", id: action.run.id },
       };
     case "UPDATE_RUN":
-      return withDesign(
-        state,
-        {
-          ...state.design,
-          runs: state.design.runs.map((r) => (r.id === action.id ? { ...r, ...action.patch } : r)),
-        },
-        action.transient,
-      );
+      return withDesign(state, updateRun(state.design, action.id, action.patch), action.transient);
     case "DELETE_RUN":
       return {
         ...withDesign(state, {
           ...state.design,
           runs: state.design.runs.filter((r) => r.id !== action.id),
-          items: state.design.items.map((item) =>
-            item.circuitId === action.id ? { ...item, circuitId: undefined } : item,
-          ),
+          items: state.design.items
+            .filter((item) => item.bistroRunId !== action.id)
+            .map((item) =>
+              item.circuitId === action.id ? { ...item, circuitId: undefined } : item,
+            ),
         }),
         selection: null,
       };

@@ -222,7 +222,7 @@ export interface LandscapeBistroRunRow {
   installation: BistroInstallationType | null;
   productName: string;
   sku: string | null;
-  anchorCount: number;
+  poleCount: number;
   lengthFeet: number | null;
 }
 
@@ -244,7 +244,7 @@ export function LandscapeBistroRunScheduleTable({ rows }: { rows: LandscapeBistr
             <th scope="col">Sheet</th>
             <th scope="col">Installation</th>
             <th scope="col">Bistro product</th>
-            <th scope="col">Anchors</th>
+            <th scope="col">Poles</th>
             <th scope="col">Length</th>
           </tr>
         </thead>
@@ -266,7 +266,7 @@ export function LandscapeBistroRunScheduleTable({ rows }: { rows: LandscapeBistr
                 <strong>{row.productName}</strong>
                 <span>{row.sku || "Layout-only product"}</span>
               </td>
-              <td>{row.anchorCount}</td>
+              <td>{row.poleCount}</td>
               <td>{row.lengthFeet === null ? "Set scale" : formatFeet(row.lengthFeet)}</td>
             </tr>
           ))}

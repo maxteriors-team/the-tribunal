@@ -112,12 +112,12 @@ PRICING = {
         "temporary": {
             "label": "Temporary Bistro Lighting",
             "lights_per_ft": 10,
-            "poles_per_ft": 4,
+            "poles_per_ft": 400,
         },
         "permanent": {
             "label": "Permanent Bistro Lighting",
             "lights_per_ft": 20,
-            "poles_per_ft": 6,
+            "poles_per_ft": 350,
         },
         "tiers": [{"key": "medium", "name": "Medium", "per_ft": 18.11, "classic_per_ft": 15.50}],
         "color": {
@@ -248,15 +248,46 @@ async def test_preview_computes_document_from_config_and_catalog() -> None:
         assert doc.bistro.min_applied is False
 
 
+def test_bistro_run_rejects_negative_pole_counts() -> None:
+    with pytest.raises(ValueError, match="greater than or equal to 0"):
+        WizardBistroRun(installation="permanent", feet=100, pole_count=-1)
+
+
+async def test_bistro_only_design_creates_a_clear_customer_quote() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        payload = _payload()
+        payload.quantities = []
+        payload.additional_charges = []
+        payload.categories = ["landscape", "bistro"]
+        payload.bistro = WizardBistroSelection(
+            runs=[WizardBistroRun(installation="permanent", feet=312.5, pole_count=2)]
+        )
+        svc = QuoteService(db)
+
+        doc = await svc.preview_from_wizard(ws.id, payload)
+        assert doc.bistro is not None
+        assert doc.bistro.lights_cost == 7022
+        assert doc.bistro.poles_cost == 787
+        assert doc.bistro.total == 7809
+        assert doc.grand_financed_total == 7809
+
+        quote = await svc.save_from_wizard(ws.id, payload)
+        assert float(quote.total) == 7809
+        assert len(quote.line_items) == 1
+        assert quote.line_items[0].name == "Bistro Lighting"
+        assert quote.line_items[0].description == ("312.5 ft Permanent Bistro Lighting · 2 poles")
+
+
 async def test_grouped_bistro_runs_price_and_persist_without_legacy_labels() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_lighting_workspace(db)
         payload = _payload()
         payload.bistro = WizardBistroSelection(
             runs=[
-                WizardBistroRun(installation="temporary", feet=100),
-                WizardBistroRun(installation="permanent", feet=50),
-                WizardBistroRun(installation="temporary", feet=25),
+                WizardBistroRun(installation="temporary", feet=100, pole_count=2),
+                WizardBistroRun(installation="permanent", feet=50, pole_count=3),
+                WizardBistroRun(installation="temporary", feet=25, pole_count=1),
             ]
         )
 
@@ -268,15 +299,15 @@ async def test_grouped_bistro_runs_price_and_persist_without_legacy_labels() -> 
         assert doc.bistro.feet == 175
         assert [row.feet for row in doc.bistro.installations] == [125, 50]
         assert doc.bistro.lights_cost == 2528
-        assert doc.bistro.poles_cost == 899
-        assert doc.bistro.total == 3427
+        assert doc.bistro.poles_cost == 2528
+        assert doc.bistro.total == 5056
 
         quote = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
         bistro_line = next(line for line in quote.line_items if line.name == "Bistro Lighting")
         assert bistro_line.description == (
-            "125 ft Temporary Bistro Lighting · 50 ft Permanent Bistro Lighting"
+            "125 ft Temporary Bistro Lighting · 3 poles · 50 ft Permanent Bistro Lighting · 3 poles"
         )
-        assert float(bistro_line.unit_price) == 3427
+        assert float(bistro_line.unit_price) == 5056
 
         skus = {part.sku: part.qty for part in doc.fulfillment}
         assert skus["59409312"] == 1.0

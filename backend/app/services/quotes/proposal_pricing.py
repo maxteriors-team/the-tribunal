@@ -486,15 +486,20 @@ def price_bistro(
 def price_bistro_installations(
     config: PricingSettings,
     runs: Mapping[BistroInstallation, float],
+    pole_counts: Mapping[BistroInstallation, int] | None = None,
 ) -> BistroPricing:
-    """Price measured temporary/permanent runs from configured component rates.
+    """Price measured runs and explicitly marked poles from configured rates.
 
     Every requested installation must have both rates configured before any money
     is returned. Each component passes through the shared gross-up independently,
     and the Bistro minimum is applied once after every installation is summed.
     """
     bistro = config.bistro
-    requested = {installation: max(0.0, feet) for installation, feet in runs.items() if feet > 0}
+    requested = {
+        installation: max(0.0, feet)
+        for installation, feet in runs.items()
+        if installation in ("temporary", "permanent") and feet > 0
+    }
     if not requested:
         return BistroPricing(
             pricing_mode="installation",
@@ -529,7 +534,7 @@ def price_bistro_installations(
             label
             for label, rate in (
                 ("lights per foot", rates.lights_per_ft),
-                ("poles/supports per foot", rates.poles_per_ft),
+                ("poles/supports each", rates.poles_each),
             )
             if rate <= 0
         ]
@@ -539,8 +544,9 @@ def price_bistro_installations(
                 "in Settings before creating this quote."
             )
 
+        pole_count = max(0, int((pole_counts or {}).get(installation, 0)))
         lights_cost = gross_up_price(_d(feet) * _d(rates.lights_per_ft), config)
-        poles_cost = gross_up_price(_d(feet) * _d(rates.poles_per_ft), config)
+        poles_cost = gross_up_price(_d(pole_count) * _d(rates.poles_each), config)
         lights_total += lights_cost
         poles_total += poles_cost
         installations.append(
@@ -548,8 +554,9 @@ def price_bistro_installations(
                 installation=installation,
                 label=rates.label,
                 feet=feet,
+                pole_count=pole_count,
                 lights_per_ft=rates.lights_per_ft,
-                poles_per_ft=rates.poles_per_ft,
+                poles_each=rates.poles_each,
                 lights_cost=float(lights_cost),
                 poles_cost=float(poles_cost),
                 total=float(lights_cost + poles_cost),

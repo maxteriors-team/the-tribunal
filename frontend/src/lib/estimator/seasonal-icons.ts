@@ -109,6 +109,7 @@ const STYLE_KIND: Record<RenderStyle, SeasonalKind> = {
   transformer: "transformer",
   wire: "wire",
   bistro: "bistro",
+  "bistro-pole": "bistro",
 };
 
 /** Icon spec for a workspace decor category key. Falls back to roofline. */

@@ -104,6 +104,9 @@ class PlacedItemSchema(DocumentSchema):
     circuit_id: ShortText | None = Field(
         default=None, validation_alias=AliasChoices("circuitId", "circuit_id")
     )
+    bistro_run_id: ShortText | None = Field(
+        default=None, validation_alias=AliasChoices("bistroRunId", "bistro_run_id")
+    )
     marker_color: Annotated[str, StringConstraints(pattern=r"^#[0-9A-Fa-f]{6}$")] | None = Field(
         default=None, validation_alias=AliasChoices("markerColor", "marker_color")
     )

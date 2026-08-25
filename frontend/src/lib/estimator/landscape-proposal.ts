@@ -20,6 +20,7 @@ export interface LandscapeWireQuoteInput {
 export interface LandscapeBistroQuoteInput {
   installation: "temporary" | "permanent" | null;
   lengthFeet: number | null;
+  poleCount: number;
 }
 
 export type GroupedLandscapeBistroRun = WizardBistroRun;
@@ -66,14 +67,18 @@ export function aggregateWireFeet(
 export function aggregateBistroRuns(
   runs: LandscapeBistroQuoteInput[],
 ): GroupedLandscapeBistroRun[] {
-  const totals = { temporary: 0, permanent: 0 };
+  const totals = {
+    temporary: { feet: 0, pole_count: 0 },
+    permanent: { feet: 0, pole_count: 0 },
+  };
   for (const run of runs) {
     if (!run.installation || run.lengthFeet === null) continue;
     if (!Number.isFinite(run.lengthFeet) || run.lengthFeet <= 0) continue;
-    totals[run.installation] += run.lengthFeet;
+    totals[run.installation].feet += run.lengthFeet;
+    totals[run.installation].pole_count += Math.max(0, Math.floor(run.poleCount));
   }
   return (["temporary", "permanent"] as const).flatMap((installation) =>
-    totals[installation] > 0 ? [{ installation, feet: totals[installation] }] : [],
+    totals[installation].feet > 0 ? [{ installation, ...totals[installation] }] : [],
   );
 }
 

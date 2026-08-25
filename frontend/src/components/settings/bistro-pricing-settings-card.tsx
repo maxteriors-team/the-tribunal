@@ -29,12 +29,12 @@ interface DraftFields {
 const DEFAULT_TEMPORARY: BistroInstallationConfig = {
   label: "Temporary Bistro Lighting",
   lights_per_ft: 0,
-  poles_per_ft: 0,
+  poles_each: 0,
 };
 const DEFAULT_PERMANENT: BistroInstallationConfig = {
   label: "Permanent Bistro Lighting",
   lights_per_ft: 0,
-  poles_per_ft: 0,
+  poles_each: 0,
 };
 
 function toDraft(config: BistroConfig): DraftFields {
@@ -42,9 +42,9 @@ function toDraft(config: BistroConfig): DraftFields {
     enabled: config.enabled,
     minimum: String(config.minimum ?? 0),
     temporaryLights: String(config.temporary?.lights_per_ft ?? 0),
-    temporaryPoles: String(config.temporary?.poles_per_ft ?? 0),
+    temporaryPoles: String(config.temporary?.poles_each ?? 0),
     permanentLights: String(config.permanent?.lights_per_ft ?? 0),
-    permanentPoles: String(config.permanent?.poles_per_ft ?? 0),
+    permanentPoles: String(config.permanent?.poles_each ?? 0),
   };
 }
 
@@ -94,7 +94,7 @@ export function BistroPricingSettingsCard() {
       return;
     }
     if (rates.some((rate) => !Number.isFinite(rate) || rate < 0)) {
-      toast.error("Every per-foot rate must be a valid number ≥ 0");
+      toast.error("Every Bistro rate must be a valid number ≥ 0");
       return;
     }
     if (draft.enabled && rates.some((rate) => rate <= 0)) {
@@ -109,12 +109,12 @@ export function BistroPricingSettingsCard() {
       temporary: {
         ...(serverBistro.temporary ?? DEFAULT_TEMPORARY),
         lights_per_ft: rates[0],
-        poles_per_ft: rates[1],
+        poles_each: rates[1],
       },
       permanent: {
         ...(serverBistro.permanent ?? DEFAULT_PERMANENT),
         lights_per_ft: rates[2],
-        poles_per_ft: rates[3],
+        poles_each: rates[3],
       },
     });
   };
@@ -131,9 +131,9 @@ export function BistroPricingSettingsCard() {
 
   const rateFields = [
     ["bistro-temporary-lights", "Temporary lights per foot ($)", "temporaryLights"],
-    ["bistro-temporary-poles", "Temporary poles/supports per foot ($)", "temporaryPoles"],
+    ["bistro-temporary-poles", "Temporary poles/supports each ($)", "temporaryPoles"],
     ["bistro-permanent-lights", "Permanent Bistro lights per foot ($)", "permanentLights"],
-    ["bistro-permanent-poles", "Permanent Bistro poles/supports per foot ($)", "permanentPoles"],
+    ["bistro-permanent-poles", "Permanent Bistro poles/supports each ($)", "permanentPoles"],
   ] as const;
 
   return (
@@ -143,8 +143,8 @@ export function BistroPricingSettingsCard() {
           <div className="space-y-1.5">
             <CardTitle>Bistro Lighting</CardTitle>
             <CardDescription>
-              Set base prices per measured foot. Existing financing fees and commission adjustments
-              still apply when the server builds a quote.
+              Set the base light rate per measured foot and support price per marked pole. Existing
+              financing fees and commission adjustments still apply when the server builds a quote.
             </CardDescription>
           </div>
           <Switch
