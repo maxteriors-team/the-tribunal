@@ -837,7 +837,9 @@ test.describe("landscape lighting studio", () => {
 
     await page.getByRole("tab", { name: "Fixture Schedule" }).click();
     await expect(
-      page.getByRole("table", { name: /Fixture schedule with editable lamp and accessory/i }),
+      page.getByRole("table", {
+        name: /Fixture schedule with editable fixture type, lamp, and accessory assignments/i,
+      }),
     ).toBeVisible();
     await page.getByLabel("Lamp for fixture 1").selectOption("lamp-2700k");
     await page.getByLabel("Add accessory to fixture 1").selectOption("ground-stake");
