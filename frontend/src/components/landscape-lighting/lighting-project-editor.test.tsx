@@ -154,6 +154,10 @@ describe("LightingProjectEditor", () => {
     expect(await screen.findByDisplayValue("Patio lighting")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Projects" })).toBeInTheDocument();
     expect(screen.queryByText(/Pat Lee/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Proposal & payment" })).toHaveAttribute(
+      "title",
+      "Set the deposit, preview the client payment page, and send the proposal",
+    );
     expect(await screen.findByTestId("light-designer")).toHaveTextContent("shot-1");
     expect(designerProps).toHaveBeenLastCalledWith(
       expect.objectContaining({

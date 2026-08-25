@@ -79,7 +79,7 @@ const editQuoteSchema = z
 type EditQuoteFormValues = z.infer<typeof editQuoteSchema>;
 
 interface QuoteEditDialogProps {
-  quote: Quote | null;
+  quote: Pick<Quote, "id" | "status" | "total" | "number" | "currency"> | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
