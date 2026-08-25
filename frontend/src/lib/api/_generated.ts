@@ -25733,6 +25733,7 @@ export interface components {
             grand_monthly_payment: number;
             /** Headline Tier */
             headline_tier?: string | null;
+            inventory_availability?: components["schemas"]["QuoteInventoryAvailability"] | null;
             /** Mockups */
             mockups?: components["schemas"]["ProposalMockup"][];
             /** Night Preview */
@@ -27425,6 +27426,66 @@ export interface components {
             offset_days: number;
             /** Template Id */
             template_id?: string | null;
+        };
+        /**
+         * QuoteInventoryAvailability
+         * @description Live-at-quote-time inventory coverage; internal and never customer-facing.
+         */
+        QuoteInventoryAvailability: {
+            /**
+             * Has Requirements
+             * @default false
+             */
+            has_requirements: boolean;
+            /**
+             * Has Shortages
+             * @default false
+             */
+            has_shortages: boolean;
+            /** Items */
+            items?: components["schemas"]["QuoteInventoryAvailabilityItem"][];
+            /**
+             * Not Counted Items
+             * @default 0
+             */
+            not_counted_items: number;
+            /**
+             * Shortage Items
+             * @default 0
+             */
+            shortage_items: number;
+            /**
+             * Untracked Items
+             * @default 0
+             */
+            untracked_items: number;
+        };
+        /**
+         * QuoteInventoryAvailabilityItem
+         * @description One internal fulfillment requirement compared with current workspace stock.
+         */
+        QuoteInventoryAvailabilityItem: {
+            /** Description */
+            description?: string | null;
+            /** Inventory Item Id */
+            inventory_item_id?: string | null;
+            /** Inventory Item Name */
+            inventory_item_name?: string | null;
+            /** Quantity On Hand */
+            quantity_on_hand?: number | null;
+            /** Required Quantity */
+            required_quantity: number;
+            /** Shortfall */
+            shortfall?: number | null;
+            /** Sku */
+            sku: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "in_stock" | "shortage" | "not_counted" | "untracked";
+            /** Unit Of Measure */
+            unit_of_measure?: string | null;
         };
         /**
          * QuoteLineItemCreate

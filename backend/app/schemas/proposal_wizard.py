@@ -405,6 +405,31 @@ class FulfillmentPart(BaseModel):
     qty: float
 
 
+class QuoteInventoryAvailabilityItem(BaseModel):
+    """One internal fulfillment requirement compared with current workspace stock."""
+
+    sku: str
+    description: str | None = None
+    required_quantity: float
+    inventory_item_id: uuid.UUID | None = None
+    inventory_item_name: str | None = None
+    unit_of_measure: str | None = None
+    quantity_on_hand: float | None = None
+    shortfall: float | None = None
+    status: Literal["in_stock", "shortage", "not_counted", "untracked"]
+
+
+class QuoteInventoryAvailability(BaseModel):
+    """Live-at-quote-time inventory coverage; internal and never customer-facing."""
+
+    items: list[QuoteInventoryAvailabilityItem] = Field(default_factory=list)
+    has_requirements: bool = False
+    has_shortages: bool = False
+    shortage_items: int = 0
+    not_counted_items: int = 0
+    untracked_items: int = 0
+
+
 class ProposalDocument(BaseModel):
     """The full computed snapshot stored on ``quote.proposal_document``."""
 
@@ -447,6 +472,9 @@ class ProposalDocument(BaseModel):
     deposit_amount: float = 0
     # Internal fulfillment sheet for the selected tier (staff-only).
     fulfillment: list[FulfillmentPart] = Field(default_factory=list)
+    # Snapshot of current on-hand coverage when this preview/quote was built.
+    # No stock is reserved or consumed until accepted work becomes a job.
+    inventory_availability: QuoteInventoryAvailability | None = None
     notes: str | None = None
     terms: str | None = None
     # The cross-sell prompt this selection currently earns, e.g. a roof job with

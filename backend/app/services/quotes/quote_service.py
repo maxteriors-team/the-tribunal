@@ -111,6 +111,7 @@ from app.services.automations.events import (
 from app.services.email import send_quote_acceptance_receipt
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
 from app.services.idempotency import derive_outbound_key
+from app.services.inventory.quote_availability import QuoteInventoryAvailabilityService
 from app.services.notifications import notify_workspace_event
 from app.services.nudges.strategies.base import dedup_exists
 from app.services.opportunities.quote_opportunity import (
@@ -2346,6 +2347,9 @@ class QuoteService:
             effective_payload = self._lighting_project_quote_defaults(payload, project)
         document, line_items = build_proposal_document(config, catalog, effective_payload)
         self._attach_deposit_to_document(document, effective_payload, config)
+        document.inventory_availability = await QuoteInventoryAvailabilityService(self.db).check(
+            workspace_id, document.fulfillment
+        )
         document.attach_warning = await self._preview_attach_warning(
             workspace, workspace_id, line_items
         )
@@ -2450,6 +2454,9 @@ class QuoteService:
 
         document, line_items = build_proposal_document(config, catalog, effective_payload)
         self._attach_deposit_to_document(document, effective_payload, config)
+        document.inventory_availability = await QuoteInventoryAvailabilityService(self.db).check(
+            workspace_id, document.fulfillment
+        )
 
         quote.contact_id = contact_id
         quote.service_location_id = payload.service_location_id
