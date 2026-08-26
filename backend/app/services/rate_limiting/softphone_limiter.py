@@ -43,7 +43,7 @@ async def enforce_softphone_token_limit(*, user_id: int) -> None:
 
 
 async def enforce_softphone_call_limits(*, workspace_id: str, user_id: int) -> None:
-    """Limit paid call attempts across browser, callback, and AI modes."""
+    """Reserve every paid start against operator and workspace call budgets."""
     now = datetime.now(UTC)
     checks = (
         (f"softphone:call:user-hour:{user_id}:{now:%Y%m%d%H}", 60, 3600),
