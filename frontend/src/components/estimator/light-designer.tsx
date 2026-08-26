@@ -38,6 +38,7 @@ import {
   ChevronDown,
   CircleDot,
   Copy,
+  ExternalLink,
   FileDown,
   FileText,
   Focus,
@@ -1498,6 +1499,9 @@ function LandscapeProposalPanel({
   createQuoteError,
   createdQuote,
   quoteDisabledReason,
+  installationSheetReady,
+  suggestedInstallationSheetLabel,
+  onUseInstallationSheet,
   onDeliverQuote,
   deliveryPending,
   deliveryStatus,
@@ -1525,6 +1529,9 @@ function LandscapeProposalPanel({
   createQuoteError: string | null;
   createdQuote: QuoteDetail | null;
   quoteDisabledReason: string | null;
+  installationSheetReady: boolean;
+  suggestedInstallationSheetLabel: string | null;
+  onUseInstallationSheet?: () => void;
   onDeliverQuote: (channel: "email" | "sms") => void;
   deliveryPending: boolean;
   deliveryStatus: string | null;
@@ -1536,6 +1543,7 @@ function LandscapeProposalPanel({
   const bistroPricing = document?.bistro?.pricing_mode === "installation" ? document.bistro : null;
   const estimateTotal =
     document?.grand_financed_total ?? selectedTier?.pricing.financed_total ?? null;
+  const cashEstimateTotal = document?.grand_cash_total ?? selectedTier?.pricing.cash_total ?? null;
   const wireTotals = new Map<8 | 10 | 12 | 14, number | null>();
   for (const circuit of circuits) {
     const previous = wireTotals.get(circuit.wireGauge);
@@ -1547,6 +1555,11 @@ function LandscapeProposalPanel({
     );
   }
   const quoteFixtureRows = rows.filter((row) => row.id !== "transformer");
+  const bistroOnly = bistroRows.length > 0 && quoteFixtureRows.length === 0;
+  const hasCashPrice =
+    estimateTotal !== null &&
+    cashEstimateTotal !== null &&
+    Math.abs(estimateTotal - cashEstimateTotal) >= 0.01;
   const [paymentTermsOpen, setPaymentTermsOpen] = useState(false);
 
   return (
@@ -1562,43 +1575,129 @@ function LandscapeProposalPanel({
             <span>Current design, customer, and CRM pricing</span>
             <h2 id="ll-proposal-title">Landscape Lighting Quote Builder</h2>
           </div>
-          {estimateTotal !== null ? <strong>{formatCurrency(estimateTotal)}</strong> : null}
         </header>
 
-        <fieldset className="ll-proposal-fieldset">
-          <legend>Fixture package</legend>
-          <p>
-            Switch packages without redrawing. Every plan fixture resolves to that tier’s catalog
-            item.
-          </p>
-          <div className="ll-package-options">
-            {tiers.map((tier) => {
-              const previewTier = (document?.tiers ?? []).find(
-                (candidate) => candidate.key === tier.key,
-              );
-              const selected = tier.key === selectedTierKey;
-              return (
-                <button
-                  key={tier.key}
-                  className={selected ? "selected" : ""}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => onSelectTier(tier.key)}
-                >
-                  <span>{tier.tab || tier.label || tier.key}</span>
-                  <strong>
-                    {previewTier
-                      ? formatCurrency(previewTier.pricing.cash_total)
-                      : pricingPending
-                        ? "Pricing…"
-                        : "Add fixtures to price"}
-                  </strong>
-                  <small>CRM price book</small>
-                </button>
-              );
-            })}
+        <section className="ll-proposal-command" aria-labelledby="ll-proposal-total-title">
+          <div className="ll-proposal-command-price">
+            <span>Step 1 · Confirm customer price</span>
+            <h3 id="ll-proposal-total-title">Proposal total</h3>
+            <strong aria-live="polite">
+              {estimateTotal !== null
+                ? formatCurrency(estimateTotal)
+                : pricingPending
+                  ? "Calculating…"
+                  : "Price unavailable"}
+            </strong>
+            <small>
+              {pricingPending
+                ? "Applying the workspace price book and financing rules."
+                : hasCashPrice
+                  ? `Pay in full: ${formatCurrency(cashEstimateTotal)}`
+                  : "Calculated by the CRM pricing rules."}
+            </small>
           </div>
-        </fieldset>
+          <div className="ll-proposal-command-steps">
+            <div className="ll-proposal-command-step">
+              <span aria-hidden="true">2</span>
+              <div>
+                <strong>Choose the customer drawing</strong>
+                <small>
+                  {installationSheetReady
+                    ? "Installation sheet selected and ready for the proposal."
+                    : suggestedInstallationSheetLabel
+                      ? `${suggestedInstallationSheetLabel} is open. Confirm it as the customer-facing drawing.`
+                      : "Open a saved customer lighting project to choose its proposal drawing."}
+                </small>
+              </div>
+              {installationSheetReady ? (
+                <CheckCircle2 aria-label="Installation sheet selected" />
+              ) : suggestedInstallationSheetLabel && onUseInstallationSheet ? (
+                <button className="est-btn" type="button" onClick={onUseInstallationSheet}>
+                  Use {suggestedInstallationSheetLabel}
+                </button>
+              ) : null}
+            </div>
+            <div className="ll-proposal-command-step">
+              <span aria-hidden="true">3</span>
+              <div>
+                <strong>
+                  {createdQuote
+                    ? `Proposal ${createdQuote.number} is ready`
+                    : "Create and send proposal"}
+                </strong>
+                <small>
+                  {createdQuote
+                    ? "Set payment terms, then email or text the customer."
+                    : "Create one customer proposal using the server-priced total above."}
+                </small>
+                <div className="ll-proposal-command-actions">
+                  {createdQuote ? (
+                    <>
+                      <button
+                        className="est-btn primary"
+                        type="button"
+                        onClick={() => setPaymentTermsOpen(true)}
+                      >
+                        Set payment terms
+                      </button>
+                      <button
+                        className="est-btn"
+                        type="button"
+                        disabled={deliveryPending}
+                        onClick={() => onDeliverQuote("email")}
+                      >
+                        <Mail aria-hidden="true" />
+                        Email proposal
+                      </button>
+                      <button
+                        className="est-btn"
+                        type="button"
+                        disabled={deliveryPending}
+                        onClick={() => onDeliverQuote("sms")}
+                      >
+                        <MessageSquareText aria-hidden="true" />
+                        Text proposal
+                      </button>
+                      {createdQuote.public_token ? (
+                        <Link
+                          className="est-btn"
+                          href={`/p/quotes/${createdQuote.public_token}?preview=1`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Preview as customer
+                          <ExternalLink aria-hidden="true" />
+                        </Link>
+                      ) : (
+                        <Link className="est-btn" href="/quotes">
+                          Open Quotes
+                        </Link>
+                      )}
+                    </>
+                  ) : (
+                    <button
+                      className="est-btn primary"
+                      type="button"
+                      disabled={Boolean(quoteDisabledReason) || createQuotePending}
+                      title={quoteDisabledReason ?? undefined}
+                      onClick={onCreateQuote}
+                    >
+                      {createQuotePending ? "Creating proposal…" : "Create customer proposal"}
+                    </button>
+                  )}
+                </div>
+                {!createdQuote && quoteDisabledReason ? (
+                  <small className="ll-proposal-command-blocker">{quoteDisabledReason}</small>
+                ) : null}
+                {deliveryStatus ? (
+                  <p role="status" aria-live="polite">
+                    {deliveryStatus}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
 
         {pricingError ? (
           <div className="ll-proposal-error" role="alert">
@@ -1608,67 +1707,113 @@ function LandscapeProposalPanel({
             </button>
           </div>
         ) : null}
-
-        <div className="ll-proposal-section">
-          <div className="ll-proposal-section-heading">
-            <div>
-              <span>Selected package</span>
-              <h3>Fixture pricing</h3>
-            </div>
-            <strong>
-              {quoteFixtureRows.reduce((total, row) => total + row.count, 0)} fixtures
-            </strong>
+        {createQuoteError ? (
+          <div className="ll-proposal-error" role="alert">
+            {createQuoteError}
           </div>
-          {quoteFixtureRows.length ? (
-            <div className="ll-data-table-wrap">
-              <table className="ll-data-table ll-proposal-price-table">
-                <caption className="sr-only">Fixture pricing for the selected package</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Fixture</th>
-                    <th scope="col">Qty</th>
-                    <th scope="col">Proposal unit</th>
-                    <th scope="col">Line total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quoteFixtureRows.map((row) => {
-                    const line = (selectedTier?.lines ?? []).find(
-                      (candidate) => candidate.item_id === row.sku,
-                    );
-                    return (
-                      <tr key={row.id}>
-                        <td>
-                          <strong>{row.label}</strong>
-                          <span>{row.productName ?? "Not sold in this package"}</span>
-                        </td>
-                        <td>{row.count}</td>
-                        <td>{line ? formatCurrency(line.unit_price) : "Not priced"}</td>
-                        <td>{line ? formatCurrency(line.line_total) : "Not priced"}</td>
+        ) : null}
+
+        {!bistroOnly ? (
+          <>
+            <fieldset className="ll-proposal-fieldset">
+              <legend>Fixture package</legend>
+              <p>
+                Switch packages without redrawing. Every plan fixture resolves to that tier’s
+                catalog item.
+              </p>
+              <div className="ll-package-options">
+                {tiers.map((tier) => {
+                  const previewTier = (document?.tiers ?? []).find(
+                    (candidate) => candidate.key === tier.key,
+                  );
+                  const selected = tier.key === selectedTierKey;
+                  return (
+                    <button
+                      key={tier.key}
+                      className={selected ? "selected" : ""}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => onSelectTier(tier.key)}
+                    >
+                      <span>{tier.tab || tier.label || tier.key}</span>
+                      <strong>
+                        {previewTier
+                          ? formatCurrency(previewTier.pricing.cash_total)
+                          : pricingPending
+                            ? "Pricing…"
+                            : "Add fixtures to price"}
+                      </strong>
+                      <small>CRM price book</small>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <div className="ll-proposal-section">
+              <div className="ll-proposal-section-heading">
+                <div>
+                  <span>Selected package</span>
+                  <h3>Fixture pricing</h3>
+                </div>
+                <strong>
+                  {quoteFixtureRows.reduce((total, row) => total + row.count, 0)} fixtures
+                </strong>
+              </div>
+              {quoteFixtureRows.length ? (
+                <div className="ll-data-table-wrap">
+                  <table className="ll-data-table ll-proposal-price-table">
+                    <caption className="sr-only">Fixture pricing for the selected package</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Fixture</th>
+                        <th scope="col">Qty</th>
+                        <th scope="col">Proposal unit</th>
+                        <th scope="col">Line total</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody>
+                      {quoteFixtureRows.map((row) => {
+                        const line = (selectedTier?.lines ?? []).find(
+                          (candidate) => candidate.item_id === row.sku,
+                        );
+                        return (
+                          <tr key={row.id}>
+                            <td>
+                              <strong>{row.label}</strong>
+                              <span>{row.productName ?? "Not sold in this package"}</span>
+                            </td>
+                            <td>{row.count}</td>
+                            <td>{line ? formatCurrency(line.unit_price) : "Not priced"}</td>
+                            <td>{line ? formatCurrency(line.line_total) : "Not priced"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="ll-panel-inline-empty">
+                  Place fixtures on the Drawing Sheet to price them.
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="ll-panel-inline-empty">
-              {bistroRows.length
-                ? "No landscape fixtures selected; this estimate contains Bistro lighting only."
-                : "Place fixtures on the Drawing Sheet to price them."}
-            </div>
-          )}
-        </div>
+          </>
+        ) : null}
 
         {bistroRows.length ? (
           <div className="ll-proposal-section">
             <div className="ll-proposal-section-heading">
               <div>
-                <span>Saved with the drawing</span>
-                <h3>Bistro lighting layout</h3>
+                <span>Internal estimator only</span>
+                <h3>Bistro price breakdown</h3>
               </div>
               <strong>{bistroRows.length} runs</strong>
             </div>
+            <p className="ll-panel-footnote">
+              The customer proposal shows one Bistro project price, not this footage and pole
+              breakdown.
+            </p>
             <LandscapeBistroRunScheduleTable rows={bistroRows} />
             {bistroPricing ? (
               <div className="ll-wire-price-list" aria-label="Bistro estimate breakdown">
@@ -1685,9 +1830,7 @@ function LandscapeProposalPanel({
                     </span>
                     <span>
                       <strong>{formatCurrency(installation.lights_cost)}</strong>
-                      <small>
-                        {formatCurrency(installation.lights_cost / installation.feet)}/ft
-                      </small>
+                      <small>{formatCurrency(installation.lights_per_ft)}/ft base rate</small>
                     </span>
                   </div>,
                   ...(installation.pole_count
@@ -1702,10 +1845,7 @@ function LandscapeProposalPanel({
                           </span>
                           <span>
                             <strong>{formatCurrency(installation.poles_cost)}</strong>
-                            <small>
-                              {formatCurrency(installation.poles_cost / installation.pole_count)}{" "}
-                              each
-                            </small>
+                            <small>{formatCurrency(installation.poles_each)} each base rate</small>
                           </span>
                         </div>,
                       ]
@@ -1723,7 +1863,7 @@ function LandscapeProposalPanel({
                 <div>
                   <span>
                     <strong>Bistro estimate total</strong>
-                    <small>Server-calculated CRM pricing</small>
+                    <small>Customer amount after configured pricing adjustments</small>
                   </span>
                   <strong>{formatCurrency(bistroPricing.total)}</strong>
                 </div>
@@ -1772,10 +1912,11 @@ function LandscapeProposalPanel({
         ) : null}
 
         <fieldset className="ll-proposal-fieldset ll-additional-lines">
-          <legend>Additional line items</legend>
+          <legend>{bistroOnly ? "Extra work only" : "Additional line items"}</legend>
           <p>
-            Add job-specific work or materials. Each completed line is included in every package
-            total.
+            {bistroOnly
+              ? "Bistro footage and marked poles are already priced from the design. Add only work or materials that are not part of that measured layout."
+              : "Add job-specific work or materials. Each completed line is included in every package total."}
           </p>
           <div className="ll-additional-line-list">
             {additionalLineItems.map((line, index) => (
@@ -1854,45 +1995,47 @@ function LandscapeProposalPanel({
           </button>
         </fieldset>
 
-        <fieldset className="ll-proposal-fieldset">
-          <legend>Care plan</legend>
-          <p>
-            Care pricing uses the fixture count on this plan and stays separate from the
-            installation total.
-          </p>
-          <div className="ll-care-options">
-            <button
-              className={selectedCarePlanKey === null ? "selected" : ""}
-              type="button"
-              aria-pressed={selectedCarePlanKey === null}
-              onClick={() => onSelectCarePlan(null)}
-            >
-              <span>No care plan</span>
-              <strong>$0.00/year</strong>
-            </button>
-            {(document?.care_plan?.options ?? []).map((option) => (
+        {!bistroOnly ? (
+          <fieldset className="ll-proposal-fieldset">
+            <legend>Care plan</legend>
+            <p>
+              Care pricing uses the fixture count on this plan and stays separate from the
+              installation total.
+            </p>
+            <div className="ll-care-options">
               <button
-                key={option.key}
-                className={option.key === selectedCarePlanKey ? "selected" : ""}
+                className={selectedCarePlanKey === null ? "selected" : ""}
                 type="button"
-                aria-pressed={option.key === selectedCarePlanKey}
-                onClick={() => onSelectCarePlan(option.key)}
+                aria-pressed={selectedCarePlanKey === null}
+                onClick={() => onSelectCarePlan(null)}
               >
-                <span>{option.name}</span>
-                <strong>{formatCurrency(option.price)}/year</strong>
-                <small>
-                  {option.visits} service {option.visits === 1 ? "visit" : "visits"}
-                  {option.repair_discount > 0
-                    ? ` · ${option.repair_discount}% repair discount`
-                    : ""}
-                </small>
+                <span>No care plan</span>
+                <strong>$0.00/year</strong>
               </button>
-            ))}
-          </div>
-          {selectedCarePlan?.blurb ? (
-            <p className="ll-care-note">{selectedCarePlan.blurb}</p>
-          ) : null}
-        </fieldset>
+              {(document?.care_plan?.options ?? []).map((option) => (
+                <button
+                  key={option.key}
+                  className={option.key === selectedCarePlanKey ? "selected" : ""}
+                  type="button"
+                  aria-pressed={option.key === selectedCarePlanKey}
+                  onClick={() => onSelectCarePlan(option.key)}
+                >
+                  <span>{option.name}</span>
+                  <strong>{formatCurrency(option.price)}/year</strong>
+                  <small>
+                    {option.visits} service {option.visits === 1 ? "visit" : "visits"}
+                    {option.repair_discount > 0
+                      ? ` · ${option.repair_discount}% repair discount`
+                      : ""}
+                  </small>
+                </button>
+              ))}
+            </div>
+            {selectedCarePlan?.blurb ? (
+              <p className="ll-care-note">{selectedCarePlan.blurb}</p>
+            ) : null}
+          </fieldset>
+        ) : null}
 
         <div className="ll-proposal-section">
           <div className="ll-proposal-section-heading">
@@ -1972,89 +2115,12 @@ function LandscapeProposalPanel({
 
         <InventoryAvailabilityCard availability={document?.inventory_availability} />
 
-        <footer className="ll-proposal-total">
-          <div>
-            <span>One-time installation</span>
-            <strong>
-              {estimateTotal !== null ? formatCurrency(estimateTotal) : "Pricing pending"}
-            </strong>
-            {selectedCarePlan ? (
-              <small>
-                Plus {formatCurrency(selectedCarePlan.price)} per year for {selectedCarePlan.name}
-              </small>
-            ) : (
-              <small>No recurring care plan selected</small>
-            )}
-          </div>
-          <button
-            className="est-btn primary"
-            type="button"
-            disabled={Boolean(quoteDisabledReason) || createQuotePending || Boolean(createdQuote)}
-            title={quoteDisabledReason ?? undefined}
-            onClick={onCreateQuote}
-          >
-            {createQuotePending
-              ? "Creating draft…"
-              : createdQuote
-                ? `Quote ${createdQuote.number} created`
-                : "Create draft quote"}
-          </button>
-        </footer>
-        {quoteDisabledReason ? <p className="ll-panel-footnote">{quoteDisabledReason}</p> : null}
-        {createQuoteError ? (
-          <div className="ll-proposal-error" role="alert">
-            {createQuoteError}
-          </div>
-        ) : null}
         {createdQuote ? (
-          <div className="ll-proposal-success">
-            <p role="status">
-              Draft quote {createdQuote.number} was created from the measured Bistro layout,
-              selected package, care plan, fixture pricing, and any catalog-priced wire.
-            </p>
-            <div>
-              <strong>Collect payment in three steps</strong>
-              <ol className="list-decimal space-y-1 pl-5 text-sm">
-                <li>Set the deposit due when the customer accepts.</li>
-                <li>Open the quote to preview the client acceptance and payment page.</li>
-                <li>Email or text the proposal so the customer can accept and pay in Stripe.</li>
-              </ol>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                className="est-btn primary"
-                type="button"
-                onClick={() => setPaymentTermsOpen(true)}
-              >
-                Set deposit & payment terms
-              </button>
-              <Link className="est-btn" href="/quotes">
-                Open quote & preview payment page
-              </Link>
-              <button
-                className="est-btn"
-                type="button"
-                disabled={deliveryPending}
-                onClick={() => onDeliverQuote("email")}
-              >
-                Email proposal
-              </button>
-              <button
-                className="est-btn"
-                type="button"
-                disabled={deliveryPending}
-                onClick={() => onDeliverQuote("sms")}
-              >
-                Text proposal
-              </button>
-            </div>
-            {deliveryStatus ? <p role="status">{deliveryStatus}</p> : null}
-            <QuoteEditDialog
-              quote={createdQuote}
-              open={paymentTermsOpen}
-              onOpenChange={setPaymentTermsOpen}
-            />
-          </div>
+          <QuoteEditDialog
+            quote={createdQuote}
+            open={paymentTermsOpen}
+            onOpenChange={setPaymentTermsOpen}
+          />
         ) : null}
       </div>
     </section>
@@ -2104,6 +2170,9 @@ function LandscapeWorkspacePanel({
   createQuoteError,
   createdQuote,
   quoteDisabledReason,
+  installationSheetReady,
+  suggestedInstallationSheetLabel,
+  onUseInstallationSheet,
   onDeliverQuote,
   deliveryPending,
   deliveryStatus,
@@ -2151,6 +2220,9 @@ function LandscapeWorkspacePanel({
   createQuoteError: string | null;
   createdQuote: QuoteDetail | null;
   quoteDisabledReason: string | null;
+  installationSheetReady: boolean;
+  suggestedInstallationSheetLabel: string | null;
+  onUseInstallationSheet?: () => void;
   onDeliverQuote: (channel: "email" | "sms") => void;
   deliveryPending: boolean;
   deliveryStatus: string | null;
@@ -2313,6 +2385,9 @@ function LandscapeWorkspacePanel({
         createQuoteError={createQuoteError}
         createdQuote={createdQuote}
         quoteDisabledReason={quoteDisabledReason}
+        installationSheetReady={installationSheetReady}
+        suggestedInstallationSheetLabel={suggestedInstallationSheetLabel}
+        onUseInstallationSheet={onUseInstallationSheet}
         onDeliverQuote={onDeliverQuote}
         deliveryPending={deliveryPending}
         deliveryStatus={deliveryStatus}
@@ -3326,7 +3401,9 @@ export function LightDesigner({
           contactId: landscapeProject?.contactId,
           opportunityId: landscapeProject?.opportunityId,
           serviceLocationId: landscapeProject?.serviceLocationId,
-          lightingProjectId: landscapeProject?.projectId,
+          lightingProjectId: landscapeProject?.installationShotId
+            ? landscapeProject.projectId
+            : undefined,
           title: landscapeProjectName,
         });
   const landscapeProposalSignature = JSON.stringify(landscapeProposalPayload);
@@ -3392,12 +3469,24 @@ export function LightDesigner({
       if (!currentSavedLandscapeQuote) throw new Error("Create a draft quote before sending it.");
       return salesWizardApi.deliver(workspaceId, currentSavedLandscapeQuote.id, channel);
     },
-    onSuccess: (result) =>
-      setLandscapeDeliveryStatus(
+    onSuccess: async (result) => {
+      const deliveredMessage =
         result.channel === "sms"
           ? `Proposal texted to ${result.to}.`
-          : `Proposal emailed to ${result.to}.`,
-      ),
+          : `Proposal emailed to ${result.to}.`;
+      setLandscapeDeliveryStatus(deliveredMessage);
+      if (!currentSavedLandscapeQuote) return;
+      try {
+        const refreshedQuote = await quotesApi.get(workspaceId, currentSavedLandscapeQuote.id);
+        setSavedLandscapeQuote((current) =>
+          current?.quote.id === refreshedQuote.id
+            ? { ...current, quote: { ...current.quote, ...refreshedQuote } }
+            : current,
+        );
+      } catch {
+        setLandscapeDeliveryStatus(`${deliveredMessage} Open Quotes to preview the client link.`);
+      }
+    },
     onError: (error: unknown) =>
       setLandscapeDeliveryStatus(getApiErrorMessage(error, "Unable to deliver the proposal.")),
   });
@@ -3861,13 +3950,13 @@ export function LightDesigner({
   const landscapeQuoteDisabledReason = !serverBacked
     ? "Open a customer lighting project to create a CRM quote here."
     : !landscapeProject?.installationShotId
-      ? "Select and save an installation sheet before creating a quote."
+      ? "Select and save an installation sheet before creating the customer proposal."
       : hasUnpriceableBistroRuns(bistroScheduleRows)
-        ? "Set the drawing scale and installation type for every Bistro run before creating a quote."
+        ? "Set the drawing scale and installation type for every Bistro run before creating the customer proposal."
         : fixtureCount === 0 && !hasBistroRuns
-          ? "Place at least one fixture or Bistro run before creating a quote."
+          ? "Place at least one fixture or Bistro run before creating the customer proposal."
           : unresolvedFixtures.length > 0
-            ? `Resolve ${unresolvedFixtures.map((line) => line.label).join(", ")} in this package before creating a quote.`
+            ? `Resolve ${unresolvedFixtures.map((line) => line.label).join(", ")} in this package before creating the customer proposal.`
             : circuitLoads.some((circuit) => circuit.lengthFeet === null)
               ? "Set the drawing scale so traced wire routes can be priced or clearly marked unpriced."
               : !landscapeProposalPayload
@@ -3875,7 +3964,7 @@ export function LightDesigner({
                 : landscapeProposalQuery.isFetching
                   ? "Pricing this package now."
                   : landscapePricingError
-                    ? "Retry proposal pricing before creating a quote."
+                    ? "Retry proposal pricing before creating the customer proposal."
                     : null;
   const createLandscapeQuote = async () => {
     if (!landscapeProposalPayload || landscapeQuoteDisabledReason) return;
@@ -4278,6 +4367,19 @@ export function LightDesigner({
               createQuoteError={landscapeCreateQuoteError}
               createdQuote={currentSavedLandscapeQuote}
               quoteDisabledReason={landscapeQuoteDisabledReason}
+              installationSheetReady={Boolean(landscapeProject?.installationShotId)}
+              suggestedInstallationSheetLabel={
+                activeShot
+                  ? `L-${liveShots.findIndex((shot) => shot.id === activeShot.id) + 1}`
+                  : null
+              }
+              onUseInstallationSheet={
+                activeShot && landscapeProject?.onSelectInstallationShot
+                  ? () => {
+                      void landscapeProject.onSelectInstallationShot?.(activeShot.id);
+                    }
+                  : undefined
+              }
               onDeliverQuote={(channel) => landscapeDeliveryMutation.mutate(channel)}
               deliveryPending={landscapeDeliveryMutation.isPending}
               deliveryStatus={landscapeDeliveryStatus}

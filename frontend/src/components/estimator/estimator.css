@@ -2925,6 +2925,123 @@
   min-width: 0;
 }
 
+.ll-proposal-command {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.75fr) minmax(0, 1.25fr);
+  border: 1px solid #343b38;
+  background: #fff;
+}
+
+.ll-proposal-command-price {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 24px;
+  color: #fff;
+  background: #1f2723;
+  border-top: 3px solid #a9802c;
+}
+
+.ll-proposal-command-price > span {
+  color: #d6b464;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ll-proposal-command-price h3 {
+  margin: 8px 0 0;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.ll-proposal-command-price strong {
+  margin-top: 7px;
+  color: #fff;
+  font-size: clamp(28px, 4vw, 38px);
+  line-height: 1;
+}
+
+.ll-proposal-command-price small {
+  margin-top: 10px;
+  color: #cfd4d1;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ll-proposal-command-steps {
+  min-width: 0;
+}
+
+.ll-proposal-command-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 8px 14px;
+  align-items: start;
+  min-width: 0;
+  padding: 18px 20px;
+}
+
+.ll-proposal-command-step + .ll-proposal-command-step {
+  border-top: 1px solid #c8cac5;
+}
+
+.ll-proposal-command-step > span {
+  color: #8a651d;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.ll-proposal-command-step > div {
+  min-width: 0;
+}
+
+.ll-proposal-command-step strong,
+.ll-proposal-command-step small {
+  display: block;
+}
+
+.ll-proposal-command-step strong {
+  color: #1c2420;
+  font-size: 13px;
+}
+
+.ll-proposal-command-step small,
+.ll-proposal-command-step p {
+  margin: 4px 0 0;
+  color: #535d58;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ll-proposal-command-step > svg {
+  width: 21px;
+  height: 21px;
+  color: #356847;
+}
+
+.ll-proposal-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ll-proposal-command-actions .est-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ll-proposal-command-step .ll-proposal-command-blocker {
+  color: #7b2d27;
+  font-weight: 650;
+}
+
 .ll-proposal-fieldset {
   min-width: 0;
   margin: 0;
@@ -3139,37 +3256,7 @@
   text-align: right;
 }
 
-.ll-proposal-total {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 22px;
-  color: #fff;
-  background: #1f2723;
-  border-top: 3px solid #a9802c;
-}
-
-.ll-proposal-total > div {
-  display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-}
-
-.ll-proposal-total span,
-.ll-proposal-total small {
-  color: #cfd4d1;
-  font-size: 11px;
-}
-
-.ll-proposal-total strong {
-  margin: 5px 0;
-  color: #fff;
-  font-size: 24px;
-}
-
-.ll-proposal-error,
-.ll-proposal-success {
+.ll-proposal-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3180,12 +3267,6 @@
   border: 1px solid #a33b32;
   font-size: 12px;
   line-height: 1.5;
-}
-
-.ll-proposal-success {
-  color: #fff;
-  background: #273c31;
-  border-color: #273c31;
 }
 
 .ll-precon-list {
@@ -3585,12 +3666,20 @@
     text-align: left;
   }
 
-  .ll-proposal-total {
-    align-items: stretch;
-    flex-direction: column;
+  .ll-proposal-command {
+    grid-template-columns: 1fr;
   }
 
-  .ll-proposal-total .est-btn {
+  .ll-proposal-command-step {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .ll-proposal-command-step > .est-btn,
+  .ll-proposal-command-step > svg {
+    grid-column: 2;
+  }
+
+  .ll-proposal-command-actions .est-btn {
     width: 100%;
   }
 

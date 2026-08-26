@@ -494,8 +494,11 @@ class ProposalDocument(BaseModel):
 # added to the document is withheld from clients until someone adds it here, so
 # leaking internal data takes an explicit act rather than an oversight.
 #
-# ``fulfillment`` is the field this guards today — distributor part numbers and
-# the bill-of-materials, which the client must never see.
+# ``fulfillment`` and Bistro unit math are the fields this guards today: distributor
+# part numbers and estimator-only pricing inputs must never reach the client.
+CLIENT_SAFE_BISTRO_FIELDS: frozenset[str] = frozenset({"total"})
+
+
 CLIENT_SAFE_DOCUMENT_FIELDS: frozenset[str] = frozenset(
     {
         "version",
@@ -533,9 +536,16 @@ def client_safe_document(document: dict[str, Any] | None) -> dict[str, Any] | No
 
     The stored snapshot mixes presentation data with staff-only data (see
     :data:`CLIENT_SAFE_DOCUMENT_FIELDS`). Never hand the raw dict to the public
-    proposal payload — run it through here first. Returns a new dict; the
-    caller's snapshot is not mutated.
+    proposal payload. The Bistro object is nested-sanitized so measured footage,
+    pole counts, unit rates, and component costs remain operator-only. Returns a
+    new dict; the caller's snapshot is not mutated.
     """
     if document is None:
         return None
-    return {k: v for k, v in document.items() if k in CLIENT_SAFE_DOCUMENT_FIELDS}
+    safe = {k: v for k, v in document.items() if k in CLIENT_SAFE_DOCUMENT_FIELDS}
+    bistro = safe.get("bistro")
+    if isinstance(bistro, dict):
+        safe["bistro"] = {k: v for k, v in bistro.items() if k in CLIENT_SAFE_BISTRO_FIELDS}
+    elif bistro is not None:
+        safe.pop("bistro", None)
+    return safe

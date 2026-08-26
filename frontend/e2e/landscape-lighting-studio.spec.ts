@@ -380,7 +380,10 @@ async function installStudioApi(page: Page) {
   const updates: unknown[] = [];
   const previews: Array<Record<string, unknown>> = [];
   const quotes: Array<Record<string, unknown>> = [];
+  const quoteUpdates: Array<Record<string, unknown>> = [];
   const deliveries: unknown[] = [];
+  const publicApprovals: Array<Record<string, unknown>> = [];
+  let depositCheckoutCount = 0;
 
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -478,19 +481,125 @@ async function installStudioApi(page: Page) {
       previews.push(parseRequestBody(request));
       await route.fulfill(
         json({
-          tiers: [],
-          selected_tier_key: "best",
-          selected_care_plan_key: null,
-          total: 2199,
-          fixture_total: 2199,
-          care_plan_total: 0,
+          title: "Hawthorne Residence",
+          tiers: [
+            {
+              key: "best",
+              label: "Premier lighting",
+              popular: true,
+              lines: [
+                {
+                  item_id: "UP-100",
+                  name: "CORA Brass Uplight",
+                  quantity: 2,
+                  unit_price: 411,
+                  line_total: 822,
+                  transformer: false,
+                },
+                {
+                  item_id: "PATH-200",
+                  name: "TM Path Light",
+                  quantity: 1,
+                  unit_price: 376,
+                  line_total: 376,
+                  transformer: false,
+                },
+              ],
+              pricing: {
+                subtotal_net: 1198,
+                overhead: 0,
+                commission: 0,
+                profit: 0,
+                tax: 0,
+                financed_total: 2199,
+                cash_total: 2090.05,
+                monthly_payment: 184,
+              },
+            },
+          ],
+          selection: {
+            selected_tier: "best",
+            selected_financed_total: 2199,
+            selected_cash_total: 2090.05,
+            deposit_due_now: 0,
+          },
+          care_plan: { fixture_count: 3, options: [] },
+          categories: ["landscape"],
+          line_count: 2,
+          services: [],
+          mockups: [],
+          grand_financed_total: 2199,
+          grand_cash_total: 2090.05,
+          grand_monthly_payment: 184,
         }),
       );
       return;
     }
     if (method === "POST" && pathname.endsWith("/quotes/wizard")) {
       quotes.push(parseRequestBody(request));
-      await route.fulfill(json({ id: "quote-1", number: "Q-1042", status: "draft", total: 2199 }));
+      await route.fulfill(
+        json({
+          id: "quote-1",
+          number: "Q-1042",
+          status: "draft",
+          total: 2199,
+        }),
+      );
+      return;
+    }
+    if (method === "GET" && pathname.endsWith("/quotes/quote-1")) {
+      await route.fulfill(
+        json({
+          id: "quote-1",
+          workspace_id: WORKSPACE_ID,
+          number: "Q-1042",
+          title: "Hawthorne Residence",
+          status: "draft",
+          subtotal: 2199,
+          tax_amount: 0,
+          discount_amount: 0,
+          total: 2199,
+          currency: "USD",
+          public_token: "share-1",
+          proposal_document: { version: 1, bistro: { total: 2199 } },
+          deposit_percentage: 0,
+          deposit_amount_fixed: null,
+          deposit_paid_at: null,
+          issue_date: "2026-08-25",
+          expiry_date: "2026-09-25",
+          notes: null,
+          terms: null,
+          created_at: "2026-08-25T00:00:00Z",
+          updated_at: "2026-08-25T00:00:00Z",
+        }),
+      );
+      return;
+    }
+    if (method === "PUT" && pathname.endsWith("/quotes/quote-1")) {
+      const body = parseRequestBody(request);
+      quoteUpdates.push(body);
+      await route.fulfill(
+        json({
+          id: "quote-1",
+          workspace_id: WORKSPACE_ID,
+          number: "Q-1042",
+          title: "Hawthorne Residence",
+          status: "draft",
+          subtotal: 2199,
+          tax_amount: 0,
+          discount_amount: 0,
+          total: 2199,
+          currency: "USD",
+          public_token: "share-1",
+          proposal_document: { version: 1, bistro: { total: 2199 } },
+          deposit_percentage: 0,
+          deposit_amount_fixed: body.deposit_amount_fixed ?? null,
+          issue_date: "2026-08-25",
+          expiry_date: "2026-09-25",
+          created_at: "2026-08-25T00:00:00Z",
+          updated_at: "2026-08-25T00:01:00Z",
+        }),
+      );
       return;
     }
     if (method === "POST" && pathname.endsWith("/quotes/quote-1/deliver")) {
@@ -505,6 +614,91 @@ async function installStudioApi(page: Page) {
       );
       return;
     }
+    if (method === "GET" && pathname === "/api/v1/p/quotes/share-1") {
+      await route.fulfill(
+        json({
+          token: "share-1",
+          number: "Q-1042",
+          title: "Hawthorne Residence Bistro Lighting",
+          status: "sent",
+          proposal_version: 1,
+          currency: "USD",
+          subtotal: 2199,
+          tax_amount: 0,
+          discount_amount: 0,
+          total: 2199,
+          is_expired: false,
+          is_decided: false,
+          deposit_percentage: null,
+          deposit_amount: 500,
+          deposit_paid: false,
+          deposit_required: true,
+          packages: [],
+          line_items: [
+            {
+              name: "Bistro Lighting",
+              description:
+                "Professionally installed Bistro lighting with required support hardware",
+              quantity: 1,
+              unit_price: 2199,
+              discount: 0,
+              total: 2199,
+            },
+          ],
+          branding: {
+            business_name: "Maxteriors Lighting",
+            brand_color: "#d4af5a",
+            accent_color: "#d4af5a",
+          },
+          proposal_document: {
+            version: 1,
+            client: { first_name: "Avery", last_name: "Homeowner" },
+            tier_order: [],
+            tiers: [],
+            selected_tier: null,
+            headline_tier: null,
+            additional_charges: [],
+            care_plan: null,
+            bistro: { total: 2199 },
+            financing: null,
+            night_preview: null,
+            mockups: [],
+            categories: ["bistro"],
+            category_sections: [],
+            service: "bistro",
+            selected_financed_total: 0,
+            selected_cash_total: 0,
+            selected_monthly_payment: 0,
+            grand_financed_total: 2199,
+            grand_cash_total: 2090.05,
+            grand_monthly_payment: 184,
+          },
+        }),
+      );
+      return;
+    }
+    if (method === "POST" && pathname === "/api/v1/p/quotes/share-1/view") {
+      await route.fulfill({ status: 204, body: "" });
+      return;
+    }
+    if (method === "POST" && pathname === "/api/v1/p/quotes/share-1/approve") {
+      publicApprovals.push(parseRequestBody(request));
+      await route.fulfill(
+        json({
+          token: "share-1",
+          status: "approved",
+          message: "Thank you! Your proposal has been approved.",
+          deposit_required: true,
+          deposit_amount: 500,
+        }),
+      );
+      return;
+    }
+    if (method === "POST" && pathname === "/api/v1/p/quotes/share-1/deposit-checkout") {
+      depositCheckoutCount += 1;
+      await route.fulfill(json({ url: "/checkout/captured" }));
+      return;
+    }
     if (
       method === "GET" &&
       (pathname.endsWith("/nudges/stats") || pathname.endsWith("/pending-actions/stats"))
@@ -515,7 +709,15 @@ async function installStudioApi(page: Page) {
     await route.fulfill(json({ detail: `Unexpected ${method} ${pathname}` }, 404));
   });
 
-  return { updates, previews, quotes, deliveries };
+  return {
+    updates,
+    previews,
+    quotes,
+    quoteUpdates,
+    deliveries,
+    publicApprovals,
+    getDepositCheckoutCount: () => depositCheckoutCount,
+  };
 }
 
 test.describe("landscape lighting studio", () => {
@@ -543,6 +745,9 @@ test.describe("landscape lighting studio", () => {
       page.getByRole("heading", { name: "Landscape Lighting Quote Builder" }),
     ).toBeVisible();
     await expect(quoteBuilder).toBeFocused();
+    await expect(page.getByRole("region", { name: "Proposal total" })).toContainText("$2,199.00");
+    await expect(page.getByRole("button", { name: "Use L-1" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create customer proposal" })).toBeDisabled();
     await expect(packageOptions).toBeInViewport();
     await expect(configuredPackage).toBeInViewport();
     await expect(page.getByTitle("Edit project name")).toHaveValue("Hawthorne Residence");
@@ -550,7 +755,7 @@ test.describe("landscape lighting studio", () => {
       .poll(() => previews.at(-1))
       .toMatchObject({
         contact_id: 42,
-        lighting_project_id: PROJECT_ID,
+        lighting_project_id: null,
         title: "Hawthorne Residence",
         selected_tier: "best",
         quantities: expect.arrayContaining([
@@ -605,7 +810,15 @@ test.describe("landscape lighting studio", () => {
   test("uses every workflow, autosaves, exports, and delivers through captured providers", async ({
     page,
   }) => {
-    const { updates, deliveries } = await installStudioApi(page);
+    const {
+      updates,
+      previews,
+      quotes,
+      quoteUpdates,
+      deliveries,
+      publicApprovals,
+      getDepositCheckoutCount,
+    } = await installStudioApi(page);
     await page.goto(PROJECT_URL);
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Drawing Sheet" })).toHaveAttribute(
@@ -662,6 +875,42 @@ test.describe("landscape lighting studio", () => {
             document?: { shots?: Array<{ design: { runs: unknown[] } }> };
           };
           return (document.document?.shots?.[0]?.design.runs.length ?? 0) >= 2;
+        }),
+      )
+      .toBe(true);
+
+    await page.getByRole("button", { name: "Wiring: On" }).click();
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Permanent Classic Bistro Lights" }).click();
+    await canvas.click({ position: { x: canvasBox.width * 0.25, y: canvasBox.height * 0.34 } });
+    await canvas.click({ position: { x: canvasBox.width * 0.68, y: canvasBox.height * 0.42 } });
+    await canvas.focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Bistro pole" }).click();
+    await canvas.click({ position: { x: canvasBox.width * 0.46, y: canvasBox.height * 0.38 } });
+    await expect
+      .poll(() =>
+        updates.some((entry) => {
+          const document = entry as {
+            document?: {
+              shots?: Array<{
+                design?: {
+                  runs?: Array<{ id?: string; productId?: string }>;
+                  items?: Array<{ productId?: string; bistroRunId?: string }>;
+                };
+              }>;
+            };
+          };
+          return (document.document?.shots ?? []).some((shot) => {
+            const bistroRun = shot.design?.runs?.find((run) =>
+              run.productId?.startsWith("bistro-permanent-"),
+            );
+            return shot.design?.items?.some(
+              (item) =>
+                item.productId === "bistro-support-pole" && item.bistroRunId === bistroRun?.id,
+            );
+          });
         }),
       )
       .toBe(true);
@@ -725,11 +974,70 @@ test.describe("landscape lighting studio", () => {
       .toBe(true);
     await page.getByRole("tab", { name: "Proposal" }).click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.getByRole("button", { name: /Create draft quote/i }).click();
-    await expect(page.getByText(/Draft quote Q-1042/i)).toBeVisible();
+    await page.getByRole("button", { name: "Create customer proposal" }).click();
+    await expect(page.getByText("Proposal Q-1042 is ready")).toBeVisible();
+    await expect.poll(() => quotes.length).toBe(1);
+    expect(quotes[0]).toMatchObject({
+      lighting_project_id: PROJECT_ID,
+      bistro: {
+        runs: [
+          expect.objectContaining({
+            installation: "permanent",
+            pole_count: 1,
+            feet: expect.any(Number),
+          }),
+        ],
+      },
+    });
+    expect(previews.at(-1)).toMatchObject({
+      bistro: {
+        runs: [
+          expect.objectContaining({
+            installation: "permanent",
+            pole_count: 1,
+            feet: expect.any(Number),
+          }),
+        ],
+      },
+    });
+
+    await page.getByRole("button", { name: "Set payment terms" }).click();
+    await expect(page.getByRole("heading", { name: "Edit quote Q-1042" })).toBeVisible();
+    await page.getByRole("combobox", { name: "Deposit" }).click();
+    await page.getByRole("option", { name: "Fixed amount" }).click();
+    await page.getByRole("spinbutton", { name: "Amount" }).fill("500");
+    await expect(page.getByText("Due today: $500.00")).toBeVisible();
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect.poll(() => quoteUpdates.length).toBe(1);
+    expect(quoteUpdates[0]).toMatchObject({ deposit_amount_fixed: 500 });
+
     await page.getByRole("button", { name: "Email proposal" }).click();
     await expect.poll(() => deliveries.length).toBe(1);
     expect(deliveries[0]).toMatchObject({ channel: "email" });
+    await expect(page.getByRole("link", { name: "Preview as customer" })).toHaveAttribute(
+      "href",
+      "/p/quotes/share-1?preview=1",
+    );
+
+    await page.goto("/p/quotes/share-1");
+    await expect(page.getByText("$2,199", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("Designed Installation")).toBeVisible();
+    await expect(page.getByText(/support poles|base rate|linear ft/i)).toHaveCount(0);
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/bistro-customer-proposal.png",
+      animations: "disabled",
+      fullPage: true,
+    });
+
+    const acceptAndPay = page
+      .locator(".cta-buttons")
+      .getByRole("button", { name: /accept|approve proposal/i });
+    await expect(acceptAndPay).toContainText("$500");
+    await acceptAndPay.click();
+    await expect.poll(() => publicApprovals.length).toBe(1);
+    expect(publicApprovals[0]).toMatchObject({ proposal_version: 1, selected_tier: null });
+    await page.waitForURL("**/checkout/captured");
+    expect(getDepositCheckoutCount()).toBe(1);
   });
 
   test("places the approved wall and underwater specialty fixtures", async ({ page }) => {

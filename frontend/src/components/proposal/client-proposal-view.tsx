@@ -174,28 +174,6 @@ export function ClientProposalView({
     : null;
 
   const bistro = doc.bistro;
-  const bistroInstallationRows =
-    bistro?.pricing_mode === "installation" ? (bistro.installations ?? []) : [];
-  const bistroInstallationNames = bistroInstallationRows.map((row) =>
-    row.installation === "temporary" ? "Temporary" : "Permanent",
-  );
-  const bistroTierName = bistro?.tier
-    ? bistro.tier.charAt(0).toUpperCase() + bistro.tier.slice(1)
-    : "Custom";
-  const bistroExperienceName = bistroInstallationNames.length
-    ? `${bistroInstallationNames.join(" + ")} Install`
-    : `${bistroTierName} Install`;
-  const bistroEstimatePoints = bistroInstallationRows.flatMap((row) => [
-    `${Number.isInteger(row.feet) ? row.feet : row.feet.toFixed(1)} ft ${row.label} lights — ${fmt(row.lights_cost)}`,
-    ...(row.pole_count
-      ? [
-          `${row.pole_count} ${row.pole_count === 1 ? "support pole" : "support poles"} — ${fmt(row.poles_cost)}`,
-        ]
-      : []),
-  ]);
-  if (bistro?.min_applied) {
-    bistroEstimatePoints.push("One Bistro project minimum applies across every measured run");
-  }
 
   // Every angle the rep designed, not just the hero shot.
   const nightPhotos = nightImages(doc.night_preview);
@@ -522,40 +500,23 @@ export function ClientProposalView({
           </div>
         ) : null}
 
-        {bistro && bistro.feet > 0 && bistro.total > 0 ? (
+        {bistro && bistro.total > 0 ? (
           <div className="pcare-section">
             <div className="pcare-inner">
               <div className="pcare-left">
                 <div className="pcare-eyebrow">Elevate Your Outdoor Living</div>
                 <div className="pcare-name">
-                  {bistroInstallationNames.length ? (
-                    <>
-                      <em>{bistroInstallationNames.join(" + ")}</em> Bistro Lighting
-                    </>
-                  ) : (
-                    <>
-                      <em>{bistro.product === "color" ? "Color Changing" : "Classic"}</em> Bistro
-                      Lighting
-                    </>
-                  )}
+                  <em>Bistro</em> Lighting
                 </div>
                 <div className="pcare-price">
                   {fmt(bistro.total)} <span>one-time</span>
                 </div>
                 <div className="pcare-points">
-                  {(bistroInstallationRows.length
-                    ? [
-                        ...bistroEstimatePoints,
-                        "Professionally installed, weather-ready Bistro lighting for your outdoor space",
-                      ]
-                    : [
-                        bistro.product === "color"
-                          ? "Color-changing RGBW — set any scene or color right from your phone"
-                          : "Warm-white vintage glow — remote-controlled and fully dimmable",
-                        `${Math.round(bistro.ordered_ft)} ft of professionally hung, weatherproof string lighting`,
-                        "Commercial-grade hardware, controller & install — built to last season after season",
-                      ]
-                  ).map((point, i) => (
+                  {[
+                    "Professionally installed, weather-ready Bistro lighting for your outdoor space",
+                    "Commercial-grade mounting, support hardware, and controls included",
+                    "Built from the approved lighting design for a finished, cohesive installation",
+                  ].map((point, i) => (
                     <div className="pcare-point" key={i}>
                       <span className="pcare-point-mark">&#9670;</span>
                       <div>{point}</div>
@@ -569,14 +530,11 @@ export function ClientProposalView({
                   className="pcare-savings-amount"
                   style={{ fontSize: "clamp(30px,4.4vw,42px)" }}
                 >
-                  {bistroExperienceName}
+                  Designed Installation
                 </div>
-                <div className="pcare-savings-unit">
-                  {Math.round(bistro.feet)} linear ft &middot; patio &amp; pergola
-                </div>
+                <div className="pcare-savings-unit">Complete outdoor lighting installation</div>
                 <div className="pcare-savings-basis">
-                  Magazine-cover evenings &#8212; dinners, parties, and quiet nights, all under a
-                  warm canopy of light.
+                  Dinners, parties, and quiet nights under a warm canopy of light.
                 </div>
               </div>
             </div>

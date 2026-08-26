@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +10,7 @@ import {
   PERMANENT_COMPLEXITY_OPTIONS,
 } from "@/components/estimator/light-designer";
 import { estimatorApi } from "@/lib/api/estimator";
+import { quotesApi } from "@/lib/api/quotes";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { designScale, designToEstimateInputs } from "@/lib/estimator/design";
 import {
@@ -39,6 +40,12 @@ vi.mock("@/lib/api/sales-wizard", () => ({
     preview: vi.fn(),
     save: vi.fn(),
     deliver: vi.fn(),
+  },
+}));
+
+vi.mock("@/lib/api/quotes", () => ({
+  quotesApi: {
+    get: vi.fn(),
   },
 }));
 
@@ -384,6 +391,24 @@ describe("LightDesigner", () => {
       created_at: "2026-08-11T00:00:00Z",
       updated_at: "2026-08-11T00:00:00Z",
     } as Awaited<ReturnType<typeof salesWizardApi.save>>);
+    vi.mocked(quotesApi.get).mockResolvedValue({
+      id: "quote-1",
+      workspace_id: "workspace-1",
+      number: "Q-1042",
+      title: "Landscape lighting proposal",
+      status: "sent",
+      public_token: "share-1",
+      subtotal: 1500,
+      tax_amount: 0,
+      discount_amount: 0,
+      total: 1500,
+      currency: "USD",
+      attach_count: 0,
+      attach_value: 0,
+      view_count: 0,
+      created_at: "2026-08-11T00:00:00Z",
+      updated_at: "2026-08-11T00:01:00Z",
+    } as Awaited<ReturnType<typeof quotesApi.get>>);
     vi.mocked(estimatorApi.estimate).mockResolvedValue(ESTIMATE);
     vi.mocked(estimatorApi.share).mockResolvedValue({
       url: "",
@@ -1416,7 +1441,9 @@ describe("LightDesigner", () => {
       screen.getByRole("heading", { name: "Landscape Lighting Quote Builder" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upload aerial plan" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: "Create draft quote" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create customer proposal" }),
+    ).not.toBeInTheDocument();
   });
 
   it("prices Good, Better, and Best fixtures with a care plan and creates the quote here", async () => {
@@ -1656,7 +1683,7 @@ describe("LightDesigner", () => {
     expect(screen.getByText("1 required item is short.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: /Better.*\$1,330\.00/i }));
     fireEvent.click(screen.getByRole("button", { name: /Essential Care.*\$249\.00\/year/i }));
-    const createQuote = screen.getByRole("button", { name: "Create draft quote" });
+    const createQuote = screen.getByRole("button", { name: "Create customer proposal" });
     await waitFor(() => expect(createQuote).toBeEnabled());
     fireEvent.click(createQuote);
 
@@ -1686,16 +1713,16 @@ describe("LightDesigner", () => {
       ),
     );
     expect(adapter.flushBeforeProposal).toHaveBeenCalled();
-    expect(await screen.findByText(/Draft quote Q-1042 was created/i)).toBeInTheDocument();
-    expect(screen.getByText("Collect payment in three steps")).toBeVisible();
-    expect(screen.getByText(/Set the deposit due when the customer accepts/i)).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open quote & preview payment page" })).toHaveAttribute(
+    expect(await screen.findByText("Proposal Q-1042 is ready")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Email proposal" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Text proposal" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open Quotes" })).toHaveAttribute(
       "href",
       "/quotes",
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Set deposit & payment terms" }));
+    await user.click(screen.getByRole("button", { name: "Set payment terms" }));
 
     expect(await screen.findByRole("dialog", { name: "Quote payment terms" })).toBeVisible();
     await waitFor(() =>
@@ -1859,7 +1886,9 @@ describe("LightDesigner", () => {
 
     renderEstimator("landscape", adapter);
     await openProposalPreview();
-    expect(await screen.findByText("Bistro lighting layout")).toBeVisible();
+    expect(await screen.findByText("Bistro price breakdown")).toBeVisible();
+    expect(screen.queryByText("Fixture package")).not.toBeInTheDocument();
+    expect(screen.queryByText("Care plan")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Bistro lighting run schedule" })).toHaveTextContent(
       "313 ft",
     );
@@ -1876,24 +1905,40 @@ describe("LightDesigner", () => {
       ),
     );
     expect(screen.getByText("Permanent Bistro Lighting lights")).toBeVisible();
+    expect(screen.getByText("$22.00/ft base rate")).toBeVisible();
     expect(screen.getByText("2 marked poles")).toBeVisible();
+    expect(screen.getByText("$350.00 each base rate")).toBeVisible();
+    const proposalSummary = screen.getByRole("region", { name: "Proposal total" });
+    expect(within(proposalSummary).getByText("$8,512.00")).toBeVisible();
+    expect(within(proposalSummary).getByText("Pay in full: $7,576.00")).toBeVisible();
     expect(
       screen.getByText("Bistro estimate total").parentElement?.parentElement,
     ).toHaveTextContent("$8,512.00");
 
-    const createQuote = screen.getByRole("button", { name: "Create draft quote" });
+    const createQuote = screen.getByRole("button", { name: "Create customer proposal" });
     expect(createQuote).toBeEnabled();
     fireEvent.click(createQuote);
-    expect(await screen.findByText(/Draft quote Q-1042 was created/i)).toBeVisible();
+    expect(await screen.findByText("Proposal Q-1042 is ready")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Email proposal" }));
     await waitFor(() =>
       expect(salesWizardApi.deliver).toHaveBeenCalledWith("ws_1", "quote-1", "email"),
     );
     expect(await screen.findByText("Proposal emailed to pat@example.com.")).toBeVisible();
+    await waitFor(() => expect(quotesApi.get).toHaveBeenCalledWith("ws_1", "quote-1"));
+    expect(await screen.findByRole("link", { name: "Preview as customer" })).toHaveAttribute(
+      "href",
+      "/p/quotes/share-1?preview=1",
+    );
   });
 
-  it("requires and persists an installation-sheet selection before quoting", async () => {
+  it("prices the design before requiring and persisting its installation sheet", async () => {
+    vi.mocked(designToEstimateInputs).mockReturnValue({
+      feet: 0,
+      christmas_items: {},
+      fixtures: { uplight: 1 },
+      bistro_feet: 0,
+    });
     const onSelectInstallationShot = vi.fn().mockResolvedValue(undefined);
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {
@@ -1903,7 +1948,18 @@ describe("LightDesigner", () => {
           {
             id: "front",
             photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
-            design: { runs: [], items: [], calibration: null },
+            design: {
+              runs: [],
+              items: [
+                {
+                  id: "fixture-1",
+                  productId: "fixture-uplight",
+                  at: { x: 200, y: 220 },
+                  sizePx: 30,
+                },
+              ],
+              calibration: null,
+            },
             dusk: 0.4,
           },
         ],
@@ -1921,13 +1977,26 @@ describe("LightDesigner", () => {
     };
 
     renderEstimator("landscape", adapter);
-    expect(
-      await screen.findByRole("button", { name: "Use L-1 as installation sheet" }),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Use L-1 as installation sheet" }));
-    await waitFor(() => expect(onSelectInstallationShot).toHaveBeenCalledWith("front"));
     await openProposalPreview();
-    expect(await screen.findByText(/Select and save an installation sheet/)).toBeInTheDocument();
+
+    const proposalSummary = screen.getByRole("region", { name: "Proposal total" });
+    expect(within(proposalSummary).getByText("$1,570.00")).toBeVisible();
+    expect(
+      screen.queryByText(/Select and save an installation sheet/, {
+        selector: ".ll-proposal-error *",
+      }),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(salesWizardApi.preview).toHaveBeenLastCalledWith(
+        "ws_1",
+        expect.objectContaining({ lighting_project_id: null }),
+      ),
+    );
+
+    const createProposal = screen.getByRole("button", { name: "Create customer proposal" });
+    expect(createProposal).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Use L-1" }));
+    await waitFor(() => expect(onSelectInstallationShot).toHaveBeenCalledWith("front"));
   });
 
   it("can share and quote a line item with nothing drawn on the photo", async () => {

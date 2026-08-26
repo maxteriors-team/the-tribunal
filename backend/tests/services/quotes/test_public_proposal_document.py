@@ -1,4 +1,4 @@
-"""The client proposal page must never see the internal fulfillment sheet.
+"""The client proposal page must never see internal pricing or fulfillment details.
 
 ``quote.proposal_document`` mixes client presentation data with the staff-only
 SKU bill-of-materials the distributor order is built from. The public,
@@ -6,7 +6,7 @@ no-auth ``/p/quotes/{token}`` payload embeds that snapshot, so the sanitizer in
 :func:`client_safe_document` is the only thing standing between a homeowner and
 our part numbers, and these tests pin it down:
 
-* fulfillment and inventory-availability details are gone from the wire payload;
+* fulfillment, inventory, and Bistro unit-math details are gone from the wire payload;
 * the presentation fields the client page actually renders survive;
 * the allowlist stays in sync with ``ProposalDocument`` so a newly added field
   fails here rather than silently shipping to clients.
@@ -116,6 +116,33 @@ def test_sanitizer_drops_fulfillment_and_keeps_presentation() -> None:
     assert safe["client"] == {"first_name": "Dana", "last_name": "Homeowner"}
     # The caller's stored snapshot is not mutated.
     assert "fulfillment" in document
+
+
+def test_sanitizer_keeps_only_the_customer_bistro_total() -> None:
+    document = _document()
+    document["bistro"] = {
+        "pricing_mode": "installation",
+        "feet": 150,
+        "lights_cost": 3708,
+        "poles_cost": 1180,
+        "raw_total": 4888,
+        "total": 4888,
+        "installations": [
+            {
+                "installation": "permanent",
+                "feet": 150,
+                "pole_count": 3,
+                "lights_per_ft": 22,
+                "poles_each": 350,
+            }
+        ],
+    }
+
+    safe = client_safe_document(document)
+
+    assert safe is not None
+    assert safe["bistro"] == {"total": 4888}
+    assert "installations" in document["bistro"]
 
 
 def test_sanitizer_passes_through_none() -> None:

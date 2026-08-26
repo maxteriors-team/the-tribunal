@@ -524,18 +524,14 @@ def charges_for_tier(
 
 
 def _bistro_quote_line(bistro: BistroPricing, config: PricingSettings) -> QuoteLineItemCreate:
-    """Describe measured runs without falling back to a legacy product label."""
+    """Keep estimator measurements internal while quoting one customer project price."""
     if bistro.pricing_mode == "installation":
         name = "Bistro Lighting"
-        description = " · ".join(
-            f"{row.feet:g} ft {row.label} · {row.pole_count} "
-            f"{'pole' if row.pole_count == 1 else 'poles'}"
-            for row in bistro.installations
-        )
+        description = "Professionally installed Bistro lighting with required support hardware"
     else:
         product_cfg = config.bistro.color if bistro.product == "color" else config.bistro.classic
         name = product_cfg.name if product_cfg else "Bistro Lighting"
-        description = f"{bistro.ordered_ft:g} ft · {bistro.product}"
+        description = "Professionally installed Bistro lighting"
     return QuoteLineItemCreate(
         name=name,
         description=description,

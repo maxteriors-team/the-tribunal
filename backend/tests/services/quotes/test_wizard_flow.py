@@ -248,7 +248,7 @@ async def test_preview_computes_document_from_config_and_catalog() -> None:
         assert doc.bistro.min_applied is False
 
 
-def test_bistro_run_rejects_negative_pole_counts() -> None:
+async def test_bistro_run_rejects_negative_pole_counts() -> None:
     with pytest.raises(ValueError, match="greater than or equal to 0"):
         WizardBistroRun(installation="permanent", feet=100, pole_count=-1)
 
@@ -276,7 +276,9 @@ async def test_bistro_only_design_creates_a_clear_customer_quote() -> None:
         assert float(quote.total) == 7809
         assert len(quote.line_items) == 1
         assert quote.line_items[0].name == "Bistro Lighting"
-        assert quote.line_items[0].description == ("312.5 ft Permanent Bistro Lighting · 2 poles")
+        assert quote.line_items[0].description == (
+            "Professionally installed Bistro lighting with required support hardware"
+        )
 
 
 async def test_grouped_bistro_runs_price_and_persist_without_legacy_labels() -> None:
@@ -305,7 +307,7 @@ async def test_grouped_bistro_runs_price_and_persist_without_legacy_labels() -> 
         quote = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
         bistro_line = next(line for line in quote.line_items if line.name == "Bistro Lighting")
         assert bistro_line.description == (
-            "125 ft Temporary Bistro Lighting · 3 poles · 50 ft Permanent Bistro Lighting · 3 poles"
+            "Professionally installed Bistro lighting with required support hardware"
         )
         assert float(bistro_line.unit_price) == 5056
 

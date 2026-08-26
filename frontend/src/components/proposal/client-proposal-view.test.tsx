@@ -198,7 +198,7 @@ describe("ClientProposalView — visual checkout", () => {
 });
 
 describe("ClientProposalView — measured Bistro pricing", () => {
-  it("names temporary and permanent runs without legacy Classic or Color labels", () => {
+  it("shows one Bistro project price without exposing the internal run and pole breakdown", () => {
     const bistroDocument = {
       ...DOCUMENT,
       bistro: {
@@ -247,11 +247,13 @@ describe("ClientProposalView — measured Bistro pricing", () => {
       proposal_document: bistroDocument as unknown as Record<string, unknown>,
     });
 
-    expect(screen.getAllByText(/Temporary \+ Permanent/)).toHaveLength(2);
-    expect(screen.getByText(/100 ft Temporary Bistro Lighting lights — \$1,124/i)).toBeVisible();
-    expect(screen.getByText(/3 support poles — \$449/i)).toBeVisible();
-    expect(screen.getByText(/50 ft Permanent Bistro Lighting lights — \$1,124/i)).toBeVisible();
-    expect(screen.getByText(/2 support poles — \$337/i)).toBeVisible();
+    expect(screen.getByText("Bistro", { selector: "em" })).toBeVisible();
+    expect(screen.getByText("Designed Installation")).toBeVisible();
+    expect(screen.getByText(/\$3,034/)).toBeVisible();
+    expect(screen.queryByText(/Temporary|Permanent/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/100 ft Temporary Bistro Lighting/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/50 ft Permanent Bistro Lighting/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/support poles/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Classic Bistro|Color Changing Bistro/i)).not.toBeInTheDocument();
   });
 
