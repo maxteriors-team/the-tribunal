@@ -19,6 +19,7 @@ from app.schemas.knowledge_document import (
     KnowledgeDocumentResponse,
     KnowledgeDocumentUpdate,
 )
+from app.services.ai.embeddings import Embedder, create_workspace_embedder
 from app.services.automations.events import (
     EVENT_KNOWLEDGE_DOCUMENT_UPLOADED,
     emit_automation_event,
@@ -36,14 +37,14 @@ router = APIRouter(
 )
 
 
-async def _reindex_or_400(db: AsyncSession, doc: KnowledgeDocument) -> None:
+async def _reindex_or_400(db: AsyncSession, doc: KnowledgeDocument, *, embedder: Embedder) -> None:
     """Chunk + embed ``doc`` inside the caller's transaction (no commit here).
 
     Embedding failures surface as a 502 so the caller's transaction rolls back
     and the document is never persisted half-indexed.
     """
     try:
-        await knowledge_ingestion_service.reindex_document(db, doc)
+        await knowledge_ingestion_service.reindex_document(db, doc, embedder=embedder)
     except IngestionError as exc:
         await db.rollback()
         raise HTTPException(
@@ -142,6 +143,8 @@ async def create_document(
 ) -> KnowledgeDocumentResponse:
     """Create a new knowledge document for an agent."""
     await _get_agent_or_404(db, agent_id, workspace_id)
+    # Resolve credentials before adding the document because OAuth refresh may commit.
+    embedder = await create_workspace_embedder(db, workspace_id)
 
     token_count = knowledge_context_service.count_tokens(body.content)
 
@@ -160,7 +163,7 @@ async def create_document(
     # Flush so the document gets its id before chunks reference it; both the
     # document and its chunks/embeddings then commit in one transaction.
     await db.flush()
-    await _reindex_or_400(db, doc)
+    await _reindex_or_400(db, doc, embedder=embedder)
     await emit_automation_event(
         db,
         workspace_id=workspace_id,
@@ -238,14 +241,17 @@ async def update_document(
         )
 
     update_data = body.model_dump(exclude_unset=True)
+    embedder = (
+        await create_workspace_embedder(db, workspace_id) if "content" in update_data else None
+    )
     for field, value in update_data.items():
         setattr(doc, field, value)
 
     # Recompute token_count and re-index chunks/embeddings if content changed.
-    if "content" in update_data:
+    if embedder is not None:
         doc.token_count = knowledge_context_service.count_tokens(doc.content)
         await db.flush()
-        await _reindex_or_400(db, doc)
+        await _reindex_or_400(db, doc, embedder=embedder)
 
     await db.commit()
     await db.refresh(doc)

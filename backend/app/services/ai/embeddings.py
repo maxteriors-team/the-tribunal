@@ -12,12 +12,17 @@ throwing on a transient embedding failure.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.ai.openai_credentials import create_openai_client
+from app.services.ai.openai_credentials import (
+    create_openai_client,
+    create_workspace_openai_client,
+)
 
 logger = structlog.get_logger()
 
@@ -54,18 +59,12 @@ class Embedder(Protocol):
     async def __call__(self, texts: list[str]) -> EmbeddingResult: ...
 
 
-async def embed_texts(texts: list[str]) -> EmbeddingResult:
-    """Embed ``texts`` with OpenAI ``text-embedding-3-small`` (1536 dims).
-
-    Returns an :class:`EmbeddingResult` rather than raising so the retrieval
-    pipeline degrades gracefully: a failed embed yields an empty result set, not
-    a 500. Empty input short-circuits to an empty success.
-    """
+async def _embed_with_client(client: Any, texts: list[str]) -> EmbeddingResult:
+    """Embed one batch with an already-authorized OpenAI client."""
     if not texts:
         return EmbeddingResult(ok=True, embeddings=[])
 
     try:
-        client = create_openai_client()
         response = await client.embeddings.create(
             model=EMBEDDING_MODEL,
             input=texts,
@@ -80,6 +79,38 @@ async def embed_texts(texts: list[str]) -> EmbeddingResult:
     ordered = sorted(response.data, key=lambda item: item.index)
     vectors = [list(item.embedding) for item in ordered]
     return EmbeddingResult(ok=True, embeddings=vectors)
+
+
+async def embed_texts(texts: list[str]) -> EmbeddingResult:
+    """Embed with the global OpenAI credential for non-workspace callers."""
+    try:
+        client = create_openai_client()
+    except Exception as exc:  # noqa: BLE001 - return the same log-safe failure contract
+        logger.warning("embedding_client_creation_failed", error_type=type(exc).__name__)
+        return EmbeddingResult(ok=False, error="Embedding request failed.")
+    return await _embed_with_client(client, texts)
+
+
+async def create_workspace_embedder(db: AsyncSession, workspace_id: uuid.UUID) -> Embedder:
+    """Resolve one workspace-scoped client before its caller mutates the session."""
+    try:
+        client = await create_workspace_openai_client(db, workspace_id)
+    except Exception as exc:  # noqa: BLE001 - never expose credential resolution details
+        logger.warning(
+            "embedding_client_creation_failed",
+            workspace_id=str(workspace_id),
+            error_type=type(exc).__name__,
+        )
+
+        async def failed_embedder(_texts: list[str]) -> EmbeddingResult:
+            return EmbeddingResult(ok=False, error="Embedding request failed.")
+
+        return cast(Embedder, failed_embedder)
+
+    async def embed(texts: list[str]) -> EmbeddingResult:
+        return await _embed_with_client(client, texts)
+
+    return embed
 
 
 async def embed_query(text: str) -> list[float] | None:
