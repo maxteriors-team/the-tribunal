@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LandscapeProjectPersistenceAdapter } from "@/components/estimator/light-designer";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import type { LightingProjectDetail } from "@/lib/api/lighting-projects";
+import type { LandscapeDraft } from "@/lib/estimator/landscape-draft";
 
 import { LightingProjectEditor } from "./lighting-project-editor";
 
@@ -77,6 +78,39 @@ vi.mock("@/lib/estimator/landscape-draft", async (importOriginal) => {
 const WORKSPACE_ID = "9029c83b-7a2a-44ce-b6b9-5567ac75cc3f";
 const PROJECT_ID = "62774d85-6fb8-49ce-a348-e390972fa9d4";
 
+function projectDraft(activeShotId = "shot-1", dusk = 0.4, includeFixture = false): LandscapeDraft {
+  return {
+    version: 2,
+    activeShotId,
+    shots: [
+      {
+        id: activeShotId,
+        photo: {
+          dataUrl: "data:image/png;base64,AAAA",
+          width: 1200,
+          height: 800,
+        },
+        design: {
+          calibration: null,
+          runs: [],
+          items: includeFixture
+            ? [
+                {
+                  id: "saved-uplight",
+                  productId: "fixture-uplight",
+                  at: { x: 160, y: 240 },
+                  sizePx: 30,
+                },
+              ]
+            : [],
+        },
+        dusk,
+      },
+    ],
+    updatedAt: "2026-08-11T10:00:00.000Z",
+  };
+}
+
 function project(overrides: Partial<LightingProjectDetail> = {}): LightingProjectDetail {
   return {
     id: PROJECT_ID,
@@ -94,23 +128,7 @@ function project(overrides: Partial<LightingProjectDetail> = {}): LightingProjec
     created_at: "2026-08-11T09:00:00.000Z",
     updated_at: "2026-08-11T10:00:00.000Z",
     created_by_id: 7,
-    document: {
-      version: 2,
-      activeShotId: "shot-1",
-      shots: [
-        {
-          id: "shot-1",
-          photo: {
-            dataUrl: "data:image/png;base64,AAAA",
-            width: 1200,
-            height: 800,
-          },
-          design: { calibration: null, runs: [], items: [] },
-          dusk: 0.4,
-        },
-      ],
-      updatedAt: "2026-08-11T10:00:00.000Z",
-    },
+    document: projectDraft(),
     ...overrides,
   };
 }
@@ -173,6 +191,72 @@ describe("LightingProjectEditor", () => {
         }),
       }),
     );
+  });
+
+  it("saves, reopens by project ID from persistence, edits, and saves again", async () => {
+    let persistedProject = project();
+    apiMocks.get.mockImplementation(async () => persistedProject);
+    apiMocks.update.mockImplementation(async (_workspaceId, _projectId, update) => {
+      persistedProject = {
+        ...persistedProject,
+        version: persistedProject.version + 1,
+        document: update.document ?? persistedProject.document,
+      };
+      return persistedProject;
+    });
+
+    const firstEdit: LandscapeDraft = {
+      ...projectDraft("saved-shot", 0.4, true),
+      updatedAt: "2026-08-11T10:05:00.000Z",
+    };
+    const firstRender = renderEditor();
+    expect(await screen.findByTestId("light-designer")).toHaveTextContent("shot-1");
+
+    act(() => {
+      const persistence = designerProps.mock.lastCall?.[0]
+        .landscapeProject as LandscapeProjectPersistenceAdapter;
+      persistence.onLandscapeDraftChange(firstEdit, { immediate: true });
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(apiMocks.update).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText("Saved to Tribunal")).toBeInTheDocument());
+    expect(apiMocks.update).toHaveBeenLastCalledWith(WORKSPACE_ID, PROJECT_ID, {
+      expected_version: 1,
+      document: firstEdit,
+    });
+    firstRender.unmount();
+
+    renderEditor();
+    expect(await screen.findByTestId("light-designer")).toHaveTextContent("saved-shot");
+    expect(apiMocks.get).toHaveBeenCalledTimes(2);
+    expect(apiMocks.get).toHaveBeenLastCalledWith(WORKSPACE_ID, PROJECT_ID);
+    const reopenedPersistence = designerProps.mock.lastCall?.[0]
+      .landscapeProject as LandscapeProjectPersistenceAdapter;
+    expect(reopenedPersistence.initialDraft.shots[0].design.items).toEqual([
+      expect.objectContaining({ id: "saved-uplight", productId: "fixture-uplight" }),
+    ]);
+
+    const secondEdit: LandscapeDraft = {
+      ...projectDraft("edited-after-reopen", 0.65, true),
+      updatedAt: "2026-08-11T10:10:00.000Z",
+    };
+    act(() => {
+      reopenedPersistence.onLandscapeDraftChange(secondEdit, { immediate: true });
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(apiMocks.update).toHaveBeenCalledTimes(2));
+    expect(apiMocks.update).toHaveBeenLastCalledWith(WORKSPACE_ID, PROJECT_ID, {
+      expected_version: 2,
+      document: secondEdit,
+    });
+    expect(persistedProject).toMatchObject({
+      id: PROJECT_ID,
+      version: 3,
+      document: {
+        activeShotId: "edited-after-reopen",
+        shots: [{ dusk: 0.65 }],
+      },
+    });
   });
 
   it("shows not-found and retry states without mounting the drawing editor", async () => {
