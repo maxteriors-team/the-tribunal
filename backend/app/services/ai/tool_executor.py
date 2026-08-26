@@ -1469,12 +1469,10 @@ class VoiceToolExecutor(BaseToolExecutor):
         phone_message: Any,
     ) -> None:
         """Notify workspace operators of a newly taken message (push + email)."""
-        from sqlalchemy import select
-
-        from app.models.user import User
-        from app.models.workspace import Workspace, WorkspaceMembership
+        from app.models.workspace import Workspace
         from app.services.email import send_taken_message_notification
         from app.services.idempotency import derive_outbound_key
+        from app.services.notification_recipients import workspace_notification_email_users
         from app.services.push_notifications import push_notification_service
 
         workspace = await db.get(Workspace, workspace_id)
@@ -1509,13 +1507,9 @@ class VoiceToolExecutor(BaseToolExecutor):
             self.log.exception("take_message_push_failed", error=str(exc))
 
         try:
-            members = await db.execute(
-                select(User)
-                .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
-                .where(WorkspaceMembership.workspace_id == workspace_id)
-            )
+            members = await workspace_notification_email_users(db, workspace_id)
             sent = 0
-            for user in members.scalars().all():
+            for user in members:
                 if not user.notification_email or not user.email:
                     continue
                 idem = derive_outbound_key("take_message_email", phone_message.id, user.id)

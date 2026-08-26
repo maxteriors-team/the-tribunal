@@ -360,10 +360,9 @@ async def _email_workspace_members(
     analysis: VoicemailAnalysis,
     log: Any,
 ) -> None:
-    """Email each opted-in workspace member about the voicemail."""
-    from app.models.user import User
-    from app.models.workspace import WorkspaceMembership
+    """Email opted-in global operators about the voicemail."""
     from app.services.email import send_voicemail_notification
+    from app.services.notification_recipients import workspace_notification_email_users
 
     transcript_text = ""
     if message.transcript:
@@ -373,13 +372,9 @@ async def _email_workspace_members(
         except (ValueError, TypeError):
             transcript_text = ""
 
-    members = await db.execute(
-        select(User)
-        .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
-        .where(WorkspaceMembership.workspace_id == workspace.id)
-    )
+    members = await workspace_notification_email_users(db, workspace.id)
     sent = 0
-    for user in members.scalars().all():
+    for user in members:
         if not user.notification_email or not user.email:
             continue
         idem = derive_outbound_key("voicemail_email", message.id, user.id)

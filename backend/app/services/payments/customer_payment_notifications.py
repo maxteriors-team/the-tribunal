@@ -19,7 +19,6 @@ import uuid
 from decimal import Decimal
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
@@ -40,7 +39,7 @@ async def notify_customer_payment(
     client_phone: str | None = None,
     quote_number: str | None = None,
 ) -> int:
-    """Push + email every workspace member that a customer payment landed.
+    """Push every member and email global operators when a customer payment lands.
 
     ``idempotency_scope``/``idempotency_id`` are folded into the per-user
     outbound key, so a Stripe webhook retry that re-confirms the same payment
@@ -51,10 +50,10 @@ async def notify_customer_payment(
 
     Returns the number of emails accepted, for logging. Never raises.
     """
-    from app.models.user import User
-    from app.models.workspace import Workspace, WorkspaceMembership
+    from app.models.workspace import Workspace
     from app.services.email import send_payment_received_notification
     from app.services.idempotency import derive_outbound_key
+    from app.services.notification_recipients import workspace_notification_email_users
     from app.services.push_notifications import push_notification_service
 
     workspace = await db.get(Workspace, workspace_id)
@@ -87,12 +86,8 @@ async def notify_customer_payment(
 
     sent = 0
     try:
-        members = await db.execute(
-            select(User)
-            .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
-            .where(WorkspaceMembership.workspace_id == workspace_id)
-        )
-        for user in members.scalars().all():
+        members = await workspace_notification_email_users(db, workspace_id)
+        for user in members:
             # Respect the per-user notification opt-out, same as in-call payments.
             if not user.notification_email or not user.email:
                 continue

@@ -16,13 +16,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
-from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.email import send_event_notification_email
 from app.services.idempotency import derive_outbound_key
+from app.services.notification_recipients import workspace_notification_email_users
 from app.services.push_notifications import (
     NOTIFICATION_TYPE_PREFS,
     push_notification_service,
@@ -60,13 +58,11 @@ async def notify_workspace_event(
     dedupe_key: str | uuid.UUID | None = None,
     recipient_user_ids: Sequence[int] | None = None,
 ) -> NotificationDispatchResult:
-    """Send an actionable-event notification to every workspace member.
+    """Send an actionable-event notification for a workspace.
 
-    Push is delivered through :class:`PushNotificationService`, which already
-    enforces the master push toggle and the per-type preference. Email is sent
-    when ``email_subject`` is provided, gated by each user's master email
-    toggle *and* the same per-type preference, and deduplicated per
-    (event, user) via ``dedupe_key`` so retries never double-send.
+    Push remains workspace-wide. Email goes to global operators unless callers
+    explicitly target member IDs, and still respects user notification preferences
+    plus per-event idempotency.
     """
     workspace_id_str = str(workspace_id)
     recipients = tuple(dict.fromkeys(recipient_user_ids or ()))
@@ -173,25 +169,18 @@ async def _send_emails(
     dedupe_key: str | uuid.UUID | None,
     recipient_user_ids: Sequence[int] | None,
 ) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    """Email each opted-in workspace member about the event."""
+    """Email opted-in global operators, or any explicitly targeted members."""
     pref_attr = NOTIFICATION_TYPE_PREFS.get(notification_type)
-    workspace = await db.get(Workspace, uuid.UUID(workspace_id))
-    if workspace is None:
-        return (), ()
-
-    member_query = (
-        select(User)
-        .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
-        .where(WorkspaceMembership.workspace_id == workspace.id)
+    members = await workspace_notification_email_users(
+        db,
+        workspace_id,
+        recipient_user_ids=recipient_user_ids,
     )
-    if recipient_user_ids is not None:
-        member_query = member_query.where(User.id.in_(recipient_user_ids))
-    members = await db.execute(member_query)
 
     detail_dict = dict(details) if details else None
     sent_ids: list[int] = []
     eligible_ids: list[int] = []
-    for user in members.scalars().all():
+    for user in members:
         if not user.email or not user.notification_email:
             continue
         if pref_attr is not None and not getattr(user, pref_attr, True):

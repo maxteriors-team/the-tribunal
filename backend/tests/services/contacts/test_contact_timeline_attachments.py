@@ -1,4 +1,4 @@
-"""Timeline serialization tests for inbound MMS media metadata."""
+"""Timeline serialization tests for MMS metadata and source provenance."""
 
 import uuid
 from datetime import UTC, datetime
@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.models.message_attachment import MESSAGE_ATTACHMENT_READY
+from app.schemas.contact import TimelineItem
 from app.services.contacts import contact_repository
 
 
@@ -27,7 +28,7 @@ class _Result:
         return _Scalars(self._values)
 
 
-async def test_contact_timeline_includes_safe_attachment_metadata(
+async def test_contact_timeline_includes_attachment_metadata_and_provenance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace_id = uuid.uuid4()
@@ -44,6 +45,8 @@ async def test_contact_timeline_includes_safe_attachment_metadata(
         recording_url=None,
         transcript=None,
         status="received",
+        source_provider="quo",
+        external_url="https://app.quo.com/messages/example",
         booking_outcome=None,
         call_outcome=None,
     )
@@ -80,7 +83,10 @@ async def test_contact_timeline_includes_safe_attachment_metadata(
     )
 
     assert len(timeline) == 1
-    assert timeline[0]["content"] == ""
+    item = TimelineItem.model_validate(timeline[0])
+    assert item.content == ""
+    assert item.source_provider == "quo"
+    assert item.external_url == "https://app.quo.com/messages/example"
     assert timeline[0]["attachments"] == [
         {
             "id": attachment.id,

@@ -20,7 +20,7 @@ from app.db.session import AsyncSessionLocal, engine
 from app.models.opportunity import Opportunity
 from app.models.pipeline import Pipeline, PipelineStage
 from app.models.user import User
-from app.models.workspace import Workspace
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.opportunity import OpportunityCreate, OpportunityUpdate
 from app.services.exceptions import NotFoundError
 from app.services.opportunities import OpportunityService
@@ -42,7 +42,7 @@ async def _workspace(db) -> Workspace:
     return ws
 
 
-async def _user(db) -> User:
+async def _user(db, workspace_id: uuid.UUID) -> User:
     email = f"rep-{uuid.uuid4().hex[:8]}@example.com"
     user = User(
         email=email,
@@ -50,6 +50,8 @@ async def _user(db) -> User:
         hashed_password="x",
     )
     db.add(user)
+    await db.flush()
+    db.add(WorkspaceMembership(workspace_id=workspace_id, user_id=user.id, role="sales_rep"))
     await db.flush()
     return user
 
@@ -82,8 +84,8 @@ async def _opportunity(db, workspace_id, pipeline_id, *, owner_id: int | None) -
 async def test_sales_can_act_on_own_but_not_others() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
-        rep = await _user(db)
-        other = await _user(db)
+        rep = await _user(db, ws.id)
+        other = await _user(db, ws.id)
         pipeline, _ = await _pipeline(db, ws.id)
         mine = await _opportunity(db, ws.id, pipeline.id, owner_id=rep.id)
         theirs = await _opportunity(db, ws.id, pipeline.id, owner_id=other.id)
@@ -101,7 +103,10 @@ async def test_sales_can_act_on_own_but_not_others() -> None:
         assert updated.name == "Renamed"
         with pytest.raises(NotFoundError):
             await svc.update_opportunity(
-                ws.id, theirs.id, OpportunityUpdate(name="Hijack"), rep.id,
+                ws.id,
+                theirs.id,
+                OpportunityUpdate(name="Hijack"),
+                rep.id,
                 restrict_to_user_id=rep.id,
             )
 
@@ -113,8 +118,8 @@ async def test_sales_can_act_on_own_but_not_others() -> None:
 async def test_sales_list_is_scoped_to_own_deals() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
-        rep = await _user(db)
-        other = await _user(db)
+        rep = await _user(db, ws.id)
+        other = await _user(db, ws.id)
         pipeline, _ = await _pipeline(db, ws.id)
         await _opportunity(db, ws.id, pipeline.id, owner_id=rep.id)
         await _opportunity(db, ws.id, pipeline.id, owner_id=rep.id)
@@ -134,7 +139,7 @@ async def test_sales_list_is_scoped_to_own_deals() -> None:
 async def test_sales_create_self_assigns() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
-        rep = await _user(db)
+        rep = await _user(db, ws.id)
         pipeline, stage = await _pipeline(db, ws.id)
         svc = OpportunityService(db)
 
@@ -149,8 +154,8 @@ async def test_sales_create_self_assigns() -> None:
 async def test_sales_update_cannot_reassign_away() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
-        rep = await _user(db)
-        other = await _user(db)
+        rep = await _user(db, ws.id)
+        other = await _user(db, ws.id)
         pipeline, _ = await _pipeline(db, ws.id)
         mine = await _opportunity(db, ws.id, pipeline.id, owner_id=rep.id)
         svc = OpportunityService(db)
@@ -172,14 +177,17 @@ async def test_sales_update_cannot_reassign_away() -> None:
 async def test_manager_can_update_any_opportunity() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
-        rep = await _user(db)
+        rep = await _user(db, ws.id)
         pipeline, _ = await _pipeline(db, ws.id)
         theirs = await _opportunity(db, ws.id, pipeline.id, owner_id=rep.id)
         svc = OpportunityService(db)
 
         # Manager passes restrict_to_user_id=None → no ownership restriction.
         updated = await svc.update_opportunity(
-            ws.id, theirs.id, OpportunityUpdate(name="Manager edit"), 999,
+            ws.id,
+            theirs.id,
+            OpportunityUpdate(name="Manager edit"),
+            999,
             restrict_to_user_id=None,
         )
         assert updated.name == "Manager edit"
