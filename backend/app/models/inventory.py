@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
@@ -47,7 +48,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.catalog import CatalogItem
-    from app.models.field_service import Crew
+    from app.models.field_service import Crew, Job
     from app.models.user import User
     from app.models.workspace import Workspace
 
@@ -74,6 +75,9 @@ INVENTORY_LEDGER_REASON_ENUM = "inventory_ledger_reason"
 
 # What a movement was posted against, when it was posted against anything.
 INVENTORY_REFERENCE_TYPES = ("job", "invoice", "quote", "manual", "transfer")
+
+INVENTORY_ALLOCATION_BEHAVIORS = ("consumable", "reusable")
+INVENTORY_ALLOCATION_STATUSES = ("reserved", "consumed", "deployed", "released", "returned")
 
 # The only valuation method the posting engine implements today.
 DEFAULT_VALUATION_METHOD = "weighted_average"
@@ -352,6 +356,103 @@ class InventoryLedgerEntry(Base):
             f"<InventoryLedgerEntry(id={self.id}, item_id={self.item_id}, "
             f"reason={self.reason}, quantity_delta={self.quantity_delta})>"
         )
+
+
+class InventoryJobAllocation(Base):
+    """Reserved or fulfilled inventory attached to one field-service job."""
+
+    __tablename__ = "inventory_job_allocations"
+    __table_args__ = (
+        UniqueConstraint("job_id", "item_id", name="uq_inventory_job_allocations_job_item"),
+        CheckConstraint(
+            "planned_quantity > 0",
+            name="ck_inventory_job_allocations_planned_positive",
+        ),
+        CheckConstraint(
+            "actual_quantity IS NULL OR actual_quantity >= 0",
+            name="ck_inventory_job_allocations_actual_nonnegative",
+        ),
+        CheckConstraint(
+            "behavior IN ('consumable', 'reusable')",
+            name="ck_inventory_job_allocations_behavior",
+        ),
+        CheckConstraint(
+            "status IN ('reserved', 'consumed', 'deployed', 'released', 'returned')",
+            name="ck_inventory_job_allocations_status",
+        ),
+        Index(
+            "ix_inventory_job_allocations_workspace_status",
+            "workspace_id",
+            "status",
+        ),
+        Index(
+            "ix_inventory_job_allocations_workspace_item_status",
+            "workspace_id",
+            "item_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("field_service_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("inventory_items.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    source_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("inventory_locations.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    consumption_ledger_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("inventory_ledger_entries.id", ondelete="RESTRICT"),
+        nullable=True,
+        unique=True,
+    )
+
+    behavior: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="reserved", server_default="reserved"
+    )
+    planned_quantity: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    actual_quantity: Mapped[Decimal | None] = mapped_column(Numeric(14, 4), nullable=True)
+
+    reserved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    returned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+    workspace: Mapped["Workspace"] = relationship("Workspace")
+    job: Mapped["Job"] = relationship("Job")
+    item: Mapped["InventoryItem"] = relationship("InventoryItem")
+    source_location: Mapped["InventoryLocation | None"] = relationship(
+        "InventoryLocation", foreign_keys=[source_location_id]
+    )
+    consumption_ledger_entry: Mapped["InventoryLedgerEntry | None"] = relationship(
+        "InventoryLedgerEntry", foreign_keys=[consumption_ledger_entry_id]
+    )
 
 
 class InventoryStockLevel(Base):

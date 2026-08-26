@@ -39,6 +39,7 @@ from app.schemas.estimate import (
     LinearFeetEstimateResult,
     PublicComparison,
 )
+from app.schemas.inventory import QuoteInventoryAvailabilityResponse
 from app.schemas.proposal import (
     PublicProposal,
     PublicProposalActionResult,
@@ -69,6 +70,7 @@ from app.services.idempotency import (
     redis_idempotency_key_exists,
     set_redis_idempotency_key,
 )
+from app.services.inventory import QuoteInventoryAvailabilityService
 from app.services.jobs import JobService
 from app.services.notifications import notify_workspace_event
 from app.services.payments.quote_deposit_service import record_manual_deposit
@@ -427,6 +429,25 @@ async def preview_wizard_proposal(
         return await service.preview_from_wizard(workspace_id, payload)
     except BistroPricingConfigurationError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post(
+    "/wizard/inventory-availability",
+    response_model=QuoteInventoryAvailabilityResponse,
+)
+async def preview_wizard_inventory_availability(
+    workspace_id: uuid.UUID,
+    payload: ProposalWizardPayload,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadQuotes,
+) -> QuoteInventoryAvailabilityResponse:
+    """Check private fulfillment requirements against available-to-promise stock."""
+    try:
+        document = await QuoteService(db).preview_from_wizard(workspace_id, payload)
+    except BistroPricingConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return await QuoteInventoryAvailabilityService(db).check(workspace_id, document.fulfillment)
 
 
 @router.post(

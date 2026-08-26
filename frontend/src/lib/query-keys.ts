@@ -117,6 +117,8 @@ const lightingProjects = {
   browserDraft: (workspaceId: string) => ["lighting-project-browser-draft", workspaceId] as const,
   proposalPreview: (workspaceId: string, selectionSignature: string) =>
     ["lighting-project-proposal-preview", workspaceId, selectionSignature] as const,
+  proposalInventoryAvailability: (workspaceId: string, selectionSignature: string) =>
+    ["lighting-project-proposal-inventory", workspaceId, selectionSignature] as const,
 };
 const businessLocations = createResourceQueryKeys("business-locations");
 const messageTemplates = createResourceQueryKeys("message-templates");
@@ -368,6 +370,8 @@ export const queryKeys = {
     crews: (workspaceId: string) => [...jobs.all(workspaceId), "crews"] as const,
     installationPlan: (workspaceId: string, jobId: string) =>
       [...jobs.detail(workspaceId, jobId), "installation-plan"] as const,
+    inventoryPlan: (workspaceId: string, jobId: string) =>
+      [...jobs.detail(workspaceId, jobId), "inventory-plan"] as const,
     visits: (workspaceId: string, jobId: string) =>
       [...jobs.detail(workspaceId, jobId), "visits"] as const,
     pricing: (workspaceId: string, jobId: string) =>

@@ -8,11 +8,12 @@ client's submitted quantities are the only untrusted input.
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from app.schemas.pricing import (
     DEFAULT_FINANCING_DISCLAIMER,
@@ -574,6 +575,31 @@ def select_tier(
 
     line_items: list[QuoteLineItemCreate] = []
     fulfillment: dict[str, FulfillmentPart] = {}
+
+    def add_fulfillment(
+        sku: str | None,
+        *,
+        description: str | None,
+        qty: float | Decimal,
+        behavior: Literal["consumable", "reusable"] = "consumable",
+    ) -> None:
+        normalized_sku = (sku or "").strip()
+        quantity = _d(qty)
+        if not normalized_sku or quantity <= 0:
+            return
+        existing = fulfillment.get(normalized_sku)
+        if existing is not None:
+            if existing.inventory_behavior != behavior:
+                raise ValueError(f"Inventory SKU {normalized_sku} has conflicting behaviors")
+            existing.qty = float(_d(existing.qty) + quantity)
+            return
+        fulfillment[normalized_sku] = FulfillmentPart(
+            sku=normalized_sku,
+            description=description,
+            qty=float(quantity),
+            inventory_behavior=behavior,
+        )
+
     if selected_view is not None:
         for line in selected_view.lines:
             if line.quantity <= 0:
@@ -592,13 +618,11 @@ def select_tier(
                 sku = str(comp.get("sku") or "").strip()
                 if not sku:
                     continue
-                qty = _d(comp.get("qty", 1)) * _d(line.quantity)
-                if sku in fulfillment:
-                    fulfillment[sku].qty = float(_d(fulfillment[sku].qty) + qty)
-                else:
-                    fulfillment[sku] = FulfillmentPart(
-                        sku=sku, description=comp.get("description"), qty=float(qty)
-                    )
+                add_fulfillment(
+                    sku,
+                    description=comp.get("description"),
+                    qty=_d(comp.get("qty", 1)) * _d(line.quantity),
+                )
     for charge in charges_for_tier(charges, selected, tier_views):
         line_items.append(
             QuoteLineItemCreate(
@@ -611,6 +635,26 @@ def select_tier(
         )
     if bistro is not None and bistro.total > 0:
         line_items.append(_bistro_quote_line(bistro, config))
+        for installation in bistro.installations:
+            mapping = getattr(config.bistro, installation.installation)
+            reusable = installation.installation == "temporary"
+            light_quantity = (
+                math.ceil(installation.feet / mapping.stock_feet_per_light_unit)
+                if reusable
+                else installation.feet
+            )
+            add_fulfillment(
+                mapping.lights_inventory_sku,
+                description=f"{mapping.label} lights",
+                qty=light_quantity,
+                behavior="reusable" if reusable else "consumable",
+            )
+            add_fulfillment(
+                mapping.poles_inventory_sku,
+                description=f"{mapping.label} poles/supports",
+                qty=installation.pole_count,
+                behavior="reusable" if reusable else "consumable",
+            )
     # One canonical line per new category section (permanent / christmas).
     for section in category_sections:
         detail_bits = [line.label for line in section.lines]

@@ -404,6 +404,7 @@ class FulfillmentPart(BaseModel):
     sku: str
     description: str | None = None
     qty: float
+    inventory_behavior: Literal["consumable", "reusable"] = "consumable"
 
 
 class QuoteInventoryAvailabilityItem(BaseModel):

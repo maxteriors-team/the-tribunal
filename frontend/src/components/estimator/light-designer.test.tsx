@@ -37,6 +37,7 @@ vi.mock("@/lib/api/sales-wizard", () => ({
     listCatalog: vi.fn(),
     getPricing: vi.fn(),
     preview: vi.fn(),
+    inventoryAvailability: vi.fn(),
     save: vi.fn(),
     deliver: vi.fn(),
   },
@@ -303,6 +304,29 @@ describe("LightDesigner", () => {
     vi.mocked(designScale).mockReturnValue({ ftPerPx: 0.05, pxPerFt: 20, calibrated: false });
     vi.mocked(salesWizardApi.listCatalog).mockResolvedValue(PRICE_BOOK);
     vi.mocked(salesWizardApi.getPricing).mockResolvedValue(PRICING);
+    vi.mocked(salesWizardApi.inventoryAvailability).mockResolvedValue({
+      connected: true,
+      is_available: false,
+      items: [
+        {
+          sku: "PATH",
+          description: "Path light",
+          inventory_behavior: "consumable",
+          required_quantity: 2,
+          item_id: "item-path",
+          item_name: "Path light",
+          unit_of_measure: "each",
+          tracked: true,
+          is_counted: true,
+          quantity_on_hand: 1,
+          quantity_reserved: 0,
+          quantity_deployed: 0,
+          available_to_promise: 1,
+          shortage_quantity: 1,
+          is_available: false,
+        },
+      ],
+    });
     vi.mocked(salesWizardApi.preview).mockResolvedValue({
       title: "Landscape lighting proposal",
       tiers: [

@@ -32,7 +32,10 @@ from app.core.permissions import Capability, role_can
 from app.models.field_service import JobStatus
 from app.models.workspace import WorkspaceMembership
 from app.schemas.inventory import (
+    CompleteJobInventoryRequest,
+    InventoryJobAllocationResponse,
     InventoryLedgerEntryResponse,
+    JobInventoryPlanResponse,
     JobMaterialCreate,
     JobMaterialsResponse,
 )
@@ -68,6 +71,7 @@ from app.schemas.neighbor_outreach import (
     NeighborOutreachGenerateRequest,
 )
 from app.services.field_service.neighbor_outreach import NeighborOutreachService
+from app.services.inventory import JobAllocationService
 from app.services.jobs import JobCostingService, JobMaterialsService, JobService
 
 router = APIRouter(route_class=ServiceErrorRoute)
@@ -214,6 +218,56 @@ async def get_job_installation_plan(
         workspace.id,
         membership=membership,
         user_id=current_user.id,
+    )
+
+
+@router.get("/{job_id}/inventory-plan", response_model=JobInventoryPlanResponse)
+async def get_job_inventory_plan(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    membership: CurrentMembership,
+    current_user: CurrentUser,
+    db: DB,
+) -> JobInventoryPlanResponse:
+    """Return inventory allocations after applying normal job visibility rules."""
+    await JobService(db).get(
+        job_id,
+        workspace.id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
+    return await JobAllocationService(db).get_plan(workspace.id, job_id)
+
+
+@router.post("/{job_id}/complete-with-inventory", response_model=JobInventoryPlanResponse)
+async def complete_job_with_inventory(
+    job_id: uuid.UUID,
+    payload: CompleteJobInventoryRequest,
+    membership: CanWriteJobs,
+    current_user: CurrentUser,
+    db: TransactionalDB,
+) -> JobInventoryPlanResponse:
+    """Post actual Bistro inventory and complete the job in one transaction."""
+    return await JobAllocationService(db).complete(
+        membership.workspace_id,
+        job_id,
+        payload,
+        created_by_id=current_user.id,
+    )
+
+
+@router.post(
+    "/{job_id}/inventory-allocations/{allocation_id}/return",
+    response_model=InventoryJobAllocationResponse,
+)
+async def return_job_inventory_allocation(
+    job_id: uuid.UUID,
+    allocation_id: uuid.UUID,
+    membership: CanWriteJobs,
+    db: TransactionalDB,
+) -> InventoryJobAllocationResponse:
+    """Return one deployed reusable allocation without changing owned stock."""
+    return await JobAllocationService(db).return_reusable(
+        membership.workspace_id, job_id, allocation_id
     )
 
 

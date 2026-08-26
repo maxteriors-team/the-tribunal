@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { InstallationPlanPanel } from "@/components/jobs/installation-plan-panel";
 import { JobBrief } from "@/components/jobs/job-brief";
 import { JobCostingPanel } from "@/components/jobs/job-costing-panel";
+import { JobInventoryCompletionDialog } from "@/components/jobs/job-inventory-completion-dialog";
 import { JobMaterialsPanel } from "@/components/jobs/job-materials-panel";
 import { JobNeighborsPanel } from "@/components/jobs/job-neighbors-panel";
 import { JobVisitsPricing } from "@/components/jobs/job-visits-pricing";
@@ -49,7 +50,7 @@ import {
   useUpdateJob,
   useWorkspaceTechnicians,
 } from "@/hooks/useJobs";
-import type { Job, JobStatus } from "@/lib/api/jobs";
+import { jobsApi, type Job, type JobStatus } from "@/lib/api/jobs";
 import {
   JOB_STATUS_VALUES,
   isoToLocalInput,
@@ -60,6 +61,7 @@ import {
   technicianInitials,
 } from "@/lib/jobs/job-derivations";
 import { formatDate } from "@/lib/utils/date";
+import type { JobInventoryPlan } from "@/types/inventory";
 
 interface JobDetailDialogProps {
   workspaceId: string;
@@ -88,6 +90,8 @@ export function JobDetailDialog({
     (job?.technicians ?? []).map((tech) => tech.id),
   );
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [inventoryPlan, setInventoryPlan] = useState<JobInventoryPlan | null>(null);
+  const [inventoryPlanPending, setInventoryPlanPending] = useState(false);
 
   const { data: techData } = useWorkspaceTechnicians(workspaceId, open && !readOnly);
   const technicians = useMemo(() => techData?.items ?? [], [techData?.items]);
@@ -129,7 +133,8 @@ export function JobDetailDialog({
     updateJob.isPending ||
     assignTechs.isPending ||
     unassignTech.isPending ||
-    deleteJob.isPending;
+    deleteJob.isPending ||
+    inventoryPlanPending;
 
   const toggleTech = (id: string) =>
     setSelectedTechs((prev) =>
@@ -149,8 +154,7 @@ export function JobDetailDialog({
     );
   };
 
-  const handleStatus = (status: JobStatus) => {
-    if (status === job.status) return;
+  const applyStatus = (status: JobStatus) =>
     updateJob.mutate(
       { jobId: job.id, body: { status } },
       {
@@ -158,6 +162,26 @@ export function JobDetailDialog({
         onError: () => toast.error("Failed to update status"),
       },
     );
+
+  const handleStatus = async (status: JobStatus) => {
+    if (status === job.status) return;
+    if (status !== "completed") {
+      applyStatus(status);
+      return;
+    }
+    setInventoryPlanPending(true);
+    try {
+      const plan = await jobsApi.inventoryPlan(workspaceId, job.id);
+      if (plan.completion_confirmation_required) {
+        setInventoryPlan(plan);
+      } else {
+        applyStatus(status);
+      }
+    } catch {
+      toast.error("Failed to load the inventory completion plan");
+    } finally {
+      setInventoryPlanPending(false);
+    }
   };
 
   const handleSaveTechnicians = async () => {
@@ -191,7 +215,8 @@ export function JobDetailDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] overflow-y-auto p-4 sm:max-w-[560px] sm:p-6">
         {/* Left-aligned at every width: the header sits above an address and a
             scope list, and `DialogHeader`'s mobile default centres it. */}
@@ -398,6 +423,18 @@ export function JobDetailDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Dialog>
+      </Dialog>
+      {inventoryPlan ? (
+        <JobInventoryCompletionDialog
+          key={`${job.id}-${(inventoryPlan.allocations ?? []).map((line) => line.id).join("-")}`}
+          workspaceId={workspaceId}
+          jobId={job.id}
+          plan={inventoryPlan}
+          open
+          onOpenChange={(next) => !next && setInventoryPlan(null)}
+          onCompleted={() => setInventoryPlan(null)}
+        />
+      ) : null}
+    </>
   );
 }

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { inventoryApi } from "@/lib/api/inventory";
+import { jobsApi } from "@/lib/api/jobs";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
@@ -101,7 +102,19 @@ export function JobMaterialsPanel({
       toast.error(getApiErrorMessage(error, "Failed to return material")),
   });
 
+  const returnEquipment = useMutation({
+    mutationFn: (allocationId: string) =>
+      jobsApi.returnInventoryAllocation(workspaceId, jobId, allocationId),
+    onSuccess: () => {
+      toast.success("Reusable equipment returned");
+      invalidate();
+    },
+    onError: (error: unknown) =>
+      toast.error(getApiErrorMessage(error, "Failed to return reusable equipment")),
+  });
+
   const entries = materials.data?.items ?? [];
+  const deployedEquipment = materials.data?.deployed_equipment ?? [];
   const usage = entries.filter((entry) => entry.reason === "job_usage");
   const returnedItemIds = new Set(
     entries
@@ -175,6 +188,46 @@ export function JobMaterialsPanel({
           })}
         </ul>
       )}
+
+      {deployedEquipment.length > 0 ? (
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Temporary Bistro equipment out</h3>
+          <ul className="divide-y rounded-lg border">
+            {deployedEquipment.map((allocation) => (
+              <li
+                key={allocation.id}
+                className="flex items-center justify-between gap-3 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Package className="size-4 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{allocation.item_name}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {allocation.actual_quantity} {allocation.unit_of_measure} deployed from{" "}
+                    {allocation.source_location_name ?? "stock"}
+                  </p>
+                </div>
+                {canRecord ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={returnEquipment.isPending}
+                    onClick={() => returnEquipment.mutate(allocation.id)}
+                  >
+                    {returnEquipment.isPending ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Undo2 className="size-4" aria-hidden="true" />
+                    )}
+                    Return
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {canRecord && (
         <div className="flex flex-wrap items-end gap-2">

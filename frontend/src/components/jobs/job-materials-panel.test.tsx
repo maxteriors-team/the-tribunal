@@ -21,12 +21,14 @@ const {
   listItemsMock,
   addJobMaterialMock,
   removeJobMaterialMock,
+  returnInventoryAllocationMock,
   capabilitiesMock,
 } = vi.hoisted(() => ({
   listJobMaterialsMock: vi.fn(),
   listItemsMock: vi.fn(),
   addJobMaterialMock: vi.fn(),
   removeJobMaterialMock: vi.fn(),
+  returnInventoryAllocationMock: vi.fn(),
   capabilitiesMock: vi.fn(),
 }));
 
@@ -37,6 +39,10 @@ vi.mock("@/lib/api/inventory", () => ({
     addJobMaterial: addJobMaterialMock,
     removeJobMaterial: removeJobMaterialMock,
   },
+}));
+
+vi.mock("@/lib/api/jobs", () => ({
+  jobsApi: { returnInventoryAllocation: returnInventoryAllocationMock },
 }));
 
 vi.mock("@/hooks/useCapabilities", () => ({
@@ -73,6 +79,31 @@ const materials: JobMaterials = {
       created_at: "2026-08-01T12:00:00.000Z",
     },
   ],
+  deployed_equipment: [
+    {
+      id: "allocation-1",
+      job_id: "job-1",
+      item_id: "temp-set",
+      item_name: "Temporary Bistro set",
+      sku: "BISTRO-TEMP-200FT",
+      unit_of_measure: "set",
+      behavior: "reusable",
+      status: "deployed",
+      planned_quantity: 2,
+      actual_quantity: 2,
+      source_location_id: "loc-1",
+      source_location_name: "Warehouse",
+      consumption_ledger_entry_id: null,
+      quantity_on_hand: 3,
+      quantity_reserved: 0,
+      quantity_deployed: 2,
+      available_to_promise: 1,
+      shortage_quantity: 0,
+      reserved_at: "2026-08-01T12:00:00.000Z",
+      fulfilled_at: "2026-08-02T12:00:00.000Z",
+      returned_at: null,
+    },
+  ],
   total_material_cost: 12,
 };
 
@@ -106,6 +137,7 @@ describe("JobMaterialsPanel", () => {
       pages: 1,
     });
     removeJobMaterialMock.mockResolvedValue({});
+    returnInventoryAllocationMock.mockResolvedValue({ status: "returned" });
   });
 
   it("shows the material and its cost to a billing reader", async () => {
@@ -144,6 +176,24 @@ describe("JobMaterialsPanel", () => {
         "ws-1",
         "job-1",
         "entry-1",
+      );
+    });
+  });
+
+  it("returns deployed reusable equipment", async () => {
+    signedInAs("owner");
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(await screen.findByText("Temporary Bistro equipment out")).toBeInTheDocument();
+    expect(screen.getByText(/2 set deployed from Warehouse/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Return" }));
+
+    await waitFor(() => {
+      expect(returnInventoryAllocationMock).toHaveBeenCalledWith(
+        "ws-1",
+        "job-1",
+        "allocation-1",
       );
     });
   });

@@ -62,11 +62,14 @@ from app.models.google_calendar_connection import GoogleCalendarConnection
 from app.models.human_nudge import HumanNudge
 from app.models.human_profile import HumanProfile
 from app.models.inventory import (
+    INVENTORY_ALLOCATION_BEHAVIORS,
+    INVENTORY_ALLOCATION_STATUSES,
     INVENTORY_LEDGER_REASONS,
     INVENTORY_LOCATION_KINDS,
     INVENTORY_REFERENCE_TYPES,
     INVENTORY_VALUATION_METHODS,
     InventoryItem,
+    InventoryJobAllocation,
     InventoryLedgerEntry,
     InventoryLocation,
     InventoryStockLevel,
@@ -266,9 +269,12 @@ __all__ = [
     "OpportunityActivity",
     "CatalogItem",
     "InventoryItem",
+    "InventoryJobAllocation",
     "InventoryLedgerEntry",
     "InventoryLocation",
     "InventoryStockLevel",
+    "INVENTORY_ALLOCATION_BEHAVIORS",
+    "INVENTORY_ALLOCATION_STATUSES",
     "INVENTORY_LEDGER_REASONS",
     "INVENTORY_LOCATION_KINDS",
     "INVENTORY_REFERENCE_TYPES",

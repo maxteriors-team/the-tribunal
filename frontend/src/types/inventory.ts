@@ -32,6 +32,14 @@ export type ReorderRow = Schemas["ReorderRow"];
 export type ReorderReport = Schemas["ReorderReport"];
 export type ReorderSuggestion = Schemas["ReorderSuggestion"];
 
+export type InventoryJobAllocation = Schemas["InventoryJobAllocationResponse"];
+export type InventoryBehavior = InventoryJobAllocation["behavior"];
+export type InventoryAllocationStatus = InventoryJobAllocation["status"];
+export type InventoryAllocationActual = Schemas["InventoryAllocationActual"];
+export type CompleteJobInventoryRequest = Schemas["CompleteJobInventoryRequest"];
+export type JobInventoryPlan = Schemas["JobInventoryPlanResponse"];
+export type QuoteInventoryAvailability = Schemas["QuoteInventoryAvailabilityResponse"];
+
 export type JobMaterialCreate = Schemas["JobMaterialCreate"];
 export type JobMaterials = Schemas["JobMaterialsResponse"];
 

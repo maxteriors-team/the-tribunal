@@ -5805,12 +5805,25 @@
         "type": "object"
       },
       "BistroInstallationConfig": {
-        "description": "Measured light rate plus the billable rate for each marked support pole.",
+        "description": "Measured light and pole rates plus internal stock mappings.",
         "properties": {
           "label": {
             "maxLength": 120,
             "title": "Label",
             "type": "string"
+          },
+          "lights_inventory_sku": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lights Inventory Sku"
           },
           "lights_per_ft": {
             "default": 0,
@@ -5822,6 +5835,26 @@
             "default": 0,
             "minimum": 0.0,
             "title": "Poles Each",
+            "type": "number"
+          },
+          "poles_inventory_sku": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poles Inventory Sku"
+          },
+          "stock_feet_per_light_unit": {
+            "default": 1,
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000.0,
+            "title": "Stock Feet Per Light Unit",
             "type": "number"
           }
         },
@@ -12023,6 +12056,25 @@
           "url"
         ],
         "title": "ComparisonShareResult",
+        "type": "object"
+      },
+      "CompleteJobInventoryRequest": {
+        "description": "Actual usage for every active allocation on a job.",
+        "properties": {
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryAllocationActual"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Allocations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "allocations"
+        ],
+        "title": "CompleteJobInventoryRequest",
         "type": "object"
       },
       "ContactAIKnowledgeConflict": {
@@ -18263,6 +18315,15 @@
             ],
             "title": "Description"
           },
+          "inventory_behavior": {
+            "default": "consumable",
+            "enum": [
+              "consumable",
+              "reusable"
+            ],
+            "title": "Inventory Behavior",
+            "type": "string"
+          },
           "qty": {
             "title": "Qty",
             "type": "number"
@@ -20082,6 +20143,153 @@
         "title": "IntegrationsResponse",
         "type": "object"
       },
+      "InventoryAllocationActual": {
+        "description": "Actual quantity and stock source confirmed when a job is completed.",
+        "properties": {
+          "actual_quantity": {
+            "maximum": 1000000000.0,
+            "minimum": 0.0,
+            "title": "Actual Quantity",
+            "type": "number"
+          },
+          "allocation_id": {
+            "format": "uuid",
+            "title": "Allocation Id",
+            "type": "string"
+          },
+          "source_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Location Id"
+          }
+        },
+        "required": [
+          "allocation_id",
+          "actual_quantity"
+        ],
+        "title": "InventoryAllocationActual",
+        "type": "object"
+      },
+      "InventoryAvailabilityLine": {
+        "description": "Sellable stock position for one internal quote requirement.",
+        "properties": {
+          "available_to_promise": {
+            "default": 0.0,
+            "title": "Available To Promise",
+            "type": "number"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "inventory_behavior": {
+            "default": "consumable",
+            "enum": [
+              "consumable",
+              "reusable"
+            ],
+            "title": "Inventory Behavior",
+            "type": "string"
+          },
+          "is_available": {
+            "default": false,
+            "title": "Is Available",
+            "type": "boolean"
+          },
+          "is_counted": {
+            "default": false,
+            "title": "Is Counted",
+            "type": "boolean"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "item_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Name"
+          },
+          "quantity_deployed": {
+            "default": 0.0,
+            "title": "Quantity Deployed",
+            "type": "number"
+          },
+          "quantity_on_hand": {
+            "default": 0.0,
+            "title": "Quantity On Hand",
+            "type": "number"
+          },
+          "quantity_reserved": {
+            "default": 0.0,
+            "title": "Quantity Reserved",
+            "type": "number"
+          },
+          "required_quantity": {
+            "title": "Required Quantity",
+            "type": "number"
+          },
+          "shortage_quantity": {
+            "default": 0.0,
+            "title": "Shortage Quantity",
+            "type": "number"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "tracked": {
+            "default": false,
+            "title": "Tracked",
+            "type": "boolean"
+          },
+          "unit_of_measure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Of Measure"
+          }
+        },
+        "required": [
+          "sku",
+          "required_quantity"
+        ],
+        "title": "InventoryAvailabilityLine",
+        "type": "object"
+      },
       "InventoryItemCreate": {
         "description": "Create a tracked item.",
         "properties": {
@@ -20222,6 +20430,11 @@
       "InventoryItemResponse": {
         "description": "A tracked item as returned by the API, with its rolled-up stock position.\n\n``quantity_on_hand`` sums every location; ``total_value``/``avg_unit_cost``\nare redacted to 0 for callers without ``billing:read``.",
         "properties": {
+          "available_to_promise": {
+            "default": 0.0,
+            "title": "Available To Promise",
+            "type": "number"
+          },
           "avg_unit_cost": {
             "default": 0.0,
             "title": "Avg Unit Cost",
@@ -20302,9 +20515,19 @@
             ],
             "title": "Notes"
           },
+          "quantity_deployed": {
+            "default": 0.0,
+            "title": "Quantity Deployed",
+            "type": "number"
+          },
           "quantity_on_hand": {
             "default": 0.0,
             "title": "Quantity On Hand",
+            "type": "number"
+          },
+          "quantity_reserved": {
+            "default": 0.0,
+            "title": "Quantity Reserved",
             "type": "number"
           },
           "reorder_point": {
@@ -20574,6 +20797,175 @@
           }
         },
         "title": "InventoryItemUpdate",
+        "type": "object"
+      },
+      "InventoryJobAllocationResponse": {
+        "description": "One planned or fulfilled job allocation and its current stock position.",
+        "properties": {
+          "actual_quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Quantity"
+          },
+          "available_to_promise": {
+            "default": 0.0,
+            "title": "Available To Promise",
+            "type": "number"
+          },
+          "behavior": {
+            "enum": [
+              "consumable",
+              "reusable"
+            ],
+            "title": "Behavior",
+            "type": "string"
+          },
+          "consumption_ledger_entry_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consumption Ledger Entry Id"
+          },
+          "fulfilled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fulfilled At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_name": {
+            "title": "Item Name",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "planned_quantity": {
+            "title": "Planned Quantity",
+            "type": "number"
+          },
+          "quantity_deployed": {
+            "default": 0.0,
+            "title": "Quantity Deployed",
+            "type": "number"
+          },
+          "quantity_on_hand": {
+            "default": 0.0,
+            "title": "Quantity On Hand",
+            "type": "number"
+          },
+          "quantity_reserved": {
+            "default": 0.0,
+            "title": "Quantity Reserved",
+            "type": "number"
+          },
+          "reserved_at": {
+            "format": "date-time",
+            "title": "Reserved At",
+            "type": "string"
+          },
+          "returned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Returned At"
+          },
+          "shortage_quantity": {
+            "default": 0.0,
+            "title": "Shortage Quantity",
+            "type": "number"
+          },
+          "sku": {
+            "title": "Sku",
+            "type": "string"
+          },
+          "source_location_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Location Id"
+          },
+          "source_location_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Location Name"
+          },
+          "status": {
+            "enum": [
+              "reserved",
+              "consumed",
+              "deployed",
+              "released",
+              "returned"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unit_of_measure": {
+            "title": "Unit Of Measure",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "job_id",
+          "item_id",
+          "item_name",
+          "sku",
+          "unit_of_measure",
+          "behavior",
+          "status",
+          "planned_quantity",
+          "reserved_at"
+        ],
+        "title": "InventoryJobAllocationResponse",
         "type": "object"
       },
       "InventoryLedgerEntryResponse": {
@@ -22698,6 +23090,38 @@
         "title": "JobInstallationPlanResponse",
         "type": "object"
       },
+      "JobInventoryPlanResponse": {
+        "description": "Inventory confirmation state for one workspace-scoped job.",
+        "properties": {
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryJobAllocationResponse"
+            },
+            "title": "Allocations",
+            "type": "array"
+          },
+          "completion_confirmation_required": {
+            "title": "Completion Confirmation Required",
+            "type": "boolean"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "job_status": {
+            "title": "Job Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "job_status",
+          "completion_confirmation_required"
+        ],
+        "title": "JobInventoryPlanResponse",
+        "type": "object"
+      },
       "JobLineItemSummary": {
         "description": "One unit of scope of work — deliberately price-free.\n\nProjected from the linked invoice's line items. A separate schema from\n:class:`app.schemas.invoice.InvoiceLineItemResponse` **on purpose**: that one\ncarries ``unit_price``, ``discount``, and ``total``, and a field technician\nmust never receive money on a job payload. Write-capable tiers still get the\npriced view from the invoice/quote endpoints; this projection only governs\nwhat rides on the job.\n\nAdding a money field here leaks it to every technician — don't.",
         "properties": {
@@ -22801,8 +23225,15 @@
         "type": "object"
       },
       "JobMaterialsResponse": {
-        "description": "Materials consumed on one job, with the total cost they contributed.",
+        "description": "Consumed COGS plus reusable equipment currently deployed on one job.",
         "properties": {
+          "deployed_equipment": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryJobAllocationResponse"
+            },
+            "title": "Deployed Equipment",
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/InventoryLedgerEntryResponse"
@@ -43469,6 +43900,32 @@
         "title": "QuoteInventoryAvailabilityItem",
         "type": "object"
       },
+      "QuoteInventoryAvailabilityResponse": {
+        "description": "Private inventory readiness for a quote or proposal preview.",
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "is_available": {
+            "title": "Is Available",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryAvailabilityLine"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "connected",
+          "is_available"
+        ],
+        "title": "QuoteInventoryAvailabilityResponse",
+        "type": "object"
+      },
       "QuoteLineItemCreate": {
         "description": "Create a line item, optionally sourced from the price book.\n\n``catalog_item_id`` is a *request-only* hint from the catalog picker: the\nserver looks the item up within the workspace and snapshots its\n``service_category`` onto the line. Nothing links back to the catalog row,\nso the metric survives the item later being re-categorized or deleted, and\nthe category can't be forged by a client since it is never read from the\nrequest body. An id that no longer resolves simply leaves the line\nuncategorized.",
         "properties": {
@@ -46606,6 +47063,11 @@
       "ReorderRow": {
         "description": "One item at or below its reorder point, aggregated across locations.",
         "properties": {
+          "available_to_promise": {
+            "default": 0.0,
+            "title": "Available To Promise",
+            "type": "number"
+          },
           "avg_daily_usage": {
             "anyOf": [
               {
@@ -46648,8 +47110,18 @@
             ],
             "title": "Lead Time Days"
           },
+          "quantity_deployed": {
+            "default": 0.0,
+            "title": "Quantity Deployed",
+            "type": "number"
+          },
           "quantity_on_hand": {
             "title": "Quantity On Hand",
+            "type": "number"
+          },
+          "quantity_reserved": {
+            "default": 0.0,
+            "title": "Quantity Reserved",
             "type": "number"
           },
           "reorder_point": {
@@ -50511,6 +50983,11 @@
       "StockLevelRow": {
         "description": "On-hand position for one item at one location.",
         "properties": {
+          "available_to_promise": {
+            "default": 0.0,
+            "title": "Available To Promise",
+            "type": "number"
+          },
           "avg_unit_cost": {
             "title": "Avg Unit Cost",
             "type": "number"
@@ -50550,8 +51027,18 @@
             "title": "Location Name",
             "type": "string"
           },
+          "quantity_deployed": {
+            "default": 0.0,
+            "title": "Quantity Deployed",
+            "type": "number"
+          },
           "quantity_on_hand": {
             "title": "Quantity On Hand",
+            "type": "number"
+          },
+          "quantity_reserved": {
+            "default": 0.0,
+            "title": "Quantity Reserved",
             "type": "number"
           },
           "reorder_point": {
@@ -77446,6 +77933,75 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/complete-with-inventory": {
+      "post": {
+        "description": "Post actual Bistro inventory and complete the job in one transaction.",
+        "operationId": "complete_job_with_inventory_api_v1_workspaces__workspace_id__jobs__job_id__complete_with_inventory_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteJobInventoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobInventoryPlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Complete Job With Inventory",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/expenses": {
       "get": {
         "description": "List a job's expenses, newest first.\n\nGated on ``billing:read``: every field on an expense is a cost the customer\nnever sees and a technician has no operational use for. A field technician\nmay still *record* one (POST below) — that only echoes back the amount they\nsubmitted — but cannot read the job's costs back out.",
@@ -77692,6 +78248,134 @@
           }
         ],
         "summary": "Get Job Installation Plan",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/inventory-allocations/{allocation_id}/return": {
+      "post": {
+        "description": "Return one deployed reusable allocation without changing owned stock.",
+        "operationId": "return_job_inventory_allocation_api_v1_workspaces__workspace_id__jobs__job_id__inventory_allocations__allocation_id__return_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "allocation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Allocation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventoryJobAllocationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Return Job Inventory Allocation",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/inventory-plan": {
+      "get": {
+        "description": "Return inventory allocations after applying normal job visibility rules.",
+        "operationId": "get_job_inventory_plan_api_v1_workspaces__workspace_id__jobs__job_id__inventory_plan_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobInventoryPlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Job Inventory Plan",
         "tags": [
           "Field Service"
         ]
@@ -88686,6 +89370,65 @@
           }
         ],
         "summary": "Save Wizard Proposal",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/wizard/inventory-availability": {
+      "post": {
+        "description": "Check private fulfillment requirements against available-to-promise stock.",
+        "operationId": "preview_wizard_inventory_availability_api_v1_workspaces__workspace_id__quotes_wizard_inventory_availability_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalWizardPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteInventoryAvailabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Preview Wizard Inventory Availability",
         "tags": [
           "Quotes"
         ]

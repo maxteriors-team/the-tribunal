@@ -74,6 +74,9 @@ const item: InventoryItem = {
   supplier_sku: null,
   notes: null,
   quantity_on_hand: 8,
+  quantity_reserved: 2,
+  quantity_deployed: 1,
+  available_to_promise: 5,
   total_value: 32,
   avg_unit_cost: 4,
   is_low_stock: true,
@@ -90,6 +93,9 @@ const reorderReport: ReorderReport = {
       sku: "SH-125",
       unit_of_measure: "gallon",
       quantity_on_hand: 8,
+      quantity_reserved: 2,
+      quantity_deployed: 1,
+      available_to_promise: 5,
       reorder_point: 20,
       reorder_quantity: 55,
       safety_stock: 5,
@@ -138,6 +144,11 @@ describe("InventoryList", () => {
     renderList();
 
     expect(await screen.findByText("Sodium hypochlorite")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Owned" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Reserved" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Deployed" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Available" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "5" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Value" })).toBeInTheDocument();
     expect(screen.getByText("$32.00")).toBeInTheDocument();
   });

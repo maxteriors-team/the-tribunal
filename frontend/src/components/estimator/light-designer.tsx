@@ -181,6 +181,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
 import type { EstimateRenderRequest, LinearFeetEstimateRequest } from "@/types/estimate";
+import type { QuoteInventoryAvailability } from "@/types/inventory";
 import type {
   CatalogItemResponse,
   ProposalDocument,
@@ -1483,6 +1484,9 @@ function LandscapeProposalPanel({
   previewsPending,
   tiers,
   document,
+  inventoryAvailability,
+  inventoryAvailabilityPending,
+  inventoryAvailabilityError,
   selectedTierKey,
   selectedCarePlanKey,
   wireItems,
@@ -1510,6 +1514,9 @@ function LandscapeProposalPanel({
   previewsPending: boolean;
   tiers: TierConfig[];
   document: ProposalDocument | undefined;
+  inventoryAvailability: QuoteInventoryAvailability | undefined;
+  inventoryAvailabilityPending: boolean;
+  inventoryAvailabilityError: string | null;
   selectedTierKey: string | null;
   selectedCarePlanKey: string | null;
   wireItems: Map<10 | 12, CatalogItemResponse | null>;
@@ -1970,7 +1977,11 @@ function LandscapeProposalPanel({
           )}
         </div>
 
-        <InventoryAvailabilityCard availability={document?.inventory_availability} />
+        <InventoryAvailabilityCard
+          availability={inventoryAvailability}
+          pending={inventoryAvailabilityPending}
+          error={inventoryAvailabilityError}
+        />
 
         <footer className="ll-proposal-total">
           <div>
@@ -2089,6 +2100,9 @@ function LandscapeWorkspacePanel({
   onBomLineItemsChange,
   pricingTiers,
   proposalDocument,
+  inventoryAvailability,
+  inventoryAvailabilityPending,
+  inventoryAvailabilityError,
   selectedTierKey,
   selectedCarePlanKey,
   wireItems,
@@ -2136,6 +2150,9 @@ function LandscapeWorkspacePanel({
   onBomLineItemsChange: (lineItems: LandscapeBomLineItem[]) => void;
   pricingTiers: TierConfig[];
   proposalDocument: ProposalDocument | undefined;
+  inventoryAvailability: QuoteInventoryAvailability | undefined;
+  inventoryAvailabilityPending: boolean;
+  inventoryAvailabilityError: string | null;
   selectedTierKey: string | null;
   selectedCarePlanKey: string | null;
   wireItems: Map<10 | 12, CatalogItemResponse | null>;
@@ -2298,6 +2315,9 @@ function LandscapeWorkspacePanel({
         previewsPending={previewsPending}
         tiers={pricingTiers}
         document={proposalDocument}
+        inventoryAvailability={inventoryAvailability}
+        inventoryAvailabilityPending={inventoryAvailabilityPending}
+        inventoryAvailabilityError={inventoryAvailabilityError}
         selectedTierKey={selectedTierKey}
         selectedCarePlanKey={selectedCarePlanKey}
         wireItems={wireItems}
@@ -3330,14 +3350,24 @@ export function LightDesigner({
           title: landscapeProjectName,
         });
   const landscapeProposalSignature = JSON.stringify(landscapeProposalPayload);
+  const landscapeProposalHasRequirements = Boolean(
+    landscapeProposalPayload &&
+      (landscapeProposalPayload.quantities?.length ||
+        landscapeProposalPayload.bistro?.runs?.length),
+  );
   const landscapeProposalQuery = useQuery({
     queryKey: queryKeys.lightingProjects.proposalPreview(workspaceId, landscapeProposalSignature),
     queryFn: () => salesWizardApi.preview(workspaceId, landscapeProposalPayload!),
-    enabled: Boolean(
-      landscapeProposalPayload &&
-      (landscapeProposalPayload.quantities?.length ||
-        landscapeProposalPayload.bistro?.runs?.length),
+    enabled: landscapeProposalHasRequirements,
+    placeholderData: keepPreviousData,
+  });
+  const landscapeInventoryAvailabilityQuery = useQuery({
+    queryKey: queryKeys.lightingProjects.proposalInventoryAvailability(
+      workspaceId,
+      landscapeProposalSignature,
     ),
+    queryFn: () => salesWizardApi.inventoryAvailability(workspaceId, landscapeProposalPayload!),
+    enabled: landscapeProposalHasRequirements,
     placeholderData: keepPreviousData,
   });
   useEffect(() => {
@@ -3855,6 +3885,12 @@ export function LightDesigner({
   const landscapePricingError = landscapeProposalQuery.isError
     ? getApiErrorMessage(landscapeProposalQuery.error, "Unable to price this lighting plan.")
     : null;
+  const landscapeInventoryAvailabilityError = landscapeInventoryAvailabilityQuery.isError
+    ? getApiErrorMessage(
+        landscapeInventoryAvailabilityQuery.error,
+        "Unable to check inventory availability.",
+      )
+    : null;
   const landscapeCreateQuoteError = landscapeQuoteMutation.isError
     ? getApiErrorMessage(landscapeQuoteMutation.error, "Unable to create the draft quote.")
     : null;
@@ -4263,6 +4299,9 @@ export function LightDesigner({
               onBomLineItemsChange={setLandscapeBomLineItems}
               pricingTiers={landscapePricingTiers}
               proposalDocument={landscapeProposalQuery.data}
+              inventoryAvailability={landscapeInventoryAvailabilityQuery.data}
+              inventoryAvailabilityPending={landscapeInventoryAvailabilityQuery.isFetching}
+              inventoryAvailabilityError={landscapeInventoryAvailabilityError}
               selectedTierKey={effectiveLandscapeTierKey}
               selectedCarePlanKey={selectedLandscapeCarePlanKey}
               wireItems={selectedTierWireItems}
