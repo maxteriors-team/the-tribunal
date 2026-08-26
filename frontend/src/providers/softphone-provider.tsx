@@ -252,6 +252,7 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
   }, [updateState]);
 
   const hangup = useCallback(async () => {
+    // Also cancels the pre-call token window before callRef has been assigned.
     cancelRequestedRef.current = true;
     const workspaceId = workspaceIdRef.current;
     const callRecordId = callRecordIdRef.current;
