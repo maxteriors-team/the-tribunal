@@ -221,10 +221,14 @@ export interface Product {
   target: DrawTarget;
 }
 
+export type ScaleSlot = 1 | 2;
+
 export interface Run {
   id: string;
   productId: string;
   points: Point[];
+  /** Missing means Scale 1 so existing drawings retain their measured footage. */
+  scaleSlot?: ScaleSlot;
   /** Per-run overrides — fall back to the product's values when unset. */
   spacingIn?: number;
   colors?: string[];
@@ -428,7 +432,10 @@ export interface LandscapePreconState {
 }
 
 export interface Design {
+  /** Scale 1; retained as the primary field for backward compatibility. */
   calibration: Calibration | null;
+  /** Optional Scale 2 for photo planes with a different perspective. */
+  secondaryCalibration?: Calibration | null;
   runs: Run[];
   items: PlacedItem[];
   /** Optional so drawings saved before image insets continue to load unchanged. */
@@ -442,7 +449,7 @@ export interface Design {
 export type Tool =
   | { type: "select" }
   | { type: "pan" }
-  | { type: "calibrate" }
+  | { type: "calibrate"; scaleSlot?: ScaleSlot }
   | { type: "draw"; productId: string }
   | { type: "place"; productId: string }
   | { type: "highlight" };

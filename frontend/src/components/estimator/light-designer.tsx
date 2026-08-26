@@ -66,6 +66,7 @@ import {
 import Link from "next/link";
 import { Children, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
+import { InventoryAvailabilityCard } from "@/components/estimator/inventory-availability-card";
 import {
   DocumentActionButton,
   DocumentViewport,
@@ -100,6 +101,7 @@ import {
   designScale,
   designToEstimateInputs,
   hasDesign,
+  runScale,
   sumEstimateInputs,
 } from "@/lib/estimator/design";
 import {
@@ -201,7 +203,6 @@ import {
   type EditorState,
 } from "./editor-store";
 import { EstimatePanel } from "./estimate-panel";
-import { InventoryAvailabilityCard } from "./inventory-availability-card";
 import { LightCanvas } from "./light-canvas";
 import { ServiceValueProps } from "./service-value-props";
 import { ToolPalette } from "./tool-palette";
@@ -1616,6 +1617,12 @@ function LandscapeProposalPanel({
           </div>
         ) : null}
 
+        <InventoryAvailabilityCard
+          availability={inventoryAvailability}
+          pending={inventoryAvailabilityPending}
+          error={inventoryAvailabilityError}
+        />
+
         <div className="ll-proposal-section">
           <div className="ll-proposal-section-heading">
             <div>
@@ -1977,11 +1984,6 @@ function LandscapeProposalPanel({
           )}
         </div>
 
-        <InventoryAvailabilityCard
-          availability={inventoryAvailability}
-          pending={inventoryAvailabilityPending}
-          error={inventoryAvailabilityError}
-        />
 
         <footer className="ll-proposal-total">
           <div>
@@ -3108,7 +3110,6 @@ export function LightDesigner({
   const productById = indexProducts(products);
   const bistroScheduleRows: LandscapeBistroRunRow[] = liveShots
     .flatMap((shot, shotIndex) => {
-      const scale = designScale(shot.design, shot.photo.width);
       const poleCounts = new Map<string, number>();
       for (const item of shot.design.items) {
         if (item.bistroRunId && productById.get(item.productId)?.target.field === "bistroPole") {
@@ -3118,6 +3119,7 @@ export function LightDesigner({
       return shot.design.runs.flatMap((run) => {
         const product = productById.get(run.productId);
         if (!product || product.style !== "bistro") return [];
+        const scale = runScale(shot.design, run, shot.photo.width);
         return [
           {
             runId: run.id,
@@ -3138,8 +3140,8 @@ export function LightDesigner({
 
   // ---- Design → server estimate inputs ----------------------------------
   // Totalled across every photo: front elevation plus back patio is one job and
-  // one price. Each shot measures on its own calibration before it's summed, so
-  // photos taken from different distances still add up correctly.
+  // one price. Each run measures on its assigned calibration before it's summed,
+  // so photo planes and shots taken from different distances add up correctly.
   const inputs = sumEstimateInputs(
     liveShots.map((shot) => designToEstimateInputs(shot.design, productById, shot.photo.width)),
   );
@@ -3147,11 +3149,11 @@ export function LightDesigner({
   const permanentComplexityFeet = (() => {
     const totals = { aerial: 0, easy: 0, standard: 0, complex: 0 };
     for (const shot of liveShots) {
-      const { ftPerPx } = designScale(shot.design, shot.photo.width);
       for (const run of shot.design.runs) {
         const product = productById.get(run.productId);
         if (product?.category !== "permanent") continue;
-        totals[run.permanentComplexity ?? "standard"] += polylineLength(run.points) * ftPerPx;
+        totals[run.permanentComplexity ?? "standard"] +=
+          polylineLength(run.points) * runScale(shot.design, run, shot.photo.width).ftPerPx;
       }
     }
     return totals;
@@ -3237,7 +3239,6 @@ export function LightDesigner({
   );
   const circuitLoads = (() => {
     const circuitInputs = liveShots.flatMap((shot, shotIndex) => {
-      const scale = designScale(shot.design, shot.photo.width);
       return shot.design.runs.flatMap((run, circuitIndex) => {
         if (productById.get(run.productId)?.style !== "wire") return [];
         const fixtures = shot.design.items.flatMap((item) => {
@@ -3253,6 +3254,7 @@ export function LightDesigner({
             item.id === run.transformerId &&
             productById.get(item.productId)?.style === "transformer",
         );
+        const scale = runScale(shot.design, run, shot.photo.width);
         return [
           {
             id: run.id,
@@ -3370,7 +3372,8 @@ export function LightDesigner({
       workspaceId,
       landscapeProposalSignature,
     ),
-    queryFn: () => salesWizardApi.inventoryAvailability(workspaceId, landscapeProposalPayload!),
+    queryFn: () =>
+      salesWizardApi.inventoryAvailability(workspaceId, landscapeProposalPayload!),
     enabled: landscapeProposalHasRequirements,
     placeholderData: keepPreviousData,
   });
@@ -4512,7 +4515,12 @@ export function LightDesigner({
                 </div>
               ) : (
                 <div className="est-main">
-                  <ToolPalette products={products} state={state} dispatch={dispatch} />
+                  <ToolPalette
+                    products={products}
+                    state={state}
+                    dispatch={dispatch}
+                    enableSecondaryScale
+                  />
                   <LightCanvas
                     // Remount per shot: zoom, pan and any half-drawn run belong to the
                     // photo they were made on and must not follow the rep to the next.

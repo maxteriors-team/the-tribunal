@@ -181,6 +181,50 @@ describe("drawScene", () => {
     expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, 1200, 800);
   });
 
+  it("spaces saved runs with each run's assigned calibration", () => {
+    stubSpriteCanvas();
+    const primaryRun: Run = {
+      id: "scale-1",
+      productId: c9.id,
+      points: [
+        { x: 0, y: 100 },
+        { x: 200, y: 100 },
+      ],
+    };
+    const secondaryRun: Run = {
+      ...primaryRun,
+      id: "scale-2",
+      scaleSlot: 2,
+      points: [
+        { x: 0, y: 200 },
+        { x: 200, y: 200 },
+      ],
+    };
+    const design: Design = {
+      calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, feet: 10 },
+      secondaryCalibration: { a: { x: 0, y: 20 }, b: { x: 200, y: 20 }, feet: 10 },
+      runs: [primaryRun, secondaryRun],
+      items: [],
+    };
+    const primaryCtx = fakeCtx();
+    const secondaryCtx = fakeCtx();
+    drawRunLights(primaryCtx, primaryRun.points, c9, 10, 2);
+    drawRunLights(secondaryCtx, secondaryRun.points, c9, 20, 2);
+
+    const sceneCtx = fakeCtx();
+    drawScene(sceneCtx, fakePhoto(), design, new Map([[c9.id, c9]]), 999, {
+      viewScale: 1,
+      dusk: 0.52,
+      showChrome: false,
+    });
+
+    expect(sceneCtx.drawImage).toHaveBeenCalledTimes(
+      1 +
+        vi.mocked(primaryCtx.drawImage).mock.calls.length +
+        vi.mocked(secondaryCtx.drawImage).mock.calls.length,
+    );
+  });
+
   it("draws fixture symbols, transformer, and inset images only on the editable plan", () => {
     const design: Design = {
       calibration: null,

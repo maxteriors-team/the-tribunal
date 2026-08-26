@@ -67,6 +67,17 @@ const WIRE: Product = {
   target: { field: "annotation", annotationType: "wire" },
 };
 
+const STRAND: Product = {
+  ...WIRE,
+  id: "roofline-c9-warm",
+  name: "C9 Roofline",
+  category: "seasonal",
+  style: "c9",
+  price: 6,
+  spacingIn: 12,
+  target: { field: "roofline" },
+};
+
 function stateWith(item: PlacedItem): EditorState {
   return {
     design: { ...EMPTY_DESIGN, items: [item] },
@@ -90,6 +101,71 @@ const placed = (over: Partial<PlacedItem> = {}): PlacedItem => ({
   at: { x: 100, y: 100 },
   sizePx: 40,
   ...over,
+});
+
+describe("photo measurement scales", () => {
+  const primary = { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, feet: 10 };
+  const secondary = { a: { x: 0, y: 20 }, b: { x: 200, y: 20 }, feet: 10 };
+
+  it("offers Scale 2 setup only after Scale 1 exists", () => {
+    const dispatch = vi.fn();
+    render(
+      <ToolPalette
+        products={[STRAND]}
+        state={{
+          ...stateWith(placed()),
+          design: { ...EMPTY_DESIGN, calibration: primary },
+          selection: null,
+        }}
+        dispatch={dispatch}
+        enableSecondaryScale
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Scale 2" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_TOOL",
+      tool: { type: "calibrate", scaleSlot: 2 },
+    });
+  });
+
+  it("assigns the selected strand to Scale 2", () => {
+    const dispatch = vi.fn();
+    const run = {
+      id: "run-1",
+      productId: STRAND.id,
+      points: [
+        { x: 0, y: 0 },
+        { x: 400, y: 0 },
+      ],
+    };
+    render(
+      <ToolPalette
+        products={[STRAND]}
+        state={{
+          ...stateWith(placed()),
+          design: {
+            ...EMPTY_DESIGN,
+            calibration: primary,
+            secondaryCalibration: secondary,
+            runs: [run],
+          },
+          selection: { kind: "run", id: run.id },
+        }}
+        dispatch={dispatch}
+        enableSecondaryScale
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Scale 1" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Scale 2" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_RUN",
+      id: run.id,
+      patch: { scaleSlot: 2 },
+    });
+    expect(screen.getByText(/Split runs at every corner or depth change/i)).toBeInTheDocument();
+  });
 });
 
 describe("FixtureOptions beam slider", () => {

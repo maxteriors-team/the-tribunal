@@ -71,6 +71,28 @@ describe("editorReducer plan images", () => {
   });
 });
 
+describe("editorReducer calibration scales", () => {
+  it("updates Scale 2 without overwriting Scale 1 and keeps the change undoable", () => {
+    const primary = { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, feet: 10 };
+    const secondary = { a: { x: 0, y: 20 }, b: { x: 200, y: 20 }, feet: 10 };
+    const withPrimary = editorReducer(initialEditorState(), {
+      type: "SET_CALIBRATION",
+      calibration: primary,
+    });
+    const withSecondary = editorReducer(withPrimary, {
+      type: "SET_CALIBRATION",
+      calibration: secondary,
+      scaleSlot: 2,
+    });
+
+    expect(withSecondary.design.calibration).toEqual(primary);
+    expect(withSecondary.design.secondaryCalibration).toEqual(secondary);
+    const undone = editorReducer(withSecondary, { type: "UNDO" });
+    expect(undone.design.calibration).toEqual(primary);
+    expect(undone.design.secondaryCalibration).toBeUndefined();
+  });
+});
+
 const ELECTRICAL_DESIGN: Design = {
   calibration: null,
   planImages: [],

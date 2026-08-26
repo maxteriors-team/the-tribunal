@@ -23,6 +23,7 @@ import type {
   LandscapeHighlightStroke,
   LandscapeArrow,
   Selection,
+  ScaleSlot,
   Tool,
 } from "@/lib/estimator/types";
 
@@ -66,6 +67,7 @@ export type EditorAction =
           Run,
           | "points"
           | "productId"
+          | "scaleSlot"
           | "spacingIn"
           | "colors"
           | "bulbScale"
@@ -121,7 +123,12 @@ export type EditorAction =
   | { type: "ADD_ARROW"; arrow: LandscapeArrow }
   | { type: "DELETE_ARROW"; id: string }
   | { type: "CLEAR_SYMBOLS" }
-  | { type: "SET_CALIBRATION"; calibration: Calibration | null; transient?: boolean }
+  | {
+      type: "SET_CALIBRATION";
+      calibration: Calibration | null;
+      scaleSlot?: ScaleSlot;
+      transient?: boolean;
+    }
   | { type: "CLEAR_DESIGN" }
   | { type: "RESET"; design?: Design }
   /**
@@ -333,7 +340,9 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case "SET_CALIBRATION":
       return withDesign(
         state,
-        { ...state.design, calibration: action.calibration },
+        action.scaleSlot === 2
+          ? { ...state.design, secondaryCalibration: action.calibration }
+          : { ...state.design, calibration: action.calibration },
         action.transient,
       );
 
@@ -342,6 +351,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return {
         ...withDesign(state, {
           calibration: state.design.calibration,
+          secondaryCalibration: state.design.secondaryCalibration,
           runs: [],
           items: [],
           planImages: state.design.planImages ?? [],

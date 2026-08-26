@@ -68,6 +68,20 @@ describe("designScale", () => {
     expect(s.pxPerFt).toBeCloseTo(10);
   });
 
+  it("resolves Scale 2 and falls back to Scale 1 when it is missing", () => {
+    const design: Design = {
+      calibration: cal,
+      secondaryCalibration: { a: { x: 0, y: 0 }, b: { x: 200, y: 0 }, feet: 10 },
+      runs: [],
+      items: [],
+    };
+
+    expect(designScale(design, PHOTO_W, 2).ftPerPx).toBeCloseTo(0.05);
+    expect(designScale({ ...design, secondaryCalibration: null }, PHOTO_W, 2).ftPerPx).toBeCloseTo(
+      0.1,
+    );
+  });
+
   it("falls back to an assumed photo width when uncalibrated", () => {
     const s = designScale({ calibration: null, runs: [], items: [] }, PHOTO_W);
     expect(s.calibrated).toBe(false);
@@ -90,6 +104,33 @@ describe("designToEstimateInputs", () => {
     const out = designToEstimateInputs(design, productById, PHOTO_W);
     expect(out.feet).toBe(40); // 400px / 10px-per-ft
     expect(out.christmas_items).toEqual({});
+  });
+
+  it("sums equal-pixel runs using their assigned scales while old runs stay on Scale 1", () => {
+    const design: Design = {
+      calibration: cal,
+      secondaryCalibration: { a: { x: 0, y: 0 }, b: { x: 200, y: 0 }, feet: 10 },
+      runs: [
+        run("scale-1", roofline.id, [
+          { x: 0, y: 0 },
+          { x: 400, y: 0 },
+        ]),
+        {
+          ...run("scale-2", roofline.id, [
+            { x: 0, y: 20 },
+            { x: 400, y: 20 },
+          ]),
+          scaleSlot: 2,
+        },
+      ],
+      items: [],
+    };
+
+    expect(designToEstimateInputs(design, productById, PHOTO_W).feet).toBe(60);
+    expect(
+      designToEstimateInputs({ ...design, secondaryCalibration: undefined }, productById, PHOTO_W)
+        .feet,
+    ).toBe(80);
   });
 
   it("sums multiple roofline runs into a single feet total", () => {
