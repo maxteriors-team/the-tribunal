@@ -183,6 +183,11 @@ KNOWN_INTEGRATIONS = [
         "description": "Physical card & postcard mailing",
     },
     {
+        "integration_type": "quo",
+        "display_name": "Quo",
+        "description": "Business phone and messaging",
+    },
+    {
         "integration_type": "companycam",
         "display_name": "CompanyCam",
         "description": "Job photos attached to your contacts",

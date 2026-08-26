@@ -1,6 +1,8 @@
 """Integration credential management endpoints."""
 
+import hmac
 import uuid
+from contextlib import suppress
 from typing import Any
 
 import httpx
@@ -32,6 +34,7 @@ from app.services.lead_sources.meta_lead_ads_service import (
     MetaLeadAdsValidationError,
     validate_meta_credentials,
 )
+from app.services.quo import QuoApiError, QuoClient
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -58,6 +61,138 @@ def mask_credentials(credentials: dict[str, Any]) -> dict[str, str]:
         elif value is not None:
             masked[key] = str(value)
     return masked
+
+
+async def _validate_quo_credentials(credentials: dict[str, Any]) -> dict[str, str]:
+    """Validate and normalize Quo credentials without exposing the API key."""
+    api_key = credentials.get("api_key")
+    if not isinstance(api_key, str) or not api_key.strip():
+        raise QuoApiError("A Quo API key is required", status_code=400)
+    if len(api_key) > 2048:
+        raise QuoApiError("The Quo API key is too long", status_code=400)
+
+    normalized_key = api_key.strip()
+    async with QuoClient(normalized_key) as client:
+        organization_id = await client.validate_api_key()
+
+    normalized = {"api_key": normalized_key}
+    if organization_id:
+        normalized["organization_id"] = organization_id
+    return normalized
+
+
+def _quo_validation_http_error(exc: QuoApiError) -> HTTPException:
+    if exc.status_code in {400, 401, 403}:
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Quo rejected the API key",
+        )
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Unable to validate the Quo API key",
+    )
+
+
+def _quo_webhook_http_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Unable to configure the Quo webhook",
+    )
+
+
+_QUO_WEBHOOK_CREDENTIAL_KEYS = frozenset(
+    {"webhook_id", "webhook_signing_key", "webhook_api_version"}
+)
+
+
+def _without_quo_webhook(credentials: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value for key, value in credentials.items() if key not in _QUO_WEBHOOK_CREDENTIAL_KEYS
+    }
+
+
+async def _provision_quo_webhook(
+    credentials: dict[str, Any],
+    *,
+    integration_id: uuid.UUID,
+    expected_organization_id: str | None,
+) -> dict[str, Any]:
+    """Create the remote webhook and return metadata for encrypted storage."""
+    api_key = credentials.get("api_key")
+    if not isinstance(api_key, str) or not api_key:
+        raise QuoApiError("A Quo API key is required", status_code=400)
+
+    target_url = f"{settings.public_base_url.rstrip('/')}/webhooks/quo/{integration_id}"
+    async with QuoClient(api_key) as client:
+        webhook = await client.create_webhook(target_url)
+        if expected_organization_id and not hmac.compare_digest(
+            webhook.organization_id, expected_organization_id
+        ):
+            with suppress(QuoApiError):
+                await client.remove_webhook(webhook.webhook_id)
+            raise QuoApiError("Quo organization mismatch", status_code=502)
+
+    return {
+        **_without_quo_webhook(credentials),
+        **webhook.as_encrypted_credentials(),
+    }
+
+
+async def _best_effort_quo_webhook_cleanup(
+    credentials: dict[str, Any],
+    *,
+    workspace_id: str,
+    reason: str,
+) -> None:
+    """Delete or disable an obsolete Quo webhook without blocking local shutdown."""
+    api_key = credentials.get("api_key")
+    webhook_id = credentials.get("webhook_id")
+    if not isinstance(api_key, str) or not api_key or not isinstance(webhook_id, str):
+        return
+
+    try:
+        async with QuoClient(api_key) as client:
+            await client.remove_webhook(webhook_id)
+    except QuoApiError as exc:
+        logger.warning(
+            "quo_webhook_cleanup_failed",
+            workspace_id=workspace_id,
+            reason=reason,
+            status_code=exc.status_code,
+        )
+
+
+async def _prepare_quo_update(
+    credentials: dict[str, Any],
+    *,
+    credentials_changed: bool,
+    integration_id: uuid.UUID,
+    current_active: bool,
+    next_active: bool,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    if credentials_changed:
+        try:
+            credentials = await _validate_quo_credentials(credentials)
+        except QuoApiError as exc:
+            raise _quo_validation_http_error(exc) from None
+
+    has_webhook = all(
+        isinstance(credentials.get(key), str) and credentials[key]
+        for key in _QUO_WEBHOOK_CREDENTIAL_KEYS
+    )
+    if next_active and (credentials_changed or not current_active or not has_webhook):
+        try:
+            provisioned = await _provision_quo_webhook(
+                credentials,
+                integration_id=integration_id,
+                expected_organization_id=credentials.get("organization_id"),
+            )
+        except QuoApiError:
+            raise _quo_webhook_http_error() from None
+        return provisioned, provisioned
+    if not next_active:
+        return _without_quo_webhook(credentials), None
+    return credentials, None
 
 
 @router.get("", response_model=list[IntegrationWithMaskedCredentials])
@@ -231,22 +366,51 @@ async def create_integration(
             "Use PUT to update.",
         )
 
-    if integration_data.integration_type == "meta_lead_ads" and integration_data.is_active:
+    integration_id = uuid.uuid4()
+    credentials = integration_data.credentials
+    provisioned_quo_credentials: dict[str, Any] | None = None
+    if integration_data.integration_type == "quo":
+        try:
+            credentials = await _validate_quo_credentials(credentials)
+        except QuoApiError as exc:
+            raise _quo_validation_http_error(exc) from None
+        if integration_data.is_active:
+            try:
+                credentials = await _provision_quo_webhook(
+                    credentials,
+                    integration_id=integration_id,
+                    expected_organization_id=credentials.get("organization_id"),
+                )
+            except QuoApiError:
+                raise _quo_webhook_http_error() from None
+            provisioned_quo_credentials = credentials
+    elif integration_data.integration_type == "meta_lead_ads" and integration_data.is_active:
         await _ensure_meta_page_is_available(
             db,
             workspace_id=workspace.id,
-            credentials=integration_data.credentials,
+            credentials=credentials,
         )
-        await _configure_meta_lead_ads(integration_data.credentials)
+        await _configure_meta_lead_ads(credentials)
 
     integration = WorkspaceIntegration(
+        id=integration_id,
         workspace_id=workspace.id,
         integration_type=integration_data.integration_type,
-        encrypted_credentials=encrypt_json(integration_data.credentials),
+        encrypted_credentials=encrypt_json(credentials),
         is_active=integration_data.is_active,
     )
     db.add(integration)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        if provisioned_quo_credentials is not None:
+            await _best_effort_quo_webhook_cleanup(
+                provisioned_quo_credentials,
+                workspace_id=str(workspace.id),
+                reason="database_write_failed",
+            )
+        raise
     await db.refresh(integration)
 
     logger.info(
@@ -302,7 +466,20 @@ async def update_integration(
         if integration_data.is_active is not None
         else integration.is_active
     )
-    if (
+    provisioned_quo_credentials: dict[str, Any] | None = None
+    if integration_type == "quo":
+        credentials_changed = bool(integration_data.credentials)
+        if integration_data.credentials is not None and not credentials_changed:
+            # The dialog sends an empty object when the existing masked key is unchanged.
+            next_credentials = previous_credentials
+        next_credentials, provisioned_quo_credentials = await _prepare_quo_update(
+            next_credentials,
+            credentials_changed=credentials_changed,
+            integration_id=integration.id,
+            current_active=integration.is_active,
+            next_active=next_active,
+        )
+    elif (
         integration_type == "meta_lead_ads"
         and next_active
         and (integration_data.credentials is not None or not integration.is_active)
@@ -315,12 +492,22 @@ async def update_integration(
         )
         await _configure_meta_lead_ads(next_credentials)
 
-    if integration_data.credentials is not None:
-        integration.credentials = integration_data.credentials
+    if integration_type == "quo" or integration_data.credentials is not None:
+        integration.credentials = next_credentials
     if integration_data.is_active is not None:
         integration.is_active = integration_data.is_active
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        if provisioned_quo_credentials is not None:
+            await _best_effort_quo_webhook_cleanup(
+                provisioned_quo_credentials,
+                workspace_id=str(workspace.id),
+                reason="database_write_failed",
+            )
+        raise
     await db.refresh(integration)
 
     if integration_type == "meta_lead_ads":
@@ -332,6 +519,14 @@ async def update_integration(
                 previous_credentials,
                 workspace_id=str(workspace.id),
                 reason="deactivated" if not next_active else "page_changed",
+            )
+    elif integration_type == "quo":
+        previous_webhook_id = previous_credentials.get("webhook_id")
+        if previous_webhook_id != next_credentials.get("webhook_id"):
+            await _best_effort_quo_webhook_cleanup(
+                previous_credentials,
+                workspace_id=str(workspace.id),
+                reason="deactivated" if not next_active else "replaced",
             )
 
     logger.info(
@@ -375,15 +570,24 @@ async def delete_integration(
             detail=f"Integration '{integration_type}' not found",
         )
 
+    deleted_quo_credentials: dict[str, Any] | None = None
     if integration_type == "meta_lead_ads":
         await _best_effort_meta_unsubscribe(
             integration.credentials,
             workspace_id=str(workspace.id),
             reason="deleted",
         )
+    elif integration_type == "quo":
+        deleted_quo_credentials = integration.credentials
 
     await db.delete(integration)
     await db.commit()
+    if deleted_quo_credentials is not None:
+        await _best_effort_quo_webhook_cleanup(
+            deleted_quo_credentials,
+            workspace_id=str(workspace.id),
+            reason="deleted",
+        )
 
     logger.info(
         "integration_deleted",
@@ -610,6 +814,25 @@ async def _test_google_ads_transparency(
     )
 
 
+async def _test_quo(credentials: dict[str, Any]) -> IntegrationTestResult:
+    try:
+        normalized = await _validate_quo_credentials(credentials)
+    except QuoApiError as exc:
+        message = (
+            "Quo rejected the API key"
+            if exc.status_code in {400, 401, 403}
+            else "Unable to validate the Quo API key"
+        )
+        return IntegrationTestResult(success=False, message=message)
+
+    organization_id = normalized.get("organization_id")
+    return IntegrationTestResult(
+        success=True,
+        message="Successfully connected to Quo",
+        details={"organization_id": organization_id} if organization_id else None,
+    )
+
+
 # Map integration types to their (uniform-signature) test functions.
 _INTEGRATION_TESTERS = {
     "telnyx": _test_telnyx,
@@ -621,7 +844,7 @@ _INTEGRATION_TESTERS = {
 
 # Integration types handled by a bespoke branch in ``test_integration`` because
 # their test function does not share the ``(client, api_key)`` signature.
-_SPECIAL_TESTERS = {"openai", "meta_lead_ads", "meta_ad_library"}
+_SPECIAL_TESTERS = {"openai", "meta_lead_ads", "meta_ad_library", "quo"}
 
 
 async def _run_integration_test(
@@ -640,7 +863,10 @@ async def _run_integration_test(
             message=f"Test not implemented for integration type: {integration_type}",
         )
 
-    api_key = credentials.get("api_key", "") if isinstance(credentials, dict) else ""
+    if integration_type == "quo":
+        return await _test_quo(credentials)
+
+    api_key = str(credentials.get("api_key", "")) if isinstance(credentials, dict) else ""
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -699,4 +925,14 @@ async def test_integration(
             detail=f"Integration '{integration_type}' not found",
         )
 
-    return await _run_integration_test(integration_type, integration.credentials)
+    test_result = await _run_integration_test(integration_type, integration.credentials)
+    organization_id = (test_result.details or {}).get("organization_id")
+    if (
+        integration_type == "quo"
+        and test_result.success
+        and isinstance(organization_id, str)
+        and integration.credentials.get("organization_id") != organization_id
+    ):
+        integration.credentials = {**integration.credentials, "organization_id": organization_id}
+        await db.commit()
+    return test_result
