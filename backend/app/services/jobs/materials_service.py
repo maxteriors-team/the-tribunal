@@ -35,6 +35,7 @@ from app.schemas.inventory import (
     JobMaterialsResponse,
 )
 from app.services.exceptions import ConflictError
+from app.services.inventory.job_allocations import JobAllocationService
 from app.services.inventory.stock_service import StockService
 
 logger = structlog.get_logger()
@@ -127,6 +128,12 @@ class JobMaterialsService:
         await self._assert_job(job_id, workspace_id)
         entries = await self._entries(job_id, workspace_id)
         items, locations = await self._labels(workspace_id, entries)
+        inventory_plan = await JobAllocationService(self.db).get_plan(workspace_id, job_id)
+        deployed_equipment = [
+            allocation
+            for allocation in inventory_plan.allocations
+            if allocation.status == "deployed"
+        ]
         total = sum((Decimal(entry.value_delta or 0) for entry in entries), Decimal(0))
         return JobMaterialsResponse(
             job_id=job_id,
@@ -139,6 +146,7 @@ class JobMaterialsService:
                 )
                 for entry in entries
             ],
+            deployed_equipment=deployed_equipment,
             # Consumption is a negative value delta; cost is its magnitude, net
             # of anything returned.
             total_material_cost=round(float(-total), 2) if include_costs else 0.0,

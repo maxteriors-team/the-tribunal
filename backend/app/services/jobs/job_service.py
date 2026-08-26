@@ -48,6 +48,7 @@ from app.models.field_service import (
     ServiceLocation,
     Technician,
 )
+from app.models.inventory import InventoryJobAllocation
 from app.models.invoice import Invoice, InvoiceLineItem
 from app.models.lighting_project import LightingProject
 from app.models.quote import Quote
@@ -70,6 +71,7 @@ from app.services.automations.events import (
     EVENT_JOB_SCHEDULED,
     emit_automation_event,
 )
+from app.services.exceptions import ConflictError
 from app.services.field_service.neighbor_outreach import NeighborOutreachService
 from app.services.jobs.system_tags import completed_install_tags
 from app.services.tags import TagService
@@ -816,12 +818,44 @@ class JobService:
         await self._emit_status_event(job, prior_status=None)
         return await self._one_response(await self._load(job.id, workspace_id), workspace_id)
 
+    async def _guard_inventory_completion(self, workspace_id: uuid.UUID, job_id: uuid.UUID) -> None:
+        active_allocation = await self.db.scalar(
+            select(InventoryJobAllocation.id)
+            .where(
+                InventoryJobAllocation.workspace_id == workspace_id,
+                InventoryJobAllocation.job_id == job_id,
+                InventoryJobAllocation.status.in_({"reserved", "deployed"}),
+            )
+            .limit(1)
+        )
+        if active_allocation is not None:
+            raise ConflictError(
+                "Confirm actual inventory usage before completing this job",
+                code="inventory_confirmation_required",
+            )
+
+    async def complete_from_inventory(self, job: Job) -> None:
+        """Complete an already locked job and run the canonical completion effects."""
+        prior_status = job.status
+        if JobStatus(prior_status) == JobStatus.COMPLETED:
+            return
+        job.status = JobStatus.COMPLETED
+        await self.db.flush()
+        await self._emit_status_event(job, prior_status)
+
     async def update(
         self, job_id: uuid.UUID, workspace_id: uuid.UUID, data: dict[str, Any]
     ) -> JobResponse:
         job = await self._load(job_id, workspace_id)
         prior_status = job.status
         await self._validate_refs(workspace_id, data)
+        requested_status = data.get("status")
+        if requested_status is not None and JobStatus(requested_status) == JobStatus.COMPLETED:
+            await self._guard_inventory_completion(workspace_id, job_id)
+        if requested_status is not None and JobStatus(requested_status) == JobStatus.CANCELLED:
+            from app.services.inventory.job_allocations import JobAllocationService
+
+            await JobAllocationService(self.db).release_for_cancel(workspace_id, job_id)
 
         for key, value in data.items():
             setattr(job, key, value)
@@ -925,4 +959,7 @@ class JobService:
         job = await assert_workspace_owned(
             self.db, Job, job_id, workspace_id, detail="Job not found"
         )
+        from app.services.inventory.job_allocations import JobAllocationService
+
+        await JobAllocationService(self.db).assert_job_deletable(workspace_id, job_id)
         await self.db.delete(job)

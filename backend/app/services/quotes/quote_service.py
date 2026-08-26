@@ -2347,7 +2347,7 @@ class QuoteService:
             effective_payload = self._lighting_project_quote_defaults(payload, project)
         document, line_items = build_proposal_document(config, catalog, effective_payload)
         self._attach_deposit_to_document(document, effective_payload, config)
-        document.inventory_availability = await QuoteInventoryAvailabilityService(self.db).check(
+        document.inventory_availability = await QuoteInventoryAvailabilityService(self.db).snapshot(
             workspace_id, document.fulfillment
         )
         document.attach_warning = await self._preview_attach_warning(
@@ -2454,7 +2454,7 @@ class QuoteService:
 
         document, line_items = build_proposal_document(config, catalog, effective_payload)
         self._attach_deposit_to_document(document, effective_payload, config)
-        document.inventory_availability = await QuoteInventoryAvailabilityService(self.db).check(
+        document.inventory_availability = await QuoteInventoryAvailabilityService(self.db).snapshot(
             workspace_id, document.fulfillment
         )
 
@@ -3485,6 +3485,7 @@ class QuoteService:
         confirm_unpaid_deposit: bool = False,
     ) -> QuoteConvertResponse:
         """Atomically convert one approved quote, with exact-retry semantics."""
+        from app.services.inventory import JobAllocationService
         from app.services.invoices import InvoiceService
         from app.services.jobs import JobService
         from app.services.payments.quote_deposit_service import deposit_amount
@@ -3637,6 +3638,11 @@ class QuoteService:
                         "scheduled_end": scheduled_end,
                     },
                 )
+                if quote.proposal_document is not None:
+                    document = self._parse_document(quote)
+                    await JobAllocationService(self.db).reserve(
+                        workspace_id, job.id, document.fulfillment
+                    )
                 job_id = job.id
                 quote.converted_job_id = job_id
                 created_something = True

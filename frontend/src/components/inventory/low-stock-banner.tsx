@@ -40,7 +40,7 @@ export function LowStockBanner({
   const days = first.days_of_cover;
   const cover =
     days === null || days === undefined
-      ? "Record usage on jobs to see how long the remaining stock lasts."
+      ? "Record usage on jobs to see how long the available stock lasts."
       : `${single ? "Runs" : `${first.item_name} runs`} out in about ${days} day${
           days === 1 ? "" : "s"
         } at recent usage.`;

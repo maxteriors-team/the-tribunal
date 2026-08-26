@@ -5,6 +5,7 @@
  * to server-authoritative preview/save endpoints. No money is computed here.
  */
 import { apiGet, apiPost, apiPut } from "@/lib/api";
+import type { QuoteInventoryAvailability } from "@/types/inventory";
 import type {
   CatalogItemResponse,
   PricingSettings,
@@ -43,6 +44,15 @@ export const salesWizardApi = {
   /** Compute the full multi-tier document without persisting (live preview). */
   preview: (workspaceId: string, payload: ProposalWizardPayload): Promise<ProposalDocument> =>
     apiPost<ProposalDocument>(`${base(workspaceId)}/quotes/wizard/preview`, payload),
+
+  inventoryAvailability: (
+    workspaceId: string,
+    payload: ProposalWizardPayload,
+  ): Promise<QuoteInventoryAvailability> =>
+    apiPost<QuoteInventoryAvailability>(
+      `${base(workspaceId)}/quotes/wizard/inventory-availability`,
+      payload,
+    ),
 
   /** Save a new proposal as a draft quote + snapshot. */
   save: (workspaceId: string, payload: ProposalWizardPayload): Promise<QuoteDetail> =>

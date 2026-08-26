@@ -83,7 +83,7 @@ async def test_quote_availability_uses_only_current_workspace_stock() -> None:
         )
         await db.flush()
 
-        result = await QuoteInventoryAvailabilityService(db).check(
+        result = await QuoteInventoryAvailabilityService(db).snapshot(
             workspace.id,
             [
                 FulfillmentPart(sku="PATH", description="Path light", qty=2),

@@ -113,11 +113,17 @@ PRICING = {
             "label": "Temporary Bistro Lighting",
             "lights_per_ft": 10,
             "poles_per_ft": 400,
+            "lights_inventory_sku": "BISTRO-TEMP-200FT",
+            "poles_inventory_sku": "BISTRO-TEMP-POLE",
+            "stock_feet_per_light_unit": 200,
         },
         "permanent": {
             "label": "Permanent Bistro Lighting",
             "lights_per_ft": 20,
             "poles_per_ft": 350,
+            "lights_inventory_sku": "BISTRO-PERM-FT",
+            "poles_inventory_sku": "BISTRO-PERM-POLE",
+            "stock_feet_per_light_unit": 1,
         },
         "tiers": [{"key": "medium", "name": "Medium", "per_ft": 18.11, "classic_per_ft": 15.50}],
         "color": {
@@ -279,10 +285,64 @@ async def test_bistro_only_design_creates_a_clear_customer_quote() -> None:
         assert quote.line_items[0].description == ("312.5 ft Permanent Bistro Lighting · 2 poles")
 
 
+async def _assert_bistro_allocations_created(
+    db: AsyncSession,
+    service: QuoteService,
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.inventory import InventoryItem, InventoryJobAllocation
+
+    await service.approve_quote(workspace_id, quote_id)
+    start = datetime(2026, 12, 1, 15, 0, tzinfo=UTC)
+    converted = await service.convert_quote(
+        workspace_id,
+        quote_id,
+        create_invoice=False,
+        scheduled_start=start,
+        scheduled_end=start + timedelta(hours=3),
+        confirm_unpaid_deposit=True,
+    )
+    allocation_rows = (
+        await db.execute(
+            select(InventoryJobAllocation, InventoryItem)
+            .join(InventoryItem, InventoryItem.id == InventoryJobAllocation.item_id)
+            .where(
+                InventoryJobAllocation.workspace_id == workspace_id,
+                InventoryJobAllocation.job_id == converted.job_id,
+            )
+        )
+    ).all()
+    planned_by_sku = {item.sku: allocation for allocation, item in allocation_rows}
+    assert planned_by_sku["BISTRO-TEMP-200FT"].planned_quantity == 1
+    assert planned_by_sku["BISTRO-TEMP-200FT"].behavior == "reusable"
+    assert planned_by_sku["BISTRO-PERM-FT"].planned_quantity == 50
+
+
 async def test_grouped_bistro_runs_price_and_persist_without_legacy_labels() -> None:
+    from app.models.inventory import InventoryItem
+    from app.schemas.inventory import ReceiveStockRequest
+    from app.services.inventory import StockService
+
     async with AsyncSessionLocal() as db:
         ws = await _make_lighting_workspace(db)
+        for sku, name, unit, quantity in (
+            ("BISTRO-PERM-FT", "Permanent Bistro footage", "ft", 200),
+            ("BISTRO-PERM-POLE", "Permanent Bistro pole", "each", 10),
+            ("BISTRO-TEMP-200FT", "Temporary Bistro set", "set", 3),
+            ("BISTRO-TEMP-POLE", "Temporary Bistro pole", "each", 10),
+        ):
+            item = InventoryItem(workspace_id=ws.id, sku=sku, name=name, unit_of_measure=unit)
+            db.add(item)
+            await db.flush()
+            await StockService(db).receive(
+                ws.id, item.id, ReceiveStockRequest(quantity=quantity, unit_cost=1)
+            )
         payload = _payload()
+        payload.client.email = "bistro-reservation@example.com"
+        payload.client.phone = "+15551235555"
         payload.bistro = WizardBistroSelection(
             runs=[
                 WizardBistroRun(installation="temporary", feet=100, pole_count=2),
@@ -309,15 +369,24 @@ async def test_grouped_bistro_runs_price_and_persist_without_legacy_labels() -> 
         )
         assert float(bistro_line.unit_price) == 5056
 
-        skus = {part.sku: part.qty for part in doc.fulfillment}
-        assert skus["59409312"] == 1.0
-        assert skus["59400232"] == 12.0
+        parts = {part.sku: part for part in doc.fulfillment}
+        assert parts["59409312"].qty == 1.0
+        assert parts["59400232"].qty == 12.0
+        assert parts["BISTRO-TEMP-200FT"].qty == 1.0
+        assert parts["BISTRO-TEMP-200FT"].inventory_behavior == "reusable"
+        assert parts["BISTRO-TEMP-POLE"].qty == 3.0
+        assert parts["BISTRO-PERM-FT"].qty == 50.0
+        assert parts["BISTRO-PERM-FT"].inventory_behavior == "consumable"
+        assert parts["BISTRO-PERM-POLE"].qty == 3.0
+
         assert doc.inventory_availability is not None
         assert doc.inventory_availability.has_requirements is True
-        assert doc.inventory_availability.untracked_items == len(doc.fulfillment)
+        assert doc.inventory_availability.untracked_items == 2
         assert quote.proposal_document is not None
         snapshot = quote.proposal_document["inventory_availability"]
-        assert snapshot["untracked_items"] == len(doc.fulfillment)
+        assert snapshot["untracked_items"] == 2
+
+        await _assert_bistro_allocations_created(db, svc, ws.id, uuid.UUID(str(quote.id)))
 
 
 async def test_price_book_mode_skips_finance_and_uses_catalog_prices_exactly() -> None:

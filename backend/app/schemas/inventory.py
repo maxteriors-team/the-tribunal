@@ -18,7 +18,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 InventoryLocationKind = Literal["warehouse", "truck", "other"]
 InventoryValuationMethod = Literal["weighted_average"]
@@ -34,6 +34,8 @@ InventoryLedgerReason = Literal[
     "opening_balance",
 ]
 InventoryReferenceType = Literal["job", "invoice", "quote", "manual", "transfer"]
+InventoryBehavior = Literal["consumable", "reusable"]
+InventoryAllocationStatus = Literal["reserved", "consumed", "deployed", "released", "returned"]
 COGSGroupBy = Literal["item", "service_category", "job"]
 
 
@@ -141,6 +143,9 @@ class InventoryItemResponse(InventoryItemBase):
     id: uuid.UUID
     workspace_id: uuid.UUID
     quantity_on_hand: float = 0.0
+    quantity_reserved: float = 0.0
+    quantity_deployed: float = 0.0
+    available_to_promise: float = 0.0
     total_value: float = 0.0
     avg_unit_cost: float = 0.0
     is_low_stock: bool = False
@@ -256,11 +261,99 @@ class InventoryLedgerPage(BaseModel):
     pages: int
 
 
+class InventoryJobAllocationResponse(BaseModel):
+    """One planned or fulfilled job allocation and its current stock position."""
+
+    id: uuid.UUID
+    job_id: uuid.UUID
+    item_id: uuid.UUID
+    item_name: str
+    sku: str
+    unit_of_measure: str
+    behavior: InventoryBehavior
+    status: InventoryAllocationStatus
+    planned_quantity: float
+    actual_quantity: float | None = None
+    source_location_id: uuid.UUID | None = None
+    source_location_name: str | None = None
+    consumption_ledger_entry_id: uuid.UUID | None = None
+    quantity_on_hand: float = 0.0
+    quantity_reserved: float = 0.0
+    quantity_deployed: float = 0.0
+    available_to_promise: float = 0.0
+    shortage_quantity: float = 0.0
+    reserved_at: datetime
+    fulfilled_at: datetime | None = None
+    returned_at: datetime | None = None
+
+
+class InventoryAllocationActual(BaseModel):
+    """Actual quantity and stock source confirmed when a job is completed."""
+
+    allocation_id: uuid.UUID
+    actual_quantity: float = Field(ge=0, le=1_000_000_000)
+    source_location_id: uuid.UUID | None = None
+
+
+class CompleteJobInventoryRequest(BaseModel):
+    """Actual usage for every active allocation on a job."""
+
+    allocations: list[InventoryAllocationActual] = Field(min_length=1, max_length=100)
+
+    @field_validator("allocations")
+    @classmethod
+    def _unique_allocation_ids(
+        cls, values: list[InventoryAllocationActual]
+    ) -> list[InventoryAllocationActual]:
+        ids = [value.allocation_id for value in values]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Each allocation can appear only once")
+        return values
+
+
+class JobInventoryPlanResponse(BaseModel):
+    """Inventory confirmation state for one workspace-scoped job."""
+
+    job_id: uuid.UUID
+    job_status: str
+    completion_confirmation_required: bool
+    allocations: list[InventoryJobAllocationResponse] = Field(default_factory=list)
+
+
+class InventoryAvailabilityLine(BaseModel):
+    """Sellable stock position for one internal quote requirement."""
+
+    sku: str
+    description: str | None = None
+    inventory_behavior: InventoryBehavior = "consumable"
+    required_quantity: float
+    item_id: uuid.UUID | None = None
+    item_name: str | None = None
+    unit_of_measure: str | None = None
+    tracked: bool = False
+    is_counted: bool = False
+    quantity_on_hand: float = 0.0
+    quantity_reserved: float = 0.0
+    quantity_deployed: float = 0.0
+    available_to_promise: float = 0.0
+    shortage_quantity: float = 0.0
+    is_available: bool = False
+
+
+class QuoteInventoryAvailabilityResponse(BaseModel):
+    """Private inventory readiness for a quote or proposal preview."""
+
+    connected: bool
+    is_available: bool
+    items: list[InventoryAvailabilityLine] = Field(default_factory=list)
+
+
 class JobMaterialsResponse(BaseModel):
-    """Materials consumed on one job, with the total cost they contributed."""
+    """Consumed COGS plus reusable equipment currently deployed on one job."""
 
     job_id: uuid.UUID
     items: list[InventoryLedgerEntryResponse]
+    deployed_equipment: list[InventoryJobAllocationResponse] = Field(default_factory=list)
     total_material_cost: float = Field(
         0.0, description="Sum of consumption cost, net of returns (0 without billing:read)"
     )
@@ -279,6 +372,9 @@ class StockLevelRow(BaseModel):
     location_id: uuid.UUID
     location_name: str
     quantity_on_hand: float
+    quantity_reserved: float = 0.0
+    quantity_deployed: float = 0.0
+    available_to_promise: float = 0.0
     total_value: float
     avg_unit_cost: float
     reorder_point: float | None = None
@@ -305,6 +401,9 @@ class ReorderRow(BaseModel):
     sku: str | None = None
     unit_of_measure: str
     quantity_on_hand: float
+    quantity_reserved: float = 0.0
+    quantity_deployed: float = 0.0
+    available_to_promise: float = 0.0
     reorder_point: float
     reorder_quantity: float | None = None
     safety_stock: float

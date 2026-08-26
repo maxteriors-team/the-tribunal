@@ -156,7 +156,10 @@ export function InventoryList() {
           <TableHeader>
             <TableRow>
               <TableHead>Item</TableHead>
-              <TableHead className="text-right">On hand</TableHead>
+              <TableHead className="text-right">Owned</TableHead>
+              <TableHead className="hidden text-right lg:table-cell">Reserved</TableHead>
+              <TableHead className="hidden text-right lg:table-cell">Deployed</TableHead>
+              <TableHead className="text-right">Available</TableHead>
               <TableHead className="hidden text-right sm:table-cell">Reorder at</TableHead>
               {canSeeCosts && (
                 <TableHead className="hidden text-right lg:table-cell">Avg cost</TableHead>
@@ -190,6 +193,15 @@ export function InventoryList() {
                   <span className="ml-1 text-xs text-muted-foreground">
                     {item.unit_of_measure}
                   </span>
+                </TableCell>
+                <TableCell className="hidden text-right tabular-nums text-muted-foreground lg:table-cell">
+                  {item.quantity_reserved}
+                </TableCell>
+                <TableCell className="hidden text-right tabular-nums text-muted-foreground lg:table-cell">
+                  {item.quantity_deployed}
+                </TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
+                  {item.available_to_promise}
                 </TableCell>
                 <TableCell className="hidden text-right tabular-nums text-muted-foreground sm:table-cell">
                   {item.reorder_point ?? "Not managed"}

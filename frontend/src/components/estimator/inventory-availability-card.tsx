@@ -3,34 +3,44 @@
 import { AlertTriangle, CheckCircle2, PackageSearch } from "lucide-react";
 import Link from "next/link";
 
-import type {
-  QuoteInventoryAvailability,
-  QuoteInventoryAvailabilityItem,
-} from "@/types/sales-wizard";
+import type { QuoteInventoryAvailability } from "@/types/inventory";
 
 interface InventoryAvailabilityCardProps {
-  availability: QuoteInventoryAvailability | null | undefined;
+  availability: QuoteInventoryAvailability | undefined;
+  pending?: boolean;
+  error?: string | null;
 }
 
-const STATUS_LABELS: Record<QuoteInventoryAvailabilityItem["status"], string> = {
-  in_stock: "In stock",
-  shortage: "Short",
-  not_counted: "Not counted",
-  untracked: "Not tracked",
-};
-
-export function InventoryAvailabilityCard({ availability }: InventoryAvailabilityCardProps) {
+export function InventoryAvailabilityCard({
+  availability,
+  pending = false,
+  error = null,
+}: InventoryAvailabilityCardProps) {
+  if (pending) {
+    return (
+      <section className="rounded-xl border border-black/10 bg-white/70 p-4 text-sm text-[#6e675e]">
+        Checking inventory availability…
+      </section>
+    );
+  }
+  if (error) {
+    return (
+      <section className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        {error}
+      </section>
+    );
+  }
   if (!availability) return null;
 
-  const incomplete = availability.not_counted_items + availability.untracked_items > 0;
-  const needsAttention = availability.has_shortages || incomplete || !availability.has_requirements;
-  const summary = availability.has_shortages
-    ? `${availability.shortage_items} required item${availability.shortage_items === 1 ? " is" : "s are"} short.`
-    : incomplete
-      ? "Some required items need an opening count or inventory link."
-      : availability.has_requirements
-        ? "Current stock covers this package."
-        : "This package has no inventory component SKUs configured.";
+  const items = availability.items ?? [];
+  const needsAttention = !availability.is_available;
+  const shortageItems = items.filter((item) => item.shortage_quantity > 0).length;
+  const summary = !availability.connected
+    ? "Some required SKUs are not connected to active inventory."
+    : shortageItems > 0
+      ? `${shortageItems} required item${shortageItems === 1 ? " is" : "s are"} short.`
+      : "Available-to-promise stock covers this package.";
   const SummaryIcon = needsAttention ? AlertTriangle : CheckCircle2;
 
   return (
@@ -62,26 +72,29 @@ export function InventoryAvailabilityCard({ availability }: InventoryAvailabilit
         </Link>
       </div>
 
-      {availability.items?.length ? (
+      {items.length ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left text-xs">
+          <table className="w-full min-w-[760px] text-left text-xs">
             <caption className="sr-only">
-              Required quote materials compared with current inventory
+              Required quote materials compared with available-to-promise inventory
             </caption>
             <thead className="border-b border-black/10 text-[#6e675e]">
               <tr>
                 <th className="py-2 pr-3 font-medium">Item</th>
                 <th className="px-3 py-2 text-right font-medium">Required</th>
-                <th className="px-3 py-2 text-right font-medium">On hand</th>
+                <th className="px-3 py-2 text-right font-medium">Owned</th>
+                <th className="px-3 py-2 text-right font-medium">Reserved</th>
+                <th className="px-3 py-2 text-right font-medium">Deployed</th>
+                <th className="px-3 py-2 text-right font-medium">ATP</th>
                 <th className="py-2 pl-3 text-right font-medium">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/[0.06]">
-              {availability.items.map((item) => (
-                <tr key={item.sku}>
+              {items.map((item) => (
+                <tr key={item.sku + item.inventory_behavior}>
                   <td className="py-2 pr-3">
                     <span className="font-medium text-[#1b1a18]">
-                      {item.inventory_item_name || item.description || item.sku}
+                      {item.item_name || item.description || item.sku}
                     </span>
                     <span className="ml-2 text-[#8a8177]">{item.sku}</span>
                   </td>
@@ -89,13 +102,25 @@ export function InventoryAvailabilityCard({ availability }: InventoryAvailabilit
                     {quantity(item.required_quantity)} {item.unit_of_measure || ""}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {item.quantity_on_hand == null ? "—" : quantity(item.quantity_on_hand)}
+                    {quantity(item.quantity_on_hand)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {quantity(item.quantity_reserved)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {quantity(item.quantity_deployed)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {quantity(item.available_to_promise)}
                   </td>
                   <td className="py-2 pl-3 text-right font-medium">
-                    {STATUS_LABELS[item.status]}
-                    {item.status === "shortage" && item.shortfall != null
-                      ? ` (${quantity(item.shortfall)} short)`
-                      : ""}
+                    {!item.tracked
+                      ? "Not tracked"
+                      : !item.is_counted
+                        ? "Not counted"
+                        : item.is_available
+                          ? "Available"
+                          : `${quantity(item.shortage_quantity)} short`}
                   </td>
                 </tr>
               ))}
@@ -105,12 +130,11 @@ export function InventoryAvailabilityCard({ availability }: InventoryAvailabilit
       ) : (
         <div className="flex items-center gap-2 text-xs text-[#6e675e]">
           <PackageSearch className="size-4" aria-hidden="true" />
-          Add component SKUs to the catalog package before relying on stock availability.
+          Map inventory SKUs in Bistro pricing settings before relying on availability.
         </div>
       )}
       <p className="text-[11px] text-[#8a8177]">
-        Quote creation does not reserve or consume stock. Inventory moves only when materials are
-        issued to accepted work.
+        Quote creation does not move stock. Accepted work reserves it until job completion.
       </p>
     </section>
   );

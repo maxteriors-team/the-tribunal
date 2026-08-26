@@ -297,7 +297,7 @@ class BistroProduct(BaseModel):
 
 
 class BistroInstallationConfig(BaseModel):
-    """Measured light rate plus the billable rate for each marked support pole."""
+    """Measured light and pole rates plus internal stock mappings."""
 
     label: str = Field(max_length=120)
     lights_per_ft: float = Field(default=0, ge=0)
@@ -306,6 +306,16 @@ class BistroInstallationConfig(BaseModel):
         ge=0,
         validation_alias=AliasChoices("poles_each", "poles_per_ft"),
     )
+    lights_inventory_sku: str | None = Field(default=None, min_length=1, max_length=100)
+    poles_inventory_sku: str | None = Field(default=None, min_length=1, max_length=100)
+    stock_feet_per_light_unit: float = Field(default=1, gt=0, le=100_000)
+
+    @field_validator("lights_inventory_sku", "poles_inventory_sku", mode="before")
+    @classmethod
+    def _normalize_inventory_sku(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
 
 
 class BistroConfig(BaseModel):
@@ -314,14 +324,27 @@ class BistroConfig(BaseModel):
     enabled: bool = False
     minimum: float = Field(default=0, ge=0)
     temporary: BistroInstallationConfig = Field(
-        default_factory=lambda: BistroInstallationConfig(label="Temporary Bistro Lighting")
+        default_factory=lambda: BistroInstallationConfig(
+            label="Temporary Bistro Lighting", stock_feet_per_light_unit=200
+        )
     )
     permanent: BistroInstallationConfig = Field(
-        default_factory=lambda: BistroInstallationConfig(label="Permanent Bistro Lighting")
+        default_factory=lambda: BistroInstallationConfig(
+            label="Permanent Bistro Lighting", stock_feet_per_light_unit=1
+        )
     )
     tiers: list[BistroTier] = Field(default_factory=list)
     color: BistroProduct | None = None
     classic: BistroProduct | None = None
+
+    @model_validator(mode="after")
+    def _default_stock_coverage_by_installation(self) -> "BistroConfig":
+        """Keep old pricing blobs safe: temporary units are sets, permanent units are feet."""
+        if "stock_feet_per_light_unit" not in self.temporary.model_fields_set:
+            self.temporary.stock_feet_per_light_unit = 200
+        if "stock_feet_per_light_unit" not in self.permanent.model_fields_set:
+            self.permanent.stock_feet_per_light_unit = 1
+        return self
 
 
 # --------------------------------------------------------------------------- #

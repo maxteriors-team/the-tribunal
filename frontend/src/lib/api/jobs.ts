@@ -6,6 +6,11 @@
  */
 
 import { apiClient, type Schemas } from "@/lib/api/_client";
+import type {
+  CompleteJobInventoryRequest,
+  InventoryJobAllocation,
+  JobInventoryPlan,
+} from "@/types/inventory";
 
 export type Job = Schemas["JobResponse"];
 export type JobList = Schemas["JobListResponse"];
@@ -91,6 +96,34 @@ export const jobsApi = {
     apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/installation-plan", {
       path: { workspace_id: workspaceId, job_id: jobId },
     }),
+
+
+  inventoryPlan: (workspaceId: string, jobId: string): Promise<JobInventoryPlan> =>
+    apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/inventory-plan", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  completeWithInventory: (
+    workspaceId: string,
+    jobId: string,
+    body: CompleteJobInventoryRequest,
+  ): Promise<JobInventoryPlan> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/complete-with-inventory", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+      body,
+    }),
+
+  returnInventoryAllocation: (
+    workspaceId: string,
+    jobId: string,
+    allocationId: string,
+  ): Promise<InventoryJobAllocation> =>
+    apiClient.post(
+      "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/inventory-allocations/{allocation_id}/return",
+      {
+        path: { workspace_id: workspaceId, job_id: jobId, allocation_id: allocationId },
+      },
+    ),
 
   listVisits: (workspaceId: string, jobId: string): Promise<JobVisit[]> =>
     apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits", {

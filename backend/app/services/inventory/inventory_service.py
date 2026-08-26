@@ -30,6 +30,7 @@ from app.models.catalog import CatalogItem
 from app.models.field_service import Crew
 from app.models.inventory import (
     InventoryItem,
+    InventoryJobAllocation,
     InventoryLedgerEntry,
     InventoryLocation,
     InventoryStockLevel,
@@ -67,17 +68,21 @@ def _as_decimal(value: float | int | None) -> Decimal | None:
 class _ItemPosition:
     """Rolled-up on-hand position for one item across every location."""
 
-    __slots__ = ("quantity", "value", "last_movement_at")
+    __slots__ = ("deployed", "last_movement_at", "quantity", "reserved", "value")
 
     def __init__(
         self,
         quantity: Decimal = Decimal(0),
         value: Decimal = Decimal(0),
         last_movement_at: datetime | None = None,
+        reserved: Decimal = Decimal(0),
+        deployed: Decimal = Decimal(0),
     ) -> None:
         self.quantity = quantity
         self.value = value
         self.last_movement_at = last_movement_at
+        self.reserved = reserved
+        self.deployed = deployed
 
 
 class InventoryService:
@@ -111,7 +116,7 @@ class InventoryService:
                 .group_by(InventoryStockLevel.item_id)
             )
         ).all()
-        return {
+        positions = {
             item_id: _ItemPosition(
                 quantity=Decimal(quantity or 0),
                 value=Decimal(value or 0),
@@ -119,6 +124,27 @@ class InventoryService:
             )
             for item_id, quantity, value, last_movement_at in rows
         }
+        allocation_rows = (
+            await self.db.execute(
+                select(
+                    InventoryJobAllocation.item_id,
+                    InventoryJobAllocation.status,
+                    InventoryJobAllocation.planned_quantity,
+                    InventoryJobAllocation.actual_quantity,
+                ).where(
+                    InventoryJobAllocation.workspace_id == workspace_id,
+                    InventoryJobAllocation.item_id.in_(item_ids),
+                    InventoryJobAllocation.status.in_({"reserved", "deployed"}),
+                )
+            )
+        ).all()
+        for item_id, allocation_status, planned, actual in allocation_rows:
+            position = positions.setdefault(item_id, _ItemPosition())
+            if allocation_status == "reserved":
+                position.reserved += Decimal(planned or 0)
+            else:
+                position.deployed += Decimal(actual or 0)
+        return positions
 
     @staticmethod
     def _item_response(
@@ -129,6 +155,9 @@ class InventoryService:
     ) -> InventoryItemResponse:
         """Serialize an item with its rolled-up position, redacting money."""
         quantity = float(position.quantity if position else 0)
+        reserved = float(position.reserved if position else 0)
+        deployed = float(position.deployed if position else 0)
+        available = quantity - reserved - deployed
         value = float(position.value if position else 0)
         reorder_point = float(item.reorder_point) if item.reorder_point is not None else None
         avg_cost = value / quantity if quantity else 0.0
@@ -151,10 +180,13 @@ class InventoryService:
             supplier_sku=item.supplier_sku,
             notes=item.notes,
             quantity_on_hand=round(quantity, 4),
+            quantity_reserved=round(reserved, 4),
+            quantity_deployed=round(deployed, 4),
+            available_to_promise=round(available, 4),
             total_value=round(value, 2) if include_costs else 0.0,
             avg_unit_cost=round(avg_cost, 4) if include_costs else 0.0,
             is_low_stock=(
-                reorder_point is not None and item.is_active and quantity <= reorder_point
+                reorder_point is not None and item.is_active and available <= reorder_point
             ),
             last_movement_at=position.last_movement_at if position else None,
             created_at=item.created_at,
@@ -199,9 +231,27 @@ class InventoryService:
                 )
                 .scalar_subquery()
             )
+            reserved = (
+                select(func.coalesce(func.sum(InventoryJobAllocation.planned_quantity), 0))
+                .where(
+                    InventoryJobAllocation.workspace_id == workspace_id,
+                    InventoryJobAllocation.item_id == InventoryItem.id,
+                    InventoryJobAllocation.status == "reserved",
+                )
+                .scalar_subquery()
+            )
+            deployed = (
+                select(func.coalesce(func.sum(InventoryJobAllocation.actual_quantity), 0))
+                .where(
+                    InventoryJobAllocation.workspace_id == workspace_id,
+                    InventoryJobAllocation.item_id == InventoryItem.id,
+                    InventoryJobAllocation.status == "deployed",
+                )
+                .scalar_subquery()
+            )
             query = query.where(
                 InventoryItem.reorder_point.isnot(None),
-                on_hand <= InventoryItem.reorder_point,
+                on_hand - reserved - deployed <= InventoryItem.reorder_point,
             )
         query = query.order_by(InventoryItem.name.asc())
 
@@ -382,10 +432,10 @@ class InventoryService:
         return self._item_response(item, positions.get(item.id), include_costs=include_costs)
 
     async def delete_item(self, workspace_id: uuid.UUID, item_id: uuid.UUID) -> None:
-        """Delete an item that never moved; archive one that did.
+        """Delete an unused item; archive one with movements or allocations.
 
-        The ledger is an audit trail and the item FK cascades, so hard-deleting
-        a moved item would erase history that a COGS report already counted.
+        Ledger and allocation rows are inventory history, so neither may be
+        removed by deleting the item they describe.
         """
         item = await assert_workspace_owned(
             self.db, InventoryItem, item_id, workspace_id, detail="Inventory item not found"
@@ -400,7 +450,17 @@ class InventoryService:
                 .limit(1)
             )
         ).scalar_one_or_none()
-        if has_history is not None:
+        has_allocation = (
+            await self.db.execute(
+                select(InventoryJobAllocation.id)
+                .where(
+                    InventoryJobAllocation.workspace_id == workspace_id,
+                    InventoryJobAllocation.item_id == item_id,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if has_history is not None or has_allocation is not None:
             item.is_active = False
             await self.db.flush()
             self.log.info("inventory_item_archived", item_id=str(item_id))
@@ -497,18 +557,20 @@ class InventoryService:
 
         rows = (await self.db.execute(query)).all()
 
-        totals: dict[uuid.UUID, Decimal] = {}
-        for level, _item, _location in rows:
-            totals[level.item_id] = totals.get(level.item_id, Decimal(0)) + Decimal(
-                level.quantity_on_hand or 0
-            )
+        positions = await self._positions(
+            workspace_id, list({level.item_id for level, _item, _location in rows})
+        )
 
         result: list[StockLevelRow] = []
         total_value = 0.0
         for level, item, location in rows:
             reorder_point = float(item.reorder_point) if item.reorder_point is not None else None
-            item_total = float(totals.get(item.id, Decimal(0)))
-            is_low = reorder_point is not None and item_total <= reorder_point
+            position = positions.get(item.id, _ItemPosition())
+            item_total = float(position.quantity)
+            reserved = float(position.reserved)
+            deployed = float(position.deployed)
+            available = item_total - reserved - deployed
+            is_low = reorder_point is not None and available <= reorder_point
             if low_stock and not is_low:
                 continue
             value = float(level.total_value or 0)
@@ -522,6 +584,9 @@ class InventoryService:
                     location_id=location.id,
                     location_name=location.name,
                     quantity_on_hand=float(level.quantity_on_hand or 0),
+                    quantity_reserved=round(reserved, 4),
+                    quantity_deployed=round(deployed, 4),
+                    available_to_promise=round(available, 4),
                     total_value=round(value, 2) if include_costs else 0.0,
                     avg_unit_cost=(
                         round(float(level.avg_unit_cost or 0), 4) if include_costs else 0.0

@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, status
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import (
@@ -23,6 +24,7 @@ from app.api.deps import (
 )
 from app.models.bookable_staff import BookableStaff
 from app.models.google_calendar_connection import GoogleCalendarConnection
+from app.models.inventory import InventoryItem
 from app.models.message_template import MessageTemplate
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceIntegration, WorkspaceMembership
@@ -37,6 +39,7 @@ from app.schemas.neighbor_outreach import (
 )
 from app.schemas.opportunity import AutoPipelineSettings
 from app.schemas.pricing import (
+    BistroConfig,
     PricingSettings,
     PricingSettingsUpdate,
 )
@@ -417,6 +420,61 @@ async def update_proposal_template_settings(
     return get_proposal_template(workspace)
 
 
+async def _validate_bistro_inventory_mappings(
+    db: AsyncSession, workspace_id: uuid.UUID, bistro: BistroConfig
+) -> None:
+    permanent_skus = {
+        sku
+        for sku in (
+            bistro.permanent.lights_inventory_sku,
+            bistro.permanent.poles_inventory_sku,
+        )
+        if sku
+    }
+    temporary_skus = {
+        sku
+        for sku in (
+            bistro.temporary.lights_inventory_sku,
+            bistro.temporary.poles_inventory_sku,
+        )
+        if sku
+    }
+    conflicting = sorted(permanent_skus & temporary_skus)
+    if conflicting:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "message": "A Bistro SKU cannot be both consumable and reusable",
+                "conflicting_skus": conflicting,
+            },
+        )
+    requested = permanent_skus | temporary_skus
+    if not requested:
+        return
+    active_skus = set(
+        (
+            await db.execute(
+                select(InventoryItem.sku).where(
+                    InventoryItem.workspace_id == workspace_id,
+                    InventoryItem.is_active.is_(True),
+                    InventoryItem.sku.in_(requested),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    missing = sorted(requested - active_skus)
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "message": "Every Bistro inventory SKU must be an active workspace item",
+                "missing_skus": missing,
+            },
+        )
+
+
 @router.get(
     "/workspaces/{workspace_id}/pricing",
     response_model=PricingSettings,
@@ -446,6 +504,8 @@ async def update_pricing_settings(
     This is the "fork the data" boundary: a second lighting business clones this
     config and tweaks a few blocks with no code change.
     """
+    if update.bistro is not None:
+        await _validate_bistro_inventory_mappings(db, workspace.id, update.bistro)
     current_settings = dict(workspace.settings)
     config = dict(current_settings.get(PRICING_KEY, {}))
     config.update(update.model_dump(exclude_unset=True))

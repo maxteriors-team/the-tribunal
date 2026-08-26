@@ -60,8 +60,16 @@ def _document() -> dict[str, Any]:
         "selected_financed_total": 5200.0,
         "notes": "Install week of the 14th.",
         "fulfillment": [
+            {
+                "sku": "BISTRO-TEMP-200FT",
+                "description": "Temporary Bistro light set",
+                "qty": 2,
+                "inventory_behavior": "reusable",
+                "unit_cost": 725,
+                "reserved_quantity": 2,
+                "cogs": 0,
+            },
             {"sku": "59409312", "description": "Luxor 300W Transformer", "qty": 1},
-            {"sku": "59409010", "description": "Luxor WiFi Module", "qty": 1},
             {"sku": "BM-050-C-AB", "description": "Mounting Bracket", "qty": 4},
         ],
         "inventory_availability": {
@@ -109,6 +117,15 @@ def test_sanitizer_drops_fulfillment_and_keeps_presentation() -> None:
     assert safe is not None
     assert "fulfillment" not in safe
     assert "inventory_availability" not in safe
+    encoded = json.dumps(safe)
+    for private_value in (
+        "BISTRO-TEMP-200FT",
+        "reusable",
+        "unit_cost",
+        "reserved_quantity",
+        "cogs",
+    ):
+        assert private_value not in encoded
     # Client-facing copy survives untouched.
     assert safe["selected_tier"] == "best"
     assert safe["selected_financed_total"] == 5200.0

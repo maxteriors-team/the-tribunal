@@ -24,11 +24,16 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.scope import assert_workspace_owned
-from app.models.inventory import InventoryItem, InventoryLedgerEntry, InventoryStockLevel
+from app.models.inventory import (
+    InventoryItem,
+    InventoryJobAllocation,
+    InventoryLedgerEntry,
+    InventoryStockLevel,
+)
 from app.schemas.inventory import ReorderReport, ReorderRow, ReorderSuggestion
 
 # Trailing window for the usage average. Long enough to survive a quiet week,
@@ -109,16 +114,61 @@ class ReorderService:
             .group_by(InventoryStockLevel.item_id)
             .subquery()
         )
+        allocations = (
+            select(
+                InventoryJobAllocation.item_id.label("item_id"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                InventoryJobAllocation.status == "reserved",
+                                InventoryJobAllocation.planned_quantity,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("reserved"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                InventoryJobAllocation.status == "deployed",
+                                InventoryJobAllocation.actual_quantity,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("deployed"),
+            )
+            .where(
+                InventoryJobAllocation.workspace_id == workspace_id,
+                InventoryJobAllocation.status.in_({"reserved", "deployed"}),
+            )
+            .group_by(InventoryJobAllocation.item_id)
+            .subquery()
+        )
+        quantity_on_hand_sql = func.coalesce(on_hand.c.quantity, 0)
+        quantity_reserved_sql = func.coalesce(allocations.c.reserved, 0)
+        quantity_deployed_sql = func.coalesce(allocations.c.deployed, 0)
+        available_sql = quantity_on_hand_sql - quantity_reserved_sql - quantity_deployed_sql
 
         rows = (
             await self.db.execute(
-                select(InventoryItem, func.coalesce(on_hand.c.quantity, 0))
+                select(
+                    InventoryItem,
+                    quantity_on_hand_sql,
+                    quantity_reserved_sql,
+                    quantity_deployed_sql,
+                )
                 .outerjoin(on_hand, on_hand.c.item_id == InventoryItem.id)
+                .outerjoin(allocations, allocations.c.item_id == InventoryItem.id)
                 .where(
                     InventoryItem.workspace_id == workspace_id,
                     InventoryItem.is_active.is_(True),
                     InventoryItem.reorder_point.isnot(None),
-                    func.coalesce(on_hand.c.quantity, 0) <= InventoryItem.reorder_point,
+                    available_sql <= InventoryItem.reorder_point,
                 )
             )
         ).all()
@@ -126,17 +176,20 @@ class ReorderService:
         usage = await self._usage_by_item(
             workspace_id,
             lookback_days=lookback_days,
-            item_ids=[item.id for item, _ in rows],
+            item_ids=[item.id for item, *_quantities in rows],
         )
 
         report_rows: list[ReorderRow] = []
-        for item, quantity in rows:
-            quantity_on_hand = float(quantity or 0)
+        for item, on_hand_quantity, reserved_quantity, deployed_quantity in rows:
+            quantity_on_hand = float(on_hand_quantity or 0)
+            quantity_reserved = float(reserved_quantity or 0)
+            quantity_deployed = float(deployed_quantity or 0)
+            available_to_promise = quantity_on_hand - quantity_reserved - quantity_deployed
             reorder_point = float(item.reorder_point or 0)
             avg_daily = self._avg_daily_usage(usage.get(item.id, Decimal(0)), lookback_days)
             days_of_cover = (
-                round(quantity_on_hand / avg_daily, 1)
-                if avg_daily and quantity_on_hand > 0
+                round(available_to_promise / avg_daily, 1)
+                if avg_daily and available_to_promise > 0
                 else (0.0 if avg_daily else None)
             )
             report_rows.append(
@@ -146,6 +199,9 @@ class ReorderService:
                     sku=item.sku,
                     unit_of_measure=item.unit_of_measure,
                     quantity_on_hand=round(quantity_on_hand, 4),
+                    quantity_reserved=round(quantity_reserved, 4),
+                    quantity_deployed=round(quantity_deployed, 4),
+                    available_to_promise=round(available_to_promise, 4),
                     reorder_point=reorder_point,
                     reorder_quantity=(
                         float(item.reorder_quantity) if item.reorder_quantity is not None else None
@@ -154,7 +210,7 @@ class ReorderService:
                     lead_time_days=item.lead_time_days,
                     supplier_name=item.supplier_name,
                     supplier_sku=item.supplier_sku,
-                    shortfall=round(max(reorder_point - quantity_on_hand, 0.0), 4),
+                    shortfall=round(max(reorder_point - available_to_promise, 0.0), 4),
                     days_of_cover=days_of_cover,
                     avg_daily_usage=round(avg_daily, 4) if avg_daily else None,
                     suggested_reorder_point=self._suggested_point(

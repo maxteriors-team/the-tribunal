@@ -6,12 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BistroPricingSettingsCard } from "@/components/settings/bistro-pricing-settings-card";
 import type { PricingSettings } from "@/types/sales-wizard";
 
-const { getPricingMock, updatePricingMock, useWorkspaceIdMock, toastError } = vi.hoisted(() => ({
-  getPricingMock: vi.fn(),
-  updatePricingMock: vi.fn(),
-  useWorkspaceIdMock: vi.fn(),
-  toastError: vi.fn(),
-}));
+const { getPricingMock, updatePricingMock, listItemsMock, useWorkspaceIdMock, toastError } =
+  vi.hoisted(() => ({
+    getPricingMock: vi.fn(),
+    updatePricingMock: vi.fn(),
+    listItemsMock: vi.fn(),
+    useWorkspaceIdMock: vi.fn(),
+    toastError: vi.fn(),
+  }));
 
 vi.mock("@/lib/api/sales-wizard", () => ({
   salesWizardApi: {
@@ -20,6 +22,9 @@ vi.mock("@/lib/api/sales-wizard", () => ({
   },
 }));
 
+vi.mock("@/lib/api/inventory", () => ({
+  inventoryApi: { listItems: listItemsMock },
+}));
 vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => useWorkspaceIdMock(),
 }));
@@ -40,11 +45,17 @@ function pricing(overrides: Record<string, unknown> = {}): PricingSettings {
         label: "Temporary Bistro Lighting",
         lights_per_ft: 10,
         poles_each: 4,
+        lights_inventory_sku: "BISTRO-TEMP-200FT",
+        poles_inventory_sku: "BISTRO-TEMP-POLE",
+        stock_feet_per_light_unit: 200,
       },
       permanent: {
         label: "Permanent Bistro Lighting",
         lights_per_ft: 20,
         poles_each: 6,
+        lights_inventory_sku: "BISTRO-PERM-FT",
+        poles_inventory_sku: "BISTRO-PERM-POLE",
+        stock_feet_per_light_unit: 1,
       },
       tiers: [{ key: "easy", name: "Easy", per_ft: 18, classic_per_ft: 15 }],
       color: { name: "Color Bistro", hardware: 577, strand_lengths: [50] },
@@ -74,6 +85,41 @@ async function replace(label: string, value: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   useWorkspaceIdMock.mockReturnValue("ws-1");
+  listItemsMock.mockResolvedValue({
+    items: [
+      {
+        id: "temp-set",
+        name: "Temporary Bistro set",
+        sku: "BISTRO-TEMP-200FT",
+        unit_of_measure: "set",
+        is_active: true,
+      },
+      {
+        id: "temp-pole",
+        name: "Temporary Bistro pole",
+        sku: "BISTRO-TEMP-POLE",
+        unit_of_measure: "each",
+        is_active: true,
+      },
+      {
+        id: "perm-ft",
+        name: "Permanent Bistro footage",
+        sku: "BISTRO-PERM-FT",
+        unit_of_measure: "ft",
+        is_active: true,
+      },
+      {
+        id: "perm-pole",
+        name: "Permanent Bistro pole",
+        sku: "BISTRO-PERM-POLE",
+        unit_of_measure: "each",
+        is_active: true,
+      },
+    ],
+    total: 4,
+    page: 1,
+    page_size: 100,
+  });
 });
 
 describe("BistroPricingSettingsCard", () => {
@@ -86,6 +132,10 @@ describe("BistroPricingSettingsCard", () => {
     expect(screen.getByLabelText("Temporary poles/supports each ($)")).toHaveValue(4);
     expect(screen.getByLabelText("Permanent Bistro lights per foot ($)")).toHaveValue(20);
     expect(screen.getByLabelText("Permanent Bistro poles/supports each ($)")).toHaveValue(6);
+    expect(screen.getByLabelText("Feet covered by one temporary set")).toHaveValue(200);
+    expect(screen.getByLabelText("Temporary light-set inventory item")).toHaveTextContent(
+      "Temporary Bistro set",
+    );
     expect(
       screen.getByText(/permanent holiday lighting uses its separate kit-and-COGS/i),
     ).toBeVisible();
@@ -115,11 +165,17 @@ describe("BistroPricingSettingsCard", () => {
             label: "Temporary Bistro Lighting",
             lights_per_ft: 11.5,
             poles_each: 4.5,
+            lights_inventory_sku: "BISTRO-TEMP-200FT",
+            poles_inventory_sku: "BISTRO-TEMP-POLE",
+            stock_feet_per_light_unit: 200,
           },
           permanent: {
             label: "Permanent Bistro Lighting",
             lights_per_ft: 22,
             poles_each: 7,
+            lights_inventory_sku: "BISTRO-PERM-FT",
+            poles_inventory_sku: "BISTRO-PERM-POLE",
+            stock_feet_per_light_unit: 1,
           },
           tiers: [{ key: "easy", name: "Easy", per_ft: 18, classic_per_ft: 15 }],
           color: { name: "Color Bistro", hardware: 577, strand_lengths: [50] },

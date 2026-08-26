@@ -18,9 +18,10 @@ import type { Job } from "@/lib/api/jobs";
  * no way to find the job. It renders for both roles, and never shows money.
  */
 
-const { mutation, installationPlanQuery, canvasContext } = vi.hoisted(() => ({
+const { mutation, installationPlanQuery, inventoryPlanMock, canvasContext } = vi.hoisted(() => ({
   mutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   installationPlanQuery: vi.fn(),
+  inventoryPlanMock: vi.fn(),
   canvasContext: {
     clearRect: vi.fn(),
     drawImage: vi.fn(),
@@ -43,6 +44,15 @@ const { mutation, installationPlanQuery, canvasContext } = vi.hoisted(() => ({
     measureText: vi.fn(() => ({ width: 10 })),
     createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
   },
+}));
+
+vi.mock("@/lib/api/jobs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/jobs")>();
+  return { ...actual, jobsApi: { ...actual.jobsApi, inventoryPlan: inventoryPlanMock } };
+});
+
+vi.mock("@/components/jobs/job-inventory-completion-dialog", () => ({
+  JobInventoryCompletionDialog: () => <div>Confirm Bistro inventory</div>,
 }));
 
 vi.mock("@/hooks/useJobs", () => ({
@@ -141,6 +151,12 @@ describe("JobDetailDialog", () => {
       data: undefined,
       refetch: vi.fn(),
     });
+    inventoryPlanMock.mockResolvedValue({
+      job_id: "job-1",
+      job_status: "scheduled",
+      completion_confirmation_required: true,
+      allocations: [{ id: "allocation-1" }],
+    });
   });
   it("renders no dispatch write controls when read-only", () => {
     renderDialog(true);
@@ -165,6 +181,17 @@ describe("JobDetailDialog", () => {
     expect(screen.getByRole("button", { name: /Delete job/i })).toBeInTheDocument();
     expect(screen.getByLabelText("Status")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Dispatch" })).toBeInTheDocument();
+  });
+
+  it("opens inventory confirmation instead of patching completed directly", async () => {
+    const user = userEvent.setup();
+    renderDialog(false);
+
+    await user.click(screen.getByLabelText("Status"));
+    await user.click(screen.getByRole("option", { name: "Completed" }));
+
+    expect(inventoryPlanMock).toHaveBeenCalledWith("ws-1", "job-1");
+    expect(await screen.findByText("Confirm Bistro inventory")).toBeInTheDocument();
   });
 
   it("loads only the selected read-only installation plan and exposes print/download", async () => {

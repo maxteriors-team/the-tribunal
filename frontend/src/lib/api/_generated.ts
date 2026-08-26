@@ -5818,6 +5818,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/complete-with-inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Job With Inventory
+         * @description Post actual Bistro inventory and complete the job in one transaction.
+         */
+        post: operations["complete_job_with_inventory_api_v1_workspaces__workspace_id__jobs__job_id__complete_with_inventory_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/expenses": {
         parameters: {
             query?: never;
@@ -5883,6 +5903,46 @@ export interface paths {
          * @description Private selected sheet for authorized office staff or assigned installers.
          */
         get: operations["get_job_installation_plan_api_v1_workspaces__workspace_id__jobs__job_id__installation_plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/inventory-allocations/{allocation_id}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Return Job Inventory Allocation
+         * @description Return one deployed reusable allocation without changing owned stock.
+         */
+        post: operations["return_job_inventory_allocation_api_v1_workspaces__workspace_id__jobs__job_id__inventory_allocations__allocation_id__return_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/inventory-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job Inventory Plan
+         * @description Return inventory allocations after applying normal job visibility rules.
+         */
+        get: operations["get_job_inventory_plan_api_v1_workspaces__workspace_id__jobs__job_id__inventory_plan_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8406,6 +8466,26 @@ export interface paths {
          * @description Save a wizard proposal as a draft quote + its multi-tier snapshot.
          */
         post: operations["save_wizard_proposal_api_v1_workspaces__workspace_id__quotes_wizard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/wizard/inventory-availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Wizard Inventory Availability
+         * @description Check private fulfillment requirements against available-to-promise stock.
+         */
+        post: operations["preview_wizard_inventory_availability_api_v1_workspaces__workspace_id__quotes_wizard_inventory_availability_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -13059,11 +13139,13 @@ export interface components {
         };
         /**
          * BistroInstallationConfig
-         * @description Measured light rate plus the billable rate for each marked support pole.
+         * @description Measured light and pole rates plus internal stock mappings.
          */
         BistroInstallationConfig: {
             /** Label */
             label: string;
+            /** Lights Inventory Sku */
+            lights_inventory_sku?: string | null;
             /**
              * Lights Per Ft
              * @default 0
@@ -13074,6 +13156,13 @@ export interface components {
              * @default 0
              */
             poles_each: number;
+            /** Poles Inventory Sku */
+            poles_inventory_sku?: string | null;
+            /**
+             * Stock Feet Per Light Unit
+             * @default 1
+             */
+            stock_feet_per_light_unit: number;
         };
         /**
          * BistroInstallationPricing
@@ -15692,6 +15781,14 @@ export interface components {
             url: string;
         };
         /**
+         * CompleteJobInventoryRequest
+         * @description Actual usage for every active allocation on a job.
+         */
+        CompleteJobInventoryRequest: {
+            /** Allocations */
+            allocations: components["schemas"]["InventoryAllocationActual"][];
+        };
+        /**
          * ContactAIKnowledgeConflict
          * @description A generated fact that disagrees with a current authoritative CRM value.
          */
@@ -17989,6 +18086,12 @@ export interface components {
         FulfillmentPart: {
             /** Description */
             description?: string | null;
+            /**
+             * Inventory Behavior
+             * @default consumable
+             * @enum {string}
+             */
+            inventory_behavior: "consumable" | "reusable";
             /** Qty */
             qty: number;
             /** Sku */
@@ -18769,6 +18872,85 @@ export interface components {
             integrations: components["schemas"]["IntegrationStatus"][];
         };
         /**
+         * InventoryAllocationActual
+         * @description Actual quantity and stock source confirmed when a job is completed.
+         */
+        InventoryAllocationActual: {
+            /** Actual Quantity */
+            actual_quantity: number;
+            /**
+             * Allocation Id
+             * Format: uuid
+             */
+            allocation_id: string;
+            /** Source Location Id */
+            source_location_id?: string | null;
+        };
+        /**
+         * InventoryAvailabilityLine
+         * @description Sellable stock position for one internal quote requirement.
+         */
+        InventoryAvailabilityLine: {
+            /**
+             * Available To Promise
+             * @default 0
+             */
+            available_to_promise: number;
+            /** Description */
+            description?: string | null;
+            /**
+             * Inventory Behavior
+             * @default consumable
+             * @enum {string}
+             */
+            inventory_behavior: "consumable" | "reusable";
+            /**
+             * Is Available
+             * @default false
+             */
+            is_available: boolean;
+            /**
+             * Is Counted
+             * @default false
+             */
+            is_counted: boolean;
+            /** Item Id */
+            item_id?: string | null;
+            /** Item Name */
+            item_name?: string | null;
+            /**
+             * Quantity Deployed
+             * @default 0
+             */
+            quantity_deployed: number;
+            /**
+             * Quantity On Hand
+             * @default 0
+             */
+            quantity_on_hand: number;
+            /**
+             * Quantity Reserved
+             * @default 0
+             */
+            quantity_reserved: number;
+            /** Required Quantity */
+            required_quantity: number;
+            /**
+             * Shortage Quantity
+             * @default 0
+             */
+            shortage_quantity: number;
+            /** Sku */
+            sku: string;
+            /**
+             * Tracked
+             * @default false
+             */
+            tracked: boolean;
+            /** Unit Of Measure */
+            unit_of_measure?: string | null;
+        };
+        /**
          * InventoryItemCreate
          * @description Create a tracked item.
          */
@@ -18825,6 +19007,11 @@ export interface components {
          */
         InventoryItemResponse: {
             /**
+             * Available To Promise
+             * @default 0
+             */
+            available_to_promise: number;
+            /**
              * Avg Unit Cost
              * @default 0
              */
@@ -18863,10 +19050,20 @@ export interface components {
             /** Notes */
             notes?: string | null;
             /**
+             * Quantity Deployed
+             * @default 0
+             */
+            quantity_deployed: number;
+            /**
              * Quantity On Hand
              * @default 0
              */
             quantity_on_hand: number;
+            /**
+             * Quantity Reserved
+             * @default 0
+             */
+            quantity_reserved: number;
             /** Reorder Point */
             reorder_point?: number | null;
             /** Reorder Quantity */
@@ -18944,6 +19141,87 @@ export interface components {
             unit_of_measure?: string | null;
             /** Valuation Method */
             valuation_method?: "weighted_average" | null;
+        };
+        /**
+         * InventoryJobAllocationResponse
+         * @description One planned or fulfilled job allocation and its current stock position.
+         */
+        InventoryJobAllocationResponse: {
+            /** Actual Quantity */
+            actual_quantity?: number | null;
+            /**
+             * Available To Promise
+             * @default 0
+             */
+            available_to_promise: number;
+            /**
+             * Behavior
+             * @enum {string}
+             */
+            behavior: "consumable" | "reusable";
+            /** Consumption Ledger Entry Id */
+            consumption_ledger_entry_id?: string | null;
+            /** Fulfilled At */
+            fulfilled_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Item Name */
+            item_name: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Planned Quantity */
+            planned_quantity: number;
+            /**
+             * Quantity Deployed
+             * @default 0
+             */
+            quantity_deployed: number;
+            /**
+             * Quantity On Hand
+             * @default 0
+             */
+            quantity_on_hand: number;
+            /**
+             * Quantity Reserved
+             * @default 0
+             */
+            quantity_reserved: number;
+            /**
+             * Reserved At
+             * Format: date-time
+             */
+            reserved_at: string;
+            /** Returned At */
+            returned_at?: string | null;
+            /**
+             * Shortage Quantity
+             * @default 0
+             */
+            shortage_quantity: number;
+            /** Sku */
+            sku: string;
+            /** Source Location Id */
+            source_location_id?: string | null;
+            /** Source Location Name */
+            source_location_name?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "reserved" | "consumed" | "deployed" | "released" | "returned";
+            /** Unit Of Measure */
+            unit_of_measure: string;
         };
         /**
          * InventoryLedgerEntryResponse
@@ -19804,6 +20082,23 @@ export interface components {
             sheet_label?: string | null;
         };
         /**
+         * JobInventoryPlanResponse
+         * @description Inventory confirmation state for one workspace-scoped job.
+         */
+        JobInventoryPlanResponse: {
+            /** Allocations */
+            allocations?: components["schemas"]["InventoryJobAllocationResponse"][];
+            /** Completion Confirmation Required */
+            completion_confirmation_required: boolean;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Job Status */
+            job_status: string;
+        };
+        /**
          * JobLineItemSummary
          * @description One unit of scope of work — deliberately price-free.
          *
@@ -19858,9 +20153,11 @@ export interface components {
         };
         /**
          * JobMaterialsResponse
-         * @description Materials consumed on one job, with the total cost they contributed.
+         * @description Consumed COGS plus reusable equipment currently deployed on one job.
          */
         JobMaterialsResponse: {
+            /** Deployed Equipment */
+            deployed_equipment?: components["schemas"]["InventoryJobAllocationResponse"][];
             /** Items */
             items: components["schemas"]["InventoryLedgerEntryResponse"][];
             /**
@@ -27492,6 +27789,18 @@ export interface components {
             unit_of_measure?: string | null;
         };
         /**
+         * QuoteInventoryAvailabilityResponse
+         * @description Private inventory readiness for a quote or proposal preview.
+         */
+        QuoteInventoryAvailabilityResponse: {
+            /** Connected */
+            connected: boolean;
+            /** Is Available */
+            is_available: boolean;
+            /** Items */
+            items?: components["schemas"]["InventoryAvailabilityLine"][];
+        };
+        /**
          * QuoteLineItemCreate
          * @description Create a line item, optionally sourced from the price book.
          *
@@ -28625,6 +28934,11 @@ export interface components {
          * @description One item at or below its reorder point, aggregated across locations.
          */
         ReorderRow: {
+            /**
+             * Available To Promise
+             * @default 0
+             */
+            available_to_promise: number;
             /** Avg Daily Usage */
             avg_daily_usage?: number | null;
             /** Days Of Cover */
@@ -28638,8 +28952,18 @@ export interface components {
             item_name: string;
             /** Lead Time Days */
             lead_time_days?: number | null;
+            /**
+             * Quantity Deployed
+             * @default 0
+             */
+            quantity_deployed: number;
             /** Quantity On Hand */
             quantity_on_hand: number;
+            /**
+             * Quantity Reserved
+             * @default 0
+             */
+            quantity_reserved: number;
             /** Reorder Point */
             reorder_point: number;
             /** Reorder Quantity */
@@ -30296,6 +30620,11 @@ export interface components {
          * @description On-hand position for one item at one location.
          */
         StockLevelRow: {
+            /**
+             * Available To Promise
+             * @default 0
+             */
+            available_to_promise: number;
             /** Avg Unit Cost */
             avg_unit_cost: number;
             /**
@@ -30319,8 +30648,18 @@ export interface components {
             location_id: string;
             /** Location Name */
             location_name: string;
+            /**
+             * Quantity Deployed
+             * @default 0
+             */
+            quantity_deployed: number;
             /** Quantity On Hand */
             quantity_on_hand: number;
+            /**
+             * Quantity Reserved
+             * @default 0
+             */
+            quantity_reserved: number;
             /** Reorder Point */
             reorder_point?: number | null;
             /** Sku */
@@ -44216,6 +44555,42 @@ export interface operations {
             };
         };
     };
+    complete_job_with_inventory_api_v1_workspaces__workspace_id__jobs__job_id__complete_with_inventory_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteJobInventoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobInventoryPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_expenses_api_v1_workspaces__workspace_id__jobs__job_id__expenses_get: {
         parameters: {
             query?: never;
@@ -44334,6 +44709,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobInstallationPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    return_job_inventory_allocation_api_v1_workspaces__workspace_id__jobs__job_id__inventory_allocations__allocation_id__return_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                allocation_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryJobAllocationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_inventory_plan_api_v1_workspaces__workspace_id__jobs__job_id__inventory_plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobInventoryPlanResponse"];
                 };
             };
             /** @description Validation Error */
@@ -49796,6 +50236,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_wizard_inventory_availability_api_v1_workspaces__workspace_id__quotes_wizard_inventory_availability_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalWizardPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteInventoryAvailabilityResponse"];
                 };
             };
             /** @description Validation Error */

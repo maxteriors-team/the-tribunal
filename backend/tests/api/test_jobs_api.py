@@ -26,9 +26,12 @@ from app.api.deps import (
 )
 from app.api.v1 import jobs as jobs_module
 from app.models.field_service import JobStatus
+from app.services.exceptions import ConflictError
 
 WS_ID = uuid.uuid4()
 JOB_ID = uuid.uuid4()
+ALLOCATION_ID = uuid.uuid4()
+ITEM_ID = uuid.uuid4()
 TECH_ID = uuid.uuid4()
 CONTACT_ID = 42
 
@@ -123,6 +126,44 @@ def _installation_plan_response() -> dict[str, object]:
     }
 
 
+def _allocation_response(**overrides: object) -> dict[str, object]:
+    now = datetime.now(UTC)
+    base: dict[str, object] = {
+        "id": str(ALLOCATION_ID),
+        "job_id": str(JOB_ID),
+        "item_id": str(ITEM_ID),
+        "item_name": "Temporary Bistro set",
+        "sku": "BISTRO-TEMP-200FT",
+        "unit_of_measure": "set",
+        "behavior": "reusable",
+        "status": "reserved",
+        "planned_quantity": 2,
+        "actual_quantity": None,
+        "source_location_id": None,
+        "source_location_name": None,
+        "consumption_ledger_entry_id": None,
+        "quantity_on_hand": 3,
+        "quantity_reserved": 2,
+        "quantity_deployed": 0,
+        "available_to_promise": 1,
+        "shortage_quantity": 0,
+        "reserved_at": now.isoformat(),
+        "fulfilled_at": None,
+        "returned_at": None,
+    }
+    base.update(overrides)
+    return base
+
+
+def _inventory_plan_response() -> dict[str, object]:
+    return {
+        "job_id": str(JOB_ID),
+        "job_status": "in_progress",
+        "completion_confirmation_required": True,
+        "allocations": [_allocation_response()],
+    }
+
+
 @pytest.fixture
 def mock_service() -> AsyncMock:
     """A JobService stand-in returning canned responses for every method."""
@@ -141,8 +182,19 @@ def mock_service() -> AsyncMock:
 
 
 @pytest.fixture
-async def client(mock_service: AsyncMock) -> AsyncIterator[AsyncClient]:
-    """Authenticated dispatcher client with the service patched out."""
+def mock_allocation_service() -> AsyncMock:
+    service = AsyncMock()
+    service.get_plan.return_value = _inventory_plan_response()
+    service.complete.return_value = _inventory_plan_response()
+    service.return_reusable.return_value = _allocation_response(status="returned")
+    return service
+
+
+@pytest.fixture
+async def client(
+    mock_service: AsyncMock, mock_allocation_service: AsyncMock
+) -> AsyncIterator[AsyncClient]:
+    """Authenticated dispatcher client with job and allocation services patched out."""
     app = FastAPI(lifespan=_test_lifespan)
 
     async def override_get_db() -> AsyncIterator[AsyncMock]:
@@ -155,7 +207,10 @@ async def client(mock_service: AsyncMock) -> AsyncIterator[AsyncClient]:
     app.dependency_overrides[get_membership] = lambda: _make_membership()
     _mount(app)
 
-    with patch.object(jobs_module, "JobService", return_value=mock_service):
+    with (
+        patch.object(jobs_module, "JobService", return_value=mock_service),
+        patch.object(jobs_module, "JobAllocationService", return_value=mock_allocation_service),
+    ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://testserver"
         ) as ac:
@@ -187,6 +242,18 @@ class TestAuth:
 
     async def test_calendar_mine_requires_auth(self, noauth_client: AsyncClient) -> None:
         assert (await noauth_client.get(_base("/calendar/mine"))).status_code == 401
+
+    async def test_inventory_routes_require_auth(self, noauth_client: AsyncClient) -> None:
+        assert (await noauth_client.get(_base(f"/{JOB_ID}/inventory-plan"))).status_code == 401
+        complete = await noauth_client.post(
+            _base(f"/{JOB_ID}/complete-with-inventory"),
+            json={"allocations": [{"allocation_id": str(ALLOCATION_ID), "actual_quantity": 2}]},
+        )
+        assert complete.status_code == 401
+        returned = await noauth_client.post(
+            _base(f"/{JOB_ID}/inventory-allocations/{ALLOCATION_ID}/return")
+        )
+        assert returned.status_code == 401
 
 
 class TestListAndGet:
@@ -396,3 +463,77 @@ class TestJobCostingAccess:
             response = await ac.get(_base(f"/{JOB_ID}/profitability"))
         assert response.status_code == 200
         assert response.json()["revenue"] == 1000.0
+
+
+class TestInventoryLifecycleRoutes:
+    async def test_plan_applies_job_visibility_and_returns_stock(
+        self,
+        client: AsyncClient,
+        mock_service: AsyncMock,
+        mock_allocation_service: AsyncMock,
+    ) -> None:
+        response = await client.get(_base(f"/{JOB_ID}/inventory-plan"))
+
+        assert response.status_code == 200
+        assert response.json()["allocations"][0]["sku"] == "BISTRO-TEMP-200FT"
+        mock_service.get.assert_awaited_once_with(JOB_ID, WS_ID, visible_to_user_id=None)
+        mock_allocation_service.get_plan.assert_awaited_once_with(WS_ID, JOB_ID)
+
+    async def test_complete_forwards_validated_actuals_and_user(
+        self, client: AsyncClient, mock_allocation_service: AsyncMock
+    ) -> None:
+        response = await client.post(
+            _base(f"/{JOB_ID}/complete-with-inventory"),
+            json={"allocations": [{"allocation_id": str(ALLOCATION_ID), "actual_quantity": 2}]},
+        )
+
+        assert response.status_code == 200
+        args = mock_allocation_service.complete.await_args.args
+        assert args[:2] == (WS_ID, JOB_ID)
+        assert args[2].allocations[0].allocation_id == ALLOCATION_ID
+        assert mock_allocation_service.complete.await_args.kwargs == {"created_by_id": 7}
+
+    async def test_complete_rejects_duplicate_or_negative_actuals(
+        self, client: AsyncClient, mock_allocation_service: AsyncMock
+    ) -> None:
+        duplicate = {
+            "allocations": [
+                {"allocation_id": str(ALLOCATION_ID), "actual_quantity": 2},
+                {"allocation_id": str(ALLOCATION_ID), "actual_quantity": 1},
+            ]
+        }
+        assert (
+            await client.post(_base(f"/{JOB_ID}/complete-with-inventory"), json=duplicate)
+        ).status_code == 422
+        negative = {"allocations": [{"allocation_id": str(ALLOCATION_ID), "actual_quantity": -1}]}
+        assert (
+            await client.post(_base(f"/{JOB_ID}/complete-with-inventory"), json=negative)
+        ).status_code == 422
+        mock_allocation_service.complete.assert_not_awaited()
+
+    async def test_shortage_is_a_conflict(
+        self, client: AsyncClient, mock_allocation_service: AsyncMock
+    ) -> None:
+        mock_allocation_service.complete.side_effect = ConflictError(
+            "Insufficient inventory",
+            code="insufficient_inventory",
+            details={"shortages": [{"sku": "BISTRO-TEMP-200FT"}]},
+        )
+        response = await client.post(
+            _base(f"/{JOB_ID}/complete-with-inventory"),
+            json={"allocations": [{"allocation_id": str(ALLOCATION_ID), "actual_quantity": 3}]},
+        )
+        assert response.status_code == 409
+
+    async def test_return_is_idempotent_service_action(
+        self, client: AsyncClient, mock_allocation_service: AsyncMock
+    ) -> None:
+        response = await client.post(
+            _base(f"/{JOB_ID}/inventory-allocations/{ALLOCATION_ID}/return")
+        )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "returned"
+        mock_allocation_service.return_reusable.assert_awaited_once_with(
+            WS_ID, JOB_ID, ALLOCATION_ID
+        )
