@@ -3,7 +3,13 @@ import React from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { loadImage } from "@/lib/estimator/photo";
-import { beamAngleAt, beamHandlePos, resizeHandlePos } from "@/lib/estimator/render";
+import {
+  beamAngleAt,
+  beamHandlePos,
+  beamRotationAt,
+  resizeHandlePos,
+  rotateHandlePos,
+} from "@/lib/estimator/render";
 import type { PhotoInfo, Product } from "@/lib/estimator/types";
 
 import {
@@ -23,6 +29,8 @@ vi.mock("@/lib/estimator/render", () => ({
   resizeHandlePos: vi.fn(() => ({ x: 0, y: 0 })),
   beamHandlePos: vi.fn(() => null),
   beamAngleAt: vi.fn(() => 30),
+  rotateHandlePos: vi.fn(() => null),
+  beamRotationAt: vi.fn(() => 0),
   DEFAULT_DUSK: 0.52,
   MAX_DUSK: 0.92,
 }));
@@ -787,6 +795,41 @@ describe("LightCanvas — beam spread grip", () => {
     });
 
     const patch = seen.find((a) => a.type === "UPDATE_ITEM");
+    expect(patch && "patch" in patch ? patch.patch : {}).toHaveProperty("sizePx");
+  });
+});
+
+describe("LightCanvas — beam direction grip", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("changes direction without moving or resizing the fixture", () => {
+    vi.mocked(rotateHandlePos).mockReturnValue({ x: 400, y: 280 });
+    vi.mocked(beamRotationAt).mockReturnValue(-35);
+    const { canvas, seen, item } = setupSelectedFixture();
+
+    fireEvent.pointerDown(canvas, { clientX: 400, clientY: 280, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 300, clientY: 320, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 300, clientY: 320, button: 0, pointerId: 1 });
+
+    const edits = seen.filter((action) => action.type === "UPDATE_ITEM");
+    expect(edits).toHaveLength(1);
+    expect(edits[0]).toMatchObject({ id: item.id, patch: { beamRotationDeg: -35 } });
+    const patch = "patch" in edits[0] ? edits[0].patch : {};
+    expect(patch).not.toHaveProperty("sizePx");
+    expect(patch).not.toHaveProperty("beamAngleDeg");
+    expect(patch).not.toHaveProperty("at");
+    expect(seen.filter((action) => action.type === "COMMIT_HISTORY")).toHaveLength(1);
+  });
+
+  it("keeps the throw grip's priority if both grips overlap", () => {
+    vi.mocked(resizeHandlePos).mockReturnValue({ x: 400, y: 300 });
+    vi.mocked(rotateHandlePos).mockReturnValue({ x: 403, y: 300 });
+    const { canvas, seen } = setupSelectedFixture();
+
+    fireEvent.pointerDown(canvas, { clientX: 401, clientY: 300, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 401, clientY: 250, button: 0, pointerId: 1 });
+
+    const patch = seen.find((action) => action.type === "UPDATE_ITEM");
     expect(patch && "patch" in patch ? patch.patch : {}).toHaveProperty("sizePx");
   });
 });

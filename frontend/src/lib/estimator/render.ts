@@ -22,6 +22,7 @@ import {
   fixtureIconScaleFor,
   isLandscapePlanStyle,
   isLandscapeStyle,
+  normalizeBeamRotation,
 } from "./types";
 import type {
   Calibration,
@@ -861,10 +862,19 @@ export function drawScene(
       // rather than drawing a circle centred on a light that only goes up.
       drawFixtureSelection(ctx, item, product, vs);
       handleSquare(ctx, resizeHandlePos(item, product), 5 / vs);
-      // Second, gold grip on the cone's edge: throw is white, spread is gold, so
-      // the two grips can't be confused for each other mid-demo.
+      // Gold controls spread; cyan sits past the throw and controls direction.
       const spreadGrip = beamHandlePos(item, product);
       if (spreadGrip) handleSquare(ctx, spreadGrip, 5 / vs, "#f5c842");
+      const aimGrip = rotateHandlePos(item, product, vs);
+      if (aimGrip) {
+        strokePath(
+          ctx,
+          [resizeHandlePos(item, product), aimGrip],
+          "rgba(79,217,255,0.75)",
+          1.2 / vs,
+        );
+        handleDot(ctx, aimGrip, 5 / vs, "#4fd9ff");
+      }
     } else if (item && (product?.style === "transformer" || product?.style === "bistro-pole")) {
       const r = (15 * fixtureIconScaleFor(item.iconScale)) / vs;
       ctx.save();
@@ -964,6 +974,33 @@ export function beamHandlePos(item: PlacedItem, product?: Product): Point | null
   const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg, item.beamRotationDeg);
   if (!beam) return null;
   return fromBeamSpace(item.at, { x: beam.topW / 2, y: beam.dir * beam.reach }, beam.rot);
+}
+
+/** Screen-space gap between the throw grip and direction grip. */
+const ROTATE_GRIP_GAP_PX = 22;
+
+/** Direction grip, just past the end of a fixture's beam throw. */
+export function rotateHandlePos(
+  item: PlacedItem,
+  product: Product | undefined,
+  viewScale: number,
+): Point | null {
+  if (!product) return null;
+  const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg, item.beamRotationDeg);
+  if (!beam) return null;
+  const gap = ROTATE_GRIP_GAP_PX / Math.max(viewScale, 0.01);
+  return fromBeamSpace(item.at, { x: 0, y: beam.dir * (beam.reach + gap) }, beam.rot);
+}
+
+/** Aim a fixture at `p` without changing its throw or spread. */
+export function beamRotationAt(item: PlacedItem, p: Point, product?: Product): number {
+  const beam = product ? beamGeometry(product.style, item.sizePx, item.beamAngleDeg) : null;
+  const dir = beam?.dir ?? -1;
+  const dx = p.x - item.at.x;
+  const dy = p.y - item.at.y;
+  if (dx === 0 && dy === 0) return beamRotationFor(item.beamRotationDeg);
+  const natural = Math.atan2(dir, 0);
+  return normalizeBeamRotation(((Math.atan2(dy, dx) - natural) * 180) / Math.PI);
 }
 
 /**
