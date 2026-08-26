@@ -127,16 +127,16 @@ export function beamAngleFor(style: RenderStyle, override?: number | null): numb
 }
 
 /**
- * Legacy beam orientation stored by older drawings. The editor no longer
- * exposes an aiming control, but the renderer keeps honoring saved values so
- * opening an existing customer plan does not silently change its appearance.
+ * Where a fixture is aimed, in degrees clockwise from the direction its type
+ * throws naturally — straight up for uplights and straight down for downlights.
+ * Aim is independent of spread: this turns the cone; `beamAngleDeg` opens it.
  */
 export function normalizeBeamRotation(deg: number): number {
   if (!Number.isFinite(deg)) return 0;
   return ((((deg + 180) % 360) + 360) % 360) - 180;
 }
 
-/** The legacy orientation a saved fixture renders at. */
+/** The aim a fixture actually renders at — its override, else its natural axis. */
 export function beamRotationFor(override?: number | null): number {
   return normalizeBeamRotation(override ?? 0);
 }
@@ -255,7 +255,7 @@ export interface PlacedItem {
   iconScale?: number;
   /** Per-fixture beam-spread override. Missing means the fixture type's default lamp. */
   beamAngleDeg?: number;
-  /** Legacy saved orientation. New edits keep the fixture on its natural axis. */
+  /** Clockwise aim from the fixture type's natural axis; independent from beam spread. */
   beamRotationDeg?: number;
   /** ID of the plan-only wire circuit that supplies this fixture. */
   circuitId?: string;

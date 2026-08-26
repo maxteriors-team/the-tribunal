@@ -35,11 +35,13 @@ import {
   MAX_DUSK,
   beamAngleAt,
   beamHandlePos,
+  beamRotationAt,
   drawScene,
   itemHit,
   planImageHit,
   planImageResizeHandlePos,
   resizeHandlePos,
+  rotateHandlePos,
 } from "@/lib/estimator/render";
 import { isLandscapeStyle } from "@/lib/estimator/types";
 import type { Design, PhotoInfo, Point, Product, Run, ScaleSlot } from "@/lib/estimator/types";
@@ -103,6 +105,7 @@ type Drag =
   | { mode: "item"; itemId: string; offset: Point; before: Design }
   | { mode: "resize"; itemId: string; before: Design }
   | { mode: "beam"; itemId: string; before: Design }
+  | { mode: "aim"; itemId: string; before: Design }
   | { mode: "plan-image"; imageId: string; offset: Point; before: Design }
   | { mode: "plan-image-resize"; imageId: string; before: Design }
   | { mode: "highlight"; before: Design }
@@ -1005,6 +1008,11 @@ export function LightCanvas({
             dragRef.current = { mode: "beam", itemId: item.id, before: design };
             return;
           }
+          const aimGrip = item ? rotateHandlePos(item, itemProduct, view.scale) : null;
+          if (item && aimGrip && distance(aimGrip, p) < slack * 1.6) {
+            dragRef.current = { mode: "aim", itemId: item.id, before: design };
+            return;
+          }
         }
         // 2) items (topmost first)
         for (let i = design.items.length - 1; i >= 0; i -= 1) {
@@ -1253,6 +1261,17 @@ export function LightCanvas({
           type: "UPDATE_ITEM",
           id: drag.itemId,
           patch: { beamAngleDeg: beamAngleAt(item, p) },
+          transient: true,
+        });
+        return;
+      }
+      case "aim": {
+        const item = design.items.find((i) => i.id === drag.itemId);
+        if (!item) return;
+        dispatch({
+          type: "UPDATE_ITEM",
+          id: drag.itemId,
+          patch: { beamRotationDeg: beamRotationAt(item, p, productById.get(item.productId)) },
           transient: true,
         });
         return;
