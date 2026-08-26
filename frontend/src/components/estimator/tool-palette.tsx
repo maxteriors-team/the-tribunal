@@ -35,9 +35,11 @@ import {
   MIN_BEAM_ANGLE_DEG,
   MIN_FIXTURE_ICON_SCALE,
   beamAngleFor,
+  beamRotationFor,
   clampBeamAngle,
   fixtureIconScaleFor,
   isLandscapePlanStyle,
+  normalizeBeamRotation,
 } from "@/lib/estimator/types";
 import type { Design, PlacedItem, Product, Run } from "@/lib/estimator/types";
 import { formatCurrency } from "@/lib/utils/number";
@@ -334,7 +336,27 @@ function FixtureOptions({
     (run) => products.find((candidate) => candidate.id === run.productId)?.style === "wire",
   );
   const angle = beamAngleFor(product.style, item.beamAngleDeg);
+  const rotation = beamRotationFor(item.beamRotationDeg);
   const iconScale = fixtureIconScaleFor(item.iconScale);
+  const naturalDirection =
+    product.style === "downlight" || product.style === "walllight" ? "down" : "up";
+  const absoluteDirection = (rotation + (naturalDirection === "up" ? 0 : 180) + 360) % 360;
+  const cardinal =
+    absoluteDirection < 22.5 || absoluteDirection >= 337.5
+      ? "up"
+      : absoluteDirection < 67.5
+        ? "up-right"
+        : absoluteDirection < 112.5
+          ? "right"
+          : absoluteDirection < 157.5
+            ? "down-right"
+            : absoluteDirection < 202.5
+              ? "down"
+              : absoluteDirection < 247.5
+                ? "down-left"
+                : absoluteDirection < 292.5
+                  ? "left"
+                  : "up-left";
 
   const markerColorButton = (marker: (typeof FIXTURE_MARKER_COLORS)[number], index: number) => {
     const checked = item.markerColor?.toLowerCase() === marker.value.toLowerCase();
@@ -535,6 +557,45 @@ function FixtureOptions({
 
       {angle !== null ? (
         <>
+          <div>
+            <p className="tp-opt-label">Beam direction</p>
+            <input
+              className="tp-range"
+              type="range"
+              min={-180}
+              max={180}
+              step={1}
+              value={Math.round(rotation)}
+              aria-label="Beam direction in degrees"
+              aria-valuetext={`${Math.abs(Math.round(rotation))} degrees ${rotation >= 0 ? "clockwise" : "counter-clockwise"}; pointing ${cardinal}`}
+              onChange={(event) =>
+                dispatch({
+                  type: "UPDATE_ITEM",
+                  id: item.id,
+                  patch: { beamRotationDeg: normalizeBeamRotation(Number(event.target.value)) },
+                })
+              }
+            />
+            <div className="tp-aim-foot">
+              <output aria-live="polite">
+                {Math.abs(rotation) < 0.5
+                  ? `Straight ${naturalDirection}`
+                  : `${Math.abs(Math.round(rotation))}° ${rotation > 0 ? "clockwise" : "counter-clockwise"}`}
+                {` · pointing ${cardinal}`}
+              </output>
+              <button
+                type="button"
+                className="tp-mini-btn"
+                disabled={Math.abs(rotation) < 0.5}
+                onClick={() =>
+                  dispatch({ type: "UPDATE_ITEM", id: item.id, patch: { beamRotationDeg: 0 } })
+                }
+              >
+                Reset
+              </button>
+            </div>
+            <p className="tp-opt-readout">Drag the cyan grip on the photo, or use this slider.</p>
+          </div>
           <div>
             <p className="tp-opt-label">Beam angle</p>
             <div className="tp-chip-row">
