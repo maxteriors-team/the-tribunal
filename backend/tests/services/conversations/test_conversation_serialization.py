@@ -78,3 +78,4 @@ class TestSerializeConversation:
 
         assert response.source_provider == "quo"
         assert response.external_url == "https://app.quo.com/messages/example"
+        assert response.is_voicemail is False

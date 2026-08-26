@@ -1,0 +1,124 @@
+{
+  "phone_numbers": {
+    "data": [
+      {
+        "id": "PNfixture",
+        "number": "+14155552671"
+      }
+    ]
+  },
+  "contacts": [
+    {
+      "data": [
+        {
+          "id": "CTfixture",
+          "defaultFields": {
+            "firstName": "Fixture",
+            "lastName": "Contact",
+            "company": "Fixture Company",
+            "role": null,
+            "phoneNumbers": [
+              {"name": "mobile", "value": "+14155552672"}
+            ],
+            "emails": [
+              {"name": "work", "value": "fixture@example.com"}
+            ]
+          },
+          "createdAt": "2026-07-01T00:00:00Z",
+          "updatedAt": "2026-08-02T12:00:00Z"
+        }
+      ],
+      "nextPageToken": "contacts-page-2"
+    },
+    {
+      "data": [
+        {
+          "id": "CToutside",
+          "defaultFields": {
+            "firstName": "Outside",
+            "lastName": "Window",
+            "company": null,
+            "role": null,
+            "phoneNumbers": [
+              {"name": "mobile", "value": "+14155552673"}
+            ],
+            "emails": []
+          },
+          "createdAt": "2026-06-01T00:00:00Z",
+          "updatedAt": "2026-07-01T00:00:00Z"
+        }
+      ],
+      "nextPageToken": null
+    }
+  ],
+  "conversations": [
+    {
+      "data": [
+        {
+          "id": "CNfixture",
+          "phoneNumberId": "PNfixture",
+          "participants": ["+14155552672"],
+          "createdAt": "2026-07-01T00:00:00Z",
+          "updatedAt": "2026-08-05T12:00:00Z"
+        }
+      ],
+      "nextPageToken": null
+    }
+  ],
+  "messages": [
+    {
+      "data": [
+        {
+          "id": "ACmessage-in",
+          "phoneNumberId": "PNfixture",
+          "direction": "incoming",
+          "status": "received",
+          "type": "text",
+          "body": "Fixture inbound text",
+          "from": "+14155552672",
+          "to": ["+14155552671"],
+          "media": [],
+          "createdAt": "2026-08-03T10:00:00Z",
+          "updatedAt": "2026-08-03T10:00:00Z"
+        }
+      ],
+      "nextPageToken": "messages-page-2"
+    },
+    {
+      "data": [
+        {
+          "id": "ACmessage-out",
+          "phoneNumberId": "PNfixture",
+          "direction": "outgoing",
+          "status": "sent",
+          "type": "text",
+          "body": "Fixture outbound text",
+          "from": "+14155552671",
+          "to": ["+14155552672"],
+          "media": [],
+          "createdAt": "2026-08-04T10:00:00Z",
+          "updatedAt": "2026-08-04T10:00:00Z"
+        }
+      ],
+      "nextPageToken": null
+    }
+  ],
+  "calls": [
+    {
+      "data": [
+        {
+          "id": "ACcall",
+          "phoneNumberId": "PNfixture",
+          "direction": "outgoing",
+          "status": "completed",
+          "duration": 42,
+          "participants": ["+14155552672"],
+          "createdAt": "2026-08-05T10:00:00Z",
+          "updatedAt": "2026-08-05T10:01:00Z",
+          "completedAt": "2026-08-05T10:01:00Z"
+        }
+      ],
+      "nextPageToken": null
+    }
+  ]
+}

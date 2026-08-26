@@ -52968,6 +52968,11 @@
             "title": "Is Ai",
             "type": "boolean"
           },
+          "is_voicemail": {
+            "default": false,
+            "title": "Is Voicemail",
+            "type": "boolean"
+          },
           "original_id": {
             "format": "uuid",
             "title": "Original Id",
@@ -56476,6 +56481,11 @@
           },
           "is_ai": {
             "title": "Is Ai",
+            "type": "boolean"
+          },
+          "is_voicemail": {
+            "default": false,
+            "title": "Is Voicemail",
             "type": "boolean"
           },
           "sent_at": {

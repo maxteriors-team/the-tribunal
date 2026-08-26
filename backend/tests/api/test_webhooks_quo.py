@@ -19,7 +19,9 @@ from svix.webhooks import Webhook
 from app.api.webhooks.quo import QUO_MAX_BODY_BYTES, router
 from app.db.session import get_db
 from app.services import webhook_replay
+from app.services.quo.sync import QuoSyncError
 from app.services.webhooks import quo as quo_service
+from app.services.webhooks.pipeline import WebhookDispatchResult
 
 pytestmark = pytest.mark.asyncio
 
@@ -64,6 +66,7 @@ def _signed_headers(
 def _integration(*, active: bool = True) -> MagicMock:
     integration = MagicMock()
     integration.id = INTEGRATION_ID
+    integration.workspace_id = uuid.UUID("56d07054-d36d-4596-8d54-46b351603c93")
     integration.is_active = active
     integration.safe_credentials.return_value = {
         "api_key": "quo_api_key",
@@ -80,6 +83,9 @@ def _database(integration: MagicMock | None) -> MagicMock:
     result.scalar_one_or_none.return_value = integration
     db = MagicMock()
     db.execute = AsyncMock(return_value=result)
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+    db.in_transaction.return_value = True
     return db
 
 
@@ -115,18 +121,45 @@ async def _post(
 async def test_valid_delivery_is_verified_claimed_and_dispatched() -> None:
     body = json.dumps(_payload(), separators=(",", ":")).encode()
     claim = webhook_replay.SignatureClaim(webhook_replay.SignatureClaimOutcome.CLAIMED)
-    with patch.object(
-        quo_service,
-        "claim_webhook_signature",
-        new=AsyncMock(return_value=claim),
-    ) as claim_mock:
+    with (
+        patch.object(
+            quo_service,
+            "claim_webhook_signature",
+            new=AsyncMock(return_value=claim),
+        ) as claim_mock,
+        patch(
+            "app.api.webhooks.quo.QuoSyncService.process",
+            new=AsyncMock(return_value=WebhookDispatchResult.processed()),
+        ) as sync_mock,
+    ):
         response = await _post(_database(_integration()), body, _signed_headers(body))
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     claim_mock.assert_awaited_once()
+    sync_mock.assert_awaited_once()
     assert claim_mock.await_args is not None
     assert claim_mock.await_args.args[:2] == ("quo", "msg_delivery_1")
+
+
+async def test_malformed_voice_resource_is_rejected_without_leaking_details() -> None:
+    body = json.dumps(_payload(), separators=(",", ":")).encode()
+    claim = webhook_replay.SignatureClaim(webhook_replay.SignatureClaimOutcome.CLAIMED)
+    with (
+        patch.object(
+            quo_service,
+            "claim_webhook_signature",
+            new=AsyncMock(return_value=claim),
+        ),
+        patch(
+            "app.api.webhooks.quo.QuoSyncService.process",
+            new=AsyncMock(side_effect=QuoSyncError("raw provider details")),
+        ),
+    ):
+        response = await _post(_database(_integration()), body, _signed_headers(body))
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Quo webhook resource"}
 
 
 async def test_tampered_delivery_is_rejected_before_dedupe() -> None:
@@ -146,6 +179,22 @@ async def test_tampered_delivery_is_rejected_before_dedupe() -> None:
         )
 
     assert response.status_code == 400
+    claim_mock.assert_not_awaited()
+
+
+async def test_malformed_signature_is_rejected_before_dedupe() -> None:
+    body = json.dumps(_payload(), separators=(",", ":")).encode()
+    headers = _signed_headers(body)
+    headers["webhook-signature"] = "v1,invalid"
+    with patch.object(
+        quo_service,
+        "claim_webhook_signature",
+        new=AsyncMock(),
+    ) as claim_mock:
+        response = await _post(_database(_integration()), body, headers)
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid Quo webhook signature"}
     claim_mock.assert_not_awaited()
 
 

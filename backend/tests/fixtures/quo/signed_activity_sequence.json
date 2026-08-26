@@ -1,0 +1,201 @@
+{
+  "workspace_phone": "+14155550100",
+  "contact_phone": "+14155552671",
+  "events": {
+    "inbound": {
+      "id": "EV_inbound___RUN_ID__",
+      "apiVersion": "2026-03-30",
+      "type": "message.received",
+      "createdAt": "2026-08-25T15:00:00Z",
+      "data": {
+        "context": {
+          "orgId": "OR___RUN_ID__",
+          "contacts": { "ids": [], "lookupStatus": "not-found" },
+          "phoneNumberId": "PN___RUN_ID__"
+        },
+        "links": {
+          "quo": "https://my.quo.com/inbox/PN___RUN_ID__/c/CN___RUN_ID__?at=AC_inbound___RUN_ID__"
+        },
+        "resource": {
+          "id": "AC_inbound___RUN_ID__",
+          "direction": "incoming",
+          "senderIdentifier": "+14155552671",
+          "recipientIdentifiers": ["+14155550100"],
+          "text": "Can you quote the patio?",
+          "media": [],
+          "createdAt": "2026-08-25T15:00:00Z"
+        }
+      }
+    },
+    "outbound_failed": {
+      "id": "EV_outbound_failed___RUN_ID__",
+      "apiVersion": "2026-03-30",
+      "type": "message.failed",
+      "createdAt": "2026-08-25T15:02:00Z",
+      "data": {
+        "context": {
+          "orgId": "OR___RUN_ID__",
+          "contacts": { "ids": [], "lookupStatus": "not-found" },
+          "phoneNumberId": "PN___RUN_ID__"
+        },
+        "links": {
+          "quo": "https://my.quo.com/inbox/PN___RUN_ID__/c/CN___RUN_ID__?at=AC_outbound___RUN_ID__"
+        },
+        "resource": {
+          "id": "AC_outbound___RUN_ID__",
+          "direction": "outgoing",
+          "senderIdentifier": "+14155550100",
+          "recipientIdentifiers": ["+14155552671"],
+          "text": "Yes — I will send that shortly.",
+          "media": [],
+          "createdAt": "2026-08-25T15:01:00Z"
+        }
+      }
+    },
+    "outbound_delivered": {
+      "id": "EV_outbound_delivered___RUN_ID__",
+      "apiVersion": "2026-03-30",
+      "type": "message.delivered",
+      "createdAt": "2026-08-25T15:03:00Z",
+      "data": {
+        "context": {
+          "orgId": "OR___RUN_ID__",
+          "contacts": { "ids": [], "lookupStatus": "not-found" },
+          "phoneNumberId": "PN___RUN_ID__"
+        },
+        "links": {
+          "quo": "https://my.quo.com/inbox/PN___RUN_ID__/c/CN___RUN_ID__?at=AC_outbound___RUN_ID__"
+        },
+        "resource": {
+          "id": "AC_outbound___RUN_ID__",
+          "direction": "outgoing",
+          "senderIdentifier": "+14155550100",
+          "recipientIdentifiers": ["+14155552671"],
+          "text": "Yes — I will send that shortly.",
+          "media": [],
+          "createdAt": "2026-08-25T15:01:00Z"
+        }
+      }
+    },
+    "stop": {
+      "id": "EV_stop___RUN_ID__",
+      "apiVersion": "2026-03-30",
+      "type": "message.received",
+      "createdAt": "2026-08-25T15:04:00Z",
+      "data": {
+        "context": {
+          "orgId": "OR___RUN_ID__",
+          "contacts": { "ids": [], "lookupStatus": "not-found" },
+          "phoneNumberId": "PN___RUN_ID__"
+        },
+        "links": {
+          "quo": "https://my.quo.com/inbox/PN___RUN_ID__/c/CN___RUN_ID__?at=AC_stop___RUN_ID__"
+        },
+        "resource": {
+          "id": "AC_stop___RUN_ID__",
+          "direction": "incoming",
+          "senderIdentifier": "+14155552671",
+          "recipientIdentifiers": ["+14155550100"],
+          "text": "STOP",
+          "media": [],
+          "createdAt": "2026-08-25T15:04:00Z"
+        }
+      }
+    },
+    "call_completed": {
+      "id": "EV_call_completed___RUN_ID__",
+      "apiVersion": "2026-03-30",
+      "type": "call.completed",
+      "createdAt": "2026-08-25T15:10:42Z",
+      "data": {
+        "context": {
+          "orgId": "OR___RUN_ID__",
+          "contacts": { "ids": [], "lookupStatus": "not-found" },
+          "phoneNumberId": "PN___RUN_ID__",
+          "participants": {
+            "external": ["+14155552671"],
+            "resolution": "available",
+            "workspace": ["+14155550100"]
+          }
+        },
+        "links": {
+          "quo": "https://my.quo.com/inbox/PN___RUN_ID__/c/CN___RUN_ID__?at=AC_call___RUN_ID__"
+        },
+        "resource": {
+          "id": "AC_call___RUN_ID__",
+          "direction": "incoming",
+          "duration": 42,
+          "status": "answered",
+          "createdAt": "2026-08-25T15:10:00Z",
+          "completedAt": "2026-08-25T15:10:42Z"
+        }
+      }
+    },
+    "call_summary": {
+      "id": "EV_call_summary___RUN_ID__",
+      "apiVersion": "2026-03-30",
+      "type": "call.summary.completed",
+      "createdAt": "2026-08-25T15:11:00Z",
+      "data": {
+        "context": {
+          "orgId": "OR___RUN_ID__",
+          "contacts": { "ids": [], "lookupStatus": "not-found" },
+          "phoneNumberId": "PN___RUN_ID__",
+          "direction": "incoming",
+          "participants": {
+            "external": ["+14155552671"],
+            "resolution": "available",
+            "workspace": ["+14155550100"]
+          }
+        },
+        "links": {
+          "quo": "https://my.quo.com/inbox/PN___RUN_ID__/c/CN___RUN_ID__?at=AC_call___RUN_ID__"
+        },
+        "resource": {
+          "id": "SUM___RUN_ID__",
+          "callId": "AC_call___RUN_ID__",
+          "summary": ["Customer requested a patio quote."],
+          "nextSteps": ["Send the estimate tomorrow."]
+        }
+      }
+    },
+    "call_transcript": {
+      "id": "EV_call_transcript___RUN_ID__",
+      "apiVersion": "2026-03-30",
+      "type": "call.transcript.completed",
+      "createdAt": "2026-08-25T15:12:00Z",
+      "data": {
+        "context": {
+          "orgId": "OR___RUN_ID__",
+          "contacts": { "ids": [], "lookupStatus": "not-found" },
+          "phoneNumberId": "PN___RUN_ID__",
+          "direction": "incoming",
+          "participants": {
+            "external": ["+14155552671"],
+            "resolution": "available",
+            "workspace": ["+14155550100"]
+          }
+        },
+        "links": {
+          "quo": "https://my.quo.com/inbox/PN___RUN_ID__/c/CN___RUN_ID__?at=AC_call___RUN_ID__"
+        },
+        "resource": {
+          "id": "TR___RUN_ID__",
+          "callId": "AC_call___RUN_ID__",
+          "direction": "incoming",
+          "duration": 42,
+          "createdAt": "2026-08-25T15:10:00Z",
+          "dialogue": [
+            {
+              "identifier": "+14155552671",
+              "speakerType": "external",
+              "content": "Please send the patio quote tomorrow.",
+              "start": 1.2,
+              "end": 4.8
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -71,6 +71,8 @@ class OptOutManager:
         keyword: str | None = None,
         source_campaign_id: uuid.UUID | None = None,
         source_message_id: uuid.UUID | None = None,
+        *,
+        commit: bool = True,
     ) -> GlobalOptOut | None:
         """Add phone number to global opt-out list.
 
@@ -110,8 +112,11 @@ class OptOutManager:
             opted_out_at=datetime.now(UTC),
         )
         db.add(opt_out)
-        await db.commit()
-        await db.refresh(opt_out)
+        if commit:
+            await db.commit()
+            await db.refresh(opt_out)
+        else:
+            await db.flush()
 
         self.logger.info(
             "opt_out_added",
