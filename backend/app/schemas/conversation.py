@@ -23,6 +23,8 @@ class MessageResponse(BaseModel):
     status: str
     is_ai: bool
     agent_id: uuid.UUID | None
+    source_provider: str | None = None
+    external_url: str | None = None
     booking_outcome: str | None = None
     sent_at: datetime | None
     created_at: datetime
@@ -43,6 +45,7 @@ class ConversationResponse(BaseModel):
     contact_phone: str
     status: str
     channel: str
+    source_provider: str | None = None
     assigned_agent_id: uuid.UUID | None
     ai_enabled: bool
     ai_paused: bool

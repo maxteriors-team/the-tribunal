@@ -5,8 +5,9 @@ from datetime import UTC, datetime
 
 from app.models.contact import Contact
 from app.models.conversation import Conversation, ConversationStatus
+from app.schemas.conversation import MessageResponse
 from app.services.conversations.conversation_service import serialize_conversation
-from tests.factories import ContactFactory, ConversationFactory
+from tests.factories import ContactFactory, ConversationFactory, MessageFactory
 
 
 class TestSerializeConversation:
@@ -59,3 +60,21 @@ class TestSerializeConversation:
 
         assert response.contact_name is None
         assert response.contact_id == 42
+
+    def test_includes_conversation_source_provider(self) -> None:
+        conversation = ConversationFactory.build(source_provider="quo")
+
+        response = serialize_conversation(conversation)
+
+        assert response.source_provider == "quo"
+
+    def test_message_response_includes_external_provenance(self) -> None:
+        message = MessageFactory.build(
+            source_provider="quo",
+            external_url="https://app.quo.com/messages/example",
+        )
+
+        response = MessageResponse.model_validate(message)
+
+        assert response.source_provider == "quo"
+        assert response.external_url == "https://app.quo.com/messages/example"

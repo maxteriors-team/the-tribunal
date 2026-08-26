@@ -219,6 +219,7 @@ class Conversation(Base):
     initiated_by: Mapped[str] = mapped_column(
         String(20), nullable=False, default="platform"
     )  # platform, external
+    source_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # Follow-up settings
     followup_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -376,6 +377,8 @@ class Message(Base):
         index=True,
     )
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    external_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 

@@ -304,12 +304,10 @@ async def notify_payment_operators(db: AsyncSession, payment: CallPayment) -> No
     Guarded by ``operators_notified_at`` so the webhook and an in-call status
     poll racing to confirm the same payment never double-notify.
     """
-    from sqlalchemy import select
-
-    from app.models.user import User
-    from app.models.workspace import Workspace, WorkspaceMembership
+    from app.models.workspace import Workspace
     from app.services.email import send_payment_received_notification
     from app.services.idempotency import derive_outbound_key
+    from app.services.notification_recipients import workspace_notification_email_users
     from app.services.push_notifications import push_notification_service
 
     if payment.operators_notified_at is not None:
@@ -342,13 +340,9 @@ async def notify_payment_operators(db: AsyncSession, payment: CallPayment) -> No
         logger.exception("call_payment_push_failed", error=str(exc))
 
     try:
-        members = await db.execute(
-            select(User)
-            .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
-            .where(WorkspaceMembership.workspace_id == payment.workspace_id)
-        )
+        members = await workspace_notification_email_users(db, payment.workspace_id)
         sent = 0
-        for user in members.scalars().all():
+        for user in members:
             if not user.notification_email or not user.email:
                 continue
             idem = derive_outbound_key("call_payment_email", payment.id, user.id)

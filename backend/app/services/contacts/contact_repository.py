@@ -560,6 +560,8 @@ async def get_contact_timeline(
                     "recording_url": msg.recording_url,
                     "transcript": msg.transcript,
                     "status": msg.status,
+                    "source_provider": msg.source_provider,
+                    "external_url": msg.external_url,
                     "booking_outcome": msg.booking_outcome,
                     "signals": signals,
                     "attachments": [

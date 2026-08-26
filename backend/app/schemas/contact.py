@@ -321,6 +321,8 @@ class TimelineItem(BaseModel):
     recording_url: str | None = None
     transcript: str | None = None
     status: str | None = None
+    source_provider: str | None = None
+    external_url: str | None = None
     booking_outcome: str | None = None
     signals: dict[str, Any] | None = None
     attachments: list[TimelineAttachment] = Field(default_factory=list)
