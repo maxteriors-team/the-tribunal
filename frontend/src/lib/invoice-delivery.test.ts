@@ -20,6 +20,7 @@ function sendResult(
     currency: "USD",
     created_at: "2026-07-30T00:00:00Z",
     updated_at: "2026-07-30T00:00:00Z",
+    receipt_delivery: { status: "skipped" },
     delivery: "emailed",
     delivered_to: "customer@example.com",
     ...overrides,

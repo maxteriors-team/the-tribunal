@@ -8,7 +8,7 @@ never accepted from clients.
 
 import uuid
 from datetime import date, datetime
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -83,8 +83,7 @@ class InvoiceCreate(InvoiceBase):
 
 
 class InvoiceUpdate(BaseModel):
-    """Update invoice header fields (all optional); ``status``/``number``/totals
-    are server-derived.
+    """Update invoice fields while identifying changes that stale checkout prices.
 
     ``line_items`` optionally **replaces the whole set** in the same transaction.
     An editor that reorders, edits, and deletes rows in one save would otherwise
@@ -93,6 +92,10 @@ class InvoiceUpdate(BaseModel):
     the customer asked for. Omit the field to leave line items untouched; the
     per-item endpoints remain for incremental edits.
     """
+
+    CHECKOUT_AFFECTING_FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {"contact_id", "currency", "tax_amount", "discount_amount", "line_items"}
+    )
 
     contact_id: int | None = None
     opportunity_id: uuid.UUID | None = None
@@ -104,6 +107,44 @@ class InvoiceUpdate(BaseModel):
     notes: str | None = None
     terms: str | None = None
     line_items: list[InvoiceLineItemCreate] | None = None
+
+    @property
+    def checkout_affecting_fields(self) -> frozenset[str]:
+        """Return effective supplied fields that can stale a Checkout Session."""
+        supplied = self.model_fields_set & self.CHECKOUT_AFFECTING_FIELDS
+        return frozenset(
+            field for field in supplied if field == "contact_id" or getattr(self, field) is not None
+        )
+
+
+InvoicePaymentMethod = Literal["card", "cash", "check"]
+InvoicePaymentRecordMethod = Literal["card", "cash", "check", "other"]
+ManualInvoicePaymentMethod = Literal["cash", "check"]
+
+
+class InvoiceManualPaymentCreate(BaseModel):
+    """Record a partial or final invoice payment received offline."""
+
+    payment_method: ManualInvoicePaymentMethod
+    amount: float = Field(gt=0)
+    reference: str | None = Field(default=None, max_length=100)
+    idempotency_key: uuid.UUID
+
+
+InvoiceReceiptDeliveryStatus = Literal["pending", "sent", "needs_attention", "skipped"]
+
+
+class InvoiceReceiptDelivery(BaseModel):
+    """Operator-safe projection of the paid-receipt outbox state.
+
+    Provider errors stay internal; ``reason`` is an allowlisted next step rather
+    than the worker's raw exception text.
+    """
+
+    status: InvoiceReceiptDeliveryStatus = "skipped"
+    recipient: str | None = None
+    timestamp: datetime | None = None
+    reason: str | None = None
 
 
 class InvoiceResponse(BaseModel):
@@ -121,6 +162,7 @@ class InvoiceResponse(BaseModel):
     total: float
     amount_paid: float
     currency: str
+    payment_method: InvoicePaymentMethod | None = None
     issue_date: date | None = None
     due_date: date | None = None
     sent_at: datetime | None = None
@@ -135,13 +177,31 @@ class InvoiceResponse(BaseModel):
     # ``contact`` relationship is eager loaded; ``None`` means either no bill-to
     # contact or a caller that did not load one -- never a failed lookup.
     contact_name: str | None = None
+    receipt_delivery: InvoiceReceiptDelivery = Field(default_factory=InvoiceReceiptDelivery)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InvoicePaymentResponse(BaseModel):
+    """Operator-visible payment history without provider or idempotency secrets."""
+
+    id: uuid.UUID
+    payment_method: InvoicePaymentRecordMethod
+    amount: float
+    reference: str | None = None
+    recorded_by_id: int | None = None
+    received_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class InvoiceDetailResponse(InvoiceResponse):
-    """Invoice with its line items."""
+    """Invoice with line items and sensitive payment provenance."""
 
+    payment_recorded_by_id: int | None = None
+    manual_payment_amount: float | None = None
+    manual_payment_reference: str | None = None
+    payments: list[InvoicePaymentResponse] = Field(default_factory=list)
     line_items: list[InvoiceLineItemResponse] = Field(default_factory=list)
 
 

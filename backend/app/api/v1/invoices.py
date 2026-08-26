@@ -23,6 +23,7 @@ from app.schemas.invoice import (
     InvoiceDetailResponse,
     InvoiceLineItemCreate,
     InvoiceLineItemUpdate,
+    InvoiceManualPaymentCreate,
     InvoicePaymentLinkResponse,
     InvoiceSendResponse,
     InvoiceUpdate,
@@ -153,6 +154,36 @@ async def send_invoice(
     """
     service = InvoiceService(db)
     return await service.mark_sent(workspace_id, invoice_id)
+
+
+@router.post("/{invoice_id}/payments/manual", response_model=InvoiceDetailResponse)
+async def record_manual_invoice_payment(
+    workspace_id: uuid.UUID,
+    invoice_id: uuid.UUID,
+    payment: InvoiceManualPaymentCreate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> InvoiceDetailResponse:
+    """Record a partial or final payment received by cash or check."""
+    return await InvoiceService(db).record_manual_payment(
+        workspace_id,
+        invoice_id,
+        payment,
+        recorded_by_id=current_user.id,
+    )
+
+
+@router.post("/{invoice_id}/receipt/retry", response_model=InvoiceDetailResponse)
+async def retry_invoice_receipt(
+    workspace_id: uuid.UUID,
+    invoice_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteBilling,
+) -> InvoiceDetailResponse:
+    """Idempotently enqueue or reopen receipt delivery without sending inline."""
+    return await InvoiceService(db).retry_payment_receipt(workspace_id, invoice_id)
 
 
 @router.post("/{invoice_id}/void", response_model=InvoiceDetailResponse)

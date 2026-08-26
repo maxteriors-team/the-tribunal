@@ -27,9 +27,11 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.api.crud import get_nested_or_404, get_or_404
 from app.core.config import settings
@@ -37,8 +39,15 @@ from app.db.pagination import paginate
 from app.db.scope import assert_workspace_owned
 from app.models.contact import Contact
 from app.models.invoice import Invoice, InvoiceLineItem, generate_invoice_token
+from app.models.invoice_payment import InvoicePayment
+from app.models.invoice_payment_receipt_outbox import (
+    RECEIPT_PENDING,
+    RECEIPT_PROCESSING,
+    RECEIPT_SENT,
+    RECEIPT_TERMINAL,
+    InvoicePaymentReceiptOutbox,
+)
 from app.models.opportunity import Opportunity
-from app.models.workspace import Workspace
 from app.schemas.invoice import (
     InvoiceCreate,
     InvoiceDeliverResult,
@@ -46,6 +55,8 @@ from app.schemas.invoice import (
     InvoiceDetailResponse,
     InvoiceLineItemCreate,
     InvoiceLineItemUpdate,
+    InvoiceManualPaymentCreate,
+    InvoiceReceiptDelivery,
     InvoiceResponse,
     InvoiceSendResponse,
     InvoiceUpdate,
@@ -67,6 +78,8 @@ from app.services.exceptions import (
     ServiceUnavailableError,
     ValidationError,
 )
+from app.services.idempotency import derive_outbound_key
+from app.services.invoices.receipt_outbox_service import enqueue_invoice_payment_receipt
 from app.services.payments import call_payment_service
 
 logger = structlog.get_logger()
@@ -76,22 +89,56 @@ logger = structlog.get_logger()
 _ISSUED_STATUSES = frozenset({"sent", "paid", "partial", "overdue"})
 
 
-def serialize_invoice[R: InvoiceResponse](invoice: Invoice, model: type[R]) -> R:
-    """Serialize an invoice, adding the bill-to contact's display name.
+def serialize_invoice[R: InvoiceResponse](
+    invoice: Invoice,
+    model: type[R],
+    *,
+    receipt_job: InvoicePaymentReceiptOutbox | None = None,
+) -> R:
+    """Serialize an invoice with its contact label and safe receipt state.
 
-    ``Invoice.contact`` lazy-loads by default, and a lazy load on an async
-    session raises ``MissingGreenlet``. Callers that want the name must eager
-    load the relationship (``selectinload(Invoice.contact)``); when it is not
-    loaded we leave ``contact_name`` as ``None`` rather than failing a whole
-    response over a display label. Mirrors ``serialize_conversation``.
-
-    Only the name is exposed. A contact's email, phone, and address are
-    ``EncryptedString`` columns and stay out of invoice payloads.
+    Relationships must be eager loaded before this synchronous projection. Raw
+    outbox errors are never returned; operators get only an allowlisted next step.
     """
     response = model.model_validate(invoice)
     if "contact" not in inspect(invoice).unloaded:
         contact = invoice.contact
         response.contact_name = contact.full_name if contact else None
+
+    if receipt_job is None:
+        response.receipt_delivery = (
+            InvoiceReceiptDelivery(
+                status="needs_attention",
+                timestamp=invoice.paid_at,
+                reason="No receipt is queued. Retry the receipt to queue delivery.",
+            )
+            if invoice.paid_at is not None
+            else InvoiceReceiptDelivery()
+        )
+    elif receipt_job.status in (RECEIPT_PENDING, RECEIPT_PROCESSING):
+        response.receipt_delivery = InvoiceReceiptDelivery(
+            status="pending",
+            recipient=receipt_job.recipient_email,
+            timestamp=receipt_job.updated_at or receipt_job.created_at,
+        )
+    elif receipt_job.status == RECEIPT_SENT:
+        response.receipt_delivery = InvoiceReceiptDelivery(
+            status="sent",
+            recipient=receipt_job.recipient_email,
+            timestamp=receipt_job.sent_at or receipt_job.updated_at,
+        )
+    else:
+        reason = (
+            "Add an email address to the customer, then retry the receipt."
+            if not receipt_job.recipient_email
+            else "Receipt delivery failed after multiple attempts. Retry the receipt."
+        )
+        response.receipt_delivery = InvoiceReceiptDelivery(
+            status="needs_attention",
+            recipient=receipt_job.recipient_email,
+            timestamp=receipt_job.terminal_at or receipt_job.updated_at,
+            reason=reason,
+        )
     return response
 
 
@@ -132,6 +179,213 @@ class InvoiceService:
                 workspace_id,
                 detail="Opportunity not found",
             )
+
+    async def _load_locked_invoice(self, workspace_id: uuid.UUID, invoice_id: uuid.UUID) -> Invoice:
+        """Load the latest workspace-scoped invoice state and hold its row lock."""
+        result = await self.db.execute(
+            select(Invoice)
+            .where(Invoice.id == invoice_id, Invoice.workspace_id == workspace_id)
+            .options(selectinload(Invoice.line_items), selectinload(Invoice.contact))
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        invoice = result.scalar_one_or_none()
+        if invoice is None:
+            raise NotFoundError("Invoice not found")
+        return invoice
+
+    async def _latest_receipt_jobs(
+        self, workspace_id: uuid.UUID, invoice_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, InvoicePaymentReceiptOutbox]:
+        """Load one newest workspace-scoped receipt job per invoice."""
+        if not invoice_ids:
+            return {}
+        jobs = (
+            await self.db.scalars(
+                select(InvoicePaymentReceiptOutbox)
+                .where(
+                    InvoicePaymentReceiptOutbox.workspace_id == workspace_id,
+                    InvoicePaymentReceiptOutbox.invoice_id.in_(invoice_ids),
+                )
+                .order_by(
+                    InvoicePaymentReceiptOutbox.invoice_id,
+                    InvoicePaymentReceiptOutbox.created_at.desc(),
+                )
+            )
+        ).all()
+        latest: dict[uuid.UUID, InvoicePaymentReceiptOutbox] = {}
+        for job in jobs:
+            latest.setdefault(job.invoice_id, job)
+        return latest
+
+    async def _serialize_invoice[R: InvoiceResponse](
+        self, workspace_id: uuid.UUID, invoice: Invoice, model: type[R]
+    ) -> R:
+        if issubclass(model, InvoiceDetailResponse):
+            payments = (
+                await self.db.scalars(
+                    select(InvoicePayment)
+                    .where(
+                        InvoicePayment.workspace_id == workspace_id,
+                        InvoicePayment.invoice_id == invoice.id,
+                    )
+                    .order_by(InvoicePayment.received_at, InvoicePayment.created_at)
+                )
+            ).all()
+            set_committed_value(invoice, "payments", payments)
+        jobs = await self._latest_receipt_jobs(workspace_id, [invoice.id])
+        return serialize_invoice(invoice, model, receipt_job=jobs.get(invoice.id))
+
+    async def _invalidate_checkout_for_edit(self, invoice: Invoice) -> None:
+        """Expire a stored Checkout Session or abort without saving the edit."""
+        session_id = invoice.stripe_checkout_session_id
+        if session_id is None:
+            return
+        try:
+            expired = await call_payment_service.expire_checkout_session_if_open(session_id)
+        except Exception as exc:
+            await self.db.rollback()
+            self.log.warning(
+                "invoice_checkout_expiration_failed",
+                invoice_id=str(invoice.id),
+                error=str(exc),
+            )
+            raise ServiceUnavailableError(
+                "Could not invalidate the current checkout; invoice changes were not saved"
+            ) from exc
+        if not expired:
+            await self.db.rollback()
+            raise ConflictError(
+                "The current checkout could not be invalidated; refresh the invoice before editing"
+            )
+        # Keep the stable customer URL and payment history. Only the now-expired
+        # price snapshot is stale.
+        invoice.stripe_checkout_session_id = None
+
+    async def _prepare_checkout_for_manual_payment(self, invoice: Invoice) -> bool:
+        """Expire an open card checkout; return True when Stripe already won."""
+        session_id = invoice.stripe_checkout_session_id
+        if not session_id:
+            return False
+        if not call_payment_service.is_payment_configured():
+            raise ServiceUnavailableError(
+                "The online payment link could not be closed safely. Try again when "
+                "card payments are available."
+            )
+
+        async def retrieve_status() -> call_payment_service.SessionStatus:
+            try:
+                return await call_payment_service.retrieve_session_status(session_id)
+            except Exception as exc:
+                self.log.warning(
+                    "invoice_manual_payment_checkout_lookup_failed",
+                    invoice_id=str(invoice.id),
+                    session_id=session_id,
+                    error=str(exc),
+                )
+                raise ServiceUnavailableError(
+                    "The online payment link could not be checked. Try again before "
+                    "recording this payment."
+                ) from exc
+
+        checkout_status = await retrieve_status()
+        if checkout_status.payment_status == "paid":
+            remaining = max(0.0, round(float(invoice.total) - float(invoice.amount_paid), 2))
+            await self.record_payment(
+                invoice,
+                remaining,
+                payment_intent_id=checkout_status.payment_intent_id,
+                checkout_session_id=session_id,
+            )
+            return True
+        if checkout_status.status != "open":
+            invoice.stripe_checkout_session_id = None
+            return False
+
+        try:
+            expired = await call_payment_service.expire_checkout_session_if_open(session_id)
+        except Exception as exc:
+            self.log.warning(
+                "invoice_manual_payment_checkout_expire_failed",
+                invoice_id=str(invoice.id),
+                session_id=session_id,
+                error=str(exc),
+            )
+            raise ServiceUnavailableError(
+                "The online payment link could not be closed. Try again before recording "
+                "this payment."
+            ) from exc
+        if expired:
+            invoice.stripe_checkout_session_id = None
+            return False
+
+        checkout_status = await retrieve_status()
+        if checkout_status.payment_status == "paid":
+            remaining = max(0.0, round(float(invoice.total) - float(invoice.amount_paid), 2))
+            await self.record_payment(
+                invoice,
+                remaining,
+                payment_intent_id=checkout_status.payment_intent_id,
+                checkout_session_id=session_id,
+            )
+            return True
+        raise ConflictError("The online payment changed state. Refresh the invoice and try again.")
+
+    async def _transition_to_fully_paid(
+        self,
+        invoice: Invoice,
+        *,
+        payment_amount: float,
+        payment_event_id: str | None,
+        queue_receipt: bool = True,
+    ) -> bool:
+        """Atomically apply the first paid transition and optionally queue its receipt."""
+        invoice.status = self.derive_status(invoice)
+        if invoice.status != "paid" or invoice.paid_at is not None:
+            return False
+
+        invoice.paid_at = datetime.now(UTC)
+        event_id = payment_event_id or f"paid-transition:{invoice.paid_at.isoformat()}"
+        await emit_automation_event(
+            self.db,
+            workspace_id=invoice.workspace_id,
+            event_type=EVENT_INVOICE_PAID,
+            contact_id=invoice.contact_id,
+            payload={
+                "invoice_id": str(invoice.id),
+                "number": invoice.number,
+                "total": float(invoice.total or 0),
+                "amount_paid": float(invoice.amount_paid or 0),
+                "currency": invoice.currency,
+            },
+        )
+        if queue_receipt:
+            await enqueue_invoice_payment_receipt(
+                self.db,
+                invoice,
+                payment_amount=payment_amount,
+                payment_event_id=event_id,
+            )
+        return True
+
+    async def _commit_edit(self, invoice: Invoice, *, checkout_affecting: bool) -> None:
+        """Validate and atomically commit one locked invoice edit."""
+        total = round(float(invoice.total or 0), 2)
+        paid = round(float(invoice.amount_paid or 0), 2)
+        if total < paid:
+            await self.db.rollback()
+            raise ConflictError("Invoice total cannot be less than the amount already paid")
+
+        if checkout_affecting:
+            await self._invalidate_checkout_for_edit(invoice)
+        await self._transition_to_fully_paid(
+            invoice,
+            payment_amount=paid,
+            payment_event_id=invoice.stripe_payment_intent_id,
+            queue_receipt=False,
+        )
+        await self.db.commit()
+        await self.db.refresh(invoice, ["line_items", "contact"])
 
     # ------------------------------------------------------------------
     # Derivation helpers (pure; no I/O)
@@ -235,8 +489,13 @@ class InvoiceService:
         query = query.order_by(Invoice.created_at.desc())
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
+        jobs = await self._latest_receipt_jobs(
+            workspace_id, [invoice.id for invoice in result.items]
+        )
         return result.build_response(
-            item_mapper=lambda invoice: serialize_invoice(invoice, InvoiceResponse),
+            item_mapper=lambda invoice: serialize_invoice(
+                invoice, InvoiceResponse, receipt_job=jobs.get(invoice.id)
+            ),
             response_builder=PaginatedInvoices,
         )
 
@@ -248,6 +507,7 @@ class InvoiceService:
         created_by_id: int | None = None,
         amount_paid: float = 0.0,
         payment_intent_id: str | None = None,
+        opening_payment_method: str | None = None,
         commit: bool = True,
     ) -> InvoiceDetailResponse:
         """Create a draft invoice with its initial line items and computed totals.
@@ -300,12 +560,28 @@ class InvoiceService:
         # Totals first: the opening credit clamps against the computed total.
         self._recompute_totals(invoice)
         opening_credit = round(max(0.0, min(float(amount_paid), float(invoice.total or 0))), 2)
+        opening_method = opening_payment_method or ("card" if payment_intent_id else "other")
         if opening_credit > 0:
             invoice.amount_paid = opening_credit
-            invoice.status = self.derive_status(invoice)
-            if invoice.status == "paid":
-                invoice.paid_at = datetime.now(UTC)
+            invoice.payment_method = opening_method if opening_method != "other" else None
         self.db.add(invoice)
+        await self.db.flush()
+        if opening_credit > 0:
+            self.db.add(
+                InvoicePayment(
+                    workspace_id=workspace_id,
+                    invoice_id=invoice.id,
+                    payment_method=opening_method,
+                    amount=opening_credit,
+                    external_event_id=payment_intent_id,
+                    received_at=datetime.now(UTC),
+                )
+            )
+            await self._transition_to_fully_paid(
+                invoice,
+                payment_amount=opening_credit,
+                payment_event_id=payment_intent_id,
+            )
         if commit:
             await self.db.commit()
             await self.db.refresh(invoice, ["line_items"])
@@ -321,7 +597,7 @@ class InvoiceService:
             # Quote conversion owns one transaction for quote, job, and invoice.
             # Flush assigns IDs while leaving rollback/commit to that caller.
             await self.db.flush()
-        return serialize_invoice(invoice, InvoiceDetailResponse)
+        return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
 
     async def get_invoice(
         self,
@@ -336,7 +612,7 @@ class InvoiceService:
             workspace_id=workspace_id,
             options=[selectinload(Invoice.line_items), selectinload(Invoice.contact)],
         )
-        return serialize_invoice(invoice, InvoiceDetailResponse)
+        return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
 
     async def update_invoice(
         self,
@@ -344,16 +620,18 @@ class InvoiceService:
         invoice_id: uuid.UUID,
         invoice_in: InvoiceUpdate,
     ) -> InvoiceDetailResponse:
-        """Update invoice header fields. Totals/status are re-derived, not set."""
-        invoice = await get_or_404(
-            self.db,
-            Invoice,
-            invoice_id,
-            workspace_id=workspace_id,
-            options=[selectinload(Invoice.line_items), selectinload(Invoice.contact)],
-        )
+        """Update a locked invoice and invalidate any stale checkout price."""
+        invoice = await self._load_locked_invoice(workspace_id, invoice_id)
         if invoice.status == "void":
+            await self.db.commit()
             raise ConflictError("Cannot edit a voided invoice")
+
+        checkout_affecting_fields = invoice_in.checkout_affecting_fields
+        if invoice.status == "paid" and checkout_affecting_fields:
+            await self.db.commit()
+            raise ConflictError(
+                "Cannot change amounts, currency, contact, or line items on a paid invoice"
+            )
 
         await self._validate_refs(
             workspace_id,
@@ -361,6 +639,14 @@ class InvoiceService:
             opportunity_id=invoice_in.opportunity_id,
         )
 
+        nullable_fields = {
+            "contact_id",
+            "opportunity_id",
+            "issue_date",
+            "due_date",
+            "notes",
+            "terms",
+        }
         for field in (
             "contact_id",
             "opportunity_id",
@@ -372,18 +658,15 @@ class InvoiceService:
             "notes",
             "terms",
         ):
+            if field not in invoice_in.model_fields_set:
+                continue
             value = getattr(invoice_in, field)
-            if value is not None:
+            if value is not None or field in nullable_fields:
                 setattr(invoice, field, value)
 
         if invoice_in.line_items is not None:
-            # Same rule as the per-item endpoints (``_get_mutable_invoice``):
-            # a settled invoice's lines are history, not a draft.
-            if invoice.status in ("paid", "void"):
-                raise ConflictError(f"Cannot edit line items on a {invoice.status} invoice")
             # Whole-set replacement inside this transaction, so a multi-row edit
-            # can never half-apply. ``delete-orphan`` on the relationship removes
-            # the dropped rows.
+            # can never half-apply. ``delete-orphan`` removes dropped rows.
             invoice.line_items.clear()
             for item in invoice_in.line_items:
                 invoice.line_items.append(
@@ -399,11 +682,9 @@ class InvoiceService:
                     )
                 )
 
-        # tax/discount/line changes move the total, which can change paid/partial state.
         self._recompute_totals(invoice)
-        await self.db.commit()
-        await self.db.refresh(invoice, ["line_items"])
-        return serialize_invoice(invoice, InvoiceDetailResponse)
+        await self._commit_edit(invoice, checkout_affecting=bool(checkout_affecting_fields))
+        return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
 
     async def delete_invoice(
         self,
@@ -475,23 +756,93 @@ class InvoiceService:
         workspace_id: uuid.UUID,
         invoice_id: uuid.UUID,
     ) -> InvoiceSendResponse:
-        """Mark an invoice as sent (sets ``sent_at`` once), re-derive status, and
-        email the invoice to the bill-to contact.
-
-        Emailing stays best-effort -- a bounce must not undo the ``sent``
-        transition -- but the outcome is *reported* rather than swallowed, so an
-        operator is never told a contactless invoice reached the customer.
-        """
+        """Mark an invoice sent and report whether email reached the customer."""
         invoice = await self._load_for_send(workspace_id, invoice_id)
         await self._transition_to_sent(workspace_id, invoice)
 
         delivery, delivered_to = await self._email_invoice(workspace_id, invoice)
-        detail = serialize_invoice(invoice, InvoiceDetailResponse)
+        detail = await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
         return InvoiceSendResponse(
             **detail.model_dump(),
             delivery=delivery,
             delivered_to=delivered_to,
         )
+
+    async def retry_payment_receipt(
+        self, workspace_id: uuid.UUID, invoice_id: uuid.UUID
+    ) -> InvoiceDetailResponse:
+        """Idempotently queue or reopen a failed receipt; never deliver inline."""
+        invoice = await self._load_locked_invoice(workspace_id, invoice_id)
+        if float(invoice.amount_paid or 0) <= 0:
+            await self.db.commit()
+            raise ConflictError("A payment receipt can be retried only after a payment is recorded")
+
+        job = await self.db.scalar(
+            select(InvoicePaymentReceiptOutbox)
+            .where(
+                InvoicePaymentReceiptOutbox.workspace_id == workspace_id,
+                InvoicePaymentReceiptOutbox.invoice_id == invoice_id,
+            )
+            .order_by(InvoicePaymentReceiptOutbox.created_at.desc())
+            .limit(1)
+            .with_for_update()
+        )
+        if job is not None and job.status in (
+            RECEIPT_PENDING,
+            RECEIPT_PROCESSING,
+            RECEIPT_SENT,
+        ):
+            await self.db.commit()
+            return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
+        if job is not None and job.status != RECEIPT_TERMINAL:
+            await self.db.commit()
+            raise ConflictError("Receipt delivery is not in a retryable state")
+
+        recipient = invoice.last_emailed_to or (invoice.contact.email if invoice.contact else None)
+        if job is not None and job.recipient_email:
+            recipient = job.recipient_email
+        if not recipient:
+            await self.db.commit()
+            raise ConflictError(
+                "Add an email address to the invoice customer before retrying the receipt"
+            )
+
+        if job is None and invoice.paid_at is None:
+            await self.db.commit()
+            raise ConflictError("No payment receipt is available to retry")
+
+        if job is None:
+            job = await enqueue_invoice_payment_receipt(
+                self.db,
+                invoice,
+                payment_amount=float(invoice.total or invoice.amount_paid or 0),
+                payment_event_id=f"operator-retry:{invoice.id}",
+            )
+        else:
+            job.recipient_email = recipient
+            job.idempotency_key = derive_outbound_key(
+                "invoice_payment_receipt",
+                invoice.id,
+                job.payment_event_id,
+                recipient,
+            )
+            job.status = RECEIPT_PENDING
+            job.attempt_count = 0
+            job.next_attempt_at = datetime.now(UTC)
+            job.claimed_at = None
+            job.sent_at = None
+            job.terminal_at = None
+            job.last_error = None
+
+        await self.db.commit()
+        await self.db.refresh(job)
+        self.log.info(
+            "invoice_receipt_retried",
+            workspace_id=str(workspace_id),
+            invoice_id=str(invoice_id),
+            job_id=str(job.id),
+        )
+        return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
 
     async def deliver_invoice(
         self,
@@ -626,9 +977,38 @@ class InvoiceService:
             return "failed", None
 
         # ``send_invoice_email`` returns True only when the provider accepted it,
-        # so a False here (unconfigured provider, rejected send) is a real miss.
+        # so skipped/rejected sends leave the last successful destination intact.
         if not accepted:
             self.log.warning("invoice_email_not_accepted", invoice_id=str(invoice.id))
+            return "failed", None
+
+        accepted_at = datetime.now(UTC)
+        try:
+            # Delivery metadata is not an invoice content revision: preserve
+            # ``updated_at`` so provider idempotency stays stable across request retries.
+            await self.db.execute(
+                update(Invoice)
+                .where(
+                    Invoice.id == invoice.id,
+                    Invoice.workspace_id == workspace_id,
+                    (Invoice.last_emailed_at.is_(None)) | (Invoice.last_emailed_at <= accepted_at),
+                )
+                .values(
+                    last_emailed_to=contact_email,
+                    last_emailed_at=accepted_at,
+                    updated_at=Invoice.updated_at,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            await self.db.commit()
+            await self.db.refresh(invoice, ["last_emailed_to", "last_emailed_at"])
+        except Exception as exc:  # pragma: no cover - provider already accepted
+            await self.db.rollback()
+            self.log.warning(
+                "invoice_email_snapshot_failed",
+                invoice_id=str(invoice.id),
+                error=str(exc),
+            )
             return "failed", None
         return "emailed", contact_email
 
@@ -637,20 +1017,152 @@ class InvoiceService:
         workspace_id: uuid.UUID,
         invoice_id: uuid.UUID,
     ) -> InvoiceDetailResponse:
-        """Void an invoice. Fully paid invoices cannot be voided."""
-        invoice = await get_or_404(
-            self.db,
-            Invoice,
-            invoice_id,
-            workspace_id=workspace_id,
-            options=[selectinload(Invoice.line_items), selectinload(Invoice.contact)],
-        )
+        """Void a locked invoice after invalidating any active checkout."""
+        invoice = await self._load_locked_invoice(workspace_id, invoice_id)
         if invoice.status == "paid":
+            await self.db.commit()
             raise ConflictError("Cannot void a fully paid invoice")
+        await self._invalidate_checkout_for_edit(invoice)
         invoice.status = "void"
         await self.db.commit()
-        await self.db.refresh(invoice, ["line_items"])
-        return serialize_invoice(invoice, InvoiceDetailResponse)
+        await self.db.refresh(invoice, ["line_items", "contact"])
+        return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
+
+    async def _apply_manual_payment(
+        self,
+        invoice: Invoice,
+        payment: InvoiceManualPaymentCreate,
+        *,
+        amount: float,
+        reference: str | None,
+        recorded_by_id: int,
+    ) -> float:
+        """Apply one validated payment inside the caller's locked transaction."""
+        received_at = datetime.now(UTC)
+        invoice.amount_paid = round(float(invoice.amount_paid or 0) + amount, 2)
+        invoice.payment_method = payment.payment_method
+        invoice.payment_recorded_by_id = recorded_by_id
+        invoice.manual_payment_amount = amount
+        invoice.manual_payment_reference = reference
+        invoice.manual_payment_idempotency_key = payment.idempotency_key
+        invoice.public_token = invoice.public_token or generate_invoice_token()
+        self.db.add(
+            InvoicePayment(
+                workspace_id=invoice.workspace_id,
+                invoice_id=invoice.id,
+                payment_method=payment.payment_method,
+                amount=amount,
+                reference=reference,
+                recorded_by_id=recorded_by_id,
+                idempotency_key=payment.idempotency_key,
+                received_at=received_at,
+            )
+        )
+
+        balance_remaining = round(float(invoice.total) - float(invoice.amount_paid), 2)
+        if balance_remaining <= 0:
+            await self._transition_to_fully_paid(
+                invoice,
+                payment_amount=amount,
+                payment_event_id=f"manual-payment:{payment.idempotency_key}",
+            )
+        else:
+            invoice.status = self.derive_status(invoice)
+            await enqueue_invoice_payment_receipt(
+                self.db,
+                invoice,
+                payment_amount=amount,
+                payment_event_id=f"manual-payment:{payment.idempotency_key}",
+                balance_remaining=balance_remaining,
+                received_at=received_at,
+            )
+        return balance_remaining
+
+    async def record_manual_payment(
+        self,
+        workspace_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        payment: InvoiceManualPaymentCreate,
+        *,
+        recorded_by_id: int,
+    ) -> InvoiceDetailResponse:
+        """Record a partial or final cash/check payment and queue its receipt."""
+        invoice = await self._load_locked_invoice(workspace_id, invoice_id)
+        reference = (
+            payment.reference.strip()
+            if payment.payment_method == "check" and payment.reference
+            else None
+        )
+        amount = round(float(payment.amount), 2)
+        if amount <= 0:
+            await self.db.commit()
+            raise ValidationError("Payment amount must be at least 0.01")
+
+        existing_payment = await self.db.scalar(
+            select(InvoicePayment).where(
+                InvoicePayment.workspace_id == workspace_id,
+                InvoicePayment.idempotency_key == payment.idempotency_key,
+            )
+        )
+        if existing_payment is not None:
+            if (
+                existing_payment.invoice_id != invoice_id
+                or existing_payment.payment_method != payment.payment_method
+                or float(existing_payment.amount) != amount
+                or (existing_payment.reference or None) != reference
+            ):
+                await self.db.commit()
+                raise ConflictError("This payment request was already used with different details")
+            await self.db.commit()
+            return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
+
+        if invoice.status == "void":
+            await self.db.commit()
+            raise ConflictError("A payment cannot be recorded on a void invoice")
+        if invoice.paid_at is not None:
+            await self.db.commit()
+            raise ConflictError("This invoice is already fully paid")
+
+        remaining = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
+        if remaining <= 0:
+            await self.db.commit()
+            raise ConflictError("This invoice has no remaining balance")
+        if amount > remaining:
+            await self.db.commit()
+            raise ValidationError(f"Payment cannot exceed the remaining balance of {remaining:.2f}")
+        if await self._prepare_checkout_for_manual_payment(invoice):
+            return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
+
+        balance_remaining = await self._apply_manual_payment(
+            invoice,
+            payment,
+            amount=amount,
+            reference=reference,
+            recorded_by_id=recorded_by_id,
+        )
+        try:
+            await self.db.commit()
+        except IntegrityError:
+            await self.db.rollback()
+            key_owner = await self.db.scalar(
+                select(InvoicePayment.id).where(
+                    InvoicePayment.workspace_id == workspace_id,
+                    InvoicePayment.idempotency_key == payment.idempotency_key,
+                )
+            )
+            if key_owner is not None:
+                raise ConflictError("This payment request was already used") from None
+            raise
+        self.log.info(
+            "invoice_manual_payment_recorded",
+            workspace_id=str(workspace_id),
+            invoice_id=str(invoice_id),
+            payment_method=payment.payment_method,
+            amount=amount,
+            balance_remaining=balance_remaining,
+            recorded_by_id=recorded_by_id,
+        )
+        return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
 
     async def record_payment(
         self,
@@ -658,46 +1170,79 @@ class InvoiceService:
         amount: float,
         *,
         payment_intent_id: str | None = None,
+        checkout_session_id: str | None = None,
     ) -> bool:
-        """Apply a payment to an invoice (idempotent on ``payment_intent_id``).
+        """Apply a payment while holding the invoice lock; dedupe by Stripe ids.
 
-        Returns ``True`` when this call recorded the payment, ``False`` on a replay
-        of the most-recently-applied Stripe payment intent (so the webhook can
-        avoid duplicate side effects on retries). Idempotency is keyed on the
-        intent id alone, not on paid state, so replays of a *partial* payment are
-        no-ops too. Distinguishing an older interleaved intent would need a full
-        per-payment ledger (deferred); Stripe retries the same event, which this
-        covers. ``invoice.line_items`` need not be loaded.
+        The lock serializes webhook retries with operator edits. The paid transition
+        owns ``paid_at`` and its automation event, so no caller can derive ``paid``
+        while skipping those side effects.
         """
-        already_applied = (
-            payment_intent_id is not None and invoice.stripe_payment_intent_id == payment_intent_id
-        )
-        if already_applied:
+        invoice = await self._load_locked_invoice(invoice.workspace_id, invoice.id)
+        if (
+            checkout_session_id is not None
+            and invoice.stripe_checkout_session_id != checkout_session_id
+        ):
+            await self.db.commit()
+            self.log.warning(
+                "invoice_stale_checkout_ignored",
+                invoice_id=str(invoice.id),
+                checkout_session_id=checkout_session_id,
+            )
             return False
 
-        was_paid = invoice.status == "paid"
+        already_applied = payment_intent_id is not None and (
+            invoice.stripe_payment_intent_id == payment_intent_id
+            or await self.db.scalar(
+                select(InvoicePayment.id).where(
+                    InvoicePayment.external_event_id == payment_intent_id
+                )
+            )
+            is not None
+        )
+        if already_applied:
+            await self.db.commit()
+            return False
+
+        received_at = datetime.now(UTC)
         invoice.amount_paid = round(float(invoice.amount_paid or 0) + float(amount), 2)
+        invoice.payment_method = "card"
+        invoice.payment_recorded_by_id = None
+        invoice.manual_payment_amount = None
+        invoice.manual_payment_reference = None
+        invoice.manual_payment_idempotency_key = None
         if payment_intent_id:
             invoice.stripe_payment_intent_id = payment_intent_id
-        invoice.status = self.derive_status(invoice)
-        if invoice.status == "paid":
-            invoice.paid_at = datetime.now(UTC)
-        became_paid = invoice.status == "paid" and not was_paid
-        # Fire once, on the transition into fully paid (not on partial payments
-        # and not on a replay that leaves an already-paid invoice paid).
-        if became_paid:
-            await emit_automation_event(
-                self.db,
+        self.db.add(
+            InvoicePayment(
                 workspace_id=invoice.workspace_id,
-                event_type=EVENT_INVOICE_PAID,
-                contact_id=invoice.contact_id,
-                payload={
-                    "invoice_id": str(invoice.id),
-                    "number": invoice.number,
-                    "total": float(invoice.total or 0),
-                    "amount_paid": float(invoice.amount_paid or 0),
-                    "currency": invoice.currency,
-                },
+                invoice_id=invoice.id,
+                payment_method="card",
+                amount=float(amount),
+                external_event_id=payment_intent_id,
+                received_at=received_at,
+            )
+        )
+        payment_event_id = (
+            payment_intent_id
+            or checkout_session_id
+            or f"card-payment:{invoice.id}:{received_at.isoformat()}"
+        )
+        became_fully_paid = await self._transition_to_fully_paid(
+            invoice,
+            payment_amount=float(amount),
+            payment_event_id=payment_event_id,
+        )
+        if not became_fully_paid:
+            await enqueue_invoice_payment_receipt(
+                self.db,
+                invoice,
+                payment_amount=float(amount),
+                payment_event_id=payment_event_id,
+                balance_remaining=max(
+                    0, round(float(invoice.total) - float(invoice.amount_paid), 2)
+                ),
+                received_at=received_at,
             )
         await self.db.commit()
 
@@ -708,91 +1253,11 @@ class InvoiceService:
             amount_paid=float(invoice.amount_paid),
             status=invoice.status,
         )
-        # Customers receive one branded receipt when the invoice first becomes
-        # fully paid. Partial payments remain visible on the stable invoice page.
-        if became_paid:
-            await self._send_payment_receipt(
-                invoice,
-                float(amount),
-                payment_intent_id=payment_intent_id,
-            )
         # Tell the company money arrived. Fires on every real payment, including
         # a partial one -- a customer paying part of the balance is still news the
         # operator needs. The early return above makes webhook replays no-ops.
         await self._notify_payment_received(invoice, float(amount))
         return True
-
-    async def _send_payment_receipt(
-        self,
-        invoice: Invoice,
-        payment_amount: float,
-        *,
-        payment_intent_id: str | None,
-    ) -> None:
-        """Email the customer after full payment without risking reconciliation."""
-        from app.services.email import send_invoice_payment_receipt
-        from app.services.idempotency import derive_outbound_key
-        from app.services.quotes.proposal_template import get_proposal_template
-
-        try:
-            contact = (
-                await self.db.get(Contact, invoice.contact_id)
-                if invoice.contact_id is not None
-                else None
-            )
-            if contact is None or not contact.email:
-                self.log.info(
-                    "invoice_payment_receipt_skipped_no_email",
-                    invoice_id=str(invoice.id),
-                )
-                return
-
-            workspace = await self.db.get(Workspace, invoice.workspace_id)
-            if workspace is None:
-                self.log.warning(
-                    "invoice_payment_receipt_skipped_no_workspace",
-                    invoice_id=str(invoice.id),
-                )
-                return
-
-            template = get_proposal_template(workspace)
-            paid_at = invoice.paid_at or datetime.now(UTC)
-            accepted = await send_invoice_payment_receipt(
-                to_email=contact.email,
-                customer_name=contact.full_name,
-                business_name=template.business_name or workspace.name,
-                invoice_number=invoice.number,
-                payment_amount=payment_amount,
-                invoice_total=float(invoice.total or 0),
-                total_paid=float(invoice.amount_paid or 0),
-                currency=invoice.currency,
-                paid_at=paid_at,
-                logo_url=template.logo_url,
-                support_email=template.business_email,
-                support_phone=template.business_phone,
-                invoice_url=(
-                    f"{settings.frontend_url}/p/invoices/{invoice.public_token}"
-                    if invoice.public_token
-                    else None
-                ),
-                idempotency_key=derive_outbound_key(
-                    "invoice_payment_receipt",
-                    invoice.id,
-                    payment_intent_id or paid_at.isoformat(),
-                    contact.email,
-                ),
-            )
-            if not accepted:
-                self.log.warning(
-                    "invoice_payment_receipt_not_accepted",
-                    invoice_id=str(invoice.id),
-                )
-        except Exception as exc:  # pragma: no cover - payment is already committed
-            self.log.warning(
-                "invoice_payment_receipt_failed",
-                invoice_id=str(invoice.id),
-                error=str(exc),
-            )
 
     async def _notify_payment_received(self, invoice: Invoice, amount: float) -> None:
         """Push + email the workspace that a customer paid (best-effort).
@@ -862,9 +1327,8 @@ class InvoiceService:
             )
         )
         self._recompute_totals(invoice)
-        await self.db.commit()
-        await self.db.refresh(invoice, ["line_items"])
-        return serialize_invoice(invoice, InvoiceDetailResponse)
+        await self._commit_edit(invoice, checkout_affecting=True)
+        return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
 
     async def update_line_item(
         self,
@@ -903,9 +1367,8 @@ class InvoiceService:
         )
 
         self._recompute_totals(invoice)
-        await self.db.commit()
-        await self.db.refresh(invoice, ["line_items"])
-        return serialize_invoice(invoice, InvoiceDetailResponse)
+        await self._commit_edit(invoice, checkout_affecting=True)
+        return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
 
     async def remove_line_item(
         self,
@@ -926,24 +1389,18 @@ class InvoiceService:
         invoice.line_items.remove(line_item)
         await self.db.delete(line_item)
         self._recompute_totals(invoice)
-        await self.db.commit()
-        await self.db.refresh(invoice, ["line_items"])
-        return serialize_invoice(invoice, InvoiceDetailResponse)
+        await self._commit_edit(invoice, checkout_affecting=True)
+        return await self._serialize_invoice(workspace_id, invoice, InvoiceDetailResponse)
 
     async def _get_mutable_invoice(
         self,
         workspace_id: uuid.UUID,
         invoice_id: uuid.UUID,
     ) -> Invoice:
-        """Load an invoice (with line items) and reject edits once paid or void."""
-        invoice = await get_or_404(
-            self.db,
-            Invoice,
-            invoice_id,
-            workspace_id=workspace_id,
-            options=[selectinload(Invoice.line_items), selectinload(Invoice.contact)],
-        )
+        """Lock an invoice and reject line-item edits once paid or void."""
+        invoice = await self._load_locked_invoice(workspace_id, invoice_id)
         if invoice.status in ("paid", "void"):
+            await self.db.commit()
             raise ConflictError(f"Cannot edit line items on a {invoice.status} invoice")
         return invoice
 
@@ -967,13 +1424,7 @@ class InvoiceService:
         ``record_payment`` keys idempotency on it -- pre-storing it would make the
         completion webhook a no-op and the payment would never be recorded.
         """
-        invoice = await get_or_404(
-            self.db,
-            Invoice,
-            invoice_id,
-            workspace_id=workspace_id,
-            options=[selectinload(Invoice.contact)],
-        )
+        invoice = await self._load_locked_invoice(workspace_id, invoice_id)
         return await self._start_checkout(invoice)
 
     async def _start_checkout(
@@ -1003,9 +1454,8 @@ class InvoiceService:
         if balance <= 0:
             raise ConflictError("Invoice has no outstanding balance")
 
-        previous_session_id = invoice.stripe_checkout_session_id
-        if previous_session_id:
-            await call_payment_service.expire_checkout_session_if_open(previous_session_id)
+        if invoice.stripe_checkout_session_id:
+            await self._invalidate_checkout_for_edit(invoice)
 
         customer_email = invoice.contact.email if invoice.contact else None
         result = await call_payment_service.create_payment_checkout_session(
@@ -1165,16 +1615,21 @@ class InvoiceService:
     ) -> PublicInvoicePaymentCheckout:
         """Validate recipient choices and charge the resulting server-priced balance."""
         invoice = await self._load_by_public_token(token, for_update=True)
-        if selected_optional_line_item_ids is not None:
-            self._apply_recipient_selection(invoice, selected_optional_line_item_ids)
+        selection_changed = selected_optional_line_item_ids is not None
+        if selection_changed:
+            self._apply_recipient_selection(invoice, selected_optional_line_item_ids or [])
         else:
             self._recompute_totals(invoice)
+
+        balance = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
+        if balance <= 0:
+            await self._commit_edit(invoice, checkout_affecting=selection_changed)
+            raise ConflictError("Invoice has no outstanding balance")
 
         return_url = f"{settings.frontend_url}/p/invoices/{token}"
         _, url = await self._start_checkout(invoice, return_url=return_url)
         if not url:
             raise ServiceUnavailableError("Could not start the payment")
-        balance = round(float(invoice.total or 0) - float(invoice.amount_paid or 0), 2)
         return PublicInvoicePaymentCheckout(url=url, amount=balance, currency=invoice.currency)
 
     async def reconcile_public_payment(self, token: str) -> PublicInvoicePaymentStatus:
@@ -1205,7 +1660,10 @@ class InvoiceService:
             else:
                 if status.payment_status == "paid":
                     await self.record_payment(
-                        invoice, balance, payment_intent_id=status.payment_intent_id
+                        invoice,
+                        balance,
+                        payment_intent_id=status.payment_intent_id,
+                        checkout_session_id=session_id,
                     )
                     paid = float(invoice.amount_paid or 0)
                     balance = round(max(0.0, total - paid), 2)
@@ -1263,4 +1721,9 @@ async def handle_invoice_checkout_session_completed(
         amount = call_payment_service.from_minor_units(int(amount_total), invoice.currency)
 
     service = InvoiceService(db)
-    await service.record_payment(invoice, amount, payment_intent_id=payment_intent_id)
+    await service.record_payment(
+        invoice,
+        amount,
+        payment_intent_id=payment_intent_id,
+        checkout_session_id=session_id if isinstance(session_id, str) else None,
+    )

@@ -925,18 +925,25 @@ async def send_invoice_payment_receipt(
     support_email: str | None = None,
     support_phone: str | None = None,
     invoice_url: str | None = None,
+    service_summary: str | None = None,
+    balance_remaining: float = 0,
 ) -> bool:
-    """Send a branded transactional receipt when an invoice becomes fully paid."""
+    """Send a branded receipt for a partial or final invoice payment."""
     currency_code = (currency or "USD").upper()
     paid_label = paid_at.astimezone(UTC).strftime("%B %-d, %Y at %-I:%M %p UTC")
+    paid_in_full = balance_remaining <= 0
     details = {
         "Invoice": invoice_number,
         "Payment received": f"{currency_code} {payment_amount:,.2f}",
         "Invoice total": f"{currency_code} {invoice_total:,.2f}",
         "Total paid": f"{currency_code} {total_paid:,.2f}",
-        "Paid": paid_label,
-        "Status": "Paid in full",
+        "Received": paid_label,
+        "Status": "Paid in full" if paid_in_full else "Partial payment",
     }
+    if not paid_in_full:
+        details["Balance remaining"] = f"{currency_code} {balance_remaining:,.2f}"
+    if service_summary:
+        details["Services provided"] = service_summary
     if support_email:
         details["Questions"] = support_email
     elif support_phone:
@@ -951,11 +958,11 @@ async def send_invoice_payment_receipt(
         Details(rows=details),
     ]
     if invoice_url:
-        blocks.append(Button("View paid invoice", invoice_url))
+        blocks.append(Button("View invoice", invoice_url))
     blocks.append(
         Paragraph(
-            "Keep this email for your records. The paid invoice includes the service "
-            "details and can be saved as a PDF."
+            "Keep this email for your records. The invoice includes the service details, "
+            "total paid, and current balance."
         )
     )
     rendered = render_email(

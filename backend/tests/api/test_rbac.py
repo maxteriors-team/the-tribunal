@@ -314,6 +314,30 @@ async def test_invoice_create_denied_to_tech_and_sales_allowed_to_manager() -> N
         _clear_overrides()
 
 
+async def test_invoice_receipt_retry_requires_billing_write() -> None:
+    path = f"/invoices/{uuid.uuid4()}/receipt/retry"
+    try:
+        for role in ("technician", "sales_rep"):
+            async with _client_as(role) as client:
+                assert (await client.post(_url(path))).status_code == 403, role
+        async with _client_as("manager") as client:
+            assert (await client.post(_url(path))).status_code != 403
+    finally:
+        _clear_overrides()
+
+
+async def test_invoice_manual_payment_requires_billing_write() -> None:
+    path = f"/invoices/{uuid.uuid4()}/payments/manual"
+    try:
+        for role in ("technician", "sales_rep"):
+            async with _client_as(role) as client:
+                assert (await client.post(_url(path), json={})).status_code == 403, role
+        async with _client_as("manager") as client:
+            assert (await client.post(_url(path), json={})).status_code != 403
+    finally:
+        _clear_overrides()
+
+
 async def test_sales_can_author_quotes_without_billing_access() -> None:
     try:
         async with _client_as("sales_rep") as client:

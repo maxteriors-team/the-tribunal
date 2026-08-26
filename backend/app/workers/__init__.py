@@ -32,6 +32,7 @@ from app.workers.email_campaign_worker import _registry as email_campaign_regist
 from app.workers.enrichment_worker import _registry as enrichment_registry
 from app.workers.experiment_evaluation_worker import _registry as experiment_evaluation_registry
 from app.workers.followup_worker import _registry as followup_registry
+from app.workers.invoice_payment_receipt_worker import registry as invoice_payment_receipt_registry
 from app.workers.message_attachment_worker import registry as message_attachment_registry
 from app.workers.message_test_worker import _registry as message_test_registry
 from app.workers.meta_ads_spend_worker import _registry as meta_ads_spend_registry
@@ -341,6 +342,11 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         dependencies=("postgres", "meta_graph"),
         enabled=lambda s: s.meta_ads_spend_worker_enabled,
         enabled_setting="meta_ads_spend_worker_enabled",
+    ),
+    WorkerSpec(
+        name="invoice_payment_receipt_worker",
+        registry=invoice_payment_receipt_registry,
+        dependencies=("postgres", "resend"),
     ),
 )
 

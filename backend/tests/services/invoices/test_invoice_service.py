@@ -8,24 +8,33 @@ default. Run with ``pytest -m integration``.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterator
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.invoice import Invoice, InvoiceLineItem
+from app.models.invoice_payment import InvoicePayment
+from app.models.invoice_payment_receipt_outbox import (
+    RECEIPT_PENDING,
+    RECEIPT_TERMINAL,
+    InvoicePaymentReceiptOutbox,
+)
+from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.invoice import (
     InvoiceCreate,
     InvoiceLineItemCreate,
     InvoiceLineItemUpdate,
+    InvoiceManualPaymentCreate,
     InvoiceUpdate,
 )
 from app.services.exceptions import (
@@ -39,6 +48,11 @@ from app.services.invoices.invoice_service import handle_invoice_checkout_sessio
 from app.services.payments import call_payment_service
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
+
+
+def _stripe_id(label: str) -> str:
+    """Return a provider id unique across persistent local test runs."""
+    return f"{label}_{uuid.uuid4().hex}"
 
 
 @pytest.fixture(autouse=True)
@@ -59,6 +73,19 @@ async def _make_workspace(db: AsyncSession) -> Workspace:
     db.add(ws)
     await db.flush()
     return ws
+
+
+async def _make_user(db: AsyncSession) -> User:
+    email = f"operator-{uuid.uuid4().hex[:8]}@example.com"
+    user = User(
+        email=email,
+        email_hash=hash_value(email),
+        hashed_password="x",
+        full_name="Payment Recorder",
+    )
+    db.add(user)
+    await db.flush()
+    return user
 
 
 async def _make_contact(
@@ -174,7 +201,9 @@ async def test_send_then_full_payment_transitions_to_paid() -> None:
 
         invoice_row = await db.get(Invoice, inv.id)
         assert invoice_row is not None
-        recorded = await svc.record_payment(invoice_row, 300.0, payment_intent_id="pi_full")
+        recorded = await svc.record_payment(
+            invoice_row, 300.0, payment_intent_id=_stripe_id("pi_full")
+        )
         assert recorded is True
         assert invoice_row.status == "paid"
         assert invoice_row.paid_at is not None
@@ -194,23 +223,34 @@ async def test_partial_payment_then_idempotent_replay() -> None:
         invoice_row = await db.get(Invoice, inv.id)
         assert invoice_row is not None
 
+        partial_payment_id = _stripe_id("pi_part")
+        final_payment_id = _stripe_id("pi_final")
+
         # Partial payment -> status partial, no paid_at.
-        assert await svc.record_payment(invoice_row, 50.0, payment_intent_id="pi_part") is True
+        assert (
+            await svc.record_payment(invoice_row, 50.0, payment_intent_id=partial_payment_id)
+            is True
+        )
         assert invoice_row.status == "partial"
         assert invoice_row.paid_at is None
         assert float(invoice_row.amount_paid) == 50.0
 
         # Remaining balance -> paid.
-        assert await svc.record_payment(invoice_row, 150.0, payment_intent_id="pi_final") is True
+        assert (
+            await svc.record_payment(invoice_row, 150.0, payment_intent_id=final_payment_id) is True
+        )
         assert invoice_row.status == "paid"
         assert float(invoice_row.amount_paid) == 200.0
 
         # Webhook replay of the same final intent must be a no-op (idempotent).
-        assert await svc.record_payment(invoice_row, 150.0, payment_intent_id="pi_final") is False
+        assert (
+            await svc.record_payment(invoice_row, 150.0, payment_intent_id=final_payment_id)
+            is False
+        )
         assert float(invoice_row.amount_paid) == 200.0
 
 
-async def test_full_payment_emails_one_branded_customer_receipt(
+async def test_full_payment_enqueues_one_branded_customer_receipt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import app.services.email as email_mod
@@ -253,24 +293,349 @@ async def test_full_payment_emails_one_branded_customer_receipt(
         invoice_row = await db.get(Invoice, inv.id)
         assert invoice_row is not None
 
-        # A partial payment is not a paid-in-full receipt.
-        assert await svc.record_payment(invoice_row, 50.0, payment_intent_id="pi_part") is True
+        partial_payment_id = _stripe_id("pi_part")
+        final_payment_id = _stripe_id("pi_final")
+
+        # A partial payment queues its own snapshot but never sends inline.
+        assert (
+            await svc.record_payment(invoice_row, 50.0, payment_intent_id=partial_payment_id)
+            is True
+        )
         assert receipt_calls == []
 
-        # Crossing into paid sends one receipt; replaying the webhook sends none.
-        assert await svc.record_payment(invoice_row, 150.0, payment_intent_id="pi_final") is True
-        assert await svc.record_payment(invoice_row, 150.0, payment_intent_id="pi_final") is False
-        assert len(receipt_calls) == 1
-        call = receipt_calls[0]
-        assert call["to_email"] == "customer@example.com"
-        assert call["customer_name"] == "Pat"
-        assert call["business_name"] == "Patio Lights Co"
-        assert call["logo_url"] == "https://cdn.example.com/logo.png"
-        assert call["support_email"] == "office@example.com"
-        assert call["payment_amount"] == 150.0
-        assert call["invoice_total"] == 200.0
-        assert call["total_paid"] == 200.0
-        assert f"/p/invoices/{invoice_row.public_token}" in str(call["invoice_url"])
+        # Crossing into paid commits a second snapshot; replay cannot add another.
+        assert (
+            await svc.record_payment(invoice_row, 150.0, payment_intent_id=final_payment_id) is True
+        )
+        assert (
+            await svc.record_payment(invoice_row, 150.0, payment_intent_id=final_payment_id)
+            is False
+        )
+        jobs = list(
+            (
+                await db.scalars(
+                    select(InvoicePaymentReceiptOutbox).where(
+                        InvoicePaymentReceiptOutbox.invoice_id == invoice_row.id
+                    )
+                )
+            ).all()
+        )
+        assert len(jobs) == 2
+        partial_job = next(job for job in jobs if job.payment_event_id == partial_payment_id)
+        job = next(job for job in jobs if job.payment_event_id == final_payment_id)
+        assert receipt_calls == []
+        assert float(partial_job.payment_amount) == 50.0
+        assert float(partial_job.balance_remaining or 0) == 150.0
+        assert job.payment_event_id == final_payment_id
+        assert job.recipient_email == "customer@example.com"
+        assert job.customer_name == "Pat"
+        assert job.service_summary == "Job"
+        assert job.business_name == "Patio Lights Co"
+        assert job.logo_url == "https://cdn.example.com/logo.png"
+        assert job.support_email == "office@example.com"
+        assert float(job.payment_amount) == 150.0
+        assert float(job.invoice_total) == 200.0
+        assert float(job.total_paid) == 200.0
+        assert f"/p/invoices/{invoice_row.public_token}" in str(job.invoice_url)
+
+
+async def test_receipt_retry_is_workspace_scoped() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        other_ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        invoice = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)],
+            ),
+            amount_paid=100.0,
+            payment_intent_id=_stripe_id("pi_scoped_receipt"),
+        )
+
+        with pytest.raises(NotFoundError):
+            await svc.retry_payment_receipt(other_ws.id, invoice.id)
+
+        jobs = (
+            await db.scalars(
+                select(InvoicePaymentReceiptOutbox).where(
+                    InvoicePaymentReceiptOutbox.invoice_id == invoice.id
+                )
+            )
+        ).all()
+        assert len(jobs) == 1
+        assert jobs[0].workspace_id == ws.id
+
+
+async def test_receipt_retry_reopens_once_without_sending_inline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.services.email as email_mod
+
+    send_calls = 0
+
+    async def _fail_if_sent(**kwargs: object) -> bool:
+        nonlocal send_calls
+        send_calls += 1
+        return True
+
+    monkeypatch.setattr(email_mod, "send_invoice_payment_receipt", _fail_if_sent)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        invoice = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)],
+            ),
+            amount_paid=100.0,
+            payment_intent_id=_stripe_id("pi_retry_receipt"),
+        )
+        job = await db.scalar(
+            select(InvoicePaymentReceiptOutbox).where(
+                InvoicePaymentReceiptOutbox.invoice_id == invoice.id
+            )
+        )
+        assert job is not None
+        job.status = RECEIPT_TERMINAL
+        job.attempt_count = 5
+        job.last_error = "provider secret detail that must never reach operators"
+        job.terminal_at = datetime.now(UTC)
+        await db.commit()
+
+        failed = await svc.get_invoice(ws.id, invoice.id)
+        assert failed.receipt_delivery.status == "needs_attention"
+        assert failed.receipt_delivery.reason == (
+            "Receipt delivery failed after multiple attempts. Retry the receipt."
+        )
+        assert "provider secret" not in (failed.receipt_delivery.reason or "")
+
+        first = await svc.retry_payment_receipt(ws.id, invoice.id)
+        first_next_attempt = job.next_attempt_at
+        second = await svc.retry_payment_receipt(ws.id, invoice.id)
+
+        await db.refresh(job)
+        jobs = (
+            await db.scalars(
+                select(InvoicePaymentReceiptOutbox).where(
+                    InvoicePaymentReceiptOutbox.invoice_id == invoice.id
+                )
+            )
+        ).all()
+        assert len(jobs) == 1
+        assert job.status == RECEIPT_PENDING
+        assert job.attempt_count == 0
+        assert job.last_error is None
+        assert job.next_attempt_at == first_next_attempt
+        assert first.receipt_delivery.status == "pending"
+        assert second.receipt_delivery.status == "pending"
+        assert send_calls == 0
+
+
+async def test_manual_check_payment_is_scoped_idempotent_and_queues_receipt() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        other_ws = await _make_workspace(db)
+        operator = await _make_user(db)
+        contact = await _make_contact(db, ws.id, email="customer@example.com")
+        svc = InvoiceService(db)
+        created = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Gutter cleaning", unit_price=175.0)],
+            ),
+        )
+        request = InvoiceManualPaymentCreate(
+            payment_method="check",
+            amount=50,
+            reference="check-1042",
+            idempotency_key=uuid.uuid4(),
+        )
+        with pytest.raises(ValidationError, match="at least 0.01"):
+            await svc.record_manual_payment(
+                ws.id,
+                created.id,
+                InvoiceManualPaymentCreate(
+                    payment_method="cash", amount=0.004, idempotency_key=uuid.uuid4()
+                ),
+                recorded_by_id=operator.id,
+            )
+
+        with pytest.raises(NotFoundError):
+            await svc.record_manual_payment(
+                other_ws.id, created.id, request, recorded_by_id=operator.id
+            )
+
+        first = await svc.record_manual_payment(
+            ws.id, created.id, request, recorded_by_id=operator.id
+        )
+        second = await svc.record_manual_payment(
+            ws.id, created.id, request, recorded_by_id=operator.id
+        )
+        other_invoice = await svc.create_invoice(
+            other_ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Fence wash", unit_price=80.0)]),
+        )
+        other_result = await svc.record_manual_payment(
+            other_ws.id, other_invoice.id, request, recorded_by_id=operator.id
+        )
+        final_request = InvoiceManualPaymentCreate(
+            payment_method="cash",
+            amount=125,
+            reference="stale-check-reference",
+            idempotency_key=uuid.uuid4(),
+        )
+        final = await svc.record_manual_payment(
+            ws.id, created.id, final_request, recorded_by_id=operator.id
+        )
+
+        row = await db.get(Invoice, created.id)
+        assert row is not None
+        assert first.status == second.status == other_result.status == "partial"
+        assert final.status == "paid"
+        assert first.payment_method == "check"
+        assert first.manual_payment_amount == 50.0
+        assert first.manual_payment_reference == "check-1042"
+        assert len(first.payments) == 1
+        assert len(final.payments) == 2
+        assert [payment.amount for payment in final.payments] == [50.0, 125.0]
+        assert final.manual_payment_reference is None
+        assert final.payments[1].reference is None
+        assert row.payment_recorded_by_id == operator.id
+        assert row.manual_payment_idempotency_key == final_request.idempotency_key
+        assert row.public_token is not None
+        jobs = (
+            await db.scalars(
+                select(InvoicePaymentReceiptOutbox).where(
+                    InvoicePaymentReceiptOutbox.invoice_id == created.id
+                )
+            )
+        ).all()
+        assert len(jobs) == 2
+        assert {job.payment_event_id for job in jobs} == {
+            f"manual-payment:{request.idempotency_key}",
+            f"manual-payment:{final_request.idempotency_key}",
+        }
+        assert sorted(float(job.payment_amount) for job in jobs) == [50.0, 125.0]
+        assert sorted(float(job.balance_remaining or 0) for job in jobs) == [0.0, 125.0]
+        ledger = (
+            await db.scalars(select(InvoicePayment).where(InvoicePayment.invoice_id == created.id))
+        ).all()
+        assert len(ledger) == 2
+
+        raw_reference = await db.scalar(
+            text("SELECT reference FROM invoice_payments WHERE id = :payment_id"),
+            {"payment_id": first.payments[0].id},
+        )
+        assert raw_reference is not None
+        assert "check-1042" not in str(raw_reference)
+
+
+async def test_manual_cash_payment_expires_open_card_checkout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expired: list[str] = []
+
+    async def retrieve_status(_session_id: str) -> call_payment_service.SessionStatus:
+        return call_payment_service.SessionStatus(
+            payment_status="unpaid", status="open", payment_intent_id=None
+        )
+
+    async def expire(session_id: str) -> bool:
+        expired.append(session_id)
+        return True
+
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: True)
+    monkeypatch.setattr(call_payment_service, "retrieve_session_status", retrieve_status)
+    monkeypatch.setattr(call_payment_service, "expire_checkout_session_if_open", expire)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        operator = await _make_user(db)
+        svc = InvoiceService(db)
+        created = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Window wash", unit_price=90.0)]),
+        )
+        row = await db.get(Invoice, created.id)
+        assert row is not None
+        row.stripe_checkout_session_id = "cs_open_manual_invoice"
+        await db.commit()
+
+        result = await svc.record_manual_payment(
+            ws.id,
+            created.id,
+            InvoiceManualPaymentCreate(
+                payment_method="cash", amount=90, idempotency_key=uuid.uuid4()
+            ),
+            recorded_by_id=operator.id,
+        )
+
+        assert expired == ["cs_open_manual_invoice"]
+        assert result.status == "paid"
+        assert result.payment_method == "cash"
+        assert row.stripe_checkout_session_id is None
+
+
+async def test_paid_card_checkout_wins_over_manual_invoice_payment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payment_intent_id = _stripe_id("pi_card_wins")
+
+    async def retrieve_status(_session_id: str) -> call_payment_service.SessionStatus:
+        return call_payment_service.SessionStatus(
+            payment_status="paid", status="complete", payment_intent_id=payment_intent_id
+        )
+
+    async def no_notification(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: True)
+    monkeypatch.setattr(call_payment_service, "retrieve_session_status", retrieve_status)
+    monkeypatch.setattr(InvoiceService, "_notify_payment_received", no_notification)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        operator = await _make_user(db)
+        svc = InvoiceService(db)
+        created = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Roof wash", unit_price=250.0)]),
+        )
+        row = await db.get(Invoice, created.id)
+        assert row is not None
+        row.stripe_checkout_session_id = "cs_paid_before_manual"
+        await db.commit()
+
+        result = await svc.record_manual_payment(
+            ws.id,
+            created.id,
+            InvoiceManualPaymentCreate(
+                payment_method="check",
+                amount=250,
+                reference="check-too-late",
+                idempotency_key=uuid.uuid4(),
+            ),
+            recorded_by_id=operator.id,
+        )
+
+        assert result.status == "paid"
+        assert result.payment_method == "card"
+        assert result.payment_recorded_by_id is None
+        assert result.manual_payment_reference is None
+        job = await db.scalar(
+            select(InvoicePaymentReceiptOutbox).where(
+                InvoicePaymentReceiptOutbox.invoice_id == created.id
+            )
+        )
+        assert job is not None
+        assert job.payment_event_id == payment_intent_id
 
 
 async def test_overdue_is_derived_from_due_date() -> None:
@@ -333,7 +698,7 @@ async def test_paid_invoice_cannot_be_voided_or_edited() -> None:
         )
         invoice_row = await db.get(Invoice, inv.id)
         assert invoice_row is not None
-        await svc.record_payment(invoice_row, 100.0, payment_intent_id="pi_x")
+        await svc.record_payment(invoice_row, 100.0, payment_intent_id=_stripe_id("pi_x"))
         assert invoice_row.status == "paid"
 
         with pytest.raises(ConflictError):
@@ -372,23 +737,41 @@ async def test_list_is_workspace_scoped_and_filterable() -> None:
             await svc.get_invoice(ws_b.id, a1.id)
 
 
-async def test_updated_tax_rederives_paid_state() -> None:
+async def test_paid_invoice_rejects_checkout_affecting_changes() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        replacement_contact = await _make_contact(db, ws.id)
         svc = InvoiceService(db)
         inv = await svc.create_invoice(
-            ws.id, InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)])
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)],
+            ),
         )
         invoice_row = await db.get(Invoice, inv.id)
         assert invoice_row is not None
-        await svc.record_payment(invoice_row, 100.0, payment_intent_id="pi_t")
-        assert invoice_row.status == "paid"
+        await svc.record_payment(invoice_row, 100.0, payment_intent_id=_stripe_id("pi_t"))
 
-        # Raising tax makes the balance outstanding again -> partial.
-        updated = await svc.update_invoice(ws.id, inv.id, InvoiceUpdate(tax_amount=20.0))
-        assert updated.total == 120.0
-        assert updated.amount_paid == 100.0
-        assert updated.status == "partial"
+        blocked_updates = [
+            InvoiceUpdate(tax_amount=20.0),
+            InvoiceUpdate(discount_amount=10.0),
+            InvoiceUpdate(currency="EUR"),
+            InvoiceUpdate(contact_id=replacement_contact.id),
+            InvoiceUpdate(line_items=[InvoiceLineItemCreate(name="Changed", unit_price=100.0)]),
+        ]
+        for invoice_update in blocked_updates:
+            with pytest.raises(ConflictError, match="paid invoice"):
+                await svc.update_invoice(ws.id, inv.id, invoice_update)
+
+        await db.refresh(invoice_row)
+        assert float(invoice_row.total) == 100.0
+        assert float(invoice_row.tax_amount) == 0.0
+        assert float(invoice_row.discount_amount) == 0.0
+        assert invoice_row.currency == "USD"
+        assert invoice_row.contact_id == contact.id
+        assert invoice_row.status == "paid"
 
 
 async def test_payment_link_requires_stripe_configured(
@@ -414,6 +797,7 @@ async def test_payment_link_requires_stripe_configured(
 
 
 async def test_webhook_records_payment_and_is_idempotent() -> None:
+    payment_intent_id = _stripe_id("pi_inv_1")
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
         svc = InvoiceService(db)
@@ -421,12 +805,16 @@ async def test_webhook_records_payment_and_is_idempotent() -> None:
             ws.id, InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=300.0)])
         )
         await svc.mark_sent(ws.id, inv.id)
+        invoice_row = await db.get(Invoice, inv.id)
+        assert invoice_row is not None
+        invoice_row.stripe_checkout_session_id = "cs_test_inv"
+        await db.commit()
 
         # Stripe sends amount in minor units; 30000 -> $300.00.
         session = {
             "id": "cs_test_inv",
             "mode": "payment",
-            "payment_intent": "pi_inv_1",
+            "payment_intent": payment_intent_id,
             "amount_total": 30000,
             "metadata": {"invoice_id": str(inv.id), "workspace_id": str(ws.id)},
         }
@@ -441,6 +829,74 @@ async def test_webhook_records_payment_and_is_idempotent() -> None:
         await handle_invoice_checkout_session_completed(session, db)
         replayed = await svc.get_invoice(ws.id, inv.id)
         assert replayed.amount_paid == 300.0
+        jobs = list(
+            (
+                await db.scalars(
+                    select(InvoicePaymentReceiptOutbox).where(
+                        InvoicePaymentReceiptOutbox.invoice_id == inv.id
+                    )
+                )
+            ).all()
+        )
+        assert len(jobs) == 1
+        assert jobs[0].payment_event_id == payment_intent_id
+
+
+async def test_receipt_survives_crash_after_payment_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Closing the webhook session after commit cannot lose its receipt job."""
+    import app.workers.invoice_payment_receipt_worker as worker_mod
+
+    async def _accepted(**kwargs: object) -> bool:
+        return True
+
+    monkeypatch.setattr(worker_mod, "BATCH_SIZE", 1)
+    monkeypatch.setattr(worker_mod, "send_invoice_payment_receipt", _accepted)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="crash@example.com")
+        svc = InvoiceService(db)
+        inv = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=125.0)],
+            ),
+        )
+        invoice_row = await db.get(Invoice, inv.id)
+        assert invoice_row is not None
+        assert await svc.record_payment(
+            invoice_row,
+            125.0,
+            payment_intent_id=_stripe_id("pi_crash_after_commit"),
+        )
+        invoice_id = invoice_row.id
+        job = await db.scalar(
+            select(InvoicePaymentReceiptOutbox).where(
+                InvoicePaymentReceiptOutbox.invoice_id == invoice_id
+            )
+        )
+        assert job is not None
+        job.next_attempt_at = datetime(2000, 1, 1, tzinfo=UTC)
+        job_id = job.id
+        await db.commit()
+    # Simulated process crash: the transaction-owning session is gone.
+
+    async with AsyncSessionLocal() as db:
+        paid_invoice = await db.get(Invoice, invoice_id)
+        persisted_job = await db.get(InvoicePaymentReceiptOutbox, job_id)
+        assert paid_invoice is not None and paid_invoice.status == "paid"
+        assert persisted_job is not None and persisted_job.status == "pending"
+
+    await worker_mod.InvoicePaymentReceiptWorker().process_once()
+
+    async with AsyncSessionLocal() as db:
+        delivered = await db.get(InvoicePaymentReceiptOutbox, job_id)
+        assert delivered is not None
+        assert delivered.status == "sent"
+        assert delivered.sent_at is not None
 
 
 async def test_webhook_matches_by_session_id_when_metadata_absent() -> None:
@@ -463,7 +919,7 @@ async def test_webhook_matches_by_session_id_when_metadata_absent() -> None:
         session = {
             "id": session_id,
             "mode": "payment",
-            "payment_intent": "pi_fallback",
+            "payment_intent": _stripe_id("pi_fallback"),
             "amount_total": 8000,
             "metadata": {},  # no invoice_id -> must resolve via session id
         }
@@ -1241,20 +1697,27 @@ async def test_texting_without_a_phone_number_names_the_fix() -> None:
             await svc.deliver_invoice(ws.id, inv.id, channel="sms")
 
 
-async def test_delivering_by_email_to_an_override_address(
+async def test_accepted_override_is_encrypted_retained_and_used_for_receipt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`to` redirects the invoice without editing the contact record."""
+    """Only provider-accepted invoice delivery changes future receipt routing."""
     import app.services.email as email_mod
 
     monkeypatch.setattr(call_payment_service, "is_payment_configured", lambda: False)
     sent: list[dict[str, object]] = []
+    receipts: list[dict[str, object]] = []
+    provider_accepts = True
 
     async def _fake_email(**kwargs: object) -> bool:
         sent.append(kwargs)
+        return provider_accepts
+
+    async def _fake_receipt(**kwargs: object) -> bool:
+        receipts.append(kwargs)
         return True
 
     monkeypatch.setattr(email_mod, "send_invoice_email", _fake_email)
+    monkeypatch.setattr(email_mod, "send_invoice_payment_receipt", _fake_receipt)
 
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
@@ -1273,6 +1736,40 @@ async def test_delivering_by_email_to_an_override_address(
         )
         assert result.to == "accounting@example.com"
         assert sent[0]["to_email"] == "accounting@example.com"
+
+        stored = await db.get(Invoice, inv.id)
+        assert stored is not None
+        assert stored.last_emailed_to == "accounting@example.com"
+        assert stored.last_emailed_at is not None
+        accepted_at = stored.last_emailed_at
+        encrypted_destination = await db.scalar(
+            text("SELECT last_emailed_to FROM invoices WHERE id = :invoice_id"),
+            {"invoice_id": inv.id},
+        )
+        assert encrypted_destination != "accounting@example.com"
+        assert str(encrypted_destination).startswith("gAAAAA")
+
+        provider_accepts = False
+        with pytest.raises(ValidationError, match="could not be sent"):
+            await svc.deliver_invoice(ws.id, inv.id, channel="email", to="rejected@example.com")
+        await db.refresh(stored)
+        assert stored.last_emailed_to == "accounting@example.com"
+        assert stored.last_emailed_at == accepted_at
+
+        contact.email = "changed@example.com"
+        contact.email_hash = hash_value(contact.email)
+        await db.commit()
+        assert await svc.record_payment(
+            stored, 100.0, payment_intent_id=_stripe_id("pi_snapshot_receipt")
+        )
+        receipt_job = await db.scalar(
+            select(InvoicePaymentReceiptOutbox).where(
+                InvoicePaymentReceiptOutbox.invoice_id == stored.id
+            )
+        )
+        assert receipt_job is not None
+        assert receipts == []
+        assert receipt_job.recipient_email == "accounting@example.com"
 
 
 # --------------------------------------------------------------------------- #
@@ -1306,7 +1803,9 @@ async def test_a_customer_payment_notifies_the_company(
         invoice = await db.get(Invoice, inv.id)
         assert invoice is not None
 
-        applied = await svc.record_payment(invoice, 500.0, payment_intent_id="pi_notify_1")
+        applied = await svc.record_payment(
+            invoice, 500.0, payment_intent_id=_stripe_id("pi_notify_1")
+        )
 
         assert applied is True
         assert len(calls) == 1
@@ -1338,9 +1837,12 @@ async def test_a_webhook_replay_does_not_re_notify(
         invoice = await db.get(Invoice, inv.id)
         assert invoice is not None
 
-        await svc.record_payment(invoice, 500.0, payment_intent_id="pi_replay")
+        payment_intent_id = _stripe_id("pi_replay")
+        await svc.record_payment(invoice, 500.0, payment_intent_id=payment_intent_id)
         # Same intent id arrives again (Stripe retry).
-        applied_again = await svc.record_payment(invoice, 500.0, payment_intent_id="pi_replay")
+        applied_again = await svc.record_payment(
+            invoice, 500.0, payment_intent_id=payment_intent_id
+        )
 
         assert applied_again is False
         assert len(calls) == 1
@@ -1367,7 +1869,7 @@ async def test_a_notification_outage_never_undoes_a_payment(
         invoice = await db.get(Invoice, inv.id)
         assert invoice is not None
 
-        applied = await svc.record_payment(invoice, 500.0, payment_intent_id="pi_boom")
+        applied = await svc.record_payment(invoice, 500.0, payment_intent_id=_stripe_id("pi_boom"))
 
         assert applied is True
         await db.refresh(invoice)
@@ -1429,3 +1931,359 @@ async def test_contact_name_is_not_leaked_across_workspaces() -> None:
         assert listed_b.total == 1
         assert all(item.contact_name != "Pat Private" for item in listed_b.items)
         assert listed_b.items[0].contact_name is None
+
+
+async def test_sent_checkout_affecting_edits_expire_only_the_price_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expired_sessions: list[str] = []
+
+    async def _fake_expire(session_id: str) -> bool:
+        expired_sessions.append(session_id)
+        return True
+
+    monkeypatch.setattr(call_payment_service, "expire_checkout_session_if_open", _fake_expire)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        replacement_contact = await _make_contact(db, ws.id)
+        svc = InvoiceService(db)
+        created = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(
+                contact_id=contact.id,
+                line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)],
+            ),
+        )
+        await svc.mark_sent(ws.id, created.id)
+        stored = await db.get(Invoice, created.id)
+        assert stored is not None
+        public_token = stored.public_token
+        assert public_token is not None
+
+        header_updates = [
+            InvoiceUpdate(tax_amount=10.0),
+            InvoiceUpdate(discount_amount=5.0),
+            InvoiceUpdate(currency="EUR"),
+            InvoiceUpdate(contact_id=replacement_contact.id),
+        ]
+        for index, invoice_update in enumerate(header_updates):
+            stored = await db.get(Invoice, created.id)
+            assert stored is not None
+            stored.stripe_checkout_session_id = f"cs_header_{index}"
+            stored.stripe_payment_intent_id = "pi_existing_payment"
+            await db.commit()
+
+            await svc.update_invoice(ws.id, created.id, invoice_update)
+            persisted = await db.get(Invoice, created.id)
+            assert persisted is not None
+            assert persisted.stripe_checkout_session_id is None
+            assert persisted.stripe_payment_intent_id == "pi_existing_payment"
+            assert persisted.public_token == public_token
+
+        stored = await db.get(Invoice, created.id)
+        assert stored is not None
+        await db.refresh(stored, ["line_items"])
+        stored.stripe_checkout_session_id = "cs_line_item"
+        await db.commit()
+        line_item = stored.line_items[0]
+        updated = await svc.update_line_item(
+            ws.id, created.id, line_item.id, InvoiceLineItemUpdate(unit_price=120.0)
+        )
+        assert updated.total == 125.0
+        persisted = await db.get(Invoice, created.id)
+        assert persisted is not None
+        assert persisted.stripe_checkout_session_id is None
+        assert persisted.public_token == public_token
+
+        stored = await db.get(Invoice, created.id)
+        assert stored is not None
+        stored.stripe_checkout_session_id = "cs_void"
+        await db.commit()
+        voided = await svc.void_invoice(ws.id, created.id)
+        assert voided.status == "void"
+        persisted = await db.get(Invoice, created.id)
+        assert persisted is not None
+        assert persisted.stripe_checkout_session_id is None
+        assert persisted.public_token == public_token
+
+    assert expired_sessions == [
+        "cs_header_0",
+        "cs_header_1",
+        "cs_header_2",
+        "cs_header_3",
+        "cs_line_item",
+        "cs_void",
+    ]
+
+
+async def test_checkout_expiration_failure_rolls_back_the_entire_edit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _cannot_expire(session_id: str) -> bool:
+        return False
+
+    monkeypatch.setattr(call_payment_service, "expire_checkout_session_if_open", _cannot_expire)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        created = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)]),
+        )
+        await svc.mark_sent(ws.id, created.id)
+        stored = await db.get(Invoice, created.id)
+        assert stored is not None
+        stored.stripe_checkout_session_id = "cs_cannot_expire"
+        original_token = stored.public_token
+        await db.commit()
+
+        with pytest.raises(ConflictError, match="could not be invalidated"):
+            await svc.update_invoice(ws.id, created.id, InvoiceUpdate(tax_amount=25.0))
+
+        persisted = await db.get(Invoice, created.id)
+        assert persisted is not None
+        assert float(persisted.tax_amount) == 0.0
+        assert float(persisted.total) == 100.0
+        assert persisted.stripe_checkout_session_id == "cs_cannot_expire"
+        assert persisted.public_token == original_token
+
+
+async def test_partial_edit_rejects_underpayment_and_equality_uses_paid_transition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.services.invoices.invoice_service as invoice_service_module
+
+    paid_events: list[dict[str, object]] = []
+
+    async def _fake_emit(db: object, **kwargs: object) -> None:
+        paid_events.append(kwargs)
+
+    async def _fake_notify(self: InvoiceService, invoice: Invoice, amount: float) -> None:
+        return None
+
+    monkeypatch.setattr(invoice_service_module, "emit_automation_event", _fake_emit)
+    monkeypatch.setattr(InvoiceService, "_notify_payment_received", _fake_notify)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        created = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)]),
+        )
+        await svc.mark_sent(ws.id, created.id)
+        workspace_id = ws.id
+        paid_events.clear()
+        stored = await db.get(Invoice, created.id)
+        assert stored is not None
+        payment_intent_id = _stripe_id("pi_partial_edit")
+        assert await svc.record_payment(stored, 40.0, payment_intent_id=payment_intent_id)
+        assert stored.status == "partial"
+
+        with pytest.raises(ConflictError, match="less than the amount already paid"):
+            await svc.update_invoice(workspace_id, created.id, InvoiceUpdate(discount_amount=70.0))
+
+        paid = await svc.update_invoice(
+            workspace_id, created.id, InvoiceUpdate(discount_amount=60.0)
+        )
+        assert paid.total == 40.0
+        assert paid.amount_paid == 40.0
+        assert paid.status == "paid"
+        assert paid.paid_at is not None
+        assert len(paid_events) == 1
+        receipt_jobs = list(
+            (
+                await db.scalars(
+                    select(InvoicePaymentReceiptOutbox).where(
+                        InvoicePaymentReceiptOutbox.invoice_id == created.id
+                    )
+                )
+            ).all()
+        )
+        assert len(receipt_jobs) == 1
+        assert float(receipt_jobs[0].payment_amount) == 40.0
+        assert float(receipt_jobs[0].balance_remaining or 0) == 60.0
+        assert receipt_jobs[0].payment_event_id == payment_intent_id
+
+        annotated = await svc.update_invoice(
+            workspace_id,
+            created.id,
+            InvoiceUpdate(
+                notes="Paid on site",
+                terms="Thank you",
+                due_date=date.today() + timedelta(days=30),
+            ),
+        )
+        assert annotated.notes == "Paid on site"
+        assert annotated.terms == "Thank you"
+        assert len(paid_events) == 1
+        assert (
+            len(
+                list(
+                    (
+                        await db.scalars(
+                            select(InvoicePaymentReceiptOutbox).where(
+                                InvoicePaymentReceiptOutbox.invoice_id == created.id
+                            )
+                        )
+                    ).all()
+                )
+            )
+            == 1
+        )
+
+
+async def test_duplicate_webhook_race_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payment_intent_id = _stripe_id("pi_duplicate_race")
+    import app.services.invoices.invoice_service as invoice_service_module
+
+    paid_events: list[dict[str, object]] = []
+    notifications: list[float] = []
+
+    async def _fake_emit(db: object, **kwargs: object) -> None:
+        paid_events.append(kwargs)
+
+    async def _fake_notify(self: InvoiceService, invoice: Invoice, amount: float) -> None:
+        notifications.append(amount)
+
+    monkeypatch.setattr(invoice_service_module, "emit_automation_event", _fake_emit)
+    monkeypatch.setattr(InvoiceService, "_notify_payment_received", _fake_notify)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        duplicate = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=90.0)]),
+        )
+        await svc.mark_sent(ws.id, duplicate.id)
+        paid_events.clear()
+        stored = await db.get(Invoice, duplicate.id)
+        assert stored is not None
+        stored.stripe_checkout_session_id = "cs_duplicate_race"
+        await db.commit()
+        duplicate_id = duplicate.id
+
+    duplicate_session = {
+        "id": "cs_duplicate_race",
+        "mode": "payment",
+        "payment_intent": payment_intent_id,
+        "amount_total": 9000,
+        "metadata": {"invoice_id": str(duplicate_id)},
+    }
+
+    async def _deliver_duplicate() -> None:
+        async with AsyncSessionLocal() as webhook_db:
+            await handle_invoice_checkout_session_completed(duplicate_session, webhook_db)
+
+    await asyncio.gather(_deliver_duplicate(), _deliver_duplicate())
+
+    async with AsyncSessionLocal() as db:
+        persisted = await db.get(Invoice, duplicate_id)
+        assert persisted is not None
+        assert float(persisted.amount_paid) == 90.0
+        assert persisted.status == "paid"
+        assert persisted.paid_at is not None
+        jobs = list(
+            (
+                await db.scalars(
+                    select(InvoicePaymentReceiptOutbox).where(
+                        InvoicePaymentReceiptOutbox.invoice_id == duplicate_id
+                    )
+                )
+            ).all()
+        )
+        assert len(jobs) == 1
+        assert jobs[0].payment_event_id == payment_intent_id
+
+    assert len(paid_events) == 1
+    assert notifications == [90.0]
+
+
+async def test_stale_checkout_webhook_race_cannot_apply_the_old_price(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expire_started = asyncio.Event()
+    payment_started = asyncio.Event()
+    allow_expire = asyncio.Event()
+    original_record_payment = InvoiceService.record_payment
+
+    async def _fake_expire(session_id: str) -> bool:
+        expire_started.set()
+        await allow_expire.wait()
+        return True
+
+    async def _record_after_signal(
+        self: InvoiceService,
+        invoice: Invoice,
+        amount: float,
+        *,
+        payment_intent_id: str | None = None,
+        checkout_session_id: str | None = None,
+    ) -> bool:
+        payment_started.set()
+        return await original_record_payment(
+            self,
+            invoice,
+            amount,
+            payment_intent_id=payment_intent_id,
+            checkout_session_id=checkout_session_id,
+        )
+
+    monkeypatch.setattr(call_payment_service, "expire_checkout_session_if_open", _fake_expire)
+    monkeypatch.setattr(InvoiceService, "record_payment", _record_after_signal)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = InvoiceService(db)
+        stale = await svc.create_invoice(
+            ws.id,
+            InvoiceCreate(line_items=[InvoiceLineItemCreate(name="Job", unit_price=100.0)]),
+        )
+        await svc.mark_sent(ws.id, stale.id)
+        stored = await db.get(Invoice, stale.id)
+        assert stored is not None
+        stored.stripe_checkout_session_id = "cs_stale_race"
+        stale_token = stored.public_token
+        await db.commit()
+        stale_workspace_id = ws.id
+        stale_id = stale.id
+
+    stale_session = {
+        "id": "cs_stale_race",
+        "mode": "payment",
+        "payment_intent": "pi_stale_race",
+        "amount_total": 10000,
+        "metadata": {"invoice_id": str(stale_id)},
+    }
+
+    async def _edit_price() -> None:
+        async with AsyncSessionLocal() as edit_db:
+            await InvoiceService(edit_db).update_invoice(
+                stale_workspace_id, stale_id, InvoiceUpdate(tax_amount=10.0)
+            )
+
+    async def _deliver_stale() -> None:
+        async with AsyncSessionLocal() as webhook_db:
+            await handle_invoice_checkout_session_completed(stale_session, webhook_db)
+
+    edit_task = asyncio.create_task(_edit_price())
+    await expire_started.wait()
+    webhook_task = asyncio.create_task(_deliver_stale())
+    await payment_started.wait()
+    allow_expire.set()
+    await asyncio.gather(edit_task, webhook_task)
+
+    async with AsyncSessionLocal() as db:
+        persisted = await db.get(Invoice, stale_id)
+        assert persisted is not None
+        assert float(persisted.total) == 110.0
+        assert float(persisted.amount_paid) == 0.0
+        assert persisted.status == "sent"
+        assert persisted.stripe_checkout_session_id is None
+        assert persisted.public_token == stale_token

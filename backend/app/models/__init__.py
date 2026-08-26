@@ -76,6 +76,8 @@ from app.models.inventory import (
 )
 from app.models.invitation import WorkspaceInvitation
 from app.models.invoice import Invoice, InvoiceLineItem
+from app.models.invoice_payment import InvoicePayment
+from app.models.invoice_payment_receipt_outbox import InvoicePaymentReceiptOutbox
 from app.models.job_costing import JobExpense, TimeEntry
 from app.models.knowledge_chunk import KnowledgeChunk
 from app.models.knowledge_document import KnowledgeDocument
@@ -281,6 +283,8 @@ __all__ = [
     "INVENTORY_VALUATION_METHODS",
     "Invoice",
     "InvoiceLineItem",
+    "InvoicePayment",
+    "InvoicePaymentReceiptOutbox",
     "TimeEntry",
     "JobExpense",
     "Quote",

@@ -54,6 +54,7 @@ def test_worker_specs_preserve_existing_startup_order() -> None:
         "prebooking_worker",
         "message_attachment",
         "meta_ads_spend_worker",
+        "invoice_payment_receipt_worker",
     ]
     assert [spec.registry for spec in WORKER_SPECS] == ALL_REGISTRIES
 
@@ -77,6 +78,7 @@ def test_worker_specs_include_health_and_dependency_metadata() -> None:
     assert "expo_push" in by_name["approval_worker"].dependencies
     assert "private_object_storage" in by_name["message_attachment"].dependencies
     assert "meta_graph" in by_name["meta_ads_spend_worker"].dependencies
+    assert "resend" in by_name["invoice_payment_receipt_worker"].dependencies
 
 
 def test_enabled_worker_specs_applies_per_spec_predicate() -> None:
