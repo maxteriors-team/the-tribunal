@@ -5649,6 +5649,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/payments/manual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Manual Invoice Payment
+         * @description Record a partial or final payment received by cash or check.
+         */
+        post: operations["record_manual_invoice_payment_api_v1_workspaces__workspace_id__invoices__invoice_id__payments_manual_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/receipt/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Invoice Receipt
+         * @description Idempotently enqueue or reopen receipt delivery without sending inline.
+         */
+        post: operations["retry_invoice_receipt_api_v1_workspaces__workspace_id__invoices__invoice_id__receipt_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/send": {
         parameters: {
             query?: never;
@@ -16529,6 +16569,8 @@ export interface components {
             last_message_at: string | null;
             /** Last Message Preview */
             last_message_preview: string | null;
+            /** Source Provider */
+            source_provider?: string | null;
             /** Status */
             status: string;
             /** Unread Count */
@@ -16576,6 +16618,8 @@ export interface components {
             last_message_preview: string | null;
             /** Messages */
             messages: components["schemas"]["app__schemas__conversation__MessageResponse"][];
+            /** Source Provider */
+            source_provider?: string | null;
             /** Status */
             status: string;
             /** Unread Count */
@@ -18761,7 +18805,7 @@ export interface components {
              * Integration Type
              * @enum {string}
              */
-            integration_type: "telnyx" | "openai" | "resend" | "meta_lead_ads" | "meta_ad_library" | "google_ads_transparency" | "companycam";
+            integration_type: "telnyx" | "openai" | "resend" | "meta_lead_ads" | "meta_ad_library" | "google_ads_transparency" | "companycam" | "quo";
             /**
              * Is Active
              * @default true
@@ -19573,7 +19617,7 @@ export interface components {
         };
         /**
          * InvoiceDetailResponse
-         * @description Invoice with its line items.
+         * @description Invoice with line items and sensitive payment provenance.
          */
         InvoiceDetailResponse: {
             /** Amount Paid */
@@ -19602,6 +19646,10 @@ export interface components {
             issue_date?: string | null;
             /** Line Items */
             line_items?: components["schemas"]["InvoiceLineItemResponse"][];
+            /** Manual Payment Amount */
+            manual_payment_amount?: number | null;
+            /** Manual Payment Reference */
+            manual_payment_reference?: string | null;
             /** Notes */
             notes?: string | null;
             /** Number */
@@ -19610,6 +19658,13 @@ export interface components {
             opportunity_id?: string | null;
             /** Paid At */
             paid_at?: string | null;
+            /** Payment Method */
+            payment_method?: ("card" | "cash" | "check") | null;
+            /** Payment Recorded By Id */
+            payment_recorded_by_id?: number | null;
+            /** Payments */
+            payments?: components["schemas"]["InvoicePaymentResponse"][];
+            receipt_delivery?: components["schemas"]["InvoiceReceiptDelivery"];
             /** Sent At */
             sent_at?: string | null;
             /**
@@ -19733,6 +19788,26 @@ export interface components {
             unit_price?: number | null;
         };
         /**
+         * InvoiceManualPaymentCreate
+         * @description Record a partial or final invoice payment received offline.
+         */
+        InvoiceManualPaymentCreate: {
+            /** Amount */
+            amount: number;
+            /**
+             * Idempotency Key
+             * Format: uuid
+             */
+            idempotency_key: string;
+            /**
+             * Payment Method
+             * @enum {string}
+             */
+            payment_method: "cash" | "check";
+            /** Reference */
+            reference?: string | null;
+        };
+        /**
          * InvoicePaymentLinkResponse
          * @description Stripe Checkout link for collecting an invoice's outstanding balance.
          */
@@ -19741,6 +19816,54 @@ export interface components {
             session_id: string;
             /** Url */
             url: string | null;
+        };
+        /**
+         * InvoicePaymentResponse
+         * @description Operator-visible payment history without provider or idempotency secrets.
+         */
+        InvoicePaymentResponse: {
+            /** Amount */
+            amount: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Payment Method
+             * @enum {string}
+             */
+            payment_method: "card" | "cash" | "check" | "other";
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Recorded By Id */
+            recorded_by_id?: number | null;
+            /** Reference */
+            reference?: string | null;
+        };
+        /**
+         * InvoiceReceiptDelivery
+         * @description Operator-safe projection of the paid-receipt outbox state.
+         *
+         *     Provider errors stay internal; ``reason`` is an allowlisted next step rather
+         *     than the worker's raw exception text.
+         */
+        InvoiceReceiptDelivery: {
+            /** Reason */
+            reason?: string | null;
+            /** Recipient */
+            recipient?: string | null;
+            /**
+             * Status
+             * @default skipped
+             * @enum {string}
+             */
+            status: "pending" | "sent" | "needs_attention" | "skipped";
+            /** Timestamp */
+            timestamp?: string | null;
         };
         /**
          * InvoiceResponse
@@ -19779,6 +19902,9 @@ export interface components {
             opportunity_id?: string | null;
             /** Paid At */
             paid_at?: string | null;
+            /** Payment Method */
+            payment_method?: ("card" | "cash" | "check") | null;
+            receipt_delivery?: components["schemas"]["InvoiceReceiptDelivery"];
             /** Sent At */
             sent_at?: string | null;
             /**
@@ -19846,6 +19972,10 @@ export interface components {
             issue_date?: string | null;
             /** Line Items */
             line_items?: components["schemas"]["InvoiceLineItemResponse"][];
+            /** Manual Payment Amount */
+            manual_payment_amount?: number | null;
+            /** Manual Payment Reference */
+            manual_payment_reference?: string | null;
             /** Notes */
             notes?: string | null;
             /** Number */
@@ -19854,6 +19984,13 @@ export interface components {
             opportunity_id?: string | null;
             /** Paid At */
             paid_at?: string | null;
+            /** Payment Method */
+            payment_method?: ("card" | "cash" | "check") | null;
+            /** Payment Recorded By Id */
+            payment_recorded_by_id?: number | null;
+            /** Payments */
+            payments?: components["schemas"]["InvoicePaymentResponse"][];
+            receipt_delivery?: components["schemas"]["InvoiceReceiptDelivery"];
             /** Sent At */
             sent_at?: string | null;
             /**
@@ -19882,8 +20019,7 @@ export interface components {
         };
         /**
          * InvoiceUpdate
-         * @description Update invoice header fields (all optional); ``status``/``number``/totals
-         *     are server-derived.
+         * @description Update invoice fields while identifying changes that stale checkout prices.
          *
          *     ``line_items`` optionally **replaces the whole set** in the same transaction.
          *     An editor that reorders, edits, and deletes rows in one save would otherwise
@@ -31331,6 +31467,8 @@ export interface components {
             direction?: string | null;
             /** Duration Seconds */
             duration_seconds?: number | null;
+            /** External Url */
+            external_url?: string | null;
             /**
              * Id
              * Format: uuid
@@ -31354,6 +31492,8 @@ export interface components {
             signals?: {
                 [key: string]: unknown;
             } | null;
+            /** Source Provider */
+            source_provider?: string | null;
             /** Status */
             status?: string | null;
             /**
@@ -32786,6 +32926,8 @@ export interface components {
             created_at: string;
             /** Direction */
             direction: string;
+            /** External Url */
+            external_url?: string | null;
             /**
              * Id
              * Format: uuid
@@ -32795,6 +32937,8 @@ export interface components {
             is_ai: boolean;
             /** Sent At */
             sent_at: string | null;
+            /** Source Provider */
+            source_provider?: string | null;
             /** Status */
             status: string;
         };
@@ -44205,6 +44349,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvoicePaymentLinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_manual_invoice_payment_api_v1_workspaces__workspace_id__invoices__invoice_id__payments_manual_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceManualPaymentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_invoice_receipt_api_v1_workspaces__workspace_id__invoices__invoice_id__receipt_retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                invoice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvoiceDetailResponse"];
                 };
             };
             /** @description Validation Error */
