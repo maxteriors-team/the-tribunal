@@ -48,6 +48,7 @@ from sqlalchemy.orm import aliased
 from app.db.scope import apply_workspace_scope
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.contact import Contact
+from app.models.field_service import Job, JobStatus
 from app.models.lead_source import LeadSource, LeadSourceType
 from app.models.opportunity import Opportunity
 from app.models.quote import Quote
@@ -125,7 +126,7 @@ class ConversionFacts:
 
 @dataclass(frozen=True)
 class AttendanceFacts:
-    """Decided appointment outcomes in the window.
+    """Appointment volume and decided outcomes in the window.
 
     Only ``completed`` and ``no_show`` are decisions. A ``scheduled``
     appointment is unknown attendance and a ``cancelled`` one is a call-off, so
@@ -133,6 +134,7 @@ class AttendanceFacts:
     that simply has not marked anything as one that gets stood up.
     """
 
+    booked: int = 0
     completed: int = 0
     no_show: int = 0
 
@@ -297,6 +299,7 @@ def assemble_sales_performance(
     attendance: AttendanceFacts | None = None,
     booked_jobs: int | None = None,
     booked_revenue: float | None = None,
+    jobs_completed: int = 0,
 ) -> SalesPerformanceReport:
     """Build the report from cohort quotes.
 
@@ -335,8 +338,10 @@ def assemble_sales_performance(
         contacts_created=contact_cohort.contacts_created,
         contacts_converted=contact_cohort.contacts_converted,
         conversion_rate=conversion_rate(contact_cohort),
+        appointments_booked=appointments.booked,
         appointments_completed=appointments.completed,
         appointments_no_show=appointments.no_show,
+        jobs_completed=jobs_completed,
         show_up_rate=show_up_rate(appointments),
         by_closer=_breakdown(issued, _closer_identity),
         by_lead_source=_breakdown(issued, _lead_source_identity),
@@ -371,6 +376,9 @@ class SalesPerformanceService:
         attendance = await self._load_attendance(
             workspace_id, start, end, timezone_name=timezone_name
         )
+        jobs_completed = await self._load_jobs_completed(
+            workspace_id, start, end, timezone_name=timezone_name
+        )
         booked = await get_booked_revenue_totals(
             self.db,
             workspace_id,
@@ -386,6 +394,7 @@ class SalesPerformanceService:
             attendance=attendance,
             booked_jobs=booked.count,
             booked_revenue=float(booked.revenue),
+            jobs_completed=jobs_completed,
         )
 
     async def _load_attendance(
@@ -407,6 +416,7 @@ class SalesPerformanceService:
         row = (
             await self.db.execute(
                 select(
+                    func.count(Appointment.id),
                     func.count(Appointment.id).filter(
                         Appointment.status == AppointmentStatus.COMPLETED
                     ),
@@ -421,7 +431,31 @@ class SalesPerformanceService:
             )
         ).one()
 
-        return AttendanceFacts(completed=int(row[0] or 0), no_show=int(row[1] or 0))
+        return AttendanceFacts(
+            booked=int(row[0] or 0),
+            completed=int(row[1] or 0),
+            no_show=int(row[2] or 0),
+        )
+
+    async def _load_jobs_completed(
+        self,
+        workspace_id: uuid.UUID,
+        date_from: date,
+        date_to: date,
+        *,
+        timezone_name: str,
+    ) -> int:
+        """Count completed jobs scheduled inside the selected local-date window."""
+        start, end = local_date_bounds_utc(date_from, date_to, timezone_name)
+        result = await self.db.execute(
+            select(func.count(Job.id)).where(
+                Job.workspace_id == workspace_id,
+                Job.status == JobStatus.COMPLETED,
+                Job.scheduled_start >= start,
+                Job.scheduled_start < end,
+            )
+        )
+        return int(result.scalar_one() or 0)
 
     async def _load_conversion(
         self,

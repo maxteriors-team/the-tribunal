@@ -72,6 +72,9 @@ vi.mock("@/components/locations/location-filter", () => ({
 vi.mock("@/components/calendar/new-appointment-dialog", () => ({
   NewAppointmentDialog: () => null,
 }));
+vi.mock("@/components/calendar/calendar-statistics", () => ({
+  CalendarStatistics: () => <div data-testid="calendar-statistics" />,
+}));
 vi.mock("@/components/jobs/new-job-dialog", () => ({
   NewJobDialog: () => null,
 }));

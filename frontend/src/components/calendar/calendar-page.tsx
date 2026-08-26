@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { AppointmentDetailsDialog } from "@/components/calendar/appointment-details-dialog";
 import { CalendarEntryChip } from "@/components/calendar/calendar-entry-chip";
 import { CalendarMonthView } from "@/components/calendar/calendar-month-view";
+import { CalendarStatistics } from "@/components/calendar/calendar-statistics";
 import { NewAppointmentDialog } from "@/components/calendar/new-appointment-dialog";
 import { JobDetailDialog } from "@/components/jobs/job-detail-dialog";
 import { NewJobDialog } from "@/components/jobs/new-job-dialog";
@@ -95,6 +96,7 @@ export function CalendarPage({ initialJobId }: { initialJobId?: string } = {}) {
   // filter for "only mine" would be a no-op switch, and the queue is dispatch
   // work they cannot act on.
   const canWriteJobs = can("jobs:write");
+  const canViewReports = can("reports:view");
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<CalendarView>("month");
@@ -383,6 +385,8 @@ export function CalendarPage({ initialJobId }: { initialJobId?: string } = {}) {
           {counts.jobs} job{counts.jobs !== 1 ? "s" : ""}
         </span>
       </div>
+
+      {canViewReports ? <CalendarStatistics workspaceId={workspaceId} /> : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Calendar */}

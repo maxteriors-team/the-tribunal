@@ -118,6 +118,14 @@ class TestAppointmentUpdate:
         update = AppointmentUpdate(duration_minutes=45)
         assert update.duration_minutes == 45
 
+    def test_schedule_fields_allow_calendar_editing(self) -> None:
+        """Operators can move an appointment and change its time semantics."""
+        scheduled_at = datetime(2026, 9, 15, 14, 30, tzinfo=UTC)
+        update = AppointmentUpdate(scheduled_at=scheduled_at, anytime=False)
+
+        assert update.scheduled_at == scheduled_at
+        assert update.anytime is False
+
     def test_duration_too_short_raises(self) -> None:
         """duration_minutes below minimum raises ValidationError."""
         with pytest.raises(ValidationError):
