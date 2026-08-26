@@ -1985,7 +1985,6 @@ function LandscapeProposalPanel({
           )}
         </div>
 
-
         <footer className="ll-proposal-total">
           <div>
             <span>One-time installation</span>
@@ -3350,14 +3349,15 @@ export function LightDesigner({
           contactId: landscapeProject?.contactId,
           opportunityId: landscapeProject?.opportunityId,
           serviceLocationId: landscapeProject?.serviceLocationId,
-          lightingProjectId: landscapeProject?.projectId,
+          lightingProjectId: landscapeProject?.installationShotId
+            ? landscapeProject.projectId
+            : undefined,
           title: landscapeProjectName,
         });
   const landscapeProposalSignature = JSON.stringify(landscapeProposalPayload);
   const landscapeProposalHasRequirements = Boolean(
     landscapeProposalPayload &&
-      (landscapeProposalPayload.quantities?.length ||
-        landscapeProposalPayload.bistro?.runs?.length),
+    (landscapeProposalPayload.quantities?.length || landscapeProposalPayload.bistro?.runs?.length),
   );
   const landscapeProposalQuery = useQuery({
     queryKey: queryKeys.lightingProjects.proposalPreview(workspaceId, landscapeProposalSignature),
@@ -3370,8 +3370,7 @@ export function LightDesigner({
       workspaceId,
       landscapeProposalSignature,
     ),
-    queryFn: () =>
-      salesWizardApi.inventoryAvailability(workspaceId, landscapeProposalPayload!),
+    queryFn: () => salesWizardApi.inventoryAvailability(workspaceId, landscapeProposalPayload!),
     enabled: landscapeProposalHasRequirements,
     placeholderData: keepPreviousData,
   });
@@ -4821,9 +4820,7 @@ export function LightDesigner({
                                   </label>
                                   <div
                                     className={
-                                      permanentDepositValid
-                                        ? "est-customer-hint"
-                                        : "est-send-error"
+                                      permanentDepositValid ? "est-customer-hint" : "est-send-error"
                                     }
                                   >
                                     {!permanentDepositValid
@@ -4878,8 +4875,8 @@ export function LightDesigner({
                                   </Link>
                                   {quoteResult.depositAmount != null ? (
                                     <div className="est-customer-hint">
-                                      Email or text the proposal from Quotes. Customer approval opens
-                                      secure card checkout.
+                                      Email or text the proposal from Quotes. Customer approval
+                                      opens secure card checkout.
                                     </div>
                                   ) : null}
                                 </div>
