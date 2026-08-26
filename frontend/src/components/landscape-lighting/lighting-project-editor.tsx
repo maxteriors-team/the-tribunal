@@ -191,6 +191,9 @@ function ActiveProjectEditor({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const projectType = loadedProject.project_type;
+  const isLandscape = projectType === "landscape";
+  const projectsHref = isLandscape ? "/landscape-lighting" : "/permanent-lighting";
   const [closedConflictKey, setClosedConflictKey] = useState<string | null>(null);
   const [resolvingConflict, setResolvingConflict] = useState<"load" | "copy" | null>(null);
   const [workflowTab, setWorkflowTab] = useState<LandscapeWorkflowTab>(
@@ -199,7 +202,7 @@ function ActiveProjectEditor({
   const autosave = useLightingProjectAutosave({
     workspaceId,
     project: loadedProject,
-    onCopyCreated: (copy) => router.push(`/landscape-lighting/${copy.id}`),
+    onCopyCreated: (copy) => router.push(`${projectsHref}/${copy.id}`),
   });
   const selectInstallationShot = useCallback(
     async (shotId: string) => {
@@ -244,7 +247,7 @@ function ActiveProjectEditor({
             aria-label="Open CRM navigation"
           />
           <Link
-            href="/landscape-lighting"
+            href={projectsHref}
             className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm px-1 text-xs font-medium text-[#38352f] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8a682f]"
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
@@ -262,17 +265,19 @@ function ActiveProjectEditor({
             errorMessage={autosave.errorMessage}
             onRetry={autosave.retry}
           />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 shrink-0 rounded-md border-[#d8d1c5] bg-transparent px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[#1b1a18] hover:bg-black/[0.04]"
-            aria-controls="landscape-quote-builder"
-            title="Set the deposit, preview the client payment page, and send the proposal"
-            onClick={openQuoteBuilder}
-          >
-            Proposal & payment
-          </Button>
+          {isLandscape ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 shrink-0 rounded-md border-[#d8d1c5] bg-transparent px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[#1b1a18] hover:bg-black/[0.04]"
+              aria-controls="landscape-quote-builder"
+              title="Set the deposit, preview the client payment page, and send the proposal"
+              onClick={openQuoteBuilder}
+            >
+              Proposal & payment
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="sm"
@@ -361,12 +366,16 @@ function ActiveProjectEditor({
           ) : null}
         </div>
       </header>
-      <ProjectWorkflowTabs value={workflowTab} onChange={setWorkflowTab} />
+      {isLandscape ? <ProjectWorkflowTabs value={workflowTab} onChange={setWorkflowTab} /> : null}
 
       <div
-        id={`landscape-panel-${workflowTab}`}
-        role="tabpanel"
-        aria-labelledby={`landscape-tab-${workflowTab}`}
+        {...(isLandscape
+          ? {
+              id: `landscape-panel-${workflowTab}`,
+              role: "tabpanel",
+              "aria-labelledby": `landscape-tab-${workflowTab}`,
+            }
+          : {})}
         className="mx-auto min-h-0 w-full max-w-[1800px] flex-1 overflow-hidden"
       >
         <LightDesigner
@@ -374,7 +383,7 @@ function ActiveProjectEditor({
           workspaceId={workspaceId}
           workspaceName={workspaceName}
           workspaceLogoUrl={workspaceLogoUrl}
-          focus="landscape"
+          focus={projectType}
           landscapeProject={{
             initialDraft: autosave.initialDraft,
             onLandscapeDraftChange: autosave.onDraftChange,
@@ -389,7 +398,7 @@ function ActiveProjectEditor({
             opportunityId: autosave.project.opportunity_id,
             serviceLocationId: autosave.project.service_location_id,
             installationShotId: autosave.project.installation_shot_id,
-            onSelectInstallationShot: selectInstallationShot,
+            onSelectInstallationShot: isLandscape ? selectInstallationShot : undefined,
             flushBeforeProposal: autosave.saveNow,
             resetKey: autosave.resetKey,
             activeWorkflowTab: workflowTab,
@@ -444,11 +453,15 @@ export function LightingProjectEditor({ projectId }: LightingProjectEditorProps)
   }
 
   if (projectQuery.data.status === "archived") {
+    const projectsHref =
+      projectQuery.data.project_type === "permanent"
+        ? "/permanent-lighting"
+        : "/landscape-lighting";
     return (
       <main className="h-full overflow-y-auto" aria-label="Archived lighting project">
         <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           <Button asChild variant="ghost" size="sm" className="mb-4">
-            <Link href="/landscape-lighting">
+            <Link href={projectsHref}>
               <ArrowLeft className="size-4" aria-hidden="true" />
               Lighting projects
             </Link>

@@ -11,6 +11,7 @@ import type {
 } from "@/lib/estimator/types";
 
 export const LANDSCAPE_DOCUMENT_VERSION = 2 as const;
+export type LightingProjectType = "landscape" | "permanent";
 export const LANDSCAPE_PAPER_SIZES: readonly LandscapePaperSize[] = [
   "tabloid",
   "super-b",
@@ -41,6 +42,7 @@ export interface LandscapeDocumentSettings {
 
 export interface LandscapeDocumentV2 {
   version: typeof LANDSCAPE_DOCUMENT_VERSION;
+  projectType: LightingProjectType;
   activeShotId: string | null;
   activeWorkflowTab?: LandscapeWorkflowTab;
   shots: DesignerShot[];
@@ -347,6 +349,7 @@ export function normalizeLandscapeDocument(value: unknown): LandscapeDocumentV2 
     : "drawing";
   return {
     version: LANDSCAPE_DOCUMENT_VERSION,
+    projectType: candidate.projectType === "permanent" ? "permanent" : "landscape",
     activeShotId,
     activeWorkflowTab: tab,
     shots,
@@ -363,10 +366,12 @@ export function createLandscapeDocument(
   shots: DesignerShot[] = [],
   activeShotId: string | null = null,
   updatedAt = new Date().toISOString(),
+  projectType: LightingProjectType = "landscape",
 ): LandscapeDocumentV2 {
   return (
-    normalizeLandscapeDocument({ version: 1, shots, activeShotId, updatedAt }) ?? {
+    normalizeLandscapeDocument({ version: 1, projectType, shots, activeShotId, updatedAt }) ?? {
       version: LANDSCAPE_DOCUMENT_VERSION,
+      projectType,
       activeShotId: null,
       activeWorkflowTab: "drawing",
       shots: [],

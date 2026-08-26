@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import cast
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,6 +21,7 @@ from app.schemas.lighting_project import (
     LightingProjectDetail,
     LightingProjectStatus,
     LightingProjectSummary,
+    LightingProjectType,
     LightingProjectUpdate,
     PaginatedLightingProjects,
     empty_landscape_document,
@@ -30,7 +31,7 @@ from app.services.workspaces.membership import assert_active_workspace_member
 
 
 class LightingProjectService:
-    """Manage one workspace's current landscape drawing documents."""
+    """Manage one workspace's versioned lighting design documents."""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -43,6 +44,9 @@ class LightingProjectService:
 
     @classmethod
     def _summary(cls, project: LightingProject) -> LightingProjectSummary:
+        project_type: LightingProjectType = (
+            "permanent" if project.document.get("projectType") == "permanent" else "landscape"
+        )
         return LightingProjectSummary(
             id=project.id,
             workspace_id=project.workspace_id,
@@ -52,6 +56,7 @@ class LightingProjectService:
             opportunity_id=project.opportunity_id,
             assigned_user_id=project.assigned_user_id,
             name=project.name,
+            project_type=project_type,
             status=cast(LightingProjectStatus, project.status),
             version=project.version,
             installation_shot_id=project.installation_shot_id,
@@ -130,6 +135,7 @@ class LightingProjectService:
         *,
         search: str | None = None,
         status: LightingProjectStatus | None = None,
+        project_type: LightingProjectType | None = None,
         contact_id: int | None = None,
         opportunity_id: uuid.UUID | None = None,
         assigned_user_id: int | None = None,
@@ -148,6 +154,13 @@ class LightingProjectService:
         )
         if status is not None:
             query = query.where(LightingProject.status == status)
+        if project_type is not None:
+            # simplification: JSONB filtering scans a workspace's projects; promote this
+            # discriminator to an indexed column if workspaces reach thousands of designs.
+            query = query.where(
+                func.coalesce(LightingProject.document["projectType"].astext, "landscape")
+                == project_type
+            )
         if contact_id is not None:
             query = query.where(LightingProject.contact_id == contact_id)
         if opportunity_id is not None:
@@ -184,7 +197,9 @@ class LightingProjectService:
 
         await self._validate_references(workspace_id, payload)
         now = datetime.now(UTC)
-        document = (payload.document or empty_landscape_document(now)).with_server_timestamp(now)
+        document = (
+            payload.document or empty_landscape_document(now, payload.project_type)
+        ).with_server_timestamp(now)
         self._validate_selected_shot(document, payload.installation_shot_id)
         project = LightingProject(
             workspace_id=workspace_id,
@@ -272,6 +287,8 @@ class LightingProjectService:
             if "document" in payload.model_fields_set and payload.document is not None
             else current_document
         )
+        if next_document.project_type != current_document.project_type:
+            raise ValidationError("Project type cannot be changed")
         next_installation_shot_id = (
             payload.installation_shot_id
             if "installation_shot_id" in payload.model_fields_set

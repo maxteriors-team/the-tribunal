@@ -173,6 +173,14 @@ export const salesNavItems: AppNavItem[] = [
     requires: "quotes:read",
   },
   {
+    title: "Permanent Lighting",
+    url: "/permanent-lighting",
+    icon: Lightbulb,
+    sidebar: true,
+    commandPalette: true,
+    requires: "quotes:read",
+  },
+  {
     // Landscape design is a distinct, visual sales workflow: it needs a direct
     // front door rather than hiding behind the Quotes table. Mixed-service work
     // can still use the designer tab inside Quotes.
@@ -614,6 +622,7 @@ export const breadcrumbLabels: Record<string, string> = {
   opportunities: "Opportunities",
   quotes: "Quotes & Estimates",
   estimator: "Light Designer",
+  "permanent-lighting": "Permanent Lighting",
   "landscape-lighting": "Landscape Lighting",
   invoices: "Invoices",
   "christmas-lights": "Christmas Light Estimator",

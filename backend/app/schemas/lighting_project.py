@@ -456,6 +456,10 @@ class PreconStateSchema(DocumentSchema):
 
 class LandscapeDraftDocument(DocumentSchema):
     version: Literal[2] = 2
+    project_type: Literal["landscape", "permanent"] = Field(
+        default="landscape",
+        validation_alias=AliasChoices("projectType", "project_type"),
+    )
     active_shot_id: ShortText | None = Field(
         default=None, validation_alias=AliasChoices("activeShotId", "active_shot_id")
     )
@@ -502,11 +506,14 @@ class LandscapeDraftDocument(DocumentSchema):
         return self.model_copy(update={"updated_at": value})
 
 
-def empty_landscape_document(now: datetime) -> LandscapeDraftDocument:
-    return LandscapeDraftDocument(updated_at=now)
+def empty_landscape_document(
+    now: datetime, project_type: Literal["landscape", "permanent"] = "landscape"
+) -> LandscapeDraftDocument:
+    return LandscapeDraftDocument(updated_at=now, project_type=project_type)
 
 
 LightingProjectStatus = Literal["active", "archived"]
+LightingProjectType = Literal["landscape", "permanent"]
 
 
 class LightingProjectSummary(ApiSchema):
@@ -518,6 +525,7 @@ class LightingProjectSummary(ApiSchema):
     opportunity_id: UUID | None
     assigned_user_id: int | None
     name: str
+    project_type: LightingProjectType
     status: LightingProjectStatus
     version: int
     installation_shot_id: ShortText | None
@@ -546,11 +554,14 @@ class LightingProjectCreate(ApiSchema):
     opportunity_id: UUID | None = None
     assigned_user_id: int | None = None
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    project_type: LightingProjectType = "landscape"
     document: LandscapeDraftDocument | None = None
     installation_shot_id: ShortText | None = None
 
     @model_validator(mode="after")
-    def selected_shot_exists(self) -> LightingProjectCreate:
+    def validate_document_links(self) -> LightingProjectCreate:
+        if self.document is not None and self.document.project_type != self.project_type:
+            raise ValueError("document projectType must match project_type")
         if self.installation_shot_id is not None:
             document = self.document
             if document is None or self.installation_shot_id not in {

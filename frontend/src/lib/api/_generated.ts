@@ -20844,6 +20844,12 @@ export interface components {
             procurement?: {
                 [key: string]: components["schemas"]["ProcurementStateSchema"];
             };
+            /**
+             * Projecttype
+             * @default landscape
+             * @enum {string}
+             */
+            projectType: "landscape" | "permanent";
             proposal?: components["schemas"]["ProposalDraftSchema"];
             settings?: components["schemas"]["DocumentSettingsSchema"];
             /** Shots */
@@ -21646,6 +21652,12 @@ export interface components {
             name: string;
             /** Opportunity Id */
             opportunity_id?: string | null;
+            /**
+             * Project Type
+             * @default landscape
+             * @enum {string}
+             */
+            project_type: "landscape" | "permanent";
             /** Service Location Id */
             service_location_id?: string | null;
         };
@@ -21676,6 +21688,11 @@ export interface components {
             name: string;
             /** Opportunity Id */
             opportunity_id: string | null;
+            /**
+             * Project Type
+             * @enum {string}
+             */
+            project_type: "landscape" | "permanent";
             /** Service Location Id */
             service_location_id: string | null;
             /**
@@ -21724,6 +21741,11 @@ export interface components {
             name: string;
             /** Opportunity Id */
             opportunity_id: string | null;
+            /**
+             * Project Type
+             * @enum {string}
+             */
+            project_type: "landscape" | "permanent";
             /** Service Location Id */
             service_location_id: string | null;
             /**
@@ -46397,6 +46419,7 @@ export interface operations {
             query?: {
                 search?: string | null;
                 status?: ("active" | "archived") | null;
+                project_type?: ("landscape" | "permanent") | null;
                 contact_id?: number | null;
                 opportunity_id?: string | null;
                 assigned_user_id?: number | null;

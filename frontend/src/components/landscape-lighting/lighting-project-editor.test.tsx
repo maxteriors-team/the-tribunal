@@ -78,9 +78,15 @@ vi.mock("@/lib/estimator/landscape-draft", async (importOriginal) => {
 const WORKSPACE_ID = "9029c83b-7a2a-44ce-b6b9-5567ac75cc3f";
 const PROJECT_ID = "62774d85-6fb8-49ce-a348-e390972fa9d4";
 
-function projectDraft(activeShotId = "shot-1", dusk = 0.4, includeFixture = false): LandscapeDraft {
+function projectDraft(
+  activeShotId = "shot-1",
+  dusk = 0.4,
+  includeFixture = false,
+  projectType: LandscapeDraft["projectType"] = "landscape",
+): LandscapeDraft {
   return {
     version: 2,
+    projectType,
     activeShotId,
     shots: [
       {
@@ -121,6 +127,7 @@ function project(overrides: Partial<LightingProjectDetail> = {}): LightingProjec
     opportunity_id: null,
     assigned_user_id: null,
     name: "Patio lighting",
+    project_type: "landscape",
     status: "active",
     version: 1,
     updated_by_id: 7,
@@ -256,6 +263,67 @@ describe("LightingProjectEditor", () => {
         activeShotId: "edited-after-reopen",
         shots: [{ dusk: 0.65 }],
       },
+    });
+  });
+
+  it("keeps a client-linked permanent design editable after save and reopen", async () => {
+    let persistedProject = project({
+      name: "Pat permanent roofline",
+      project_type: "permanent",
+      document: projectDraft("permanent-shot", 0.4, true, "permanent"),
+    });
+    apiMocks.get.mockImplementation(async () => persistedProject);
+    apiMocks.update.mockImplementation(async (_workspaceId, _projectId, update) => {
+      persistedProject = {
+        ...persistedProject,
+        version: persistedProject.version + 1,
+        document: update.document ?? persistedProject.document,
+      };
+      return persistedProject;
+    });
+
+    const firstRender = renderEditor();
+    expect(await screen.findByTestId("light-designer")).toHaveTextContent("permanent-shot");
+    expect(designerProps.mock.lastCall?.[0]).toEqual(
+      expect.objectContaining({
+        focus: "permanent",
+        landscapeProject: expect.objectContaining({ contactId: 42 }),
+      }),
+    );
+    expect(screen.queryByRole("button", { name: "Proposal & payment" })).not.toBeInTheDocument();
+
+    const savedEdit = projectDraft("saved-permanent-shot", 0.5, true, "permanent");
+    act(() => {
+      const persistence = designerProps.mock.lastCall?.[0]
+        .landscapeProject as LandscapeProjectPersistenceAdapter;
+      persistence.onLandscapeDraftChange(savedEdit, { immediate: true });
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(apiMocks.update).toHaveBeenCalledTimes(1));
+    firstRender.unmount();
+
+    renderEditor();
+    expect(await screen.findByTestId("light-designer")).toHaveTextContent("saved-permanent-shot");
+    const reopenedPersistence = designerProps.mock.lastCall?.[0]
+      .landscapeProject as LandscapeProjectPersistenceAdapter;
+    expect(reopenedPersistence.initialDraft).toMatchObject({
+      projectType: "permanent",
+      activeShotId: "saved-permanent-shot",
+    });
+
+    const secondEdit = projectDraft("edited-permanent-shot", 0.65, true, "permanent");
+    act(() => reopenedPersistence.onLandscapeDraftChange(secondEdit, { immediate: true }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(apiMocks.update).toHaveBeenCalledTimes(2));
+    expect(apiMocks.update).toHaveBeenLastCalledWith(WORKSPACE_ID, PROJECT_ID, {
+      expected_version: 2,
+      document: secondEdit,
+    });
+    expect(persistedProject).toMatchObject({
+      contact_id: 42,
+      project_type: "permanent",
+      version: 3,
+      document: { projectType: "permanent", activeShotId: "edited-permanent-shot" },
     });
   });
 

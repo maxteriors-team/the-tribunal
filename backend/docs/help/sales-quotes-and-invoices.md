@@ -28,7 +28,7 @@ A stage change updates the CRM record. It does not send a customer message unles
 
 Route: `/quotes`. Sidebar label: **Quotes & Estimates**.
 
-1. Create a customer estimate from **Light Designer** at `/quotes?tab=designer` or from a saved **Landscape Lighting** project.
+1. Create a customer estimate from **Light Designer** at `/quotes?tab=designer` or from a saved **Permanent Lighting** or **Landscape Lighting** project.
 2. Open the **Quotes** tab and find the saved quote.
 3. Open the quote's **Actions** menu.
 4. Use **Email proposal to client** or **Text proposal to client** to deliver the customer proposal. Either action can send a draft and create its client link.
@@ -41,6 +41,8 @@ After approval, the **Copy to Job** tab shows every selected permanent-light kit
 ## Use lighting estimators
 
 Route: `/quotes?tab=designer`. Open the **Light Designer** tab to trace permanent or seasonal rooflines on a customer photo, price the design from workspace settings, and save or deliver the estimate. For a selected permanent run, **Aerial Pics · 1.5×** is available alongside Easy, Standard, and Complex and prices that run's measured feet at the fixed 1.5× multiplier.
+
+Route: `/permanent-lighting`. Sidebar label: **Permanent Lighting**. Select **New lighting project**, name the design, and select the customer before creating it. Open the saved designer at `/permanent-lighting/{project_id}` to draw permanent roofline track. Select **Save** and wait for **Saved to Tribunal**; the client-linked drawing can then be reopened, edited, and saved again. Active projects can be archived and later restored.
 
 Route: `/landscape-lighting`. Sidebar label: **Landscape Lighting**. Select **New lighting project**, enter the project and customer details, and select **Create project**. Open the saved designer at `/landscape-lighting/{project_id}`. The list can show active and archived projects and can recover a browser draft when one exists.
 

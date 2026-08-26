@@ -307,7 +307,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     ...POLL_60S,
   });
   const breadcrumbs = buildBreadcrumbs(pathname);
-  const focusedLandscapeProject = /^\/landscape-lighting\/[^/]+$/.test(pathname);
+  const focusedLightingProject = /^\/(?:landscape|permanent)-lighting\/[^/]+$/.test(pathname);
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandMounted, setCommandMounted] = useState(false);
   // next-themes cannot know the active theme during SSR, so `resolvedTheme` is
@@ -418,12 +418,12 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
   return (
     <SidebarProvider
-      key={focusedLandscapeProject ? "studio" : "crm"}
-      defaultOpen={!focusedLandscapeProject}
+      key={focusedLightingProject ? "studio" : "crm"}
+      defaultOpen={!focusedLightingProject}
       data-app-shell
     >
       <Sidebar
-        collapsible={focusedLandscapeProject ? "offcanvas" : "icon"}
+        collapsible={focusedLightingProject ? "offcanvas" : "icon"}
         className="border-r border-sidebar-border bg-gradient-to-b from-sidebar via-sidebar to-sidebar"
       >
         <SidebarHeader className="border-b border-sidebar-border">
@@ -484,7 +484,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         <header
           className={cn(
             "h-14 shrink-0 items-center gap-2 border-b px-4",
-            focusedLandscapeProject ? "hidden" : "flex",
+            focusedLightingProject ? "hidden" : "flex",
           )}
         >
           <SidebarTrigger className="-ml-1" />

@@ -42,9 +42,7 @@ vi.mock("@/lib/api/contacts", async (importOriginal) => {
 });
 
 vi.mock("@/lib/api/lighting-projects", async (importOriginal) => {
-  const original = await importOriginal<
-    typeof import("@/lib/api/lighting-projects")
-  >();
+  const original = await importOriginal<typeof import("@/lib/api/lighting-projects")>();
   return {
     ...original,
     lightingProjectsApi: {
@@ -57,9 +55,7 @@ vi.mock("@/lib/api/lighting-projects", async (importOriginal) => {
 });
 
 vi.mock("@/lib/estimator/landscape-draft", async (importOriginal) => {
-  const original = await importOriginal<
-    typeof import("@/lib/estimator/landscape-draft")
-  >();
+  const original = await importOriginal<typeof import("@/lib/estimator/landscape-draft")>();
   return {
     ...original,
     deleteLandscapeDraft: draftMocks.deleteDraft,
@@ -72,6 +68,7 @@ const PROJECT_ID = "62774d85-6fb8-49ce-a348-e390972fa9d4";
 
 const browserDraft: LandscapeDraft = {
   version: 2,
+  projectType: "landscape",
   activeShotId: "shot-1",
   shots: [
     {
@@ -97,9 +94,7 @@ const browserDraft: LandscapeDraft = {
   updatedAt: "2026-08-11T10:00:00.000Z",
 };
 
-function projectSummary(
-  overrides: Partial<LightingProjectSummary> = {},
-): LightingProjectSummary {
+function projectSummary(overrides: Partial<LightingProjectSummary> = {}): LightingProjectSummary {
   return {
     id: PROJECT_ID,
     workspace_id: WORKSPACE_ID,
@@ -109,6 +104,7 @@ function projectSummary(
     opportunity_id: null,
     assigned_user_id: null,
     name: "Patio lighting",
+    project_type: "landscape",
     status: "active",
     version: 2,
     installation_shot_id: null,
@@ -120,9 +116,7 @@ function projectSummary(
   };
 }
 
-function project(
-  overrides: Partial<LightingProjectDetail> = {},
-): LightingProjectDetail {
+function project(overrides: Partial<LightingProjectDetail> = {}): LightingProjectDetail {
   return {
     ...projectSummary(),
     created_by_id: 7,
@@ -141,7 +135,7 @@ function page(items: LightingProjectSummary[] = []): PaginatedLightingProjects {
   };
 }
 
-function renderPage() {
+function renderPage(projectType: "landscape" | "permanent" = "landscape") {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
@@ -151,7 +145,9 @@ function renderPage() {
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
   return {
-    ...render(<LightingProjectsPage workspaceId={WORKSPACE_ID} />, { wrapper }),
+    ...render(<LightingProjectsPage workspaceId={WORKSPACE_ID} projectType={projectType} />, {
+      wrapper,
+    }),
     queryClient,
   };
 }
@@ -166,7 +162,13 @@ beforeEach(() => {
   routerPush.mockReset();
 
   apiMocks.list.mockResolvedValue(page());
-  apiMocks.contactsList.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 });
+  apiMocks.contactsList.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: 20,
+    pages: 0,
+  });
   draftMocks.loadDraft.mockResolvedValue(null);
   draftMocks.deleteDraft.mockResolvedValue(undefined);
 });
@@ -197,9 +199,7 @@ describe("LightingProjectsPage", () => {
 
     apiMocks.list.mockRejectedValueOnce(new Error("offline"));
     renderPage();
-    expect(
-      await screen.findByText("Lighting projects could not be loaded."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Lighting projects could not be loaded.")).toBeInTheDocument();
     apiMocks.list.mockResolvedValueOnce(page());
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(
@@ -208,13 +208,12 @@ describe("LightingProjectsPage", () => {
   });
 
   it("lists customer identity and switches between active and archived filters", async () => {
-    apiMocks.list.mockImplementation(
-      (_workspaceId: string, params: { status?: string }) =>
-        Promise.resolve(
-          params.status === "archived"
-            ? page([projectSummary({ status: "archived", name: "Pool terrace" })])
-            : page([projectSummary()]),
-        ),
+    apiMocks.list.mockImplementation((_workspaceId: string, params: { status?: string }) =>
+      Promise.resolve(
+        params.status === "archived"
+          ? page([projectSummary({ status: "archived", name: "Pool terrace" })])
+          : page([projectSummary()]),
+      ),
     );
     renderPage();
 
@@ -247,9 +246,7 @@ describe("LightingProjectsPage", () => {
     apiMocks.create.mockResolvedValue(project({ name: "Front walk" }));
     renderPage();
 
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "New lighting project" })[0],
-    );
+    await userEvent.click(screen.getAllByRole("button", { name: "New lighting project" })[0]);
     await userEvent.type(screen.getByLabelText("Project name"), "Front walk");
     await pickCustomer(/Pat Lee/);
     await userEvent.click(screen.getByRole("button", { name: "Create project" }));
@@ -258,11 +255,68 @@ describe("LightingProjectsPage", () => {
       expect(apiMocks.create).toHaveBeenCalledWith(WORKSPACE_ID, {
         contact_id: 42,
         name: "Front walk",
+        project_type: "landscape",
       }),
     );
-    expect(routerPush).toHaveBeenCalledWith(
-      `/landscape-lighting/${PROJECT_ID}`,
+    expect(routerPush).toHaveBeenCalledWith(`/landscape-lighting/${PROJECT_ID}`);
+  });
+
+  it("creates a client-linked permanent project in the permanent workspace", async () => {
+    apiMocks.list.mockResolvedValue(
+      page([
+        project({
+          project_type: "permanent",
+          document: { ...browserDraft, projectType: "permanent" },
+        }),
+      ]),
     );
+    apiMocks.contactsList.mockResolvedValue({
+      items: [
+        {
+          id: 42,
+          first_name: "Pat",
+          last_name: "Lee",
+          email: "pat@example.com",
+          company_name: null,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    });
+    apiMocks.create.mockResolvedValue(
+      project({
+        name: "Pat permanent roofline",
+        project_type: "permanent",
+        document: { ...browserDraft, projectType: "permanent" },
+      }),
+    );
+    renderPage("permanent");
+
+    expect(
+      await screen.findByRole("heading", { name: "Permanent lighting projects" }),
+    ).toBeInTheDocument();
+    expect(apiMocks.list).toHaveBeenCalledWith(
+      WORKSPACE_ID,
+      expect.objectContaining({ project_type: "permanent", status: "active" }),
+    );
+    for (const clientLink of await screen.findAllByRole("link", { name: "Pat Lee" })) {
+      expect(clientLink).toHaveAttribute("href", "/contacts/42");
+    }
+    await userEvent.click(screen.getAllByRole("button", { name: "New lighting project" })[0]);
+    await userEvent.type(screen.getByLabelText("Project name"), "Pat permanent roofline");
+    await pickCustomer(/Pat Lee/);
+    await userEvent.click(screen.getByRole("button", { name: "Create project" }));
+
+    await waitFor(() =>
+      expect(apiMocks.create).toHaveBeenCalledWith(WORKSPACE_ID, {
+        contact_id: 42,
+        name: "Pat permanent roofline",
+        project_type: "permanent",
+      }),
+    );
+    expect(routerPush).toHaveBeenCalledWith(`/permanent-lighting/${PROJECT_ID}`);
   });
 
   it("recovers the browser draft and deletes it only after server creation succeeds", async () => {
@@ -280,9 +334,7 @@ describe("LightingProjectsPage", () => {
     });
     renderPage();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Recover browser draft" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "Recover browser draft" }));
     await pickCustomer(/Pat Lee/);
     await userEvent.click(screen.getByRole("button", { name: "Recover project" }));
 
@@ -310,18 +362,14 @@ describe("LightingProjectsPage", () => {
     apiMocks.archive.mockResolvedValue(project({ status: "archived", version: 2 }));
     renderPage();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Recover browser draft" }),
-    );
+    await userEvent.click(await screen.findByRole("button", { name: "Recover browser draft" }));
     await pickCustomer(/Pat Lee/);
     await userEvent.click(screen.getByRole("button", { name: "Recover project" }));
     await screen.findByRole("alert");
     expect(draftMocks.deleteDraft).not.toHaveBeenCalled();
 
     fireEvent.keyDown(document, { key: "Escape" });
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await userEvent.click(screen.getAllByRole("button", { name: "Archive" })[0]);
     await waitFor(() =>
       expect(apiMocks.archive).toHaveBeenCalledWith(WORKSPACE_ID, PROJECT_ID, {

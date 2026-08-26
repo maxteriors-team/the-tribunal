@@ -245,11 +245,8 @@ interface LightDesignerProps {
   workspaceId: string;
   workspaceName?: string;
   workspaceLogoUrl?: string | null;
-  /**
-   * Locks the dedicated landscape-lighting section to its fixture catalog and
-   * removes seasonal estimate controls that do not belong in that workflow.
-   */
-  focus?: "all" | "landscape";
+  /** Locks a dedicated lighting-project section to one service catalog. */
+  focus?: "all" | "landscape" | "permanent";
   /**
    * Server-backed project state. When present, browser-only workspace restore is
    * disabled and every debounced drawing change is emitted to the project owner.
@@ -2393,6 +2390,7 @@ export function LightDesigner({
   const landscapeProjectName = landscapeProject?.projectName ?? "Untitled lighting project";
   const landscapeContactName = landscapeProject?.contactName ?? "Not selected";
   const landscapeOnly = focus === "landscape";
+  const serviceLocked = focus === "landscape" || focus === "permanent";
   const initialLandscapeSettings = projectInitialDraft?.settings ?? defaultLandscapeSettings();
   const initialLandscapeProposal = projectInitialDraft?.proposal ?? defaultLandscapeProposal();
   const [localLandscapeTab, setLocalLandscapeTab] = useState<LandscapeWorkspaceTab>(
@@ -2720,12 +2718,13 @@ export function LightDesigner({
   );
 
   const [viewMode, setViewMode] = useState<ViewMode>("rep");
-  // Which services this design covers. Multi-select in the shared designer; the
-  // dedicated landscape builder deliberately fixes this to landscape fixtures.
-  const [services, setServices] = useState<ServiceKey[]>(["landscape"]);
+  // Dedicated project editors lock the catalog to their project type.
+  const [services, setServices] = useState<ServiceKey[]>([
+    focus === "permanent" ? "permanent" : "landscape",
+  ]);
   const sells = useCallback((key: ServiceKey) => services.includes(key), [services]);
   const toggleService = (key: ServiceKey) => {
-    if (landscapeOnly) return;
+    if (serviceLocked) return;
     setServices((prev) => {
       // Never let the rep switch every service off because the palette would be
       // empty with no way back. The last one stays on until another is picked.
@@ -2864,6 +2863,7 @@ export function LightDesigner({
         projectInitialDraft.updatedAt,
         undefined,
         restoredState,
+        projectInitialDraft.projectType,
       );
       emittedServerDraftSignatureRef.current = landscapeDraftSignature(
         normalizedDraft.shots,
@@ -2922,7 +2922,7 @@ export function LightDesigner({
     const itemCount = liveShots.reduce((total, shot) => total + shot.design.items.length, 0);
     const fixtureWasAdded = itemCount > persistedItemCountRef.current;
     persistedItemCountRef.current = itemCount;
-    if (!fixtureWasAdded || !landscapeOnly || !serverBacked || !emitProjectDraft || !draftReady) {
+    if (!fixtureWasAdded || !serverBacked || !emitProjectDraft || !draftReady) {
       return;
     }
     const nextActiveShotId = activeShot?.id ?? null;
@@ -2936,6 +2936,7 @@ export function LightDesigner({
         new Date().toISOString(),
         undefined,
         liveState,
+        projectInitialDraft?.projectType,
       ),
       { immediate: true },
     );
@@ -2944,8 +2945,8 @@ export function LightDesigner({
     draftReady,
     emitProjectDraft,
     landscapeLiveStateJson,
-    landscapeOnly,
     liveShots,
+    projectInitialDraft,
     serverBacked,
   ]);
 
@@ -2953,7 +2954,7 @@ export function LightDesigner({
   // browser-only builder stores, after one quiet period, without saving the
   // workspace-keyed legacy record or emitting the unchanged initial document.
   useEffect(() => {
-    if (!landscapeOnly || !serverBacked || !emitProjectDraft || !draftReady) {
+    if (!serverBacked || !emitProjectDraft || !draftReady) {
       return;
     }
     const nextActiveShotId = activeShot?.id ?? null;
@@ -2970,6 +2971,7 @@ export function LightDesigner({
           new Date().toISOString(),
           undefined,
           liveState,
+          projectInitialDraft?.projectType,
         ),
       );
     }, 600);
@@ -2979,8 +2981,8 @@ export function LightDesigner({
     draftReady,
     emitProjectDraft,
     landscapeLiveStateJson,
-    landscapeOnly,
     liveShots,
+    projectInitialDraft,
     serverBacked,
   ]);
 
@@ -4071,7 +4073,7 @@ export function LightDesigner({
                     : "Upload house photo"}
               </button>
             ) : null}
-            {photo && !landscapeOnly ? (
+            {photo && !serviceLocked ? (
               <div className="est-service-toggle" role="group" aria-label="Services in this design">
                 {SERVICES.map((spec) => (
                   <button

@@ -44,9 +44,11 @@ def _document(
     *,
     updated_at: datetime | None = None,
     shot_id: str = "shot-1",
+    project_type: str = "landscape",
 ) -> dict[str, object]:
     return {
         "version": 2,
+        "projectType": project_type,
         "activeShotId": shot_id,
         "shots": [
             {
@@ -192,9 +194,7 @@ class TestLandscapeDraftSchema:
             lambda document: document["bomLineItems"].append(document["bomLineItems"][0]),
             lambda document: document["bomLineItems"][0].update(quantity=-1),
             lambda document: document["shots"][0]["design"]["items"][0].update(iconScale=3),
-            lambda document: document["procurement"]["fixture:catalog-1"].update(
-                neededQuantity=-1
-            ),
+            lambda document: document["procurement"]["fixture:catalog-1"].update(neededQuantity=-1),
             lambda document: document.update(version=1),
             lambda document: document.update(version=3),
         ],
@@ -258,6 +258,7 @@ def _api_response(**overrides: object) -> dict[str, object]:
         "opportunity_id": None,
         "assigned_user_id": None,
         "name": "Patio lighting",
+        "project_type": "landscape",
         "status": "active",
         "version": 1,
         "installation_shot_id": None,
@@ -268,6 +269,7 @@ def _api_response(**overrides: object) -> dict[str, object]:
         "created_by_id": 7,
         "document": {
             "version": 2,
+            "projectType": "landscape",
             "activeShotId": None,
             "shots": [],
             "updatedAt": NOW.isoformat(),
@@ -486,6 +488,81 @@ async def test_create_list_get_update_archive_and_stale_conflict(
         assert archived_page.total == 1
         assert archived_page.items[0].id == created.id
         assert archived_page.pages == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_permanent_project_persists_client_design_reopen_and_resave(
+    fresh_engine_pool: None,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        workspace = await _make_workspace(db, "Permanent Lighting Co")
+        creator = await _make_member(db, workspace.id, name="Morgan Manager")
+        contact = await _make_contact(db, workspace.id, name="Avery")
+        service = LightingProjectService(db)
+
+        created = await service.create_project(
+            workspace.id,
+            LightingProjectCreate(
+                contact_id=contact.id,
+                name="Avery permanent roofline",
+                project_type="permanent",
+                document=LandscapeDraftDocument.model_validate(_document(project_type="permanent")),
+            ),
+            user_id=creator.id,
+        )
+        assert created.contact_id == contact.id
+        assert created.contact_name == "Avery"
+        assert created.project_type == "permanent"
+        assert created.document.project_type == "permanent"
+
+        permanent_projects = await service.list_projects(workspace.id, project_type="permanent")
+        landscape_projects = await service.list_projects(workspace.id, project_type="landscape")
+        assert [project.id for project in permanent_projects.items] == [created.id]
+        assert landscape_projects.total == 0
+
+        reopened = await service.get_project(workspace.id, created.id)
+        assert reopened.document.shots[0].design.runs[0].product_id == "c9-roofline"
+
+        first_resave = await service.update_project(
+            workspace.id,
+            created.id,
+            LightingProjectUpdate(
+                expected_version=1,
+                document=LandscapeDraftDocument.model_validate(
+                    _document(project_type="permanent", shot_id="permanent-edit-1")
+                ),
+            ),
+            user_id=creator.id,
+        )
+        assert first_resave.version == 2
+
+        reopened_again = await service.get_project(workspace.id, created.id)
+        assert reopened_again.document.active_shot_id == "permanent-edit-1"
+        second_resave = await service.update_project(
+            workspace.id,
+            created.id,
+            LightingProjectUpdate(
+                expected_version=2,
+                document=LandscapeDraftDocument.model_validate(
+                    _document(project_type="permanent", shot_id="permanent-edit-2")
+                ),
+            ),
+            user_id=creator.id,
+        )
+        assert second_resave.version == 3
+        assert second_resave.document.active_shot_id == "permanent-edit-2"
+
+        with pytest.raises(ValidationError, match="Project type cannot be changed"):
+            await service.update_project(
+                workspace.id,
+                created.id,
+                LightingProjectUpdate(
+                    expected_version=3,
+                    document=LandscapeDraftDocument.model_validate(_document()),
+                ),
+                user_id=creator.id,
+            )
 
 
 @pytest.mark.integration

@@ -419,6 +419,7 @@ export function useLightingProjectAutosave({
         opportunity_id: sourceProject.opportunity_id,
         assigned_user_id: sourceProject.assigned_user_id,
         name: `${sourceProject.name} copy`,
+        project_type: sourceProject.project_type,
         document: activeConflict.localDraft,
       });
       await clearPendingDraft();

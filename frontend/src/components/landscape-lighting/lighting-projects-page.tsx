@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   ArchiveRestore,
@@ -31,16 +26,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   lightingProjectsApi,
   type LightingProjectDetail,
   type LightingProjectSummary,
 } from "@/lib/api/lighting-projects";
+import type { LightingProjectType } from "@/lib/estimator/landscape-document";
 import {
   deleteLandscapeDraft,
   loadLandscapeDraft,
@@ -52,6 +44,7 @@ import { getApiErrorMessage } from "@/lib/utils/errors";
 
 interface LightingProjectsPageProps {
   workspaceId: string;
+  projectType?: LightingProjectType;
 }
 
 type ProjectFilter = "active" | "archived";
@@ -64,11 +57,13 @@ const projectTimeFormatter = new Intl.DateTimeFormat(undefined, {
 
 function DraftCreateDialog({
   workspaceId,
+  projectType,
   mode,
   browserDraft,
   onOpenChange,
 }: {
   workspaceId: string;
+  projectType: LightingProjectType;
   mode: CreateMode;
   browserDraft: LandscapeDraft | null | undefined;
   onOpenChange: (open: boolean) => void;
@@ -77,9 +72,7 @@ function DraftCreateDialog({
   const queryClient = useQueryClient();
   const customerId = useId();
   const nameId = useId();
-  const [name, setName] = useState(
-    mode === "recover" ? "Recovered landscape lighting plan" : "",
-  );
+  const [name, setName] = useState(mode === "recover" ? "Recovered landscape lighting plan" : "");
   const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -92,11 +85,11 @@ function DraftCreateDialog({
         throw new Error("The browser draft is no longer available.");
       }
 
-      const document =
-        mode === "recover" && browserDraft ? browserDraft : undefined;
+      const document = mode === "recover" && browserDraft ? browserDraft : undefined;
       const created = await lightingProjectsApi.create(workspaceId, {
         contact_id: selectedContactId,
         name: trimmedName,
+        project_type: projectType,
         ...(document ? { document } : {}),
       });
 
@@ -111,29 +104,21 @@ function DraftCreateDialog({
       return { created, cleanupFailed };
     },
     onSuccess: ({ created, cleanupFailed }) => {
-      queryClient.setQueryData(
-        queryKeys.lightingProjects.detail(workspaceId, created.id),
-        created,
-      );
+      queryClient.setQueryData(queryKeys.lightingProjects.detail(workspaceId, created.id), created);
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lightingProjects.all(workspaceId),
       });
       if (mode === "recover") {
-        queryClient.setQueryData(
-          queryKeys.lightingProjects.browserDraft(workspaceId),
-          null,
-        );
+        queryClient.setQueryData(queryKeys.lightingProjects.browserDraft(workspaceId), null);
       }
       if (cleanupFailed) {
-        toast.warning(
-          "Project recovered, but this browser could not remove the old draft.",
-        );
+        toast.warning("Project recovered, but this browser could not remove the old draft.");
       } else {
-        toast.success(
-          mode === "recover" ? "Browser draft recovered" : "Lighting project created",
-        );
+        toast.success(mode === "recover" ? "Browser draft recovered" : "Lighting project created");
       }
-      router.push(`/landscape-lighting/${created.id}`);
+      router.push(
+        `/${projectType === "permanent" ? "permanent-lighting" : "landscape-lighting"}/${created.id}`,
+      );
     },
     onError: (error: unknown) => {
       setFormError(getApiErrorMessage(error, "Could not create this project."));
@@ -147,7 +132,7 @@ function DraftCreateDialog({
           <DialogTitle>
             {mode === "recover"
               ? "Recover browser draft"
-              : "New lighting project"}
+              : `New ${projectType === "permanent" ? "permanent" : "landscape"} lighting project`}
           </DialogTitle>
           <DialogDescription>
             {mode === "recover"
@@ -236,10 +221,12 @@ function ProjectStatus({ status }: { status: LightingProjectSummary["status"] })
 
 function ProjectActions({
   project,
+  projectType,
   pending,
   onArchiveToggle,
 }: {
   project: LightingProjectSummary;
+  projectType: LightingProjectType;
   pending: boolean;
   onArchiveToggle: (project: LightingProjectSummary) => void;
 }) {
@@ -263,7 +250,9 @@ function ProjectActions({
         {archived ? "Restore" : "Archive"}
       </Button>
       <Button asChild size="sm" variant="outline">
-        <Link href={`/landscape-lighting/${project.id}`}>
+        <Link
+          href={`/${projectType === "permanent" ? "permanent-lighting" : "landscape-lighting"}/${project.id}`}
+        >
           Open project
           <ArrowRight className="size-4" aria-hidden="true" />
         </Link>
@@ -274,10 +263,12 @@ function ProjectActions({
 
 function ProjectRows({
   projects,
+  projectType,
   pendingProjectId,
   onArchiveToggle,
 }: {
   projects: LightingProjectSummary[];
+  projectType: LightingProjectType;
   pendingProjectId: string | null;
   onArchiveToggle: (project: LightingProjectSummary) => void;
 }) {
@@ -285,7 +276,9 @@ function ProjectRows({
     <>
       <div className="hidden overflow-hidden rounded-lg border md:block">
         <table className="w-full text-left text-sm">
-          <caption className="sr-only">Landscape lighting customer projects</caption>
+          <caption className="sr-only">
+            {projectType === "permanent" ? "Permanent" : "Landscape"} lighting customer projects
+          </caption>
           <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
             <tr>
               <th scope="col" className="px-4 py-3 font-medium">
@@ -311,7 +304,14 @@ function ProjectRows({
                 <th scope="row" className="px-4 py-4 font-medium">
                   {project.name}
                 </th>
-                <td className="px-4 py-4">{project.contact_name}</td>
+                <td className="px-4 py-4">
+                  <Link
+                    href={`/contacts/${project.contact_id}`}
+                    className="font-medium hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    {project.contact_name}
+                  </Link>
+                </td>
                 <td className="px-4 py-4">
                   <ProjectStatus status={project.status} />
                 </td>
@@ -326,6 +326,7 @@ function ProjectRows({
                 <td className="px-4 py-4">
                   <ProjectActions
                     project={project}
+                    projectType={projectType}
                     pending={pendingProjectId === project.id}
                     onArchiveToggle={onArchiveToggle}
                   />
@@ -336,15 +337,21 @@ function ProjectRows({
         </table>
       </div>
 
-      <ul className="space-y-3 md:hidden" aria-label="Landscape lighting projects">
+      <ul
+        className="space-y-3 md:hidden"
+        aria-label={`${projectType === "permanent" ? "Permanent" : "Landscape"} lighting projects`}
+      >
         {projects.map((project) => (
           <li key={project.id} className="space-y-4 rounded-lg border p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="truncate font-medium">{project.name}</h2>
-                <p className="truncate text-sm text-muted-foreground">
+                <Link
+                  href={`/contacts/${project.contact_id}`}
+                  className="block truncate text-sm text-muted-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
                   {project.contact_name}
-                </p>
+                </Link>
               </div>
               <ProjectStatus status={project.status} />
             </div>
@@ -354,6 +361,7 @@ function ProjectRows({
             </p>
             <ProjectActions
               project={project}
+              projectType={projectType}
               pending={pendingProjectId === project.id}
               onArchiveToggle={onArchiveToggle}
             />
@@ -364,7 +372,10 @@ function ProjectRows({
   );
 }
 
-export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps) {
+export function LightingProjectsPage({
+  workspaceId,
+  projectType = "landscape",
+}: LightingProjectsPageProps) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<ProjectFilter>("active");
   const [pageNumber, setPageNumber] = useState(1);
@@ -372,6 +383,7 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const listParams = {
     status: filter,
+    project_type: projectType,
     page: pageNumber,
     page_size: 50,
   } as const;
@@ -385,6 +397,7 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
   const browserDraftQuery = useQuery({
     queryKey: queryKeys.lightingProjects.browserDraft(workspaceId),
     queryFn: () => loadLandscapeDraft(workspaceId),
+    enabled: projectType === "landscape",
     ...STATIC,
   });
 
@@ -397,10 +410,7 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
       });
     },
     onSuccess: (updated: LightingProjectDetail) => {
-      queryClient.setQueryData(
-        queryKeys.lightingProjects.detail(workspaceId, updated.id),
-        updated,
-      );
+      queryClient.setQueryData(queryKeys.lightingProjects.detail(workspaceId, updated.id), updated);
       void queryClient.invalidateQueries({
         queryKey: queryKeys.lightingProjects.all(workspaceId),
       });
@@ -416,7 +426,8 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
   });
 
   const projects = projectsQuery.data?.items ?? [];
-  const browserDraft = browserDraftQuery.data;
+  const browserDraft = projectType === "landscape" ? browserDraftQuery.data : null;
+  const projectLabel = projectType === "permanent" ? "Permanent" : "Landscape";
 
   return (
     <main className="h-full min-h-0 overflow-y-auto" aria-labelledby="lighting-projects-heading">
@@ -424,10 +435,12 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
         <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-2xl">
             <h1 id="lighting-projects-heading" className="text-2xl font-semibold tracking-tight">
-              Landscape lighting projects
+              {projectLabel} lighting projects
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Open a customer plan, design from a top-down aerial, and keep the current drawing synced to Tribunal.
+              {projectType === "permanent"
+                ? "Open a customer project, draw permanent track on property photos, and keep every edit synced to Tribunal."
+                : "Open a customer plan, design from a top-down aerial, and keep the current drawing synced to Tribunal."}
             </p>
           </div>
           <Button type="button" onClick={() => setCreateMode("create")}>
@@ -437,15 +450,22 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
         </header>
 
         {browserDraft ? (
-          <section className="flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="browser-draft-heading">
+          <section
+            className="flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
+            aria-labelledby="browser-draft-heading"
+          >
             <div className="flex min-w-0 items-start gap-3">
-              <FolderOpen className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <FolderOpen
+                className="mt-0.5 size-5 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
               <div>
                 <h2 id="browser-draft-heading" className="font-medium">
                   Browser draft found
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Recover the previous workspace drawing into a named customer project before continuing.
+                  Recover the previous workspace drawing into a named customer project before
+                  continuing.
                 </p>
               </div>
             </div>
@@ -498,7 +518,9 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
                 <Archive className="size-9" aria-hidden="true" />
               )
             }
-            title={filter === "active" ? "No active lighting projects" : "No archived lighting projects"}
+            title={
+              filter === "active" ? "No active lighting projects" : "No archived lighting projects"
+            }
             description={
               filter === "active"
                 ? "Create a customer project to start a server-backed lighting plan."
@@ -517,6 +539,7 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
           <>
             <ProjectRows
               projects={projects}
+              projectType={projectType}
               pendingProjectId={pendingProjectId}
               onArchiveToggle={(project) => archiveMutation.mutate(project)}
             />
@@ -542,8 +565,7 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
                   size="sm"
                   variant="outline"
                   disabled={
-                    pageNumber >= (projectsQuery.data?.pages ?? 1) ||
-                    projectsQuery.isFetching
+                    pageNumber >= (projectsQuery.data?.pages ?? 1) || projectsQuery.isFetching
                   }
                   onClick={() => setPageNumber((page) => page + 1)}
                 >
@@ -559,6 +581,7 @@ export function LightingProjectsPage({ workspaceId }: LightingProjectsPageProps)
         <DraftCreateDialog
           key={createMode}
           workspaceId={workspaceId}
+          projectType={projectType}
           mode={createMode}
           browserDraft={browserDraft}
           onOpenChange={(open) => {

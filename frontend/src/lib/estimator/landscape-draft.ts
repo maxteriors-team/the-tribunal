@@ -4,6 +4,7 @@ import {
   normalizeLandscapeDocument,
   type LandscapeDocumentSettings,
   type LandscapeDocumentV2,
+  type LightingProjectType,
 } from "@/lib/estimator/landscape-document";
 import type {
   DesignerShot,
@@ -118,8 +119,9 @@ export function createLandscapeDraft(
   updatedAt = new Date().toISOString(),
   proposal?: LandscapeProposalDraft,
   liveState?: LandscapeDraftState,
+  projectType: LightingProjectType = "landscape",
 ): LandscapeDraft {
-  const document = createLandscapeDocument(shots, activeShotId, updatedAt);
+  const document = createLandscapeDocument(shots, activeShotId, updatedAt, projectType);
   const normalized = normalizeLandscapeDocument({
     ...document,
     activeWorkflowTab: liveState?.activeWorkflowTab ?? document.activeWorkflowTab,

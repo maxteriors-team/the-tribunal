@@ -53,14 +53,17 @@ vi.mock("@/components/quotes/quote-edit-dialog", () => ({
 }));
 
 vi.mock("@/lib/estimator/landscape-draft", () => ({
-  createLandscapeDraft: vi.fn((shots, activeShotId, updatedAt, proposal, liveState) => ({
-    version: 2,
-    activeShotId,
-    shots,
-    updatedAt: updatedAt ?? "2026-08-11T10:00:00.000Z",
-    ...liveState,
-    ...(proposal ? { proposal: { ...liveState?.proposal, ...proposal } } : {}),
-  })),
+  createLandscapeDraft: vi.fn(
+    (shots, activeShotId, updatedAt, proposal, liveState, projectType) => ({
+      version: 2,
+      projectType: projectType ?? "landscape",
+      activeShotId,
+      shots,
+      updatedAt: updatedAt ?? "2026-08-11T10:00:00.000Z",
+      ...liveState,
+      ...(proposal ? { proposal: { ...liveState?.proposal, ...proposal } } : {}),
+    }),
+  ),
   loadLandscapeDraft: vi.fn(),
   saveLandscapeDraft: vi.fn(),
 }));
@@ -244,7 +247,7 @@ function stubCanvas() {
 }
 
 function renderEstimator(
-  focus: "all" | "landscape" = "all",
+  focus: "all" | "landscape" | "permanent" = "all",
   landscapeProject?: LandscapeProjectPersistenceAdapter,
   workspace: { id: string; name?: string; logoUrl?: string | null } = { id: "ws_1" },
 ) {
@@ -503,12 +506,22 @@ describe("LightDesigner", () => {
     expect(screen.getByText("Aerial landscape lighting plan")).toBeInTheDocument();
 
     const wireTool = await screen.findByRole("button", { name: "Wire" });
-    fireEvent.click(wireTool);
-    await waitFor(() => expect(wireTool).toHaveAttribute("aria-pressed", "true"));
+    await userEvent.click(wireTool);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Wire" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
 
     const uplightTool = await screen.findByRole("button", { name: /^Uplight:/i });
-    fireEvent.click(uplightTool);
-    await waitFor(() => expect(uplightTool).toHaveAttribute("aria-pressed", "true"));
+    await userEvent.click(uplightTool);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Uplight:/i })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
     expect(screen.getByRole("img", { name: "Northstar Outdoor Lighting" })).toHaveAttribute(
       "src",
       "https://northstar.example/logo.svg",
@@ -1281,6 +1294,7 @@ describe("LightDesigner", () => {
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {
         version: 2,
+        projectType: "landscape",
         activeShotId: "server-shot",
         shots: [
           {
@@ -1379,11 +1393,69 @@ describe("LightDesigner", () => {
     expect(saveLandscapeDraft).not.toHaveBeenCalled();
   });
 
+  it("restores and saves permanent server projects without browser draft storage", async () => {
+    const onLandscapeDraftChange = vi.fn();
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        projectType: "permanent",
+        activeShotId: "permanent-shot",
+        shots: [
+          {
+            id: "permanent-shot",
+            photo: {
+              dataUrl: "data:image/png;base64,AAAA",
+              width: 1200,
+              height: 800,
+            },
+            design: { runs: [], items: [], calibration: null },
+            dusk: 0.4,
+          },
+        ],
+        updatedAt: "2026-08-11T09:00:00.000Z",
+      },
+      onLandscapeDraftChange,
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      projectId: "permanent-project",
+      projectName: "Pat permanent roofline",
+      contactName: "Pat Lee",
+      contactId: 42,
+      resetKey: 0,
+    };
+    const { container } = renderEstimator("permanent", adapter);
+
+    expect(
+      await screen.findByLabelText("Property photo lighting design canvas"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: "Services in this design" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Permanent LED Roofline/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Uplight/i })).not.toBeInTheDocument();
+
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    fireEvent.change(input!, {
+      target: { files: [new File(["second"], "second-house.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(onLandscapeDraftChange).toHaveBeenCalled(), { timeout: 1_500 });
+    expect(onLandscapeDraftChange.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        projectType: "permanent",
+        shots: expect.arrayContaining([expect.objectContaining({ id: expect.any(String) })]),
+      }),
+    );
+    expect(loadLandscapeDraft).not.toHaveBeenCalled();
+    expect(saveLandscapeDraft).not.toHaveBeenCalled();
+  });
+
   it("adds, edits, persists, exports, and removes manual BOM lines without an aerial", async () => {
     const onLandscapeDraftChange = vi.fn();
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {
         version: 2,
+        projectType: "landscape",
         activeShotId: null,
         activeWorkflowTab: "bom",
         shots: [],
@@ -1434,6 +1506,7 @@ describe("LightDesigner", () => {
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {
         version: 2,
+        projectType: "landscape",
         activeShotId: null,
         activeWorkflowTab: "proposal",
         shots: [],
@@ -1615,6 +1688,7 @@ describe("LightDesigner", () => {
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {
         version: 2,
+        projectType: "landscape",
         activeShotId: "server-shot",
         shots: [
           {
@@ -1838,6 +1912,7 @@ describe("LightDesigner", () => {
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {
         version: 2,
+        projectType: "landscape",
         activeShotId: "patio",
         shots: [
           {
@@ -1943,6 +2018,7 @@ describe("LightDesigner", () => {
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {
         version: 2,
+        projectType: "landscape",
         activeShotId: "front",
         shots: [
           {
