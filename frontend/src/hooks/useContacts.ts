@@ -138,6 +138,7 @@ export function useContactTimeline(workspaceId: string, contactId: number, limit
     queryFn: () => contactsApi.getTimeline(workspaceId, contactId, limit),
     enabled: !!workspaceId && !!contactId,
     ...REALTIME,
+    refetchInterval: 3_000,
     // Don't poll when the tab is not active
     refetchIntervalInBackground: false,
   });

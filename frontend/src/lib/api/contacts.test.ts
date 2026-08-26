@@ -71,3 +71,41 @@ describe("contact AI knowledge API", () => {
     );
   });
 });
+
+describe("contact timeline API", () => {
+  beforeEach(() => {
+    getMock.mockReset();
+  });
+
+  it("preserves synced provider provenance for conversation rendering", async () => {
+    getMock.mockResolvedValue([
+      {
+        id: "message-1",
+        type: "sms",
+        timestamp: "2026-08-26T12:00:00Z",
+        direction: "inbound",
+        is_ai: false,
+        agent_id: null,
+        content: "Mirrored from Quo",
+        duration_seconds: null,
+        recording_url: null,
+        transcript: null,
+        status: "received",
+        source_provider: "quo",
+        external_url: "https://my.quo.com/inbox/conversations/abc",
+        booking_outcome: null,
+        signals: null,
+        attachments: [],
+        original_id: "message-1",
+        original_type: "sms_message",
+      },
+    ]);
+
+    await expect(contactsApi.getTimeline(workspaceId, contactId)).resolves.toEqual([
+      expect.objectContaining({
+        source_provider: "quo",
+        external_url: "https://my.quo.com/inbox/conversations/abc",
+      }),
+    ]);
+  });
+});

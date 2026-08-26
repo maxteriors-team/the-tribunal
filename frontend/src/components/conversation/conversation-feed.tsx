@@ -20,6 +20,7 @@ import {
 import { usePhoneNumbers } from "@/hooks/usePhoneNumbers";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { conversationsApi } from "@/lib/api/conversations";
+import { getLatestQuoLink } from "@/lib/api/quo-links";
 import { useContactStore } from "@/lib/contact-store";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ import { ChatHeader } from "./chat-header";
 import { DateSeparator } from "./date-separator";
 import { MessageComposer } from "./message-composer";
 import { MessageItem } from "./message-item";
+import { QuoBridgeBanner } from "./quo-bridge-banner";
 import { TeachAIDialog } from "./teach-ai-dialog";
 
 interface ConversationFeedProps {
@@ -84,7 +86,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   const agents = useMemo(() => agentsData?.items ?? [], [agentsData?.items]);
 
   // Fetch conversations to find the one for the current contact
-  const { data: conversationsData } = useQuery({
+  const { data: conversationsData, isPending: isConversationPending } = useQuery({
     queryKey: queryKeys.conversations.byContact(workspaceId ?? "", selectedContact?.id),
     queryFn: () =>
       workspaceId
@@ -110,6 +112,11 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
       normalizePhoneForComparison(conv.contact_phone) === selectedContactPhone
     );
   });
+  const isQuoConversation = contactConversation?.source_provider === "quo";
+  const quoReplyUrl = useMemo(
+    () => (isQuoConversation ? getLatestQuoLink(timeline) : null),
+    [isQuoConversation, timeline],
+  );
 
   // Mutations for AI toggle, agent assignment, and clear history
   const toggleAIMutation = useToggleConversationAI(workspaceId ?? "");
@@ -158,6 +165,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   };
 
   const handleTeachAI = (item: TimelineItem) => {
+    if (isQuoConversation) return;
     if (!item.agent_id) {
       toast.error("This AI reply has no assigned agent to teach");
       return;
@@ -170,7 +178,14 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   };
 
   const handleSendMessage = async (imageDataUrl?: string) => {
-    if ((!message.trim() && !imageDataUrl) || !selectedContact || !workspaceId || isSending) {
+    if (
+      isConversationPending ||
+      isQuoConversation ||
+      (!message.trim() && !imageDataUrl) ||
+      !selectedContact ||
+      !workspaceId ||
+      isSending
+    ) {
       return;
     }
 
@@ -202,6 +217,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   };
 
   const handleToggleAI = () => {
+    if (isQuoConversation) return;
     if (!contactConversation) {
       toast.error("No conversation found for this contact");
       return;
@@ -222,6 +238,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   };
 
   const handleAssignAgent = (agentId: string | null) => {
+    if (isQuoConversation) return;
     if (!contactConversation) {
       toast.error("No conversation found for this contact");
       return;
@@ -328,7 +345,11 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
             className="h-full"
             icon={<MessageSquare className="h-8 w-8" />}
             title="No conversation yet"
-            description="Start a conversation by sending a message, making a call, or scheduling an appointment."
+            description={
+              isQuoConversation
+                ? "Mirrored messages and calls will appear here after the next Quo sync."
+                : "Start a conversation by sending a message, making a call, or scheduling an appointment."
+            }
           />
         ) : (
           <div className="py-4">
@@ -341,7 +362,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
                       key={item.id}
                       item={item}
                       contactName={contactName}
-                      onTeachAI={item.agent_id ? handleTeachAI : undefined}
+                      onTeachAI={!isQuoConversation && item.agent_id ? handleTeachAI : undefined}
                     />
                   ))}
                 </div>
@@ -351,7 +372,7 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         )}
       </ScrollArea>
 
-      {workspaceId && contactConversation && teachAIMessage && (
+      {workspaceId && contactConversation && !isQuoConversation && teachAIMessage && (
         <TeachAIDialog
           open={true}
           onOpenChange={(open) => {
@@ -374,15 +395,26 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         />
       )}
 
-      <MessageComposer
-        message={message}
-        onMessageChange={setMessage}
-        onSend={handleSendMessage}
-        isSending={isSending}
-        phoneNumbers={phoneNumbers}
-        selectedFromNumber={activeFromNumber}
-        onFromNumberChange={setSelectedFromNumber}
-      />
+      {isConversationPending ? (
+        <div
+          role="status"
+          className="shrink-0 border-t px-4 py-3 text-center text-xs text-muted-foreground"
+        >
+          Loading reply controls…
+        </div>
+      ) : isQuoConversation ? (
+        <QuoBridgeBanner replyUrl={quoReplyUrl} />
+      ) : (
+        <MessageComposer
+          message={message}
+          onMessageChange={setMessage}
+          onSend={handleSendMessage}
+          isSending={isSending}
+          phoneNumbers={phoneNumbers}
+          selectedFromNumber={activeFromNumber}
+          onFromNumberChange={setSelectedFromNumber}
+        />
+      )}
     </div>
   );
 }
