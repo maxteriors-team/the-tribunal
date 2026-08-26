@@ -26,6 +26,8 @@ export interface Message {
   created_at: string;
   sent_at?: string;
   delivered_at?: string;
+  source_provider?: string | null;
+  external_url?: string | null;
 }
 
 export interface Conversation {
@@ -48,6 +50,7 @@ export interface Conversation {
   ai_enabled: boolean;
   ai_paused: boolean;
   assigned_agent_id?: string;
+  source_provider?: string | null;
   // Follow-up settings
   followup_enabled?: boolean;
   followup_delay_hours?: number;
@@ -127,6 +130,8 @@ export interface TimelineItem {
   recording_url?: string;
   transcript?: string;
   status?: string;
+  source_provider?: string | null;
+  external_url?: string | null;
   booking_outcome?: string;
   signals?: CallSignals | null;
   attachments?: TimelineAttachment[];

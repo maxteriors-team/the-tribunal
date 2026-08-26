@@ -73,6 +73,7 @@ export function ChatHeader({
   };
 
   const unreadCount = conversation?.unread_count ?? 0;
+  const isQuoConversation = conversation?.source_provider === "quo";
 
   const assignedAgentName = conversation?.assigned_agent_id
     ? (agents.find((a) => a.id === conversation.assigned_agent_id)?.name ?? "Agent")
@@ -95,59 +96,63 @@ export function ChatHeader({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {/* AI Toggle Button */}
-          <Button
-            size="sm"
-            variant={conversation?.ai_enabled ? "default" : "outline"}
-            className="h-8 gap-1.5"
-            onClick={onToggleAI}
-            disabled={!conversation || isToggleAIPending}
-          >
-            {isToggleAIPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Bot className="h-3.5 w-3.5" />
-            )}
-            <span className="text-xs">{conversation?.ai_enabled ? "AI On" : "AI Off"}</span>
-          </Button>
-          {/* Agent Selector */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" className="h-8 gap-1.5">
-                <User className="h-3.5 w-3.5" />
-                <span className="text-xs max-w-[60vw] sm:max-w-[100px] truncate">
-                  {assignedAgentName}
-                </span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem
-                onClick={() => onAssignAgent(null)}
-                disabled={!conversation || isAssignAgentPending}
+          {!isQuoConversation ? (
+            <>
+              {/* AI Toggle Button */}
+              <Button
+                size="sm"
+                variant={conversation?.ai_enabled ? "default" : "outline"}
+                className="h-8 gap-1.5"
+                onClick={onToggleAI}
+                disabled={!conversation || isToggleAIPending}
               >
-                <span className="text-muted-foreground">No Agent</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {agents.map((agent) => (
-                <DropdownMenuItem
-                  key={agent.id}
-                  onClick={() => onAssignAgent(agent.id)}
-                  disabled={!conversation || isAssignAgentPending}
-                >
-                  <Bot className="h-4 w-4 mr-2" />
-                  {agent.name}
-                </DropdownMenuItem>
-              ))}
-              {agents.length === 0 && (
-                <DropdownMenuItem disabled>
-                  <span className="text-muted-foreground text-sm">No agents available</span>
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Call contact">
-            <Phone className="h-4 w-4" />
-          </Button>
+                {isToggleAIPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Bot className="h-3.5 w-3.5" />
+                )}
+                <span className="text-xs">{conversation?.ai_enabled ? "AI On" : "AI Off"}</span>
+              </Button>
+              {/* Agent Selector */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-8 gap-1.5">
+                    <User className="h-3.5 w-3.5" />
+                    <span className="text-xs max-w-[60vw] sm:max-w-[100px] truncate">
+                      {assignedAgentName}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem
+                    onClick={() => onAssignAgent(null)}
+                    disabled={!conversation || isAssignAgentPending}
+                  >
+                    <span className="text-muted-foreground">No Agent</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {agents.map((agent, index) => (
+                    <DropdownMenuItem
+                      key={index}
+                      onClick={() => onAssignAgent(agent.id)}
+                      disabled={!conversation || isAssignAgentPending}
+                    >
+                      <Bot className="h-4 w-4 mr-2" />
+                      {agent.name}
+                    </DropdownMenuItem>
+                  ))}
+                  {agents.length === 0 && (
+                    <DropdownMenuItem disabled>
+                      <span className="text-muted-foreground text-sm">No agents available</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button size="icon" variant="ghost" className="h-8 w-8" aria-label="Call contact">
+                <Phone className="h-4 w-4" />
+              </Button>
+            </>
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

@@ -135,7 +135,7 @@ export function AIAgentsSection() {
   const assignAgentMutation = useAssignContactAgent(workspaceId ?? "");
   const toggleAIMutation = useToggleContactAI(workspaceId ?? "");
 
-  const { data: conversationsData } = useQuery({
+  const { data: conversationsData, isPending: isConversationPending } = useQuery({
     queryKey: queryKeys.conversations.byContact(workspaceId ?? "", selectedContact?.id),
     queryFn: () =>
       workspaceId
@@ -155,6 +155,7 @@ export function AIAgentsSection() {
       );
     },
   );
+  const isQuoConversation = contactConversation?.source_provider === "quo";
 
   const assignedAgentId = contactConversation?.assigned_agent_id;
   const assignedAgent = useMemo(() => {
@@ -163,7 +164,7 @@ export function AIAgentsSection() {
   }, [agents, assignedAgentId]);
 
   const handleAssign = (agentId: string | null) => {
-    if (!selectedContact) return;
+    if (!selectedContact || isConversationPending || isQuoConversation) return;
 
     assignAgentMutation.mutate(
       { contactId: selectedContact.id, agentId },
@@ -179,7 +180,9 @@ export function AIAgentsSection() {
   };
 
   const handleToggle = () => {
-    if (!selectedContact || !contactConversation) return;
+    if (!selectedContact || !contactConversation || isConversationPending || isQuoConversation) {
+      return;
+    }
 
     const enabled = !contactConversation.ai_enabled;
     toggleAIMutation.mutate(
@@ -199,6 +202,31 @@ export function AIAgentsSection() {
     return (
       <div className="text-center py-8 text-sm text-muted-foreground">
         Select a contact to manage AI agents
+      </div>
+    );
+  }
+
+  if (isConversationPending) {
+    return (
+      <p role="status" className="py-4 text-center text-xs text-muted-foreground">
+        Loading AI controls…
+      </p>
+    );
+  }
+
+  if (isQuoConversation) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <h3 className="text-sm font-semibold">AI Agents</h3>
+          <Badge variant="outline" className="ml-auto text-xs">
+            Quo
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Tribunal AI controls are unavailable for this read-only Quo thread.
+        </p>
       </div>
     );
   }

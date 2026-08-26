@@ -55,8 +55,9 @@ const MAX_COUNT_OPTIONS = [
 export function FollowupSection() {
   const { selectedContact } = useContactStore();
   const workspaceId = useWorkspaceId();
-  const [generatedMessagesByConversation, setGeneratedMessagesByConversation] =
-    useState<Record<string, string>>({});
+  const [generatedMessagesByConversation, setGeneratedMessagesByConversation] = useState<
+    Record<string, string>
+  >({});
 
   // Fetch conversations to find the one for the current contact
   const { data: conversationsData } = useQuery({
@@ -70,14 +71,15 @@ export function FollowupSection() {
 
   // Find the conversation for the current contact
   const contactConversation: Conversation | undefined = conversationsData?.items?.find(
-    (conv) => conv.contact_id === selectedContact?.id
+    (conv) => conv.contact_id === selectedContact?.id,
   );
+  const isQuoConversation = contactConversation?.source_provider === "quo";
 
   const conversationId = contactConversation?.id ?? "";
   const generatedMessage = generatedMessagesByConversation[conversationId] ?? "";
 
   const setGeneratedMessage = (message: string) => {
-    if (!conversationId) return;
+    if (!conversationId || isQuoConversation) return;
 
     setGeneratedMessagesByConversation((currentMessages) => ({
       ...currentMessages,
@@ -88,7 +90,7 @@ export function FollowupSection() {
   // Hooks for followup management
   const { data: settings, isPending: isLoadingSettings } = useFollowupSettings(
     workspaceId ?? "",
-    conversationId
+    conversationId,
   );
   const updateSettings = useUpdateFollowupSettings(workspaceId ?? "");
   const generateFollowup = useGenerateFollowup(workspaceId ?? "");
@@ -96,7 +98,7 @@ export function FollowupSection() {
   const resetCounter = useResetFollowupCounter(workspaceId ?? "");
 
   const handleToggleEnabled = async (enabled: boolean) => {
-    if (!conversationId) return;
+    if (!conversationId || isQuoConversation) return;
 
     try {
       await updateSettings.mutateAsync({
@@ -110,7 +112,7 @@ export function FollowupSection() {
   };
 
   const handleDelayChange = async (value: string) => {
-    if (!conversationId) return;
+    if (!conversationId || isQuoConversation) return;
 
     try {
       await updateSettings.mutateAsync({
@@ -123,7 +125,7 @@ export function FollowupSection() {
   };
 
   const handleMaxCountChange = async (value: string) => {
-    if (!conversationId) return;
+    if (!conversationId || isQuoConversation) return;
 
     try {
       await updateSettings.mutateAsync({
@@ -136,7 +138,7 @@ export function FollowupSection() {
   };
 
   const handleGenerate = async () => {
-    if (!conversationId) return;
+    if (!conversationId || isQuoConversation) return;
 
     try {
       const result = await generateFollowup.mutateAsync({
@@ -150,7 +152,7 @@ export function FollowupSection() {
   };
 
   const handleSend = async () => {
-    if (!conversationId) return;
+    if (!conversationId || isQuoConversation) return;
 
     try {
       await sendFollowup.mutateAsync({
@@ -165,7 +167,7 @@ export function FollowupSection() {
   };
 
   const handleReset = async () => {
-    if (!conversationId) return;
+    if (!conversationId || isQuoConversation) return;
 
     try {
       await resetCounter.mutateAsync(conversationId);
@@ -192,6 +194,23 @@ export function FollowupSection() {
         </div>
         <p className="text-xs text-muted-foreground">
           No conversation yet. Start a conversation to enable follow-ups.
+        </p>
+      </div>
+    );
+  }
+
+  if (isQuoConversation) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <RefreshCw className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <h3 className="text-sm font-semibold">Follow-up</h3>
+          <Badge variant="outline" className="ml-auto text-xs">
+            Quo
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Tribunal follow-up generation and sending are unavailable for this read-only Quo thread.
         </p>
       </div>
     );
@@ -230,9 +249,7 @@ export function FollowupSection() {
               disabled={isLoadingSettings || isUpdating}
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Send if no response
-          </p>
+          <p className="text-xs text-muted-foreground">Send if no response</p>
         </CardHeader>
         <CardContent className="py-3 px-4 pt-0 space-y-3">
           {/* Delay Setting */}
@@ -328,12 +345,7 @@ export function FollowupSection() {
               )}
               Generate
             </Button>
-            <Button
-              size="sm"
-              className="flex-1"
-              onClick={handleSend}
-              disabled={isSending}
-            >
+            <Button size="sm" className="flex-1" onClick={handleSend} disabled={isSending}>
               {isSending ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
               ) : (
