@@ -21,7 +21,7 @@
 import type { ChristmasItemsSelection } from "@/types/estimate";
 
 import { distance, polylineLength } from "./geometry";
-import type { Design, Product } from "./types";
+import type { Design, Product, Run, ScaleSlot } from "./types";
 
 /** When no scale is set we assume the photo spans this many feet across. */
 export const ASSUMED_PHOTO_WIDTH_FT = 60;
@@ -34,19 +34,32 @@ export interface DesignScale {
   calibrated: boolean;
 }
 
-export function designScale(design: Design, photoWidth: number): DesignScale {
-  const cal = design.calibration;
-  if (cal && cal.feet > 0) {
-    const px = distance(cal.a, cal.b);
-    if (px > 1) {
-      const ftPerPx = cal.feet / px;
-      return { ftPerPx, pxPerFt: 1 / ftPerPx, calibrated: true };
-    }
-  }
+export function designScale(
+  design: Design,
+  photoWidth: number,
+  scaleSlot: ScaleSlot = 1,
+): DesignScale {
+  const calibrationScale = (calibration: Design["secondaryCalibration"]): DesignScale | null => {
+    if (!calibration || calibration.feet <= 0) return null;
+    const px = distance(calibration.a, calibration.b);
+    if (px <= 1) return null;
+    const ftPerPx = calibration.feet / px;
+    return { ftPerPx, pxPerFt: 1 / ftPerPx, calibrated: true };
+  };
+  const calibrated =
+    calibrationScale(scaleSlot === 2 ? design.secondaryCalibration : design.calibration) ??
+    (scaleSlot === 2 ? calibrationScale(design.calibration) : null);
+  if (calibrated) return calibrated;
+
   const ftPerPx = photoWidth > 0 ? ASSUMED_PHOTO_WIDTH_FT / photoWidth : 0;
   const pxPerFt =
     ftPerPx > 0 ? 1 / ftPerPx : photoWidth > 0 ? photoWidth / ASSUMED_PHOTO_WIDTH_FT : 1;
   return { ftPerPx, pxPerFt, calibrated: false };
+}
+
+/** Resolve a saved run's scale; missing/invalid Scale 2 safely falls back to Scale 1. */
+export function runScale(design: Design, run: Run, photoWidth: number): DesignScale {
+  return designScale(design, photoWidth, run.scaleSlot ?? 1);
 }
 
 /** The estimate inputs a design contributes: roofline feet + decor selection. */
@@ -61,7 +74,7 @@ export interface DesignEstimateInputs {
 
 /**
  * Tally a design into the estimate request's measured inputs. Linear runs are
- * converted to feet via the current scale and rounded to whole feet (rooflines
+ * converted to feet via each run's scale and rounded to whole feet (rooflines
  * and garland are quoted in whole feet); placed items count as one each.
  */
 export function designToEstimateInputs(
@@ -69,8 +82,6 @@ export function designToEstimateInputs(
   productById: Map<string, Product>,
   photoWidth: number,
 ): DesignEstimateInputs {
-  const { ftPerPx } = designScale(design, photoWidth);
-
   let rooflineFt = 0;
   let bistroFt = 0;
   const raw: ChristmasItemsSelection = {};
@@ -83,7 +94,7 @@ export function designToEstimateInputs(
   for (const run of design.runs) {
     const product = productById.get(run.productId);
     if (!product) continue;
-    const ft = polylineLength(run.points) * ftPerPx;
+    const ft = polylineLength(run.points) * runScale(design, run, photoWidth).ftPerPx;
     if (ft <= 0) continue;
     if (product.target.field === "roofline") {
       rooflineFt += ft;

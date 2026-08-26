@@ -42,7 +42,7 @@ import {
   resizeHandlePos,
 } from "@/lib/estimator/render";
 import { isLandscapeStyle } from "@/lib/estimator/types";
-import type { Design, PhotoInfo, Point, Product, Run } from "@/lib/estimator/types";
+import type { Design, PhotoInfo, Point, Product, Run, ScaleSlot } from "@/lib/estimator/types";
 
 import { EMPTY_DESIGN, nextId, type EditorAction, type EditorState } from "./editor-store";
 
@@ -106,7 +106,7 @@ type Drag =
   | { mode: "plan-image"; imageId: string; offset: Point; before: Design }
   | { mode: "plan-image-resize"; imageId: string; before: Design }
   | { mode: "highlight"; before: Design }
-  | { mode: "cal-a" | "cal-b"; before: Design };
+  | { mode: "cal-a" | "cal-b"; scaleSlot: ScaleSlot; before: Design };
 
 const MAX_PLAN_IMAGES = 12;
 const MAX_PLAN_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -180,7 +180,11 @@ export function LightCanvas({
   /** A touch press whose action is held until the finger lifts (see below). */
   const tapRef = useRef<{ id: number; x: number; y: number } | null>(null);
   const [panning, setPanning] = useState(false);
-  const [pendingCal, setPendingCal] = useState<{ a: Point; b: Point } | null>(null);
+  const [pendingCal, setPendingCal] = useState<{
+    a: Point;
+    b: Point;
+    scaleSlot: ScaleSlot;
+  } | null>(null);
   // "Before": the untouched base image (aerial for landscape, daylight photo for
   // seasonal), for the side-by-side customer moment. A toggle rather than a
   // press-and-hold keeps it usable from the keyboard and on touch.
@@ -190,6 +194,9 @@ export function LightCanvas({
 
   const productById = useMemo(() => indexProducts(products), [products]);
   const { ftPerPx, pxPerFt, calibrated } = designScale(design, photo.width);
+  const activeScaleSlot: ScaleSlot = tool.type === "calibrate" ? (tool.scaleSlot ?? 1) : 1;
+  const activeCalibration =
+    activeScaleSlot === 2 ? design.secondaryCalibration : design.calibration;
 
   const activeProduct =
     tool.type === "draw" || tool.type === "place"
@@ -270,7 +277,11 @@ export function LightCanvas({
 
   // Reset interaction drafts during render so a new tool never paints stale guides.
   const toolDraftKey =
-    tool.type === "draw" || tool.type === "place" ? `${tool.type}:${tool.productId}` : tool.type;
+    tool.type === "draw" || tool.type === "place"
+      ? `${tool.type}:${tool.productId}`
+      : tool.type === "calibrate"
+        ? `${tool.type}:${activeScaleSlot}`
+        : tool.type;
   const [activeToolDraftKey, setActiveToolDraftKey] = useState(toolDraftKey);
   if (activeToolDraftKey !== toolDraftKey) {
     setActiveToolDraftKey(toolDraftKey);
@@ -315,6 +326,7 @@ export function LightCanvas({
       showFixtureNumbers: !isAerial || fixtureNumbersVisible,
       showChrome: !showBefore,
       calibrateTool: tool.type === "calibrate",
+      calibrateScaleSlot: activeScaleSlot,
       planImageElements,
       draftHighlight: showBefore ? null : draftHighlight,
     });
@@ -410,6 +422,7 @@ export function LightCanvas({
     planOpacity,
     showBefore,
     tool.type,
+    activeScaleSlot,
     planImageElements,
   ]);
 
@@ -889,20 +902,20 @@ export function LightCanvas({
         return;
       case "calibrate": {
         if (!insidePhoto(p)) return;
-        const cal = design.calibration;
+        const cal = activeCalibration;
         if (cal && distance(p, cal.a) < slack * 1.5) {
-          dragRef.current = { mode: "cal-a", before: design };
+          dragRef.current = { mode: "cal-a", scaleSlot: activeScaleSlot, before: design };
           return;
         }
         if (cal && distance(p, cal.b) < slack * 1.5) {
-          dragRef.current = { mode: "cal-b", before: design };
+          dragRef.current = { mode: "cal-b", scaleSlot: activeScaleSlot, before: design };
           return;
         }
         if (!calDraft) {
           setCalDraft(p);
         } else {
           if (shift) p = snapAngle(calDraft, p);
-          setPendingCal({ a: calDraft, b: p });
+          setPendingCal({ a: calDraft, b: p, scaleSlot: activeScaleSlot });
           setCalDraft(null);
         }
         return;
@@ -1246,11 +1259,16 @@ export function LightCanvas({
       }
       case "cal-a":
       case "cal-b": {
-        const cal = design.calibration;
+        const cal = drag.scaleSlot === 2 ? design.secondaryCalibration : design.calibration;
         if (!cal) return;
         const at = clampToPhoto(p);
         const calibration = drag.mode === "cal-a" ? { ...cal, a: at } : { ...cal, b: at };
-        dispatch({ type: "SET_CALIBRATION", calibration, transient: true });
+        dispatch({
+          type: "SET_CALIBRATION",
+          calibration,
+          scaleSlot: drag.scaleSlot,
+          transient: true,
+        });
         return;
       }
     }
@@ -1329,17 +1347,18 @@ export function LightCanvas({
   };
 
   // ---- hint text ----------------------------------------------------------
+  const calibrationLabel = isAerial ? "Scale" : `Scale ${activeScaleSlot}`;
   let hint = "";
   if (tool.type === "pan") {
     hint = "Drag with one finger to move around the zoomed plan · switch to Select to edit";
   } else if (tool.type === "calibrate") {
     hint = calDraft
-      ? "Click the other end of your reference object · Shift = straight line"
-      : design.calibration
-        ? "Drag the cyan handles to adjust — or click two new points to re-measure"
+      ? `${calibrationLabel}: click the other end of your reference object · Shift = straight line`
+      : activeCalibration
+        ? `${calibrationLabel}: drag the cyan handles to adjust — or click two new points to re-measure`
         : isAerial
-          ? "Click both ends of a known top-down distance (driveway, walkway, or survey line)"
-          : "Click both ends of something with a known size (garage door = 16 ft)";
+          ? "Scale: click both ends of a known top-down distance (driveway, walkway, or survey line)"
+          : `${calibrationLabel}: click both ends of something with a known size (garage door = 16 ft)`;
   } else if (tool.type === "draw") {
     const liveFt =
       draft.length > 0 ? polylineLength(hoverPt ? [...draft, hoverPt] : draft) * ftPerPx : 0;
@@ -1447,18 +1466,32 @@ export function LightCanvas({
           <button
             type="button"
             className={`lc-chip ${calibrated ? "lc-chip-ok" : "lc-chip-warn"}`}
-            onClick={() => dispatch({ type: "SET_TOOL", tool: { type: "calibrate" } })}
-            title={
-              isAerial
-                ? "Set the aerial plan scale from a known top-down distance"
-                : "Set the photo scale from a known measurement"
+            onClick={() =>
+              dispatch({ type: "SET_TOOL", tool: { type: "calibrate", scaleSlot: 1 } })
             }
+            title="Set Scale 1 from a known measurement"
           >
             {!calibrated ? <AlertTriangle className="lc-chip-glyph" aria-hidden="true" /> : null}
             {calibrated && design.calibration
-              ? `Scale set: ${design.calibration.feet} ft reference`
-              : "Not to scale. Select to set scale."}
+              ? `Scale 1: ${design.calibration.feet} ft`
+              : "Scale 1 not set. Select to set scale."}
           </button>
+          {design.calibration ? (
+            <button
+              type="button"
+              className={`lc-chip ${
+                design.secondaryCalibration ? "lc-chip-ok" : "lc-chip-warn"
+              } ${tool.type === "calibrate" && activeScaleSlot === 2 ? "lc-chip-on" : ""}`}
+              onClick={() =>
+                dispatch({ type: "SET_TOOL", tool: { type: "calibrate", scaleSlot: 2 } })
+              }
+              title="Measure a second photo plane with different perspective"
+            >
+              {design.secondaryCalibration
+                ? `Scale 2: ${design.secondaryCalibration.feet} ft`
+                : "Add Scale 2"}
+            </button>
+          ) : null}
           <button
             type="button"
             className="lc-chip"
@@ -1568,11 +1601,13 @@ export function LightCanvas({
       {pendingCal ? (
         <FeetModal
           perspective={perspective}
+          scaleSlot={pendingCal.scaleSlot}
           onCancel={() => setPendingCal(null)}
           onApply={(feet) => {
             dispatch({
               type: "SET_CALIBRATION",
               calibration: { a: pendingCal.a, b: pendingCal.b, feet },
+              scaleSlot: pendingCal.scaleSlot,
             });
             setPendingCal(null);
             dispatch({ type: "SET_TOOL", tool: { type: "select" } });
@@ -1585,14 +1620,17 @@ export function LightCanvas({
 
 function FeetModal({
   perspective,
+  scaleSlot,
   onApply,
   onCancel,
 }: {
   perspective: "photo" | "aerial";
+  scaleSlot: ScaleSlot;
   onApply: (feet: number) => void;
   onCancel: () => void;
 }) {
   const isAerial = perspective === "aerial";
+  const scaleLabel = isAerial ? "aerial plan scale" : `photo Scale ${scaleSlot}`;
   const [value, setValue] = useState(isAerial ? "25" : "16");
   const feet = parseFloat(value);
   const valid = Number.isFinite(feet) && feet > 0;
@@ -1602,16 +1640,11 @@ function FeetModal({
       <button
         type="button"
         className="lc-modal-scrim"
-        aria-label="Cancel setting the scale"
+        aria-label={`Cancel setting ${scaleLabel}`}
         onClick={onCancel}
       />
-      <div
-        className="lc-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={isAerial ? "Set aerial plan scale" : "Set photo scale"}
-      >
-        <h3>How long is that line in real life?</h3>
+      <div className="lc-modal" role="dialog" aria-modal="true" aria-label={`Set ${scaleLabel}`}>
+        <h3>How long is the {isAerial ? "scale" : `Scale ${scaleSlot}`} line in real life?</h3>
         <p className="lc-modal-sub">
           {isAerial
             ? "Use a known top-down distance from a survey, driveway, walkway, or measured site line."
@@ -1671,7 +1704,7 @@ function FeetModal({
             disabled={!valid}
             onClick={() => valid && onApply(feet)}
           >
-            Set scale
+            Set {isAerial ? "scale" : `Scale ${scaleSlot}`}
           </button>
         </div>
       </div>

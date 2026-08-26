@@ -314,6 +314,60 @@ describe("LightCanvas — aerial plan semantics", () => {
   });
 });
 
+describe("LightCanvas — photo calibration scales", () => {
+  it("clears a half-drawn Scale 1 reference before measuring Scale 2", () => {
+    const primary = { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, feet: 10 };
+    const dispatch = vi.fn();
+    const scale1State: EditorState = {
+      ...initialEditorState(),
+      design: { ...initialEditorState().design, calibration: primary },
+      tool: { type: "calibrate", scaleSlot: 1 },
+    };
+    const { container, rerender } = render(
+      <LightCanvas photo={PHOTO} products={[BISTRO]} state={scale1State} dispatch={dispatch} />,
+    );
+    const canvas = container.querySelector("canvas")!;
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      width: PHOTO.width,
+      height: PHOTO.height,
+      right: PHOTO.width,
+      bottom: PHOTO.height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+    const clickAt = (x: number, y: number) => {
+      fireEvent.pointerDown(canvas, { clientX: x, clientY: y, button: 0, pointerId: 1 });
+      fireEvent.pointerUp(canvas, { clientX: x, clientY: y, button: 0, pointerId: 1 });
+    };
+
+    clickAt(100, 100);
+    const scale2State: EditorState = {
+      ...scale1State,
+      tool: { type: "calibrate", scaleSlot: 2 },
+    };
+    rerender(
+      <LightCanvas photo={PHOTO} products={[BISTRO]} state={scale2State} dispatch={dispatch} />,
+    );
+
+    clickAt(200, 200);
+    expect(screen.queryByRole("dialog", { name: "Set photo Scale 2" })).not.toBeInTheDocument();
+    clickAt(300, 200);
+    expect(screen.getByRole("dialog", { name: "Set photo Scale 2" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Set Scale 2" }));
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_CALIBRATION",
+      calibration: { a: { x: 200, y: 200 }, b: { x: 300, y: 200 }, feet: 16 },
+      scaleSlot: 2,
+    });
+  });
+});
+
 describe("LightCanvas — geometry stays on the photo", () => {
   beforeEach(() => vi.clearAllMocks());
 

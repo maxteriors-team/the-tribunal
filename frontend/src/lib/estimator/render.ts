@@ -9,8 +9,10 @@
  * the canvas transform, so the same code paths drive the on-screen editor and a
  * full-resolution export.
  *
- * Coordinates are image-space pixels. `pxPerFt` sizes bulbs to real-world scale.
+ * Coordinates are image-space pixels. Saved runs resolve their assigned scale;
+ * `pxPerFt` remains the default for drafts and placed items.
  */
+import { runScale } from "./design";
 import { distance, jitter, pointsAlongPath } from "./geometry";
 import type { Point } from "./measure";
 import {
@@ -29,6 +31,7 @@ import type {
   Product,
   RenderStyle,
   Run,
+  ScaleSlot,
   Selection,
 } from "./types";
 
@@ -693,6 +696,7 @@ export interface SceneOpts {
   showFixtureNumbers?: boolean;
   showChrome?: boolean;
   calibrateTool?: boolean;
+  calibrateScaleSlot?: ScaleSlot;
   /** Decoded image elements keyed by persisted plan-image id. */
   planImageElements?: ReadonlyMap<string, CanvasImageSource>;
   /** Freehand highlighter points currently being dragged, before commit. */
@@ -728,7 +732,13 @@ export function drawScene(
   for (const run of design.runs) {
     const product = productById.get(run.productId);
     if (product && product.style !== "wire" && opts.showHalos !== false) {
-      drawRunLights(ctx, run.points, withRunOverrides(product, run), pxPerFt, minR);
+      drawRunLights(
+        ctx,
+        run.points,
+        withRunOverrides(product, run),
+        runScale(design, run, photo.naturalWidth).pxPerFt,
+        minR,
+      );
     }
   }
   for (const item of design.items) {
@@ -897,7 +907,7 @@ export function drawScene(
   }
 
   // calibration line — only while the scale tool is active
-  const cal = design.calibration;
+  const cal = opts.calibrateScaleSlot === 2 ? design.secondaryCalibration : design.calibration;
   if (cal && opts.calibrateTool) drawCalibration(ctx, cal, vs);
   if (opts.draftCalPoint) {
     handleSquare(ctx, opts.draftCalPoint, 5 / vs, "#4fd9ff");

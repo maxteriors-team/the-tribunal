@@ -54,6 +54,7 @@ interface ToolPaletteProps {
   products: Product[];
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
+  enableSecondaryScale?: boolean;
 }
 
 /**
@@ -71,7 +72,12 @@ function Swatch({ colors }: { colors: string[] }) {
   );
 }
 
-export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
+export function ToolPalette({
+  products,
+  state,
+  dispatch,
+  enableSecondaryScale = false,
+}: ToolPaletteProps) {
   const { tool, selection, design } = state;
 
   const landscape = products.filter((p) => p.category === "landscape");
@@ -110,12 +116,35 @@ export function ToolPalette({ products, state, dispatch }: ToolPaletteProps) {
         </button>
         <button
           type="button"
-          className={`tp-tool ${tool.type === "calibrate" ? "active" : ""}`}
-          onClick={() => dispatch({ type: "SET_TOOL", tool: { type: "calibrate" } })}
+          className={`tp-tool ${
+            tool.type === "calibrate" && (tool.scaleSlot ?? 1) === 1 ? "active" : ""
+          }`}
+          onClick={() => dispatch({ type: "SET_TOOL", tool: { type: "calibrate", scaleSlot: 1 } })}
         >
-          <Ruler className="tp-glyph" aria-hidden="true" /> Set scale
+          <Ruler className="tp-glyph" aria-hidden="true" />
+          {enableSecondaryScale
+            ? design.calibration
+              ? `Scale 1: ${design.calibration.feet} ft`
+              : "Set Scale 1"
+            : "Set scale"}
           <kbd>S</kbd>
         </button>
+        {enableSecondaryScale && design.calibration ? (
+          <button
+            type="button"
+            className={`tp-tool ${
+              tool.type === "calibrate" && tool.scaleSlot === 2 ? "active" : ""
+            }`}
+            onClick={() =>
+              dispatch({ type: "SET_TOOL", tool: { type: "calibrate", scaleSlot: 2 } })
+            }
+          >
+            <Ruler className="tp-glyph" aria-hidden="true" />
+            {design.secondaryCalibration
+              ? `Scale 2: ${design.secondaryCalibration.feet} ft`
+              : "Add Scale 2"}
+          </button>
+        ) : null}
       </div>
 
       <div className="tp-section tp-grow">
@@ -596,8 +625,36 @@ function RunOptions({
 }) {
   const product = products.find((p) => p.id === run.productId);
   if (!product || product.kind !== "linear") return null;
+
+  const scaleOptions = design.secondaryCalibration ? (
+    <div>
+      <p className="tp-opt-label">Measurement scale</p>
+      <div className="tp-chip-row" role="group" aria-label="Strand measurement scale">
+        {([1, 2] as const).map((scaleSlot) => (
+          <button
+            key={scaleSlot}
+            type="button"
+            className={`tp-spacing-chip ${(run.scaleSlot ?? 1) === scaleSlot ? "on" : ""}`}
+            aria-pressed={(run.scaleSlot ?? 1) === scaleSlot}
+            onClick={() => dispatch({ type: "UPDATE_RUN", id: run.id, patch: { scaleSlot } })}
+          >
+            Scale {scaleSlot}
+          </button>
+        ))}
+      </div>
+      <p className="tp-opt-readout">
+        Split runs at every corner or depth change, then tag each plane.
+      </p>
+    </div>
+  ) : null;
+
   if (product.style === "wire") {
-    return <WireCircuitOptions run={run} products={products} design={design} dispatch={dispatch} />;
+    return (
+      <>
+        {scaleOptions}
+        <WireCircuitOptions run={run} products={products} design={design} dispatch={dispatch} />
+      </>
+    );
   }
 
   const options = [...new Set([...SPACING_OPTIONS[product.style], product.spacingIn])].sort(
@@ -609,6 +666,7 @@ function RunOptions({
 
   return (
     <>
+      {scaleOptions}
       {options.length > 1 ? (
         <div>
           <p className="tp-opt-label">Bulb spacing</p>
