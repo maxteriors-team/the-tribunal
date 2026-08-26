@@ -14752,6 +14752,17 @@
             ],
             "title": "Last Message Preview"
           },
+          "source_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Provider"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -14881,6 +14892,17 @@
             },
             "title": "Messages",
             "type": "array"
+          },
+          "source_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Provider"
           },
           "status": {
             "title": "Status",
@@ -19959,7 +19981,8 @@
               "meta_lead_ads",
               "meta_ad_library",
               "google_ads_transparency",
-              "companycam"
+              "companycam",
+              "quo"
             ],
             "title": "Integration Type",
             "type": "string"
@@ -21747,7 +21770,7 @@
         "type": "object"
       },
       "InvoiceDetailResponse": {
-        "description": "Invoice with its line items.",
+        "description": "Invoice with line items and sensitive payment provenance.",
         "properties": {
           "amount_paid": {
             "title": "Amount Paid",
@@ -21824,6 +21847,28 @@
             "title": "Line Items",
             "type": "array"
           },
+          "manual_payment_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Payment Amount"
+          },
+          "manual_payment_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Payment Reference"
+          },
           "notes": {
             "anyOf": [
               {
@@ -21862,6 +21907,43 @@
               }
             ],
             "title": "Paid At"
+          },
+          "payment_method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "card",
+                  "cash",
+                  "check"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Method"
+          },
+          "payment_recorded_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Recorded By Id"
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/InvoicePaymentResponse"
+            },
+            "title": "Payments",
+            "type": "array"
+          },
+          "receipt_delivery": {
+            "$ref": "#/components/schemas/InvoiceReceiptDelivery"
           },
           "sent_at": {
             "anyOf": [
@@ -22144,6 +22226,48 @@
         "title": "InvoiceLineItemUpdate",
         "type": "object"
       },
+      "InvoiceManualPaymentCreate": {
+        "description": "Record a partial or final invoice payment received offline.",
+        "properties": {
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "idempotency_key": {
+            "format": "uuid",
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "payment_method": {
+            "enum": [
+              "cash",
+              "check"
+            ],
+            "title": "Payment Method",
+            "type": "string"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          }
+        },
+        "required": [
+          "payment_method",
+          "amount",
+          "idempotency_key"
+        ],
+        "title": "InvoiceManualPaymentCreate",
+        "type": "object"
+      },
       "InvoicePaymentLinkResponse": {
         "description": "Stripe Checkout link for collecting an invoice's outstanding balance.",
         "properties": {
@@ -22168,6 +22292,117 @@
           "url"
         ],
         "title": "InvoicePaymentLinkResponse",
+        "type": "object"
+      },
+      "InvoicePaymentResponse": {
+        "description": "Operator-visible payment history without provider or idempotency secrets.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "payment_method": {
+            "enum": [
+              "card",
+              "cash",
+              "check",
+              "other"
+            ],
+            "title": "Payment Method",
+            "type": "string"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "recorded_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded By Id"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          }
+        },
+        "required": [
+          "id",
+          "payment_method",
+          "amount",
+          "received_at"
+        ],
+        "title": "InvoicePaymentResponse",
+        "type": "object"
+      },
+      "InvoiceReceiptDelivery": {
+        "description": "Operator-safe projection of the paid-receipt outbox state.\n\nProvider errors stay internal; ``reason`` is an allowlisted next step rather\nthan the worker's raw exception text.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "recipient": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipient"
+          },
+          "status": {
+            "default": "skipped",
+            "enum": [
+              "pending",
+              "sent",
+              "needs_attention",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          }
+        },
+        "title": "InvoiceReceiptDelivery",
         "type": "object"
       },
       "InvoiceResponse": {
@@ -22279,6 +22514,25 @@
               }
             ],
             "title": "Paid At"
+          },
+          "payment_method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "card",
+                  "cash",
+                  "check"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Method"
+          },
+          "receipt_delivery": {
+            "$ref": "#/components/schemas/InvoiceReceiptDelivery"
           },
           "sent_at": {
             "anyOf": [
@@ -22453,6 +22707,28 @@
             "title": "Line Items",
             "type": "array"
           },
+          "manual_payment_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Payment Amount"
+          },
+          "manual_payment_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Payment Reference"
+          },
           "notes": {
             "anyOf": [
               {
@@ -22491,6 +22767,43 @@
               }
             ],
             "title": "Paid At"
+          },
+          "payment_method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "card",
+                  "cash",
+                  "check"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Method"
+          },
+          "payment_recorded_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Recorded By Id"
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/InvoicePaymentResponse"
+            },
+            "title": "Payments",
+            "type": "array"
+          },
+          "receipt_delivery": {
+            "$ref": "#/components/schemas/InvoiceReceiptDelivery"
           },
           "sent_at": {
             "anyOf": [
@@ -22569,7 +22882,7 @@
         "type": "object"
       },
       "InvoiceUpdate": {
-        "description": "Update invoice header fields (all optional); ``status``/``number``/totals\nare server-derived.\n\n``line_items`` optionally **replaces the whole set** in the same transaction.\nAn editor that reorders, edits, and deletes rows in one save would otherwise\nhave to fan out across the per-item sub-resource endpoints, where a failure\nhalfway through leaves a financial record in a state neither the operator nor\nthe customer asked for. Omit the field to leave line items untouched; the\nper-item endpoints remain for incremental edits.",
+        "description": "Update invoice fields while identifying changes that stale checkout prices.\n\n``line_items`` optionally **replaces the whole set** in the same transaction.\nAn editor that reorders, edits, and deletes rows in one save would otherwise\nhave to fan out across the per-item sub-resource endpoints, where a failure\nhalfway through leaves a financial record in a state neither the operator nor\nthe customer asked for. Omit the field to leave line items untouched; the\nper-item endpoints remain for incremental edits.",
         "properties": {
           "contact_id": {
             "anyOf": [
@@ -52634,6 +52947,17 @@
             ],
             "title": "Duration Seconds"
           },
+          "external_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Url"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -52675,6 +52999,17 @@
               }
             ],
             "title": "Signals"
+          },
+          "source_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Provider"
           },
           "status": {
             "anyOf": [
@@ -56123,6 +56458,17 @@
             "title": "Direction",
             "type": "string"
           },
+          "external_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Url"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -56143,6 +56489,17 @@
               }
             ],
             "title": "Sent At"
+          },
+          "source_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Provider"
           },
           "status": {
             "title": "Status",
@@ -77209,6 +77566,134 @@
           }
         ],
         "summary": "Create Payment Link",
+        "tags": [
+          "Invoices"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/payments/manual": {
+      "post": {
+        "description": "Record a partial or final payment received by cash or check.",
+        "operationId": "record_manual_invoice_payment_api_v1_workspaces__workspace_id__invoices__invoice_id__payments_manual_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceManualPaymentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Record Manual Invoice Payment",
+        "tags": [
+          "Invoices"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/invoices/{invoice_id}/receipt/retry": {
+      "post": {
+        "description": "Idempotently enqueue or reopen receipt delivery without sending inline.",
+        "operationId": "retry_invoice_receipt_api_v1_workspaces__workspace_id__invoices__invoice_id__receipt_retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "invoice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Invoice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvoiceDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Retry Invoice Receipt",
         "tags": [
           "Invoices"
         ]
