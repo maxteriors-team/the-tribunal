@@ -27,6 +27,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
 from app.api.webhooks.mac_relay import router as mac_relay_webhook_router
 from app.api.webhooks.meta import router as meta_webhook_router
+from app.api.webhooks.quo import router as quo_webhook_router
 from app.api.webhooks.resend import router as resend_webhook_router
 from app.api.webhooks.telnyx import router as telnyx_webhook_router
 from app.core.config import settings
@@ -756,6 +757,7 @@ app.include_router(telnyx_webhook_router, prefix="/webhooks/telnyx", tags=["webh
 app.include_router(mac_relay_webhook_router, prefix="/webhooks/mac-relay", tags=["webhooks"])
 app.include_router(resend_webhook_router, prefix="/webhooks/resend", tags=["webhooks"])
 app.include_router(meta_webhook_router, prefix="/webhooks/meta", tags=["webhooks"])
+app.include_router(quo_webhook_router, prefix="/webhooks/quo", tags=["webhooks"])
 
 # Include WebSocket routers
 app.include_router(voice_bridge_router, tags=["voice"])

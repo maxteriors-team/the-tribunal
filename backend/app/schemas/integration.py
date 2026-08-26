@@ -14,6 +14,7 @@ IntegrationType = Literal[
     "meta_ad_library",
     "google_ads_transparency",
     "companycam",
+    "quo",
 ]
 
 

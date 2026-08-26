@@ -23,11 +23,12 @@ import { integrationsApi, type IntegrationWithMaskedCredentials } from "@/lib/ap
 import { settingsApi } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
 
-type IntegrationType = "telnyx" | "openai" | "resend" | "lob" | "companycam";
+type IntegrationType = "telnyx" | "openai" | "resend" | "lob" | "quo" | "companycam";
 
 function getIntegrationIcon(type: string) {
   switch (type) {
     case "telnyx":
+    case "quo":
       return Phone;
     case "resend":
       return Mail;

@@ -35,7 +35,14 @@ import {
   type IntegrationWithMaskedCredentials,
 } from "@/lib/api/integrations";
 import { queryKeys } from "@/lib/query-keys";
-type IntegrationType = "telnyx" | "openai" | "resend" | "meta_lead_ads" | "lob" | "companycam";
+type IntegrationType =
+  | "telnyx"
+  | "openai"
+  | "resend"
+  | "meta_lead_ads"
+  | "lob"
+  | "quo"
+  | "companycam";
 
 interface IntegrationConfig {
   name: string;
@@ -206,6 +213,20 @@ const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
         label: "API Key",
         placeholder: "test_...",
         description: "Find in Lob Dashboard > Settings > API Keys",
+        required: true,
+        type: "password",
+      },
+    ],
+  },
+  quo: {
+    name: "Quo",
+    description: "Connect Quo for workspace-scoped business phone access",
+    fields: [
+      {
+        key: "api_key",
+        label: "Quo API Key",
+        placeholder: "Paste your Quo API key",
+        description: "Create this in Quo Settings > Integrations > API keys",
         required: true,
         type: "password",
       },
