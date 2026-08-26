@@ -32,7 +32,7 @@ from app.services.quo.client import QuoClient
 FIXTURE_PATH = Path(__file__).parents[1] / "fixtures" / "quo" / "historical_pages.json"
 SINCE = datetime(2026, 8, 1, tzinfo=UTC)
 UNTIL = datetime(2026, 8, 8, tzinfo=UTC)
-pytestmark = pytest.mark.asyncio(loop_scope="module")
+pytestmark = [pytest.mark.asyncio(loop_scope="module"), pytest.mark.integration]
 
 
 @asynccontextmanager
