@@ -3614,6 +3614,7 @@ class QuoteService:
                     created_by_id=quote.created_by_id,
                     amount_paid=paid_deposit,
                     payment_intent_id=(quote.deposit_payment_intent_id if paid_deposit else None),
+                    opening_payment_method=(quote.deposit_payment_method if paid_deposit else None),
                     commit=False,
                 )
                 invoice_id = invoice.id

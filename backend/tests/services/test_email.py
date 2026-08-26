@@ -182,6 +182,7 @@ async def test_invoice_payment_receipt_is_branded_transactional_and_itemized(
         logo_url="https://cdn.example.com/logo.png",
         support_email="office@example.com",
         invoice_url="https://app.example/p/invoices/token",
+        service_summary="Gutter cleaning × 2; Window wash <premium>",
     )
 
     assert sent is True
@@ -193,11 +194,42 @@ async def test_invoice_payment_receipt_is_branded_transactional_and_itemized(
     assert "USD 150.00" in params["html"]
     assert "USD 200.00" in params["html"]
     assert "Paid in full" in params["html"]
+    assert "Services provided" in params["html"]
+    assert "Gutter cleaning × 2; Window wash &lt;premium&gt;" in params["html"]
+    assert "Gutter cleaning × 2; Window wash <premium>" in params["text"]
     assert "https://cdn.example.com/logo.png" in params["html"]
-    assert "View paid invoice" in params["html"]
+    assert "View invoice" in params["html"]
     assert "service details" in params["text"]
     assert "unsubscribe" not in params["html"].lower()
     assert call.args[1] == {"idempotency_key": str(key)}
+
+
+@pytest.mark.asyncio
+async def test_invoice_partial_payment_receipt_shows_remaining_balance(
+    fake_resend: _FakeResend,
+) -> None:
+    sent = await email.send_invoice_payment_receipt(
+        to_email="dana@example.com",
+        customer_name="Dana",
+        business_name="Maxteriors Lighting",
+        invoice_number="INV-000043",
+        payment_amount=500,
+        invoice_total=2785,
+        total_paid=500,
+        balance_remaining=2285,
+        currency="usd",
+        paid_at=email.datetime(2026, 8, 21, 14, 30, tzinfo=email.UTC),
+        idempotency_key=uuid.uuid4(),
+        service_summary="Christmas light installation",
+    )
+
+    assert sent is True
+    params = fake_resend.Emails.send_async.await_args.args[0]
+    assert "Partial payment" in params["html"]
+    assert "Balance remaining" in params["html"]
+    assert "USD 2,285.00" in params["html"]
+    assert "Paid in full" not in params["html"]
+    assert "Christmas light installation" in params["text"]
 
 
 @pytest.mark.asyncio

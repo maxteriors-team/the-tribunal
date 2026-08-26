@@ -1,12 +1,19 @@
 // Customer invoice types. Mirrors the backend `app/schemas/invoice.py` contract.
 
-export type InvoiceStatus =
-  | "draft"
-  | "sent"
-  | "paid"
-  | "partial"
-  | "void"
-  | "overdue";
+export type InvoiceStatus = "draft" | "sent" | "paid" | "partial" | "void" | "overdue";
+export type InvoicePaymentMethod = "card" | "cash" | "check";
+export type InvoicePaymentRecordMethod = InvoicePaymentMethod | "other";
+export type ManualInvoicePaymentMethod = "cash" | "check";
+
+export type InvoiceReceiptDeliveryStatus = "pending" | "sent" | "needs_attention" | "skipped";
+
+export interface InvoiceReceiptDelivery {
+  status: InvoiceReceiptDeliveryStatus;
+  recipient?: string | null;
+  timestamp?: string | null;
+  /** Sanitized operator next step; never a raw provider error. */
+  reason?: string | null;
+}
 
 export interface InvoiceLineItem {
   id: string;
@@ -21,6 +28,15 @@ export interface InvoiceLineItem {
   is_selected: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface InvoicePayment {
+  id: string;
+  payment_method: InvoicePaymentRecordMethod;
+  amount: number;
+  reference?: string | null;
+  recorded_by_id?: number | null;
+  received_at: string;
 }
 
 export interface Invoice {
@@ -38,6 +54,10 @@ export interface Invoice {
   total: number;
   amount_paid: number;
   currency: string;
+  payment_method?: InvoicePaymentMethod | null;
+  payment_recorded_by_id?: number | null;
+  manual_payment_amount?: number | null;
+  manual_payment_reference?: string | null;
   issue_date?: string | null;
   due_date?: string | null;
   sent_at?: string | null;
@@ -46,17 +66,40 @@ export interface Invoice {
   terms?: string | null;
   created_at: string;
   updated_at: string;
+  receipt_delivery: InvoiceReceiptDelivery;
+  payments?: InvoicePayment[];
   /** Present on detail responses (get/create/update, line-item + lifecycle ops). */
   line_items?: InvoiceLineItem[];
 }
 
+export interface InvoiceManualPaymentInput {
+  payment_method: ManualInvoicePaymentMethod;
+  amount: number;
+  reference?: string | null;
+  idempotency_key: string;
+}
+
 export interface InvoiceLineItemInput {
   name: string;
-  description?: string;
+  description?: string | null;
   quantity?: number;
   unit_price: number;
   discount?: number;
   is_optional?: boolean;
+}
+
+/**
+ * Every client-settable line field required for whole-set replacement.
+ * Keeping these required prevents an editor from silently applying API defaults
+ * to fields it loaded but failed to send back.
+ */
+export interface InvoiceLineItemReplacementInput {
+  name: string;
+  description: string | null;
+  quantity: number;
+  unit_price: number;
+  discount: number;
+  is_optional: boolean;
 }
 
 export interface CreateInvoiceRequest {
@@ -84,9 +127,10 @@ export interface UpdateInvoiceRequest {
   terms?: string;
   /**
    * Replaces the entire line-item set in one transaction. Omit to leave line
-   * items untouched; the server rejects it on a paid or voided invoice.
+   * items untouched; every supported line field is required here because omitted
+   * fields would be reset to API defaults during replacement.
    */
-  line_items?: InvoiceLineItemInput[];
+  line_items?: InvoiceLineItemReplacementInput[];
 }
 
 export interface InvoicePaymentLink {

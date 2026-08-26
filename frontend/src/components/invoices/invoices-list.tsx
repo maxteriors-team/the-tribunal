@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Plus, Receipt } from "lucide-react";
+import { Banknote, MoreHorizontal, Plus, Receipt, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -23,11 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Table,
   TableBody,
@@ -41,18 +37,16 @@ import { invoicesApi } from "@/lib/api/invoices";
 import { describeInvoiceDelivery } from "@/lib/invoice-delivery";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
-import { formatDate } from "@/lib/utils/date";
+import { formatDate, formatDateTime } from "@/lib/utils/date";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
 import type { Invoice, InvoiceStatus } from "@/types";
 
 import { InvoiceCreateDialog } from "./invoice-create-dialog";
 import { InvoiceEditDialog } from "./invoice-edit-dialog";
+import { InvoiceRecordPaymentDialog } from "./invoice-record-payment-dialog";
 
-const STATUS_VARIANT: Record<
-  InvoiceStatus,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
+const STATUS_VARIANT: Record<InvoiceStatus, "default" | "secondary" | "destructive" | "outline"> = {
   draft: "outline",
   sent: "secondary",
   partial: "secondary",
@@ -61,11 +55,45 @@ const STATUS_VARIANT: Record<
   void: "outline",
 };
 
+const RECEIPT_STATUS = {
+  pending: { label: "Pending", variant: "secondary" },
+  sent: { label: "Sent", variant: "default" },
+  needs_attention: { label: "Needs attention", variant: "destructive" },
+  skipped: { label: "Skipped", variant: "outline" },
+} as const;
+
+function ReceiptDeliveryCell({ invoice }: { invoice: Invoice }) {
+  const delivery = invoice.receipt_delivery ?? { status: "skipped" as const };
+  const config = RECEIPT_STATUS[delivery.status];
+  return (
+    <div className="max-w-56 space-y-1">
+      <Badge variant={config.variant}>{config.label}</Badge>
+      {delivery.recipient && (
+        <p className="truncate text-xs text-muted-foreground" title={delivery.recipient}>
+          {delivery.recipient}
+        </p>
+      )}
+      {invoice.payment_method && invoice.status === "paid" && (
+        <p className="text-xs font-medium capitalize">Paid by {invoice.payment_method}</p>
+      )}
+      {delivery.timestamp && (
+        <p className="text-xs text-muted-foreground">{formatDateTime(delivery.timestamp)}</p>
+      )}
+      {delivery.reason && (
+        <p className="text-xs text-destructive" title={delivery.reason}>
+          {delivery.reason}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function InvoicesList() {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
+  const [recordingPayment, setRecordingPayment] = useState<Invoice | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Invoice | null>(null);
 
   const query = useQuery({
@@ -95,8 +123,20 @@ export function InvoicesList() {
       }
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to send invoice")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to send invoice")),
+  });
+
+  const retryReceiptMutation = useMutation({
+    mutationFn: (invoice: Invoice) => invoicesApi.retryReceipt(workspaceId ?? "", invoice.id),
+    onSuccess: (updated) => {
+      toast.success(
+        updated.receipt_delivery.status === "sent"
+          ? `Receipt for ${updated.number} was already sent`
+          : `Receipt for ${updated.number} queued`,
+      );
+      invalidate();
+    },
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Could not retry the receipt")),
   });
 
   const voidMutation = useMutation({
@@ -105,8 +145,7 @@ export function InvoicesList() {
       toast.success(`Invoice ${inv.number} voided`);
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to void invoice")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to void invoice")),
   });
 
   const textMutation = useMutation({
@@ -118,20 +157,17 @@ export function InvoicesList() {
     },
     // The API refuses with an actionable reason (no phone on file, opted out,
     // no SMS number in the workspace) — show it rather than a generic failure.
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to text invoice")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to text invoice")),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (invoice: Invoice) =>
-      invoicesApi.delete(workspaceId ?? "", invoice.id),
+    mutationFn: (invoice: Invoice) => invoicesApi.delete(workspaceId ?? "", invoice.id),
     onSuccess: (_result, invoice) => {
       toast.success(`Invoice ${invoice.number} deleted`);
       setPendingDelete(null);
       invalidate();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to delete invoice")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to delete invoice")),
   });
 
   const newInvoiceButton = (
@@ -172,6 +208,7 @@ export function InvoicesList() {
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead className="text-right">Paid</TableHead>
+              <TableHead>Receipt</TableHead>
               <TableHead>Due</TableHead>
               <TableHead className="w-10" />
             </TableRow>
@@ -180,24 +217,22 @@ export function InvoicesList() {
             {invoices.map((invoice: Invoice) => (
               <TableRow key={invoice.id}>
                 <TableCell className="font-medium">{invoice.number}</TableCell>
-                {/* An invoice can legitimately have no bill-to contact (an
-                    unattached draft), so say so rather than leaving a blank
-                    cell that reads as a loading failure. */}
                 <TableCell>
                   {invoice.contact_name ?? (
                     <span className="text-muted-foreground">No customer</span>
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={STATUS_VARIANT[invoice.status]}>
-                    {invoice.status}
-                  </Badge>
+                  <Badge variant={STATUS_VARIANT[invoice.status]}>{invoice.status}</Badge>
                 </TableCell>
                 <TableCell className="text-right">
                   {formatCurrency(invoice.total, invoice.currency)}
                 </TableCell>
                 <TableCell className="text-right text-muted-foreground">
                   {formatCurrency(invoice.amount_paid, invoice.currency)}
+                </TableCell>
+                <TableCell>
+                  <ReceiptDeliveryCell invoice={invoice} />
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {invoice.due_date ? formatDate(invoice.due_date) : "—"}
@@ -208,10 +243,13 @@ export function InvoicesList() {
                     onEdit={() => setEditing(invoice)}
                     onSend={() => sendMutation.mutate(invoice.id)}
                     onText={() => textMutation.mutate(invoice)}
+                    onRecordPayment={() => setRecordingPayment(invoice)}
+                    onRetryReceipt={() => retryReceiptMutation.mutate(invoice)}
                     onVoid={() => voidMutation.mutate(invoice.id)}
                     onDelete={() => setPendingDelete(invoice)}
                     busy={
                       sendMutation.isPending ||
+                      retryReceiptMutation.isPending ||
                       voidMutation.isPending ||
                       textMutation.isPending
                     }
@@ -237,6 +275,14 @@ export function InvoicesList() {
           if (!next) setEditing(null);
         }}
       />
+      <InvoiceRecordPaymentDialog
+        key={recordingPayment?.id ?? "closed"}
+        invoice={recordingPayment}
+        open={recordingPayment !== null}
+        onOpenChange={(next) => {
+          if (!next) setRecordingPayment(null);
+        }}
+      />
 
       {/* Deleting is only offered for drafts, but it still destroys a record —
           confirm with the number so the operator sees which one. */}
@@ -248,18 +294,14 @@ export function InvoicesList() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete invoice {pendingDelete?.number}?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Delete invoice {pendingDelete?.number}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This draft has never been sent, so deleting it removes it for good.
-              This can&rsquo;t be undone.
+              This draft has never been sent, so deleting it removes it for good. This can&rsquo;t
+              be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={(event) => {
                 // Keep the dialog mounted while the request is in flight.
@@ -282,39 +324,37 @@ interface RowActionsProps {
   onEdit: () => void;
   onSend: () => void;
   onText: () => void;
+  onRecordPayment: () => void;
+  onRetryReceipt: () => void;
   onVoid: () => void;
   onDelete: () => void;
   busy: boolean;
 }
 
-/**
- * Row menu. Each item mirrors a backend rule rather than guessing:
- * a voided invoice is frozen, a paid one keeps its lines as history (but its
- * notes stay editable), and only an unsent draft can be destroyed — anything
- * the customer has seen gets voided so the record survives.
- */
+/** Row actions mirror backend invoice lifecycle and receipt retry rules. */
 function RowActions({
   invoice,
   onEdit,
   onSend,
   onText,
+  onRecordPayment,
+  onRetryReceipt,
   onVoid,
   onDelete,
   busy,
 }: RowActionsProps) {
   const isVoid = invoice.status === "void";
   const isDraft = invoice.status === "draft";
-  // Void is terminal; everything else stays editable (a paid invoice opens with
-  // its line items locked, matching the service's own guard).
   const canEdit = !isVoid;
   const canSend = !isVoid && invoice.status !== "paid";
-  // Texting needs someone to text. Whether that contact actually has a phone
-  // isn't on the list row, so the API decides and returns a reason we surface.
   const canText = canSend && invoice.contact_id != null;
+  const canRecordPayment =
+    !isVoid && invoice.status !== "paid" && invoice.total > invoice.amount_paid;
+  const canRetryReceipt = invoice.receipt_delivery?.status === "needs_attention";
   const canVoid = !isVoid && invoice.status !== "paid";
-  // Issued invoices are accounting records: void, never delete.
   const canDelete = isDraft;
-  if (!canEdit && !canSend && !canVoid && !canDelete) return null;
+  if (!canEdit && !canSend && !canRecordPayment && !canRetryReceipt && !canVoid && !canDelete)
+    return null;
 
   return (
     <DropdownMenu>
@@ -334,8 +374,18 @@ function RowActions({
             {isDraft ? "Send invoice" : "Resend invoice"}
           </DropdownMenuItem>
         )}
-        {canText && (
-          <DropdownMenuItem onClick={onText}>Text invoice</DropdownMenuItem>
+        {canText && <DropdownMenuItem onClick={onText}>Text invoice</DropdownMenuItem>}
+        {canRecordPayment && (
+          <DropdownMenuItem onClick={onRecordPayment}>
+            <Banknote className="mr-2 size-4" />
+            Record payment
+          </DropdownMenuItem>
+        )}
+        {canRetryReceipt && (
+          <DropdownMenuItem onClick={onRetryReceipt}>
+            <RotateCcw className="mr-2 size-4" />
+            Retry receipt
+          </DropdownMenuItem>
         )}
         {canVoid && (
           <DropdownMenuItem variant="destructive" onClick={onVoid}>
