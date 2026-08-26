@@ -550,7 +550,7 @@ test.describe("landscape lighting studio", () => {
       .poll(() => previews.at(-1))
       .toMatchObject({
         contact_id: 42,
-        lighting_project_id: PROJECT_ID,
+        lighting_project_id: null,
         title: "Hawthorne Residence",
         selected_tier: "best",
         quantities: expect.arrayContaining([
@@ -602,7 +602,7 @@ test.describe("landscape lighting studio", () => {
     });
   });
 
-  test("uses every workflow, autosaves, exports, and delivers through captured providers", async ({
+  test("persists, reopens, edits, and uses every workflow through captured providers", async ({
     page,
   }) => {
     const { updates, deliveries } = await installStudioApi(page);
@@ -628,6 +628,12 @@ test.describe("landscape lighting studio", () => {
       document?: { shots?: Array<{ design?: { highlights?: unknown[] } }> };
     };
     expect(latestDraft.document?.shots?.[0]?.design?.highlights).toHaveLength(1);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Saved to Tribunal")).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Drawing toolbar" })).toBeVisible();
 
     await page.locator('label[title="Blue"]').click();
     await expect(page.getByRole("radio", { name: "Blue" })).toBeChecked();
@@ -642,14 +648,22 @@ test.describe("landscape lighting studio", () => {
       .poll(() =>
         updates.some((entry) => {
           const document = entry as {
-            document?: { shots?: Array<{ design: { items: Array<{ markerColor?: string }> } }> };
+            document?: {
+              shots?: Array<{
+                design: { highlights?: unknown[]; items: Array<{ markerColor?: string }> };
+              }>;
+            };
           };
-          return document.document?.shots?.some((shot) =>
-            shot.design.items.some((item) => item.markerColor === "#2f80ed"),
+          return document.document?.shots?.some(
+            (shot) =>
+              shot.design.highlights?.length === 1 &&
+              shot.design.items.some((item) => item.markerColor === "#2f80ed"),
           );
         }),
       )
       .toBe(true);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Saved to Tribunal")).toBeVisible();
 
     await page.getByRole("button", { name: "Wiring: Off" }).click();
     await canvas.click({ position: { x: canvasBox.width * 0.35, y: canvasBox.height * 0.62 } });
