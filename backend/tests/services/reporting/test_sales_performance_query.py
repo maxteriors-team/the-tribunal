@@ -22,6 +22,7 @@ from app.core.encryption import hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.appointment import Appointment
 from app.models.contact import Contact
+from app.models.field_service import Job, JobStatus
 from app.models.lead_source import LeadSource, LeadSourceType
 from app.models.opportunity import Opportunity
 from app.models.pipeline import Pipeline
@@ -45,7 +46,12 @@ async def _fresh_engine_pool():
 
 
 async def _workspace(db) -> Workspace:
-    ws = Workspace(id=uuid.uuid4(), name="Sales", slug=f"sales-{uuid.uuid4().hex[:8]}")
+    ws = Workspace(
+        id=uuid.uuid4(),
+        name="Sales",
+        slug=f"sales-{uuid.uuid4().hex[:8]}",
+        settings={"timezone": "UTC"},
+    )
     db.add(ws)
     await db.flush()
     return ws
@@ -440,6 +446,7 @@ async def test_show_up_rate_counts_only_decided_appointments() -> None:
 
         report = await _report(db, ws.id)
 
+        assert report.appointments_booked == 6
         assert report.appointments_completed == 3
         assert report.appointments_no_show == 1
         assert report.show_up_rate == 0.75
@@ -451,7 +458,13 @@ async def test_show_up_rate_is_null_when_nothing_was_marked() -> None:
         ws = await _workspace(db)
         contact = await _contact(db, ws.id)
         await _appointment(db, ws.id, contact.id, status="scheduled")
-        await _appointment(db, ws.id, contact.id, status="scheduled")
+        await _appointment(
+            db,
+            ws.id,
+            contact.id,
+            status="scheduled",
+            scheduled_at=IN_WINDOW + timedelta(hours=1),
+        )
 
         report = await _report(db, ws.id)
 
@@ -489,5 +502,51 @@ async def test_another_workspaces_appointments_never_leak_in() -> None:
 
         report = await _report(db, ws.id)
 
+        assert report.appointments_booked == 1
         assert report.appointments_no_show == 0
         assert report.show_up_rate == 1.0
+
+
+async def test_completed_jobs_are_windowed_and_workspace_scoped() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        other = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        other_contact = await _contact(db, other.id)
+        db.add_all(
+            [
+                Job(
+                    workspace_id=ws.id,
+                    contact_id=contact.id,
+                    title="Completed in window",
+                    status=JobStatus.COMPLETED,
+                    scheduled_start=IN_WINDOW,
+                ),
+                Job(
+                    workspace_id=ws.id,
+                    contact_id=contact.id,
+                    title="Still scheduled",
+                    status=JobStatus.SCHEDULED,
+                    scheduled_start=IN_WINDOW,
+                ),
+                Job(
+                    workspace_id=ws.id,
+                    contact_id=contact.id,
+                    title="Completed outside window",
+                    status=JobStatus.COMPLETED,
+                    scheduled_start=datetime(2026, 6, 15, tzinfo=UTC),
+                ),
+                Job(
+                    workspace_id=other.id,
+                    contact_id=other_contact.id,
+                    title="Other workspace",
+                    status=JobStatus.COMPLETED,
+                    scheduled_start=IN_WINDOW,
+                ),
+            ]
+        )
+        await db.flush()
+
+        report = await _report(db, ws.id)
+
+        assert report.jobs_completed == 1

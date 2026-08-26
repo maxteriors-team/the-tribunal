@@ -422,8 +422,10 @@ def test_show_up_rate_is_null_until_an_appointment_is_marked() -> None:
     """A workspace that has marked nothing has an unreadable rate, not 0%."""
     report = _report()
 
+    assert report.appointments_booked == 0
     assert report.appointments_completed == 0
     assert report.appointments_no_show == 0
+    assert report.jobs_completed == 0
     assert report.show_up_rate is None
 
 
@@ -432,12 +434,15 @@ def test_show_up_rate_divides_attended_by_decided() -> None:
         [],
         date_from=WINDOW_FROM,
         date_to=WINDOW_TO,
-        attendance=AttendanceFacts(completed=9, no_show=3),
+        attendance=AttendanceFacts(booked=15, completed=9, no_show=3),
+        jobs_completed=4,
     )
 
+    assert report.appointments_booked == 15
     assert report.show_up_rate == 0.75
     assert report.appointments_completed == 9
     assert report.appointments_no_show == 3
+    assert report.jobs_completed == 4
 
 
 def test_show_up_rate_reports_a_real_zero_when_everyone_missed() -> None:
