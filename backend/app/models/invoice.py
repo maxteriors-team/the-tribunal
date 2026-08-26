@@ -10,7 +10,7 @@ request time in the payments service. ``status`` is derived by the service from
 import secrets
 import uuid
 from datetime import UTC, date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     DATE,
@@ -35,7 +35,6 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
-    from app.models.invoice_payment import InvoicePayment
     from app.models.user import User
     from app.models.workspace import Workspace
 
@@ -204,7 +203,8 @@ class Invoice(Base):
         cascade="all, delete-orphan",
         order_by="InvoiceLineItem.created_at",
     )
-    payments: Mapped[list["InvoicePayment"]] = relationship(
+    # Keep this annotation import-free to avoid an Invoice↔InvoicePayment module cycle.
+    payments: Mapped[list[Any]] = relationship(
         "InvoicePayment",
         back_populates="invoice",
         cascade="all, delete-orphan",
