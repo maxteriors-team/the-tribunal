@@ -64,7 +64,7 @@ export function LandscapeFixtureScheduleTable({
     >
       <table className="ll-data-table ll-fixture-schedule-table">
         <caption className="sr-only">
-          Fixture schedule with editable lamp and accessory assignments, plus fixture type
+          Fixture schedule with editable fixture type, lamp, and accessory assignments
         </caption>
         <thead>
           <tr>
