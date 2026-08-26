@@ -263,6 +263,33 @@ class TestRetrieveShortCircuits:
         assert out == []
         db.execute.assert_not_awaited()
 
+    @pytest.mark.asyncio
+    async def test_default_embedder_resolves_workspace_credentials(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        db = AsyncMock()
+        workspace_id = uuid.uuid4()
+
+        async def failing_embedder(_texts: list[str]) -> EmbeddingResult:
+            return EmbeddingResult(ok=False, error="boom")
+
+        create_embedder = AsyncMock(return_value=failing_embedder)
+        monkeypatch.setattr(
+            "app.services.knowledge.retrieval_service.create_workspace_embedder",
+            create_embedder,
+        )
+
+        out = await KnowledgeRetrievalService().retrieve(
+            db,
+            workspace_id=workspace_id,
+            agent_id=uuid.uuid4(),
+            query="pricing",
+        )
+
+        assert out == []
+        create_embedder.assert_awaited_once_with(db, workspace_id)
+        db.execute.assert_not_awaited()
+
 
 # ── retrieve_passages() title enrichment ─────────────────────────────
 class TestRetrievePassages:

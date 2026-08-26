@@ -32,7 +32,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.knowledge_chunk import KnowledgeChunk
 from app.models.knowledge_document import KnowledgeDocument
-from app.services.ai.embeddings import Embedder, embed_texts
+from app.services.ai.embeddings import Embedder, create_workspace_embedder
 
 logger = structlog.get_logger()
 
@@ -343,7 +343,6 @@ class KnowledgeRetrievalService:
         when ``agent_id`` is ``None``.
         """
         opts = options or RetrieveOptions()
-        embedder = opts.embedder or embed_texts
         reranker = opts.reranker or identity_reranker
 
         min_score = (
@@ -354,6 +353,7 @@ class KnowledgeRetrievalService:
         if not trimmed:
             return []
 
+        embedder = opts.embedder or await create_workspace_embedder(db, workspace_id)
         embedded = await embedder([trimmed])
         if not embedded.ok or not embedded.embeddings:
             logger.warning(
