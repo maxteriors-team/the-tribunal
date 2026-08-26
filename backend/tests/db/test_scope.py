@@ -18,7 +18,7 @@ import pytest
 from sqlalchemy import UUID, Column, String, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from app.db.scope import apply_workspace_scope
+from app.db.scope import apply_workspace_scope, select_workspace_owned
 
 
 class _ScopeTestBase(DeclarativeBase):
@@ -93,4 +93,12 @@ class TestApplyWorkspaceScope:
                 select(_TenantModel),
                 _NotAModel,  # type: ignore[arg-type]
                 uuid.uuid4(),
+            )
+
+    def test_rejects_non_sequence_loader_options(self) -> None:
+        with pytest.raises(TypeError, match="options must be a sequence"):
+            select_workspace_owned(
+                _TenantModel,
+                uuid.uuid4(),
+                options=True,  # type: ignore[arg-type]
             )

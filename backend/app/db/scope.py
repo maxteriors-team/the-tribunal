@@ -78,7 +78,9 @@ def select_workspace_owned[ModelT: DeclarativeBase](
     query = apply_workspace_scope(select(model), model, workspace_id)
     if criteria:
         query = query.where(*criteria)
-    if options:
+    if options is not None:
+        if not isinstance(options, Sequence):
+            raise TypeError("options must be a sequence of SQLAlchemy loader options")
         for option in options:
             query = query.options(option)
     return query
