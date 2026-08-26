@@ -43,9 +43,13 @@ from app.services.exceptions import (
     ServiceUnavailableError,
     ValidationError,
 )
-from app.services.invoices import InvoiceService
-from app.services.invoices.invoice_service import handle_invoice_checkout_session_completed
+from app.services.invoices import invoice_service as invoice_service_module
 from app.services.payments import call_payment_service
+
+InvoiceService = invoice_service_module.InvoiceService
+handle_invoice_checkout_session_completed = (
+    invoice_service_module.handle_invoice_checkout_session_completed
+)
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -2054,7 +2058,6 @@ async def test_checkout_expiration_failure_rolls_back_the_entire_edit(
 async def test_partial_edit_rejects_underpayment_and_equality_uses_paid_transition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import app.services.invoices.invoice_service as invoice_service_module
 
     paid_events: list[dict[str, object]] = []
 
@@ -2140,7 +2143,6 @@ async def test_duplicate_webhook_race_is_idempotent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     payment_intent_id = _stripe_id("pi_duplicate_race")
-    import app.services.invoices.invoice_service as invoice_service_module
 
     paid_events: list[dict[str, object]] = []
     notifications: list[float] = []
