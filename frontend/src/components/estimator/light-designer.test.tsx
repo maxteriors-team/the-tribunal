@@ -770,10 +770,9 @@ describe("LightDesigner", () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
 
-    fireEvent.change(
-      await screen.findByRole("spinbutton", { name: /Permanent quote deposit/i }),
-      { target: { value: "30" } },
-    );
+    fireEvent.change(await screen.findByRole("spinbutton", { name: /Permanent quote deposit/i }), {
+      target: { value: "30" },
+    });
     expect(screen.getByText("$990.00 due when the customer approves.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Create permanent quote/i }));
 
@@ -1934,6 +1933,12 @@ describe("LightDesigner", () => {
   });
 
   it("requires and persists an installation-sheet selection before quoting", async () => {
+    vi.mocked(designToEstimateInputs).mockReturnValue({
+      feet: 0,
+      christmas_items: {},
+      fixtures: { uplight: 2 },
+      bistro_feet: 0,
+    });
     const onSelectInstallationShot = vi.fn().mockResolvedValue(undefined);
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {
@@ -1967,6 +1972,12 @@ describe("LightDesigner", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use L-1 as installation sheet" }));
     await waitFor(() => expect(onSelectInstallationShot).toHaveBeenCalledWith("front"));
     await openProposalPreview();
+    await waitFor(() =>
+      expect(salesWizardApi.preview).toHaveBeenLastCalledWith(
+        "ws_1",
+        expect.objectContaining({ lighting_project_id: null }),
+      ),
+    );
     expect(await screen.findByText(/Select and save an installation sheet/)).toBeInTheDocument();
   });
 
