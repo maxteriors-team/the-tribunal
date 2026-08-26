@@ -25,9 +25,15 @@ class MessageResponse(BaseModel):
     agent_id: uuid.UUID | None
     source_provider: str | None = None
     external_url: str | None = None
+    is_voicemail: bool = False
     booking_outcome: str | None = None
     sent_at: datetime | None
     created_at: datetime
+
+    @field_validator("is_voicemail", mode="before")
+    @classmethod
+    def default_missing_voicemail_indicator(cls, value: object) -> bool:
+        return bool(value)
 
     model_config = ConfigDict(from_attributes=True)
 

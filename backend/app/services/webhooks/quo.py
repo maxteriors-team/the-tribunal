@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -41,6 +42,17 @@ class QuoWebhookEvent:
     @property
     def idempotency_key(self) -> str:
         return self.delivery_id
+
+    @property
+    def created_at_datetime(self) -> datetime:
+        """Return the verified envelope time as timezone-aware UTC."""
+        try:
+            parsed = datetime.fromisoformat(self.created_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise ValueError("Invalid Quo event timestamp") from None
+        if parsed.tzinfo is None:
+            raise ValueError("Invalid Quo event timestamp")
+        return parsed.astimezone(UTC)
 
 
 def parse_quo_payload(
@@ -82,6 +94,16 @@ def parse_quo_payload(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Quo webhook organization mismatch",
+        )
+
+    try:
+        parsed_created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError:
+        parsed_created_at = None
+    if parsed_created_at is None or parsed_created_at.tzinfo is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Quo webhook payload",
         )
 
     return QuoWebhookEvent(

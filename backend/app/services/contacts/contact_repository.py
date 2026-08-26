@@ -562,6 +562,7 @@ async def get_contact_timeline(
                     "status": msg.status,
                     "source_provider": msg.source_provider,
                     "external_url": msg.external_url,
+                    "is_voicemail": bool(msg.is_voicemail),
                     "booking_outcome": msg.booking_outcome,
                     "signals": signals,
                     "attachments": [

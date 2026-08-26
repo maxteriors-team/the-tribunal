@@ -14,13 +14,18 @@ from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 from svix.webhooks import Webhook, WebhookVerificationError
 
-from app.api.deps import DB
+from app.api.deps import TransactionalDB
 from app.models.workspace import WorkspaceIntegration
-from app.services.webhooks.pipeline import WebhookPipeline, WebhookRequestEnvelope
+from app.services.quo.client import QuoClient
+from app.services.quo.sync import QuoSyncError, QuoSyncService
+from app.services.webhooks.pipeline import (
+    WebhookDispatchResult,
+    WebhookPipeline,
+    WebhookRequestEnvelope,
+)
 from app.services.webhooks.quo import (
     QuoWebhookEvent,
     check_quo_idempotency,
-    dispatch_quo_event,
     parse_quo_payload,
 )
 
@@ -91,6 +96,12 @@ async def _verify_quo_envelope(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid Quo webhook payload",
         ) from None
+    except ValueError:
+        logger.warning("quo_webhook_verification_failed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Quo webhook signature",
+        ) from None
 
     if isinstance(verified, dict):
         return verified
@@ -145,7 +156,7 @@ async def _read_limited_body(request: Request) -> bytes:
 async def receive_quo_webhook(
     workspace_integration_id: uuid.UUID,
     request: Request,
-    db: DB,
+    db: TransactionalDB,
 ) -> dict[str, str]:
     """Verify, tenant-bind, dedupe, and dispatch one Quo delivery."""
     lookup_result = await db.execute(
@@ -163,11 +174,14 @@ async def receive_quo_webhook(
         )
 
     credentials = integration.safe_credentials()
+    api_key = credentials.get("api_key") if credentials else None
     signing_key = credentials.get("webhook_signing_key") if credentials else None
     organization_id = credentials.get("organization_id") if credentials else None
     api_version = credentials.get("webhook_api_version") if credentials else None
     if (
-        not isinstance(signing_key, str)
+        not isinstance(api_key, str)
+        or not api_key.strip()
+        or not isinstance(signing_key, str)
         or not signing_key.startswith("whsec_")
         or not isinstance(organization_id, str)
         or not organization_id.startswith("OR")
@@ -182,6 +196,25 @@ async def receive_quo_webhook(
             detail="Quo webhook verification unavailable",
         )
 
+    async def dispatch(
+        session: Any,
+        event: QuoWebhookEvent,
+        event_log: Any,
+    ) -> WebhookDispatchResult:
+        async with QuoClient(api_key) as quo_client:
+            try:
+                return await QuoSyncService(
+                    session,
+                    workspace_id=integration.workspace_id,
+                    organization_id=organization_id,
+                    client=quo_client,
+                ).process(event, event_log)
+            except QuoSyncError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid Quo webhook resource",
+                ) from exc
+
     payload = await _read_limited_body(request)
     headers = dict(request.headers)
     pipeline: WebhookPipeline[dict[str, Any], QuoWebhookEvent] = WebhookPipeline(
@@ -193,7 +226,7 @@ async def receive_quo_webhook(
             expected_api_version=api_version,
         ),
         idempotency_checker=check_quo_idempotency,
-        dispatcher=dispatch_quo_event,
+        dispatcher=dispatch,
     )
     pipeline_result = await pipeline.process(
         db=db,

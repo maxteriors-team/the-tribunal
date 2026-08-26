@@ -36,6 +36,30 @@ async def test_validate_api_key_accepts_an_account_without_webhooks() -> None:
         assert await quo.validate_api_key() is None
 
 
+async def test_get_contact_encodes_id_and_verifies_returned_resource() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url == httpx.URL("https://api.quo.com/contacts/CT%2Fone")
+        return httpx.Response(200, json={"data": {"id": "CT/one", "phoneNumbers": []}})
+
+    async with (
+        httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client,
+        QuoClient("quo_test_key", client=http_client) as quo,
+    ):
+        assert (await quo.get_contact("CT/one"))["id"] == "CT/one"
+
+
+async def test_get_contact_rejects_a_mismatched_resource() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(200, json={"data": {"id": "CT_other"}})
+    )
+    async with (
+        httpx.AsyncClient(transport=transport) as http_client,
+        QuoClient("quo_test_key", client=http_client) as quo,
+    ):
+        with pytest.raises(QuoApiError, match="invalid contact data"):
+            await quo.get_contact("CT_expected")
+
+
 async def test_client_errors_never_include_key_or_provider_body() -> None:
     api_key = "quo_do_not_expose"
     provider_body = f"rejected {api_key}"

@@ -323,6 +323,7 @@ class TimelineItem(BaseModel):
     status: str | None = None
     source_provider: str | None = None
     external_url: str | None = None
+    is_voicemail: bool = False
     booking_outcome: str | None = None
     signals: dict[str, Any] | None = None
     attachments: list[TimelineAttachment] = Field(default_factory=list)

@@ -426,6 +426,9 @@ class Message(Base):
 
     # Voice-specific
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_voicemail: Mapped[bool | None] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=True
+    )
     recording_url: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
     transcript: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
     booking_outcome: Mapped[str | None] = mapped_column(String(50), nullable=True)

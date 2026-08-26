@@ -31480,6 +31480,11 @@ export interface components {
              */
             is_ai: boolean;
             /**
+             * Is Voicemail
+             * @default false
+             */
+            is_voicemail: boolean;
+            /**
              * Original Id
              * Format: uuid
              */
@@ -32935,6 +32940,11 @@ export interface components {
             id: string;
             /** Is Ai */
             is_ai: boolean;
+            /**
+             * Is Voicemail
+             * @default false
+             */
+            is_voicemail: boolean;
             /** Sent At */
             sent_at: string | null;
             /** Source Provider */

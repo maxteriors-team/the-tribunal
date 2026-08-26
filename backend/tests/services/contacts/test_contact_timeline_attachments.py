@@ -47,6 +47,7 @@ async def test_contact_timeline_includes_attachment_metadata_and_provenance(
         status="received",
         source_provider="quo",
         external_url="https://app.quo.com/messages/example",
+        is_voicemail=False,
         booking_outcome=None,
         call_outcome=None,
     )
@@ -87,6 +88,7 @@ async def test_contact_timeline_includes_attachment_metadata_and_provenance(
     assert item.content == ""
     assert item.source_provider == "quo"
     assert item.external_url == "https://app.quo.com/messages/example"
+    assert item.is_voicemail is False
     assert timeline[0]["attachments"] == [
         {
             "id": attachment.id,
