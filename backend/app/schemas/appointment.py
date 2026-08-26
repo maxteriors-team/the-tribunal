@@ -27,10 +27,12 @@ class AppointmentCreate(AppointmentBase):
 class AppointmentUpdate(BaseModel):
     """Schema for updating an appointment."""
 
+    scheduled_at: datetime | None = None
+    anytime: bool | None = None
     status: str | None = Field(default=None, pattern="^(scheduled|completed|cancelled|no_show)$")
     duration_minutes: int | None = Field(default=None, ge=15, le=480)
-    service_type: str | None = None
-    notes: str | None = None
+    service_type: str | None = Field(default=None, max_length=100)
+    notes: str | None = Field(default=None, max_length=5000)
     business_location_id: uuid.UUID | None = None
     bookable_staff_id: uuid.UUID | None = None
 

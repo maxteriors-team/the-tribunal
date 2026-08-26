@@ -29,6 +29,8 @@ export interface AppointmentsListResponse {
 }
 
 export interface UpdateAppointmentRequest {
+  scheduled_at?: string;
+  anytime?: boolean;
   status?: "scheduled" | "completed" | "cancelled" | "no_show";
   duration_minutes?: number;
   service_type?: string;

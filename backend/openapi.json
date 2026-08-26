@@ -3876,6 +3876,17 @@
       "AppointmentUpdate": {
         "description": "Schema for updating an appointment.",
         "properties": {
+          "anytime": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anytime"
+          },
           "bookable_staff_id": {
             "anyOf": [
               {
@@ -3916,6 +3927,7 @@
           "notes": {
             "anyOf": [
               {
+                "maxLength": 5000,
                 "type": "string"
               },
               {
@@ -3924,9 +3936,22 @@
             ],
             "title": "Notes"
           },
+          "scheduled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled At"
+          },
           "service_type": {
             "anyOf": [
               {
+                "maxLength": 100,
                 "type": "string"
               },
               {
@@ -49421,6 +49446,13 @@
       "SalesPerformanceReport": {
         "description": "Sales performance over a quote cohort.\n\nQuotes are cohorted by creation date inside the inclusive window, so a quote\nand the decision it later earned are reported together. Drafts never count\n(they never reached a customer) and still-``sent`` quotes are undecided, so\nthey are excluded from the close-rate denominator rather than counted as\nlosses. Every rate is null instead of zero when its denominator is empty.",
         "properties": {
+          "appointments_booked": {
+            "default": 0,
+            "description": "Appointments scheduled inside the selected window",
+            "minimum": 0.0,
+            "title": "Appointments Booked",
+            "type": "integer"
+          },
           "appointments_completed": {
             "default": 0,
             "description": "Window appointments the customer attended",
@@ -49571,6 +49603,13 @@
             "format": "date",
             "title": "Date To",
             "type": "string"
+          },
+          "jobs_completed": {
+            "default": 0,
+            "description": "Completed jobs scheduled inside the selected window",
+            "minimum": 0.0,
+            "title": "Jobs Completed",
+            "type": "integer"
           },
           "median_job_value": {
             "anyOf": [

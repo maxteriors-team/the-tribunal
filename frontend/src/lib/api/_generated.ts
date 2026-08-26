@@ -12270,6 +12270,8 @@ export interface components {
          * @description Schema for updating an appointment.
          */
         AppointmentUpdate: {
+            /** Anytime */
+            anytime?: boolean | null;
             /** Bookable Staff Id */
             bookable_staff_id?: string | null;
             /** Business Location Id */
@@ -12278,6 +12280,8 @@ export interface components {
             duration_minutes?: number | null;
             /** Notes */
             notes?: string | null;
+            /** Scheduled At */
+            scheduled_at?: string | null;
             /** Service Type */
             service_type?: string | null;
             /** Status */
@@ -29941,6 +29945,12 @@ export interface components {
          */
         SalesPerformanceReport: {
             /**
+             * Appointments Booked
+             * @description Appointments scheduled inside the selected window
+             * @default 0
+             */
+            appointments_booked: number;
+            /**
              * Appointments Completed
              * @description Window appointments the customer attended
              * @default 0
@@ -30036,6 +30046,12 @@ export interface components {
              * @description Inclusive end of the cohort/window
              */
             date_to: string;
+            /**
+             * Jobs Completed
+             * @description Completed jobs scheduled inside the selected window
+             * @default 0
+             */
+            jobs_completed: number;
             /**
              * Median Job Value
              * @description Median approved quote total (outlier-resistant companion to avg_job_value), or null with no approvals

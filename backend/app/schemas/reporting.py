@@ -197,6 +197,11 @@ class SalesPerformanceReport(BaseModel):
             "understates conversion: deals still in flight cannot have closed yet."
         ),
     )
+    appointments_booked: int = Field(
+        0,
+        ge=0,
+        description="Appointments scheduled inside the selected window",
+    )
     appointments_completed: int = Field(
         0,
         ge=0,
@@ -206,6 +211,11 @@ class SalesPerformanceReport(BaseModel):
         0,
         ge=0,
         description="Window appointments the customer missed",
+    )
+    jobs_completed: int = Field(
+        0,
+        ge=0,
+        description="Completed jobs scheduled inside the selected window",
     )
     show_up_rate: float | None = Field(
         None,
