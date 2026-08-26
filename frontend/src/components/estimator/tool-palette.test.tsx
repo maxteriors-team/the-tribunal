@@ -193,7 +193,7 @@ describe("FixtureOptions beam slider", () => {
       patch: { iconScale: 1.2 },
     });
     expect(screen.getByText(/Beam throw stays unchanged/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Beam aim in degrees/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Beam direction in degrees/i)).toHaveValue("0");
 
     fireEvent.click(screen.getByRole("button", { name: "Duplicate fixture" }));
     expect(dispatch).toHaveBeenCalledWith({
@@ -265,10 +265,44 @@ describe("FixtureOptions beam slider", () => {
     expect(screen.getByText(/Spot · 24°/)).toBeInTheDocument();
   });
 
+  it("changes beam direction without touching its spread", () => {
+    const dispatch = renderPalette(placed({ beamAngleDeg: 24 }));
+
+    fireEvent.change(screen.getByLabelText(/Beam direction in degrees/i), {
+      target: { value: "-35" },
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_ITEM",
+      id: "item-1",
+      patch: { beamRotationDeg: -35 },
+    });
+  });
+
+  it("names the direction and resets it to the fixture's natural axis", () => {
+    const dispatch = renderPalette(placed({ beamRotationDeg: 90 }));
+
+    expect(screen.getByText(/90° clockwise · pointing right/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_ITEM",
+      id: "item-1",
+      patch: { beamRotationDeg: 0 },
+    });
+  });
+
+  it("uses a downlight's natural down-facing axis", () => {
+    const downlight: Product = { ...UPLIGHT, id: "down", style: "downlight" };
+    renderPalette(placed({ productId: "down" }), [downlight]);
+
+    expect(screen.getByText(/Straight down · pointing down/i)).toBeInTheDocument();
+  });
+
   it("shows no beam control for a fixture that throws no cone", () => {
     renderPalette(placed({ productId: "path" }), [PATH_LIGHT]);
 
     expect(screen.queryByLabelText(/Beam angle in degrees/i)).toBeNull();
+    expect(screen.queryByLabelText(/Beam direction in degrees/i)).toBeNull();
   });
 
   it("changes a placed fixture to another icon without moving its anchor", () => {

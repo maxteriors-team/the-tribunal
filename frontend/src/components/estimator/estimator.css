@@ -1088,6 +1088,16 @@
   cursor: pointer;
 }
 
+.tp-aim-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+  color: var(--t3);
+  font-size: 11px;
+}
+
 .tp-mini-btn {
   flex: 0 0 auto;
   margin-top: 6px;

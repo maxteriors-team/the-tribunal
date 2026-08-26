@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   beamAngleAt,
   beamHandlePos,
+  beamRotationAt,
   drawPlacedItem,
   drawRunLights,
   drawScene,
   itemHit,
   resizeHandlePos,
+  rotateHandlePos,
   withRunOverrides,
 } from "./render";
 import { DEFAULT_BEAM_ANGLE_DEG, MAX_BEAM_ANGLE_DEG, MIN_BEAM_ANGLE_DEG } from "./types";
@@ -454,39 +456,65 @@ describe("landscape fixture geometry", () => {
     expect(beamHandlePos(item)).toBeNull();
   });
 
-  // Legacy drawings can still carry an orientation even though the editor no
-  // longer offers an aiming control. Rendering it avoids changing saved plans.
-  describe("legacy beam orientation", () => {
-    it("leaves every fixture pointing its natural way by default", () => {
+  describe("beam direction", () => {
+    it("leaves a fixture pointing its natural way by default", () => {
       expect(resizeHandlePos(item, uplight)).toEqual({ x: 200, y: 100 });
+      expect(beamRotationAt(item, { x: 200, y: 100 }, uplight)).toBe(0);
     });
 
-    it("keeps the saved throw length identical at every orientation", () => {
+    it("swings the throw without changing its length", () => {
+      const grip = resizeHandlePos({ ...item, beamRotationDeg: 90 }, uplight);
+      expect(grip.x).toBeCloseTo(500, 5);
+      expect(grip.y).toBeCloseTo(400, 5);
+
       for (const deg of [-135, -42, 0, 30, 90, 180]) {
-        const grip = resizeHandlePos({ ...item, beamRotationDeg: deg }, uplight);
-        expect(Math.hypot(grip.x - 200, grip.y - 400)).toBeCloseTo(300, 5);
+        const aimedGrip = resizeHandlePos({ ...item, beamRotationDeg: deg }, uplight);
+        expect(Math.hypot(aimedGrip.x - 200, aimedGrip.y - 400)).toBeCloseTo(300, 5);
       }
     });
 
-    it("measures spread across the saved cone, not across the photo", () => {
-      for (const rot of [0, 35, -80, 140]) {
-        for (const deg of [10, 24, 60]) {
-          const aimed = { ...item, beamRotationDeg: rot, beamAngleDeg: deg };
-          const grip = beamHandlePos(aimed, uplight)!;
-          expect(beamAngleAt(aimed, grip)).toBeCloseTo(deg, 5);
+    it("round-trips the direction grip for up- and down-facing fixtures", () => {
+      const downlight: Product = { ...uplight, id: "d1", style: "downlight" };
+      for (const product of [uplight, downlight]) {
+        for (const deg of [-135, -20, 0, 45, 120, 179]) {
+          const aimed = { ...item, beamRotationDeg: deg };
+          const grip = rotateHandlePos(aimed, product, 1)!;
+          expect(beamRotationAt(aimed, grip, product)).toBeCloseTo(deg, 5);
         }
       }
     });
 
-    it("renders the saved orientation without exposing an editor control", () => {
+    it("keeps the direction grip a constant screen distance past the throw", () => {
+      const throwGrip = resizeHandlePos(item, uplight);
+      const directionGrip = rotateHandlePos(item, uplight, 2)!;
+      expect(Math.hypot(directionGrip.x - throwGrip.x, directionGrip.y - throwGrip.y)).toBeCloseTo(
+        11,
+        5,
+      );
+    });
+
+    it("does not offer a direction grip for a fixture without a beam", () => {
+      const pathlight: Product = { ...uplight, id: "p1", style: "pathlight" };
+      expect(rotateHandlePos(item, pathlight, 1)).toBeNull();
+    });
+
+    it("measures spread across the aimed cone", () => {
+      for (const rot of [0, 35, -80, 140]) {
+        for (const deg of [10, 24, 60]) {
+          const aimed = { ...item, beamRotationDeg: rot, beamAngleDeg: deg };
+          expect(beamAngleAt(aimed, beamHandlePos(aimed, uplight)!)).toBeCloseTo(deg, 5);
+        }
+      }
+    });
+
+    it("renders the selected direction", () => {
       stubSpriteCanvas();
-      const rotation = (beamRotationDeg?: number) => {
-        const ctx = fakeCtx();
-        drawPlacedItem(ctx, { ...item, beamRotationDeg }, uplight, 15, 1);
-        return (ctx.rotate as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as number;
-      };
-      expect(rotation()).toBeCloseTo(0, 5);
-      expect(rotation(45)).toBeCloseTo(Math.PI / 4, 5);
+      const ctx = fakeCtx();
+      drawPlacedItem(ctx, { ...item, beamRotationDeg: 45 }, uplight, 15, 1);
+      expect((ctx.rotate as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBeCloseTo(
+        Math.PI / 4,
+        5,
+      );
     });
   });
 
