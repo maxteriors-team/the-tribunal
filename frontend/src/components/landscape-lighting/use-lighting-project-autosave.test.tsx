@@ -41,9 +41,13 @@ vi.mock("@/lib/estimator/landscape-draft", async (importOriginal) => {
 const WORKSPACE_ID = "c08cc985-944f-48f8-987c-7fc171afdfe2";
 const PROJECT_ID = "e83683ac-426a-4a18-b9ad-dffb76574d69";
 
-function makeDraft(id = "shot-1"): LandscapeDraft {
+function makeDraft(
+  id = "shot-1",
+  projectType: LandscapeDraft["projectType"] = "landscape",
+): LandscapeDraft {
   return {
     version: 2,
+    projectType,
     activeShotId: id,
     shots: [
       {
@@ -71,6 +75,7 @@ function makeProject(version = 1, draft: LandscapeDraft = makeDraft()): Lighting
     opportunity_id: null,
     assigned_user_id: null,
     name: "Patio lighting",
+    project_type: draft.projectType,
     status: "active",
     version,
     installation_shot_id: null,
@@ -419,6 +424,7 @@ describe("useLightingProjectAutosave", () => {
       expect.objectContaining({
         contact_id: 42,
         name: "Patio lighting copy",
+        project_type: "landscape",
         document: changedDraft,
       }),
     );

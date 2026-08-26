@@ -67,11 +67,12 @@ Offer creation uses `/offers/new`; offer detail uses `/offers/{offer_id}`. Refer
 | --- | --- | --- |
 | Opportunities | `/opportunities` | Manage the pipeline board |
 | Quotes & Estimates | `/quotes` | Create, send, and track proposals |
+| Permanent Lighting | `/permanent-lighting` | Save and reopen client-linked permanent-light designs |
 | Landscape Lighting | `/landscape-lighting` | Manage synced customer lighting projects and designs |
 | Christmas Light Estimator | `/christmas-lights` | Build a seasonal lighting estimate |
 | Invoices | `/invoices` | Create, send, track, and manage invoices |
 
-A landscape-lighting project uses `/landscape-lighting/{project_id}`. Quotes and invoices are created and edited in controls on their list screens, not on separate new/edit routes.
+A permanent-lighting project uses `/permanent-lighting/{project_id}`. A landscape-lighting project uses `/landscape-lighting/{project_id}`. Quotes and invoices are created and edited in controls on their list screens, not on separate new/edit routes.
 
 ## Operations
 

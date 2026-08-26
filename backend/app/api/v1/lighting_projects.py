@@ -1,4 +1,4 @@
-"""Workspace-scoped landscape lighting project API."""
+"""Workspace-scoped lighting project API."""
 
 import uuid
 from typing import Annotated
@@ -11,6 +11,7 @@ from app.schemas.lighting_project import (
     LightingProjectCreate,
     LightingProjectDetail,
     LightingProjectStatus,
+    LightingProjectType,
     LightingProjectUpdate,
     PaginatedLightingProjects,
 )
@@ -27,6 +28,7 @@ async def list_lighting_projects(
     membership: CanReadBilling,
     search: Annotated[str | None, Query(max_length=200)] = None,
     project_status: Annotated[LightingProjectStatus | None, Query(alias="status")] = None,
+    project_type: Annotated[LightingProjectType | None, Query()] = None,
     contact_id: Annotated[int | None, Query(gt=0)] = None,
     opportunity_id: Annotated[uuid.UUID | None, Query()] = None,
     assigned_user_id: Annotated[int | None, Query(gt=0)] = None,
@@ -39,6 +41,7 @@ async def list_lighting_projects(
         workspace_id,
         search=search,
         status=project_status,
+        project_type=project_type,
         contact_id=contact_id,
         opportunity_id=opportunity_id,
         assigned_user_id=assigned_user_id,

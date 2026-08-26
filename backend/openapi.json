@@ -24951,6 +24951,15 @@
             "title": "Procurement",
             "type": "object"
           },
+          "projectType": {
+            "default": "landscape",
+            "enum": [
+              "landscape",
+              "permanent"
+            ],
+            "title": "Projecttype",
+            "type": "string"
+          },
           "proposal": {
             "$ref": "#/components/schemas/ProposalDraftSchema"
           },
@@ -27022,6 +27031,15 @@
             ],
             "title": "Opportunity Id"
           },
+          "project_type": {
+            "default": "landscape",
+            "enum": [
+              "landscape",
+              "permanent"
+            ],
+            "title": "Project Type",
+            "type": "string"
+          },
           "service_location_id": {
             "anyOf": [
               {
@@ -27116,6 +27134,14 @@
             ],
             "title": "Opportunity Id"
           },
+          "project_type": {
+            "enum": [
+              "landscape",
+              "permanent"
+            ],
+            "title": "Project Type",
+            "type": "string"
+          },
           "service_location_id": {
             "anyOf": [
               {
@@ -27182,6 +27208,7 @@
           "opportunity_id",
           "assigned_user_id",
           "name",
+          "project_type",
           "status",
           "version",
           "installation_shot_id",
@@ -27255,6 +27282,14 @@
             ],
             "title": "Opportunity Id"
           },
+          "project_type": {
+            "enum": [
+              "landscape",
+              "permanent"
+            ],
+            "title": "Project Type",
+            "type": "string"
+          },
           "service_location_id": {
             "anyOf": [
               {
@@ -27321,6 +27356,7 @@
           "opportunity_id",
           "assigned_user_id",
           "name",
+          "project_type",
           "status",
           "version",
           "installation_shot_id",
@@ -81529,6 +81565,26 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "landscape",
+                    "permanent"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Type"
             }
           },
           {

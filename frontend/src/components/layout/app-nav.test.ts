@@ -231,6 +231,24 @@ describe("Landscape Lighting builder nav item", () => {
   });
 });
 
+describe("Permanent Lighting builder nav item", () => {
+  const designer = allNavItems.find((item) => item.title === "Permanent Lighting");
+
+  it("has a dedicated, client-project entry in the Sales section", () => {
+    expect(designer).toBeDefined();
+    expect(designer).toMatchObject({
+      url: "/permanent-lighting",
+      sidebar: true,
+      commandPalette: true,
+      requires: "quotes:read",
+    });
+  });
+
+  it("stays fail-closed to field techs even with all capabilities", () => {
+    expect(canSeeNavItem(designer!, "field", canAll)).toBe(false);
+  });
+});
+
 describe("Segments nav item (folded into the campaign builder)", () => {
   const segments = allNavItems.find((i) => i.url === "/segments");
 

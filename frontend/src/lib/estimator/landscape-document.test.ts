@@ -28,6 +28,7 @@ describe("landscape document v2", () => {
 
     expect(migrated).toMatchObject({
       version: 2,
+      projectType: "landscape",
       activeShotId: "shot-1",
       activeWorkflowTab: "drawing",
       settings: {
@@ -50,6 +51,24 @@ describe("landscape document v2", () => {
       label: "Aerial plan 1",
       drawingTitle: "Aerial landscape lighting plan",
       drawingNumber: "L-1",
+    });
+  });
+
+  it("round-trips permanent project identity with its editable drawing", () => {
+    const permanent = createLandscapeDraft(
+      [shot],
+      "shot-1",
+      "2026-08-14T12:00:00.000Z",
+      undefined,
+      undefined,
+      "permanent",
+    );
+
+    expect(normalizeLandscapeDocument(JSON.parse(JSON.stringify(permanent)))).toMatchObject({
+      version: 2,
+      projectType: "permanent",
+      activeShotId: "shot-1",
+      shots: [{ id: "shot-1" }],
     });
   });
 

@@ -5,6 +5,7 @@ import { expect, test, type Page, type Request } from "@playwright/test";
 const WORKSPACE_ID = "0ef615a3-4fa5-43e7-bb3b-2dbfa0788a11";
 const PROJECT_ID = "6c5e45fd-7984-4216-8ff4-988c03cc2a11";
 const PROJECT_URL = `/landscape-lighting/${PROJECT_ID}`;
+const PERMANENT_PROJECT_URL = `/permanent-lighting/${PROJECT_ID}`;
 
 const json = (body: unknown, status = 200) => ({
   status,
@@ -40,6 +41,7 @@ const planSvg = `data:image/svg+xml;base64,${Buffer.from(
 
 const projectDocument = {
   version: 2,
+  projectType: "landscape",
   activeShotId: "shot-front",
   activeWorkflowTab: "drawing",
   updatedAt: "2026-08-11T20:00:00.000Z",
@@ -157,6 +159,7 @@ const project = {
   opportunity_id: null,
   assigned_user_id: 41,
   name: "Hawthorne Residence",
+  project_type: "landscape",
   status: "active",
   version: 4,
   installation_shot_id: null,
@@ -373,9 +376,12 @@ function parseRequestBody(request: Request): Record<string, unknown> {
   }
 }
 
-async function installStudioApi(page: Page) {
+async function installStudioApi(
+  page: Page,
+  { projectType = "landscape" }: { projectType?: "landscape" | "permanent" } = {},
+) {
   let serverVersion = 4;
-  let serverDocument = structuredClone(projectDocument);
+  let serverDocument = { ...structuredClone(projectDocument), projectType };
   let installationShotId: string | null = null;
   const updates: unknown[] = [];
   const previews: Array<Record<string, unknown>> = [];
@@ -429,6 +435,7 @@ async function installStudioApi(page: Page) {
       await route.fulfill(
         json({
           ...project,
+          project_type: projectType,
           version: serverVersion,
           document: serverDocument,
           installation_shot_id: installationShotId,
@@ -449,6 +456,7 @@ async function installStudioApi(page: Page) {
       await route.fulfill(
         json({
           ...project,
+          project_type: projectType,
           version: serverVersion,
           document: serverDocument,
           installation_shot_id: installationShotId,
@@ -457,7 +465,26 @@ async function installStudioApi(page: Page) {
       return;
     }
     if (method === "POST" && pathname.endsWith("/quotes/estimate")) {
-      await route.fulfill(json(estimate));
+      await route.fulfill(
+        json(
+          projectType === "permanent"
+            ? {
+                ...estimate,
+                permanent: {
+                  enabled: true,
+                  total: 3300,
+                  subtotal: 3300,
+                  per_ft: 33,
+                  package_feet: 100,
+                  package_cogs: 1250,
+                  markup: 2.64,
+                  roofline_cost: 3300,
+                  custom_total: 0,
+                },
+              }
+            : estimate,
+        ),
+      );
       return;
     }
     if (method === "GET" && pathname.endsWith("/catalog-items")) {
@@ -520,6 +547,53 @@ async function installStudioApi(page: Page) {
 
 test.describe("landscape lighting studio", () => {
   test.describe.configure({ mode: "serial" });
+
+  test("saves, reopens, edits, and resaves a client-linked permanent design", async ({ page }) => {
+    const { updates } = await installStudioApi(page, { projectType: "permanent" });
+    await page.goto(PERMANENT_PROJECT_URL);
+
+    await expect(page.getByLabel("Project name")).toHaveValue("Hawthorne Residence");
+    await expect(page.getByRole("button", { name: "Proposal & payment" })).toHaveCount(0);
+    await expect(page.getByRole("group", { name: "Services in this design" })).toHaveCount(0);
+
+    const drawPermanentRun = async (y: number) => {
+      const canvas = page.getByLabel("Property photo lighting design canvas");
+      const box = await canvas.boundingBox();
+      if (!box) throw new Error("Permanent lighting canvas did not render");
+      await page.getByRole("button", { name: /Permanent LED Roofline/i }).click();
+      await canvas.click({ position: { x: box.width * 0.25, y: box.height * y } });
+      await canvas.click({ position: { x: box.width * 0.75, y: box.height * (y + 0.08) } });
+      await canvas.focus();
+      await page.keyboard.press("Enter");
+    };
+    const permanentRunCount = () =>
+      Math.max(
+        0,
+        ...updates.map((entry) => {
+          const document = (entry as { document?: typeof projectDocument }).document;
+          return (
+            document?.shots
+              .flatMap((shot) => shot.design.runs)
+              .filter((run) => run.productId === "roofline-permanent").length ?? 0
+          );
+        }),
+      );
+
+    await drawPermanentRun(0.35);
+    await expect.poll(permanentRunCount).toBe(1);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Saved to Tribunal")).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByLabel("Project name")).toHaveValue("Hawthorne Residence");
+    await drawPermanentRun(0.55);
+    await expect.poll(permanentRunCount).toBe(2);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Saved to Tribunal")).toBeVisible();
+    expect(updates.at(-1)).toMatchObject({
+      document: { projectType: "permanent" },
+    });
+  });
 
   test("opens the quote builder at its package choices every time Proposal & payment is used", async ({
     page,
