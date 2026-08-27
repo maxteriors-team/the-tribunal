@@ -11,7 +11,7 @@ import {
 } from "@/components/estimator/light-designer";
 import { estimatorApi } from "@/lib/api/estimator";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
-import { designScale, designToEstimateInputs } from "@/lib/estimator/design";
+import { designScale, designToEstimateInputs, hasDesign } from "@/lib/estimator/design";
 import {
   defaultLandscapePrecon,
   defaultLandscapeProposal,
@@ -319,6 +319,7 @@ describe("LightDesigner", () => {
     // Reset the design mapping each test; landscape cases override it.
     vi.mocked(designToEstimateInputs).mockReturnValue(MAPPED);
     vi.mocked(designScale).mockReturnValue({ ftPerPx: 0.05, pxPerFt: 20, calibrated: false });
+    vi.mocked(hasDesign).mockReturnValue(true);
     vi.mocked(salesWizardApi.listCatalog).mockResolvedValue(PRICE_BOOK);
     vi.mocked(salesWizardApi.getPricing).mockResolvedValue(PRICING);
     vi.mocked(salesWizardApi.inventoryAvailability).mockResolvedValue({
@@ -730,7 +731,18 @@ describe("LightDesigner", () => {
           {
             id: "front",
             photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
-            design: { runs: [], items: [], calibration: null },
+            design: {
+              runs: [],
+              items: [
+                {
+                  id: "fixture-1",
+                  productId: "fixture-uplight",
+                  at: { x: 200, y: 220 },
+                  sizePx: 30,
+                },
+              ],
+              calibration: null,
+            },
             dusk: 0.4,
           },
         ],
@@ -755,8 +767,51 @@ describe("LightDesigner", () => {
       expect.objectContaining({
         side: "permanent",
         lighting_project_id: "permanent-project",
+        proposal_preview: {
+          shot_id: "front",
+          image: "data:image/jpeg;base64,LIT",
+        },
       }),
     );
+  });
+
+  it("keeps permanent proposal creation disabled until the selected shot has a design", async () => {
+    const actualDesign = await vi.importActual<typeof import("@/lib/estimator/design")>(
+      "@/lib/estimator/design",
+    );
+    vi.mocked(hasDesign).mockImplementation(actualDesign.hasDesign);
+    const flushBeforeProposal = vi.fn().mockResolvedValue(undefined);
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        projectType: "permanent",
+        activeShotId: "front",
+        shots: [
+          {
+            id: "front",
+            photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
+            design: { runs: [], items: [], calibration: null },
+            dusk: 0.4,
+          },
+        ],
+        updatedAt: "2026-08-26T12:00:00.000Z",
+      },
+      onLandscapeDraftChange: vi.fn(),
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      projectId: "permanent-project",
+      projectName: "Pat permanent roofline",
+      contactName: "Pat Lee",
+      contactId: 42,
+      flushBeforeProposal,
+      resetKey: 0,
+    };
+    renderEstimator("permanent", adapter);
+
+    const createButton = await screen.findByRole("button", { name: /Create permanent quote/i });
+    await waitFor(() => expect(createButton).toBeDisabled());
+    fireEvent.click(createButton);
+    expect(flushBeforeProposal).not.toHaveBeenCalled();
+    expect(estimatorApi.createQuote).not.toHaveBeenCalled();
   });
 
   it("offers Aerial Pics as the fixed 1.5× Light Designer run option", () => {

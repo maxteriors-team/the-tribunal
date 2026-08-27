@@ -25,7 +25,7 @@ import { lightingProjectsApi, type LightingProjectDetail } from "@/lib/api/light
 import { resolveWorkspaceBrand } from "@/lib/brand";
 import type { LandscapeWorkflowTab } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
-import { STATIC } from "@/lib/query-options";
+import { POLL_15S } from "@/lib/query-options";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { useWorkspace } from "@/providers/workspace-provider";
 
@@ -413,12 +413,22 @@ function ActiveProjectEditor({
 
 export function LightingProjectEditor({ projectId }: LightingProjectEditorProps) {
   const { currentWorkspace, currentWorkspaceId, isPending: workspacePending } = useWorkspace();
+  const queryClient = useQueryClient();
   const workspaceBrand = resolveWorkspaceBrand(currentWorkspace?.workspace);
+  const detailQueryKey = queryKeys.lightingProjects.detail(currentWorkspaceId ?? "", projectId);
   const projectQuery = useQuery({
-    queryKey: queryKeys.lightingProjects.detail(currentWorkspaceId ?? "", projectId),
-    queryFn: () => lightingProjectsApi.get(currentWorkspaceId!, projectId),
+    queryKey: detailQueryKey,
+    queryFn: async () => {
+      const cachedProject = queryClient.getQueryData<LightingProjectDetail>(detailQueryKey);
+      if (!cachedProject) return lightingProjectsApi.get(currentWorkspaceId!, projectId);
+
+      const revision = await lightingProjectsApi.getRevision(currentWorkspaceId!, projectId);
+      return revision.version > cachedProject.version
+        ? lightingProjectsApi.get(currentWorkspaceId!, projectId)
+        : cachedProject;
+    },
     enabled: Boolean(currentWorkspaceId),
-    ...STATIC,
+    ...POLL_15S,
   });
 
   if (workspacePending) {

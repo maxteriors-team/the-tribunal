@@ -6678,6 +6678,26 @@ export interface paths {
         patch: operations["update_lighting_project_api_v1_workspaces__workspace_id__lighting_projects__project_id__patch"];
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/lighting-projects/{project_id}/revision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lighting Project Revision
+         * @description Get the lightweight version stamp used for live refresh.
+         */
+        get: operations["get_lighting_project_revision_api_v1_workspaces__workspace_id__lighting_projects__project_id__revision_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/members/bulk": {
         parameters: {
             query?: never;
@@ -17845,6 +17865,16 @@ export interface components {
             unit_price: number;
         };
         /**
+         * EstimateProposalPreview
+         * @description A bounded, rasterized customer-photo preview tied to one saved project shot.
+         */
+        EstimateProposalPreview: {
+            /** Image */
+            image: string;
+            /** Shot Id */
+            shot_id: string;
+        };
+        /**
          * EstimateQuoteRequest
          * @description Convert a measured estimate into a real draft quote.
          *
@@ -17902,6 +17932,7 @@ export interface components {
             permanent_complexity_feet?: {
                 [key: string]: number;
             };
+            proposal_preview?: components["schemas"]["EstimateProposalPreview"] | null;
             /**
              * Proposal Side
              * @default comparison
@@ -20203,7 +20234,7 @@ export interface components {
         };
         /**
          * JobInstallationPlanResponse
-         * @description Assignment-scoped, read-only projection of one selected installation sheet.
+         * @description Assignment-scoped, price-free plan with the customer's proposal decision.
          */
         JobInstallationPlanResponse: {
             design: components["schemas"]["DesignSchema"];
@@ -20220,6 +20251,10 @@ export interface components {
              * Format: uuid
              */
             job_id: string;
+            /** Payment Received At */
+            payment_received_at?: string | null;
+            /** Payment Status */
+            payment_status?: ("not_required" | "pending" | "paid") | null;
             photo: components["schemas"]["PhotoSchema"];
             /**
              * Precon Field Brief
@@ -20240,6 +20275,14 @@ export interface components {
             project_updated_at: string;
             /** Project Version */
             project_version: number;
+            /** Proposal Accepted At */
+            proposal_accepted_at?: string | null;
+            /** Proposal Preview Caption */
+            proposal_preview_caption?: string | null;
+            /** Proposal Preview Image */
+            proposal_preview_image?: string | null;
+            /** Proposal Status */
+            proposal_status?: ("draft" | "sent" | "approved" | "declined" | "expired") | null;
             /** Selected Shot Id */
             selected_shot_id: string;
             settings: components["schemas"]["DocumentSettingsSchema"];
@@ -21744,6 +21787,11 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /** LightingProjectRevision */
+        LightingProjectRevision: {
+            /** Version */
+            version: number;
         };
         /** LightingProjectSummary */
         LightingProjectSummary: {
@@ -46666,6 +46714,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LightingProjectDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lighting_project_revision_api_v1_workspaces__workspace_id__lighting_projects__project_id__revision_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightingProjectRevision"];
                 };
             };
             /** @description Validation Error */

@@ -94,6 +94,33 @@ describe("plain quote financing", () => {
     );
   });
 
+  it("shows the saved permanent-lighting preview before acceptance", () => {
+    renderQuote({
+      title: "Permanent lighting proposal",
+      proposal_document: {
+        mockups: [
+          {
+            image: "data:image/jpeg;base64,/9j/2Q==",
+            caption: "Pat permanent roofline proposed permanent lighting",
+          },
+        ],
+      },
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Preview your permanent lighting" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("img", {
+        name: "Pat permanent roofline proposed permanent lighting",
+      }),
+    ).toHaveAttribute("src", "data:image/jpeg;base64,/9j/2Q==");
+    expect(
+      screen.getByRole("button", { name: /^✓\s+Approve Proposal$/ }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Terms and Conditions" })).toBeVisible();
+  });
+
   it("shows no financing language when the quote does not qualify", () => {
     renderQuote({ financing: null, total: 400, subtotal: 400 });
 

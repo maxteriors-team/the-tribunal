@@ -25,7 +25,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import ColumnElement, delete, false, or_, select
@@ -59,6 +59,7 @@ from app.schemas.job import (
     JobCustomerSummary,
     JobInstallationPlanResponse,
     JobLineItemSummary,
+    JobPaymentStatus,
     JobPricedLineItemResponse,
     JobPricingResponse,
     JobResponse,
@@ -66,6 +67,8 @@ from app.schemas.job import (
     TechnicianSummary,
 )
 from app.schemas.lighting_project import LandscapeDraftDocument
+from app.schemas.proposal_wizard import ProposalDocument
+from app.schemas.quote import QuoteStatus
 from app.services.automations.events import (
     EVENT_JOB_COMPLETED,
     EVENT_JOB_SCHEDULED,
@@ -300,6 +303,51 @@ class JobService:
         )
         return tuple(sorted(active_ids))
 
+    @staticmethod
+    def _proposal_context(
+        job: Job,
+    ) -> tuple[
+        str | None,
+        str | None,
+        QuoteStatus | None,
+        datetime | None,
+        JobPaymentStatus | None,
+        datetime | None,
+    ]:
+        source_quote = job.source_quote
+        if source_quote is None:
+            return None, None, None, None, None, None
+
+        preview_image: str | None = None
+        preview_caption: str | None = None
+        if source_quote.proposal_document:
+            try:
+                proposal = ProposalDocument.model_validate(source_quote.proposal_document)
+            except ValueError:
+                proposal = None
+            if proposal is not None and proposal.mockups:
+                preview_image = proposal.mockups[0].image
+                preview_caption = proposal.mockups[0].caption
+
+        if source_quote.deposit_paid_at is not None:
+            payment_status: JobPaymentStatus = "paid"
+        elif (
+            source_quote.deposit_percentage is not None
+            or source_quote.deposit_amount_fixed is not None
+        ):
+            payment_status = "pending"
+        else:
+            payment_status = "not_required"
+
+        return (
+            preview_image,
+            preview_caption,
+            cast(QuoteStatus, source_quote.status),
+            source_quote.approved_at,
+            payment_status,
+            source_quote.deposit_paid_at,
+        )
+
     async def get_installation_plan(
         self,
         job_id: uuid.UUID,
@@ -317,7 +365,7 @@ class JobService:
         statement = (
             select(Job)
             .where(Job.id == job_id, Job.workspace_id == workspace_id)
-            .options(selectinload(Job.lighting_project))
+            .options(selectinload(Job.lighting_project), selectinload(Job.source_quote))
         )
         if membership.role not in office_roles:
             # Sales, finance/member, and unassigned field users all collapse to the
@@ -366,6 +414,15 @@ class JobService:
             for number, item in enumerate(shot.design.items, start=1)
         ]
         sheet = shot.sheet
+        (
+            preview_image,
+            preview_caption,
+            proposal_status,
+            proposal_accepted_at,
+            payment_status,
+            payment_received_at,
+        ) = self._proposal_context(job)
+
         return JobInstallationPlanResponse(
             job_id=job.id,
             project_id=project.id,
@@ -373,6 +430,12 @@ class JobService:
             project_version=project.version,
             project_updated_at=project.updated_at,
             selected_shot_id=shot.id,
+            proposal_preview_image=preview_image,
+            proposal_preview_caption=preview_caption,
+            proposal_status=proposal_status,
+            proposal_accepted_at=proposal_accepted_at,
+            payment_status=payment_status,
+            payment_received_at=payment_received_at,
             sheet_label=sheet.label if sheet else None,
             drawing_title=sheet.drawing_title if sheet else None,
             drawing_number=sheet.drawing_number if sheet else None,

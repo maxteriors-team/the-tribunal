@@ -8,7 +8,7 @@ only one of them survives on any given quote:
   *derived* from it. A line item written directly is invisible on the client
   proposal (which renders the document) and is deleted outright the next time the
   quote reprices.
-* **plain quote** — no document; the line items are the truth.
+* **plain quote** — line items are the truth; it may still carry preview-only media.
 
 ``QuoteService.add_service`` hides that split. These tests exist to hold the
 consequences of it, because every one of them fails *silently* in production:
@@ -28,6 +28,7 @@ from fastapi.exceptions import HTTPException
 
 from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
+from app.schemas.proposal_wizard import ProposalDocument, ProposalMockup
 from app.schemas.quote import QuoteCreate, QuoteLineItemCreate, QuoteServiceCreate
 from app.services.exceptions import ConflictError, NotFoundError
 from app.services.quotes import QuoteService
@@ -207,6 +208,49 @@ async def test_services_omit_fixture_lines_the_rep_cannot_edit_here() -> None:
 # --------------------------------------------------------------------------- #
 # Plain quotes: the same operation, the other persistence.
 # --------------------------------------------------------------------------- #
+async def test_preview_media_does_not_turn_a_plain_quote_into_a_wizard_quote() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        quote = await svc.create_quote(
+            ws.id,
+            QuoteCreate(
+                title="Permanent lighting",
+                line_items=[QuoteLineItemCreate(name="Permanent lighting", unit_price=400.0)],
+            ),
+            created_by_id=None,
+            proposal_document=ProposalDocument(
+                service="permanent",
+                mockups=[
+                    ProposalMockup(
+                        image="data:image/jpeg;base64,/9j/2Q==",
+                        caption="Proposed roofline",
+                    )
+                ],
+            ),
+        )
+        quote_id = uuid.UUID(str(quote.id))
+
+        detail = await svc.get_quote(ws.id, quote_id)
+        assert detail.is_wizard_quote is False
+        assert [service.name for service in detail.services] == ["Permanent lighting"]
+
+        updated = await svc.add_service(
+            ws.id, quote_id, QuoteServiceCreate(name="Gutter cleaning", amount=600.0)
+        )
+        assert {line.name for line in updated.line_items} == {
+            "Permanent lighting",
+            "Gutter cleaning",
+        }
+        assert float(updated.total) == pytest.approx(1000.0)
+
+        sent = await svc.mark_sent(ws.id, quote_id)
+        assert sent.public_token is not None
+        public = await svc.get_public_proposal(sent.public_token)
+        assert public.proposal_document is not None
+        assert public.proposal_document["mockups"][0]["caption"] == "Proposed roofline"
+
+
 async def test_plain_quote_service_becomes_a_line_item() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_lighting_workspace(db)

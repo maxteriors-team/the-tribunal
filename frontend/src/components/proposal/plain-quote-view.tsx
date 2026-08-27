@@ -3,11 +3,12 @@
 /**
  * Client-facing plain line-item quote (dark/gold premium presentation).
  *
- * Renders quotes whose `proposal_document` is null in the same luxury theme as
- * `ClientProposalView`, so every recipient — rich proposal or simple itemized
- * quote — gets one consistent brand experience. Shares `proposal-theme.css`
- * Decline CTA pattern; only the itemized table + totals are bespoke.
+ * Renders line-item quotes without structured package pricing in the same luxury
+ * theme as `ClientProposalView`; a plain quote may still carry customer preview
+ * media. Shares `proposal-theme.css` and the decline pattern; only the itemized
+ * table and totals are bespoke.
  */
+import Image from "next/image";
 import { useState } from "react";
 
 import { TermsAndConditionsLink } from "@/components/shared/terms-and-conditions-link";
@@ -32,6 +33,36 @@ interface PlainQuoteViewProps {
   onDecline: (reason: string) => void;
 }
 
+interface QuotePreview {
+  image: string;
+  caption: string;
+}
+
+function proposalPreviews(document: Record<string, unknown> | null | undefined): QuotePreview[] {
+  const mockups = document?.mockups;
+  if (!Array.isArray(mockups)) return [];
+  return mockups.flatMap((mockup) => {
+    if (!mockup || typeof mockup !== "object") return [];
+    const record = mockup as Record<string, unknown>;
+    const image = record.image;
+    if (
+      typeof image !== "string" ||
+      !/^data:image\/(?:jpeg|png|webp);base64,/.test(image)
+    ) {
+      return [];
+    }
+    return [
+      {
+        image,
+        caption:
+          typeof record.caption === "string" && record.caption.trim()
+            ? record.caption.trim()
+            : "Proposed permanent lighting preview",
+      },
+    ];
+  });
+}
+
 export function PlainQuoteView({
   data,
   justApproved,
@@ -43,6 +74,7 @@ export function PlainQuoteView({
 }: PlainQuoteViewProps) {
   const { branding } = data;
   const brandName = branding.business_name;
+  const previews = proposalPreviews(data.proposal_document);
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
 
@@ -103,6 +135,30 @@ export function PlainQuoteView({
         </div>
 
         {data.intro ? <p className="pq-intro">{data.intro}</p> : null}
+
+        {previews.length > 0 ? (
+          <section className="pmock-section" aria-labelledby="permanent-preview-heading">
+            <h2 className="section-heading" id="permanent-preview-heading">
+              Preview your permanent lighting
+            </h2>
+            <div className={`pmock-grid${previews.length === 1 ? " single" : ""}`}>
+              {previews.map((preview) => (
+                <figure className="pmock-item" key={preview.image}>
+                  <Image
+                    src={preview.image}
+                    alt={preview.caption}
+                    width={1280}
+                    height={720}
+                    sizes="(max-width: 620px) 100vw, 960px"
+                    style={{ height: "auto" }}
+                    unoptimized
+                  />
+                  <figcaption className="pmock-cap">{preview.caption}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {/* Line items */}
         <div className="pq-table-wrap" style={{ marginTop: 48 }}>

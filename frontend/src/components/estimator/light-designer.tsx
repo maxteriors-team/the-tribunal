@@ -3827,6 +3827,14 @@ export function LightDesigner({
     permanentDepositPercentage != null
       ? round2((estimate?.permanent.total ?? 0) * permanentDepositPercentage * 0.01)
       : null;
+  const permanentPreviewShot = liveShots.find((shot) => shot.id === activeShotId);
+  const permanentProjectPreviewReady =
+    !landscapeProject ||
+    Boolean(
+      landscapeProject.projectId &&
+        permanentPreviewShot &&
+        hasDesign(permanentPreviewShot.design),
+    );
 
   // Convert the drawn design into a real draft quote. ``side`` picks which
   // priced option the customer is buying; the seasonal side carries the chosen
@@ -3834,10 +3842,30 @@ export function LightDesigner({
   const createQuoteMutation = useMutation({
     mutationFn: async (side: "permanent" | "seasonal") => {
       await landscapeProject?.flushBeforeProposal?.();
+      const lightingProjectId = landscapeProject?.projectId ?? null;
+      const proposalPreview =
+        side === "permanent" &&
+        lightingProjectId &&
+        permanentPreviewShot &&
+        hasDesign(permanentPreviewShot.design)
+          ? {
+              shot_id: permanentPreviewShot.id,
+              image: await exportDesignJpeg(
+                permanentPreviewShot.photo,
+                permanentPreviewShot.design,
+                productById,
+                { dusk: permanentPreviewShot.dusk },
+              ),
+            }
+          : undefined;
+      if (side === "permanent" && landscapeProject && !proposalPreview) {
+        throw new Error("Save a lighting design on the selected photo before creating its proposal");
+      }
       return estimatorApi.createQuote(workspaceId, {
         ...shareParams,
         side,
-        lighting_project_id: landscapeProject?.projectId ?? null,
+        lighting_project_id: lightingProjectId,
+        proposal_preview: proposalPreview,
         ...(side === "permanent" && permanentDepositPercentage != null
           ? { deposit_percentage: permanentDepositPercentage }
           : {}),
@@ -4905,7 +4933,10 @@ export function LightDesigner({
                                     className="est-btn primary est-save-btn"
                                     type="button"
                                     disabled={
-                                      !hasHolidayDesign || quotePending || !permanentDepositValid
+                                      !hasHolidayDesign ||
+                                      !permanentProjectPreviewReady ||
+                                      quotePending ||
+                                      !permanentDepositValid
                                     }
                                     onClick={() => createQuoteMutation.mutate("permanent")}
                                   >
@@ -4932,8 +4963,9 @@ export function LightDesigner({
                                 </button>
                               ) : null}
                               <div className="est-customer-hint">
-                                Creates a draft quote with itemized, server-priced lines. Review and
-                                send it from Quotes.
+                                {sides.permanent
+                                  ? "Permanent quotes include the current customer-photo preview. Acceptance and payment status stay with the calendar job."
+                                  : "Creates a draft quote with itemized, server-priced lines. Review and send it from Quotes."}
                               </div>
                               {quoteResult ? (
                                 <div className="est-saved-note">

@@ -1,14 +1,34 @@
 "use client";
 
 import { Download, Loader2, Printer, RefreshCw } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useJobInstallationPlan } from "@/hooks/useJobs";
+import type { JobInstallationPlan } from "@/lib/api/jobs";
 import { designScale } from "@/lib/estimator/design";
 import { loadImage } from "@/lib/estimator/photo";
 import { drawScene } from "@/lib/estimator/render";
 import type { Design, PhotoInfo, Product, RenderStyle } from "@/lib/estimator/types";
+
+type Plan = JobInstallationPlan;
+
+function proposalStatusLabel(status: Plan["proposal_status"]): string | null {
+  if (status === "approved") return "Proposal accepted";
+  if (status === "sent") return "Awaiting client acceptance";
+  if (status === "declined") return "Proposal declined";
+  if (status === "expired") return "Proposal expired";
+  if (status === "draft") return "Proposal draft";
+  return null;
+}
+
+function paymentStatusLabel(status: Plan["payment_status"]): string | null {
+  if (status === "paid") return "Customer payment received";
+  if (status === "pending") return "Customer payment pending";
+  if (status === "not_required") return "No upfront payment required";
+  return null;
+}
 
 const STYLE_BY_PRODUCT: Record<string, RenderStyle> = {
   uplight: "uplight",
@@ -113,6 +133,13 @@ export function InstallationPlanPanel({ workspaceId, jobId }: InstallationPlanPa
   }
   const plan = query.data;
   if (!plan) return null;
+  const proposalLabel = proposalStatusLabel(plan.proposal_status);
+  const paymentLabel = paymentStatusLabel(plan.payment_status);
+  const proposalPreview =
+    plan.proposal_preview_image &&
+    /^data:image\/(?:jpeg|png|webp);base64,/.test(plan.proposal_preview_image)
+      ? plan.proposal_preview_image
+      : null;
 
   const download = () => {
     const canvas = canvasRef.current;
@@ -144,6 +171,46 @@ export function InstallationPlanPanel({ workspaceId, jobId }: InstallationPlanPa
           </Button>
         </div>
       </div>
+      {proposalPreview || proposalLabel || paymentLabel ? (
+        <section
+          className="space-y-3 rounded-lg border bg-muted/30 p-3"
+          aria-label="Customer proposal status"
+        >
+          <div>
+            <h4 className="text-sm font-semibold">Customer proposal</h4>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+              {proposalLabel ? (
+                <span className="rounded-full border bg-background px-2 py-1">
+                  {proposalLabel}
+                </span>
+              ) : null}
+              {paymentLabel ? (
+                <span className="rounded-full border bg-background px-2 py-1">
+                  {paymentLabel}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          {proposalPreview ? (
+            <figure>
+              <Image
+                src={proposalPreview}
+                alt={plan.proposal_preview_caption || "Customer permanent-lighting preview"}
+                width={1280}
+                height={720}
+                sizes="(max-width: 768px) 100vw, 720px"
+                className="max-h-80 h-auto w-full rounded-md border bg-black/5 object-contain"
+                unoptimized
+              />
+              {plan.proposal_preview_caption ? (
+                <figcaption className="mt-1 text-xs text-muted-foreground">
+                  {plan.proposal_preview_caption}
+                </figcaption>
+              ) : null}
+            </figure>
+          ) : null}
+        </section>
+      ) : null}
       <div className="overflow-hidden rounded-lg border bg-black/5">
         <canvas
           ref={canvasRef}

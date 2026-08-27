@@ -3,7 +3,7 @@
  *
  * The dangerous parts of this dialog are the ones that are invisible when they
  * break: clearing a deposit has to be expressed as 0 (the API treats null as
- * "leave it alone"), and a proposal-backed quote must never have its tax/discount
+ * "leave it alone"), and a wizard-priced quote must never have its tax/discount
  * moved from here — the customer's page prices from the stored document, so a
  * header-level reprice would show up on the dashboard and nowhere else. Both
  * are pinned below, along with the fact that the copy tells the operator their
@@ -170,7 +170,7 @@ describe("QuoteEditDialog deposits", () => {
 
 describe("QuoteEditDialog and wizard pricing", () => {
   it("never offers to reprice a wizard quote from the header", async () => {
-    getMock.mockResolvedValue(quote({ proposal_document: { selected_tier: "better" } }));
+    getMock.mockResolvedValue(quote({ proposal_document: { selected_tier: "better" }, is_wizard_quote: true }));
 
     renderDialog();
 
@@ -183,7 +183,7 @@ describe("QuoteEditDialog and wizard pricing", () => {
   it("omits tax and discount from a wizard quote's payload", async () => {
     // Belt and braces: even if the fields reappeared, the request must not carry
     // a total the customer's proposal page would never show.
-    getMock.mockResolvedValue(quote({ proposal_document: { selected_tier: "better" } }));
+    getMock.mockResolvedValue(quote({ proposal_document: { selected_tier: "better" }, is_wizard_quote: true }));
 
     renderDialog();
 
@@ -197,7 +197,14 @@ describe("QuoteEditDialog and wizard pricing", () => {
   });
 
   it("does let a plain quote move its tax, which is its real price", async () => {
-    getMock.mockResolvedValue(quote({ proposal_document: null }));
+    getMock.mockResolvedValue(
+      quote({
+        proposal_document: {
+          mockups: [{ image: "data:image/jpeg;base64,/9j/2Q==" }],
+        },
+        is_wizard_quote: false,
+      }),
+    );
 
     renderDialog();
 

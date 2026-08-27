@@ -10,6 +10,7 @@ from app.api.service_errors import ServiceErrorRoute
 from app.schemas.lighting_project import (
     LightingProjectCreate,
     LightingProjectDetail,
+    LightingProjectRevision,
     LightingProjectStatus,
     LightingProjectType,
     LightingProjectUpdate,
@@ -80,6 +81,19 @@ async def get_lighting_project(
     """Get one project and its complete current drawing."""
 
     return await LightingProjectService(db).get_project(workspace_id, project_id)
+
+
+@router.get("/{project_id}/revision", response_model=LightingProjectRevision)
+async def get_lighting_project_revision(
+    workspace_id: uuid.UUID,
+    project_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadBilling,
+) -> LightingProjectRevision:
+    """Get the lightweight version stamp used for live refresh."""
+
+    return await LightingProjectService(db).get_project_revision(workspace_id, project_id)
 
 
 @router.patch("/{project_id}", response_model=LightingProjectDetail)
