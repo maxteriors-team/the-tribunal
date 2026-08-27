@@ -17868,6 +17868,8 @@ export interface components {
             feet: number;
             /** Label */
             label?: string | null;
+            /** Lighting Project Id */
+            lighting_project_id?: string | null;
             /** Per Ft Override */
             per_ft_override?: number | null;
             /**
@@ -27596,6 +27598,8 @@ export interface components {
             expiry_date?: string | null;
             /** Issue Date */
             issue_date?: string | null;
+            /** Lighting Project Id */
+            lighting_project_id?: string | null;
             /** Line Items */
             line_items?: components["schemas"]["QuoteLineItemCreate"][];
             /** Notes */

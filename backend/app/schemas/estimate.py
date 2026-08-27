@@ -15,6 +15,7 @@ Two boundaries live here:
   leak is structurally impossible, not just omitted.
 """
 
+import uuid
 from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
@@ -272,6 +273,7 @@ class EstimateQuoteRequest(ComparisonShareRequest):
 
     side: Literal["permanent", "seasonal"] = "seasonal"
     deposit_percentage: float | None = Field(default=None, ge=0.01, le=100)
+    lighting_project_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def deposit_applies_only_to_permanent_quote(self) -> Self:

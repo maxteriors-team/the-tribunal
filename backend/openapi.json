@@ -17783,6 +17783,18 @@
             ],
             "title": "Label"
           },
+          "lighting_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lighting Project Id"
+          },
           "per_ft_override": {
             "anyOf": [
               {
@@ -43230,6 +43242,18 @@
               }
             ],
             "title": "Issue Date"
+          },
+          "lighting_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lighting Project Id"
           },
           "line_items": {
             "items": {

@@ -508,10 +508,7 @@ describe("LightDesigner", () => {
     const wireTool = await screen.findByRole("button", { name: "Wire" });
     await userEvent.click(wireTool);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Wire" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      ),
+      expect(screen.getByRole("button", { name: "Wire" })).toHaveAttribute("aria-pressed", "true"),
     );
 
     const uplightTool = await screen.findByRole("button", { name: /^Uplight:/i });
@@ -703,6 +700,46 @@ describe("LightDesigner", () => {
 
     // The created quote's number is confirmed inline with a link into Quotes.
     expect(await screen.findByText(/Quote QUO-000007 created/i)).toBeInTheDocument();
+  });
+
+  it("flushes and links a permanent server project before creating its quote", async () => {
+    const flushBeforeProposal = vi.fn().mockResolvedValue(undefined);
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        projectType: "permanent",
+        activeShotId: "front",
+        shots: [
+          {
+            id: "front",
+            photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
+            design: { runs: [], items: [], calibration: null },
+            dusk: 0.4,
+          },
+        ],
+        updatedAt: "2026-08-26T12:00:00.000Z",
+      },
+      onLandscapeDraftChange: vi.fn(),
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      projectId: "permanent-project",
+      projectName: "Pat permanent roofline",
+      contactName: "Pat Lee",
+      contactId: 42,
+      flushBeforeProposal,
+      resetKey: 0,
+    };
+    renderEstimator("permanent", adapter);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Create permanent quote/i }));
+
+    await waitFor(() => expect(flushBeforeProposal).toHaveBeenCalledOnce());
+    expect(estimatorApi.createQuote).toHaveBeenCalledWith(
+      "ws_1",
+      expect.objectContaining({
+        side: "permanent",
+        lighting_project_id: "permanent-project",
+      }),
+    );
   });
 
   it("offers Aerial Pics as the fixed 1.5× Light Designer run option", () => {

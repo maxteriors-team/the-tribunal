@@ -3767,14 +3767,17 @@ export function LightDesigner({
   // priced option the customer is buying; the seasonal side carries the chosen
   // package. Every line is recomputed server-side, so this only sends inputs.
   const createQuoteMutation = useMutation({
-    mutationFn: (side: "permanent" | "seasonal") =>
-      estimatorApi.createQuote(workspaceId, {
+    mutationFn: async (side: "permanent" | "seasonal") => {
+      await landscapeProject?.flushBeforeProposal?.();
+      return estimatorApi.createQuote(workspaceId, {
         ...shareParams,
         side,
+        lighting_project_id: landscapeProject?.projectId ?? null,
         ...(side === "permanent" && permanentDepositPercentage != null
           ? { deposit_percentage: permanentDepositPercentage }
           : {}),
-      }),
+      });
+    },
     onSuccess: (quote) =>
       setQuoteResult({
         number: quote.number,

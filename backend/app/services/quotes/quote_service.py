@@ -349,6 +349,26 @@ class QuoteService:
             ):
                 raise ValidationError("Opportunity does not belong to the selected contact")
 
+    async def _validated_lighting_project_reference(
+        self,
+        workspace_id: uuid.UUID,
+        project_id: uuid.UUID,
+        *,
+        contact_id: int | None,
+    ) -> LightingProject:
+        project = await assert_workspace_owned(
+            self.db,
+            LightingProject,
+            project_id,
+            workspace_id,
+            detail="Lighting project not found",
+        )
+        if project.status != "active" or (
+            contact_id is not None and project.contact_id != contact_id
+        ):
+            raise ValidationError("Lighting project does not belong to the selected contact")
+        return project
+
     async def _validated_lighting_project(
         self,
         workspace_id: uuid.UUID,
@@ -358,15 +378,9 @@ class QuoteService:
         service_location_id: uuid.UUID | None,
         opportunity_id: uuid.UUID | None,
     ) -> LightingProject:
-        project = await assert_workspace_owned(
-            self.db,
-            LightingProject,
-            project_id,
-            workspace_id,
-            detail="Lighting project not found",
+        project = await self._validated_lighting_project_reference(
+            workspace_id, project_id, contact_id=contact_id
         )
-        if project.status != "active" or project.contact_id != contact_id:
-            raise ValidationError("Lighting project does not belong to the selected contact")
         if service_location_id is not None and project.service_location_id != service_location_id:
             raise ValidationError(
                 "Lighting project does not belong to the selected service location"
@@ -1018,9 +1032,15 @@ class QuoteService:
         selected_permanent_kits: Sequence[PermanentKitSelection] | None = None,
     ) -> QuoteDetailResponse:
         """Create a draft quote with its initial line items and computed totals."""
+        contact_id = quote_in.contact_id
+        if quote_in.lighting_project_id is not None:
+            lighting_project = await self._validated_lighting_project_reference(
+                workspace_id, quote_in.lighting_project_id, contact_id=contact_id
+            )
+            contact_id = lighting_project.contact_id
         await self._validate_refs(
             workspace_id,
-            contact_id=quote_in.contact_id,
+            contact_id=contact_id,
             service_location_id=quote_in.service_location_id,
             opportunity_id=quote_in.opportunity_id,
         )
@@ -1032,9 +1052,10 @@ class QuoteService:
             )
         quote = Quote(
             workspace_id=workspace_id,
-            contact_id=quote_in.contact_id,
+            contact_id=contact_id,
             service_location_id=quote_in.service_location_id,
             opportunity_id=quote_in.opportunity_id,
+            lighting_project_id=quote_in.lighting_project_id,
             assigned_user_id=assigned_user_id,
             number=await self._next_quote_number(workspace_id),
             title=quote_in.title,
@@ -3113,6 +3134,7 @@ class QuoteService:
             workspace_id,
             QuoteCreate(
                 contact_id=contact_id,
+                lighting_project_id=req.lighting_project_id,
                 title=req.label or title,
                 currency="USD",
                 discount_amount=discount,
