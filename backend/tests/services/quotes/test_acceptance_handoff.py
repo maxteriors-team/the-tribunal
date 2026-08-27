@@ -163,6 +163,26 @@ async def test_handoff_texts_the_customer_once(_sender: AsyncMock, _notifier: As
     assert "materials" in _sender.await_args.kwargs["body"].lower()
 
 
+async def test_quo_handoff_pauses_ai_without_automated_acknowledgement(
+    _sender: AsyncMock, _notifier: AsyncMock
+) -> None:
+    conversation = _conversation()
+    conversation.source_provider = "quo"
+
+    await hand_off_accepted_quote(
+        _FakeDB(),
+        conversation=conversation,
+        contact=_contact(),
+        quote=_quote(),
+        agent_id=uuid.uuid4(),
+        log=_Log(),
+    )
+
+    _sender.assert_not_awaited()
+    _notifier.assert_awaited_once()
+    assert conversation.ai_paused is True
+
+
 async def test_handoff_pages_operators_with_the_parts_list(
     _sender: AsyncMock, _notifier: AsyncMock
 ) -> None:

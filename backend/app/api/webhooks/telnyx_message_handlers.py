@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.encryption import hash_phone
 from app.core.metrics import observe_sms_bounce
 from app.db.session import AsyncSessionLocal
-from app.models.conversation import Message, MessageChannel
+from app.models.conversation import MessageChannel
 from app.models.phone_number import PhoneNumber
 from app.models.user import User
 from app.models.workspace import WorkspaceMembership
@@ -17,7 +17,11 @@ from app.services.ai.text_agent import schedule_ai_response
 from app.services.approval.command_processor_service import command_processor_service
 from app.services.campaigns.conversation_syncer import CampaignConversationSyncer
 from app.services.push_notifications import push_notification_service
-from app.services.telephony.inbound_text import InboundTextEvent, process_inbound_text_event
+from app.services.telephony.inbound_text import (
+    InboundTextEvent,
+    process_inbound_text_event,
+)
+from app.services.telephony.inbound_types import InboundMessageIngestResult
 from app.services.telephony.telnyx import InboundMedia, TelnyxSMSService
 
 _conversation_syncer = CampaignConversationSyncer()
@@ -153,7 +157,9 @@ async def handle_inbound_message(payload: dict[str, Any], log: Any) -> None:  # 
                 media_preview=_media_notification_preview(media),
             )
 
-            async def ingest_message(db: Any, inbound_event: InboundTextEvent) -> Message:
+            async def ingest_message(
+                db: Any, inbound_event: InboundTextEvent
+            ) -> InboundMessageIngestResult:
                 return await sms_service.process_inbound_message(
                     db=db,
                     provider_message_id=inbound_event.provider_message_id,

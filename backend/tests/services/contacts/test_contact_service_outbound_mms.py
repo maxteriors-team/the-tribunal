@@ -54,13 +54,18 @@ async def test_send_message_stores_image_and_forwards_media_to_telnyx(
         workspace_id=workspace_id,
         message_body="Caption",
         image_data_url="data:image/jpeg;base64,placeholder",
+        sender_user_id=73,
+        sender_display_name="Morgan Operator",
     )
 
     store.assert_awaited_once_with(
         workspace_id=workspace_id,
         data_url="data:image/jpeg;base64,placeholder",
     )
-    assert provider.send_message.await_args.kwargs["media"] == (media,)
+    send_kwargs = provider.send_message.await_args.kwargs
+    assert send_kwargs["media"] == (media,)
+    assert send_kwargs["sender_user_id"] == 73
+    assert send_kwargs["sender_display_name"] == "Morgan Operator"
     provider.close.assert_awaited_once()
 
 

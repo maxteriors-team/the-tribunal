@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,7 @@ from app.api.deps import (
 )
 from app.core.config import settings
 from app.core.encryption import encrypt_json
+from app.models.conversation import Conversation
 from app.models.workspace import WorkspaceIntegration
 from app.schemas.integration import (
     IntegrationCreate,
@@ -27,6 +28,8 @@ from app.schemas.integration import (
     IntegrationTestResult,
     IntegrationUpdate,
     IntegrationWithMaskedCredentials,
+    QuoActiveLineStatus,
+    QuoPhoneNumberChoice,
 )
 from app.services.lead_sources.meta_lead_ads_service import (
     MetaLeadAdsClient,
@@ -34,7 +37,8 @@ from app.services.lead_sources.meta_lead_ads_service import (
     MetaLeadAdsValidationError,
     validate_meta_credentials,
 )
-from app.services.quo import QuoApiError, QuoClient
+from app.services.quo import QuoApiError, QuoClient, QuoPhoneNumber
+from app.services.quo.line import get_active_quo_line as resolve_active_quo_line
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -63,8 +67,10 @@ def mask_credentials(credentials: dict[str, Any]) -> dict[str, str]:
     return masked
 
 
-async def _validate_quo_credentials(credentials: dict[str, Any]) -> dict[str, str]:
-    """Validate and normalize Quo credentials without exposing the API key."""
+async def _inspect_quo_credentials(
+    credentials: dict[str, Any],
+) -> tuple[str, str | None, list[QuoPhoneNumber]]:
+    """Authenticate once and return provider-owned sender metadata."""
     api_key = credentials.get("api_key")
     if not isinstance(api_key, str) or not api_key.strip():
         raise QuoApiError("A Quo API key is required", status_code=400)
@@ -74,8 +80,26 @@ async def _validate_quo_credentials(credentials: dict[str, Any]) -> dict[str, st
     normalized_key = api_key.strip()
     async with QuoClient(normalized_key) as client:
         organization_id = await client.validate_api_key()
+        phone_numbers = await client.list_phone_numbers()
+    return normalized_key, organization_id, phone_numbers
 
-    normalized = {"api_key": normalized_key}
+
+async def _validate_quo_credentials(credentials: dict[str, Any]) -> dict[str, str]:
+    """Require one provider-validated sender and derive its normalized number."""
+    api_key, organization_id, phone_numbers = await _inspect_quo_credentials(credentials)
+    selected_id = credentials.get("phone_number_id")
+    if not isinstance(selected_id, str) or not selected_id.strip():
+        raise QuoApiError("Select one Quo phone number", status_code=400)
+    selected_id = selected_id.strip()
+    selected = next((item for item in phone_numbers if item.id == selected_id), None)
+    if selected is None:
+        raise QuoApiError("The selected Quo phone number is unavailable", status_code=400)
+
+    normalized = {
+        "api_key": api_key,
+        "phone_number_id": selected.id,
+        "phone_number": selected.phone_number,
+    }
     if organization_id:
         normalized["organization_id"] = organization_id
     return normalized
@@ -166,21 +190,29 @@ async def _prepare_quo_update(
     credentials: dict[str, Any],
     *,
     credentials_changed: bool,
+    api_key_changed: bool,
     integration_id: uuid.UUID,
     current_active: bool,
     next_active: bool,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    if credentials_changed:
+    if credentials_changed or (next_active and not current_active):
+        stored_webhook = {
+            key: credentials[key]
+            for key in _QUO_WEBHOOK_CREDENTIAL_KEYS
+            if isinstance(credentials.get(key), str) and credentials[key]
+        }
         try:
             credentials = await _validate_quo_credentials(credentials)
         except QuoApiError as exc:
             raise _quo_validation_http_error(exc) from None
+        if not api_key_changed:
+            credentials.update(stored_webhook)
 
     has_webhook = all(
         isinstance(credentials.get(key), str) and credentials[key]
         for key in _QUO_WEBHOOK_CREDENTIAL_KEYS
     )
-    if next_active and (credentials_changed or not current_active or not has_webhook):
+    if next_active and (api_key_changed or not current_active or not has_webhook):
         try:
             provisioned = await _provision_quo_webhook(
                 credentials,
@@ -228,6 +260,42 @@ async def list_integrations(
         )
         for i in integrations
     ]
+
+
+@router.get("/quo/active-line", response_model=QuoActiveLineStatus)
+async def get_active_quo_line(
+    workspace: WorkspaceAccess,
+    db: DB,
+    contact_id: int | None = Query(default=None, ge=1),
+) -> QuoActiveLineStatus:
+    """Return the selected Quo line without exposing integration secrets."""
+    has_contact_history = False
+    if contact_id is not None:
+        has_contact_history = (
+            await db.scalar(
+                select(Conversation.id)
+                .where(
+                    Conversation.workspace_id == workspace.id,
+                    Conversation.contact_id == contact_id,
+                    Conversation.source_provider == "quo",
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
+    active_line = await resolve_active_quo_line(db, workspace.id)
+    if active_line is None:
+        return QuoActiveLineStatus(
+            active=False,
+            has_contact_history=has_contact_history,
+        )
+    return QuoActiveLineStatus(
+        active=True,
+        phone_number_id=active_line.phone_number_id,
+        phone_number=active_line.phone_number,
+        has_contact_history=has_contact_history,
+    )
 
 
 @router.get("/{integration_type}", response_model=IntegrationWithMaskedCredentials)
@@ -468,13 +536,22 @@ async def update_integration(
     )
     provisioned_quo_credentials: dict[str, Any] | None = None
     if integration_type == "quo":
-        credentials_changed = bool(integration_data.credentials)
-        if integration_data.credentials is not None and not credentials_changed:
-            # The dialog sends an empty object when the existing masked key is unchanged.
-            next_credentials = previous_credentials
+        submitted = {
+            key: value
+            for key, value in (integration_data.credentials or {}).items()
+            if key in {"api_key", "phone_number_id"}
+        }
+        if submitted.get("api_key") in {None, ""}:
+            submitted.pop("api_key", None)
+        next_credentials = {**previous_credentials, **submitted}
+        credentials_changed = bool(submitted)
+        api_key_changed = "api_key" in submitted and submitted[
+            "api_key"
+        ] != previous_credentials.get("api_key")
         next_credentials, provisioned_quo_credentials = await _prepare_quo_update(
             next_credentials,
             credentials_changed=credentials_changed,
+            api_key_changed=api_key_changed,
             integration_id=integration.id,
             current_active=integration.is_active,
             next_active=next_active,
@@ -816,7 +893,7 @@ async def _test_google_ads_transparency(
 
 async def _test_quo(credentials: dict[str, Any]) -> IntegrationTestResult:
     try:
-        normalized = await _validate_quo_credentials(credentials)
+        _api_key, organization_id, phone_numbers = await _inspect_quo_credentials(credentials)
     except QuoApiError as exc:
         message = (
             "Quo rejected the API key"
@@ -825,11 +902,18 @@ async def _test_quo(credentials: dict[str, Any]) -> IntegrationTestResult:
         )
         return IntegrationTestResult(success=False, message=message)
 
-    organization_id = normalized.get("organization_id")
     return IntegrationTestResult(
         success=True,
         message="Successfully connected to Quo",
         details={"organization_id": organization_id} if organization_id else None,
+        phone_numbers=[
+            QuoPhoneNumberChoice(
+                id=phone_number.id,
+                phone_number=phone_number.phone_number,
+                provider_label=phone_number.provider_label,
+            )
+            for phone_number in phone_numbers
+        ],
     )
 
 

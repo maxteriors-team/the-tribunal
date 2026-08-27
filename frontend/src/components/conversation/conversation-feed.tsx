@@ -20,12 +20,12 @@ import {
 import { usePhoneNumbers } from "@/hooks/usePhoneNumbers";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { conversationsApi } from "@/lib/api/conversations";
-import { getLatestQuoLink } from "@/lib/api/quo-links";
+import { integrationsApi } from "@/lib/api/integrations";
 import { useContactStore } from "@/lib/contact-store";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { isSameDay } from "@/lib/utils/date";
-import { getApiErrorMessage } from "@/lib/utils/errors";
+import { getApiErrorCode, getApiErrorMessage, getApiErrorStatus } from "@/lib/utils/errors";
 import { normalizePhoneForComparison } from "@/lib/utils/phone";
 import type { Conversation, TimelineItem } from "@/types";
 
@@ -33,7 +33,6 @@ import { ChatHeader } from "./chat-header";
 import { DateSeparator } from "./date-separator";
 import { MessageComposer } from "./message-composer";
 import { MessageItem } from "./message-item";
-import { QuoBridgeBanner } from "./quo-bridge-banner";
 import { TeachAIDialog } from "./teach-ai-dialog";
 
 interface ConversationFeedProps {
@@ -58,35 +57,35 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
 
-  // Fetch timeline via React Query (polls every 3s)
-  const {
-    data: timelineData,
-    isPending: isLoadingTimeline,
-    isError: isTimelineError,
-    refetch: refetchTimeline,
-  } = useContactTimeline(workspaceId ?? "", selectedContact?.id ?? 0);
-  const timeline = useMemo(() => timelineData ?? [], [timelineData]);
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [selectedFromNumber, setSelectedFromNumber] = useState<string | undefined>();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const quoPendingRequestRef = useRef<{
+    id: string;
+    body: string;
+    conversationId: string;
+  } | null>(null);
   const [teachAIMessage, setTeachAIMessage] = useState<TimelineItem | null>(null);
 
-  // Fetch phone numbers for the workspace
   const { data: phoneNumbersData } = usePhoneNumbers(workspaceId ?? "", {
     sms_enabled: true,
     active_only: true,
   });
   const phoneNumbers = useMemo(() => phoneNumbersData?.items ?? [], [phoneNumbersData?.items]);
   const fallbackFromNumber = phoneNumbers[0]?.phone_number;
-  const activeFromNumber = selectedFromNumber ?? fallbackFromNumber;
 
-  // Fetch agents for the workspace
+  const { data: activeQuoLine, isPending: isActiveQuoLinePending } = useQuery({
+    queryKey: queryKeys.integrations.activeQuoLine(workspaceId ?? "", selectedContact?.id),
+    queryFn: () => integrationsApi.getActiveQuoLine(workspaceId ?? "", selectedContact?.id),
+    enabled: !!workspaceId,
+    staleTime: 30_000,
+  });
+
   const { data: agentsData } = useAgents(workspaceId ?? "");
   const agents = useMemo(() => agentsData?.items ?? [], [agentsData?.items]);
 
-  // Fetch conversations to find the one for the current contact
-  const { data: conversationsData, isPending: isConversationPending } = useQuery({
+  const { data: conversationsData, isPending: isConversationsPending } = useQuery({
     queryKey: queryKeys.conversations.byContact(workspaceId ?? "", selectedContact?.id),
     queryFn: () =>
       workspaceId
@@ -102,21 +101,55 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   });
 
   const selectedContactPhone = normalizePhoneForComparison(selectedContact?.phone_number);
-
-  // Find the conversation for the current contact. Inbound relay threads may
-  // arrive before the contact_id is linked, so fall back to normalized phone.
-  const contactConversation: Conversation | undefined = conversationsData?.items?.find((conv) => {
-    if (conv.contact_id === selectedContact?.id) return true;
-    return (
-      !!selectedContactPhone &&
-      normalizePhoneForComparison(conv.contact_phone) === selectedContactPhone
-    );
-  });
-  const isQuoConversation = contactConversation?.source_provider === "quo";
-  const quoReplyUrl = useMemo(
-    () => (isQuoConversation ? getLatestQuoLink(timeline) : null),
-    [isQuoConversation, timeline],
+  const contactConversations = useMemo(
+    () =>
+      conversationsData?.items?.filter((conversation) => {
+        if (conversation.contact_id === selectedContact?.id) return true;
+        return (
+          !!selectedContactPhone &&
+          normalizePhoneForComparison(conversation.contact_phone) === selectedContactPhone
+        );
+      }) ?? [],
+    [conversationsData?.items, selectedContact?.id, selectedContactPhone],
   );
+  const activeQuoPhone = normalizePhoneForComparison(activeQuoLine?.phone_number);
+  const hasQuoHistory =
+    activeQuoLine?.has_contact_history ??
+    contactConversations.some((conversation) => conversation.source_provider === "quo");
+  const activeQuoConversation =
+    activeQuoLine?.active && activeQuoPhone
+      ? contactConversations.find(
+          (conversation) =>
+            conversation.source_provider === "quo" &&
+            normalizePhoneForComparison(conversation.workspace_phone) === activeQuoPhone,
+        )
+      : undefined;
+  const quoMode = hasQuoHistory;
+  const contactConversation: Conversation | undefined = quoMode
+    ? activeQuoConversation
+    : contactConversations[0];
+  const isQuoConversation = contactConversation?.source_provider === "quo";
+  const shouldLoadTimeline = !quoMode || !!activeQuoConversation;
+  const {
+    data: timelineData,
+    isLoading: isLoadingTimeline,
+    isError: isTimelineError,
+    refetch: refetchTimeline,
+  } = useContactTimeline(
+    workspaceId ?? "",
+    selectedContact?.id ?? 0,
+    100,
+    isQuoConversation ? contactConversation.id : undefined,
+    shouldLoadTimeline,
+  );
+  const timeline = useMemo(
+    () => (shouldLoadTimeline ? (timelineData ?? []) : []),
+    [shouldLoadTimeline, timelineData],
+  );
+  const isConversationPending = isActiveQuoLinePending || isConversationsPending;
+  const activeFromNumber = isQuoConversation
+    ? (activeQuoLine?.phone_number ?? contactConversation.workspace_phone)
+    : (selectedFromNumber ?? fallbackFromNumber);
 
   // Mutations for AI toggle, agent assignment, and clear history
   const toggleAIMutation = useToggleConversationAI(workspaceId ?? "");
@@ -178,41 +211,86 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   };
 
   const handleSendMessage = async (imageDataUrl?: string) => {
+    const quoConversationId = isQuoConversation ? contactConversation?.id : undefined;
     if (
       isConversationPending ||
-      isQuoConversation ||
       (!message.trim() && !imageDataUrl) ||
       !selectedContact ||
       !workspaceId ||
-      isSending
+      isSending ||
+      (isQuoConversation && (imageDataUrl || !quoConversationId))
     ) {
       return;
     }
 
     const messageBody = message.trim();
+    const pendingRequest = quoPendingRequestRef.current;
+    const clientRequestId =
+      isQuoConversation && quoConversationId
+        ? pendingRequest?.body === messageBody &&
+          pendingRequest.conversationId === quoConversationId
+          ? pendingRequest.id
+          : globalThis.crypto.randomUUID()
+        : undefined;
+    if (clientRequestId && quoConversationId) {
+      quoPendingRequestRef.current = {
+        id: clientRequestId,
+        body: messageBody,
+        conversationId: quoConversationId,
+      };
+    }
     setMessage("");
     setIsSending(true);
 
     try {
-      await conversationsApi.sendMessageToContact(
-        workspaceId,
-        selectedContact.id,
-        messageBody,
-        activeFromNumber,
-        imageDataUrl,
-      );
-
+      if (isQuoConversation && quoConversationId) {
+        await conversationsApi.sendMessage(
+          workspaceId,
+          quoConversationId,
+          messageBody,
+          clientRequestId,
+        );
+      } else {
+        await conversationsApi.sendMessageToContact(
+          workspaceId,
+          selectedContact.id,
+          messageBody,
+          activeFromNumber,
+          imageDataUrl,
+        );
+      }
+      quoPendingRequestRef.current = null;
       void queryClient.invalidateQueries({
         queryKey: queryKeys.contacts.timeline(workspaceId, selectedContact.id),
       });
       toast.success(imageDataUrl ? "Image sent" : "Message sent");
     } catch (error) {
       setMessage(messageBody);
-      const errorMessage = error instanceof Error ? error.message : "Failed to send message";
-      toast.error(errorMessage);
+      const errorMessage = getApiErrorMessage(error, "Failed to send message");
+      const errorCode = getApiErrorCode(error);
+      const errorStatus = getApiErrorStatus(error);
+      const isDefinitiveQuoRejection = errorCode === "quo_send_rejected";
+      const isUnknownQuoStatus =
+        isQuoConversation &&
+        (errorCode === "quo_send_status_unknown" ||
+          errorStatus === null ||
+          (errorStatus >= 500 && !isDefinitiveQuoRejection));
+      if (!isUnknownQuoStatus) quoPendingRequestRef.current = null;
+      toast.error(
+        isUnknownQuoStatus
+          ? "Delivery status unknown—wait for the message to appear before retrying"
+          : errorMessage,
+      );
       throw error;
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleMessageChange = (value: string) => {
+    setMessage(value);
+    if (quoPendingRequestRef.current?.body !== value.trim()) {
+      quoPendingRequestRef.current = null;
     }
   };
 
@@ -317,6 +395,8 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         contactId={selectedContact.id}
         contactName={contactName}
         phoneNumber={selectedContact.phone_number}
+        quoPhoneNumber={quoMode ? activeQuoLine?.phone_number : null}
+        manualMessagingOnly={quoMode}
         conversation={contactConversation}
         agents={agents}
         hasTimelineItems={timeline.length > 0}
@@ -346,8 +426,8 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
             icon={<MessageSquare className="h-8 w-8" />}
             title="No conversation yet"
             description={
-              isQuoConversation
-                ? "Mirrored messages and calls will appear here after the next Quo sync."
+              quoMode
+                ? "No conversation exists for this contact on the active messaging line."
                 : "Start a conversation by sending a message, making a call, or scheduling an appointment."
             }
           />
@@ -402,19 +482,19 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
         >
           Loading reply controls…
         </div>
-      ) : isQuoConversation ? (
-        <QuoBridgeBanner replyUrl={quoReplyUrl} />
-      ) : (
+      ) : contactConversation ? (
         <MessageComposer
+          key={contactConversation.id}
           message={message}
-          onMessageChange={setMessage}
+          onMessageChange={handleMessageChange}
           onSend={handleSendMessage}
           isSending={isSending}
-          phoneNumbers={phoneNumbers}
+          phoneNumbers={isQuoConversation ? [] : phoneNumbers}
           selectedFromNumber={activeFromNumber}
           onFromNumberChange={setSelectedFromNumber}
+          textOnly={isQuoConversation}
         />
-      )}
+      ) : null}
     </div>
   );
 }

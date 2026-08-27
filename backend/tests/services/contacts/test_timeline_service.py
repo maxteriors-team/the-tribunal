@@ -58,10 +58,12 @@ class TestContactTimelineService:
         )
 
         db = AsyncMock()
+        conversation_id = uuid.uuid4()
         result = await ContactTimelineService(db).get_contact_timeline(
             contact_id=contact_id,
             workspace_id=workspace_id,
             limit=25,
+            conversation_id=conversation_id,
         )
 
         assert result == timeline
@@ -71,6 +73,7 @@ class TestContactTimelineService:
         assert captured["contact_id"] == contact_id
         assert captured["workspace_id"] == workspace_id
         assert captured["limit"] == 25
+        assert captured["conversation_id"] == conversation_id
 
     async def test_timeline_raises_when_contact_missing(
         self,

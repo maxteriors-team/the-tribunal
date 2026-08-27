@@ -14,7 +14,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
-from app.api.deps import DB, WorkspaceAccess
+from app.api.deps import DB, CanReadCRM, WorkspaceAccess
 from app.models.contact import Contact
 from app.models.workspace import WorkspaceIntegration
 from app.schemas.companycam import (
@@ -66,6 +66,7 @@ async def get_contact_companycam_photos(
     workspace_id: uuid.UUID,
     contact_id: int,
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
     db: DB,
 ) -> ContactCompanyCamPhotosResponse:
     """Return CompanyCam projects + recent photos matched to a contact."""

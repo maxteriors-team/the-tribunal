@@ -19,9 +19,11 @@ from app.models.campaign import (
     Campaign,
     CampaignContact,
     CampaignContactStatus,
+    CampaignStatus,
     CampaignType,
 )
 from app.services.idempotency import derive_outbound_key
+from app.services.telephony.phone_number_resolver import resolve_workspace_phone_number
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 from app.workers.base import WorkerRegistry
 from app.workers.base_campaign_worker import BaseCampaignWorker
@@ -71,10 +73,32 @@ class VoiceCampaignWorker(BaseCampaignWorker):
         log: Any,
     ) -> None:
         """Process voice campaign contacts: clean up stuck calls and initiate new ones."""
+        configured_sender = campaign.from_phone_number
+        sender = (
+            await resolve_workspace_phone_number(
+                db,
+                campaign.workspace_id,
+                configured_sender,
+                capability="voice",
+            )
+            if configured_sender
+            else None
+        )
+        if sender is None:
+            if campaign.status == CampaignStatus.RUNNING:
+                campaign.status = CampaignStatus.PAUSED
+            log.error(
+                "voice_campaign_paused_invalid_sender",
+                workspace_id=str(campaign.workspace_id),
+                from_phone_number=configured_sender,
+            )
+            await db.commit()
+            return
+
         voice_service = TelnyxVoiceService(settings.telnyx_api_key)
         try:
             await self._cleanup_stuck_calls(campaign, db, log)
-            await self._process_pending_calls(campaign, voice_service, db, log)
+            await self._process_pending_calls(campaign, sender.phone_number, voice_service, db, log)
             await self._check_completion(campaign, db, log)
             await db.commit()
         finally:
@@ -83,6 +107,7 @@ class VoiceCampaignWorker(BaseCampaignWorker):
     async def _process_pending_calls(
         self,
         campaign: Campaign,
+        from_number: str,
         voice_service: TelnyxVoiceService,
         db: AsyncSession,
         log: Any,
@@ -116,14 +141,6 @@ class VoiceCampaignWorker(BaseCampaignWorker):
         pending_contacts = pending_result.scalars().all()
 
         if not pending_contacts:
-            return
-
-        # Voice campaigns dial from a phone sender. The column is nullable to
-        # accommodate email campaigns, so guard here: without a sender there is
-        # nothing to place the call from.
-        from_number = campaign.from_phone_number
-        if not from_number:
-            log.warning("Voice campaign has no sender phone number, skipping")
             return
 
         log.info(

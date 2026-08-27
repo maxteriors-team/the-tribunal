@@ -18,6 +18,8 @@ export interface Message {
   to_number?: string;
   is_ai: boolean;
   agent_id?: string;
+  sender_user_id?: number | null;
+  sender_display_name?: string | null;
   // For voice messages
   duration_seconds?: number;
   recording_url?: string;
@@ -123,6 +125,8 @@ export interface TimelineItem {
   direction?: MessageDirection;
   is_ai: boolean;
   agent_id?: string | null;
+  sender_user_id?: number | null;
+  sender_display_name?: string | null;
   // Content varies by type
   content: string;
   // Optional metadata

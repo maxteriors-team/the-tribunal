@@ -78,6 +78,48 @@ class SignatureClaim:
         return self.outcome is SignatureClaimOutcome.CLAIMED
 
 
+async def claim_webhook_signature_in_transaction(
+    db: AsyncSession,
+    provider: str,
+    signature: str,
+    *,
+    log: Any,
+) -> SignatureClaim:
+    """Claim a signature inside the caller's domain transaction.
+
+    A failed dispatch rolls this insert back, allowing the provider retry to
+    run. A concurrent duplicate waits on the unique key and is skipped only
+    after the first transaction commits successfully.
+    """
+    provider_slug = provider.strip().lower()
+    normalized = signature.strip()
+    if not provider_slug or not normalized:
+        raise ValueError("webhook replay provider and signature must be non-empty")
+    statement = (
+        pg_insert(SeenWebhookSignature)
+        .values(
+            id=uuid.uuid4(),
+            provider=provider_slug,
+            signature=normalized,
+            created_at=datetime.now(UTC),
+        )
+        .on_conflict_do_nothing(index_elements=["provider", "signature"])
+        .returning(SeenWebhookSignature.id)
+    )
+    try:
+        inserted = (await db.execute(statement)).scalar_one_or_none()
+    except Exception as exc:
+        log.error(
+            "webhook_signature_ledger_unavailable",
+            provider=provider_slug,
+            error=str(exc),
+        )
+        return SignatureClaim(SignatureClaimOutcome.LEDGER_UNAVAILABLE)
+    if inserted is None:
+        return SignatureClaim(SignatureClaimOutcome.REPLAY)
+    return SignatureClaim(SignatureClaimOutcome.CLAIMED)
+
+
 async def claim_webhook_signature(
     provider: str,
     signature: str,

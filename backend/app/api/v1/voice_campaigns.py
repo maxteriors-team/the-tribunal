@@ -34,6 +34,7 @@ from app.schemas.campaign import (
     VoiceCampaignUpdate,
 )
 from app.services.campaigns.guarantee_tracker import check_guarantee_expiry
+from app.services.telephony.phone_number_resolver import resolve_workspace_phone_number
 from app.utils.datetime import parse_time_string
 
 router = APIRouter(
@@ -64,6 +65,28 @@ async def _get_voice_campaign(
         )
 
     return campaign
+
+
+async def _validate_voice_sender(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    from_phone_number: str | None,
+) -> None:
+    """Ensure a voice campaign sender is active and owned by the workspace."""
+    sender = await resolve_workspace_phone_number(
+        db,
+        workspace_id,
+        from_phone_number,
+        capability="voice",
+    )
+    if sender is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Voice campaign sender must be an active, workspace-owned, "
+                "voice-enabled phone number"
+            ),
+        )
 
 
 @router.get("", response_model=PaginatedVoiceCampaigns)
@@ -139,6 +162,8 @@ async def create_voice_campaign(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="SMS fallback agent must support text channel",
             )
+
+    await _validate_voice_sender(db, workspace_id, campaign_in.from_phone_number)
 
     # Create campaign with voice-specific settings
     campaign_data = campaign_in.model_dump()
@@ -300,6 +325,7 @@ async def start_voice_campaign(
             detail=f"Cannot start campaign with status: {campaign.status}",
         )
 
+    await _validate_voice_sender(db, workspace_id, campaign.from_phone_number)
     # Check if campaign has contacts
     count_result = await db.execute(
         select(func.count(CampaignContact.id)).where(CampaignContact.campaign_id == campaign_id)

@@ -28,7 +28,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.models.conversation import MessageStatus
+from app.models.conversation import Message, MessageStatus
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 
@@ -194,6 +194,163 @@ class TestSendMessageDedupe:
             post_mock.assert_awaited_once()
             forwarded = post_mock.call_args.kwargs["idempotency_key"]
             assert forwarded == key
+
+    async def test_new_message_persists_native_sender_snapshot(
+        self, mock_db_with_existing: Any
+    ) -> None:
+        svc = TelnyxSMSService(api_key="test-key")
+        db = mock_db_with_existing(None)
+        workspace_id = uuid.uuid4()
+        conversation = MagicMock(
+            id=uuid.uuid4(),
+            workspace_id=workspace_id,
+            contact_id=None,
+            last_message_preview=None,
+            last_message_at=None,
+            last_message_direction=None,
+        )
+
+        with (
+            patch.object(
+                svc,
+                "_get_or_create_conversation",
+                AsyncMock(return_value=conversation),
+            ),
+            patch.object(
+                svc,
+                "_post_message",
+                AsyncMock(return_value={"data": {"id": "telnyx-native-sender"}}),
+            ),
+            patch(
+                "app.services.telephony.telnyx.shorten_urls_in_text",
+                AsyncMock(side_effect=lambda body, **kw: body),
+            ),
+        ):
+            message = await svc.send_message(
+                to_number="+12025551234",
+                from_number="+12025556789",
+                body="Human-written reply",
+                db=db,
+                workspace_id=workspace_id,
+                sender_user_id=73,
+                sender_display_name="Morgan Operator",
+            )
+
+        persisted = next(
+            call.args[0] for call in db.add.call_args_list if isinstance(call.args[0], Message)
+        )
+        assert message is persisted
+        assert persisted.sender_user_id == 73
+        assert persisted.sender_display_name == "Morgan Operator"
+
+    @pytest.mark.parametrize(
+        ("agent_id", "expected_name"),
+        [(uuid.uuid4(), "AI Agent"), (None, "Automation")],
+    )
+    async def test_new_non_human_message_gets_explicit_sender_label(
+        self,
+        mock_db_with_existing: Any,
+        agent_id: uuid.UUID | None,
+        expected_name: str,
+    ) -> None:
+        svc = TelnyxSMSService("unused")
+        db = mock_db_with_existing(None)
+        workspace_id = uuid.uuid4()
+        conversation = MagicMock(
+            id=uuid.uuid4(),
+            workspace_id=workspace_id,
+            contact_id=None,
+            last_message_preview=None,
+            last_message_at=None,
+            last_message_direction=None,
+        )
+        with (
+            patch.object(
+                svc,
+                "_get_or_create_conversation",
+                AsyncMock(return_value=conversation),
+            ),
+            patch.object(
+                svc,
+                "_post_message",
+                AsyncMock(return_value={"data": {"id": "telnyx-automation"}}),
+            ),
+            patch(
+                "app.services.telephony.telnyx.shorten_urls_in_text",
+                AsyncMock(side_effect=lambda body, **kw: body),
+            ),
+        ):
+            await svc.send_message(
+                to_number="+12025551234",
+                from_number="+12025556789",
+                body="Automated reply",
+                db=db,
+                workspace_id=workspace_id,
+                agent_id=agent_id,
+            )
+
+        persisted = next(
+            call.args[0] for call in db.add.call_args_list if isinstance(call.args[0], Message)
+        )
+        assert persisted.sender_user_id is None
+        assert persisted.sender_display_name == expected_name
+
+    async def test_retry_fills_missing_sender_attribution(self, mock_db_with_existing: Any) -> None:
+        key = uuid.uuid4()
+        existing = MagicMock(
+            id=uuid.uuid4(),
+            status=MessageStatus.SENT,
+            idempotency_key=key,
+            sender_user_id=None,
+            sender_display_name=None,
+        )
+        db = mock_db_with_existing(existing)
+        svc = TelnyxSMSService(api_key="test-key")
+
+        with patch.object(svc, "_post_message", AsyncMock(side_effect=AssertionError("unreached"))):
+            result = await svc.send_message(
+                to_number="+12025551234",
+                from_number="+12025556789",
+                body="same",
+                db=db,
+                workspace_id=uuid.uuid4(),
+                idempotency_key=key,
+                sender_user_id=73,
+                sender_display_name="Morgan Operator",
+            )
+
+        assert result is existing
+        assert existing.sender_user_id == 73
+        assert existing.sender_display_name == "Morgan Operator"
+        db.commit.assert_awaited_once()
+
+    async def test_retry_never_overwrites_sender_snapshot(self, mock_db_with_existing: Any) -> None:
+        key = uuid.uuid4()
+        existing = MagicMock(
+            id=uuid.uuid4(),
+            status=MessageStatus.SENT,
+            idempotency_key=key,
+            sender_user_id=41,
+            sender_display_name="Original Operator",
+        )
+        db = mock_db_with_existing(existing)
+        svc = TelnyxSMSService(api_key="test-key")
+
+        with patch.object(svc, "_post_message", AsyncMock(side_effect=AssertionError("unreached"))):
+            result = await svc.send_message(
+                to_number="+12025551234",
+                from_number="+12025556789",
+                body="same",
+                db=db,
+                workspace_id=uuid.uuid4(),
+                idempotency_key=key,
+                sender_user_id=73,
+                sender_display_name="Renamed Operator",
+            )
+
+        assert result is existing
+        assert existing.sender_user_id == 41
+        assert existing.sender_display_name == "Original Operator"
 
 
 # ---------------------------------------------------------------------------

@@ -257,9 +257,9 @@ def build_booking_instructions(
     if extracted_email:
         email_context = f"""
 KNOWN EMAIL: The customer has provided their email: {extracted_email}
-- Use this email in the booking confirmation summary and when calling book_appointment
+- Use this email in prepare_booking; the persisted draft supplies it to book_appointment
 - Do NOT ask for email again - you already have it
-- Do not book until they explicitly affirm the complete confirmation summary"""
+- Do not book until they explicitly affirm prepare_booking's complete summary"""
 
     return f"""
 
@@ -272,45 +272,42 @@ CRITICAL RULES - NEVER VIOLATE THESE:
 2. NEVER promise to do something without IMMEDIATELY calling the function
 3. If you need availability info, call check_availability IN THIS RESPONSE
 4. Selecting or proposing a time starts a SEPARATE confirmation turn; it is not permission to book
-5. Before booking, restate the exact weekday and calendar date, start time, {timezone} timezone,
-   appointment duration, and invite email, then ask the customer to confirm those exact details
-6. Call book_appointment only after the customer's NEXT message explicitly affirms that complete
+5. Collect the exact slot, appointment duration, call type, and invite email before confirmation
+6. Once those details are complete, call prepare_booking exactly once.
+   Send its direct_response verbatim and STOP; it includes the exact weekday and calendar date,
+   time, {timezone} timezone, appointment duration, call type, and invite email
+7. Call book_appointment only after the customer's NEXT message explicitly affirms that complete
    summary (for example, "yes", "correct", or "confirm"). Silence, a time selection, an email,
    a question, or an ambiguous reply is not confirmation
-7. Set customer_confirmed=true only for that explicitly affirmative reply. Never infer or reuse
-   confirmation from an earlier choice, and never call book_appointment with false or missing
-   confirmation
-8. EMAIL IS REQUIRED - collect email before presenting the complete confirmation summary
-9. After book_appointment succeeds, send exactly ONE concise confirmation in this
-   response. Do not send or imply a separate confirmation, reminder, or settings update
+8. Set customer_confirmed=true only for that explicitly affirmative reply. Never infer or reuse
+   confirmation from an earlier choice
+9. After book_appointment succeeds, send exactly ONE concise confirmation in this response
 10. The booking system sends the calendar invitation to the customer's booking email.
-    Say it was sent only when the successful tool result says invitation_sent is true;
-    otherwise confirm the booking without claiming an email arrived
-11. book_appointment VALIDATES before it confirms. If it returns success=false,
-    nothing was booked: read its "message", and if it lists alternative_slots,
-    offer ONLY those exact times. Never confirm a booking off a failed result
+    Say it was sent only when the successful tool result says invitation_sent is true
+11. If prepare_booking or book_appointment returns success=false, nothing was booked: use its
+    message and offer only any exact alternative_slots it returned
 12. NEVER state that an appointment is booked, cancelled, moved, or changed unless
-    the matching tool call returned success in THIS response. You cannot change a
-    calendar by describing the change. Saying "I cancelled that for you" without a
-    successful cancel_appointment call leaves the appointment live, and the customer
-    keeps getting reminders for a meeting they cancelled.
+    the matching tool call returned success in THIS response.
 
-EMAIL COLLECTION:
-- If you already have the customer's email (see KNOWN EMAIL above), use it directly
-- If no email is known, ask for it when offering time slots
-- Example: "I have Monday 2pm or Tuesday 10am. Which works? What email for the invite?"
-- Once you have both time and email, present the complete confirmation summary; do not book yet
+EMAIL AND CALL-TYPE COLLECTION:
+- Use a KNOWN EMAIL directly; do not ask for it again
+- If email or phone/video preference is missing, ask for missing details with the time options
+- Never infer phone versus video
+- Once slot, email, call type, and duration are known, call prepare_booking instead of writing
+  your own summary
 
 WHEN TO CALL check_availability:
 - User asks about availability ("when", "what times", "what's open")
-- User mentions a day ("Monday", "tomorrow", "next week")
-- User wants to schedule/book/meet
+- User wants to schedule/book/meet and no fresh slots were offered
 - You need to offer time options
 
+WHEN TO CALL prepare_booking:
+- The customer chose a freshly offered slot and email, call type, and duration are known
+- Call it once; Send its direct_response verbatim and wait
+
 WHEN TO CALL book_appointment:
-- Only after the user explicitly affirms your immediately preceding complete confirmation summary
-- ALWAYS include the email parameter and customer_confirmed=true
-- A selected time or newly provided email requires the confirmation summary, not a booking call
+- Only after the user explicitly affirms prepare_booking's immediately preceding direct_response
+- Set customer_confirmed=true; the persisted draft supplies the confirmed booking details
 
 WHEN TO CALL cancel_appointment:
 - User says cancel, "cancel our talk", or asks to call it off
@@ -321,45 +318,36 @@ WHEN TO CALL cancel_appointment:
 - Pass the reason only if they gave one in their own words
 
 RESPONSE PATTERN:
-1. Call check_availability when availability is needed, then respond from its result
-2. Offer exactly 2 specific time options when presenting availability
-3. If no known email, ask for email in the SAME message as time options
-4. After the customer chooses and email is known, restate the exact weekday/date, time,
-   {timezone} timezone, duration, and invite email; ask for explicit confirmation and STOP
-5. Only after their next message clearly affirms all details, call book_appointment with
-   customer_confirmed=true, then respond based on the function result
+1. Call check_availability when availability is needed, then offer exactly 2 returned times
+2. Ask for any missing email and phone/video preference with those options
+3. After the customer chooses and all details are known, call prepare_booking exactly once
+4. Send its direct_response verbatim and STOP
+5. Only after the next message clearly affirms it, call book_appointment with
+   customer_confirmed=true, then respond from the result
 
 FUNCTION FORMATS:
 - check_availability: start_date as YYYY-MM-DD (check 3-5 days ahead if not specified)
-- book_appointment: date as YYYY-MM-DD, time as HH:MM (24-hour format), email (REQUIRED),
-  customer_confirmed=true (REQUIRED)
+- prepare_booking: chosen date, time, duration_minutes, call_type, and email when not already known
+- book_appointment: customer_confirmed=true after the persisted summary is affirmed
 
 EXAMPLES:
 - "when are you free?" -> check_availability ->
-  "Monday at 2 or Tuesday at 10 - which works? What email should I use for the invite?"
-- "Monday, email is john@example.com" -> NO TOOL ->
-  "Please confirm: Monday, August 24 at 2 PM {timezone}, 30 minutes, using invite email
-  john@example.com. Is that correct?"
-- "Yes" after that complete summary -> book_appointment(customer_confirmed=true, email),
+  "Monday at 2 or Tuesday at 10 - which works, phone or video? What email should get the invite?"
+- "Monday, phone, email is john@example.com" -> prepare_booking -> send direct_response verbatim
+- "Yes" after that direct_response -> book_appointment(customer_confirmed=true),
   invitation_sent=true -> "You're booked. I sent the invite to john@example.com."
-- "Monday works" (with known email) -> present the complete confirmation summary; NO TOOL
-- "Monday works" (no known email) ->
-  "Sounds good - what email should I use for the invite?"
+- "Monday works" (missing call type) -> "Phone call or video call?"
 - Unclear correction like "No - in the email. It shows a long string." ->
   "I want to make sure I understand - did the invite email not arrive, or is the
   text displaying incorrectly?"
 - "cancel" -> cancel_appointment -> "All set, I've cancelled Monday at 2."
-- "it's more than I want to invest" -> cancel_appointment(reason="cost") ->
-  "I've cancelled it."
-
 - book_appointment returns success=false with alternative_slots ->
   "That time just got taken - I have 3 or 4:30 open. Which works?"
-- book_appointment returns success=false about the email ->
-  "Can you double-check that email? It didn't go through."
 
-The ONLY way to check times is check_availability. The ONLY way to book is book_appointment.
-The ONLY way to cancel is cancel_appointment. There is no tool for changing SMS or email
-settings, so never claim you changed them."""
+The ONLY way to check times is check_availability. The ONLY way to prepare the customer-visible
+confirmation is prepare_booking. The ONLY way to book is book_appointment.
+The ONLY way to cancel is cancel_appointment. There is no tool for changing SMS or email settings;
+never claim you changed them."""
 
 
 # Follow-up message generation system prompt

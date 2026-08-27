@@ -155,3 +155,118 @@ async def test_quote_intent_forces_fresh_lookup_before_customer_claim() -> None:
         agent_id=agent_id,
         latest_inbound_intent="Is quote Q-101 approved?",
     )
+
+
+@pytest.mark.asyncio
+async def test_prepare_booking_returns_canonical_summary_without_second_model_turn() -> None:
+    workspace_id = uuid.uuid4()
+    agent = SimpleNamespace(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        text_max_context_messages=20,
+        enabled_tools=["book_appointment"],
+        system_prompt="Help the customer book.",
+        language="en",
+        temperature=0.2,
+    )
+    conversation = SimpleNamespace(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        contact_id=None,
+        contact_phone="+15125550100",
+    )
+    latest_message = "Monday at 10, phone, use lead@example.com."
+    confirmation = (
+        "Please confirm: 30-minute phone call on Tuesday, September 1, 2099 at "
+        "10:00 AM America/New_York, invitation to lead@example.com. Is that correct?"
+    )
+    tool_call = SimpleNamespace(
+        id="call-prepare",
+        function=SimpleNamespace(
+            name="prepare_booking",
+            arguments=json.dumps(
+                {
+                    "date": "2099-09-01",
+                    "time": "10:00",
+                    "email": "lead@example.com",
+                    "duration_minutes": 30,
+                    "call_type": "phone_call",
+                }
+            ),
+        ),
+    )
+    completion = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=None, tool_calls=[tool_call]))]
+    )
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(
+        side_effect=[completion, RuntimeError("unexpected second model turn")]
+    )
+    executor = MagicMock()
+    executor.handle_tool_calls = AsyncMock(
+        return_value=[
+            {
+                "tool_call_id": "call-prepare",
+                "role": "tool",
+                "content": json.dumps(
+                    {
+                        "success": True,
+                        "booking_draft_prepared": True,
+                        "direct_response": confirmation,
+                    }
+                ),
+            }
+        ]
+    )
+
+    with (
+        patch(
+            "app.services.ai.text_response_generator.get_workspace_timezone",
+            AsyncMock(return_value="America/New_York"),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.build_message_context",
+            AsyncMock(return_value=[{"role": "user", "content": latest_message}]),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.get_offer_context",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.build_contact_generation_context",
+            AsyncMock(return_value=ContactGenerationContext(None, latest_message)),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.get_website_lead_qualification_policy",
+            return_value=None,
+        ),
+        patch(
+            "app.services.ai.text_response_generator.get_training_examples_prompt",
+            AsyncMock(return_value=""),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.knowledge_context_service.get_preamble_for_agent",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.knowledge_context_service.has_active_documents",
+            AsyncMock(return_value=False),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.AsyncOpenAI",
+            return_value=client,
+        ),
+        patch(
+            "app.services.ai.text_response_generator.TextToolExecutor",
+            return_value=executor,
+        ),
+    ):
+        response = await generate_text_response(
+            agent,
+            conversation,
+            AsyncMock(),
+            openai_api_key="test-key",
+        )
+
+    assert response == confirmation
+    assert client.chat.completions.create.await_count == 1

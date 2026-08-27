@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ChatHeader } from "@/components/conversation/chat-header";
 import { InboundMessageItem } from "@/components/conversation/inbound-message-item";
-import { QuoBridgeBanner } from "@/components/conversation/quo-bridge-banner";
 import type { Conversation, TimelineItem } from "@/types";
 
 vi.mock("@/hooks/useCapabilities", () => ({
@@ -61,17 +60,14 @@ const headerProps = {
 };
 
 describe("Quo conversation provenance", () => {
-  it("labels a mirrored message and exposes a safe new-tab link", () => {
+  it("labels a mirrored message without exposing a provider exit link", () => {
     render(<InboundMessageItem item={timelineItem} contactName="Ada" />);
 
-    expect(screen.getByText("Quo")).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /Open in Quo.*opens in a new tab/i });
-    expect(link).toHaveAttribute("href", timelineItem.external_url);
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getByText("via Quo")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Open in Quo/i })).not.toBeInTheDocument();
   });
 
-  it("labels a mirrored call with the same safe Quo action", () => {
+  it("labels a mirrored call without exposing a provider exit link", () => {
     render(
       <InboundMessageItem
         item={{
@@ -86,11 +82,8 @@ describe("Quo conversation provenance", () => {
       />,
     );
 
-    expect(screen.getByText("Quo")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open in Quo.*opens in a new tab/i })).toHaveAttribute(
-      "rel",
-      "noopener noreferrer",
-    );
+    expect(screen.getByText("via Quo")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Open in Quo/i })).not.toBeInTheDocument();
   });
 
   it("keeps provenance visible but drops an unvalidated external link", () => {
@@ -101,31 +94,21 @@ describe("Quo conversation provenance", () => {
       />,
     );
 
-    expect(screen.getByText("Quo")).toBeInTheDocument();
+    expect(screen.getByText("via Quo")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Open in Quo/i })).not.toBeInTheDocument();
   });
 
-  it("renders an accessible read-only bridge with the reply action", () => {
-    render(<QuoBridgeBanner replyUrl="https://my.quo.com/inbox/conversations/abc" />);
-
-    expect(
-      screen.getByRole("region", { name: "This Quo thread is read-only in Tribunal" }),
-    ).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /Reply in Quo.*opens in a new tab/i });
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
-  });
-
-  it("fails closed when no validated Quo reply link is available", () => {
-    render(<QuoBridgeBanner replyUrl="javascript:alert(1)" />);
-
-    expect(screen.getByRole("button", { name: "Reply in Quo unavailable" })).toBeDisabled();
-    expect(screen.queryByRole("link", { name: /Reply in Quo/i })).not.toBeInTheDocument();
-  });
-
   it("removes Tribunal AI and call controls only from Quo threads", () => {
-    const { rerender } = render(<ChatHeader {...headerProps} conversation={conversation("quo")} />);
+    const { rerender } = render(
+      <ChatHeader
+        {...headerProps}
+        quoPhoneNumber="+15555550999"
+        manualMessagingOnly
+        conversation={undefined}
+      />,
+    );
 
+    expect(screen.getByText(/via Quo/)).toHaveTextContent("(555) 555-0999");
     expect(screen.queryByRole("button", { name: /AI On/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Call contact" })).not.toBeInTheDocument();
 

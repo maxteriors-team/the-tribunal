@@ -17,6 +17,7 @@ from app.models.conversation import Conversation, Message
 from app.models.message_attachment import MessageAttachment
 from app.models.tag import ContactTag
 from app.services.contacts.contact_filters import apply_contact_filters, apply_contact_list_filters
+from app.services.quo.line import visible_conversation_provider_clause
 from app.services.tags import TagService
 from app.utils.phone import normalize_phone_safe
 
@@ -435,6 +436,7 @@ async def get_contact_timeline(
     offset: int = 0,
     include_attachments: bool = True,
     include_call_outcomes: bool = True,
+    conversation_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
     """Get the conversation timeline for a contact.
 
@@ -448,6 +450,7 @@ async def get_contact_timeline(
         offset: Number of newer matching messages to skip
         include_attachments: Whether to query attachment metadata
         include_call_outcomes: Whether to query structured voice-call outcomes
+        conversation_id: Optional tenant-scoped conversation to isolate one provider line
 
     Returns:
         List of timeline items (dicts)
@@ -479,10 +482,14 @@ async def get_contact_timeline(
             ),
         )
 
+    visible_provider = await visible_conversation_provider_clause(db, workspace_id)
     conv_query = select(Conversation).where(
         Conversation.workspace_id == workspace_id,
         conversation_contact_filter,
+        visible_provider,
     )
+    if conversation_id is not None:
+        conv_query = conv_query.where(Conversation.id == conversation_id)
 
     conv_result = await db.execute(conv_query)
     conversations = conv_result.scalars().all()
@@ -555,6 +562,8 @@ async def get_contact_timeline(
                     "direction": msg.direction,
                     "is_ai": msg.is_ai,
                     "agent_id": getattr(msg, "agent_id", None),
+                    "sender_user_id": msg.sender_user_id,
+                    "sender_display_name": msg.sender_display_name,
                     "content": msg.body,
                     "duration_seconds": msg.duration_seconds,
                     "recording_url": msg.recording_url,

@@ -132,11 +132,17 @@ export function useBulkDeleteContacts(workspaceId: string) {
 /**
  * Fetch the timeline for a contact with live polling
  */
-export function useContactTimeline(workspaceId: string, contactId: number, limit: number = 100) {
+export function useContactTimeline(
+  workspaceId: string,
+  contactId: number,
+  limit: number = 100,
+  conversationId?: string,
+  enabled: boolean = true,
+) {
   return useQuery({
-    queryKey: queryKeys.contacts.timeline(workspaceId, contactId, limit),
-    queryFn: () => contactsApi.getTimeline(workspaceId, contactId, limit),
-    enabled: !!workspaceId && !!contactId,
+    queryKey: queryKeys.contacts.timeline(workspaceId, contactId, limit, conversationId),
+    queryFn: () => contactsApi.getTimeline(workspaceId, contactId, limit, conversationId),
+    enabled: enabled && !!workspaceId && !!contactId,
     ...REALTIME,
     refetchInterval: 3_000,
     // Don't poll when the tab is not active

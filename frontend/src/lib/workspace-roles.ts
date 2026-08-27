@@ -23,6 +23,13 @@ export const ASSIGNABLE_ROLES = [
 
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
+export function canAssignWorkspaceRole(
+  actorRole: string,
+  targetRole: AssignableRole,
+): boolean {
+  return actorRole === "owner" || (actorRole === "admin" && targetRole !== "admin");
+}
+
 /** Human-readable label for any workspace role, including `owner`. */
 export const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",

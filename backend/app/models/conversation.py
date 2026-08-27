@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy import (
     Enum as SAEnum,
@@ -36,6 +37,7 @@ if TYPE_CHECKING:
     from app.models.phone_message import PhoneMessage
     from app.models.phone_number import PhoneNumber
     from app.models.prompt_version import PromptVersion
+    from app.models.user import User
     from app.models.workspace import Workspace
 
 
@@ -299,8 +301,22 @@ class Message(Base):
 
     __tablename__ = "messages"
     __table_args__ = (
-        UniqueConstraint("provider_message_id", name="uq_messages_provider_message_id"),
         UniqueConstraint("idempotency_key", name="uq_messages_idempotency_key"),
+        Index(
+            "uq_messages_legacy_provider_message_id",
+            "provider_message_id",
+            unique=True,
+            postgresql_where=text(
+                "source_provider IS DISTINCT FROM 'quo' AND provider_message_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_messages_quo_provider",
+            "source_provider",
+            "provider_message_id",
+            unique=True,
+            postgresql_where=text("source_provider = 'quo' AND provider_message_id IS NOT NULL"),
+        ),
         Index(
             "ix_messages_conversation_created_at",
             "conversation_id",
@@ -407,6 +423,15 @@ class Message(Base):
         index=True,
     )
 
+    # Human/provider sender attribution. Display names are immutable send-time snapshots.
+    sender_user_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    sender_display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_sender_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # AI attribution
     is_ai: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     agent_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -462,6 +487,7 @@ class Message(Base):
 
     # Relationships
     conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="messages")
+    sender_user: Mapped["User | None"] = relationship("User", foreign_keys=[sender_user_id])
     agent: Mapped["Agent | None"] = relationship(
         "Agent", back_populates="messages", foreign_keys=[agent_id]
     )

@@ -21,9 +21,13 @@ from app.models.conversation import (
     MessageChannel,
     MessageDirection,
     MessageStatus,
-    advances_message_status,
 )
-from app.services.quo.client import QUO_HISTORICAL_API_VERSION, QuoClient
+from app.services.quo.client import QUO_HISTORICAL_API_VERSION, QuoApiError, QuoClient
+from app.services.quo.reconciliation import (
+    QuoMessageSnapshot,
+    QuoReconciliationError,
+    reconcile_quo_message,
+)
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.webhooks.pipeline import WebhookDispatchResult
 from app.services.webhooks.quo import QuoWebhookEvent
@@ -79,15 +83,23 @@ class QuoSyncService:
         *,
         workspace_id: uuid.UUID,
         organization_id: str,
+        phone_number_id: str,
+        phone_number: str,
         client: QuoClient,
     ) -> None:
+        normalized_phone = normalize_phone_safe(phone_number)
+        if not phone_number_id.strip() or len(phone_number_id) > 255 or normalized_phone is None:
+            raise QuoSyncError("Quo selected phone number is unavailable")
         self.db = db
         self.workspace_id = workspace_id
         self.organization_id = organization_id
+        self.phone_number_id = phone_number_id
+        self.phone_number = normalized_phone
         self.client = client
+        self._sender_display_names: dict[str, str] = {}
 
     async def process(self, event: QuoWebhookEvent, log: Any) -> WebhookDispatchResult:
-        """Process supported events after a defense-in-depth organization check."""
+        """Process only resources owned by this workspace's selected Quo line."""
         if event.organization_id != self.organization_id:
             raise QuoSyncError("Quo event organization mismatch")
 
@@ -95,22 +107,38 @@ class QuoSyncService:
         if not isinstance(resource, dict):
             raise QuoSyncError("Quo event resource is missing")
 
-        if event.event_type == "contact.deleted":
-            # Quo deletion only removes the provider copy; CRM history is retained.
+        if event.event_type in _CONTACT_EVENTS:
             log.info(
-                "quo_contact_delete_preserved",
+                "quo_standalone_contact_ignored",
                 workspace_id=str(self.workspace_id),
-                quo_contact_id=_bounded_string(resource.get("id"), 255),
             )
-        elif event.event_type == "contact.updated":
-            await self._upsert_contact_resource(resource)
-        elif event.event_type in _MESSAGE_EVENTS:
-            await self._upsert_message(event, resource)
-        elif event.event_type in _VOICE_EVENTS:
-            await self._upsert_voice_event(event, resource)
-        elif event.event_type not in _CONTACT_EVENTS:
+            return WebhookDispatchResult.ignored("standalone_contact_event")
+        if event.event_type not in _MESSAGE_EVENTS | _VOICE_EVENTS:
             return WebhookDispatchResult.ignored("unsupported_event")
 
+        context = event.data.get("context")
+        resource_phone_number_id = resource.get("phoneNumberId")
+        if not isinstance(resource_phone_number_id, str) and isinstance(context, dict):
+            resource_phone_number_id = context.get("phoneNumberId")
+        if not isinstance(resource_phone_number_id, str) or not resource_phone_number_id:
+            log.info(
+                "quo_line_event_ignored",
+                workspace_id=str(self.workspace_id),
+                reason="missing_phone_number_id",
+            )
+            return WebhookDispatchResult.ignored("missing_phone_number_id")
+        if resource_phone_number_id != self.phone_number_id:
+            log.info(
+                "quo_line_event_ignored",
+                workspace_id=str(self.workspace_id),
+                reason="unselected_phone_number",
+            )
+            return WebhookDispatchResult.ignored("unselected_phone_number")
+
+        if event.event_type in _MESSAGE_EVENTS:
+            await self._upsert_message(event, resource)
+        else:
+            await self._upsert_voice_event(event, resource)
         return WebhookDispatchResult.processed()
 
     async def _upsert_contact_resource(
@@ -159,6 +187,8 @@ class QuoSyncService:
     ) -> None:
         resource_id = _required_string(resource.get("id"), "Quo message ID", 255)
         workspace_phone, contact_phone, direction = _message_participants(resource)
+        if workspace_phone != self.phone_number:
+            raise QuoSyncError("Quo message sender does not match the selected line")
         context = event.data.get("context")
         contact_ids = _contact_ids(context)
 
@@ -168,41 +198,83 @@ class QuoSyncService:
             contact_ids=contact_ids,
             channel=MessageChannel.SMS,
         )
-        message, created = await self._message(
-            event=event,
-            resource=resource,
-            resource_id=resource_id,
-            conversation=conversation,
-            direction=direction,
-        )
-        await self.db.flush()
-
         occurred_at = _resource_timestamp(resource)
-        self._update_conversation(
-            conversation=conversation,
-            message=message,
-            occurred_at=occurred_at,
-            created=created,
+        candidate_status = _STATUS_BY_EVENT[event.event_type]
+        body = _message_body(resource)
+        provider_sender_user_id = (
+            _bounded_string(resource.get("userId"), 255)
+            if direction == MessageDirection.OUTBOUND
+            else None
         )
+        sender_display_name = (
+            await self._sender_display_name(provider_sender_user_id)
+            if provider_sender_user_id is not None
+            else None
+        )
+        snapshot = QuoMessageSnapshot(
+            provider_message_id=resource_id,
+            conversation_id=conversation.id,
+            direction=direction,
+            sender=contact_phone if direction == MessageDirection.INBOUND else workspace_phone,
+            recipient=workspace_phone if direction == MessageDirection.INBOUND else contact_phone,
+            body=body,
+            status=candidate_status,
+            occurred_at=occurred_at,
+            sent_at=(
+                occurred_at
+                if direction == MessageDirection.OUTBOUND
+                and candidate_status
+                in {MessageStatus.SENT, MessageStatus.FAILED, MessageStatus.DELIVERED}
+                else None
+            ),
+            delivered_at=(
+                event.created_at_datetime if candidate_status == MessageStatus.DELIVERED else None
+            ),
+            external_url=_quo_deep_link(event.data.get("links")),
+            error_code=(
+                event.event_type.removeprefix("message.")
+                if candidate_status == MessageStatus.FAILED
+                else None
+            ),
+            error_message=(
+                "Quo reported message delivery failure"
+                if candidate_status == MessageStatus.FAILED
+                else None
+            ),
+            provider_sender_user_id=provider_sender_user_id,
+            sender_display_name=sender_display_name,
+        )
+        try:
+            reconciled = await reconcile_quo_message(
+                self.db,
+                workspace_id=self.workspace_id,
+                conversation=conversation,
+                snapshot=snapshot,
+            )
+        except QuoReconciliationError as exc:
+            raise QuoSyncError(str(exc)) from None
+
+        if not reconciled.created:
+            return
         _advance_contact_engagement(contact, occurred_at)
         await self._update_sla(conversation)
 
         opt_out_manager = OptOutManager()
-        is_opt_out, keyword = opt_out_manager.is_opt_out_keyword(message.body)
+        is_opt_out, keyword = opt_out_manager.is_opt_out_keyword(body)
         definite_opt_out = bool(
-            is_opt_out and keyword and message.body.strip().casefold() == keyword.casefold()
+            is_opt_out and keyword and body.strip().casefold() == keyword.casefold()
         )
-        if created and direction == MessageDirection.INBOUND and definite_opt_out:
+        if direction == MessageDirection.INBOUND and definite_opt_out:
             contact.sms_consent_status = "opted_out"
             contact.sms_consent_source = "quo_webhook"
             contact.sms_consent_collected_at = event.created_at_datetime
-            contact.sms_consent_notes = f"Opted out via Quo reply: {message.body[:100]}"
+            contact.sms_consent_notes = f"Opted out via Quo reply: {body[:100]}"
             await opt_out_manager.add_opt_out(
                 workspace_id=self.workspace_id,
                 phone_number=contact_phone,
                 db=self.db,
                 keyword=keyword,
-                source_message_id=message.id,
+                source_message_id=reconciled.message.id,
                 commit=False,
             )
 
@@ -225,6 +297,8 @@ class QuoSyncService:
         workspace_phone, contact_phone, direction, fetched_contact = await self._voice_participants(
             resource, context, contact_ids
         )
+        if workspace_phone != self.phone_number:
+            raise QuoSyncError("Quo call sender does not match the selected line")
         contact, conversation = await self._resolve_contact_conversation(
             workspace_phone=workspace_phone,
             contact_phone=contact_phone,
@@ -534,82 +608,18 @@ class QuoSyncService:
             conversation.source_provider = QUO_PROVIDER
         return conversation
 
-    async def _message(
-        self,
-        *,
-        event: QuoWebhookEvent,
-        resource: dict[str, Any],
-        resource_id: str,
-        conversation: Conversation,
-        direction: MessageDirection,
-    ) -> tuple[Message, bool]:
-        result = await self.db.execute(
-            select(Message)
-            .join(Conversation, Conversation.id == Message.conversation_id)
-            .where(
-                Conversation.workspace_id == self.workspace_id,
-                Message.source_provider == QUO_PROVIDER,
-                Message.provider_message_id == resource_id,
-            )
-            .with_for_update()
-        )
-        message = result.scalar_one_or_none()
-        if message is not None and message.conversation_id != conversation.id:
-            raise QuoSyncError("Quo message is bound to a different conversation")
-
-        body = _message_body(resource)
-        deep_link = _quo_deep_link(event.data.get("links"))
-        occurred_at = _resource_timestamp(resource)
-        candidate_status = _STATUS_BY_EVENT[event.event_type]
-        created = message is None
-
-        if message is None:
-            message = Message(
-                conversation_id=conversation.id,
-                channel=MessageChannel.SMS,
-                direction=direction,
-                status=candidate_status,
-                body=body,
-                provider_message_id=resource_id,
-                source_provider=QUO_PROVIDER,
-                external_url=deep_link,
-                created_at=occurred_at,
-                sent_at=occurred_at if direction == MessageDirection.OUTBOUND else None,
-            )
-            self.db.add(message)
+    async def _sender_display_name(self, provider_user_id: str) -> str:
+        cached = self._sender_display_names.get(provider_user_id)
+        if cached is not None:
+            return cached
+        try:
+            resource = await self.client.get_user(provider_user_id)
+        except QuoApiError:
+            display_name = provider_user_id
         else:
-            if message.direction != direction:
-                raise QuoSyncError("Quo message direction changed")
-            historical = event.api_version == QUO_HISTORICAL_API_VERSION
-            if not historical:
-                message.body = body
-            message.source_provider = QUO_PROVIDER
-            if deep_link and (not historical or message.external_url is None):
-                message.external_url = deep_link
-            if advances_message_status(message.status, candidate_status) or (
-                candidate_status == MessageStatus.DELIVERED
-                and message.status == MessageStatus.FAILED
-                and not historical
-            ):
-                message.status = candidate_status
-
-        if event.event_type == "message.delivered" and message.status == MessageStatus.DELIVERED:
-            delivered_at = event.created_at_datetime
-            if message.delivered_at is None or (
-                event.api_version != QUO_HISTORICAL_API_VERSION
-                and delivered_at < message.delivered_at
-            ):
-                message.delivered_at = delivered_at
-            message.error_code = None
-            message.error_message = None
-        elif (
-            event.event_type in {"message.failed", "message.undelivered"}
-            and message.status == MessageStatus.FAILED
-        ):
-            message.error_code = event.event_type.removeprefix("message.")
-            message.error_message = "Quo reported message delivery failure"
-
-        return message, created
+            display_name = _quo_user_display_name(resource, fallback=provider_user_id)
+        self._sender_display_names[provider_user_id] = display_name
+        return display_name
 
     def _update_conversation(
         self,
@@ -1208,6 +1218,20 @@ def _strict_string(value: Any, limit: int) -> str | None:
     if not normalized or len(normalized) > limit:
         return None
     return normalized
+
+
+def _quo_user_display_name(resource: Any, *, fallback: str) -> str:
+    if not isinstance(resource, dict):
+        return fallback
+    parts = [
+        value
+        for key in ("firstName", "lastName")
+        if (value := _strict_string(resource.get(key), 255)) is not None
+    ]
+    full_name = " ".join(parts)
+    if full_name and len(full_name) <= 255:
+        return full_name
+    return _strict_string(resource.get("email"), 255) or fallback
 
 
 def _bounded_string(value: Any, limit: int) -> str | None:

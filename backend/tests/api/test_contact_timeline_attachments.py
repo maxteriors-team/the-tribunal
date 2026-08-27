@@ -30,7 +30,7 @@ async def test_ready_attachment_redirects_to_short_lived_private_url() -> None:
         storage_key="workspaces/ws/messages/msg/attachments/photo.jpg",
     )
     db = MagicMock()
-    db.execute = AsyncMock(side_effect=[_Result(contact), _Result(attachment)])
+    db.execute = AsyncMock(side_effect=[_Result(contact), _Result(None), _Result(attachment)])
     storage = MagicMock()
     storage.create_download_url.return_value = (
         "https://private-bucket.railway.app/photo.jpg?signature=redacted"
@@ -60,7 +60,7 @@ async def test_ready_attachment_redirects_to_short_lived_private_url() -> None:
 async def test_cross_workspace_or_contact_attachment_returns_not_found() -> None:
     contact = MagicMock(phone_number="+14155552671")
     db = MagicMock()
-    db.execute = AsyncMock(side_effect=[_Result(contact), _Result(None)])
+    db.execute = AsyncMock(side_effect=[_Result(contact), _Result(None), _Result(None)])
 
     with pytest.raises(HTTPException) as exc_info:
         await get_timeline_attachment_content(
@@ -91,7 +91,7 @@ async def test_attachment_processing_state_is_explicit(
     contact = MagicMock(phone_number=None)
     attachment = MagicMock(status=attachment_status, storage_key=storage_key)
     db = MagicMock()
-    db.execute = AsyncMock(side_effect=[_Result(contact), _Result(attachment)])
+    db.execute = AsyncMock(side_effect=[_Result(contact), _Result(None), _Result(attachment)])
 
     with pytest.raises(HTTPException) as exc_info:
         await get_timeline_attachment_content(

@@ -63,6 +63,7 @@ def test_booking_tool_schemas_are_removed_until_persisted_qualification() -> Non
     policy = get_website_lead_qualification_policy(_agent(), pending_contact)
     assert policy is not None
     booking_tools = [
+        {"function": {"name": "prepare_booking"}},
         {"function": {"name": "book_appointment"}},
         {"function": {"name": "check_availability"}},
         {"function": {"name": "cancel_appointment"}},
@@ -82,16 +83,21 @@ def test_booking_tool_schemas_are_removed_until_persisted_qualification() -> Non
     ]
 
     assert pending_names == ["cancel_appointment", "mark_lead_qualified"]
-    assert qualified_names == ["book_appointment", "check_availability", "cancel_appointment"]
+    assert qualified_names == [
+        "prepare_booking",
+        "book_appointment",
+        "check_availability",
+        "cancel_appointment",
+    ]
 
 
 def test_text_booking_requires_explicit_call_type() -> None:
-    book_tool = next(
+    prepare_tool = next(
         tool
         for tool in get_text_booking_tools("America/New_York")
-        if tool["function"]["name"] == "book_appointment"
+        if tool["function"]["name"] == "prepare_booking"
     )
-    parameters = book_tool["function"]["parameters"]
+    parameters = prepare_tool["function"]["parameters"]
 
     assert "call_type" in parameters["required"]
     assert parameters["properties"]["call_type"]["enum"] == [

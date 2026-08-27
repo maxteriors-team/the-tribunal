@@ -79,15 +79,23 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         response_started_at = time.monotonic()
     log.info("processing_inbound_with_ai")
 
-    # Get conversation with agent
-    result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    # Get the tenant-bound conversation with its assigned agent.
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.workspace_id == workspace_id,
+        )
+    )
     conversation = result.scalar_one_or_none()
 
     if not conversation:
         log.error("conversation_not_found")
         return
-
-    if not conversation.ai_enabled or conversation.ai_paused:
+    if (
+        getattr(conversation, "source_provider", None) == "quo"
+        or not conversation.ai_enabled
+        or conversation.ai_paused
+    ):
         log.info("ai_disabled_for_conversation")
         return
 
@@ -95,8 +103,15 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         log.info("no_agent_assigned")
         return
 
-    # Get agent
-    agent_result = await db.execute(select(Agent).where(Agent.id == conversation.assigned_agent_id))
+    # Fail closed if a stale/corrupt assignment points outside this workspace.
+    agent_result = await db.execute(
+        select(Agent).where(
+            Agent.id == conversation.assigned_agent_id,
+            Agent.workspace_id == workspace_id,
+            Agent.is_active.is_(True),
+            Agent.channel_mode.in_(("text", "both")),
+        )
+    )
     agent = agent_result.scalar_one_or_none()
 
     if not agent or not agent.is_active:
@@ -571,7 +586,8 @@ async def _load_sendable_conversation(
         log.info("conversation_removed_before_ai_response_send")
         return None
     if (
-        not current_conversation.ai_enabled
+        current_conversation.source_provider == "quo"
+        or not current_conversation.ai_enabled
         or current_conversation.ai_paused
         or current_conversation.assigned_agent_id != agent_id
     ):
@@ -627,7 +643,8 @@ async def schedule_ai_response(
         except Exception:
             log.exception("delayed_response_error")
         finally:
-            _pending_responses.pop(key, None)
+            if _pending_responses.get(key) is task:
+                _pending_responses.pop(key, None)
 
     # Create and store task
     task = asyncio.create_task(delayed_response())

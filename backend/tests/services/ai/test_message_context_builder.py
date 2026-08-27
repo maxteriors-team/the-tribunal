@@ -10,6 +10,7 @@ import pytest
 from app.services.ai.contact_context_snapshot import ContactTimelineItem
 from app.services.ai.message_context_builder import (
     build_contact_generation_context,
+    extract_email_from_messages,
     get_latest_inbound_intent,
     select_relevant_cross_channel_history,
 )
@@ -44,6 +45,12 @@ def test_latest_inbound_intent_ignores_newer_assistant_turn() -> None:
     ]
 
     assert get_latest_inbound_intent(messages) == ("What did we discuss about gutters on the call?")
+
+
+def test_booking_email_falls_back_to_the_known_crm_contact() -> None:
+    assert (
+        extract_email_from_messages([], fallback_email="known@example.com") == "known@example.com"
+    )
 
 
 def test_relevant_prior_call_survives_newer_unrelated_sms_history() -> None:

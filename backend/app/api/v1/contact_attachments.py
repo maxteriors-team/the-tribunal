@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import load_only
 
-from app.api.deps import DB, CurrentUser, WorkspaceAccess
+from app.api.deps import DB, CanReadCRM, CanWriteCRM, CurrentUser, WorkspaceAccess
 from app.models.contact import Contact
 from app.models.contact_attachment import ContactAttachment
 from app.schemas.contact_attachment import (
@@ -103,6 +103,7 @@ async def list_contact_attachments(
     workspace_id: uuid.UUID,
     contact_id: int,
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
     db: DB,
 ) -> ContactAttachmentListResponse:
     """List attachment metadata for a contact, newest first. Never loads bytes."""
@@ -137,6 +138,7 @@ async def upload_contact_attachment(
     contact_id: int,
     file: UploadFile,
     workspace: WorkspaceAccess,
+    _gate: CanWriteCRM,
     current_user: CurrentUser,
     db: DB,
 ) -> ContactAttachmentResponse:
@@ -187,6 +189,7 @@ async def download_contact_attachment(
     contact_id: int,
     attachment_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
     db: DB,
 ) -> Response:
     """Serve the attachment bytes (inline for safe types, download otherwise)."""
@@ -224,6 +227,7 @@ async def delete_contact_attachment(
     contact_id: int,
     attachment_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    _gate: CanWriteCRM,
     db: DB,
 ) -> None:
     """Remove an attachment from a contact."""

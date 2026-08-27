@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.sql import Select
 
@@ -18,6 +18,8 @@ from app.api.v1 import voice_campaigns as voice_campaigns_module
 from app.models.agent import Agent
 from app.models.campaign import Campaign, CampaignStatus, CampaignType
 from app.models.contact import Contact
+from app.models.phone_number import PhoneNumber
+from app.schemas.campaign import VoiceCampaignCreate
 
 WS_ID = uuid.uuid4()
 CAMPAIGN_ID = uuid.uuid4()
@@ -124,6 +126,28 @@ def _make_campaign(*, campaign_id: uuid.UUID = CAMPAIGN_ID) -> Campaign:
     )
 
 
+def _make_sender(
+    *,
+    workspace_id: uuid.UUID = WS_ID,
+    is_active: bool = True,
+    voice_enabled: bool = True,
+) -> PhoneNumber:
+    return PhoneNumber(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        phone_number="+15551234567",
+        is_active=is_active,
+        sms_enabled=True,
+        voice_enabled=voice_enabled,
+        imessage_enabled=False,
+    )
+
+
+def _query_sql(query: object) -> str:
+    assert isinstance(query, Select)
+    return str(query.compile(compile_kwargs={"literal_binds": True})).lower()
+
+
 def _make_contact(contact_id: int) -> Contact:
     return Contact(
         id=contact_id,
@@ -150,9 +174,7 @@ def _make_auth_test_app(mock_db: AsyncMock) -> FastAPI:
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_workspace] = override_get_workspace
     app.dependency_overrides[get_current_user] = override_get_current_user
-    app.dependency_overrides[get_membership] = lambda: MagicMock(
-        role="owner", workspace_id=WS_ID
-    )
+    app.dependency_overrides[get_membership] = lambda: MagicMock(role="owner", workspace_id=WS_ID)
     app.include_router(
         voice_campaigns_module.router,
         prefix="/api/v1/workspaces/{workspace_id}/voice-campaigns",
@@ -255,3 +277,95 @@ async def test_add_contacts_to_voice_campaign_enrolls_only_workspace_contacts(
     created_link = mock_db.add.call_args.args[0]
     assert created_link.contact_id == 1
     assert campaign.total_contacts == 1
+
+
+@pytest.mark.parametrize(
+    ("sender", "invalid_reason"),
+    [
+        (_make_sender(workspace_id=uuid.uuid4()), "foreign"),
+        (_make_sender(is_active=False), "inactive"),
+        (_make_sender(voice_enabled=False), "wrong-capability"),
+    ],
+    ids=["foreign", "inactive", "wrong-capability"],
+)
+async def test_create_voice_campaign_rejects_invalid_sender_number(
+    mock_db: AsyncMock,
+    sender: PhoneNumber,
+    invalid_reason: str,
+) -> None:
+    voice_agent = _make_agent(channel_mode="voice")
+    phone_queries: list[object] = []
+
+    async def execute(query: object) -> MagicMock:
+        sql = _query_sql(query)
+        if "phone_numbers" in sql:
+            phone_queries.append(query)
+            filtered_out = (
+                (invalid_reason == "foreign" and "workspace_id" in sql)
+                or (invalid_reason == "inactive" and "is_active" in sql)
+                or (invalid_reason == "wrong-capability" and "voice_enabled" in sql)
+            )
+            return _scalar_result(None if filtered_out else sender)
+        if "agents" in sql:
+            return _scalar_result(voice_agent)
+        raise AssertionError(f"Unexpected query: {sql}")
+
+    mock_db.execute = AsyncMock(side_effect=execute)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await voice_campaigns_module.create_voice_campaign(
+            workspace_id=WS_ID,
+            campaign_in=VoiceCampaignCreate(
+                name="Voice Campaign",
+                from_phone_number=sender.phone_number,
+                voice_agent_id=voice_agent.id,
+            ),
+            current_user=_make_user(),
+            db=mock_db,
+            workspace=_make_workspace(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert phone_queries
+    _assert_scoped_query(phone_queries[0], "phone_numbers")
+    mock_db.add.assert_not_called()
+
+
+async def test_start_voice_campaign_rejects_foreign_sender_number(
+    mock_db: AsyncMock,
+) -> None:
+    campaign = _make_campaign()
+    foreign_sender = _make_sender(workspace_id=uuid.uuid4())
+    voice_agent = _make_agent(agent_id=campaign.voice_agent_id, channel_mode="voice")
+    phone_queries: list[object] = []
+
+    async def execute(query: object) -> MagicMock:
+        sql = _query_sql(query)
+        if "phone_numbers" in sql:
+            phone_queries.append(query)
+            return _scalar_result(None if "workspace_id" in sql else foreign_sender)
+        if "count(" in sql:
+            result = MagicMock()
+            result.scalar.return_value = 1
+            return result
+        if "agents" in sql:
+            return _scalar_result(voice_agent)
+        if "campaigns" in sql:
+            return _scalar_result(campaign)
+        raise AssertionError(f"Unexpected query: {sql}")
+
+    mock_db.execute = AsyncMock(side_effect=execute)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await voice_campaigns_module.start_voice_campaign(
+            workspace_id=WS_ID,
+            campaign_id=campaign.id,
+            current_user=_make_user(),
+            db=mock_db,
+            workspace=_make_workspace(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert phone_queries
+    _assert_scoped_query(phone_queries[0], "phone_numbers")
+    mock_db.commit.assert_not_awaited()

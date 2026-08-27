@@ -47,6 +47,7 @@ import {
   ASSIGNABLE_ROLES,
   ROLE_DESCRIPTIONS,
   ROLE_LABELS,
+  canAssignWorkspaceRole,
   type AssignableRole,
 } from "@/lib/workspace-roles";
 interface EditMemberDialogProps {
@@ -78,9 +79,13 @@ export function EditMemberDialog({
     ? (member.role as AssignableRole)
     : "member";
   const [selectedRole, setSelectedRole] = useState<AssignableRole>(initialRole);
-
-  // Can only edit if current user is owner/admin and target is not owner
-  const canEditRole = member.role !== "owner" && currentUserRole !== "member";
+  const availableRoles = ASSIGNABLE_ROLES.filter((role) =>
+    canAssignWorkspaceRole(currentUserRole, role),
+  );
+  const canEditRole =
+    member.role !== "owner" &&
+    (ASSIGNABLE_ROLES as readonly string[]).includes(member.role) &&
+    canAssignWorkspaceRole(currentUserRole, member.role as AssignableRole);
   // Technician writes are gated on WorkspaceManager (owner/admin/manager).
   const canManageRoster = ["owner", "admin", "manager"].includes(currentUserRole);
   // Linking a login to a booking calendar decides whose calendar an appointment
@@ -216,7 +221,7 @@ export function EditMemberDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ASSIGNABLE_ROLES.map((role) => (
+                  {availableRoles.map((role) => (
                     <SelectItem key={role} value={role}>
                       <div>
                         <div className="font-medium">{ROLE_LABELS[role]}</div>

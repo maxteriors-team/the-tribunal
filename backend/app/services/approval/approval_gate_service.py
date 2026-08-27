@@ -20,6 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
 from app.models.conversation import Conversation
+from app.models.conversation_booking_draft import (
+    BookingDraftCallType,
+    ConversationBookingDraft,
+)
 from app.models.human_profile import HumanProfile
 from app.models.pending_action import PendingAction
 from app.models.workspace import Workspace
@@ -160,7 +164,21 @@ class BookAppointmentActionHandler:
         from app.services.appointments.booking_finalizer import finalize_booking, load_agent
         from app.services.calendar.booking import BookingService
 
-        payload = action.action_payload
+        payload = dict(action.action_payload)
+        draft_or_error = await self._validated_text_booking_draft(db, action, payload)
+        if isinstance(draft_or_error, dict):
+            return draft_or_error
+        draft = draft_or_error
+        if draft is not None:
+            payload.update(
+                {
+                    "date": draft.date.isoformat(),
+                    "time": draft.time.strftime("%H:%M"),
+                    "email": draft.email,
+                    "duration_minutes": draft.duration_minutes,
+                    "call_type": BookingDraftCallType(draft.call_type).value,
+                }
+            )
 
         contact = await self._resolve_contact(db, action)
         if contact is None:
@@ -197,10 +215,13 @@ class BookAppointmentActionHandler:
             contact_name=str(payload.get("name") or contact.full_name or "Customer"),
             duration_minutes=duration_minutes,
             phone_number=payload.get("phone_number") or contact.phone_number,
+            service_type=payload.get("call_type"),
         )
         if not booking_result.success:
             return {"error": "slot_unavailable", "detail": booking_result.error}
 
+        if draft is not None:
+            await db.delete(draft)
         agent = await load_agent(db, action.agent_id)
         appointment = await finalize_booking(
             db,
@@ -210,8 +231,11 @@ class BookAppointmentActionHandler:
             scheduled_at=scheduled_at,
             duration_minutes=duration_minutes,
             notes=payload.get("notes"),
+            service_type=payload.get("call_type"),
             verify_availability=agent is not None,
         )
+        if draft is not None:
+            await db.commit()
 
         logger.info(
             "Approved action %s booked appointment %s at %s",
@@ -225,6 +249,56 @@ class BookAppointmentActionHandler:
             "scheduled_at": scheduled_at.isoformat(),
             "timezone": timezone,
         }
+
+    @staticmethod
+    async def _validated_text_booking_draft(
+        db: AsyncSession,
+        action: PendingAction,
+        payload: dict[str, Any],
+    ) -> ConversationBookingDraft | dict[str, Any] | None:
+        """Reject an approved SMS action if its confirmed draft was replaced."""
+        marker = payload.get("booking_draft_prepared_at")
+        if marker is None:
+            return None  # Legacy and voice actions predate persisted SMS drafts.
+        context = action.context or {}
+        if context.get("source") != "text_conversation":
+            return {"error": "booking_draft_context_invalid", "action_id": str(action.id)}
+        raw_duration = payload.get("duration_minutes")
+        try:
+            conversation_id = uuid.UUID(str(context.get("conversation_id", "")))
+            expected_prepared_at = datetime.fromisoformat(str(marker))
+            if expected_prepared_at.tzinfo is None:
+                raise ValueError("booking draft timestamp must include a timezone")
+            if not isinstance(raw_duration, (str, int)) or isinstance(raw_duration, bool):
+                raise ValueError("booking draft duration must be an integer")
+            duration_minutes = int(raw_duration)
+        except (TypeError, ValueError):
+            return {"error": "booking_draft_changed", "action_id": str(action.id)}
+
+        draft_result = await db.execute(
+            select(ConversationBookingDraft).where(
+                ConversationBookingDraft.conversation_id == conversation_id,
+                ConversationBookingDraft.workspace_id == action.workspace_id,
+            )
+        )
+        draft = draft_result.scalar_one_or_none()
+        if draft is None:
+            return {"error": "booking_draft_missing", "action_id": str(action.id)}
+
+        prepared_at = draft.prepared_at
+        if prepared_at.tzinfo is None:
+            prepared_at = prepared_at.replace(tzinfo=UTC)
+        payload_matches = (
+            expected_prepared_at.astimezone(UTC) == prepared_at.astimezone(UTC)
+            and str(payload.get("date")) == draft.date.isoformat()
+            and str(payload.get("time")) == draft.time.strftime("%H:%M")
+            and str(payload.get("email")) == draft.email
+            and duration_minutes == draft.duration_minutes
+            and str(payload.get("call_type")) == BookingDraftCallType(draft.call_type).value
+        )
+        if not payload_matches:
+            return {"error": "booking_draft_changed", "action_id": str(action.id)}
+        return draft
 
     @staticmethod
     async def _resolve_contact(db: AsyncSession, action: PendingAction) -> Contact | None:

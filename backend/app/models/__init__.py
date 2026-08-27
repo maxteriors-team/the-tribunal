@@ -161,6 +161,7 @@ from app.models.prospect_signal import (
     ProspectSignalStatus,
     ProspectSignalType,
 )
+from app.models.quo_send_attempt import QuoSendAttempt, QuoSendAttemptState
 from app.models.quote import Quote, QuoteLineItem
 from app.models.quote_followup_touch import QuoteFollowupTouch
 from app.models.recurring_job import RecurrenceFrequency, RecurringJobTemplate
@@ -287,6 +288,8 @@ __all__ = [
     "InvoicePaymentReceiptOutbox",
     "TimeEntry",
     "JobExpense",
+    "QuoSendAttempt",
+    "QuoSendAttemptState",
     "Quote",
     "QuoteLineItem",
     "QuoteFollowupTouch",

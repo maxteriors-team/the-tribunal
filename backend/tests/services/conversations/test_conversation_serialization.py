@@ -3,8 +3,10 @@
 import uuid
 from datetime import UTC, datetime
 
+import pytest
+
 from app.models.contact import Contact
-from app.models.conversation import Conversation, ConversationStatus
+from app.models.conversation import Conversation, ConversationStatus, MessageDirection
 from app.schemas.conversation import MessageResponse
 from app.services.conversations.conversation_service import serialize_conversation
 from tests.factories import ContactFactory, ConversationFactory, MessageFactory
@@ -79,3 +81,30 @@ class TestSerializeConversation:
         assert response.source_provider == "quo"
         assert response.external_url == "https://app.quo.com/messages/example"
         assert response.is_voicemail is False
+
+
+class TestMessageResponse:
+    """Message payloads preserve exact, nullable sender attribution."""
+
+    @pytest.mark.parametrize(
+        ("sender_user_id", "sender_display_name"),
+        [(314, "Jordan Lee"), (None, None)],
+        ids=["attributed-human", "historical-outbound"],
+    )
+    def test_serializes_nullable_sender_attribution(
+        self,
+        sender_user_id: int | None,
+        sender_display_name: str | None,
+    ) -> None:
+        message = MessageFactory.build(
+            direction=MessageDirection.OUTBOUND,
+            sender_user_id=sender_user_id,
+            sender_display_name=sender_display_name,
+        )
+
+        response = MessageResponse.model_validate(message)
+
+        assert response.model_dump(include={"sender_user_id", "sender_display_name"}) == {
+            "sender_user_id": sender_user_id,
+            "sender_display_name": sender_display_name,
+        }

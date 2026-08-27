@@ -316,6 +316,8 @@ class TimelineItem(BaseModel):
     direction: str | None = None
     is_ai: bool = False
     agent_id: uuid.UUID | None = None
+    sender_user_id: int | None = None
+    sender_display_name: str | None = None
     content: str
     duration_seconds: int | None = None
     recording_url: str | None = None

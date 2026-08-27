@@ -7,17 +7,33 @@ error-path branches (e.g. state-machine transitions). DB is fully mocked.
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.sql import Select
 
 from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import campaigns as campaigns_module
 
 WS_ID = uuid.uuid4()
 CAMPAIGN_ID = uuid.uuid4()
+
+
+def _scalar_result(value: object | None) -> MagicMock:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = value
+    return result
+
+
+def _assert_sender_query_is_workspace_scoped(query: object) -> None:
+    assert isinstance(query, Select)
+    compiled = str(query.compile(compile_kwargs={"literal_binds": True})).lower()
+    assert "phone_numbers" in compiled
+    assert "workspace_id" in compiled
+    assert WS_ID.hex in compiled
 
 
 @asynccontextmanager
@@ -61,6 +77,8 @@ def _make_mock_campaign(
     c.status = status
     c.from_phone_number = "+15551234567"
     c.initial_message = "Hello"
+    c.email_subject = None
+    c.pre_booking = None
     c.ai_enabled = True
     c.qualification_criteria = None
     c.scheduled_start = None
@@ -341,6 +359,30 @@ class TestUpdateCampaign:
 
         assert response.status_code == 400
 
+    async def test_update_rejects_foreign_agent(
+        self, client: AsyncClient, mock_db: AsyncMock
+    ) -> None:
+        campaign = _make_mock_campaign()
+        mock_db.execute = AsyncMock(return_value=_scalar_result(None))
+
+        with (
+            patch(
+                "app.api.v1.campaigns.get_or_404",
+                new=AsyncMock(return_value=campaign),
+            ),
+            patch(
+                "app.api.v1.campaigns._validate_campaign_sender",
+                new=AsyncMock(),
+            ),
+        ):
+            response = await client.put(
+                f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}",
+                json={"agent_id": str(uuid.uuid4())},
+            )
+
+        assert response.status_code == 404
+        mock_db.commit.assert_not_awaited()
+
 
 class TestStartCampaign:
     """POST /campaigns/{id}/start state transitions."""
@@ -351,6 +393,39 @@ class TestStartCampaign:
             f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/start"
         )
         assert response.status_code == 401
+
+    async def test_start_rejects_legacy_foreign_agent(
+        self, client: AsyncClient, mock_db: AsyncMock
+    ) -> None:
+        campaign = _make_mock_campaign()
+        campaign.agent_id = uuid.uuid4()
+        mock_db.execute = AsyncMock(return_value=_scalar_result(None))
+
+        with (
+            patch(
+                "app.api.v1.campaigns.get_or_404",
+                new=AsyncMock(return_value=campaign),
+            ),
+            patch(
+                "app.api.v1.campaigns._validate_campaign_sender",
+                new=AsyncMock(),
+            ),
+            patch(
+                "app.api.v1.campaigns.start_campaign_lifecycle",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        status=SimpleNamespace(value="running"),
+                        message="started",
+                    )
+                ),
+            ),
+        ):
+            response = await client.post(
+                f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/start"
+            )
+
+        assert response.status_code == 404
+        mock_db.commit.assert_not_awaited()
 
     async def test_start_wrong_status_returns_400(self, client: AsyncClient) -> None:
         """POST /campaigns/{id}/start when already running returns 400."""
@@ -546,3 +621,89 @@ class TestDeleteCampaign:
             response = await client.delete(f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}")
 
         assert response.status_code == 400
+
+
+class TestCampaignSenderIsolation:
+    """Campaign sender lookups must remain inside the route workspace."""
+
+    async def test_create_hides_foreign_sender_number(
+        self, client: AsyncClient, mock_db: AsyncMock
+    ) -> None:
+        mock_db.execute = AsyncMock(return_value=_scalar_result(None))
+
+        response = await client.post(
+            f"/api/v1/workspaces/{WS_ID}/campaigns",
+            json={
+                "name": "Tenant-safe campaign",
+                "from_phone_number": "+15551234567",
+                "initial_message": "Hi",
+            },
+        )
+
+        assert response.status_code == 400
+        _assert_sender_query_is_workspace_scoped(mock_db.execute.await_args.args[0])
+
+    async def test_update_hides_foreign_sender_number(
+        self, client: AsyncClient, mock_db: AsyncMock
+    ) -> None:
+        mock_db.execute = AsyncMock(return_value=_scalar_result(None))
+
+        with patch(
+            "app.api.v1.campaigns.get_or_404",
+            new=AsyncMock(return_value=_make_mock_campaign()),
+        ):
+            response = await client.put(
+                f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}",
+                json={"from_phone_number": "+15551234567"},
+            )
+
+        assert response.status_code == 400
+        _assert_sender_query_is_workspace_scoped(mock_db.execute.await_args.args[0])
+
+    async def test_start_hides_foreign_sender_number(
+        self, client: AsyncClient, mock_db: AsyncMock
+    ) -> None:
+        mock_db.execute = AsyncMock(return_value=_scalar_result(None))
+
+        with patch(
+            "app.api.v1.campaigns.get_or_404",
+            new=AsyncMock(return_value=_make_mock_campaign()),
+        ):
+            response = await client.post(
+                f"/api/v1/workspaces/{WS_ID}/campaigns/{CAMPAIGN_ID}/start"
+            )
+
+        assert response.status_code == 400
+        _assert_sender_query_is_workspace_scoped(mock_db.execute.await_args.args[0])
+
+    @pytest.mark.parametrize(
+        ("sender", "expected_detail"),
+        [
+            (MagicMock(sms_enabled=True, imessage_enabled=False), "not active"),
+            (MagicMock(sms_enabled=False, imessage_enabled=False), "SMS or iMessage"),
+        ],
+        ids=["inactive", "wrong-capability"],
+    )
+    async def test_create_rejects_unusable_sender_number(
+        self,
+        client: AsyncClient,
+        mock_db: AsyncMock,
+        sender: MagicMock,
+        expected_detail: str,
+    ) -> None:
+        # An inactive row is absent from the active-only lookup. The second case
+        # returns an active row whose text capabilities are unusable.
+        value = None if expected_detail == "not active" else sender
+        mock_db.execute = AsyncMock(return_value=_scalar_result(value))
+
+        response = await client.post(
+            f"/api/v1/workspaces/{WS_ID}/campaigns",
+            json={
+                "name": "Invalid sender campaign",
+                "from_phone_number": "+15551234567",
+                "initial_message": "Hi",
+            },
+        )
+
+        assert response.status_code == 400
+        assert expected_detail.lower() in response.json()["detail"].lower()

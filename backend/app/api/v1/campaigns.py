@@ -22,7 +22,6 @@ from app.db.pagination import paginate
 from app.models.agent import Agent
 from app.models.campaign import Campaign, CampaignContact, CampaignStatus, CampaignType
 from app.models.contact import Contact
-from app.models.phone_number import PhoneNumber
 from app.models.prebooking import PreBookingCampaignConfig
 from app.schemas.campaign import (
     CampaignAnalytics,
@@ -48,6 +47,7 @@ from app.services.campaigns.campaign_lifecycle import (
     start_campaign as start_campaign_lifecycle,
 )
 from app.services.campaigns.guarantee_tracker import check_guarantee_expiry
+from app.services.telephony.phone_number_resolver import resolve_workspace_phone_number
 from app.utils.datetime import parse_time_string
 
 router = APIRouter(
@@ -57,26 +57,35 @@ router = APIRouter(
 )
 
 
-async def _validate_campaign_sender(db: AsyncSession, from_phone_number: str | None) -> None:
-    """Ensure a campaign sender has a usable text channel."""
+async def _validate_campaign_sender(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    from_phone_number: str | None,
+) -> None:
+    """Ensure a campaign sender is an active workspace-owned text channel."""
     if not from_phone_number:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A sender phone number is required for this campaign type.",
         )
-    sender_result = await db.execute(
-        select(PhoneNumber).where(
-            PhoneNumber.phone_number == from_phone_number,
-            PhoneNumber.is_active.is_(True),
-        )
+
+    sender = await resolve_workspace_phone_number(
+        db,
+        workspace_id,
+        from_phone_number,
+        capability="text",
     )
-    sender = sender_result.scalar_one_or_none()
     if sender is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Campaign sender phone number is not active",
+            detail=(
+                "Campaign sender phone number is not active, not owned by this workspace, "
+                "or does not have SMS or iMessage enabled"
+            ),
         )
 
+    # Keep this defensive check explicit for callers using mocked sessions and
+    # to make the accepted text capabilities clear at the API boundary.
     if not sender.sms_enabled and not sender.imessage_enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -93,6 +102,27 @@ async def _validate_campaign_sender(db: AsyncSession, from_phone_number: str | N
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Telnyx SMS is not configured for campaign sending",
+        )
+
+
+async def _validate_campaign_agent(
+    db: AsyncSession, workspace_id: uuid.UUID, agent_id: uuid.UUID
+) -> None:
+    """Require an active, text-capable agent owned by the campaign workspace."""
+    agent = (
+        await db.execute(
+            select(Agent).where(
+                Agent.id == agent_id,
+                Agent.workspace_id == workspace_id,
+                Agent.is_active.is_(True),
+                Agent.channel_mode.in_(("text", "both")),
+            )
+        )
+    ).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Active text-capable agent not found",
         )
 
 
@@ -127,19 +157,8 @@ async def create_campaign(
     _gate: CanWriteOutreach,
 ) -> Campaign:
     """Create a new campaign."""
-    # Verify agent if provided
     if campaign_in.agent_id:
-        agent_result = await db.execute(
-            select(Agent).where(
-                Agent.id == campaign_in.agent_id,
-                Agent.workspace_id == workspace_id,
-            )
-        )
-        if not agent_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Agent not found",
-            )
+        await _validate_campaign_agent(db, workspace_id, campaign_in.agent_id)
 
     # Email campaigns send via Resend and have no phone sender; SMS/voice
     # campaigns must resolve to a usable text channel.
@@ -160,7 +179,7 @@ async def create_campaign(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="A sender phone number is required for this campaign type.",
             )
-        await _validate_campaign_sender(db, campaign_in.from_phone_number)
+        await _validate_campaign_sender(db, workspace_id, campaign_in.from_phone_number)
 
     # Convert time strings to datetime.time objects
     campaign_data = campaign_in.model_dump()
@@ -213,10 +232,16 @@ async def update_campaign(
             detail="Can only update draft or paused campaigns",
         )
 
-    # Update fields
+    # Validate tenant-bound resources before applying any campaign updates.
     update_data = campaign_in.model_dump(exclude_unset=True)
-    if "from_phone_number" in update_data and update_data["from_phone_number"] is not None:
-        await _validate_campaign_sender(db, update_data["from_phone_number"])
+    if (agent_id := update_data.get("agent_id")) is not None:
+        await _validate_campaign_agent(db, workspace_id, agent_id)
+    if campaign.campaign_type != CampaignType.EMAIL:
+        from_phone_number = update_data.get(
+            "from_phone_number",
+            campaign.from_phone_number,
+        )
+        await _validate_campaign_sender(db, workspace_id, from_phone_number)
 
     # Convert time strings to datetime.time objects
     if "sending_hours_start" in update_data:
@@ -244,9 +269,12 @@ async def start_campaign(
     """Start a campaign."""
     campaign = await get_or_404(db, Campaign, campaign_id, workspace_id=workspace_id)
 
+    if campaign.agent_id is not None:
+        await _validate_campaign_agent(db, workspace_id, campaign.agent_id)
+
     try:
         if campaign.campaign_type != CampaignType.EMAIL:
-            await _validate_campaign_sender(db, campaign.from_phone_number)
+            await _validate_campaign_sender(db, workspace_id, campaign.from_phone_number)
         lifecycle_result = await start_campaign_lifecycle(db, campaign)
     except CampaignLifecycleError as exc:
         raise HTTPException(

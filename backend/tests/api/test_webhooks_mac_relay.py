@@ -23,6 +23,7 @@ from app.api.webhooks import mac_relay_handlers as handlers
 from app.api.webhooks.mac_relay import router as mac_relay_router
 from app.core.config import settings as app_settings
 from app.models.conversation import Message, MessageChannel
+from app.services.telephony.inbound_types import InboundMessageIngestResult
 from app.services.telephony.mac_relay_auth import MacRelayCredential
 
 
@@ -317,7 +318,7 @@ async def test_process_inbound_mac_relay_message_prefixes_provider_id(
     expected.provider_message_id = "mac-relay:relay-guid-1"
     expected.channel = MessageChannel.IMESSAGE
 
-    persist = AsyncMock(return_value=expected)
+    persist = AsyncMock(return_value=InboundMessageIngestResult(expected, created=True))
     monkeypatch.setattr(handlers, "persist_inbound_text_message", persist)
 
     workspace_id = uuid.uuid4()

@@ -26,6 +26,7 @@ from app.services.telephony.inbound_text import (
     persist_inbound_text_message,
     process_inbound_text_event,
 )
+from app.services.telephony.inbound_types import InboundMessageIngestResult
 from app.services.telephony.mac_relay_auth import MacRelayCredential
 from app.utils.phone import normalize_phone_safe
 
@@ -118,10 +119,10 @@ async def handle_mac_relay_message(
 
 def _build_mac_relay_ingestor(
     log: Any,
-) -> Callable[[AsyncSession, InboundTextEvent], Awaitable[Message]]:
+) -> Callable[[AsyncSession, InboundTextEvent], Awaitable[InboundMessageIngestResult]]:
     """Build a relay ingestor bound to the request logger."""
 
-    async def ingest(db: AsyncSession, event: InboundTextEvent) -> Message:
+    async def ingest(db: AsyncSession, event: InboundTextEvent) -> InboundMessageIngestResult:
         return await persist_inbound_text_message(
             db=db,
             provider_message_id=event.provider_message_id,
@@ -234,7 +235,7 @@ async def process_inbound_mac_relay_message(
         workspace_id=workspace_id,
         channel=MessageChannel.IMESSAGE,
     )
-    message = await persist_inbound_text_message(
+    ingest_result = await persist_inbound_text_message(
         db=db,
         provider_message_id=event.provider_message_id,
         from_number=event.from_number,
@@ -244,6 +245,7 @@ async def process_inbound_mac_relay_message(
         channel=MessageChannel.IMESSAGE,
         log=_NoopLog(),
     )
+    message = ingest_result.message
     if created_at is not None:
         message.created_at = created_at if created_at.tzinfo else created_at.replace(tzinfo=UTC)
         await db.commit()

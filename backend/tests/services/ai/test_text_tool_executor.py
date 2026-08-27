@@ -1,12 +1,18 @@
 """Regression tests for SMS booking result behavior."""
 
+import json
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.models.conversation import MessageDirection
+from app.models.conversation_booking_draft import (
+    BookingDraftCallType,
+    ConversationBookingDraft,
+)
 from app.services.ai.text_tool_executor import TextToolExecutor
 from app.services.ai.website_lead_qualification import WebsiteLeadQualificationPolicy
 
@@ -116,31 +122,245 @@ async def test_ai_staff_routing_requires_connected_google_calendar() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sms_executor_passes_explicit_confirmation_to_booking_guard() -> None:
+async def test_prepare_booking_persists_one_scoped_confirmation_draft() -> None:
     workspace_id = uuid.uuid4()
+    conversation_id = uuid.uuid4()
+    db = AsyncMock()
+    draft_result = MagicMock()
+    draft_result.scalar_one_or_none.return_value = conversation_id
+    db.execute.return_value = draft_result
     executor = TextToolExecutor(
         agent=SimpleNamespace(id=uuid.uuid4(), workspace_id=workspace_id),
-        conversation=SimpleNamespace(id=uuid.uuid4(), workspace_id=workspace_id),
-        db=AsyncMock(),
+        conversation=SimpleNamespace(
+            id=conversation_id,
+            workspace_id=workspace_id,
+            contact_id=44,
+            contact_phone="+15551234567",
+        ),
+        db=db,
+        timezone="America/New_York",
     )
-    executor._execute_book_with_contact_lookup = AsyncMock(  # type: ignore[method-assign]
-        return_value={"success": False, "error": "test stop"}
+    get_contact = AsyncMock(
+        return_value=SimpleNamespace(
+            id=44,
+            email="lead@example.com",
+            full_name="Lead Person",
+            address_line1=None,
+            address_city=None,
+            address_state=None,
+            address_zip=None,
+            is_qualified=True,
+        )
     )
 
-    await executor.execute(
-        "book_appointment",
-        {
-            "date": "2099-01-15",
-            "time": "10:00",
-            "email": "lead@example.com",
-            "customer_confirmed": True,
-            "call_type": "phone_call",
-        },
-    )
+    with patch.object(executor, "_get_contact", get_contact):
+        result = await executor.execute(
+            "prepare_booking",
+            {
+                "date": "2099-01-15",
+                "time": "10:00",
+                "duration_minutes": 30,
+                "call_type": "phone_call",
+            },
+        )
 
-    assert (
-        executor._execute_book_with_contact_lookup.await_args.kwargs["customer_confirmed"] is True
+    statement_params = db.execute.await_args.args[0].compile().params
+    assert statement_params["workspace_id"] == workspace_id
+    assert statement_params["conversation_id"] == conversation_id
+    assert statement_params["email"] == "lead@example.com"
+    assert statement_params["call_type"] == "phone_call"
+    assert result == {
+        "success": True,
+        "booking_draft_prepared": True,
+        "message": (
+            "Please confirm: 30-minute phone call on Thursday, January 15, 2099 at "
+            "10:00 AM America/New_York, invitation to lead@example.com. Is that correct?"
+        ),
+        "direct_response": (
+            "Please confirm: 30-minute phone call on Thursday, January 15, 2099 at "
+            "10:00 AM America/New_York, invitation to lead@example.com. Is that correct?"
+        ),
+    }
+
+
+@pytest.mark.asyncio
+async def test_sms_booking_uses_only_the_immediately_confirmed_persisted_draft() -> None:
+    workspace_id = uuid.uuid4()
+    conversation_id = uuid.uuid4()
+    confirmation = (
+        "Please confirm: 30-minute phone call on Thursday, January 15, 2099 at "
+        "10:00 AM America/New_York, invitation to lead@example.com. Is that correct?"
     )
+    draft = ConversationBookingDraft(
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+        date=datetime(2099, 1, 15).date(),
+        time=datetime(2099, 1, 15, 10).time(),
+        timezone="America/New_York",
+        duration_minutes=30,
+        call_type=BookingDraftCallType.PHONE_CALL,
+        email="lead@example.com",
+        confirmation_text=confirmation,
+        prepared_at=datetime.now(UTC),
+    )
+    draft_result = MagicMock()
+    draft_result.scalar_one_or_none.return_value = draft
+    message_result = MagicMock()
+    message_result.scalars.return_value.all.return_value = [
+        SimpleNamespace(direction=MessageDirection.INBOUND, body="Yes"),
+        SimpleNamespace(direction=MessageDirection.OUTBOUND, body=confirmation),
+    ]
+    db = AsyncMock()
+    db.execute.side_effect = [draft_result, message_result]
+    db.delete = AsyncMock()
+    db.flush = AsyncMock()
+    executor = TextToolExecutor(
+        agent=SimpleNamespace(id=uuid.uuid4(), workspace_id=workspace_id),
+        conversation=SimpleNamespace(id=conversation_id, workspace_id=workspace_id),
+        db=db,
+    )
+    book = AsyncMock(return_value={"success": True})
+
+    with patch.object(executor, "_execute_book_with_contact_lookup", book):
+        await executor.execute(
+            "book_appointment",
+            {
+                "date": "2099-12-31",
+                "time": "23:59",
+                "email": "tampered@example.com",
+                "customer_confirmed": True,
+                "call_type": "video_call",
+            },
+        )
+
+    book.assert_awaited_once_with(
+        date_str="2099-01-15",
+        time_str="10:00",
+        email="lead@example.com",
+        customer_confirmed=True,
+        duration_minutes=30,
+        notes=None,
+        required_skill=None,
+        call_type="phone_call",
+    )
+    db.delete.assert_awaited_once_with(draft)
+    db.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reply", ["Yes, but make it video", "I guess", "What time?"])
+async def test_sms_booking_rejects_ambiguous_or_corrective_replies(reply: str) -> None:
+    workspace_id = uuid.uuid4()
+    conversation_id = uuid.uuid4()
+    confirmation = (
+        "Please confirm: 30-minute phone call on Thursday, January 15, 2099 at "
+        "10:00 AM America/New_York, invitation to lead@example.com. Is that correct?"
+    )
+    draft = ConversationBookingDraft(
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+        date=datetime(2099, 1, 15).date(),
+        time=datetime(2099, 1, 15, 10).time(),
+        timezone="America/New_York",
+        duration_minutes=30,
+        call_type=BookingDraftCallType.PHONE_CALL,
+        email="lead@example.com",
+        confirmation_text=confirmation,
+        prepared_at=datetime.now(UTC),
+    )
+    draft_result = MagicMock()
+    draft_result.scalar_one_or_none.return_value = draft
+    message_result = MagicMock()
+    message_result.scalars.return_value.all.return_value = [
+        SimpleNamespace(direction=MessageDirection.INBOUND, body=reply),
+        SimpleNamespace(direction=MessageDirection.OUTBOUND, body=confirmation),
+    ]
+    db = AsyncMock()
+    db.execute.side_effect = [draft_result, message_result]
+    executor = TextToolExecutor(
+        agent=SimpleNamespace(id=uuid.uuid4(), workspace_id=workspace_id),
+        conversation=SimpleNamespace(id=conversation_id, workspace_id=workspace_id),
+        db=db,
+    )
+    book = AsyncMock()
+
+    with patch.object(executor, "_execute_book_with_contact_lookup", book):
+        result = await executor.execute("book_appointment", {"customer_confirmed": True})
+
+    assert result["success"] is False
+    assert result["error"] == "confirmation_context_mismatch"
+    book.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pending_sms_booking_approval_carries_only_confirmed_draft_details() -> None:
+    workspace_id = uuid.uuid4()
+    conversation_id = uuid.uuid4()
+    confirmation = (
+        "Please confirm: 30-minute phone call on Thursday, January 15, 2099 at "
+        "10:00 AM America/New_York, invitation to lead@example.com. Is that correct?"
+    )
+    draft = ConversationBookingDraft(
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+        date=datetime(2099, 1, 15).date(),
+        time=datetime(2099, 1, 15, 10).time(),
+        timezone="America/New_York",
+        duration_minutes=30,
+        call_type=BookingDraftCallType.PHONE_CALL,
+        email="lead@example.com",
+        confirmation_text=confirmation,
+        prepared_at=datetime.now(UTC),
+    )
+    draft_result = MagicMock()
+    draft_result.scalar_one_or_none.return_value = draft
+    message_result = MagicMock()
+    message_result.scalars.return_value.all.return_value = [
+        SimpleNamespace(direction=MessageDirection.INBOUND, body="Yes"),
+        SimpleNamespace(direction=MessageDirection.OUTBOUND, body=confirmation),
+    ]
+    db = AsyncMock()
+    db.execute.side_effect = [draft_result, message_result]
+    executor = TextToolExecutor(
+        agent=SimpleNamespace(id=uuid.uuid4(), workspace_id=workspace_id),
+        conversation=SimpleNamespace(id=conversation_id, workspace_id=workspace_id),
+        db=db,
+    )
+    tool_call = SimpleNamespace(
+        id="call-book",
+        function=SimpleNamespace(
+            name="book_appointment",
+            arguments=json.dumps(
+                {
+                    "date": "2099-12-31",
+                    "time": "23:59",
+                    "email": "tampered@example.com",
+                    "customer_confirmed": True,
+                    "duration_minutes": 45,
+                    "call_type": "video_call",
+                }
+            ),
+        ),
+    )
+    gate = AsyncMock(return_value=("pending", {}))
+
+    with patch(
+        "app.services.ai.text_tool_executor.approval_gate_service.check_and_execute_or_queue",
+        gate,
+    ):
+        result = await executor.handle_tool_calls([tool_call])
+
+    assert json.loads(result[0]["content"])["pending_approval"] is True
+    payload = gate.await_args.kwargs["action_payload"]
+    assert payload == {
+        "date": "2099-01-15",
+        "time": "10:00",
+        "email": "lead@example.com",
+        "customer_confirmed": True,
+        "duration_minutes": 30,
+        "call_type": "phone_call",
+        "booking_draft_prepared_at": draft.prepared_at.isoformat(),
+    }
 
 
 @pytest.fixture
@@ -191,7 +411,7 @@ async def test_booking_tools_are_blocked_before_persisted_qualification(
 
 
 @pytest.mark.asyncio
-async def test_booking_requires_explicit_phone_or_video_choice(
+async def test_prepare_booking_requires_explicit_phone_or_video_choice(
     qualification_executor: TextToolExecutor,
 ) -> None:
     contact = SimpleNamespace(
@@ -205,8 +425,8 @@ async def test_booking_requires_explicit_phone_or_video_choice(
     qualification_executor._get_contact = AsyncMock(return_value=contact)  # type: ignore[method-assign]
 
     result = await qualification_executor.execute(
-        "book_appointment",
-        {"date": "2026-08-20", "time": "10:00", "email": "lead@example.com"},
+        "prepare_booking",
+        {"date": "2099-08-20", "time": "10:00", "email": "lead@example.com"},
     )
 
     assert result["success"] is False

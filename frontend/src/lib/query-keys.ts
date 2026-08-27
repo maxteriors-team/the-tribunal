@@ -293,10 +293,20 @@ export const queryKeys = {
       workspaceId: string,
       contactId: number | string | null | undefined,
       limit?: number,
+      conversationId?: string,
     ) =>
-      limit === undefined
+      limit === undefined && conversationId === undefined
         ? (["contacts", workspaceId, contactId ?? null, "timeline"] as const)
-        : (["contacts", workspaceId, contactId ?? null, "timeline", { limit }] as const),
+        : ([
+            "contacts",
+            workspaceId,
+            contactId ?? null,
+            "timeline",
+            {
+              ...(limit === undefined ? {} : { limit }),
+              ...(conversationId === undefined ? {} : { conversation_id: conversationId }),
+            },
+          ] as const),
     conversations: (workspaceId: string, contactId: string) =>
       [...contacts.detail(workspaceId, contactId), "conversations"] as const,
     tags: (workspaceId: string, contactId: string) =>
@@ -338,6 +348,8 @@ export const queryKeys = {
   },
   integrations: {
     ...integrations,
+    activeQuoLine: (workspaceId: string, contactId?: number) =>
+      [...integrations.all(workspaceId), "quo-active-line", contactId] as const,
     openAIOAuth: (workspaceId: string) =>
       [...integrations.all(workspaceId), "openai-oauth"] as const,
   },

@@ -37,6 +37,7 @@ from app.services.quo.backfill import (  # noqa: E402
     validate_backfill_window,
 )
 from app.services.quo.client import QuoApiError, QuoClient  # noqa: E402
+from app.utils.phone import normalize_phone_safe  # noqa: E402
 
 
 class QuoBackfillConfigError(RuntimeError):
@@ -88,20 +89,24 @@ async def _run(args: argparse.Namespace) -> int:
             if integration is None:
                 raise QuoBackfillConfigError("workspace has no active encrypted Quo integration")
             credentials = integration.safe_credentials()
-            api_key, organization_id = _integration_credentials(credentials)
+            api_key, organization_id, phone_number_id, phone_number = _integration_credentials(
+                credentials
+)
 
             async with QuoClient(api_key) as client:
                 remote_organization_id = await client.validate_api_key()
                 if remote_organization_id is None or not hmac.compare_digest(
                     remote_organization_id, organization_id
-                ):
+):
                     raise QuoBackfillConfigError(
                         "stored Quo integration does not match the authenticated tenant"
-                    )
+)
                 counts = await QuoHistoricalBackfill(
                     db,
                     workspace_id=args.workspace_id,
                     organization_id=organization_id,
+                    phone_number_id=phone_number_id,
+                    phone_number=phone_number,
                     client=client,
                     since=args.since,
                     until=args.until,
@@ -114,16 +119,23 @@ async def _run(args: argparse.Namespace) -> int:
     return 2 if _error_count(counts) else 0
 
 
-def _integration_credentials(credentials: object) -> tuple[str, str]:
+def _integration_credentials(credentials: object) -> tuple[str, str, str, str]:
     if not isinstance(credentials, dict):
         raise QuoBackfillConfigError("workspace Quo credentials cannot be decrypted")
     api_key = credentials.get("api_key")
     organization_id = credentials.get("organization_id")
+    phone_number_id = credentials.get("phone_number_id")
+    phone_number = credentials.get("phone_number")
+    normalized_phone = normalize_phone_safe(phone_number) if isinstance(phone_number, str) else None
     if not isinstance(api_key, str) or not api_key.strip():
         raise QuoBackfillConfigError("workspace Quo API credential is missing")
     if not isinstance(organization_id, str) or not organization_id.startswith("OR"):
         raise QuoBackfillConfigError("workspace Quo tenant binding is missing")
-    return api_key, organization_id
+    if not isinstance(phone_number_id, str) or not phone_number_id.strip():
+        raise QuoBackfillConfigError("workspace Quo sender selection is missing")
+    if normalized_phone is None or normalized_phone != phone_number:
+        raise QuoBackfillConfigError("workspace Quo sender number is invalid")
+    return api_key, organization_id, phone_number_id, normalized_phone
 
 
 def _print_counts(counts: QuoBackfillCounts, *, applied: bool) -> None:

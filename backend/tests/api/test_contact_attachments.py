@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import contact_attachments as module
 from app.api.v1.contact_attachments import (
     MAX_ATTACHMENT_BYTES,
@@ -73,9 +73,12 @@ def _make_app(mock_db: AsyncMock) -> FastAPI:
     async def override_db() -> AsyncIterator[AsyncMock]:
         yield mock_db
 
+    membership = MagicMock()
+    membership.role = "owner"
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_workspace] = lambda: workspace
     app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_membership] = lambda: membership
     return app
 
 

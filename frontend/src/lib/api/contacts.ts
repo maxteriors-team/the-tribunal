@@ -293,12 +293,13 @@ export const contactsApi = {
     workspaceId: string,
     contactId: number,
     limit: number = 100,
+    conversationId?: string,
   ): Promise<TimelineItem[]> => {
     const response = await apiClient.get(
       "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/timeline",
       {
         path: { workspace_id: workspaceId, contact_id: contactId },
-        query: { limit },
+        query: { limit, conversation_id: conversationId },
       },
     );
     // The OpenAPI schema models timeline items as a loose object; the

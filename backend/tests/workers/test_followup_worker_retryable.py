@@ -64,6 +64,26 @@ async def test_followup_uses_workspace_openai_credential() -> None:
 
 
 @pytest.mark.asyncio
+async def test_quo_followup_stops_before_ai_or_sms() -> None:
+    worker = FollowupWorker()
+    conversation = MagicMock(id=uuid4(), source_provider="quo")
+    db = MagicMock()
+
+    with (
+        patch(
+            "app.workers.followup_worker.resolve_openai_credentials",
+            new=AsyncMock(),
+        ) as resolve_credential,
+        patch("app.workers.followup_worker.get_text_message_provider") as get_provider,
+    ):
+        result = await worker._process_conversation_followup(conversation, db)
+
+    assert result is True
+    resolve_credential.assert_not_awaited()
+    get_provider.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_failed_conversation_followup_routes_to_dlq() -> None:
     worker = FollowupWorker()
     recorder = wire_worker_for_retry_test(worker)

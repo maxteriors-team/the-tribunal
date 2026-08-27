@@ -42,6 +42,7 @@ from app.services.providers.http import (
     ProviderHTTPError,
     ProviderRetryPolicy,
 )
+from app.services.telephony.inbound_types import InboundMessageIngestResult
 from app.utils.phone import normalize_phone_e164, phone_lookup_variants
 from app.utils.pii import mask_phone
 
@@ -94,6 +95,24 @@ def _media_preview(media: Sequence["InboundMedia | OutboundMedia"]) -> str:
             return "[Video]"
         return "[Media attachment]"
     return f"[{len(media)} media attachments]"
+
+
+async def _fill_missing_sender_attribution(
+    db: AsyncSession,
+    message: Message,
+    sender_user_id: int | None,
+    sender_display_name: str,
+) -> None:
+    """Fill retry attribution once without mutating an existing snapshot."""
+    changed = False
+    if message.sender_user_id is None and sender_user_id is not None:
+        message.sender_user_id = sender_user_id
+        changed = True
+    if message.sender_display_name is None:
+        message.sender_display_name = sender_display_name
+        changed = True
+    if changed:
+        await db.commit()
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +244,8 @@ class TelnyxSMSService:
         phone_number_id: uuid.UUID | None = None,
         idempotency_key: uuid.UUID | None = None,
         media: tuple[OutboundMedia, ...] = (),
+        sender_user_id: int | None = None,
+        sender_display_name: str | None = None,
     ) -> Message:
         """Send an SMS message and store it.
 
@@ -251,8 +272,13 @@ class TelnyxSMSService:
             Created (or pre-existing) Message record.
         """
         # Normalize outbound addresses before persistence/provider handoff.
-        to_number = self._normalize_outbound_to(to_number)
-        from_number = self._normalize_outbound_from(from_number)
+        to_number, from_number = (
+            self._normalize_outbound_to(to_number),
+            self._normalize_outbound_from(from_number),
+        )
+        resolved_sender_name = sender_display_name or (
+            "AI Agent" if agent_id is not None else "Automation"
+        )
 
         log = self.logger.bind(to=to_number, from_=from_number)
 
@@ -263,15 +289,19 @@ class TelnyxSMSService:
         # send never happened (still QUEUED), we resume the send rather than
         # inserting a duplicate row, reusing the existing message id.
         idempotency_state = await resolve_message_idempotency(db, idempotency_key)
-        if idempotency_state.should_skip and idempotency_state.existing_message is not None:
+        if idempotency_state.existing_message is not None:
             existing = idempotency_state.existing_message
-            log.info(
-                "text_send_idempotent_skip",
-                idempotency_key=str(idempotency_key),
-                message_id=str(existing.id),
-                status=existing.status,
+            await _fill_missing_sender_attribution(
+                db, existing, sender_user_id, resolved_sender_name
             )
-            return existing
+            if idempotency_state.should_skip:
+                log.info(
+                    "text_send_idempotent_skip",
+                    idempotency_key=str(idempotency_key),
+                    message_id=str(existing.id),
+                    status=existing.status,
+                )
+                return existing
 
         log.info(
             "sending_text_message",
@@ -306,6 +336,8 @@ class TelnyxSMSService:
                 is_ai=agent_id is not None,
                 from_phone_number_id=phone_number_id,
                 idempotency_key=effective_key,
+                sender_user_id=sender_user_id,
+                sender_display_name=resolved_sender_name,
             )
             db.add(message)
             await db.flush()
@@ -413,7 +445,7 @@ class TelnyxSMSService:
         body: str,
         workspace_id: uuid.UUID,
         media: tuple[InboundMedia, ...] = (),
-    ) -> Message:
+    ) -> InboundMessageIngestResult:
         """Process an inbound SMS message.
 
         Args:
@@ -425,7 +457,7 @@ class TelnyxSMSService:
             workspace_id: Workspace ID
 
         Returns:
-            Created Message record
+            Persisted message and whether this delivery created it.
         """
         log = self.logger.bind(
             provider_message_id=provider_message_id,
@@ -453,7 +485,7 @@ class TelnyxSMSService:
                     "inbound_sms_duplicate_ignored",
                     message_id=str(existing_message.id),
                 )
-                return existing_message
+                return InboundMessageIngestResult(existing_message, created=False)
 
         # Get or create conversation (swap from/to for inbound)
         conversation = await self._get_or_create_conversation(
@@ -540,12 +572,12 @@ class TelnyxSMSService:
                 "inbound_sms_duplicate_race_ignored",
                 message_id=str(existing_message.id),
             )
-            return existing_message
+            return InboundMessageIngestResult(existing_message, created=False)
 
         await db.refresh(message)
 
         log.info("inbound_sms_processed", message_id=str(message.id))
-        return message
+        return InboundMessageIngestResult(message, created=True)
 
     async def update_message_status(
         self,

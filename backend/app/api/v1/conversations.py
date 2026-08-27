@@ -169,6 +169,9 @@ async def send_message(
         conversation_id=conversation_id,
         workspace_id=workspace_id,
         body=message_in.body,
+        sender_user_id=current_user.id,
+        sender_display_name=current_user.full_name or current_user.email,
+        client_request_id=message_in.client_request_id,
     )
 
 
@@ -338,6 +341,8 @@ async def send_followup(
         workspace_id=workspace_id,
         message=request.message,
         custom_instructions=request.custom_instructions,
+        sender_user_id=current_user.id,
+        sender_display_name=current_user.full_name or current_user.email,
     )
 
 

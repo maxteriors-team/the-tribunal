@@ -206,11 +206,11 @@ export function FollowupSection() {
           <RefreshCw className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h3 className="text-sm font-semibold">Follow-up</h3>
           <Badge variant="outline" className="ml-auto text-xs">
-            Quo
+            Manual messaging only
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          Tribunal follow-up generation and sending are unavailable for this read-only Quo thread.
+          Follow-up generation and sending are unavailable for manual-only conversations.
         </p>
       </div>
     );

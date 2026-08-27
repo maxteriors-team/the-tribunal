@@ -25,6 +25,7 @@ from app.models.campaign import (
     Campaign,
     CampaignContact,
     CampaignContactStatus,
+    CampaignStatus,
     CampaignType,
 )
 from app.models.contact import Contact
@@ -123,6 +124,24 @@ class CampaignWorker(BaseCampaignWorker):
         log: Any,
     ) -> None:
         """Process SMS/iMessage campaign contacts: send initial messages and follow-ups."""
+        agent = campaign.agent
+        if campaign.agent_id is not None and (
+            agent is None
+            or agent.workspace_id != campaign.workspace_id
+            or not agent.is_active
+            or agent.channel_mode not in ("text", "both")
+        ):
+            campaign.status = CampaignStatus.PAUSED
+            campaign.last_error = "Campaign agent is not an active workspace-owned text agent"
+            campaign.last_error_at = datetime.now(UTC)
+            log.error(
+                "invalid_campaign_agent",
+                campaign_id=str(campaign.id),
+                agent_id=str(campaign.agent_id),
+            )
+            await db.commit()
+            return
+
         text_providers: TextProviderCache = {}
         try:
             await self._process_initial_messages(campaign, text_providers, db, log)

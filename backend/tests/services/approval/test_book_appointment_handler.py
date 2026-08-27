@@ -12,7 +12,7 @@ wall-clock in the workspace's zone, not UTC.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -23,6 +23,10 @@ from app.db.session import AsyncSessionLocal, engine
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.contact import Contact
 from app.models.conversation import Conversation
+from app.models.conversation_booking_draft import (
+    BookingDraftCallType,
+    ConversationBookingDraft,
+)
 from app.models.pending_action import PendingAction
 from app.models.workspace import Workspace
 from app.services.approval.approval_gate_service import (
@@ -224,6 +228,104 @@ async def test_unresolvable_contact_reports_error_instead_of_phantom_booking(wor
             .all()
         )
         assert rows == []
+
+
+async def test_approved_sms_booking_rejects_a_replaced_confirmation_draft(
+    workspace_id,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        workspace = await _workspace(db, workspace_id)
+        contact = await _contact(db, workspace.id)
+        conversation = await _conversation(db, workspace.id, contact.id)
+        prepared_at = datetime.now(UTC)
+        db.add(
+            ConversationBookingDraft(
+                conversation_id=conversation.id,
+                workspace_id=workspace.id,
+                date=datetime(2099, 6, 10).date(),
+                time=datetime(2099, 6, 10, 14).time(),
+                timezone="America/New_York",
+                duration_minutes=30,
+                call_type=BookingDraftCallType.PHONE_CALL,
+                email="dana@example.com",
+                confirmation_text="Original summary",
+                prepared_at=prepared_at,
+            )
+        )
+        await db.flush()
+        action = _action(
+            workspace.id,
+            {
+                "date": "2099-06-10",
+                "time": "14:00",
+                "email": "dana@example.com",
+                "duration_minutes": 30,
+                "call_type": "phone_call",
+                "booking_draft_prepared_at": (prepared_at - timedelta(seconds=1)).isoformat(),
+            },
+            {"source": "text_conversation", "conversation_id": str(conversation.id)},
+        )
+
+        result = await BookAppointmentActionHandler().execute(db, action)
+
+        assert result["error"] == "booking_draft_changed"
+        appointments = (
+            (await db.execute(select(Appointment).where(Appointment.workspace_id == workspace.id)))
+            .scalars()
+            .all()
+        )
+        assert appointments == []
+
+
+async def test_approved_sms_booking_consumes_the_confirmed_draft(workspace_id, monkeypatch) -> None:
+    def discard_notification(coroutine, **_kwargs) -> None:
+        coroutine.close()
+
+    monkeypatch.setattr(
+        "app.services.appointments.booking_finalizer.spawn_background_task",
+        discard_notification,
+    )
+    async with AsyncSessionLocal() as db:
+        workspace = await _workspace(db, workspace_id)
+        contact = await _contact(db, workspace.id)
+        conversation = await _conversation(db, workspace.id, contact.id)
+        prepared_at = datetime.now(UTC)
+        draft = ConversationBookingDraft(
+            conversation_id=conversation.id,
+            workspace_id=workspace.id,
+            date=datetime(2099, 6, 11).date(),
+            time=datetime(2099, 6, 11, 14).time(),
+            timezone="America/New_York",
+            duration_minutes=30,
+            call_type=BookingDraftCallType.VIDEO_CALL,
+            email="dana@example.com",
+            confirmation_text="Confirmed summary",
+            prepared_at=prepared_at,
+        )
+        db.add(draft)
+        await db.flush()
+        action = _action(
+            workspace.id,
+            {
+                "date": "2099-06-11",
+                "time": "14:00",
+                "email": "dana@example.com",
+                "duration_minutes": 30,
+                "call_type": "video_call",
+                "booking_draft_prepared_at": prepared_at.isoformat(),
+            },
+            {"source": "text_conversation", "conversation_id": str(conversation.id)},
+        )
+
+        result = await BookAppointmentActionHandler().execute(db, action)
+
+        assert result["status"] == "booked"
+        appointment = await db.scalar(
+            select(Appointment).where(Appointment.workspace_id == workspace.id)
+        )
+        assert appointment is not None
+        assert appointment.service_type == "video_call"
+        assert await db.get(ConversationBookingDraft, conversation.id) is None
 
 
 async def test_handler_error_marks_action_failed_not_executed(workspace_id) -> None:

@@ -89,6 +89,7 @@
         {
           "id": "ACmessage-out",
           "phoneNumberId": "PNfixture",
+          "userId": "USfixture",
           "direction": "outgoing",
           "status": "sent",
           "type": "text",

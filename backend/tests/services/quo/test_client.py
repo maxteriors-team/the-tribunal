@@ -78,3 +78,54 @@ async def test_client_errors_never_include_key_or_provider_body() -> None:
     assert exc_info.value.status_code == 401
     assert api_key not in rendered_error
     assert provider_body not in rendered_error
+
+
+async def test_list_phone_numbers_returns_only_normalized_safe_choices() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url == httpx.URL("https://api.quo.com/v1/phone-numbers")
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": "PN_one",
+                        "number": "+14155552671",
+                        "name": "Main line",
+                        "private": "never exposed",
+                    },
+                    {"id": "PN_two", "number": "+14155550123"},
+                ]
+            },
+        )
+
+    async with (
+        httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client,
+        QuoClient("quo_test_key", client=http_client) as quo,
+    ):
+        choices = await quo.list_phone_numbers()
+
+    assert [choice.as_public_dict() for choice in choices] == [
+        {
+            "id": "PN_one",
+            "phone_number": "+14155552671",
+            "provider_label": "Main line",
+        },
+        {
+            "id": "PN_two",
+            "phone_number": "+14155550123",
+            "provider_label": None,
+        },
+    ]
+
+
+async def test_list_phone_numbers_fails_closed_on_invalid_provider_data() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(200, json={"data": [{"id": "PN_one"}]})
+    )
+    async with (
+        httpx.AsyncClient(transport=transport) as http_client,
+        QuoClient("quo_test_key", client=http_client) as quo,
+    ):
+        with pytest.raises(QuoApiError, match="invalid phone number data"):
+            await quo.list_phone_numbers()

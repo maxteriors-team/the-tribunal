@@ -30,6 +30,7 @@ from app.models.drip_campaign import (
 )
 from app.services.idempotency import derive_outbound_key
 from app.services.rate_limiting.opt_out_manager import OptOutManager
+from app.services.telephony.phone_number_resolver import resolve_workspace_phone_number
 from app.services.telephony.telnyx import TelnyxSMSService
 
 logger = structlog.get_logger()
@@ -56,12 +57,45 @@ async def process_active_drip_campaigns(db: AsyncSession) -> None:
             )
 
 
+async def _pause_campaign_for_invalid_sender(
+    campaign: DripCampaign,
+    db: AsyncSession,
+    log: Any,
+    *,
+    from_number: str | None,
+) -> None:
+    """Pause an active campaign whose sender is no longer safe to use."""
+    if campaign.status == DripCampaignStatus.ACTIVE:
+        campaign.status = DripCampaignStatus.PAUSED
+    log.error(
+        "drip_campaign_paused_invalid_sender",
+        workspace_id=str(campaign.workspace_id),
+        from_phone_number=from_number,
+    )
+    await db.commit()
+
+
 async def _process_campaign(campaign: DripCampaign, db: AsyncSession) -> None:
     """Process a single drip campaign: send due messages and check completion."""
     log = logger.bind(
         campaign_id=str(campaign.id),
         campaign_name=campaign.name,
     )
+
+    configured_sender = campaign.from_phone_number
+    sender = (
+        await resolve_workspace_phone_number(
+            db,
+            campaign.workspace_id,
+            configured_sender,
+            capability="text",
+        )
+        if configured_sender
+        else None
+    )
+    if sender is None:
+        await _pause_campaign_for_invalid_sender(campaign, db, log, from_number=configured_sender)
+        return
 
     if not _is_within_sending_hours(campaign):
         log.debug("drip_outside_sending_hours")
@@ -107,6 +141,8 @@ async def _process_campaign(campaign: DripCampaign, db: AsyncSession) -> None:
                 await _process_enrollment(
                     enrollment, campaign, sms_service, opt_out_manager, db, log
                 )
+                if campaign.status == DripCampaignStatus.PAUSED:
+                    break
             except Exception:
                 log.exception(
                     "drip_enrollment_error",
@@ -166,10 +202,15 @@ async def _process_enrollment(
     # Render message
     message_text = _render_template(current_step_config["message"], contact)
 
-    # Resolve from number (prefer conversation continuity)
+    # Resolve and revalidate the sender, preferring safe conversation continuity.
     from_number = await _resolve_from_number(
         db, contact.id, campaign.workspace_id, campaign.from_phone_number
     )
+    if from_number is None:
+        await _pause_campaign_for_invalid_sender(
+            campaign, db, log, from_number=campaign.from_phone_number
+        )
+        return
 
     # Stable per-(enrollment, step) key so a worker crash between the
     # Message row insert and the Telnyx POST is recoverable on the next
@@ -248,18 +289,29 @@ async def enroll_contacts(
     now = datetime.now(UTC)
     next_step_at = now + timedelta(days=delay_days) if delay_days > 0 else now
 
+    # Ignore contact IDs that do not belong to the campaign's workspace.
+    contacts_result = await db.execute(
+        select(Contact).where(
+            Contact.id.in_(contact_ids),
+            Contact.workspace_id == campaign.workspace_id,
+        )
+    )
+    eligible_contact_ids = {contact.id for contact in contacts_result.scalars().all()}
+    if not eligible_contact_ids:
+        return 0
+
     # Get already-enrolled contact IDs to skip duplicates
     existing_result = await db.execute(
         select(DripEnrollment.contact_id).where(
             DripEnrollment.drip_campaign_id == campaign.id,
-            DripEnrollment.contact_id.in_(contact_ids),
+            DripEnrollment.contact_id.in_(eligible_contact_ids),
         )
     )
     existing_ids = set(existing_result.scalars().all())
 
     enrolled = 0
     for cid in contact_ids:
-        if cid in existing_ids:
+        if cid not in eligible_contact_ids or cid in existing_ids:
             continue
         enrollment = DripEnrollment(
             drip_campaign_id=campaign.id,
@@ -365,9 +417,8 @@ async def _resolve_from_number(
     contact_id: int,
     workspace_id: uuid.UUID,
     default_number: str,
-) -> str:
-    """Resolve from-number, preferring conversation continuity."""
-    # Try existing conversation first
+) -> str | None:
+    """Resolve an owned, active text sender, preferring conversation continuity."""
     result = await db.execute(
         select(Conversation.workspace_phone)
         .where(
@@ -379,11 +430,35 @@ async def _resolve_from_number(
         .order_by(Conversation.last_message_at.desc().nulls_last())
         .limit(1)
     )
-    phone = result.scalar_one_or_none()
-    if phone:
-        return str(phone)
+    conversation_number = result.scalar_one_or_none()
 
-    return default_number
+    if conversation_number:
+        conversation_sender = await resolve_workspace_phone_number(
+            db,
+            workspace_id,
+            str(conversation_number),
+            capability="text",
+        )
+        if conversation_sender is not None:
+            return conversation_sender.phone_number
+        logger.warning(
+            "drip_conversation_sender_invalid",
+            workspace_id=str(workspace_id),
+            contact_id=contact_id,
+            from_phone_number=str(conversation_number),
+        )
+
+    default_sender = (
+        await resolve_workspace_phone_number(
+            db,
+            workspace_id,
+            default_number,
+            capability="text",
+        )
+        if default_number
+        else None
+    )
+    return default_sender.phone_number if default_sender is not None else None
 
 
 def _is_within_sending_hours(campaign: DripCampaign) -> bool:

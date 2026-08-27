@@ -30,6 +30,8 @@ class TextMessageProvider(Protocol):
         phone_number_id: uuid.UUID | None = None,
         idempotency_key: uuid.UUID | None = None,
         media: tuple[OutboundMedia, ...] = (),
+        sender_user_id: int | None = None,
+        sender_display_name: str | None = None,
     ) -> Message:
         """Send and persist a text message."""
         ...

@@ -34,6 +34,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import hash_value
+from app.core.roles import can_assign_workspace_role
 from app.core.security import get_password_hash
 from app.models.user import User
 from app.models.workspace import WorkspaceMembership
@@ -144,14 +145,16 @@ async def bulk_create_members(
         member_user_ids = set(member_rows)
 
     for item, email_norm, email_hash in deduped:
-        # Escalation guard: only the owner may grant the admin role, mirroring
-        # "admins cannot change other admins" in update_member_role.
-        if item.role == "admin" and caller_role != "owner":
+        if not can_assign_workspace_role(caller_role, item.role):
             results.append(
                 BulkMemberResultItem(
                     email=email_norm,
                     status="skipped",
-                    error="Only the workspace owner can grant the admin role",
+                    error=(
+                        "Only the workspace owner can grant the admin role"
+                        if item.role == "admin"
+                        else "Not authorized to assign workspace roles"
+                    ),
                 )
             )
             continue

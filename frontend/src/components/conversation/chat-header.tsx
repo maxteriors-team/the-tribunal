@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { formatPhoneNumber } from "@/lib/utils/phone";
 import type { Conversation } from "@/types";
 import type { Agent } from "@/types/agent";
 
@@ -33,6 +34,8 @@ interface ChatHeaderProps {
   contactId: number;
   contactName?: string;
   phoneNumber?: string | null;
+  quoPhoneNumber?: string | null;
+  manualMessagingOnly?: boolean;
   conversation?: Conversation;
   agents: Agent[];
   hasTimelineItems: boolean;
@@ -51,6 +54,8 @@ export function ChatHeader({
   contactId,
   contactName,
   phoneNumber,
+  quoPhoneNumber,
+  manualMessagingOnly = false,
   conversation,
   agents,
   hasTimelineItems,
@@ -73,7 +78,7 @@ export function ChatHeader({
   };
 
   const unreadCount = conversation?.unread_count ?? 0;
-  const isQuoConversation = conversation?.source_provider === "quo";
+  const isQuoConversation = manualMessagingOnly || conversation?.source_provider === "quo";
 
   const assignedAgentName = conversation?.assigned_agent_id
     ? (agents.find((a) => a.id === conversation.assigned_agent_id)?.name ?? "Agent")
@@ -90,10 +95,15 @@ export function ChatHeader({
             </Badge>
           ) : null}
           {phoneNumber && (
-            <span className="text-sm text-muted-foreground hidden truncate sm:inline">
+            <span className="hidden truncate text-sm text-muted-foreground sm:inline">
               {phoneNumber}
             </span>
           )}
+          {quoPhoneNumber ? (
+            <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
+              via Quo · {formatPhoneNumber(quoPhoneNumber)}
+            </Badge>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {!isQuoConversation ? (
