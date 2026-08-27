@@ -37,7 +37,6 @@ if TYPE_CHECKING:
     from app.models.phone_message import PhoneMessage
     from app.models.phone_number import PhoneNumber
     from app.models.prompt_version import PromptVersion
-    from app.models.user import User
     from app.models.workspace import Workspace
 
 
@@ -487,7 +486,6 @@ class Message(Base):
 
     # Relationships
     conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="messages")
-    sender_user: Mapped["User | None"] = relationship("User", foreign_keys=[sender_user_id])
     agent: Mapped["Agent | None"] = relationship(
         "Agent", back_populates="messages", foreign_keys=[agent_id]
     )

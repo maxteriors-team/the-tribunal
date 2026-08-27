@@ -360,7 +360,7 @@ def _provider_datetime(value: object) -> datetime:
             if parsed.tzinfo is not None:
                 return parsed.astimezone(UTC)
         except ValueError:
-            pass
+            return datetime.now(UTC)
     return datetime.now(UTC)
 
 
