@@ -203,8 +203,7 @@ const WITH_PACKAGES: LinearFeetEstimateResult = {
   ],
 };
 
-// A price book + a single package that sells an uplight and a path light, so a
-// drawn "Uplight" resolves to a real SKU exactly as it does in production.
+// Real catalog products resolve to package SKUs exactly as they do in production.
 const PRICE_BOOK = [
   {
     id: "id-up",
@@ -217,6 +216,21 @@ const PRICE_BOOK = [
     taxable: true,
     is_active: true,
     attributes: null,
+    components: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  },
+  {
+    id: "id-transformer",
+    workspace_id: "ws_1",
+    name: "Luxor Transformer",
+    description: null,
+    sku: "best-transformer",
+    kind: "product",
+    unit_price: 900,
+    taxable: true,
+    is_active: true,
+    attributes: { transformer: true },
     components: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
@@ -1586,19 +1600,19 @@ describe("LightDesigner", () => {
           ["key"]: "good",
           label: "Good",
           tab: "Good",
-          sections: [{ title: "Fixtures", item_ids: ["best-zd-up"] }],
+          sections: [{ title: "Fixtures", item_ids: ["best-zd-up", "best-transformer"] }],
         },
         {
           ["key"]: "better",
           label: "Better",
           tab: "Better",
-          sections: [{ title: "Fixtures", item_ids: ["best-zd-up"] }],
+          sections: [{ title: "Fixtures", item_ids: ["best-zd-up", "best-transformer"] }],
         },
         {
           ["key"]: "best",
           label: "Best",
           tab: "Best",
-          sections: [{ title: "Fixtures", item_ids: ["best-zd-up"] }],
+          sections: [{ title: "Fixtures", item_ids: ["best-zd-up", "best-transformer"] }],
         },
       ],
     } as Awaited<ReturnType<typeof salesWizardApi.getPricing>>);
@@ -1743,6 +1757,12 @@ describe("LightDesigner", () => {
                   at: { x: 200, y: 220 },
                   sizePx: 30,
                 },
+                {
+                  id: "transformer-1",
+                  productId: "fixture-transformer",
+                  at: { x: 300, y: 320 },
+                  sizePx: 30,
+                },
               ],
               calibration: null,
             },
@@ -1813,6 +1833,7 @@ describe("LightDesigner", () => {
           title: "Patio lighting",
           quantities: expect.arrayContaining([
             expect.objectContaining({ item_id: "best-zd-up", quantity: 2 }),
+            expect.objectContaining({ item_id: "best-transformer", quantity: 1 }),
           ]),
           selected_tier: "good",
           care_plan_tier: null,

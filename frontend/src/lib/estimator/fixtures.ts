@@ -315,8 +315,8 @@ export function hasLandscapeFixtures(resolution: FixtureResolution): boolean {
 
 /**
  * The landscape palette: six light-emitting fixture types plus a transformer
- * plan symbol. Prices are display hints only; transformer placement is an
- * annotation and does not alter quote quantities.
+ * plan symbol. Prices are display hints only; proposal quantities include each
+ * placed transformer, and the server remains authoritative for catalog pricing.
  */
 export function buildFixturePalette(
   resolution: FixtureResolution,

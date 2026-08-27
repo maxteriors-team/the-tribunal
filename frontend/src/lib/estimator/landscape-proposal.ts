@@ -1,6 +1,7 @@
 import {
   FIXTURE_TYPES,
   resolveTierFixtures,
+  resolveTierTransformer,
   resolveTierWire,
   type FixtureType,
   type QuotedLandscapeWireGauge,
@@ -38,6 +39,7 @@ export interface BuildLandscapeProposalPayloadOptions extends LandscapeProposalL
   pricing: PricingSettings;
   catalog: CatalogItemResponse[];
   fixtureCounts: Partial<Record<FixtureType, number>>;
+  transformerCount: number;
   fixedItems?: Array<{ itemId: string; quantity: number }>;
   wireRuns: LandscapeWireQuoteInput[];
   bistroRuns?: LandscapeBistroQuoteInput[];
@@ -127,6 +129,7 @@ export function buildLandscapeProposalQuantities(
   catalog: CatalogItemResponse[],
   fixtureCounts: Partial<Record<FixtureType, number>>,
   wireRuns: LandscapeWireQuoteInput[],
+  transformerCount: number,
 ): ProposalWizardPayload["quantities"] {
   const quantities = new Map<string, number>();
   const tierOrder = pricing.tier_order ?? [];
@@ -142,6 +145,11 @@ export function buildLandscapeProposalQuantities(
         fixtureCounts[fixture.type] ?? 0,
       );
     }
+    addQuantity(
+      quantities,
+      resolveTierTransformer(pricing, catalog, tierKey).itemId,
+      transformerCount,
+    );
     for (const [gauge, feet] of wireFeet) {
       const item = resolveTierWire(pricing, catalog, tierKey, gauge);
       addQuantity(quantities, item?.sku || item?.id || null, feet);
@@ -155,6 +163,7 @@ export function buildLandscapeProposalPayload({
   pricing,
   catalog,
   fixtureCounts,
+  transformerCount,
   fixedItems = [],
   wireRuns,
   bistroRuns = [],
@@ -185,7 +194,13 @@ export function buildLandscapeProposalPayload({
     lighting_project_id: lightingProjectId ?? null,
     title: title?.trim() || "Landscape lighting proposal",
     categories: groupedBistroRuns.length ? ["landscape", "bistro"] : ["landscape"],
-    quantities: buildLandscapeProposalQuantities(pricing, catalog, fixtureCounts, wireRuns),
+    quantities: buildLandscapeProposalQuantities(
+      pricing,
+      catalog,
+      fixtureCounts,
+      wireRuns,
+      transformerCount,
+    ),
     fixed_items: fixedItems
       .filter((item) => item.itemId && Number.isFinite(item.quantity) && item.quantity > 0)
       .map((item) => ({ item_id: item.itemId, quantity: item.quantity })),
