@@ -254,7 +254,7 @@ async def test_preview_computes_document_from_config_and_catalog() -> None:
         assert doc.bistro.min_applied is False
 
 
-def test_bistro_run_rejects_negative_pole_counts() -> None:
+async def test_bistro_run_rejects_negative_pole_counts() -> None:
     with pytest.raises(ValueError, match="greater than or equal to 0"):
         WizardBistroRun(installation="permanent", feet=100, pole_count=-1)
 
@@ -1049,6 +1049,115 @@ async def _sent_wizard_quote(
     sent = await svc.mark_sent(workspace_id, uuid.UUID(str(saved.id)))
     assert sent.public_token
     return sent.public_token
+
+
+async def test_locked_public_proposal_exposes_and_accepts_only_selected_package() -> None:
+    """A crafted tier key cannot change the package the operator sent."""
+    from app.services.exceptions import ValidationError
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        payload = _payload()
+        payload.selected_tier = "good"
+        payload.customer_can_select_package = False
+        payload.deposit = WizardDepositSelection(mode="percentage", value=50)
+        payload.additional_charges = [
+            WizardCharge(description="Permit", net_amount=100),
+            WizardCharge(description="Premier drilling", net_amount=500, tier_key="best"),
+            WizardCharge(description="Starter trenching", net_amount=250, tier_key="good"),
+        ]
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        sent = await svc.mark_sent(ws.id, uuid.UUID(str(saved.id)))
+        assert sent.public_token
+
+        before = await svc.get_public_proposal(sent.public_token)
+        document = before.proposal_document
+        assert document is not None
+        assert before.packages == []
+        assert document["tier_order"] == ["good"]
+        assert [tier["key"] for tier in document["tiers"]] == ["good"]
+        assert document["selected_tier"] == "good"
+        assert document["headline_tier"] == "good"
+        assert [charge["description"] for charge in document["additional_charges"]] == [
+            "Permit",
+            "Starter trenching",
+        ]
+
+        original = (
+            before.status,
+            before.total,
+            before.deposit_amount,
+            [(line.name, line.total) for line in before.line_items],
+        )
+        with pytest.raises(ValidationError, match="locked to the selected package"):
+            await svc.approve_public(
+                sent.public_token,
+                proposal_version=before.proposal_version,
+                selected_tier="best",
+            )
+
+        unchanged = await svc.get_public_proposal(sent.public_token)
+        assert (
+            unchanged.status,
+            unchanged.total,
+            unchanged.deposit_amount,
+            [(line.name, line.total) for line in unchanged.line_items],
+        ) == original
+        stored = await db.get(Quote, uuid.UUID(str(saved.id)))
+        assert stored is not None
+        assert stored.proposal_document["selected_tier"] == "good"
+        assert len(stored.proposal_document["tiers"]) == 2
+        assert len(stored.proposal_document["additional_charges"]) == 3
+
+        approved = await svc.approve_public(
+            sent.public_token, proposal_version=before.proposal_version
+        )
+        assert approved.status == "approved"
+        assert approved.deposit_amount == before.deposit_amount
+        repeated = await svc.approve_public(
+            sent.public_token,
+            proposal_version=before.proposal_version,
+            selected_tier="good",
+        )
+        assert repeated.status == "approved"
+        assert repeated.deposit_amount == before.deposit_amount
+
+
+async def test_legacy_proposal_without_package_intent_keeps_customer_choice() -> None:
+    """Stored inputs predating the lock field retain their package ladder."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        saved = await svc.save_from_wizard(ws.id, _payload(), created_by_id=None)
+        quote = await db.get(Quote, uuid.UUID(str(saved.id)))
+        assert quote is not None
+        legacy_input = dict(quote.proposal_input or {})
+        assert legacy_input.pop("customer_can_select_package") is True
+        quote.proposal_input = legacy_input
+        await db.commit()
+
+        sent = await svc.mark_sent(ws.id, uuid.UUID(str(saved.id)))
+        assert sent.public_token
+        public = await svc.get_public_proposal(sent.public_token)
+        packages = {package.key: package for package in public.packages}
+        assert set(packages) == {"best", "good"}
+        assert public.proposal_document is not None
+        assert [tier["key"] for tier in public.proposal_document["tiers"]] == [
+            "best",
+            "good",
+        ]
+
+        approved = await svc.approve_public(
+            sent.public_token,
+            proposal_version=public.proposal_version,
+            selected_tier="good",
+        )
+        assert approved.status == "approved"
+        after = await svc.get_public_proposal(sent.public_token)
+        assert after.total == packages["good"].total
+        assert after.proposal_document is not None
+        assert after.proposal_document["selected_tier"] == "good"
 
 
 async def test_public_read_offers_every_package_with_its_own_deposit() -> None:

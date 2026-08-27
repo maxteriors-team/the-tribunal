@@ -1716,6 +1716,43 @@ class QuoteService:
             await self.db.refresh(quote, ["line_items"])
         return quote
 
+    @staticmethod
+    def _customer_can_select_package(quote: Quote) -> bool:
+        """Default legacy snapshots to customer choice; only stored ``false`` locks."""
+        raw = quote.proposal_input
+        return not (isinstance(raw, Mapping) and raw.get("customer_can_select_package") is False)
+
+    def _public_proposal_document(self, quote: Quote) -> dict[str, object] | None:
+        """Return the allowlisted snapshot, narrowed to the staff-selected package."""
+        document = client_safe_document(quote.proposal_document)
+        if document is None or self._customer_can_select_package(quote):
+            return document
+
+        selected = document.get("selected_tier")
+        tier_order = document.get("tier_order")
+        tiers = document.get("tiers")
+        charges = document.get("additional_charges")
+        document["tier_order"] = (
+            [key for key in tier_order if key == selected] if isinstance(tier_order, list) else []
+        )
+        document["tiers"] = (
+            [tier for tier in tiers if isinstance(tier, Mapping) and tier.get("key") == selected]
+            if isinstance(tiers, list)
+            else []
+        )
+        document["headline_tier"] = selected
+        document["additional_charges"] = (
+            [
+                charge
+                for charge in charges
+                if isinstance(charge, Mapping)
+                and (charge.get("tier_key") is None or charge.get("tier_key") == selected)
+            ]
+            if isinstance(charges, list)
+            else []
+        )
+        return document
+
     async def get_public_proposal(self, token: str) -> PublicProposal:
         """Return the read-only, safe-fields-only proposal for a public token."""
         quote = await self._load_by_token(token)
@@ -1764,8 +1801,9 @@ class QuoteService:
             deposit_required=deposit_due is not None and not deposit_paid,
             # Allowlisted copy — the stored snapshot carries the staff-only
             # fulfillment sheet (distributor SKUs), which must not reach the
-            # unauthenticated client page.
-            proposal_document=client_safe_document(quote.proposal_document),
+            # unauthenticated client page. Locked quotes are narrowed further to
+            # the package the operator selected.
+            proposal_document=self._public_proposal_document(quote),
             line_items=[
                 PublicProposalLineItem(
                     name=li.name,
@@ -1800,6 +1838,8 @@ class QuoteService:
         Returns an empty list when there is nothing to choose (a plain quote, or
         a proposal with a single priced package).
         """
+        if not self._customer_can_select_package(quote):
+            return []
         raw = quote.proposal_document
         if not raw:
             return []
@@ -2123,9 +2163,15 @@ class QuoteService:
                 code="proposal_changed",
             )
         should_send_receipt = quote.status == "sent"
-        # Re-pointing an already-decided quote would rewrite a signed agreement,
-        # so the lifecycle guard runs first and a late package switch is ignored.
-        if selected_tier and quote.status in {"draft", "sent"}:
+        customer_can_select_package = self._customer_can_select_package(quote)
+        if selected_tier and not customer_can_select_package:
+            document = quote.proposal_document
+            locked_tier = document.get("selected_tier") if isinstance(document, Mapping) else None
+            if selected_tier != locked_tier:
+                raise ValidationError("This proposal is locked to the selected package.")
+        # Re-pointing an already-decided selectable quote would rewrite a signed
+        # agreement, so a late package switch keeps the existing idempotent behavior.
+        if selected_tier and customer_can_select_package and quote.status in {"draft", "sent"}:
             await self._apply_client_package(quote, selected_tier)
         result = await self.approve_quote(
             quote.workspace_id,

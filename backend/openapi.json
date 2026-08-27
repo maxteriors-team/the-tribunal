@@ -40563,6 +40563,11 @@
             ],
             "title": "Contact Id"
           },
+          "customer_can_select_package": {
+            "default": true,
+            "title": "Customer Can Select Package",
+            "type": "boolean"
+          },
           "deposit": {
             "anyOf": [
               {

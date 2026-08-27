@@ -26520,6 +26520,11 @@ export interface components {
             client?: components["schemas"]["WizardClient"] | null;
             /** Contact Id */
             contact_id?: number | null;
+            /**
+             * Customer Can Select Package
+             * @default true
+             */
+            customer_can_select_package: boolean;
             deposit?: components["schemas"]["WizardDepositSelection"] | null;
             /** Fixed Items */
             fixed_items?: components["schemas"]["WizardFixtureQty"][];
