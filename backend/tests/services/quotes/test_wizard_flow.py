@@ -1133,7 +1133,8 @@ async def test_legacy_proposal_without_package_intent_keeps_customer_choice() ->
         quote = await db.get(Quote, uuid.UUID(str(saved.id)))
         assert quote is not None
         legacy_input = dict(quote.proposal_input or {})
-        assert legacy_input.pop("customer_can_select_package") is True
+        customer_can_select_package = legacy_input.pop("customer_can_select_package")
+        assert customer_can_select_package is True
         quote.proposal_input = legacy_input
         await db.commit()
 
