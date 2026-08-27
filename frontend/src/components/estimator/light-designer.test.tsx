@@ -10,6 +10,7 @@ import {
   PERMANENT_COMPLEXITY_OPTIONS,
 } from "@/components/estimator/light-designer";
 import { estimatorApi } from "@/lib/api/estimator";
+import { quotesApi } from "@/lib/api/quotes";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
 import { designScale, designToEstimateInputs, hasDesign } from "@/lib/estimator/design";
 import {
@@ -28,6 +29,13 @@ vi.mock("@/lib/api/estimator", () => ({
     deliver: vi.fn(),
     render: vi.fn(),
     createQuote: vi.fn(),
+  },
+}));
+
+vi.mock("@/lib/api/quotes", () => ({
+  quotesApi: {
+    get: vi.fn(),
+    deliver: vi.fn(),
   },
 }));
 
@@ -442,9 +450,15 @@ describe("LightDesigner", () => {
       to: "",
     });
     vi.mocked(estimatorApi.createQuote).mockResolvedValue({
+      id: "quote-1",
       number: "QUO-000007",
       deposit_amount: null,
     } as Awaited<ReturnType<typeof estimatorApi.createQuote>>);
+    vi.mocked(quotesApi.deliver).mockResolvedValue({
+      ok: true,
+      channel: "email",
+      to: "pat@example.com",
+    });
     vi.mocked(loadLandscapeDraft).mockResolvedValue(null);
     vi.mocked(saveLandscapeDraft).mockImplementation(async (workspaceId, shots) => ({
       workspaceId,
@@ -886,6 +900,7 @@ describe("LightDesigner", () => {
 
   it("adds a deposit percentage to the permanent quote and shows the payment path", async () => {
     vi.mocked(estimatorApi.createQuote).mockResolvedValueOnce({
+      id: "quote-1",
       number: "QUO-000007",
       deposit_amount: 990,
     } as Awaited<ReturnType<typeof estimatorApi.createQuote>>);
@@ -912,14 +927,8 @@ describe("LightDesigner", () => {
     expect(screen.getByText(/Customer approval opens secure card checkout/i)).toBeInTheDocument();
   });
 
-  it("emails the estimate in one click, minting a share link first", async () => {
-    vi.mocked(estimatorApi.share).mockResolvedValue({
-      url: "https://app.test/p/compare/tok_123",
-      token: "tok_123",
-      contact_id: 42,
-      saved_to_customer: true,
-    });
-    vi.mocked(estimatorApi.deliver).mockResolvedValue({
+  it("creates and emails the actionable permanent proposal in one click", async () => {
+    vi.mocked(quotesApi.deliver).mockResolvedValue({
       ok: true,
       channel: "email",
       to: "buyer@example.com",
@@ -929,44 +938,41 @@ describe("LightDesigner", () => {
     await uploadPhoto(container);
     enableService(/^Permanent$/);
 
-    // The email button is there immediately, disabled until an email is typed —
-    // the rep never has to press "Save & share" first.
-    const emailBtn = screen.getByRole("button", { name: /Email estimate/i });
+    const emailBtn = screen.getByRole("button", { name: /Email proposal/i });
     expect(emailBtn).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/Customer email/i), {
       target: { value: "buyer@example.com" },
     });
     expect(emailBtn).toBeEnabled();
+    expect(screen.getByText(/customer accepts it there/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Save & share link only/i })).toHaveTextContent(
+      /no approval or payment/i,
+    );
 
-    // One click mints the share link (share) and then delivers it (deliver).
     fireEvent.click(emailBtn);
 
     await waitFor(() =>
-      expect(estimatorApi.share).toHaveBeenCalledWith(
+      expect(estimatorApi.createQuote).toHaveBeenCalledWith(
         "ws_1",
-        expect.objectContaining({ client_email: "buyer@example.com" }),
+        expect.objectContaining({ side: "permanent", client_email: "buyer@example.com" }),
       ),
     );
     await waitFor(() =>
-      expect(estimatorApi.deliver).toHaveBeenCalledWith(
+      expect(quotesApi.deliver).toHaveBeenCalledWith(
         "ws_1",
-        "tok_123",
-        "buyer@example.com",
+        "quote-1",
         "email",
+        "buyer@example.com",
       ),
     );
+    expect(estimatorApi.share).not.toHaveBeenCalled();
+    expect(estimatorApi.deliver).not.toHaveBeenCalled();
     expect(await screen.findByText(/Emailed to buyer@example\.com/i)).toBeInTheDocument();
   });
 
-  it("texts the estimate to the customer's phone, minting a share link first", async () => {
-    vi.mocked(estimatorApi.share).mockResolvedValue({
-      url: "https://app.test/p/compare/tok_123",
-      token: "tok_123",
-      contact_id: 42,
-      saved_to_customer: true,
-    });
-    vi.mocked(estimatorApi.deliver).mockResolvedValue({
+  it("creates and texts the actionable permanent proposal in one click", async () => {
+    vi.mocked(quotesApi.deliver).mockResolvedValue({
       ok: true,
       channel: "sms",
       to: "+15551234567",
@@ -976,9 +982,7 @@ describe("LightDesigner", () => {
     await uploadPhoto(container);
     enableService(/^Permanent$/);
 
-    // Same deal as email: present from the start, disabled until there's a
-    // number to send to.
-    const textBtn = screen.getByRole("button", { name: /Text estimate/i });
+    const textBtn = screen.getByRole("button", { name: /Text proposal/i });
     expect(textBtn).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/Customer phone/i), {
@@ -989,28 +993,27 @@ describe("LightDesigner", () => {
     fireEvent.click(textBtn);
 
     await waitFor(() =>
-      expect(estimatorApi.deliver).toHaveBeenCalledWith("ws_1", "tok_123", "+15551234567", "sms"),
+      expect(quotesApi.deliver).toHaveBeenCalledWith(
+        "ws_1",
+        "quote-1",
+        "sms",
+        "+15551234567",
+      ),
     );
-    // Names the rail, so a bare phone number never leaves the rep guessing
-    // whether this went out as a text or an email.
+    expect(estimatorApi.share).not.toHaveBeenCalled();
+    expect(estimatorApi.deliver).not.toHaveBeenCalled();
     expect(await screen.findByText(/Texted to \+15551234567/i)).toBeInTheDocument();
   });
 
-  it("tells the rep what to fix when a text can't be sent", async () => {
-    vi.mocked(estimatorApi.share).mockResolvedValue({
-      url: "https://app.test/p/compare/tok_123",
-      token: "tok_123",
-      contact_id: 42,
-      saved_to_customer: true,
-    });
-    // The server's refusals are actionable; a generic "couldn't send" would
-    // throw away the only sentence that tells the rep what to do next.
-    vi.mocked(estimatorApi.deliver).mockRejectedValue(
+  it("surfaces quote delivery errors for permanent proposals", async () => {
+    // The server's refusals are actionable; preserve them instead of replacing
+    // them with a generic retry sentence.
+    vi.mocked(quotesApi.deliver).mockRejectedValue(
       Object.assign(new Error("Request failed"), {
         response: {
           status: 422,
           data: {
-            detail: "No SMS-enabled phone number in this workspace \u2014 add one under Settings.",
+            detail: "No SMS-enabled phone number in this workspace — add one under Settings.",
           },
         },
       }),
@@ -1022,9 +1025,35 @@ describe("LightDesigner", () => {
     fireEvent.change(screen.getByLabelText(/Customer phone/i), {
       target: { value: "+15551234567" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Text estimate/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Text proposal/i }));
 
     expect(await screen.findByText(/add one under Settings/i)).toBeInTheDocument();
+  });
+
+  it("retries delivery without creating a duplicate permanent quote", async () => {
+    vi.mocked(quotesApi.deliver)
+      .mockRejectedValueOnce(new Error("Provider unavailable"))
+      .mockResolvedValueOnce({
+        ok: true,
+        channel: "email",
+        to: "buyer@example.com",
+      });
+
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    enableService(/^Permanent$/);
+    fireEvent.change(screen.getByLabelText(/Customer email/i), {
+      target: { value: "buyer@example.com" },
+    });
+
+    const emailButton = screen.getByRole("button", { name: /Email proposal/i });
+    fireEvent.click(emailButton);
+    expect(await screen.findByText(/Provider unavailable/i)).toBeInTheDocument();
+
+    fireEvent.click(emailButton);
+    expect(await screen.findByText(/Emailed to buyer@example\.com/i)).toBeInTheDocument();
+    expect(estimatorApi.createQuote).toHaveBeenCalledTimes(1);
+    expect(quotesApi.deliver).toHaveBeenCalledTimes(2);
   });
 
   it("tallies drawn fixture types against the product the package sells", async () => {
@@ -1133,13 +1162,18 @@ describe("LightDesigner", () => {
     expect(preview).toHaveTextContent("$2,800");
     expect(preview).not.toHaveTextContent("$900");
 
-    fireEvent.click(screen.getByRole("button", { name: /Save & share link only/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Rep view/i }));
+    fireEvent.change(screen.getByLabelText(/Customer email/i), {
+      target: { value: "buyer@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Email proposal/i }));
     await waitFor(() =>
-      expect(estimatorApi.share).toHaveBeenCalledWith(
+      expect(estimatorApi.createQuote).toHaveBeenCalledWith(
         "ws_1",
         expect.objectContaining({ proposal_side: "permanent", discount_amount: 500 }),
       ),
     );
+    expect(estimatorApi.share).not.toHaveBeenCalled();
   });
 
   // ---- Standalone line items (independent of packages) -------------------
