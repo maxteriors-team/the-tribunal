@@ -2,6 +2,8 @@
 
 The Tribunal is a proprietary AI-powered CRM command center for capturing leads, running AI voice/SMS follow-up, booking appointments, and giving operators a Next.js dashboard for human-in-the-loop decisions.
 
+Read CONTEXT.md before naming anything.
+
 ## Apps and stable structure
 
 - `frontend/` — Next.js 16 + React 19 + TypeScript dashboard. Key folders: `src/app/` routes, `src/components/` feature/UI components, `src/lib/api/` API clients and generated OpenAPI types, `src/providers/` auth/workspace providers, `src/types/` shared domain types, `src/widget/` embeddable chat widget.
