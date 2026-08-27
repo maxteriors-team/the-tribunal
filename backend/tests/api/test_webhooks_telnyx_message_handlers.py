@@ -23,6 +23,7 @@ import pytest
 
 from app.api.webhooks import telnyx_message_handlers as handlers
 from app.core.config import settings as app_settings
+from app.services.telephony.inbound_text import InboundMessageIngestResult
 from tests.fixtures.webhooks import load_telnyx_payload
 
 # --------------------------------------------------------------------------- #
@@ -179,7 +180,9 @@ async def test_inbound_media_only_message_is_ingested(
 
     ingested_message = MagicMock(id=uuid.uuid4())
     sms_service = MagicMock()
-    sms_service.process_inbound_message = AsyncMock(return_value=ingested_message)
+    sms_service.process_inbound_message = AsyncMock(
+        return_value=InboundMessageIngestResult(ingested_message, created=True)
+    )
     sms_service.close = AsyncMock(return_value=None)
     monkeypatch.setattr(handlers, "TelnyxSMSService", lambda *args, **kwargs: sms_service)
 
@@ -188,7 +191,8 @@ async def test_inbound_media_only_message_is_ingested(
     async def fake_pipeline(**kwargs: Any) -> MagicMock:
         nonlocal captured_event
         captured_event = kwargs["event"]
-        return await kwargs["ingest_message"](kwargs["db"], captured_event)
+        result = await kwargs["ingest_message"](kwargs["db"], captured_event)
+        return result.message
 
     monkeypatch.setattr(handlers, "process_inbound_text_event", fake_pipeline)
     payload = {
@@ -338,7 +342,9 @@ async def test_inbound_message_processes_and_schedules_ai_response(
     _patch_session_local(monkeypatch, db)
 
     sms_service = MagicMock()
-    sms_service.process_inbound_message = AsyncMock(return_value=ingested_message)
+    sms_service.process_inbound_message = AsyncMock(
+        return_value=InboundMessageIngestResult(ingested_message, created=True)
+    )
     sms_service.close = AsyncMock(return_value=None)
     monkeypatch.setattr(
         handlers,
@@ -400,7 +406,9 @@ async def test_inbound_message_skips_ai_when_paused(
     _patch_session_local(monkeypatch, db)
 
     sms_service = MagicMock()
-    sms_service.process_inbound_message = AsyncMock(return_value=ingested_message)
+    sms_service.process_inbound_message = AsyncMock(
+        return_value=InboundMessageIngestResult(ingested_message, created=True)
+    )
     sms_service.close = AsyncMock(return_value=None)
     monkeypatch.setattr(
         handlers,

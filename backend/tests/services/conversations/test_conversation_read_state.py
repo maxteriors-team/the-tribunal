@@ -5,17 +5,27 @@ what it returns, when it skips the write), not SQL execution.
 """
 
 import uuid
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.models.workspace import WorkspaceIntegration
 from app.services.conversations.conversation_service import ConversationService
 from tests.factories import ContactFactory, ConversationFactory
 
 
 def _db_returning(result: MagicMock) -> AsyncMock:
     db = AsyncMock()
-    db.execute = AsyncMock(return_value=result)
+    no_quo_integration = MagicMock()
+    no_quo_integration.scalar_one_or_none.return_value = None
+
+    async def execute(statement: Any) -> MagicMock:
+        descriptions = getattr(statement, "column_descriptions", ())
+        entity = descriptions[0].get("entity") if descriptions else None
+        return no_quo_integration if entity is WorkspaceIntegration else result
+
+    db.execute = AsyncMock(side_effect=execute)
     db.commit = AsyncMock()
     return db
 

@@ -13,6 +13,7 @@ from app.api.deps import (
     WorkspaceAdminAccess,
 )
 from app.core.permissions import Capability, role_can
+from app.core.roles import can_assign_workspace_role
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.bulk_members import (
@@ -202,6 +203,11 @@ async def update_member_role(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to manage members",
+        )
+    if not can_assign_workspace_role(membership.role, role_update.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the workspace owner can grant the admin role",
         )
 
     # Get target membership

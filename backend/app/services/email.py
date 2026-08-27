@@ -944,10 +944,9 @@ async def send_invoice_payment_receipt(
         details["Balance remaining"] = f"{currency_code} {balance_remaining:,.2f}"
     if service_summary:
         details["Services provided"] = service_summary
-    if support_email:
-        details["Questions"] = support_email
-    elif support_phone:
-        details["Questions"] = support_phone
+    questions = " or ".join(value for value in (support_phone, support_email) if value)
+    if questions:
+        details["Questions"] = questions
 
     blocks: list[Block] = [
         Paragraph(f"Hi {customer_name or 'there'},"),

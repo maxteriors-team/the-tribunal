@@ -20,18 +20,24 @@ Usage:
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 import structlog
 from openai.types.chat import ChatCompletionMessageToolCall
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import Agent
 from app.models.contact import Contact
-from app.models.conversation import Conversation
+from app.models.conversation import Conversation, Message, MessageDirection
+from app.models.conversation_booking_draft import (
+    BookingDraftCallType,
+    ConversationBookingDraft,
+)
 from app.services.ai.base_tool_executor import BaseToolExecutor
+from app.services.ai.booking_confirmation import is_explicit_booking_confirmation
 from app.services.ai.contact_context_snapshot import ContactContextSnapshotService
 from app.services.ai.contact_state_evidence import (
     ContactEvidenceDomain,
@@ -41,20 +47,22 @@ from app.services.ai.contact_state_evidence import (
 from app.services.ai.context_observability import observability_logger, observe_tool_call
 from app.services.ai.website_lead_qualification import WebsiteLeadQualificationPolicy
 from app.services.appointments.booking_finalizer import finalize_booking, format_contact_address
+from app.services.appointments.booking_validation import validate_booking_request
 from app.services.appointments.cancellation import cancel_upcoming_appointments
 from app.services.approval.approval_gate_service import approval_gate_service
 from app.services.leads.funnel_transitions import mark_contact_qualified
 from app.utils.meeting_urls import meeting_provider_name
 
 logger = structlog.get_logger()
+_BOOKING_DRAFT_TTL = timedelta(hours=24)
 
-# Read-only retrieval tools bypass the HITL approval gate. Cancellation is also exempt:
-# delaying an explicit customer cancellation leaves reminders running after they opted out
-# of the appointment.
+# Read-only retrieval, reversible draft preparation, and explicit cancellation bypass
+# the HITL approval gate. Calendar mutation still requires the gate.
 GATE_EXEMPT_TOOLS: frozenset[str] = frozenset(
     {
         "search_knowledge",
         "lookup_contact_state",
+        "prepare_booking",
         "cancel_appointment",
         "mark_lead_qualified",
     }
@@ -135,6 +143,7 @@ class TextToolExecutor(BaseToolExecutor):
                 status="requested",
             )
 
+            arguments, preflight_error = await self._preflight_tool_call(function_name, arguments)
             # Read-only tools (e.g. knowledge lookups) skip the approval gate.
             if function_name in GATE_EXEMPT_TOOLS:
                 result = await self.execute(function_name, arguments)
@@ -162,36 +171,7 @@ class TextToolExecutor(BaseToolExecutor):
                 )
                 continue
 
-            # Check approval gate
-            decision, _gate_result = await approval_gate_service.check_and_execute_or_queue(
-                db=self.db,
-                agent_id=self.agent.id,
-                workspace_id=self.agent.workspace_id,
-                action_type=function_name,
-                action_payload=arguments,
-                description=f"{function_name}: {arguments}",
-                context={
-                    "source": "text_conversation",
-                    "conversation_id": str(self.conversation.id),
-                },
-            )
-
-            if decision == "pending":
-                result = {
-                    "success": False,
-                    "pending_approval": True,
-                    "message": (
-                        "I need approval from your operator for this action. They've been notified."
-                    ),
-                }
-            elif decision == "blocked":
-                result = {
-                    "success": False,
-                    "blocked": True,
-                    "message": "I'm not permitted to perform this action.",
-                }
-            else:
-                result = await self.execute(function_name, arguments)
+            result = await self._execute_gated_tool(function_name, arguments, preflight_error)
 
             results.append(
                 {
@@ -226,6 +206,59 @@ class TextToolExecutor(BaseToolExecutor):
 
         return results
 
+    async def _preflight_tool_call(
+        self, function_name: str, arguments: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """Replace untrusted booking arguments with the confirmed server draft."""
+        if function_name != "book_appointment":
+            return arguments, None
+        draft_or_error = await self._confirmed_booking_draft(arguments)
+        if isinstance(draft_or_error, dict):
+            error = self._attach_fresh_evidence(
+                draft_or_error,
+                domains={"appointment", "availability"},
+                has_evidence=False,
+            )
+            return arguments, error
+        return self._booking_arguments_from_draft(draft_or_error, arguments), None
+
+    async def _execute_gated_tool(
+        self,
+        function_name: str,
+        arguments: dict[str, Any],
+        preflight_error: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Apply the approval gate after tool-specific preflight validation."""
+        if preflight_error is not None:
+            return preflight_error
+        decision, _gate_result = await approval_gate_service.check_and_execute_or_queue(
+            db=self.db,
+            agent_id=self.agent.id,
+            workspace_id=self.agent.workspace_id,
+            action_type=function_name,
+            action_payload=arguments,
+            description=f"{function_name}: {arguments}",
+            context={
+                "source": "text_conversation",
+                "conversation_id": str(self.conversation.id),
+            },
+        )
+        if decision == "pending":
+            return {
+                "success": False,
+                "pending_approval": True,
+                "message": (
+                    "I need approval from your operator for this action. They've been notified."
+                ),
+            }
+        if decision == "blocked":
+            return {
+                "success": False,
+                "blocked": True,
+                "message": "I'm not permitted to perform this action.",
+            }
+        return await self.execute(function_name, arguments)
+
     # ── Main dispatch ───────────────────────────────────────────────
 
     async def execute(  # noqa: PLR0911
@@ -238,7 +271,7 @@ class TextToolExecutor(BaseToolExecutor):
         if scope_error is not None:
             return scope_error
 
-        if function_name in {"book_appointment", "check_availability"}:
+        if function_name in {"prepare_booking", "book_appointment", "check_availability"}:
             qualification_error = await self._qualification_booking_error()
             if qualification_error is not None:
                 return qualification_error
@@ -249,22 +282,10 @@ class TextToolExecutor(BaseToolExecutor):
                 arguments.get("subject"),
                 arguments.get("reference"),
             )
+        if function_name == "prepare_booking":
+            return await self._execute_prepare_booking(arguments)
         if function_name == "book_appointment":
-            result = await self._execute_book_with_contact_lookup(
-                date_str=arguments.get("date", ""),
-                time_str=arguments.get("time", ""),
-                email=arguments.get("email"),
-                customer_confirmed=arguments.get("customer_confirmed", False),
-                duration_minutes=arguments.get("duration_minutes", 30),
-                notes=arguments.get("notes"),
-                required_skill=arguments.get("skill"),
-                call_type=arguments.get("call_type"),
-            )
-            return self._attach_fresh_evidence(
-                result,
-                domains={"appointment", "availability"},
-                has_evidence=result.get("success") is True,
-            )
+            return await self._execute_confirmed_booking(arguments)
         if function_name == "check_availability":
             try:
                 result = await self.execute_check_availability(
@@ -342,6 +363,235 @@ class TextToolExecutor(BaseToolExecutor):
             }
         )
         return enriched
+
+    async def _execute_confirmed_booking(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Book only the persisted draft bound to the latest explicit confirmation."""
+        draft_or_error = await self._confirmed_booking_draft(arguments)
+        if isinstance(draft_or_error, dict):
+            return self._attach_fresh_evidence(
+                draft_or_error,
+                domains={"appointment", "availability"},
+                has_evidence=False,
+            )
+        draft = draft_or_error
+        result = await self._execute_book_with_contact_lookup(
+            date_str=draft.date.isoformat(),
+            time_str=draft.time.strftime("%H:%M"),
+            email=draft.email,
+            customer_confirmed=True,
+            duration_minutes=draft.duration_minutes,
+            notes=arguments.get("notes"),
+            required_skill=arguments.get("skill"),
+            call_type=BookingDraftCallType(draft.call_type).value,
+        )
+        if result.get("success") is True:
+            await self.db.delete(draft)
+            await self.db.flush()
+        return self._attach_fresh_evidence(
+            result,
+            domains={"appointment", "availability"},
+            has_evidence=result.get("success") is True,
+        )
+
+    async def _confirmed_booking_draft(
+        self, arguments: dict[str, Any]
+    ) -> ConversationBookingDraft | dict[str, Any]:
+        """Bind booking to the fresh summary immediately affirmed by the customer."""
+        if arguments.get("customer_confirmed") is not True:
+            return {
+                "success": False,
+                "blocked": True,
+                "error": "explicit_confirmation_required",
+                "message": "Please confirm the complete appointment summary first.",
+            }
+
+        draft_result = await self.db.execute(
+            select(ConversationBookingDraft).where(
+                ConversationBookingDraft.conversation_id == self.conversation.id,
+                ConversationBookingDraft.workspace_id == self.conversation.workspace_id,
+            )
+        )
+        draft = draft_result.scalar_one_or_none()
+        if draft is None:
+            return {
+                "success": False,
+                "blocked": True,
+                "error": "booking_draft_missing",
+                "message": "I need to restate the appointment details before booking.",
+            }
+
+        prepared_at = draft.prepared_at
+        if prepared_at.tzinfo is None:
+            prepared_at = prepared_at.replace(tzinfo=UTC)
+        if draft.timezone != self.timezone or datetime.now(UTC) - prepared_at > _BOOKING_DRAFT_TTL:
+            return {
+                "success": False,
+                "blocked": True,
+                "error": "booking_draft_stale",
+                "message": "That appointment summary expired. Which day should I recheck?",
+            }
+
+        recent_result = await self.db.execute(
+            select(Message)
+            .where(Message.conversation_id == self.conversation.id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(2)
+        )
+        recent_messages = list(recent_result.scalars().all())
+        if len(recent_messages) != 2:
+            return {
+                "success": False,
+                "blocked": True,
+                "error": "confirmation_context_missing",
+                "message": "Please confirm the complete appointment summary first.",
+            }
+        latest, prior = recent_messages
+        explicitly_affirmed = bool(
+            latest.direction == MessageDirection.INBOUND
+            and isinstance(latest.body, str)
+            and is_explicit_booking_confirmation(latest.body)
+        )
+        summary_matches = bool(
+            prior.direction == MessageDirection.OUTBOUND
+            and isinstance(prior.body, str)
+            and prior.body.strip() == draft.confirmation_text.strip()
+        )
+        if not explicitly_affirmed or not summary_matches:
+            return {
+                "success": False,
+                "blocked": True,
+                "error": "confirmation_context_mismatch",
+                "message": "Please confirm the latest complete appointment summary first.",
+            }
+        return draft
+
+    @staticmethod
+    def _booking_arguments_from_draft(
+        draft: ConversationBookingDraft,
+        requested_arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Replace model-supplied appointment fields with the confirmed server draft."""
+        arguments: dict[str, Any] = {
+            "date": draft.date.isoformat(),
+            "time": draft.time.strftime("%H:%M"),
+            "email": draft.email,
+            "customer_confirmed": True,
+            "duration_minutes": draft.duration_minutes,
+            "call_type": BookingDraftCallType(draft.call_type).value,
+            "booking_draft_prepared_at": draft.prepared_at.isoformat(),
+        }
+        notes = requested_arguments.get("notes")
+        if isinstance(notes, str) and 0 < len(notes.strip()) <= 500:
+            arguments["notes"] = notes.strip()
+        skill = requested_arguments.get("skill")
+        if isinstance(skill, str) and 0 < len(skill.strip()) <= 100:
+            arguments["skill"] = skill.strip()
+        return arguments
+
+    async def _execute_prepare_booking(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Validate and atomically persist one complete confirmation draft."""
+        contact = await self._get_contact()
+        raw_email = arguments.get("email") or getattr(contact, "email", None)
+        email = raw_email.strip() if isinstance(raw_email, str) else None
+        raw_call_type = arguments.get("call_type")
+        call_type = next(
+            (
+                member
+                for member in BookingDraftCallType
+                if isinstance(raw_call_type, str) and member.value == raw_call_type
+            ),
+            None,
+        )
+        if call_type is None:
+            return {
+                "success": False,
+                "error": "invalid_call_type",
+                "message": "Ask whether the customer prefers a phone call or video call.",
+            }
+
+        date_str = arguments.get("date", "")
+        time_str = arguments.get("time", "")
+        duration_minutes = arguments.get("duration_minutes", 30)
+        validation = validate_booking_request(
+            date_str=date_str,
+            time_str=time_str,
+            email=email,
+            duration_minutes=duration_minutes,
+            tz=self._get_timezone(),
+            service_type=call_type.value,
+        )
+        if not validation.valid or validation.scheduled_at is None:
+            return validation.as_tool_result()
+
+        scheduled_at = validation.scheduled_at
+        duration = int(duration_minutes)
+        confirmation_text = self._booking_confirmation_text(
+            scheduled_at=scheduled_at,
+            timezone=self.timezone,
+            duration_minutes=duration,
+            call_type=call_type,
+            email=email or "",
+        )
+        prepared_at = datetime.now(UTC)
+        values = {
+            "conversation_id": self.conversation.id,
+            "workspace_id": self.conversation.workspace_id,
+            "date": scheduled_at.date(),
+            "time": scheduled_at.time().replace(tzinfo=None),
+            "timezone": self.timezone,
+            "duration_minutes": duration,
+            "call_type": call_type,
+            "email": email,
+            "confirmation_text": confirmation_text,
+            "prepared_at": prepared_at,
+        }
+        statement = (
+            insert(ConversationBookingDraft)
+            .values(**values)
+            .on_conflict_do_update(
+                index_elements=[ConversationBookingDraft.conversation_id],
+                set_={
+                    key: value
+                    for key, value in values.items()
+                    if key not in {"conversation_id", "workspace_id"}
+                },
+                where=(ConversationBookingDraft.workspace_id == self.conversation.workspace_id),
+            )
+            .returning(ConversationBookingDraft.conversation_id)
+        )
+        persisted_id = (await self.db.execute(statement)).scalar_one_or_none()
+        if persisted_id is None:
+            self.log.warning("booking_draft_workspace_conflict")
+            return {
+                "success": False,
+                "blocked": True,
+                "error": "Booking draft scope does not match this conversation.",
+            }
+
+        return {
+            "success": True,
+            "booking_draft_prepared": True,
+            "message": confirmation_text,
+            "direct_response": confirmation_text,
+        }
+
+    @staticmethod
+    def _booking_confirmation_text(
+        *,
+        scheduled_at: datetime,
+        timezone: str,
+        duration_minutes: int,
+        call_type: BookingDraftCallType,
+        email: str,
+    ) -> str:
+        """Return the exact summary the customer must affirm before booking."""
+        date_text = scheduled_at.strftime("%A, %B %d, %Y").replace(" 0", " ")
+        time_text = scheduled_at.strftime("%I:%M %p").lstrip("0")
+        call_label = "phone call" if call_type is BookingDraftCallType.PHONE_CALL else "video call"
+        return (
+            f"Please confirm: {duration_minutes}-minute {call_label} on {date_text} at "
+            f"{time_text} {timezone}, invitation to {email}. Is that correct?"
+        )
 
     async def _execute_lookup_contact_state(
         self,

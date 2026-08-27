@@ -10,8 +10,11 @@ from app.services.telephony.telnyx import InboundMedia, TelnyxSMSService
 
 
 class _Result:
-    def scalar_one_or_none(self) -> None:
-        return None
+    def __init__(self, message: Message | None = None) -> None:
+        self.message = message
+
+    def scalar_one_or_none(self) -> Message | None:
+        return self.message
 
 
 async def test_inbound_mms_persists_message_and_media_queue_atomically() -> None:
@@ -56,7 +59,7 @@ async def test_inbound_mms_persists_message_and_media_queue_atomically() -> None
         ),
     )
 
-    message = await service.process_inbound_message(
+    ingest_result = await service.process_inbound_message(
         db=db,
         provider_message_id="message-with-media",
         from_number="+14155552671",
@@ -65,6 +68,8 @@ async def test_inbound_mms_persists_message_and_media_queue_atomically() -> None
         workspace_id=workspace_id,
         media=media,
     )
+    message = ingest_result.message
+    assert ingest_result.created is True
 
     added = [call.args[0] for call in db.add.call_args_list]
     attachments = [item for item in added if isinstance(item, MessageAttachment)]
@@ -80,6 +85,29 @@ async def test_inbound_mms_persists_message_and_media_queue_atomically() -> None
     assert conversation.unread_count == 1
     db.flush.assert_awaited_once()
     db.commit.assert_awaited_once()
+
+
+async def test_duplicate_inbound_delivery_reports_existing_message_without_writes() -> None:
+    existing = MagicMock(spec=Message)
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_Result(existing))
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    service = TelnyxSMSService("test-api-key")
+
+    result = await service.process_inbound_message(
+        db=db,
+        provider_message_id="message-duplicate",
+        from_number="+14155552671",
+        to_number="+12125550101",
+        body="Hello",
+        workspace_id=uuid.uuid4(),
+    )
+
+    assert result.message is existing
+    assert result.created is False
+    db.add.assert_not_called()
+    db.commit.assert_not_awaited()
 
 
 async def test_outbound_mms_sends_media_url_and_persists_ready_attachment() -> None:

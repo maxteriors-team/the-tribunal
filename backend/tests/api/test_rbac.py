@@ -428,6 +428,60 @@ async def test_field_technician_is_locked_to_operational_surfaces() -> None:
         _clear_overrides()
 
 
+@pytest.mark.parametrize(
+    ("method", "suffix"),
+    [
+        ("GET", "/contacts/5/attachments"),
+        ("GET", f"/contacts/5/attachments/{uuid.uuid4()}/download"),
+        ("POST", "/contacts/5/attachments"),
+        ("DELETE", f"/contacts/5/attachments/{uuid.uuid4()}"),
+        ("GET", "/contacts/5/companycam-photos"),
+    ],
+    ids=[
+        "attachment-list",
+        "attachment-download",
+        "attachment-upload",
+        "attachment-delete",
+        "companycam-photo-read",
+    ],
+)
+async def test_field_technician_is_denied_contact_media_routes(method: str, suffix: str) -> None:
+    """Contact media follows the contact book's CRM read/write boundary."""
+    from app.main import app
+
+    async def _workspace_override() -> types.SimpleNamespace:
+        # These routes use WorkspaceAccess separately from their capability gate.
+        # Stub that real dependency so a missing gate reaches the handler body.
+        return types.SimpleNamespace(id=WORKSPACE_ID, is_active=True)
+
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=result)
+
+    async def _db_override() -> AsyncIterator[AsyncMock]:
+        # A missing media gate should produce a normal handler response, not a
+        # mock-induced 500 that could disguise which boundary regressed.
+        yield db
+
+    try:
+        app.dependency_overrides[get_workspace] = _workspace_override
+        async with _client_as("technician") as client:
+            # _client_as installs its generic DB override when constructed; replace
+            # it before the request with the route-compatible async session above.
+            app.dependency_overrides[get_db] = _db_override
+            if method == "POST":
+                response = await client.post(
+                    _url(suffix),
+                    files={"file": ("jobsite.jpg", b"image bytes", "image/jpeg")},
+                )
+            else:
+                response = await client.request(method, _url(suffix))
+            assert response.status_code == 403, f"technician should be denied {method} {suffix}"
+    finally:
+        _clear_overrides()
+
+
 async def test_segments_and_automations_gated_reads_and_outreach_writes() -> None:
     """Reads need crm:read (member+); authoring needs outreach:write (sales+).
     Sales can create outreach but a plain member cannot; field techs get neither."""

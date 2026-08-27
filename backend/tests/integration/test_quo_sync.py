@@ -17,7 +17,8 @@ from app.models.contact import Contact
 from app.models.conversation import Conversation, Message, MessageDirection, MessageStatus
 from app.models.opt_out import GlobalOptOut
 from app.models.workspace import Workspace
-from app.services.quo.client import QuoClient
+from app.services.contacts.contact_repository import get_contact_timeline
+from app.services.quo.client import QuoApiError, QuoClient
 from app.services.quo.sync import QuoSyncError, QuoSyncService
 from app.services.webhooks.quo import QuoWebhookEvent
 
@@ -136,13 +137,19 @@ def _service(
     workspace_id: uuid.UUID,
     *,
     fetched_contact: dict[str, object] | None = None,
+    client: QuoClient | None = None,
+    phone_number_id: str = "PN_test",
+    phone_number: str = WORKSPACE_PHONE,
 ) -> QuoSyncService:
-    client = MagicMock(spec=QuoClient)
-    client.get_contact = AsyncMock(return_value=fetched_contact)
+    if client is None:
+        client = MagicMock(spec=QuoClient)
+        client.get_contact = AsyncMock(return_value=fetched_contact)
     return QuoSyncService(
         db,
         workspace_id=workspace_id,
         organization_id=ORGANIZATION_ID,
+        phone_number_id=phone_number_id,
+        phone_number=phone_number,
         client=client,
     )
 
@@ -155,36 +162,169 @@ async def _workspace(db: AsyncSession, label: str) -> Workspace:
     return workspace
 
 
-async def test_contact_update_creates_contact_and_preserves_it_on_delete() -> None:
+async def test_standalone_contact_events_are_acknowledged_without_global_import() -> None:
     async with AsyncSessionLocal() as db:
-        workspace = await _workspace(db, "Quo contact creation")
+        workspace = await _workspace(db, "Quo contact isolation")
         resource: dict[str, object] = {
-            "id": "CT_created",
+            "id": "CT_ignored",
             "firstName": "Ada",
             "lastName": "Lovelace",
-            "company": "Analytical Engines",
             "emails": ["ADA@example.com"],
             "phoneNumbers": [CONTACT_PHONE],
         }
         service = _service(db, workspace.id)
 
-        await service.process(_event("contact.updated", resource), MagicMock())
-        await service.process(_event("contact.deleted", resource), MagicMock())
+        updated = await service.process(_event("contact.updated", resource), MagicMock())
+        deleted = await service.process(_event("contact.deleted", resource), MagicMock())
         await db.commit()
 
-        contact = (
-            await db.execute(
-                select(Contact).where(
-                    Contact.workspace_id == workspace.id,
-                    Contact.external_source == "quo",
-                    Contact.external_id == "CT_created",
-                )
+        contact_count = await db.scalar(
+            select(func.count(Contact.id)).where(Contact.workspace_id == workspace.id)
+        )
+        assert updated.status == "ignored"
+        assert deleted.status == "ignored"
+        assert updated.reason == "standalone_contact_event"
+        assert contact_count == 0
+
+        await db.delete(workspace)
+        await db.commit()
+
+
+async def test_unselected_and_missing_line_events_create_no_crm_rows() -> None:
+    occurred_at = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+    async with AsyncSessionLocal() as db:
+        workspace = await _workspace(db, "Quo selected-line filter")
+        service = _service(db, workspace.id)
+
+        wrong_message = _message_resource(
+            f"AC_wrong_{uuid.uuid4().hex}",
+            direction="incoming",
+            created_at=occurred_at,
+        )
+        wrong_message["phoneNumberId"] = "PN_other"
+        wrong = await service.process(
+            _event("message.received", wrong_message),
+            MagicMock(),
+        )
+
+        missing_message = _message_resource(
+            f"AC_missing_{uuid.uuid4().hex}",
+            direction="incoming",
+            created_at=occurred_at,
+        )
+        missing_message.pop("phoneNumberId")
+        missing = await service.process(
+            _event("message.received", missing_message),
+            MagicMock(),
+        )
+        await db.commit()
+
+        assert wrong.status == "ignored"
+        assert wrong.reason == "unselected_phone_number"
+        assert missing.status == "ignored"
+        assert missing.reason == "missing_phone_number_id"
+        assert (
+            await db.scalar(
+                select(func.count(Contact.id)).where(Contact.workspace_id == workspace.id)
             )
-        ).scalar_one()
-        assert contact.first_name == "Ada"
-        assert contact.last_name == "Lovelace"
-        assert contact.email == "ada@example.com"
-        assert contact.company_name == "Analytical Engines"
+            == 0
+        )
+        assert (
+            await db.scalar(
+                select(func.count(Conversation.id)).where(Conversation.workspace_id == workspace.id)
+            )
+            == 0
+        )
+        assert (
+            await db.scalar(
+                select(func.count(Message.id))
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(Conversation.workspace_id == workspace.id)
+            )
+            == 0
+        )
+
+        await db.delete(workspace)
+        await db.commit()
+
+
+async def test_switching_selected_line_retains_each_lines_separate_history() -> None:
+    occurred_at = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+    second_workspace_phone = "+14155550199"
+    async with AsyncSessionLocal() as db:
+        workspace = await _workspace(db, "Quo line switching")
+        first_id = f"AC_first_{uuid.uuid4().hex}"
+        first_resource = _message_resource(
+            first_id,
+            direction="outgoing",
+            created_at=occurred_at,
+        )
+        await _service(db, workspace.id).process(
+            _event("message.sent", first_resource),
+            MagicMock(),
+        )
+
+        second_id = f"AC_second_{uuid.uuid4().hex}"
+        second_resource = _message_resource(
+            second_id,
+            direction="outgoing",
+            created_at=occurred_at + timedelta(minutes=1),
+        )
+        second_resource["phoneNumberId"] = "PN_second"
+        second_resource["from"] = second_workspace_phone
+        second_resource["senderIdentifier"] = second_workspace_phone
+        await _service(
+            db,
+            workspace.id,
+            phone_number_id="PN_second",
+            phone_number=second_workspace_phone,
+        ).process(
+            _event("message.sent", second_resource),
+            MagicMock(),
+        )
+
+        await _service(db, workspace.id).process(
+            _event(
+                "message.delivered",
+                first_resource,
+                event_at=occurred_at + timedelta(minutes=2),
+            ),
+            MagicMock(),
+        )
+        await db.commit()
+
+        conversations = list(
+            await db.scalars(select(Conversation).where(Conversation.workspace_id == workspace.id))
+        )
+        messages = list(
+            await db.scalars(
+                select(Message)
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(Conversation.workspace_id == workspace.id)
+            )
+        )
+        assert {conversation.workspace_phone for conversation in conversations} == {
+            WORKSPACE_PHONE,
+            second_workspace_phone,
+        }
+        assert {message.provider_message_id for message in messages} == {first_id, second_id}
+        first_message = next(
+            message for message in messages if message.provider_message_id == first_id
+        )
+        assert first_message.status == MessageStatus.DELIVERED
+        first_conversation = next(
+            conversation
+            for conversation in conversations
+            if conversation.workspace_phone == WORKSPACE_PHONE
+        )
+        assert first_conversation.contact_id is not None
+        timeline = await get_contact_timeline(
+            first_conversation.contact_id,
+            workspace.id,
+            db,
+            conversation_id=first_conversation.id,
+        )
+        assert [item["original_id"] for item in timeline] == [first_message.id]
 
         await db.delete(workspace)
         await db.commit()
@@ -244,7 +384,172 @@ async def test_message_matches_quo_external_id_before_phone_hash() -> None:
         await db.commit()
 
 
-async def test_contact_update_only_fills_blank_identity_fields() -> None:
+async def test_outbound_sender_ids_are_cached_and_snapshot_name_or_email() -> None:
+    occurred_at = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+    full_name_sender_id = f"US_full_{uuid.uuid4().hex}"
+    email_sender_id = f"US_email_{uuid.uuid4().hex}"
+    message_ids = [f"AC_sender_{uuid.uuid4().hex}" for _ in range(3)]
+    users: dict[str, dict[str, object]] = {
+        full_name_sender_id: {
+            "id": full_name_sender_id,
+            "firstName": "Ada",
+            "lastName": "Lovelace",
+            "email": "ada@example.com",
+        },
+        email_sender_id: {
+            "id": email_sender_id,
+            "firstName": "",
+            "lastName": "",
+            "email": "operator@example.com",
+        },
+    }
+
+    async def get_user(user_id: str) -> dict[str, object]:
+        return users[user_id]
+
+    user_lookup = AsyncMock(side_effect=get_user)
+    client = MagicMock()
+    client.get_contact = AsyncMock(return_value=None)
+    client.get_user = user_lookup
+
+    async with AsyncSessionLocal() as db:
+        workspace = await _workspace(db, "Quo outbound sender snapshots")
+        service = _service(db, workspace.id, client=client)
+        sender_ids = [full_name_sender_id, full_name_sender_id, email_sender_id]
+
+        for offset, (message_id, sender_id) in enumerate(zip(message_ids, sender_ids, strict=True)):
+            resource = _message_resource(
+                message_id,
+                direction="outgoing",
+                created_at=occurred_at + timedelta(seconds=offset),
+            )
+            resource["userId"] = sender_id
+            await service.process(_event("message.delivered", resource), MagicMock())
+
+        await db.commit()
+        messages = (
+            await db.execute(select(Message).where(Message.provider_message_id.in_(message_ids)))
+        ).scalars()
+        snapshots = {
+            message.provider_message_id: (
+                message.provider_sender_user_id,
+                message.sender_display_name,
+            )
+            for message in messages
+        }
+        lookup_calls = [mock_call.args for mock_call in user_lookup.await_args_list]
+
+        await db.delete(workspace)
+        await db.commit()
+
+    assert snapshots == {
+        message_ids[0]: (full_name_sender_id, "Ada Lovelace"),
+        message_ids[1]: (full_name_sender_id, "Ada Lovelace"),
+        message_ids[2]: (email_sender_id, "operator@example.com"),
+    }
+    assert lookup_calls == [(full_name_sender_id,), (email_sender_id,)]
+
+
+async def test_sender_lookup_failure_falls_back_then_revisit_enriches_snapshot() -> None:
+    occurred_at = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+    sender_id = f"US_retry_{uuid.uuid4().hex}"
+    message_id = f"AC_sender_retry_{uuid.uuid4().hex}"
+    resource = _message_resource(
+        message_id,
+        direction="outgoing",
+        created_at=occurred_at,
+        text="Persist even when sender lookup fails",
+    )
+    resource["userId"] = sender_id
+
+    failed_lookup = AsyncMock(side_effect=QuoApiError("Quo user lookup unavailable"))
+    failed_client = MagicMock()
+    failed_client.get_contact = AsyncMock(return_value=None)
+    failed_client.get_user = failed_lookup
+
+    async with AsyncSessionLocal() as db:
+        workspace = await _workspace(db, "Quo sender retry enrichment")
+        await _service(db, workspace.id, client=failed_client).process(
+            _event("message.delivered", resource),
+            MagicMock(),
+        )
+        await db.commit()
+
+        message = (
+            await db.execute(
+                select(Message).where(
+                    Message.provider_message_id == message_id,
+                    Message.source_provider == "quo",
+                )
+            )
+        ).scalar_one()
+        fallback_snapshot = (
+            message.provider_sender_user_id,
+            message.sender_display_name,
+            message.body,
+        )
+
+        enriched_lookup = AsyncMock(
+            return_value={
+                "id": sender_id,
+                "firstName": "Grace",
+                "lastName": "Hopper",
+                "email": "grace@example.com",
+            }
+        )
+        enriched_client = MagicMock()
+        enriched_client.get_contact = AsyncMock(return_value=None)
+        enriched_client.get_user = enriched_lookup
+        await _service(db, workspace.id, client=enriched_client).process(
+            _event("message.delivered", resource),
+            MagicMock(),
+        )
+        await db.commit()
+        await db.refresh(message)
+        enriched_snapshot = (
+            message.provider_sender_user_id,
+            message.sender_display_name,
+        )
+
+        changed_lookup = AsyncMock(
+            return_value={
+                "id": sender_id,
+                "firstName": "Changed",
+                "lastName": "Provider Name",
+                "email": "changed@example.com",
+            }
+        )
+        changed_client = MagicMock()
+        changed_client.get_contact = AsyncMock(return_value=None)
+        changed_client.get_user = changed_lookup
+        await _service(db, workspace.id, client=changed_client).process(
+            _event("message.delivered", resource),
+            MagicMock(),
+        )
+        await db.commit()
+        await db.refresh(message)
+        preserved_snapshot = (
+            message.provider_sender_user_id,
+            message.sender_display_name,
+        )
+        failed_lookup_count = failed_lookup.await_count
+        enriched_lookup_count = enriched_lookup.await_count
+
+        await db.delete(workspace)
+        await db.commit()
+
+    assert fallback_snapshot == (
+        sender_id,
+        sender_id,
+        "Persist even when sender lookup fails",
+    )
+    assert failed_lookup_count == 1
+    assert enriched_lookup_count == 1
+    assert enriched_snapshot == (sender_id, "Grace Hopper")
+    assert preserved_snapshot == enriched_snapshot
+
+
+async def test_standalone_contact_update_does_not_mutate_existing_contact() -> None:
     async with AsyncSessionLocal() as db:
         workspace = await _workspace(db, "Quo identity conflicts")
         contact = Contact(
@@ -275,11 +580,11 @@ async def test_contact_update_only_fills_blank_identity_fields() -> None:
         await db.commit()
 
         assert contact.first_name == "Operator First"
-        assert contact.last_name == "Quo Last"
+        assert contact.last_name == ""
         assert contact.email == "operator@example.com"
         assert contact.company_name == "Operator Company"
-        assert contact.external_source == "quo"
-        assert contact.external_id == "CT_conflict"
+        assert contact.external_source is None
+        assert contact.external_id is None
 
         await db.delete(workspace)
         await db.commit()
@@ -340,7 +645,7 @@ async def test_duplicate_and_out_of_order_delivery_do_not_regress_message() -> N
             await db.execute(select(Message).where(Message.provider_message_id == resource_id))
         ).scalar_one()
         assert message.status == MessageStatus.DELIVERED
-        assert message.delivered_at == occurred_at + timedelta(minutes=2)
+        assert message.delivered_at == occurred_at + timedelta(minutes=3)
         assert message.error_code is None
         assert message.error_message is None
 

@@ -83,6 +83,22 @@ describe("MessageComposer outbound images", () => {
     expect(screen.getByRole("button", { name: "Attach image" })).toBeDisabled();
   });
 
+  it("keeps Quo replies fixed-sender and text-only", async () => {
+    const { onSend } = renderComposer({
+      message: "Quo reply",
+      textOnly: true,
+      phoneNumbers: [phone, { ...phone, id: "phone-2", phone_number: "+12125550102" }],
+    });
+
+    expect(screen.queryByText("Send from:")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Attach image" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Choose image attachment")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Voice message" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByPlaceholderText("Type a message..."), { key: "Enter" });
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith(undefined));
+  });
+
   it("keeps the selected image when sending fails", async () => {
     const onSend = vi.fn().mockRejectedValue(new Error("provider failed"));
     renderComposer({ onSend });

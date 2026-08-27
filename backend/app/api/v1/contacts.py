@@ -91,6 +91,10 @@ from app.services.lead_sources.attribution_service import (
 )
 from app.services.lead_sources.capture_settings import get_lead_source_capture_settings
 from app.services.messaging.media_storage import MMSMediaStorage, MMSStorageError
+from app.services.quo.line import (
+    get_active_quo_line,
+    visible_conversation_provider_clause,
+)
 
 router = APIRouter(route_class=ServiceErrorRoute)
 
@@ -568,6 +572,8 @@ async def send_message_to_contact(
             message_body=message_in.body,
             from_number=message_in.from_number,
             image_data_url=message_in.image_data_url,
+            sender_user_id=current_user.id,
+            sender_display_name=current_user.full_name or current_user.email,
         )
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -669,16 +675,41 @@ async def get_contact_timeline(
     db: DB,
     membership: CanReadCRM,
     limit: int = Query(100, ge=1, le=500),
+    conversation_id: uuid.UUID | None = Query(default=None),
 ) -> list[TimelineItem]:
     """Get the conversation timeline for a contact.
 
     Returns a unified timeline of SMS messages, calls, appointments, etc.
     """
+    if conversation_id is not None:
+        conversation = await db.scalar(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.workspace_id == workspace_id,
+                Conversation.contact_id == contact_id,
+            )
+        )
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+        if conversation.source_provider == "quo":
+            active_line = await get_active_quo_line(db, workspace_id)
+            if active_line is None or conversation.workspace_phone_hash != hash_phone(
+                active_line.phone_number
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Conversation not found",
+                )
+
     service = ContactTimelineService(db)
     timeline_items_data = await service.get_contact_timeline(
         contact_id=contact_id,
         workspace_id=workspace_id,
         limit=limit,
+        conversation_id=conversation_id,
     )
 
     # Convert dicts to TimelineItem models
@@ -721,6 +752,7 @@ async def get_timeline_attachment_content(
             Conversation.contact_phone_hash == hash_phone(contact.phone_number)
         )
 
+    visible_provider = await visible_conversation_provider_clause(db, workspace_id)
     attachment_result = await db.execute(
         select(MessageAttachment)
         .join(Message, MessageAttachment.message_id == Message.id)
@@ -730,6 +762,7 @@ async def get_timeline_attachment_content(
             MessageAttachment.workspace_id == workspace_id,
             Conversation.workspace_id == workspace_id,
             or_(*conversation_matches),
+            visible_provider,
         )
     )
     attachment = attachment_result.scalar_one_or_none()

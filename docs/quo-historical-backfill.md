@@ -1,9 +1,10 @@
 # Quo historical backfill runbook
 
-This command imports Quo contacts changed in a recent window, texts created in that
-window, and calls completed in that window into one explicit Tribunal workspace. It
-uses the encrypted `workspace_integrations` credential and stored Quo organization ID;
-it does not accept or print an API key.
+This command imports texts and completed calls from one selected Quo phone line into one
+explicit CRM workspace. It discovers only conversations on that line; message/call processing
+resolves its own contact, while standalone Quo contacts are never imported. The command uses
+the encrypted `workspace_integrations` credential, stored organization ID, selected phone ID,
+and normalized number; it does not accept or print an API key.
 
 ## Verified API versions (2026-08-26)
 
@@ -15,7 +16,6 @@ operations. Historical collection remains on the path-versioned v1 API:
 | Tenant validation | `GET /webhooks` + `Quo-Api-Version: 2026-03-30` |
 | Webhook contact enrichment | `GET /contacts/{id}` + `Quo-Api-Version: 2026-03-30` |
 | Workspace phone numbers | `GET /v1/phone-numbers` |
-| Contacts | `GET /v1/contacts` |
 | Candidate conversations | `GET /v1/conversations` |
 | Historical texts | `GET /v1/messages` |
 | Historical calls | `GET /v1/calls` |
@@ -24,7 +24,6 @@ Do not add the dated header to `/v1/messages`: Quo's dated API does not currentl
 support historical message listing. Sources:
 
 - <https://www.quo.com/docs/2026-03-30/introduction>
-- <https://www.quo.com/docs/mdx/api-reference/contacts/list-contacts>
 - <https://www.quo.com/docs/mdx/api-reference/conversations/list-conversations>
 - <https://www.quo.com/docs/mdx/api-reference/messages/list-messages>
 - <https://www.quo.com/docs/mdx/api-reference/calls/list-calls>
@@ -83,18 +82,17 @@ railway run --service the-tribunal-api --environment production --no-local -- ba
   --apply
 ```
 
-The script validates the API key's Quo organization against the stored encrypted
-tenant binding before any write. It aborts on HTTP 401/403, tenant/phone-number scope
-mismatch, or invalid bounds. Other malformed provider resources are isolated and
-counted without response bodies, contact names, phone numbers, message bodies, or
+The script validates the API key's Quo organization and confirms the stored selected phone ID
+still maps to the stored normalized number before any write. It aborts on HTTP 401/403,
+tenant/phone-number scope mismatch, or invalid bounds. Other malformed provider resources are
+isolated and counted without response bodies, contact names, phone numbers, message bodies, or
 other PII in output.
 
-Writes commit every 100 resources so an interrupted run can resume. Provider IDs and
-the existing Quo sync upserts make retries idempotent; historical message statuses only
-advance, and historical resources do not overwrite newer message bodies, links,
-delivery timestamps, call status, transcript, or summary fields.
+Writes commit every 100 resources so an interrupted run can resume. Provider-message IDs use
+the same atomic reconciliation as signed webhooks and outbound acceptance, making retries
+idempotent. Historical status can only advance, sparse resources cannot erase richer data, and
+older activity cannot replace a newer conversation preview.
 
-Quo's contact-list v1 endpoint has no date filter, so the command must paginate the
-list and applies the requested date window locally to `createdAt`/`updatedAt`. Text and
-call requests pass API date bounds directly; conversation discovery is also scoped to
-validated workspace phone-number IDs.
+Conversation discovery requests only the validated selected phone ID. Message and call requests
+also include that ID, the participant, and the bounded dates; each returned resource is checked
+again before synchronization. Resources from another line fail closed rather than importing.

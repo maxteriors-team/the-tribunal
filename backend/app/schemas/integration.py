@@ -114,6 +114,23 @@ class IntegrationWithMaskedCredentials(IntegrationResponse):
     )
 
 
+class QuoPhoneNumberChoice(BaseModel):
+    """Safe Quo sender option returned after credential validation."""
+
+    id: str
+    phone_number: str
+    provider_label: str | None = None
+
+
+class QuoActiveLineStatus(BaseModel):
+    """Non-secret active Quo line visible to authenticated CRM readers."""
+
+    active: bool
+    phone_number_id: str | None = None
+    phone_number: str | None = None
+    has_contact_history: bool = False
+
+
 class IntegrationTestRequest(BaseModel):
     """Optional request body for testing an integration.
 
@@ -134,3 +151,4 @@ class IntegrationTestResult(BaseModel):
     success: bool
     message: str
     details: dict[str, Any] | None = None
+    phone_numbers: list[QuoPhoneNumberChoice] | None = None

@@ -17,7 +17,7 @@ constraint, so adding a role here is a code-only change.
 """
 
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, get_args
 
 
 class WorkspaceRole(StrEnum):
@@ -70,6 +70,15 @@ AssignableRole = Literal[
     "technician",
     "member",
 ]
+
+
+def can_assign_workspace_role(actor_role: str, target_role: str) -> bool:
+    """Return whether an actor may grant ``target_role`` to a workspace member."""
+    if target_role not in get_args(AssignableRole):
+        return False
+    return actor_role == WorkspaceRole.OWNER or (
+        actor_role == WorkspaceRole.ADMIN and target_role != WorkspaceRole.ADMIN
+    )
 
 
 def role_at_least(role: str, minimum: WorkspaceRole) -> bool:

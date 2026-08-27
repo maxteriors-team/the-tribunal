@@ -221,11 +221,11 @@ export function AIAgentsSection() {
           <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h3 className="text-sm font-semibold">AI Agents</h3>
           <Badge variant="outline" className="ml-auto text-xs">
-            Quo
+            Manual messaging only
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          Tribunal AI controls are unavailable for this read-only Quo thread.
+          AI controls are unavailable while this conversation uses manual messaging only.
         </p>
       </div>
     );

@@ -56,6 +56,7 @@ export function TeamSettingsTab() {
       <InviteMemberDialog
         open={inviteDialogOpen}
         onOpenChange={setInviteDialogOpen}
+        currentUserRole={currentWorkspace?.role ?? "member"}
       />
 
       <TeamMemberRoleDialog

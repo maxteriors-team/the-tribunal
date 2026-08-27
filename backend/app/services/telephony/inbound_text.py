@@ -24,6 +24,7 @@ from app.services.ai.text_agent import schedule_ai_response
 from app.services.approval.command_processor_service import command_processor_service
 from app.services.campaigns.conversation_syncer import CampaignConversationSyncer
 from app.services.push_notifications import push_notification_service
+from app.services.telephony.inbound_types import InboundMessageIngestResult
 
 logger = structlog.get_logger()
 
@@ -94,7 +95,10 @@ class OperatorChecker(Protocol):
         ...
 
 
-InboundMessageIngestor = Callable[[AsyncSession, "InboundTextEvent"], Awaitable[Message]]
+InboundMessageIngestor = Callable[
+    [AsyncSession, "InboundTextEvent"],
+    Awaitable[InboundMessageIngestResult],
+]
 
 
 @dataclass(slots=True, frozen=True)
@@ -163,17 +167,23 @@ async def process_inbound_text_event(
             )
             return None
 
-    message = await ingest_message(db, event)
+    ingest_result = await ingest_message(db, event)
+    if not ingest_result.created:
+        log.info(
+            "inbound_text_side_effects_duplicate_skipped",
+            message_id=str(ingest_result.message.id),
+        )
+        return ingest_result.message
     await run_inbound_text_side_effects(
         db=db,
-        message=message,
+        message=ingest_result.message,
         event=event,
         log=log,
         conversation_syncer=conversation_syncer,
         schedule_ai_response_fn=schedule_ai_response_fn,
         push_service=push_service,
     )
-    return message
+    return ingest_result.message
 
 
 async def run_inbound_text_side_effects(
@@ -227,8 +237,8 @@ async def persist_inbound_text_message(
     channel: MessageChannel,
     log: Any,
     conversation_channel: str | None = None,
-) -> Message:
-    """Persist an inbound text message with provider-neutral channel attribution."""
+) -> InboundMessageIngestResult:
+    """Persist an inbound text and report whether this delivery created it."""
     stored_channel = conversation_channel or channel.value
     if provider_message_id:
         existing_result = await db.execute(
@@ -242,7 +252,7 @@ async def persist_inbound_text_message(
         existing_message = existing_result.scalar_one_or_none()
         if existing_message is not None:
             log.info("inbound_text_duplicate_ignored", message_id=str(existing_message.id))
-            return existing_message
+            return InboundMessageIngestResult(existing_message, created=False)
 
     conversation = await _get_or_create_text_conversation(
         db=db,
@@ -314,10 +324,10 @@ async def persist_inbound_text_message(
         if existing_message is None:
             raise
         log.info("inbound_text_duplicate_race_ignored", message_id=str(existing_message.id))
-        return existing_message
+        return InboundMessageIngestResult(existing_message, created=False)
 
     await db.refresh(message)
-    return message
+    return InboundMessageIngestResult(message, created=True)
 
 
 async def _get_or_create_text_conversation(

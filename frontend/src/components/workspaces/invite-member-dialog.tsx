@@ -33,6 +33,7 @@ import {
   ASSIGNABLE_ROLES,
   ROLE_DESCRIPTIONS,
   ROLE_LABELS,
+  canAssignWorkspaceRole,
 } from "@/lib/workspace-roles";
 
 const inviteFormSchema = z.object({
@@ -52,11 +53,19 @@ const defaultValues: InviteFormValues = {
 interface InviteMemberDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  currentUserRole: string;
 }
 
-export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogProps) {
+export function InviteMemberDialog({
+  open,
+  onOpenChange,
+  currentUserRole,
+}: InviteMemberDialogProps) {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const availableRoles = ASSIGNABLE_ROLES.filter((role) =>
+    canAssignWorkspaceRole(currentUserRole, role),
+  );
 
   const createInvitationMutation = useMutation({
     mutationFn: (data: CreateInvitationRequest) => invitationsApi.create(workspaceId!, data),
@@ -141,7 +150,7 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
-                {ASSIGNABLE_ROLES.map((role) => (
+                {availableRoles.map((role) => (
                   <SelectItem key={role} value={role}>
                     <div>
                       <div className="font-medium">{ROLE_LABELS[role]}</div>

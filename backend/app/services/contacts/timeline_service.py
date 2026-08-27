@@ -28,6 +28,7 @@ class ContactTimelineService:
         contact_id: int,
         workspace_id: uuid.UUID,
         limit: int = 100,
+        conversation_id: uuid.UUID | None = None,
     ) -> list[dict[str, Any]]:
         """Return recent timeline items for a contact."""
         contact = await get_contact_by_id(contact_id, workspace_id, self.db)
@@ -39,4 +40,5 @@ class ContactTimelineService:
             workspace_id=workspace_id,
             db=self.db,
             limit=limit,
+            conversation_id=conversation_id,
         )

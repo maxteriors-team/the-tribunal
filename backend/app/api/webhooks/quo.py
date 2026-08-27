@@ -28,6 +28,7 @@ from app.services.webhooks.quo import (
     check_quo_idempotency,
     parse_quo_payload,
 )
+from app.utils.phone import normalize_phone_safe
 
 router = APIRouter()
 logger = structlog.get_logger()
@@ -178,6 +179,8 @@ async def receive_quo_webhook(
     signing_key = credentials.get("webhook_signing_key") if credentials else None
     organization_id = credentials.get("organization_id") if credentials else None
     api_version = credentials.get("webhook_api_version") if credentials else None
+    phone_number_id = credentials.get("phone_number_id") if credentials else None
+    phone_number = credentials.get("phone_number") if credentials else None
     if (
         not isinstance(api_key, str)
         or not api_key.strip()
@@ -186,6 +189,11 @@ async def receive_quo_webhook(
         or not isinstance(organization_id, str)
         or not organization_id.startswith("OR")
         or not isinstance(api_version, str)
+        or not isinstance(phone_number_id, str)
+        or not phone_number_id.strip()
+        or len(phone_number_id) > 255
+        or not isinstance(phone_number, str)
+        or normalize_phone_safe(phone_number) != phone_number
     ):
         logger.error(
             "quo_webhook_credentials_unavailable",
@@ -207,6 +215,8 @@ async def receive_quo_webhook(
                     session,
                     workspace_id=integration.workspace_id,
                     organization_id=organization_id,
+                    phone_number_id=phone_number_id,
+                    phone_number=phone_number,
                     client=quo_client,
                 ).process(event, event_log)
             except QuoSyncError as exc:

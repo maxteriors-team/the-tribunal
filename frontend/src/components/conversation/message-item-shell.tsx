@@ -1,22 +1,11 @@
 "use client";
 
-import {
-  Phone,
-  MessageSquare,
-  Mail,
-  Voicemail,
-  Bot,
-  User,
-  Calendar,
-  FileText,
-  ExternalLink,
-} from "lucide-react";
+import { Phone, MessageSquare, Mail, Voicemail, User, Calendar, FileText } from "lucide-react";
 import { motion } from "motion/react";
 import { type ReactNode } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { getValidatedQuoLink } from "@/lib/api/quo-links";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/utils/date";
 import type { TimelineItem } from "@/types";
@@ -51,8 +40,11 @@ export function MessageItemShell({
   const isCall = item.type === "call";
   const isAppointment = item.type === "appointment";
   const isQuoActivity = (item.type === "sms" || isCall) && item.source_provider === "quo";
-  const quoLink = isQuoActivity ? getValidatedQuoLink(item) : null;
   const timestamp = formatTime(item.timestamp);
+  const senderName = isOutbound
+    ? item.sender_display_name?.trim() || "Unknown sender (historical)"
+    : contactName?.trim();
+  const avatarInitial = senderName?.[0]?.toUpperCase();
 
   return (
     <motion.div
@@ -65,24 +57,14 @@ export function MessageItemShell({
       )}
     >
       {/* Avatar */}
-      <Avatar className="h-8 w-8 shrink-0">
+      <Avatar className="h-8 w-8 shrink-0" aria-label={isOutbound ? senderName : undefined}>
         <AvatarFallback
           className={cn(
             "text-xs",
-            item.is_ai
-              ? "bg-primary/10 text-primary"
-              : isOutbound
-                ? "bg-primary/10 text-primary"
-                : "bg-muted",
+            isOutbound || item.is_ai ? "bg-primary/10 text-primary" : "bg-muted",
           )}
         >
-          {item.is_ai ? (
-            <Bot className="h-4 w-4" />
-          ) : isOutbound ? (
-            "You"
-          ) : (
-            (contactName?.[0]?.toUpperCase() ?? <User className="h-4 w-4" />)
-          )}
+          {isOutbound ? avatarInitial : (avatarInitial ?? <User className="h-4 w-4" />)}
         </AvatarFallback>
       </Avatar>
 
@@ -95,6 +77,7 @@ export function MessageItemShell({
             isOutbound ? "flex-row-reverse" : "flex-row",
           )}
         >
+          {isOutbound && <span className="shrink-0 font-medium text-foreground">{senderName}</span>}
           {item.is_ai && (
             <Badge
               variant="secondary"
@@ -105,25 +88,13 @@ export function MessageItemShell({
           )}
           {isQuoActivity ? (
             <Badge variant="outline" className="h-4 shrink-0 px-1.5 py-0 text-[10px]">
-              Quo
+              via Quo
             </Badge>
           ) : null}
           <span className="shrink-0">{timestamp}</span>
           <span className="shrink-0" aria-hidden="true">
             {channelIcons[item.type]}
           </span>
-          {quoLink ? (
-            <a
-              href={quoLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex shrink-0 items-center gap-1 font-medium text-primary underline-offset-2 hover:underline focus-visible:underline"
-            >
-              Open in Quo
-              <ExternalLink className="h-3 w-3" aria-hidden="true" />
-              <span className="sr-only"> (opens in a new tab)</span>
-            </a>
-          ) : null}
         </div>
 
         {/* Content bubble */}

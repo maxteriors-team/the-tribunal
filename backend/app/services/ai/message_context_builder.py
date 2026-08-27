@@ -95,27 +95,19 @@ async def get_workspace_timezone(
     return DEFAULT_TIMEZONE
 
 
-def extract_email_from_messages(messages: list[dict[str, str]]) -> str | None:
-    """Extract email address from conversation history.
-
-    Searches through messages (newest first) for email addresses.
-
-    Args:
-        messages: List of message dicts with 'content' key
-
-    Returns:
-        The most recently mentioned email address, or None
-    """
+def extract_email_from_messages(
+    messages: list[dict[str, str]],
+    *,
+    fallback_email: str | None = None,
+) -> str | None:
+    """Return the latest valid thread email, then a validated CRM fallback."""
     email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
-
-    # Search from newest to oldest (reversed)
-    for msg in reversed(messages):
-        content = msg.get("content", "")
-        match = re.search(email_pattern, content)
+    for message in reversed(messages):
+        match = re.search(email_pattern, message.get("content", ""))
         if match:
             return match.group(0)
-
-    return None
+    fallback_match = re.search(email_pattern, fallback_email or "")
+    return fallback_match.group(0) if fallback_match else None
 
 
 async def build_message_context(

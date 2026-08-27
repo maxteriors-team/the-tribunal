@@ -1014,17 +1014,14 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
         {
             "type": "function",
             "function": {
-                "name": "book_appointment",
+                "name": "prepare_booking",
                 "description": (
-                    "Book a qualified website lead's phone or video call on the "
-                    "assigned representative's calendar. "
+                    "Persist the customer's chosen appointment details before booking. "
                     f"TODAY IS {today_str} ({today_iso}). "
-                    "Use this only after asking whether the lead prefers a phone call "
-                    "or video call; never infer the format or invent a meeting link. "
-                    "Parse relative dates like 'tomorrow at 2pm'. "
-                    "IMPORTANT: use only after the customer explicitly affirms your immediately "
-                    "preceding summary of the exact date, time, timezone, duration, call type, "
-                    "and invite email."
+                    "Use only after availability was checked and the customer chose a returned "
+                    "slot plus phone or video. Include the invite email when the customer gave "
+                    "one; omit it when the current contact already has the correct email. Return "
+                    "the tool's confirmation question verbatim, then wait for an explicit answer."
                 ),
                 "parameters": {
                     "type": "object",
@@ -1032,66 +1029,70 @@ def get_text_booking_tools(timezone: str = "America/New_York") -> list[dict[str,
                         "date": {
                             "type": "string",
                             "description": (
-                                f"Appointment date in YYYY-MM-DD format. TODAY IS {today_iso}."
+                                f"Chosen date in YYYY-MM-DD format. TODAY IS {today_iso}."
                             ),
                         },
                         "time": {
                             "type": "string",
-                            "description": (
-                                "Appointment time in HH:MM 24-hour format "
-                                "(e.g., '14:00' for 2 PM, '09:30' for 9:30 AM). "
-                                "Always pass 24-hour format here even though you "
-                                "speak 12-hour format to the customer."
-                            ),
+                            "description": "Chosen time in HH:MM 24-hour format.",
                         },
                         "email": {
                             "type": "string",
                             "description": (
-                                "Customer's email address for booking confirmation. "
-                                "REQUIRED - always ask for and include the email."
-                            ),
-                        },
-                        "customer_confirmed": {
-                            "type": "boolean",
-                            "description": (
-                                "Must be true only after the customer explicitly affirms the "
-                                "immediately preceding complete booking summary."
+                                "Invite email the customer provided. Omit only when the current "
+                                "contact already has the correct email."
                             ),
                         },
                         "call_type": {
                             "type": "string",
                             "enum": ["phone_call", "video_call"],
-                            "description": (
-                                "Lead's explicit format choice. Phone calls use their phone; "
-                                "video calls receive Zoom when configured, with Meet fallback."
-                            ),
+                            "description": "The customer's explicit phone or video choice.",
                         },
                         "duration_minutes": {
                             "type": "integer",
-                            "description": "Duration in minutes. Default is 30.",
+                            "description": "Duration in minutes.",
                             "default": 30,
+                        },
+                    },
+                    "required": ["date", "time", "duration_minutes", "call_type"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "book_appointment",
+                "description": (
+                    "Finalize the persisted SMS booking draft. Use only after the customer's "
+                    "latest message explicitly affirms prepare_booking's immediately preceding "
+                    "direct_response. The server loads the confirmed date, time, timezone, "
+                    "duration, call type, and email; never reconstruct those fields."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "customer_confirmed": {
+                            "type": "boolean",
+                            "description": (
+                                "True only when the latest customer message explicitly affirms "
+                                "prepare_booking's immediately preceding complete summary."
+                            ),
                         },
                         "notes": {
                             "type": "string",
-                            "description": "Optional notes about the appointment",
+                            "description": "Optional appointment notes, maximum 500 characters.",
                         },
                         "skill": {
                             "type": "string",
                             "description": (
-                                "Optional skill, specialty, or service the appointment "
-                                "needs (e.g. 'spanish', 'mortgage'). When set, routes the "
-                                "booking to a staff member with that skill. Leave out "
-                                "unless the need clearly maps to a specialty."
+                                "Optional staff skill, maximum 100 characters. Omit unless the "
+                                "customer's stated need clearly requires it."
                             ),
                         },
                     },
-                    "required": [
-                        "date",
-                        "time",
-                        "email",
-                        "customer_confirmed",
-                        "call_type",
-                    ],
+                    "required": ["customer_confirmed"],
+                    "additionalProperties": False,
                 },
             },
         },

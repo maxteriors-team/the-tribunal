@@ -8,6 +8,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -23,6 +24,10 @@ from app.models.workspace import Workspace, WorkspaceIntegration
 from app.services.compliance.outbound_compliance import (
     DirectOutboundComplianceRequest,
     OutboundComplianceService,
+)
+from app.services.webhook_replay import (
+    SignatureClaimOutcome,
+    claim_webhook_signature_in_transaction,
 )
 
 pytestmark = [pytest.mark.asyncio(loop_scope="module"), pytest.mark.integration]
@@ -66,6 +71,47 @@ async def _post_event(
     return response.json()
 
 
+async def test_failed_dispatch_rollback_allows_same_delivery_retry() -> None:
+    delivery_id = f"quo_retry_{uuid.uuid4().hex}"
+    log = MagicMock()
+    async with AsyncSessionLocal() as db:
+        first = await claim_webhook_signature_in_transaction(
+            db,
+            "quo",
+            delivery_id,
+            log=log,
+        )
+        assert first.outcome is SignatureClaimOutcome.CLAIMED
+        await db.rollback()
+
+    async with AsyncSessionLocal() as db:
+        retry = await claim_webhook_signature_in_transaction(
+            db,
+            "quo",
+            delivery_id,
+            log=log,
+        )
+        assert retry.outcome is SignatureClaimOutcome.CLAIMED
+        await db.commit()
+
+    async with AsyncSessionLocal() as db:
+        replay = await claim_webhook_signature_in_transaction(
+            db,
+            "quo",
+            delivery_id,
+            log=log,
+        )
+        assert replay.outcome is SignatureClaimOutcome.REPLAY
+        await db.rollback()
+        await db.execute(
+            delete(SeenWebhookSignature).where(
+                SeenWebhookSignature.provider == "quo",
+                SeenWebhookSignature.signature == delivery_id,
+            )
+        )
+        await db.commit()
+
+
 async def test_signed_activity_sequence_is_tenant_safe_idempotent_and_sms_compliant() -> None:  # noqa: PLR0915
     run_id = uuid.uuid4().hex[:16]
     fixture = _fixture(run_id)
@@ -91,6 +137,8 @@ async def test_signed_activity_sequence_is_tenant_safe_idempotent_and_sms_compli
                 "webhook_id": f"WH_{run_id}",
                 "webhook_signing_key": signing_key,
                 "webhook_api_version": "2026-03-30",
+                "phone_number_id": f"PN_{run_id}",
+                "phone_number": fixture["workspace_phone"],
             },
             is_active=True,
         )

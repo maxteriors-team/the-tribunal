@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DB, CurrentUser, get_workspace, require_route_capabilities
 from app.core.permissions import Capability
+from app.models.agent import Agent
 from app.models.drip_campaign import (
     DripCampaign,
     DripCampaignStatus,
@@ -26,6 +27,7 @@ from app.schemas.drip_campaign import (
     EnrollContactsRequest,
 )
 from app.services.reactivation.drip_runner import enroll_contacts
+from app.services.telephony.phone_number_resolver import resolve_workspace_phone_number
 
 router = APIRouter(
     dependencies=[
@@ -33,6 +35,46 @@ router = APIRouter(
     ]
 )
 logger = structlog.get_logger()
+
+
+async def _validate_drip_resources(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    from_phone_number: str,
+    agent_id: uuid.UUID | None,
+) -> None:
+    """Validate the workspace-owned text resources used by a drip campaign."""
+    sender = await resolve_workspace_phone_number(
+        db,
+        workspace_id,
+        from_phone_number,
+        capability="text",
+    )
+    if sender is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Drip campaign sender must be an active, workspace-owned phone number "
+                "with SMS or iMessage enabled"
+            ),
+        )
+
+    if agent_id is None:
+        return
+
+    agent_result = await db.execute(
+        select(Agent).where(
+            Agent.id == agent_id,
+            Agent.workspace_id == workspace_id,
+            Agent.is_active.is_(True),
+            Agent.channel_mode.in_(("text", "both")),
+        )
+    )
+    if agent_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Active text agent not found",
+        )
 
 
 @router.get("", response_model=list[DripCampaignResponse])
@@ -65,6 +107,13 @@ async def create_drip_campaign(
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> DripCampaignResponse:
     """Create a new drip campaign."""
+    await _validate_drip_resources(
+        db,
+        workspace_id,
+        request.from_phone_number,
+        request.agent_id,
+    )
+
     campaign = DripCampaign(
         workspace_id=workspace_id,
         agent_id=request.agent_id,
@@ -129,6 +178,12 @@ async def start_drip_campaign(
             detail=f"Cannot start campaign in '{campaign.status}' status",
         )
 
+    await _validate_drip_resources(
+        db,
+        workspace_id,
+        campaign.from_phone_number,
+        campaign.agent_id,
+    )
     campaign.status = DripCampaignStatus.ACTIVE
     campaign.started_at = campaign.started_at or datetime.now(UTC)
     await db.commit()

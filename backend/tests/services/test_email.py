@@ -181,6 +181,7 @@ async def test_invoice_payment_receipt_is_branded_transactional_and_itemized(
         idempotency_key=key,
         logo_url="https://cdn.example.com/logo.png",
         support_email="office@example.com",
+        support_phone="248-877-4672",
         invoice_url="https://app.example/p/invoices/token",
         service_summary="Gutter cleaning × 2; Window wash <premium>",
     )
@@ -195,6 +196,7 @@ async def test_invoice_payment_receipt_is_branded_transactional_and_itemized(
     assert "USD 200.00" in params["html"]
     assert "Paid in full" in params["html"]
     assert "Services provided" in params["html"]
+    assert "248-877-4672 or office@example.com" in params["html"]
     assert "Gutter cleaning × 2; Window wash &lt;premium&gt;" in params["html"]
     assert "Gutter cleaning × 2; Window wash <premium>" in params["text"]
     assert "https://cdn.example.com/logo.png" in params["html"]

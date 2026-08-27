@@ -20,6 +20,8 @@ from app.models.campaign import (
 from app.models.contact import Contact
 from app.models.offer import Offer
 from app.models.phone_number import PhoneNumber
+from app.models.user import User
+from app.models.workspace import WorkspaceMembership
 from app.schemas.campaign import CampaignCreate, CampaignUpdate
 from app.services.ai.crm_assistant._pagination import count_matching, listing
 from app.services.ai.crm_assistant._tool_context import (
@@ -468,6 +470,16 @@ class CampaignAssistantTools:
                 "This workspace has no sending phone number.",
                 "Tell the operator to add a phone number in Settings before sending.",
             )
+        sender = (
+            await self.context.db.execute(
+                select(User)
+                .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
+                .where(
+                    User.id == self.context.user_id,
+                    WorkspaceMembership.workspace_id == self.context.workspace_id,
+                )
+            )
+        ).scalar_one_or_none()
 
         sms_service = get_text_message_provider()
         try:
@@ -478,6 +490,8 @@ class CampaignAssistantTools:
                 db=self.context.db,
                 workspace_id=self.context.workspace_id,
                 phone_number_id=phone.id,
+                sender_user_id=sender.id if sender else None,
+                sender_display_name=(sender.full_name or sender.email if sender else None),
             )
         finally:
             await sms_service.close()

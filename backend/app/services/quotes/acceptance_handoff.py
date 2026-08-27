@@ -125,6 +125,9 @@ async def _send_acknowledgement(
     log: Any,
 ) -> None:
     """Text the customer that their approval landed. Best-effort."""
+    if getattr(conversation, "source_provider", None) == "quo":
+        log.info("quo_manual_messaging_only")
+        return
     body = build_acknowledgement(contact)
     sms_service = get_text_message_provider(provider_for_conversation(conversation))
     try:

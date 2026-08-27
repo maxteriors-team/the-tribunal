@@ -11,9 +11,11 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.quo.client import QUO_API_VERSION, QUO_WEBHOOK_EVENTS
-from app.services.webhook_replay import SignatureClaimOutcome, claim_webhook_signature
+from app.services.webhook_replay import (
+    SignatureClaimOutcome,
+    claim_webhook_signature_in_transaction,
+)
 from app.services.webhooks.pipeline import (
-    WebhookDispatchResult,
     WebhookIdempotencyDecision,
     WebhookRequestEnvelope,
 )
@@ -118,12 +120,17 @@ def parse_quo_payload(
 
 
 async def check_quo_idempotency(
-    _db: AsyncSession,
+    db: AsyncSession,
     event: QuoWebhookEvent,
     log: Any,
 ) -> WebhookIdempotencyDecision:
     """Atomically claim the signed delivery ID before any domain dispatch."""
-    claim = await claim_webhook_signature("quo", event.delivery_id, log=log)
+    claim = await claim_webhook_signature_in_transaction(
+        db,
+        "quo",
+        event.delivery_id,
+        log=log,
+    )
     if claim.outcome is SignatureClaimOutcome.LEDGER_UNAVAILABLE:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -132,12 +139,3 @@ async def check_quo_idempotency(
     if claim.outcome is SignatureClaimOutcome.REPLAY:
         return WebhookIdempotencyDecision.duplicate("already_processed")
     return WebhookIdempotencyDecision.process()
-
-
-async def dispatch_quo_event(
-    _db: AsyncSession,
-    _event: QuoWebhookEvent,
-    _log: Any,
-) -> WebhookDispatchResult:
-    """Acknowledge verified events; domain mirrors register here in follow-up work."""
-    return WebhookDispatchResult.processed()

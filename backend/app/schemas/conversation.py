@@ -10,6 +10,7 @@ class MessageCreate(BaseModel):
     """Schema for sending a message."""
 
     body: str
+    client_request_id: uuid.UUID | None = None
 
 
 class MessageResponse(BaseModel):
@@ -23,6 +24,8 @@ class MessageResponse(BaseModel):
     status: str
     is_ai: bool
     agent_id: uuid.UUID | None
+    sender_user_id: int | None = None
+    sender_display_name: str | None = None
     source_provider: str | None = None
     external_url: str | None = None
     is_voicemail: bool = False

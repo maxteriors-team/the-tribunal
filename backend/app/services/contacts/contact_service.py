@@ -281,6 +281,7 @@ class ContactService:
         contact_id: int,
         workspace_id: uuid.UUID,
         limit: int = 100,
+        conversation_id: uuid.UUID | None = None,
     ) -> list[dict[str, Any]]:
         """Get the conversation timeline for a contact.
 
@@ -299,6 +300,7 @@ class ContactService:
             contact_id=contact_id,
             workspace_id=workspace_id,
             limit=limit,
+            conversation_id=conversation_id,
         )
 
     async def send_message(
@@ -308,6 +310,8 @@ class ContactService:
         message_body: str,
         from_number: str | None = None,
         image_data_url: str | None = None,
+        sender_user_id: int | None = None,
+        sender_display_name: str | None = None,
     ) -> Any:
         """Send a configured text-channel message to a contact.
 
@@ -366,6 +370,8 @@ class ContactService:
                 workspace_id=workspace_id,
                 phone_number_id=workspace_phone.id,
                 media=media,
+                sender_user_id=sender_user_id,
+                sender_display_name=sender_display_name,
             )
         finally:
             await sms_service.close()

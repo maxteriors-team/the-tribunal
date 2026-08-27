@@ -48,6 +48,12 @@ async def _db_session() -> AsyncIterator[AsyncSession]:
 
 def _fixture_client(*, tenant_mismatch: bool = False) -> tuple[QuoClient, httpx.AsyncClient]:
     fixture: dict[str, Any] = json.loads(FIXTURE_PATH.read_text())
+    fixture["phone_numbers"]["data"].extend(
+        [
+            {"id": "PNother-one", "number": "+14155550101"},
+            {"id": "PNother-two", "number": "+14155550102"},
+        ]
+    )
     if tenant_mismatch:
         fixture["conversations"][0]["data"][0]["phoneNumberId"] = "PNforeign"
 
@@ -56,6 +62,18 @@ def _fixture_client(*, tenant_mismatch: bool = False) -> tuple[QuoClient, httpx.
         token = request.url.params.get("pageToken")
         if path == "/v1/phone-numbers":
             return httpx.Response(200, json=fixture["phone_numbers"])
+        if path == "/v1/users/USfixture":
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "id": "USfixture",
+                        "firstName": "Morgan",
+                        "lastName": "Operator",
+                        "email": "morgan@example.com",
+                    }
+                },
+            )
         if path.startswith("/contacts/"):
             contact = fixture["contacts"][0]["data"][0]
             fields = contact["defaultFields"]
@@ -63,6 +81,8 @@ def _fixture_client(*, tenant_mismatch: bool = False) -> tuple[QuoClient, httpx.
                 200,
                 json={"data": {"id": contact["id"], **fields}},
             )
+        if path == "/v1/conversations":
+            assert request.url.params.get_list("phoneNumbers") == ["PNfixture"]
         pages = fixture[path.removeprefix("/v1/")]
         return httpx.Response(200, json=pages[1 if token else 0])
 
@@ -81,6 +101,8 @@ async def _run(
         db_session,
         workspace_id=workspace_id,
         organization_id="ORfixture",
+        phone_number_id="PNfixture",
+        phone_number="+14155552671",
         client=client,
         since=SINCE,
         until=UNTIL,
@@ -101,7 +123,7 @@ async def test_fixture_backfill_is_dry_idempotent_and_preserves_newer_fields() -
 
         try:
             dry_run = await _run(db, workspace_id, client, apply=False)
-            assert dry_run.contacts.synced == 1
+            assert dry_run.contacts.synced == 0
             assert dry_run.texts.synced == 2
             assert dry_run.calls.synced == 1
             assert (
@@ -134,9 +156,11 @@ async def test_fixture_backfill_is_dry_idempotent_and_preserves_newer_fields() -
                 message for message in messages if message.provider_message_id == "ACmessage-out"
             )
             call = next(message for message in messages if message.provider_message_id == "ACcall")
-            assert contact.email == "fixture@example.com"
+            assert contact.email is None
             assert contact.phone_number == "+14155552672"
             assert outbound.body == "Fixture outbound text"
+            assert outbound.provider_sender_user_id == "USfixture"
+            assert outbound.sender_display_name == "Morgan Operator"
             contact.first_name = "Operator edit"
             outbound.status = MessageStatus.DELIVERED
             outbound.body = "Newer webhook body"

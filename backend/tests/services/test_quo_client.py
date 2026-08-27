@@ -94,3 +94,30 @@ async def test_create_webhook_rejects_missing_one_time_signing_key() -> None:
         client = QuoClient("quo_secret", client=http_client)
         with pytest.raises(QuoApiError, match="invalid webhook data"):
             await client.create_webhook("https://api.example.com/webhooks/quo/id")
+
+
+async def test_get_user_uses_current_user_endpoint_without_webhook_version() -> None:
+    user_id = "US_sender_123"
+    response_data = {
+        "id": user_id,
+        "firstName": "Ada",
+        "lastName": "Lovelace",
+        "email": "ada@example.com",
+    }
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"data": response_data})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = QuoClient("quo_secret", client=http_client)
+        get_user = getattr(client, "get_user", None)
+        assert callable(get_user), "QuoClient.get_user is not implemented"
+        user = await get_user(user_id)
+
+    assert user == response_data
+    assert len(seen) == 1
+    assert seen[0].method == "GET"
+    assert seen[0].url == httpx.URL(f"https://api.quo.com/v1/users/{user_id}")
+    assert "Quo-Api-Version" not in seen[0].headers

@@ -13,6 +13,7 @@ from app.api.deps import DB, CurrentUser, OptionalCurrentUser
 from app.core.config import settings
 from app.core.encryption import hash_value
 from app.core.permissions import Capability, role_can
+from app.core.roles import can_assign_workspace_role
 from app.db.scope import apply_workspace_scope
 from app.models.invitation import WorkspaceInvitation
 from app.models.user import User
@@ -105,7 +106,12 @@ async def create_invitation(
     db: DB,
 ) -> InvitationResponse:
     """Create and send an invitation to join the workspace."""
-    await verify_workspace_admin(db, current_user, workspace_id)
+    actor_membership = await verify_workspace_admin(db, current_user, workspace_id)
+    if not can_assign_workspace_role(actor_membership.role, invitation_data.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the workspace owner can grant the admin role",
+        )
 
     # Get workspace details
     result = await db.execute(select(Workspace).where(Workspace.id == workspace_id))
@@ -325,6 +331,25 @@ async def accept_invitation(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This invitation was sent to a different email address",
         )
+
+    # Pending admin grants remain valid only while their inviter is still owner.
+    if invitation.role == "admin":
+        inviter_membership = (
+            await db.execute(
+                apply_workspace_scope(
+                    select(WorkspaceMembership),
+                    WorkspaceMembership,
+                    invitation.workspace_id,
+                ).where(WorkspaceMembership.user_id == invitation.invited_by_id)
+            )
+        ).scalar_one_or_none()
+        if inviter_membership is None or not can_assign_workspace_role(
+            inviter_membership.role, invitation.role
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This admin invitation is no longer authorized",
+            )
 
     # Check if already a member
     result = await db.execute(

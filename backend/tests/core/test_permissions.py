@@ -37,6 +37,31 @@ ALL_ROLES = [
     "member",
 ]
 
+ASSIGNABLE_ROLES = [
+    "admin",
+    "manager",
+    "dispatcher",
+    "sales_rep",
+    "lead_technician",
+    "technician",
+    "member",
+]
+
+
+def test_workspace_role_assignment_policy_is_owner_only_for_admin() -> None:
+    from app.core.roles import can_assign_workspace_role
+
+    assert all(can_assign_workspace_role("owner", role) for role in ASSIGNABLE_ROLES)
+    assert not can_assign_workspace_role("admin", "admin")
+    assert all(
+        can_assign_workspace_role("admin", role) for role in ASSIGNABLE_ROLES if role != "admin"
+    )
+    for actor_role in ALL_ROLES[2:] + ["unknown"]:
+        assert not any(
+            can_assign_workspace_role(actor_role, target_role) for target_role in ASSIGNABLE_ROLES
+        )
+
+
 _ALL_CAPABILITIES = frozenset(Capability)
 _MANAGER_CAPABILITIES = frozenset(
     {

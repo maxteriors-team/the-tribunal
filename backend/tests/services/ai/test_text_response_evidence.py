@@ -2,6 +2,7 @@
 
 import json
 
+from app.services.ai.booking_confirmation import is_booking_confirmation_turn
 from app.services.ai.text_response_generator import (
     _evidence_fallback,
     _safe_without_claim_evidence,
@@ -9,6 +10,7 @@ from app.services.ai.text_response_generator import (
     _update_evidence_status,
     required_claim_evidence_domains,
     response_claim_evidence_domains,
+    should_require_booking_tools,
 )
 from app.services.ai.voice_tools import (
     get_text_booking_tools,
@@ -22,6 +24,9 @@ def test_latest_inbound_intent_maps_each_mutable_claim_to_fresh_evidence() -> No
     assert required_claim_evidence_domains("What would a roof wash run?") == {"pricing"}
     assert required_claim_evidence_domains("Are you available Friday?") == {"availability"}
     assert required_claim_evidence_domains("Can you come Friday?") == {"availability"}
+    assert required_claim_evidence_domains("What slots work Monday?") == {"availability"}
+    assert required_claim_evidence_domains("The Monday slot works") == set()
+    assert required_claim_evidence_domains("I'll take the first available slot") == set()
     assert required_claim_evidence_domains("Is my quote still pending?") == {"quote"}
     assert required_claim_evidence_domains("Q-101") == {"quote"}
     assert required_claim_evidence_domains("How much is my invoice balance?") == {"invoice"}
@@ -31,6 +36,55 @@ def test_latest_inbound_intent_maps_each_mutable_claim_to_fresh_evidence() -> No
     assert required_claim_evidence_domains("STOP") == set()
     assert required_claim_evidence_domains("Stop texting me about my invoice") == set()
     assert required_claim_evidence_domains("Cancel my appointment") == {"appointment"}
+
+
+def test_only_a_reply_to_the_canonical_summary_is_booking_confirmation() -> None:
+    summary = (
+        "Please confirm: 30-minute phone call on Thursday, January 15, 2099 at "
+        "10:00 AM America/New_York, invitation to lead@example.com. Is that correct?"
+    )
+    assert is_booking_confirmation_turn(
+        [
+            {"role": "assistant", "content": summary},
+            {"role": "user", "content": "Sounds good!"},
+        ]
+    )
+    assert not is_booking_confirmation_turn(
+        [
+            {"role": "assistant", "content": "Would you like an estimate?"},
+            {"role": "user", "content": "Sounds good!"},
+        ]
+    )
+    assert not is_booking_confirmation_turn(
+        [
+            {"role": "assistant", "content": summary},
+            {"role": "user", "content": "Yes, but make it video"},
+        ]
+    )
+
+
+def test_booking_tools_are_not_forced_for_details_or_generic_agreement() -> None:
+    for message in (
+        "Monday at 2 works",
+        "john@example.com",
+        "Sounds good",
+        "Yes please",
+    ):
+        assert should_require_booking_tools(message.casefold()) is False
+
+
+def test_booking_tools_prepare_a_draft_before_calendar_mutation() -> None:
+    tools = get_text_booking_tools("America/New_York")
+    prepare_tool = next(tool for tool in tools if tool["function"]["name"] == "prepare_booking")
+
+    assert prepare_tool["function"]["parameters"]["required"] == [
+        "date",
+        "time",
+        "duration_minutes",
+        "call_type",
+    ]
+    book_tool = next(tool for tool in tools if tool["function"]["name"] == "book_appointment")
+    assert book_tool["function"]["parameters"]["required"] == ["customer_confirmed"]
 
 
 def test_quote_and_invoice_amounts_do_not_require_unrelated_generic_pricing_tool() -> None:
@@ -59,6 +113,13 @@ def test_claim_intent_forces_the_matching_fresh_tool() -> None:
         tools=tools,
         force_booking_tool=False,
     )
+    confirmation_choice = _tool_choice_for_claims(
+        required_domains=frozenset(),
+        evidence_status={},
+        tools=tools,
+        force_booking_tool=False,
+        force_booking_confirmation=True,
+    )
 
     assert quote_choice == {
         "type": "function",
@@ -67,6 +128,10 @@ def test_claim_intent_forces_the_matching_fresh_tool() -> None:
     assert availability_choice == {
         "type": "function",
         "function": {"name": "check_availability"},
+    }
+    assert confirmation_choice == {
+        "type": "function",
+        "function": {"name": "book_appointment"},
     }
 
 

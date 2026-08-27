@@ -38,7 +38,7 @@ def _payload(*, organization_id: str = ORGANIZATION_ID) -> dict[str, Any]:
         "createdAt": "2026-08-26T12:00:00Z",
         "data": {
             "context": {"orgId": organization_id},
-            "resource": {"id": "AC_redacted"},
+            "resource": {"id": "AC_redacted", "phoneNumberId": "PN_main"},
         },
     }
 
@@ -71,6 +71,8 @@ def _integration(*, active: bool = True) -> MagicMock:
     integration.safe_credentials.return_value = {
         "api_key": "quo_api_key",
         "organization_id": ORGANIZATION_ID,
+        "phone_number_id": "PN_main",
+        "phone_number": "+14155552671",
         "webhook_id": "12345",
         "webhook_signing_key": SIGNING_KEY,
         "webhook_api_version": "2026-03-30",
@@ -124,7 +126,7 @@ async def test_valid_delivery_is_verified_claimed_and_dispatched() -> None:
     with (
         patch.object(
             quo_service,
-            "claim_webhook_signature",
+            "claim_webhook_signature_in_transaction",
             new=AsyncMock(return_value=claim),
         ) as claim_mock,
         patch(
@@ -139,7 +141,7 @@ async def test_valid_delivery_is_verified_claimed_and_dispatched() -> None:
     claim_mock.assert_awaited_once()
     sync_mock.assert_awaited_once()
     assert claim_mock.await_args is not None
-    assert claim_mock.await_args.args[:2] == ("quo", "msg_delivery_1")
+    assert claim_mock.await_args.args[1:3] == ("quo", "msg_delivery_1")
 
 
 async def test_malformed_voice_resource_is_rejected_without_leaking_details() -> None:
@@ -148,7 +150,7 @@ async def test_malformed_voice_resource_is_rejected_without_leaking_details() ->
     with (
         patch.object(
             quo_service,
-            "claim_webhook_signature",
+            "claim_webhook_signature_in_transaction",
             new=AsyncMock(return_value=claim),
         ),
         patch(
@@ -169,7 +171,7 @@ async def test_tampered_delivery_is_rejected_before_dedupe() -> None:
     ).encode()
     with patch.object(
         quo_service,
-        "claim_webhook_signature",
+        "claim_webhook_signature_in_transaction",
         new=AsyncMock(),
     ) as claim_mock:
         response = await _post(
@@ -188,7 +190,7 @@ async def test_malformed_signature_is_rejected_before_dedupe() -> None:
     headers["webhook-signature"] = "v1,invalid"
     with patch.object(
         quo_service,
-        "claim_webhook_signature",
+        "claim_webhook_signature_in_transaction",
         new=AsyncMock(),
     ) as claim_mock:
         response = await _post(_database(_integration()), body, headers)
@@ -203,7 +205,7 @@ async def test_stale_delivery_is_rejected_before_signature_dispatch() -> None:
     stale_at = int(time.time()) - 301
     with patch.object(
         quo_service,
-        "claim_webhook_signature",
+        "claim_webhook_signature_in_transaction",
         new=AsyncMock(),
     ) as claim_mock:
         response = await _post(
@@ -221,7 +223,7 @@ async def test_replayed_delivery_is_acknowledged_without_dispatch() -> None:
     replay = webhook_replay.SignatureClaim(webhook_replay.SignatureClaimOutcome.REPLAY)
     with patch.object(
         quo_service,
-        "claim_webhook_signature",
+        "claim_webhook_signature_in_transaction",
         new=AsyncMock(return_value=replay),
     ):
         response = await _post(_database(_integration()), body, _signed_headers(body))
@@ -232,6 +234,18 @@ async def test_replayed_delivery_is_acknowledged_without_dispatch() -> None:
         "deduped": "true",
         "reason": "already_processed",
     }
+
+
+async def test_active_legacy_integration_without_selected_line_fails_closed() -> None:
+    integration = _integration()
+    credentials = integration.safe_credentials.return_value
+    credentials.pop("phone_number_id")
+    credentials.pop("phone_number")
+    body = json.dumps(_payload(), separators=(",", ":")).encode()
+
+    response = await _post(_database(integration), body, _signed_headers(body))
+
+    assert response.status_code == 503
 
 
 async def test_inactive_integration_is_rejected_before_body_trust() -> None:
@@ -245,7 +259,7 @@ async def test_inactive_integration_is_rejected_before_body_trust() -> None:
 async def test_signed_malformed_delivery_is_rejected(body: bytes) -> None:
     with patch.object(
         quo_service,
-        "claim_webhook_signature",
+        "claim_webhook_signature_in_transaction",
         new=AsyncMock(),
     ) as claim_mock:
         response = await _post(_database(_integration()), body, _signed_headers(body))
@@ -258,7 +272,7 @@ async def test_cross_workspace_organization_is_rejected_after_verification() -> 
     body = json.dumps(_payload(organization_id="OR_workspace_b"), separators=(",", ":")).encode()
     with patch.object(
         quo_service,
-        "claim_webhook_signature",
+        "claim_webhook_signature_in_transaction",
         new=AsyncMock(),
     ) as claim_mock:
         response = await _post(_database(_integration()), body, _signed_headers(body))
@@ -271,7 +285,7 @@ async def test_oversized_delivery_is_rejected_before_verification() -> None:
     body = b"x" * (QUO_MAX_BODY_BYTES + 1)
     with patch.object(
         quo_service,
-        "claim_webhook_signature",
+        "claim_webhook_signature_in_transaction",
         new=AsyncMock(),
     ) as claim_mock:
         response = await _post(_database(_integration()), body)

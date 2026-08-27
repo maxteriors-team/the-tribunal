@@ -60,7 +60,12 @@ class NumberPoolManager:
         # Legacy mode: single number per campaign
         if not campaign.use_number_pool:
             result = await db.execute(
-                select(PhoneNumber).where(PhoneNumber.phone_number == campaign.from_phone_number)
+                select(PhoneNumber).where(
+                    and_(
+                        PhoneNumber.phone_number == campaign.from_phone_number,
+                        PhoneNumber.workspace_id == campaign.workspace_id,
+                    )
+                )
             )
             phone = result.scalar_one_or_none()
 
@@ -76,11 +81,13 @@ class NumberPoolManager:
         # Pool mode: select from campaign's number pool
         pool_result = await db.execute(
             select(CampaignNumberPool)
+            .join(CampaignNumberPool.phone_number)
             .options(selectinload(CampaignNumberPool.phone_number))
             .where(
                 and_(
                     CampaignNumberPool.campaign_id == campaign.id,
                     CampaignNumberPool.is_active.is_(True),
+                    PhoneNumber.workspace_id == campaign.workspace_id,
                 )
             )
             .order_by(

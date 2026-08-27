@@ -55,6 +55,8 @@ def test_booking_prompt_prevents_scott_conversation_failures() -> None:
     assert "never claim you changed them" in prompt
     assert "Selecting or proposing a time starts a SEPARATE confirmation turn" in prompt
     assert "exact weekday and calendar date" in prompt
-    assert "appointment duration, and invite email" in prompt
+    assert "appointment duration, call type, and invite email" in prompt
+    assert "call prepare_booking exactly once" in prompt
+    assert "Send its direct_response verbatim" in prompt
     assert "customer_confirmed=true" in prompt
     assert "ambiguous reply is not confirmation" in prompt

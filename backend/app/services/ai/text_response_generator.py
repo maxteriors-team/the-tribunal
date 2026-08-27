@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation
+from app.services.ai.booking_confirmation import is_booking_confirmation_turn
 from app.services.ai.context_observability import (
     ContextChunk,
     observability_logger,
@@ -63,19 +64,10 @@ from app.services.knowledge.knowledge_context_service import knowledge_context_s
 logger = structlog.get_logger()
 
 
-def should_require_booking_tools(message: str) -> bool:  # noqa: PLR0911
-    """Determine if booking tools should be required based on message content.
-
-    Uses smarter matching to avoid false positives like "weather today".
-
-    Args:
-        message: The lowercased message to analyze
-
-    Returns:
-        True if booking tools should be required
-    """
-    # Direct booking intent phrases - always trigger
-    direct_booking_phrases = [
+def should_require_booking_tools(message: str) -> bool:
+    """Require a booking tool only for explicit scheduling or availability intent."""
+    normalized = message.casefold()
+    booking_intent_phrases = (
         "book a",
         "book an",
         "schedule a",
@@ -100,51 +92,6 @@ def should_require_booking_tools(message: str) -> bool:  # noqa: PLR0911
         "interested in meeting",
         "ready to book",
         "ready to schedule",
-    ]
-    if any(phrase in message for phrase in direct_booking_phrases):
-        return True
-
-    # Buying signals - general positive responses indicating readiness to proceed
-    # These trigger booking tools so the AI offers to schedule instead of more questions
-    buying_signal_phrases = [
-        "sounds good",
-        "that sounds great",
-        "that sounds good",
-        "ok sounds good",
-        "okay sounds good",
-        "i'm in",
-        "im in",
-        "count me in",
-        "sign me up",
-        "i'm interested",
-        "im interested",
-        "i'm ready",
-        "im ready",
-        "let's move forward",
-        "lets move forward",
-        "let's get started",
-        "lets get started",
-        "let's go",
-        "lets go",
-        "how do we get started",
-        "how do i get started",
-        "what's the next step",
-        "whats the next step",
-        "what do i need to do",
-        "what do we do next",
-        "i want that",
-        "i need that",
-        "i want this",
-        "i need this",
-        "yes please",
-        "yeah that works",
-        "yes that works",
-    ]
-    if any(phrase in message for phrase in buying_signal_phrases):
-        return True
-
-    # Availability questions - trigger tools
-    availability_phrases = [
         "when are you",
         "when is he",
         "when is she",
@@ -166,52 +113,8 @@ def should_require_booking_tools(message: str) -> bool:  # noqa: PLR0911
         "free time",
         "open slots",
         "available slots",
-    ]
-    if any(phrase in message for phrase in availability_phrases):
-        return True
-
-    # Time selection responses - user picking a slot
-    # Must be in scheduling context (short message with time reference)
-    time_selection_patterns = [
-        r"\b(tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.*\b(works|good|perfect|great|fine)\b",
-        r"\b(works|good|perfect|great|fine)\b.*\b(tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
-        r"^(tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*(at\s*)?\d",
-        r"^\d{1,2}(:\d{2})?\s*(am|pm|AM|PM)?\s*(works|good|perfect|sounds|great)?",
-        r"^(let's do|lets do|i'll take|ill take|how about)\s",
-    ]
-    for pattern in time_selection_patterns:
-        if re.search(pattern, message, re.IGNORECASE):
-            return True
-
-    # Specific time mentions with booking context
-    # Only trigger if message is SHORT and contains time (likely a time selection)
-    if len(message) < 50:
-        time_patterns = [
-            r"\b\d{1,2}(:\d{2})?\s*(am|pm)\b",  # "2pm", "2:30 pm"
-            r"\bat\s+\d{1,2}\b",  # "at 2", "at 3"
-            r"\b(morning|afternoon|evening)\s+(works|is good|sounds good)\b",
-        ]
-        for pattern in time_patterns:
-            if re.search(pattern, message, re.IGNORECASE):
-                return True
-
-    # Email provided - likely confirming booking
-    # Check for actual email pattern, not just "@" or ".com"
-    email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
-    if re.search(email_pattern, message):
-        return True
-
-    # Email mention in booking context
-    email_context_phrases = [
-        "my email is",
-        "email is",
-        "send it to",
-        "send confirmation to",
-        "here's my email",
-        "heres my email",
-        "my email:",
-    ]
-    return any(phrase in message for phrase in email_context_phrases)
+    )
+    return any(phrase in normalized for phrase in booking_intent_phrases)
 
 
 type ClaimEvidenceDomain = Literal[
@@ -239,6 +142,27 @@ _AVAILABILITY_PATTERNS: Final = (
     re.compile(r"\bwhen can (?:i|we|you)\b", re.IGNORECASE),
     re.compile(r"\bcan you come\b", re.IGNORECASE),
     re.compile(r"\b(?:book|schedule|set up) (?:a|an|the)\b", re.IGNORECASE),
+)
+_BOOKING_DETAIL_SELECTION_PATTERNS: Final = (
+    re.compile(
+        r"\b(?:the|that|this|first|second)\s+(?:\w+\s+){0,2}(?:slot|time)\s+"
+        r"(?:works?|is (?:fine|good))\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:mon|tues|wednes|thurs|fri|satur|sun)day\s+(?:slot|time)\s+"
+        r"(?:works?|is (?:fine|good))\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s+(?:works?|is (?:fine|good))\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:i(?:'|’)ll|i will|let(?:'|’)s)\s+(?:take|choose|do)\s+(?:the\s+)?"
+        r"(?:first|second|\w+)?\s*(?:available\s+)?(?:slot|time)\b",
+        re.IGNORECASE,
+    ),
 )
 _QUOTE_PATTERNS: Final = (
     re.compile(r"\bq[-\s]?\d+\b", re.IGNORECASE),
@@ -345,6 +269,10 @@ def required_claim_evidence_domains(
     for domain, patterns in pattern_groups:
         if any(pattern.search(latest_inbound_intent) for pattern in patterns):
             domains.add(domain)
+    if "availability" in domains and any(
+        pattern.search(latest_inbound_intent) for pattern in _BOOKING_DETAIL_SELECTION_PATTERNS
+    ):
+        domains.remove("availability")
     # "How much is my quote/invoice?" is a contact-record lookup, not generic pricing.
     if "pricing" in domains and ({"quote", "invoice"} & domains):
         domains.remove("pricing")
@@ -379,11 +307,14 @@ def _tool_choice_for_claims(
     evidence_status: dict[ClaimEvidenceDomain, str],
     tools: list[dict[str, Any]],
     force_booking_tool: bool,
+    force_booking_confirmation: bool = False,
 ) -> str | dict[str, Any]:
     missing_domains = {
         domain for domain in required_domains if evidence_status.get(domain) != "found"
     }
     active_names = _active_tool_names(tools)
+    if force_booking_confirmation and "book_appointment" in active_names:
+        return {"type": "function", "function": {"name": "book_appointment"}}
     matching_tools = {
         _EVIDENCE_TOOL_BY_DOMAIN[domain]
         for domain in missing_domains
@@ -416,6 +347,25 @@ def _update_evidence_status(
             for domain in _EVIDENCE_TOOL_BY_DOMAIN:
                 if raw_domain == domain:
                     evidence_status[domain] = status
+
+
+def _direct_tool_response(tool_results: list[dict[str, Any]]) -> str | None:
+    """Return only server-authored, bounded responses that must bypass paraphrasing."""
+    if len(tool_results) != 1:
+        return None
+    try:
+        payload = json.loads(str(tool_results[0].get("content", "{}")))
+    except (json.JSONDecodeError, TypeError):
+        return None
+    response = payload.get("direct_response")
+    if (
+        payload.get("success") is True
+        and payload.get("booking_draft_prepared") is True
+        and isinstance(response, str)
+        and 0 < len(response.strip()) <= 1000
+    ):
+        return to_gsm7_safe(response.strip())
+    return None
 
 
 def _failed_required_domain(
@@ -570,8 +520,10 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
     extracted_email = None
     has_booking_tools = booking_configured and not qualification_pending
     if has_booking_tools:
-        # Extract email from conversation history
-        extracted_email = extract_email_from_messages(messages)
+        extracted_email = extract_email_from_messages(
+            messages,
+            fallback_email=getattr(lead_contact, "email", None),
+        )
 
         # Build booking instructions using extracted module
         booking_instructions = build_booking_instructions(
@@ -647,6 +599,7 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
         force_initial_booking_tool = bool(
             has_booking_tools and should_require_booking_tools(latest_inbound_intent.casefold())
         )
+        force_confirmed_booking = bool(has_booking_tools and is_booking_confirmation_turn(messages))
         force_booking_next_round = False
 
         route_decision = route_sms_turn(
@@ -655,7 +608,9 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
             strong_model=settings.openai_assistant_model,
             simple_temperature=settings.openai_sms_simple_temperature,
             strong_temperature=settings.openai_sms_strong_temperature,
-            requires_tool_action=bool(required_domains) or force_initial_booking_tool,
+            requires_tool_action=(
+                bool(required_domains) or force_initial_booking_tool or force_confirmed_booking
+            ),
         )
         routing_mode = settings.openai_sms_routing_mode
         if routing_mode == "active":
@@ -735,6 +690,7 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
                     force_booking_tool=(
                         force_booking_next_round or (tool_round == 0 and force_initial_booking_tool)
                     ),
+                    force_booking_confirmation=(tool_round == 0 and force_confirmed_booking),
                 )
             force_booking_next_round = False
 
@@ -791,6 +747,14 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
             tool_results = await tool_executor.handle_tool_calls(
                 tool_calls=assistant_message.tool_calls,
             )
+            direct_response = _direct_tool_response(tool_results)
+            if direct_response is not None:
+                log.info(
+                    "generated_direct_tool_response",
+                    length=len(direct_response),
+                    tool_rounds=tool_round + 1,
+                )
+                return direct_response
             _update_evidence_status(evidence_status, tool_results)
             api_messages.append(_assistant_tool_message(assistant_message))
             api_messages.extend(tool_results)
@@ -831,6 +795,10 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
                     )
                 booking_instructions = ""
                 if has_booking_tools:
+                    extracted_email = extract_email_from_messages(
+                        messages,
+                        fallback_email=getattr(lead_contact, "email", None),
+                    )
                     booking_instructions = build_booking_instructions(
                         timezone=timezone,
                         extracted_email=extracted_email,

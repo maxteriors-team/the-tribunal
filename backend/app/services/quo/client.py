@@ -13,6 +13,8 @@ from urllib.parse import quote
 
 import httpx
 
+from app.utils.phone import normalize_phone_safe
+
 QUO_API_BASE_URL = "https://api.quo.com"
 # Dated endpoints verified against Quo's versioned API docs on 2026-08-26:
 # https://www.quo.com/docs/2026-03-30/introduction
@@ -43,8 +45,6 @@ QUO_WEBHOOK_EVENTS = (
     "call.transcript.completed",
     "call.summary.completed",
     "call.voicemail.completed",
-    "contact.updated",
-    "contact.deleted",
 )
 
 
@@ -54,6 +54,22 @@ class QuoApiError(RuntimeError):
     def __init__(self, message: str, *, status_code: int | None = None) -> None:
         self.status_code = status_code
         super().__init__(message)
+
+
+@dataclass(frozen=True, slots=True)
+class QuoPhoneNumber:
+    """Validated sender metadata safe to expose outside credential storage."""
+
+    id: str
+    phone_number: str
+    provider_label: str | None = None
+
+    def as_public_dict(self) -> dict[str, str | None]:
+        return {
+            "id": self.id,
+            "phone_number": self.phone_number,
+            "provider_label": self.provider_label,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,8 +218,8 @@ class QuoClient:
 
         raise QuoApiError("Quo API pagination exceeded the safety limit")
 
-    async def list_phone_numbers(self) -> list[dict[str, Any]]:
-        """List Quo numbers through the historical v1 API."""
+    async def list_phone_numbers(self) -> list[QuoPhoneNumber]:
+        """Return only validated, normalized sender choices from Quo."""
         payload = await self._request(
             "GET",
             f"/{QUO_HISTORICAL_API_VERSION}/phone-numbers",
@@ -212,7 +228,15 @@ class QuoClient:
         data = payload.get("data")
         if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
             raise QuoApiError("Quo API returned invalid phone number data")
-        return data
+
+        phone_numbers = [_parse_phone_number(item) for item in data]
+        by_id: dict[str, QuoPhoneNumber] = {}
+        for phone_number in phone_numbers:
+            existing = by_id.get(phone_number.id)
+            if existing is not None and existing != phone_number:
+                raise QuoApiError("Quo API returned conflicting phone number data")
+            by_id[phone_number.id] = phone_number
+        return list(by_id.values())
 
     def iter_contacts(self) -> AsyncIterator[dict[str, Any]]:
         """Iterate every v1 contact page; callers must apply their date bound."""
@@ -354,6 +378,22 @@ class QuoClient:
             raise QuoApiError("Quo API returned invalid contact data")
         return data
 
+    async def get_user(self, user_id: str) -> dict[str, Any]:
+        """Fetch one Quo user from the path-versioned identity endpoint."""
+        normalized_id = user_id.strip()
+        if not normalized_id or len(normalized_id) > 255:
+            raise QuoApiError("A valid Quo user ID is required")
+
+        payload = await self._request(
+            "GET",
+            f"/{QUO_HISTORICAL_API_VERSION}/users/{quote(normalized_id, safe='')}",
+            api_version=None,
+        )
+        data = payload.get("data")
+        if not isinstance(data, dict) or data.get("id") != normalized_id:
+            raise QuoApiError("Quo API returned invalid user data")
+        return data
+
     async def delete_webhook(self, webhook_id: str) -> None:
         """Delete a Quo webhook. A missing webhook is already cleaned up."""
         try:
@@ -386,6 +426,30 @@ class QuoClient:
 
     async def __aexit__(self, *exc: object) -> None:
         await self.aclose()
+
+
+def _parse_phone_number(resource: dict[str, Any]) -> QuoPhoneNumber:
+    phone_number_id = resource.get("id")
+    raw_number = resource.get("number", resource.get("phoneNumber"))
+    if (
+        not isinstance(phone_number_id, str)
+        or not phone_number_id.strip()
+        or len(phone_number_id) > 255
+    ):
+        raise QuoApiError("Quo API returned invalid phone number data")
+    phone_number = normalize_phone_safe(raw_number) if isinstance(raw_number, str) else None
+    if phone_number is None:
+        raise QuoApiError("Quo API returned invalid phone number data")
+
+    raw_label = resource.get("name", resource.get("label"))
+    provider_label = raw_label.strip() if isinstance(raw_label, str) else None
+    if provider_label is not None and (not provider_label or len(provider_label) > 100):
+        provider_label = None
+    return QuoPhoneNumber(
+        id=phone_number_id.strip(),
+        phone_number=phone_number,
+        provider_label=provider_label,
+    )
 
 
 def _retry_delay_seconds(response: httpx.Response, attempt: int) -> float:
