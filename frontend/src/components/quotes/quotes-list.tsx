@@ -17,6 +17,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -59,6 +60,7 @@ import {
 } from "@/components/ui/table";
 import { TeamMemberPicker } from "@/components/workspaces/team-member-picker";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
+import { lightingProjectsApi } from "@/lib/api/lighting-projects";
 import { quotesApi } from "@/lib/api/quotes";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
@@ -85,9 +87,12 @@ const canEditQuote = (quote: Quote) =>
   !quote.deposit_paid &&
   (!quote.is_wizard_quote || quote.wizard_edit_mode === "update");
 
+const canOpenQuote = (quote: Quote) => Boolean(quote.lighting_project_id) || canEditQuote(quote);
+
 export function QuotesList() {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [convertQuote, setConvertQuote] = useState<Quote | null>(null);
   const [recordDepositQuote, setRecordDepositQuote] = useState<Quote | null>(null);
   const [editing, setEditing] = useState<Quote | null>(null);
@@ -187,6 +192,24 @@ export function QuotesList() {
     setAssignmentUserId(quote.assigned_user_id ?? null);
   };
 
+  const openQuote = async (quote: Quote) => {
+    if (!quote.lighting_project_id) {
+      setEditing(quote);
+      return;
+    }
+    if (!workspaceId) return;
+
+    try {
+      const project = await lightingProjectsApi.get(workspaceId, quote.lighting_project_id);
+      queryClient.setQueryData(queryKeys.lightingProjects.detail(workspaceId, project.id), project);
+      router.push(
+        `/${project.project_type === "permanent" ? "permanent-lighting" : "landscape-lighting"}/${project.id}`,
+      );
+    } catch (error: unknown) {
+      toast.error(getApiErrorMessage(error, "Could not open the linked lighting project"));
+    }
+  };
+
   const busy =
     sendMutation.isPending ||
     deliverMutation.isPending ||
@@ -253,11 +276,11 @@ export function QuotesList() {
             {quotes.map((quote: Quote) => (
               <TableRow key={quote.id}>
                 <TableCell className="font-medium">
-                  {canEditQuote(quote) ? (
+                  {canOpenQuote(quote) ? (
                     <button
                       type="button"
                       className="underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      onClick={() => setEditing(quote)}
+                      onClick={() => void openQuote(quote)}
                     >
                       {quote.number}
                     </button>

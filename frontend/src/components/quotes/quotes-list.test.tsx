@@ -19,6 +19,8 @@ const {
   getMock,
   deleteMock,
   assignMock,
+  lightingProjectGetMock,
+  routerPushMock,
   useWorkspaceIdMock,
   toastMock,
 } = vi.hoisted(() => ({
@@ -29,8 +31,18 @@ const {
   getMock: vi.fn(),
   deleteMock: vi.fn(),
   assignMock: vi.fn(),
+  lightingProjectGetMock: vi.fn(),
+  routerPushMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
   toastMock: { success: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: routerPushMock }),
+}));
+
+vi.mock("@/lib/api/lighting-projects", () => ({
+  lightingProjectsApi: { get: lightingProjectGetMock },
 }));
 
 vi.mock("@/lib/api/quotes", () => ({
@@ -414,7 +426,7 @@ describe("QuotesList editing and deleting", () => {
     await userEvent.click(screen.getByRole("button", { name: "Actions" }));
   };
 
-  it("opens the quote editor when its number is clicked", async () => {
+  it("opens basic details for an editable quote without a linked lighting project", async () => {
     listOne({ status: "sent" });
     getMock.mockResolvedValue(quote({ status: "sent" }));
     renderList();
@@ -425,6 +437,23 @@ describe("QuotesList editing and deleting", () => {
       await screen.findByRole("heading", { name: "Edit quote QUO-000123" }),
     ).toBeInTheDocument();
     await waitFor(() => expect(getMock).toHaveBeenCalledWith("ws-1", "quote-1"));
+  });
+
+  it.each([
+    ["permanent", "/permanent-lighting/project-1"],
+    ["landscape", "/landscape-lighting/project-1"],
+  ] as const)("opens a linked %s project in the Lighting Designer", async (projectType, href) => {
+    listOne({ status: "approved", lighting_project_id: "project-1" });
+    lightingProjectGetMock.mockResolvedValue({ id: "project-1", project_type: projectType });
+    renderList();
+
+    await userEvent.click(await screen.findByRole("button", { name: "QUO-000123" }));
+
+    await waitFor(() => {
+      expect(lightingProjectGetMock).toHaveBeenCalledWith("ws-1", "project-1");
+      expect(routerPushMock).toHaveBeenCalledWith(href);
+    });
+    expect(getMock).not.toHaveBeenCalled();
   });
 
   it("offers edit and delete on a quote the customer already has", async () => {
