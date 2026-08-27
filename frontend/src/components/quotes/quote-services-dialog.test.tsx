@@ -87,6 +87,7 @@ describe("QuoteServicesDialog", () => {
       makeQuote({
         total: 16782,
         proposal_document: { version: 1 },
+        is_wizard_quote: true,
         line_items: [
           {
             id: "li-1",
@@ -146,6 +147,10 @@ describe("QuoteServicesDialog", () => {
     getMock.mockResolvedValue(
       makeQuote({
         total: 180,
+        proposal_document: {
+          mockups: [{ image: "data:image/jpeg;base64,/9j/2Q==" }],
+        },
+        is_wizard_quote: false,
         services: [
           {
             id: "line-1",
@@ -218,7 +223,13 @@ describe("QuoteServicesDialog", () => {
   });
 
   it("says the amount is net only on a quote that grosses it up", async () => {
-    getMock.mockResolvedValue(makeQuote({ proposal_document: { version: 1 }, services: [] }));
+    getMock.mockResolvedValue(
+      makeQuote({
+        proposal_document: { version: 1 },
+        is_wizard_quote: true,
+        services: [],
+      }),
+    );
     const { unmount } = renderDialog(makeQuote());
     expect(await screen.findByText(/the finance fee is added/i)).toBeInTheDocument();
     unmount();

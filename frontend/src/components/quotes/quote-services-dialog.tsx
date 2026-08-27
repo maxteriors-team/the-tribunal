@@ -62,7 +62,7 @@ export function QuoteServicesDialog({
   });
   const detail = detailQuery.data;
   const services = detail?.services ?? [];
-  const isWizardQuote = Boolean(detail?.proposal_document);
+  const isWizardQuote = Boolean(detail?.is_wizard_quote);
   const lineItemsById = new Map(
     isWizardQuote ? [] : (detail?.line_items ?? []).map((lineItem) => [lineItem.id, lineItem]),
   );

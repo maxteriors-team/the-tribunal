@@ -7,6 +7,7 @@ export type LightingProjectDetail = Omit<
   components["schemas"]["LightingProjectDetail"],
   "installation_shot_id"
 > & { installation_shot_id?: string | null };
+export type LightingProjectRevision = components["schemas"]["LightingProjectRevision"];
 export type LightingProjectSummary = Omit<
   components["schemas"]["LightingProjectSummary"],
   "installation_shot_id"
@@ -38,6 +39,9 @@ export const lightingProjectsApi = {
 
   get: (workspaceId: string, projectId: string): Promise<LightingProjectDetail> =>
     apiGet<LightingProjectDetail>(detailPath(workspaceId, projectId)),
+
+  getRevision: (workspaceId: string, projectId: string): Promise<LightingProjectRevision> =>
+    apiGet<LightingProjectRevision>(`${detailPath(workspaceId, projectId)}/revision`),
 
   update: (
     workspaceId: string,

@@ -95,8 +95,8 @@ export interface Quote {
    */
   services?: QuoteService[];
   /**
-   * Rich proposal snapshot; null/absent on a plain quote. Detail responses only —
-   * a list row uses `is_wizard_quote` instead of carrying this large document.
+   * Customer-facing proposal snapshot. It may hold wizard pricing or only media;
+   * use `is_wizard_quote` to choose editing behavior. Detail responses only.
    */
   proposal_document?: Record<string, unknown> | null;
   /** Exact validated proposal input; authenticated detail responses only. */

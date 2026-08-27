@@ -14,6 +14,7 @@ import { LightingProjectEditor } from "./lighting-project-editor";
 const apiMocks = vi.hoisted(() => ({
   create: vi.fn(),
   get: vi.fn(),
+  getRevision: vi.fn(),
   update: vi.fn(),
 }));
 const draftMocks = vi.hoisted(() => ({
@@ -23,10 +24,22 @@ const draftMocks = vi.hoisted(() => ({
 }));
 const designerProps = vi.hoisted(() => vi.fn());
 const routerPush = vi.hoisted(() => vi.fn());
+const queryOptionMocks = vi.hoisted(() => ({ pollProject: false }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: routerPush }),
 }));
+
+vi.mock("@/lib/query-options", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/query-options")>();
+  return {
+    ...original,
+    POLL_15S: {
+      ...original.POLL_15S,
+      refetchInterval: () => (queryOptionMocks.pollProject ? 10 : false),
+    },
+  };
+});
 
 vi.mock("@/providers/workspace-provider", () => ({
   useWorkspace: () => ({
@@ -158,6 +171,7 @@ function renderEditor() {
 
 beforeEach(() => {
   apiMocks.get.mockReset();
+  apiMocks.getRevision.mockReset();
   apiMocks.update.mockReset();
   apiMocks.create.mockReset();
   draftMocks.loadPending.mockReset();
@@ -165,6 +179,7 @@ beforeEach(() => {
   draftMocks.deletePending.mockReset();
   designerProps.mockReset();
   routerPush.mockReset();
+  queryOptionMocks.pollProject = false;
   draftMocks.loadPending.mockResolvedValue(null);
   draftMocks.savePending.mockResolvedValue(undefined);
   draftMocks.deletePending.mockResolvedValue(undefined);
@@ -198,6 +213,28 @@ describe("LightingProjectEditor", () => {
         }),
       }),
     );
+  });
+
+  it("loads a teammate's newer saved design while the editor stays open", async () => {
+    queryOptionMocks.pollProject = true;
+    apiMocks.get.mockResolvedValueOnce(project()).mockResolvedValue(
+      project({
+        version: 2,
+        updater_name: "Carter",
+        updated_at: "2026-08-11T10:05:00.000Z",
+        document: projectDraft("carter-edit", 0.7, true),
+      }),
+    );
+    apiMocks.getRevision.mockResolvedValueOnce({ version: 1 }).mockResolvedValue({ version: 2 });
+    renderEditor();
+
+    expect(await screen.findByTestId("light-designer")).toHaveTextContent("shot-1");
+    await waitFor(() => expect(apiMocks.getRevision.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await waitFor(() =>
+      expect(screen.getByTestId("light-designer")).toHaveTextContent("carter-edit"),
+    );
+    queryOptionMocks.pollProject = false;
+    expect(apiMocks.get).toHaveBeenCalledTimes(2);
   });
 
   it("saves, reopens by project ID from persistence, edits, and saves again", async () => {
