@@ -264,8 +264,10 @@ class ProposalWizardPayload(BaseModel):
     # are priced into every package instead of being replaced by tier defaults.
     fixed_items: list[WizardFixtureQty] = Field(default_factory=list, max_length=100)
     additional_charges: list[WizardCharge] = Field(default_factory=list)
-    # Tier the client is buying; defaults to the highest-value ("headline") tier.
+    # Tier priced into the quote before it is sent.
     selected_tier: str | None = None
+    # Existing proposals remain customer-selectable when this intent is absent.
+    customer_can_select_package: bool = True
     care_plan_tier: str | None = None
     care_count_manual: int | None = Field(default=None, ge=0)
     bistro: WizardBistroSelection | None = None
