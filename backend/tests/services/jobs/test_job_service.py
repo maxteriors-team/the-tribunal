@@ -21,8 +21,9 @@ from fastapi import HTTPException
 from app.core.encryption import hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
-from app.models.field_service import Crew, JobAssignment, JobStatus, Technician
+from app.models.field_service import Crew, Job, JobAssignment, JobStatus, Technician
 from app.models.lighting_project import LightingProject
+from app.models.quote import Quote
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.jobs import JobService
@@ -169,6 +170,98 @@ def _landscape_document() -> dict:
         },
         "precon": {"responses": [], "leadInstaller": "Hidden", "notes": "Field brief"},
     }
+
+
+async def _approved_preview_quote(
+    db, workspace_id: uuid.UUID, contact_id: int, project_id: uuid.UUID
+) -> tuple[Quote, datetime]:
+    decision_at = datetime.now(UTC)
+    quote = Quote(
+        workspace_id=workspace_id,
+        contact_id=contact_id,
+        lighting_project_id=project_id,
+        number="QUO-PLAN",
+        title="Permanent lighting",
+        status="approved",
+        subtotal=5000,
+        total=5000,
+        approved_at=decision_at,
+        deposit_percentage=30,
+        deposit_paid_at=decision_at,
+        proposal_document={
+            "version": 1,
+            "service": "permanent",
+            "mockups": [
+                {
+                    "image": "data:image/jpeg;base64,/9j/2Q==",
+                    "caption": "Approved permanent lighting preview",
+                }
+            ],
+        },
+    )
+    db.add(quote)
+    await db.flush()
+    return quote, decision_at
+
+
+async def _assert_installation_plan_access(
+    db,
+    *,
+    job_id: uuid.UUID,
+    workspace: Workspace,
+    crew_user: User,
+    project_id: uuid.UUID,
+) -> None:
+    crew_membership = await _member(db, workspace.id, crew_user.id)
+    crew_membership.role = "technician"
+    crew_plan = await JobService(db).get_installation_plan(
+        job_id,
+        workspace.id,
+        membership=crew_membership,
+        user_id=crew_user.id,
+    )
+    assert crew_plan.selected_shot_id == "install-front"
+
+    unassigned_user = await _user(db)
+    unassigned = await _member(db, workspace.id, unassigned_user.id)
+    unassigned.role = "technician"
+    with pytest.raises(HTTPException) as exc:
+        await JobService(db).get_installation_plan(
+            job_id,
+            workspace.id,
+            membership=unassigned,
+            user_id=unassigned_user.id,
+        )
+    assert exc.value.status_code == 404
+
+    unassigned.role = "sales_rep"
+    with pytest.raises(HTTPException) as exc:
+        await JobService(db).get_installation_plan(
+            job_id,
+            workspace.id,
+            membership=unassigned,
+            user_id=unassigned_user.id,
+        )
+    assert exc.value.status_code == 404
+
+    unassigned.role = "manager"
+    manager_plan = await JobService(db).get_installation_plan(
+        job_id,
+        workspace.id,
+        membership=unassigned,
+        user_id=unassigned_user.id,
+    )
+    assert manager_plan.project_id == project_id
+
+    other = await _workspace(db)
+    with pytest.raises(HTTPException) as exc:
+        await JobService(db).get_installation_plan(
+            job_id,
+            other.id,
+            membership=unassigned,
+            user_id=unassigned_user.id,
+        )
+    assert exc.value.status_code == 404
 
 
 # --------------------------------------------------------------------------- #
@@ -621,6 +714,7 @@ async def test_installation_plan_is_redacted_and_assignment_scoped() -> None:
         )
         db.add(project)
         await db.flush()
+        quote, decision_at = await _approved_preview_quote(db, ws.id, contact.id, project.id)
         job = await JobService(db).create(
             ws.id,
             {
@@ -631,6 +725,11 @@ async def test_installation_plan_is_redacted_and_assignment_scoped() -> None:
                 "technician_ids": [assigned_tech.id],
             },
         )
+        stored_job = await db.get(Job, job.id)
+        assert stored_job is not None
+        stored_job.source_quote_id = quote.id
+        quote.converted_job_id = stored_job.id
+        await db.flush()
 
         plan = await JobService(db).get_installation_plan(
             job.id,
@@ -640,6 +739,12 @@ async def test_installation_plan_is_redacted_and_assignment_scoped() -> None:
         )
         payload = plan.model_dump(mode="json", by_alias=True)
         assert plan.selected_shot_id == "install-front"
+        assert plan.proposal_preview_image == "data:image/jpeg;base64,/9j/2Q=="
+        assert plan.proposal_preview_caption == "Approved permanent lighting preview"
+        assert plan.proposal_status == "approved"
+        assert plan.proposal_accepted_at == decision_at
+        assert plan.payment_status == "paid"
+        assert plan.payment_received_at == decision_at
         assert plan.photo.data_url.endswith("AAAA")
         assert plan.fixture_schedule[0].catalog_sku == "UP-01"
         assert plan.precon_field_brief == "Field brief"
@@ -647,53 +752,10 @@ async def test_installation_plan_is_redacted_and_assignment_scoped() -> None:
         assert "leadInstaller" not in str(payload)
         assert "BBBB" not in str(payload)
 
-        crew_membership = await _member(db, ws.id, crew_user.id)
-        crew_membership.role = "technician"
-        crew_plan = await JobService(db).get_installation_plan(
-            job.id,
-            ws.id,
-            membership=crew_membership,
-            user_id=crew_user.id,
+        await _assert_installation_plan_access(
+            db,
+            job_id=job.id,
+            workspace=ws,
+            crew_user=crew_user,
+            project_id=project.id,
         )
-        assert crew_plan.selected_shot_id == "install-front"
-
-        unassigned_user = await _user(db)
-        unassigned = await _member(db, ws.id, unassigned_user.id)
-        unassigned.role = "technician"
-        with pytest.raises(HTTPException) as exc:
-            await JobService(db).get_installation_plan(
-                job.id,
-                ws.id,
-                membership=unassigned,
-                user_id=unassigned_user.id,
-            )
-        assert exc.value.status_code == 404
-
-        unassigned.role = "sales_rep"
-        with pytest.raises(HTTPException) as exc:
-            await JobService(db).get_installation_plan(
-                job.id,
-                ws.id,
-                membership=unassigned,
-                user_id=unassigned_user.id,
-            )
-        assert exc.value.status_code == 404
-
-        unassigned.role = "manager"
-        manager_plan = await JobService(db).get_installation_plan(
-            job.id,
-            ws.id,
-            membership=unassigned,
-            user_id=unassigned_user.id,
-        )
-        assert manager_plan.project_id == project.id
-
-        other = await _workspace(db)
-        with pytest.raises(HTTPException) as exc:
-            await JobService(db).get_installation_plan(
-                job.id,
-                other.id,
-                membership=unassigned,
-                user_id=unassigned_user.id,
-            )
-        assert exc.value.status_code == 404

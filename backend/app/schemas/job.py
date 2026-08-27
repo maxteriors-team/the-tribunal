@@ -9,6 +9,7 @@ job on their calendar. Status is derived/maintained server-side by
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -21,6 +22,7 @@ from app.schemas.lighting_project import (
     SheetMetadataSchema,
     ShortText,
 )
+from app.schemas.quote import QuoteStatus
 
 
 class JobCreate(BaseModel):
@@ -297,8 +299,11 @@ class InstallationPlanFixture(BaseModel):
     transformer_zone_id: ShortText | None = None
 
 
+JobPaymentStatus = Literal["not_required", "pending", "paid"]
+
+
 class JobInstallationPlanResponse(BaseModel):
-    """Assignment-scoped, read-only projection of one selected installation sheet."""
+    """Assignment-scoped, price-free plan with the customer's proposal decision."""
 
     job_id: uuid.UUID
     project_id: uuid.UUID
@@ -306,6 +311,12 @@ class JobInstallationPlanResponse(BaseModel):
     project_version: int
     project_updated_at: datetime
     selected_shot_id: ShortText
+    proposal_preview_image: str | None = None
+    proposal_preview_caption: str | None = None
+    proposal_status: QuoteStatus | None = None
+    proposal_accepted_at: datetime | None = None
+    payment_status: JobPaymentStatus | None = None
+    payment_received_at: datetime | None = None
     sheet_label: ShortText | None = None
     drawing_title: ShortText | None = None
     drawing_number: ShortText | None = None

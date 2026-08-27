@@ -535,6 +535,10 @@ class LightingProjectSummary(ApiSchema):
     updated_at: datetime
 
 
+class LightingProjectRevision(ApiSchema):
+    version: Annotated[int, Field(ge=1)]
+
+
 class LightingProjectDetail(LightingProjectSummary):
     document: LandscapeDraftDocument
     created_by_id: int | None

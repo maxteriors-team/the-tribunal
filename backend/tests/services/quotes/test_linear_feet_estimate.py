@@ -8,6 +8,8 @@ and feet-privacy contract are all locked down without touching Postgres.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from app.schemas.estimate import (
@@ -592,6 +594,61 @@ def test_estimate_quote_deposit_is_bounded_and_permanent_only() -> None:
         EstimateQuoteRequest(side="permanent", feet=100, deposit_percentage=0)
     with pytest.raises(ValueError):
         EstimateQuoteRequest(side="permanent", feet=100, deposit_percentage=101)
+
+
+def test_estimate_quote_preview_requires_a_saved_permanent_project_and_raster() -> None:
+    project_id = uuid.uuid4()
+    request = EstimateQuoteRequest(
+        side="permanent",
+        feet=100,
+        lighting_project_id=project_id,
+        proposal_preview={
+            "shot_id": "front",
+            "image": "data:image/jpeg;base64,/9j/2Q==",
+        },
+    )
+    assert request.proposal_preview is not None
+    assert request.proposal_preview.shot_id == "front"
+
+    with pytest.raises(ValueError, match="requires a saved lighting project"):
+        EstimateQuoteRequest(
+            side="permanent",
+            feet=100,
+            proposal_preview={
+                "shot_id": "front",
+                "image": "data:image/jpeg;base64,/9j/2Q==",
+            },
+        )
+    with pytest.raises(ValueError, match="only be added to a permanent quote"):
+        EstimateQuoteRequest(
+            side="seasonal",
+            feet=100,
+            lighting_project_id=project_id,
+            proposal_preview={
+                "shot_id": "front",
+                "image": "data:image/jpeg;base64,/9j/2Q==",
+            },
+        )
+    with pytest.raises(ValueError, match="valid base64 data"):
+        EstimateQuoteRequest(
+            side="permanent",
+            feet=100,
+            lighting_project_id=project_id,
+            proposal_preview={
+                "shot_id": "front",
+                "image": "data:image/jpeg;base64,not-valid!",
+            },
+        )
+    with pytest.raises(ValueError, match="bytes do not match"):
+        EstimateQuoteRequest(
+            side="permanent",
+            feet=100,
+            lighting_project_id=project_id,
+            proposal_preview={
+                "shot_id": "front",
+                "image": "data:image/png;base64,/9j/2Q==",
+            },
+        )
 
 
 def test_convert_permanent_lines_sum_to_permanent_total() -> None:

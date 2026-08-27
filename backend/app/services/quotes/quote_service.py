@@ -48,6 +48,7 @@ from app.schemas.estimate import (
     ComparisonShareResult,
     EstimateCustomLine,
     EstimateCustomLineCost,
+    EstimateProposalPreview,
     EstimateQuoteRequest,
     EstimateRenderRequest,
     EstimateRenderResult,
@@ -428,6 +429,37 @@ class QuoteService:
 
         return payload.model_copy(update=updates) if updates else payload
 
+    @staticmethod
+    def _permanent_estimate_preview_document(
+        project: LightingProject, preview: EstimateProposalPreview
+    ) -> ProposalDocument:
+        """Bind the customer-visible render to the saved shot technicians install."""
+        from app.schemas.lighting_project import LandscapeDraftDocument
+
+        document = LandscapeDraftDocument.model_validate(project.document)
+        if document.project_type != "permanent":
+            raise ValidationError("Proposal previews require a permanent-lighting project")
+        selected_shot = next((shot for shot in document.shots if shot.id == preview.shot_id), None)
+        if selected_shot is None:
+            raise ValidationError("Proposal preview shot is missing from the lighting project")
+        if not (
+            selected_shot.design.runs
+            or selected_shot.design.items
+            or selected_shot.design.plan_images
+        ):
+            raise ValidationError("Proposal preview shot has no saved lighting design")
+
+        project.installation_shot_id = selected_shot.id
+        return ProposalDocument(
+            service="permanent",
+            mockups=[
+                ProposalMockup(
+                    image=preview.image,
+                    caption=f"{project.name} proposed permanent lighting",
+                )
+            ],
+        )
+
     # ------------------------------------------------------------------
     # Derivation helpers (pure; no I/O)
     # ------------------------------------------------------------------
@@ -577,9 +609,29 @@ class QuoteService:
             return PricingSettings()
         return get_pricing_config(workspace)
 
+    @staticmethod
+    def _is_wizard_quote(quote: Quote) -> bool:
+        """Distinguish priced wizard snapshots from plain quotes with preview media."""
+        document = quote.proposal_document
+        if not isinstance(document, dict):
+            return False
+        if quote.proposal_input is not None:
+            return True
+        return any(
+            document.get(key)
+            for key in (
+                "categories",
+                "category_sections",
+                "tiers",
+                "bistro",
+                "additional_charges",
+                "fulfillment",
+            )
+        )
+
     @classmethod
     def _decorate_wizard_edit_state(cls, response: QuoteResponse, quote: Quote) -> None:
-        response.is_wizard_quote = quote.proposal_document is not None
+        response.is_wizard_quote = cls._is_wizard_quote(quote)
         if response.is_wizard_quote:
             response.wizard_edit_mode = (
                 "revise" if cls._wizard_quote_requires_revision(quote) else "update"
@@ -601,14 +653,14 @@ class QuoteService:
         Which persistence answers depends on how the quote was built. A wizard
         quote's line items are *derived* from its snapshot and are rebuilt from
         scratch whenever the document is repriced, so its editable services are
-        the document's add-on charges. A plain quote has no document and its line
-        items are the truth, so they are the services.
+        the document's add-on charges. A plain quote's line items remain the truth,
+        even when it carries a preview-only document.
 
         A snapshot that no longer parses returns nothing rather than raising:
         this runs on every quote read, and one bad document must not 500 a list.
         """
         raw = quote.proposal_document
-        if not raw:
+        if not self._is_wizard_quote(quote):
             return [
                 QuoteServiceResponse(
                     id=str(li.id),
@@ -1030,6 +1082,7 @@ class QuoteService:
         created_by_id: int | None = None,
         assigned_user_id: int | None = None,
         selected_permanent_kits: Sequence[PermanentKitSelection] | None = None,
+        proposal_document: ProposalDocument | None = None,
     ) -> QuoteDetailResponse:
         """Create a draft quote with its initial line items and computed totals."""
         contact_id = quote_in.contact_id
@@ -1070,6 +1123,9 @@ class QuoteService:
             terms=quote_in.terms,
             status="draft",
             created_by_id=created_by_id,
+            proposal_document=(
+                proposal_document.model_dump(mode="json") if proposal_document else None
+            ),
             selected_permanent_kits=[
                 kit.model_dump(mode="json") for kit in (selected_permanent_kits or ())
             ],
@@ -1964,7 +2020,7 @@ class QuoteService:
         """
         quote = await self._get_mutable_quote(workspace_id, quote_id)
         before = float(quote.total or 0)
-        wizard = bool(quote.proposal_document)
+        wizard = self._is_wizard_quote(quote)
 
         if wizard:
             document = self._parse_document(quote)
@@ -2035,7 +2091,7 @@ class QuoteService:
         quote = await self._get_mutable_quote(workspace_id, quote_id)
         before = float(quote.total or 0)
 
-        if quote.proposal_document:
+        if self._is_wizard_quote(quote):
             document = self._parse_document(quote)
             charge_index = next(
                 (
@@ -2473,7 +2529,7 @@ class QuoteService:
         quote = result.scalar_one_or_none()
         if quote is None:
             raise NotFoundError("Quote not found")
-        if quote.proposal_document is None:
+        if not self._is_wizard_quote(quote):
             raise ConflictError(
                 "Only a sales-wizard quote can be reopened in the quote builder",
                 code="wizard_quote_required",
@@ -3176,6 +3232,18 @@ class QuoteService:
             source="roofline_estimator",
         )
 
+        proposal_document: ProposalDocument | None = None
+        if req.proposal_preview is not None:
+            project_id = req.lighting_project_id
+            if project_id is None:
+                raise ValidationError("A proposal preview requires a saved lighting project")
+            project = await self._validated_lighting_project_reference(
+                workspace_id, project_id, contact_id=contact_id
+            )
+            proposal_document = self._permanent_estimate_preview_document(
+                project, req.proposal_preview
+            )
+
         quote = await self.create_quote(
             workspace_id,
             QuoteCreate(
@@ -3192,6 +3260,7 @@ class QuoteService:
             selected_permanent_kits=(
                 pricing.selected_kits if isinstance(pricing, PermanentPricing) else None
             ),
+            proposal_document=proposal_document,
         )
         self.log.info(
             "quote_created_from_estimate",
@@ -3714,7 +3783,7 @@ class QuoteService:
                         "scheduled_end": scheduled_end,
                     },
                 )
-                if quote.proposal_document is not None:
+                if self._is_wizard_quote(quote):
                     document = self._parse_document(quote)
                     await JobAllocationService(self.db).reserve(
                         workspace_id, job.id, document.fulfillment

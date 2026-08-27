@@ -320,6 +320,7 @@ async def manager_client() -> AsyncIterator[AsyncClient]:
     }
     service.create_project.return_value = _api_response()
     service.get_project.return_value = _api_response()
+    service.get_project_revision.return_value = {"version": 1}
     service.update_project.return_value = _api_response(version=2)
     async for client in _api_client("manager", service):
         yield client
@@ -338,6 +339,9 @@ class TestLightingProjectApiPermissions:
         list_response = await manager_client.get(base)
         assert list_response.status_code == 200
         assert "document" not in list_response.json()["items"][0]
+        revision_response = await manager_client.get(f"{base}/{PROJECT_ID}/revision")
+        assert revision_response.status_code == 200
+        assert revision_response.json() == {"version": 1}
         response = await manager_client.post(
             base, json={"contact_id": 42, "name": "Patio lighting"}
         )
@@ -350,6 +354,7 @@ class TestLightingProjectApiPermissions:
     ) -> None:
         base = f"/api/v1/workspaces/{WS_ID}/lighting-projects"
         assert (await sales_client.get(base)).status_code == 403
+        assert (await sales_client.get(f"{base}/{PROJECT_ID}/revision")).status_code == 403
         assert (
             await sales_client.post(base, json={"contact_id": 42, "name": "Patio lighting"})
         ).status_code == 403
@@ -428,6 +433,7 @@ async def test_create_list_get_update_archive_and_stale_conflict(
         assert created.installation_shot_id == "shot-1"
         assert created.updater_name == "Morgan Manager"
         assert created.document.updated_at > browser_time
+        assert (await service.get_project_revision(workspace_id, created.id)).version == 1
 
         fetched = await service.get_project(workspace_id, created.id)
         assert fetched.document.shots[0].id == "shot-1"
@@ -444,6 +450,7 @@ async def test_create_list_get_update_archive_and_stale_conflict(
             user_id=creator_id,
         )
         assert accepted.version == 2
+        assert (await service.get_project_revision(workspace_id, created.id)).version == 2
         assert accepted.document.active_shot_id == "shot-new"
         assert accepted.installation_shot_id == "shot-new"
 
@@ -657,3 +664,5 @@ async def test_workspace_isolation_covers_project_and_every_linked_crm_id(
         )
         with pytest.raises(NotFoundError):
             await service.get_project(foreign_workspace.id, created.id)
+        with pytest.raises(NotFoundError):
+            await service.get_project_revision(foreign_workspace.id, created.id)
