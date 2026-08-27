@@ -414,6 +414,19 @@ describe("QuotesList editing and deleting", () => {
     await userEvent.click(screen.getByRole("button", { name: "Actions" }));
   };
 
+  it("opens the quote editor when its number is clicked", async () => {
+    listOne({ status: "sent" });
+    getMock.mockResolvedValue(quote({ status: "sent" }));
+    renderList();
+
+    await userEvent.click(await screen.findByRole("button", { name: "QUO-000123" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Edit quote QUO-000123" }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(getMock).toHaveBeenCalledWith("ws-1", "quote-1"));
+  });
+
   it("offers edit and delete on a quote the customer already has", async () => {
     listOne({ status: "sent" });
 

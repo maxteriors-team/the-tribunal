@@ -80,6 +80,11 @@ const STATUS_VARIANT: Record<QuoteStatus, "default" | "secondary" | "destructive
   expired: "outline",
 };
 
+const canEditQuote = (quote: Quote) =>
+  (quote.status === "draft" || quote.status === "sent") &&
+  !quote.deposit_paid &&
+  (!quote.is_wizard_quote || quote.wizard_edit_mode === "update");
+
 export function QuotesList() {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
@@ -247,7 +252,19 @@ export function QuotesList() {
           <TableBody>
             {quotes.map((quote: Quote) => (
               <TableRow key={quote.id}>
-                <TableCell className="font-medium">{quote.number}</TableCell>
+                <TableCell className="font-medium">
+                  {canEditQuote(quote) ? (
+                    <button
+                      type="button"
+                      className="underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      onClick={() => setEditing(quote)}
+                    >
+                      {quote.number}
+                    </button>
+                  ) : (
+                    quote.number
+                  )}
+                </TableCell>
                 <TableCell className="max-w-[16rem] truncate text-muted-foreground">
                   {quote.title || "—"}
                 </TableCell>
@@ -503,11 +520,7 @@ function RowActions({
   onDelete,
 }: RowActionsProps) {
   const isOpen = quote.status === "draft" || quote.status === "sent";
-  const canChangeTerms = Boolean(
-    isOpen &&
-    !quote.deposit_paid &&
-    (!quote.is_wizard_quote || quote.wizard_edit_mode === "update"),
-  );
+  const canChangeTerms = canEditQuote(quote);
   const isApproved = quote.status === "approved";
   const alreadyConverted = Boolean(quote.converted_job_id && quote.converted_invoice_id);
   const canConvert = isApproved && !alreadyConverted;
