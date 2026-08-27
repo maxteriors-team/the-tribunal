@@ -206,6 +206,12 @@ describe("JobDetailDialog", () => {
         project_version: 4,
         project_updated_at: "2026-08-12T00:00:00Z",
         selected_shot_id: "install-front",
+        proposal_preview_image: "data:image/jpeg;base64,/9j/2Q==",
+        proposal_preview_caption: "Approved permanent lighting preview",
+        proposal_status: "approved",
+        proposal_accepted_at: "2026-08-12T01:00:00Z",
+        payment_status: "paid",
+        payment_received_at: "2026-08-12T01:05:00Z",
         sheet_label: "Front",
         drawing_title: "Installation plan",
         drawing_number: "L-1",
@@ -221,6 +227,12 @@ describe("JobDetailDialog", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Installation plan" }));
 
     expect(await screen.findByRole("heading", { name: "Installation plan" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Customer proposal" })).toBeVisible();
+    expect(screen.getByText("Proposal accepted")).toBeVisible();
+    expect(screen.getByText("Customer payment received")).toBeVisible();
+    expect(
+      screen.getByRole("img", { name: "Approved permanent lighting preview" }),
+    ).toHaveAttribute("src", "data:image/jpeg;base64,/9j/2Q==");
     expect(screen.getByText(/Confirm transformer location/)).toBeInTheDocument();
     expect(screen.getByText(/UP-01/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Print/ })).toBeInTheDocument();

@@ -3064,9 +3064,12 @@ export function LightDesigner({
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [savedToCustomer, setSavedToCustomer] = useState(false);
-  // The draft quote just created from this design (its number is shown inline
-  // with a link into Quotes). Cleared whenever the priced inputs change.
+  // The draft quote created from the current proposal inputs. Its signature keeps
+  // delivery from reusing a stale quote after pricing, customer, or design changes.
   const [quoteResult, setQuoteResult] = useState<{
+    id: string;
+    side: "permanent" | "seasonal";
+    signature: string;
     number: string;
     depositAmount: number | null;
   } | null>(null);
@@ -3827,57 +3830,154 @@ export function LightDesigner({
     permanentDepositPercentage != null
       ? round2((estimate?.permanent.total ?? 0) * permanentDepositPercentage * 0.01)
       : null;
+  const permanentPreviewShot = liveShots.find((shot) => shot.id === activeShotId);
+  const permanentProjectPreviewReady =
+    !landscapeProject ||
+    Boolean(
+      landscapeProject.projectId &&
+        permanentPreviewShot &&
+        hasDesign(permanentPreviewShot.design),
+    );
+
+  const quoteSignature = (side: "permanent" | "seasonal") =>
+    JSON.stringify({
+      side,
+      inputs: shareParams,
+      deposit_percentage: side === "permanent" ? permanentDepositPercentage : null,
+      lighting_project_id: side === "permanent" ? (landscapeProject?.projectId ?? null) : null,
+      preview:
+        side === "permanent" && permanentPreviewShot
+          ? {
+              shot_id: permanentPreviewShot.id,
+              design: permanentPreviewShot.design,
+              dusk: permanentPreviewShot.dusk,
+            }
+          : null,
+    });
+  const permanentQuoteSignature = quoteSignature("permanent");
+  const currentPermanentQuote =
+    quoteResult?.side === "permanent" && quoteResult.signature === permanentQuoteSignature
+      ? quoteResult
+      : null;
 
   // Convert the drawn design into a real draft quote. ``side`` picks which
   // priced option the customer is buying; the seasonal side carries the chosen
   // package. Every line is recomputed server-side, so this only sends inputs.
   const createQuoteMutation = useMutation({
-    mutationFn: async (side: "permanent" | "seasonal") => {
+    mutationFn: async ({ side }: { side: "permanent" | "seasonal"; signature: string }) => {
       await landscapeProject?.flushBeforeProposal?.();
+      const lightingProjectId = landscapeProject?.projectId ?? null;
+      const proposalPreview =
+        side === "permanent" &&
+        lightingProjectId &&
+        permanentPreviewShot &&
+        hasDesign(permanentPreviewShot.design)
+          ? {
+              shot_id: permanentPreviewShot.id,
+              image: await exportDesignJpeg(
+                permanentPreviewShot.photo,
+                permanentPreviewShot.design,
+                productById,
+                { dusk: permanentPreviewShot.dusk },
+              ),
+            }
+          : undefined;
+      if (side === "permanent" && landscapeProject && !proposalPreview) {
+        throw new Error("Save a lighting design on the selected photo before creating its proposal");
+      }
       return estimatorApi.createQuote(workspaceId, {
         ...shareParams,
         side,
-        lighting_project_id: landscapeProject?.projectId ?? null,
+        lighting_project_id: lightingProjectId,
+        proposal_preview: proposalPreview,
         ...(side === "permanent" && permanentDepositPercentage != null
           ? { deposit_percentage: permanentDepositPercentage }
           : {}),
       });
     },
-    onSuccess: (quote) =>
+    onSuccess: (quote, { side, signature }) =>
       setQuoteResult({
+        id: quote.id,
+        side,
+        signature,
         number: quote.number,
         depositAmount: quote.deposit_amount ?? null,
       }),
   });
+  const quoteDeliveryMutation = useMutation({
+    mutationFn: ({ quoteId, channel }: { quoteId: string; channel: SendChannel }) =>
+      quotesApi.deliver(
+        workspaceId,
+        quoteId,
+        channel,
+        (channel === "email" ? clientEmail : clientPhone).trim() || null,
+      ),
+    onSuccess: (result) => {
+      // Do not leave a preview-only comparison URL beside a successful quote
+      // delivery; it is not the acceptance link the customer just received.
+      setShareUrl(null);
+      setShareToken(null);
+      setSavedToCustomer(false);
+      setSentTo(result.to);
+      setSentVia(result.channel);
+    },
+  });
   const quotePending = createQuoteMutation.isPending;
 
-  // One-click "send the estimate", by email or text. Both buttons are always
-  // visible on every estimate. If the rep hasn't saved a share link yet we mint
-  // one first, then deliver it — so sending never depends on remembering to
-  // press "Save & share" beforehand.
-  const sendPending = shareMutation.isPending || deliverMutation.isPending;
+  // A single-side permanent send must create and deliver the real quote. The
+  // old comparison link only displayed pricing, so customers could neither
+  // accept nor reach the existing Stripe deposit checkout.
+  const sendPending =
+    shareMutation.isPending ||
+    deliverMutation.isPending ||
+    createQuoteMutation.isPending ||
+    quoteDeliveryMutation.isPending;
   // The server's own words, not a generic retry line: a failed text usually
   // means something the rep can fix right now ("add a number under Settings",
   // "this number has opted out"), and that is exactly what gets swallowed by a
   // hardcoded "couldn't send".
-  const sendFailure = deliverMutation.error ?? shareMutation.error;
+  const sendFailure =
+    proposalSide === "permanent"
+      ? (quoteDeliveryMutation.error ?? createQuoteMutation.error)
+      : (deliverMutation.error ?? shareMutation.error);
   const sendError = sendFailure
-    ? getApiErrorMessage(sendFailure, "Couldn’t send the estimate — try again.")
+    ? getApiErrorMessage(
+        sendFailure,
+        proposalSide === "permanent"
+          ? "Couldn’t send the proposal — try again."
+          : "Couldn’t send the estimate — try again.",
+      )
     : null;
   const canSend = (channel: SendChannel) =>
-    hasHolidayProposal && (channel === "email" ? clientEmail : clientPhone).trim().length > 0;
+    hasHolidayProposal &&
+    (channel === "email" ? clientEmail : clientPhone).trim().length > 0 &&
+    (proposalSide !== "permanent" ||
+      (permanentDepositValid && permanentProjectPreviewReady));
   const sendEstimate = async (channel: SendChannel) => {
     if (!canSend(channel) || sendPending) return;
     setSendingChannel(channel);
     try {
-      let token = shareToken;
-      if (!token) {
-        const shared = await shareMutation.mutateAsync();
-        token = shared.token;
+      if (proposalSide === "permanent") {
+        const quote =
+          currentPermanentQuote ??
+          (await createQuoteMutation.mutateAsync({
+            side: "permanent",
+            signature: permanentQuoteSignature,
+          }));
+        await quoteDeliveryMutation.mutateAsync({ quoteId: quote.id, channel });
+        return;
       }
-      if (token) await deliverMutation.mutateAsync({ token, channel });
+
+      let comparisonToken = shareToken;
+      if (!comparisonToken) {
+        const shared = await shareMutation.mutateAsync();
+        comparisonToken = shared.token;
+      }
+      if (comparisonToken) {
+        await deliverMutation.mutateAsync({ token: comparisonToken, channel });
+      }
     } catch {
-      // Surfaced to the rep via shareMutation/deliverMutation isError below.
+      // Surfaced via the matching create/share/delivery mutation above.
     } finally {
       setSendingChannel(null);
     }
@@ -4813,8 +4913,8 @@ export function LightDesigner({
                               disabled={!canSend("email") || sendPending}
                               title={
                                 canSend("email")
-                                  ? `Email the estimate to ${clientEmail.trim()}`
-                                  : "Draw the holiday design and add a customer email to send the estimate"
+                                  ? `${proposalSide === "permanent" ? "Email the proposal" : "Email the estimate"} to ${clientEmail.trim()}`
+                                  : "Draw the design and add a customer email to send"
                               }
                               onClick={() => void sendEstimate("email")}
                             >
@@ -4823,7 +4923,7 @@ export function LightDesigner({
                               ) : (
                                 <>
                                   <Mail aria-hidden="true" />
-                                  Email estimate
+                                  {proposalSide === "permanent" ? "Email proposal" : "Email estimate"}
                                 </>
                               )}
                             </button>
@@ -4833,8 +4933,8 @@ export function LightDesigner({
                               disabled={!canSend("sms") || sendPending}
                               title={
                                 canSend("sms")
-                                  ? `Text the estimate to ${clientPhone.trim()}`
-                                  : "Draw the holiday design and add a customer phone to text the estimate"
+                                  ? `${proposalSide === "permanent" ? "Text the proposal" : "Text the estimate"} to ${clientPhone.trim()}`
+                                  : "Draw the design and add a customer phone to send"
                               }
                               onClick={() => void sendEstimate("sms")}
                             >
@@ -4843,18 +4943,28 @@ export function LightDesigner({
                               ) : (
                                 <>
                                   <MessageSquareText aria-hidden="true" />
-                                  Text estimate
+                                  {proposalSide === "permanent" ? "Text proposal" : "Text estimate"}
                                 </>
                               )}
                             </button>
                           </div>
+                          {proposalSide === "permanent" ? (
+                            <div className="est-customer-hint">
+                              Email or text creates and sends the full proposal. The customer accepts
+                              it there, then pays the deposit by card.
+                            </div>
+                          ) : null}
                           <button
                             className="est-btn est-save-btn"
                             type="button"
                             disabled={!hasHolidayProposal || shareMutation.isPending}
                             onClick={() => shareMutation.mutate()}
                           >
-                            {shareMutation.isPending ? "Saving…" : "Save & share link only"}
+                            {shareMutation.isPending
+                              ? "Saving…"
+                              : proposalSide === "permanent"
+                                ? "Save & share link only — preview, no approval or payment"
+                                : "Save & share link only"}
                           </button>
                           {sendError ? (
                             <div className="est-send-row">
@@ -4905,9 +5015,17 @@ export function LightDesigner({
                                     className="est-btn primary est-save-btn"
                                     type="button"
                                     disabled={
-                                      !hasHolidayDesign || quotePending || !permanentDepositValid
+                                      !hasHolidayDesign ||
+                                      !permanentProjectPreviewReady ||
+                                      quotePending ||
+                                      !permanentDepositValid
                                     }
-                                    onClick={() => createQuoteMutation.mutate("permanent")}
+                                    onClick={() =>
+                                      createQuoteMutation.mutate({
+                                        side: "permanent",
+                                        signature: permanentQuoteSignature,
+                                      })
+                                    }
                                   >
                                     {quotePending
                                       ? "Creating…"
@@ -4922,7 +5040,12 @@ export function LightDesigner({
                                   className="est-btn est-save-btn"
                                   type="button"
                                   disabled={!hasHolidayDesign || quotePending}
-                                  onClick={() => createQuoteMutation.mutate("seasonal")}
+                                  onClick={() =>
+                                    createQuoteMutation.mutate({
+                                      side: "seasonal",
+                                      signature: quoteSignature("seasonal"),
+                                    })
+                                  }
                                 >
                                   {quotePending
                                     ? "Creating…"
@@ -4932,8 +5055,9 @@ export function LightDesigner({
                                 </button>
                               ) : null}
                               <div className="est-customer-hint">
-                                Creates a draft quote with itemized, server-priced lines. Review and
-                                send it from Quotes.
+                                {sides.permanent
+                                  ? "Permanent quotes include the current customer-photo preview. Acceptance and payment status stay with the calendar job."
+                                  : "Creates a draft quote with itemized, server-priced lines. Review and send it from Quotes."}
                               </div>
                               {quoteResult ? (
                                 <div className="est-saved-note">
@@ -4978,13 +5102,13 @@ export function LightDesigner({
                                 Copy
                               </button>
                             </div>
-                            {sentTo ? (
-                              <div className="est-send-row">
-                                <span className="est-sent-note">
-                                  {sentVia === "sms" ? "Texted to" : "Emailed to"} {sentTo}
-                                </span>
-                              </div>
-                            ) : null}
+                          </div>
+                        ) : null}
+                        {sentTo ? (
+                          <div className="est-send-row">
+                            <span className="est-sent-note">
+                              {sentVia === "sms" ? "Texted to" : "Emailed to"} {sentTo}
+                            </span>
                           </div>
                         ) : null}
                       </>

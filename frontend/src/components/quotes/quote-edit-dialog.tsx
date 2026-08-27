@@ -110,8 +110,8 @@ export function QuoteEditDialog({
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
 
-  // The list row is a summary: it carries no `proposal_document`, which is the
-  // one field that decides whether repricing fields are safe to show.
+  // The detail's server-derived flag distinguishes priced wizard snapshots from
+  // preview-only documents on otherwise plain quotes.
   const detailQuery = useQuery({
     queryKey: queryKeys.quotes.detail(workspaceId ?? "", quote?.id ?? ""),
     queryFn: () => quotesApi.get(workspaceId ?? "", quote?.id ?? ""),
@@ -119,7 +119,7 @@ export function QuoteEditDialog({
   });
   const detail = detailQuery.data;
 
-  const isWizardQuote = Boolean(detail?.proposal_document);
+  const isWizardQuote = Boolean(detail?.is_wizard_quote);
   const alreadySent = quote?.status === "sent";
 
   const form = useForm<EditQuoteFormValues>({
