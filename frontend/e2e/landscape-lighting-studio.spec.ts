@@ -815,7 +815,7 @@ test.describe("landscape lighting studio", () => {
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByRole("button", { name: /Create draft quote/i }).click();
     await expect(page.getByText(/Draft quote Q-1042/i)).toBeVisible();
-    await page.getByRole("button", { name: "Email proposal" }).click();
+    await page.getByRole("button", { name: "Email selected package" }).click();
     await expect.poll(() => deliveries.length).toBe(1);
     expect(deliveries[0]).toMatchObject({ channel: "email" });
   });
