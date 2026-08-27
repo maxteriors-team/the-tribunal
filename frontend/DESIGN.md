@@ -254,8 +254,8 @@ and install plan, not a generic dashboard.
   in the client preview for the current design and is preferred when creating the quote.
 - **Safety boundary:** the browser never receives the provider key. The server keeps the
   placement-preserving prompt, validates the data URL, authorizes workspace billing access,
-  and caps paid renders per workspace. Generated images remain session-only until included
-  in a saved quote or explicitly downloaded.
+  and caps paid renders hourly per user, workspace, and platform. Generated images remain
+  session-only until included in a saved quote or explicitly downloaded.
 - **Responsive behavior:** the presentation board uses image-plus-summary columns on wide
   screens, then stacks image before summary below 840 px. All compare and generation actions
   remain native buttons with visible keyboard focus and no pointer-only requirement.
