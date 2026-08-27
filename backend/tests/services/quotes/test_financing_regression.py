@@ -232,6 +232,33 @@ def test_landscape_over_the_provider_cap_reports_disabled():
     assert document.grand_monthly_payment == 0
 
 
+def test_fixed_fixture_selection_reprices_every_package() -> None:
+    catalog = {
+        **FROZEN_CATALOG,
+        "designer-uplight": CatalogEntry(
+            item_id="designer-uplight",
+            name="Designer Uplight",
+            unit_price=Decimal("400"),
+        ),
+    }
+    payload = _landscape_payload(
+        pricing_source="price_book",
+        quantities=[
+            WizardFixtureQty(item_id="path", quantity=9),
+            WizardFixtureQty(item_id="accent", quantity=6),
+        ],
+        fixed_items=[WizardFixtureQty(item_id="designer-uplight", quantity=1)],
+    )
+
+    document, _ = build_proposal_document(_lighting_config(), catalog, payload)
+
+    for tier in document.tiers:
+        fixed = next(line for line in tier.lines if line.item_id == "designer-uplight")
+        assert fixed.quantity == 1
+        assert fixed.unit_price == 400
+        assert tier.pricing.financed_total == 3604
+
+
 # --------------------------------------------------------------------------- #
 # 2. The margin math category eligibility must never touch
 # --------------------------------------------------------------------------- #

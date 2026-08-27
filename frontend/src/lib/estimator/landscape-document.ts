@@ -132,6 +132,11 @@ const normalizePlacedItem = (value: unknown): unknown => {
     if (iconScale === undefined) delete normalized.iconScale;
     else normalized.iconScale = iconScale;
   }
+  if ("catalogItemOverride" in normalized) {
+    if (typeof normalized.catalogItemOverride !== "boolean") {
+      delete normalized.catalogItemOverride;
+    }
+  }
   return normalized;
 };
 

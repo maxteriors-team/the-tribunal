@@ -15,6 +15,7 @@ const row: LandscapeScheduleRow = {
   fixtureType: "uplight",
   fixtureName: "ZD Uplight",
   fixtureCatalogItemId: "catalog-uplight",
+  fixtureCatalogItemIsOverride: false,
   fixtureSku: "UP-1",
   lampCatalogItemId: "lamp-1",
   lampName: "MR16 Lamp",
@@ -56,6 +57,7 @@ describe("LandscapeFixtureScheduleTable", () => {
       productId: "fixture-downlight",
       catalogItemId: undefined,
       catalogSku: undefined,
+      catalogItemOverride: undefined,
       lampCatalogItemId: undefined,
       accessoryCatalogItemIds: [],
     });
@@ -114,6 +116,7 @@ describe("LandscapeFixtureScheduleTable", () => {
     expect(onUpdate).toHaveBeenCalledWith("fixture-placed-1", {
       catalogItemId: "catalog-uplight",
       catalogSku: "UP-ACCENT",
+      catalogItemOverride: true,
       lampCatalogItemId: undefined,
       accessoryCatalogItemIds: [],
     });

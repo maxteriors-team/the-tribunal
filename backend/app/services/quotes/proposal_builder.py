@@ -199,6 +199,9 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
 ) -> tuple[ProposalDocument, list[QuoteLineItemCreate]]:
     """Build the snapshot + the canonical line items for the selected tier."""
     qty_map = {q.item_id: _d(q.quantity) for q in payload.quantities}
+    fixed_item_ids = list(dict.fromkeys(item.item_id for item in payload.fixed_items))
+    for item in payload.fixed_items:
+        qty_map[item.item_id] = qty_map.get(item.item_id, Decimal("0")) + _d(item.quantity)
 
     use_price_book = payload.pricing_source == "price_book"
 
@@ -236,6 +239,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         if tcfg is None:
             continue
         item_ids = [iid for section in tcfg.sections for iid in section.item_ids]
+        item_ids.extend(iid for iid in fixed_item_ids if iid not in item_ids)
         lines: list[ProposalLine] = []
         base = Decimal("0")
         for iid in item_ids:
