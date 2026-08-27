@@ -248,10 +248,11 @@ and install plan, not a generic dashboard.
 - **Thesis:** lead with one dark presentation board containing the active mockup, project
   name, fixture count, selected package, and price. Keep quote controls below it. The image
   stage is the product-specific memorable device; no decorative metrics or generic cards.
-- **Fixture ownership:** fixture product selection sits with fixture type and only shows
-  catalog products classified for that fixture. Choosing a product locks that exact SKU into
-  every package and immediately reprices the proposal; `Use package fixture` restores tier
-  substitution. Lamp selection remains separate and only shows lamp-like products.
+- **Fixture ownership:** fixture product selection sits with fixture type and shows classified
+  fixture products. Package fallback remains type-matched, while an explicit product may fill
+  another installation role (for example, an accent uplight used as a downlight). Choosing a
+  product locks that exact SKU into every package and immediately reprices the proposal; `Use
+package fixture` restores tier substitution. Lamps remain separate and lamp-only.
 - **AI flow:** `Make this look real` opens the shared Radix dialog with an editable, bounded
   direction, explicit workspace-account cost language, pending/error/retry states, keyboard
   comparison controls, download, and an AI-concept disclosure. A result replaces the mockup

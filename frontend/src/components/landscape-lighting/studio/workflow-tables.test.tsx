@@ -63,7 +63,7 @@ describe("LandscapeFixtureScheduleTable", () => {
     });
   });
 
-  it("puts product selection with the fixture and keeps fixture products out of lamps", () => {
+  it("allows cross-type fixture overrides while keeping fixture products out of lamps", () => {
     const onUpdate = vi.fn();
     const catalog = [
       {
@@ -74,6 +74,15 @@ describe("LandscapeFixtureScheduleTable", () => {
         is_active: true,
         description: "Landscape accent fixture",
         attributes: { fixture_type: "uplight" },
+      },
+      {
+        id: "catalog-downlight",
+        name: "ZD Down Light",
+        sku: "ZD-DOWN",
+        kind: "product",
+        is_active: true,
+        description: "Landscape downlight fixture",
+        attributes: { fixture_type: "downlight" },
       },
       {
         id: "lamp-1",
@@ -94,7 +103,14 @@ describe("LandscapeFixtureScheduleTable", () => {
 
     render(
       <LandscapeFixtureScheduleTable
-        rows={[row]}
+        rows={[
+          {
+            ...row,
+            productId: "fixture-downlight",
+            fixtureType: "downlight",
+            fixtureName: "ZD Down Light",
+          },
+        ]}
         catalog={catalog}
         onUpdate={onUpdate}
         onCopyToType={vi.fn()}
@@ -105,6 +121,7 @@ describe("LandscapeFixtureScheduleTable", () => {
       name: "Fixture product for fixture 1",
     });
     expect(within(fixtureProduct).getByRole("option", { name: /Accent Uplight/i })).toBeVisible();
+    expect(within(fixtureProduct).getByRole("option", { name: /ZD Down Light/i })).toBeVisible();
     expect(within(fixtureProduct).queryByRole("option", { name: /MR16/i })).toBeNull();
     expect(within(fixtureProduct).queryByRole("option", { name: /Transformer/i })).toBeNull();
 

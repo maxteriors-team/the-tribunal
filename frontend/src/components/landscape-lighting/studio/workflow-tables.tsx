@@ -85,9 +85,7 @@ export function LandscapeFixtureScheduleTable({
         </thead>
         <tbody>
           {rows.map((row) => {
-            const fixtureOptions = fixtureCatalog.filter(
-              (item) => classifyFixture(item) === row.fixtureType,
-            );
+            const fixtureOptions = fixtureCatalog;
             const selectedAccessoryIds = row.accessoryCatalogItemIds;
             const selectedAccessories = selectedAccessoryIds.map((id, index) => ({
               id,
