@@ -1874,7 +1874,6 @@ describe("LightDesigner", () => {
             expect.objectContaining({ item_id: "best-zd-up", quantity: 2 }),
           ]),
           selected_tier: "better",
-          customer_can_select_package: false,
           care_plan_tier: "essential",
           care_count_manual: 2,
           additional_charges: [
@@ -1888,7 +1887,6 @@ describe("LightDesigner", () => {
     );
     expect(adapter.flushBeforeProposal).toHaveBeenCalled();
     expect(await screen.findByText(/Draft quote Q-1042 was created/i)).toBeInTheDocument();
-    expect(screen.getByText(/customer link is locked to the highlighted fixture package/i)).toBeVisible();
     expect(screen.getByText("Collect payment in three steps")).toBeVisible();
     expect(screen.getByText(/Set the deposit due when the customer accepts/i)).toBeVisible();
     expect(screen.getByRole("link", { name: "Open quote & preview payment page" })).toHaveAttribute(
@@ -2089,23 +2087,11 @@ describe("LightDesigner", () => {
     fireEvent.click(createQuote);
     expect(await screen.findByText(/Draft quote Q-1042 was created/i)).toBeVisible();
 
-    expect(screen.getByText(/customer link is locked to the highlighted fixture package/i)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Email selected package" }));
+    fireEvent.click(screen.getByRole("button", { name: "Email proposal" }));
     await waitFor(() =>
-      expect(salesWizardApi.deliver).toHaveBeenNthCalledWith(1, "ws_1", "quote-1", "email"),
+      expect(salesWizardApi.deliver).toHaveBeenCalledWith("ws_1", "quote-1", "email"),
     );
     expect(await screen.findByText("Proposal emailed to pat@example.com.")).toBeVisible();
-
-    vi.mocked(salesWizardApi.deliver).mockResolvedValueOnce({
-      ok: true,
-      channel: "sms",
-      to: "+15551234567",
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Text selected package" }));
-    await waitFor(() =>
-      expect(salesWizardApi.deliver).toHaveBeenNthCalledWith(2, "ws_1", "quote-1", "sms"),
-    );
-    expect(await screen.findByText("Proposal texted to +15551234567.")).toBeVisible();
   });
 
   it("requires and persists an installation-sheet selection before quoting", async () => {

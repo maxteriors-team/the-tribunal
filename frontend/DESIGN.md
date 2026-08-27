@@ -193,10 +193,6 @@ and install plan, not a generic dashboard.
   re-resolves every placed fixture without changing geometry.
   The package and care-plan selection autosaves with the project, and creating the CRM
   draft quote preserves its customer, opportunity, and service-location linkage.
-- New landscape draft quotes lock the public link to the operator's highlighted package.
-  Staff set deposit terms before explicitly emailing or texting that package; the customer
-  still sees its terms, acceptance action, server-derived deposit, and hosted Stripe handoff.
-  Older proposals without the lock intent retain their existing customer package choice.
 - Selecting one placed fixture exposes its CRM product/SKU, lamp specification, included
   accessory components, plan-marker color, symbol sizing, beam spread, aim, circuit,
   duplicate, and delete controls. Marker/size/aim edits remain visual or plan metadata and
