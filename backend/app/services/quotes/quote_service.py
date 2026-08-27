@@ -3162,6 +3162,8 @@ class QuoteService:
         self,
         workspace_id: uuid.UUID,
         req: EstimateRenderRequest,
+        *,
+        requested_by_id: int,
     ) -> EstimateRenderResult:
         """Render a drawn lighting design into a photorealistic night photo.
 
@@ -3176,7 +3178,7 @@ class QuoteService:
         )
 
         await get_or_404(self.db, Workspace, workspace_id)
-        await enforce_estimate_render_rate_limit(workspace_id)
+        await enforce_estimate_render_rate_limit(workspace_id, requested_by_id)
         image = await render_design(
             self.db,
             workspace_id,

@@ -544,7 +544,7 @@ async def render_estimate(
     key. Spends per image, hence ``billing:write``.
     """
     service = QuoteService(db)
-    return await service.render_estimate(workspace_id, payload)
+    return await service.render_estimate(workspace_id, payload, requested_by_id=current_user.id)
 
 
 @router.post(
