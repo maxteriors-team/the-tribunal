@@ -970,3 +970,19 @@ Scope: selected-line Quo text synchronization and manual CRM replies for authent
 RUNTIME on 26 August 2026: focused Quo backend suites passed, including 34 PostgreSQL integration tests; the concurrent three-writer race passed five consecutive runs; the Quo migration passed disposable-database up/down/up plus schema-drift checks; full backend CI passed 4,911 tests; full frontend CI passed 1,564 tests and a production build; generated OpenAPI artifacts were regenerated twice with identical hashes.
 
 These checks verify authorization, input handling, state transitions, and database reconciliation; they cannot prove carrier delivery, recipient identity, message-purpose legality, recording legality, or real-recipient consent. No live production SMS, customer call, recording playback, transcript review, legal consent determination, or production backfill was performed.
+
+## Focused addendum — selected-package landscape proposal delivery (2026-08-27)
+
+Snapshot: 27 August 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE** · Working tree based on `24a3e248`
+
+Scope: new landscape-lighting quotes that staff explicitly email or text after choosing one package and setting payment terms. Existing transactional delivery providers, public proposal terms, customer acceptance, and hosted Stripe Checkout are reused; this is not a product-wide re-audit.
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| SPP-001 | HIGH | A public customer could name a different priced package than the operator sent | RUNTIME + CODE: locked-quote integration coverage exposes only the stored selected tier, removes other tier charges and package cards, and rejects another tier without changing status or totals | Keep package authorization and pricing at the public server boundary rather than trusting hidden browser controls | Fixed locally | Locked and legacy proposal integration tests plus client one-package regression |
+| SPP-002 | MEDIUM | Staff can send the selected proposal by email or SMS | CODE/tests: both explicit buttons call the existing authenticated delivery endpoint; no provider, recipient-resolution, opt-out, idempotency, or tracking implementation changed | Keep messaging operator-initiated, recipient-scoped, and subject to the existing SMS opt-out gate | Existing controls reused | Email/SMS action tests; no live provider send in this pass |
+| SPP-003 | LAWYER | Customer acceptance may create a contract and start a Stripe deposit | CODE/DEDUCED: totals and deposits remain server-derived and card entry stays on hosted Stripe Checkout; the existing terms footer remains visible, but its legal substance was not reviewed | Confirm cancellation, refund, tax, contract-capacity, and jurisdiction-specific terms before relying on the proposal as the customer contract | Open | Legal review of deployed terms and operating jurisdictions |
+
+### Verification boundary
+
+Targeted backend and frontend regressions passed locally, and the OpenAPI/client contracts were regenerated. No Resend or Telnyx message was sent, no paid Stripe Checkout was created, and no legal review, live carrier delivery, or production payment was performed.
