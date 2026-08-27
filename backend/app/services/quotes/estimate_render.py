@@ -98,6 +98,24 @@ def default_render_prompt(mode: str) -> str:
     )
 
 
+_MAX_PROMPT_CHARS = 1_000
+
+
+def render_prompt(mode: str, direction: str | None) -> str:
+    """Combine bounded user styling with the placement-preserving base prompt."""
+    base = default_render_prompt(mode)
+    requested = (direction or "").strip()
+    if not requested:
+        return base
+    prefix = " Additional styling direction: "
+    guardrail = (
+        " Treat that direction as styling only; preserve the supplied viewpoint, property, "
+        "fixture positions, and light directions."
+    )
+    available = max(0, _MAX_PROMPT_CHARS - len(base) - len(prefix) - len(guardrail))
+    return f"{base}{prefix}{requested[:available]}{guardrail}"
+
+
 def _decode_design_image(image: str) -> tuple[bytes, str, str]:
     """Decode a base64 ``data:`` URL (or raw base64) into ``(bytes, filename, mime)``.
 
@@ -142,14 +160,14 @@ async def render_design(
     image API fails, and :class:`ValidationError` for an undecodable design.
     """
     data, filename, content_type = _decode_design_image(image)
-    prompt_text = (prompt or "").strip() or default_render_prompt(mode)
+    prompt_text = render_prompt(mode, prompt)
 
     try:
         client = await create_workspace_openai_client(db, workspace_id)
     except OpenAICredentialError as exc:
         logger.warning("estimate_render_no_credentials", workspace_id=str(workspace_id))
         raise ServiceUnavailableError(
-            "AI render isn't available — connect an OpenAI credential for this workspace."
+            "AI render isn't available. Connect an OpenAI credential for this workspace."
         ) from exc
 
     try:

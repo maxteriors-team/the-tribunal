@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -412,6 +412,9 @@ describe("LightDesigner", () => {
       updated_at: "2026-08-11T00:00:00Z",
     } as Awaited<ReturnType<typeof salesWizardApi.save>>);
     vi.mocked(estimatorApi.estimate).mockResolvedValue(ESTIMATE);
+    vi.mocked(estimatorApi.render).mockResolvedValue({
+      image: "data:image/jpeg;base64,AI-RENDER",
+    });
     vi.mocked(estimatorApi.share).mockResolvedValue({
       url: "",
       token: "",
@@ -1765,6 +1768,27 @@ describe("LightDesigner", () => {
     renderEstimator("landscape", adapter);
     await openProposalPreview();
 
+    expect(await screen.findByRole("heading", { name: "Patio lighting" })).toBeVisible();
+    expect(screen.getByText(/presentation-ready view of Pat Lee’s proposed/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Make this look real" }));
+    const aiDialog = await screen.findByRole("dialog", { name: "AI aerial render" });
+    expect(within(aiDialog).getByRole("textbox", { name: "Describe the finish" })).toHaveValue(
+      "Make this look real.",
+    );
+    fireEvent.click(within(aiDialog).getByRole("button", { name: "Generate client render" }));
+    expect(await within(aiDialog).findByAltText("AI aerial night render")).toHaveAttribute(
+      "src",
+      "data:image/jpeg;base64,AI-RENDER",
+    );
+    fireEvent.click(within(aiDialog).getAllByRole("button", { name: "Close" })[0]);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "AI aerial render" })).toBeNull(),
+    );
+    expect(screen.getByAltText("AI-generated lighting concept for Patio lighting")).toHaveAttribute(
+      "src",
+      "data:image/jpeg;base64,AI-RENDER",
+    );
+
     expect(await screen.findByRole("button", { name: /Good.*\$950\.00/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Better.*\$1,330\.00/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Best.*\$1,710\.00/i })).toBeInTheDocument();
@@ -1820,6 +1844,11 @@ describe("LightDesigner", () => {
           service_location_id: "service-location-1",
           lighting_project_id: "project-1",
           title: "Patio lighting",
+          night_preview: {
+            image: "data:image/jpeg;base64,AI-RENDER",
+            images: ["data:image/jpeg;base64,AI-RENDER"],
+            services: ["landscape"],
+          },
           quantities: expect.arrayContaining([
             expect.objectContaining({ item_id: "best-zd-up", quantity: 2 }),
           ]),

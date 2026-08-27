@@ -6,7 +6,7 @@ import { useMemo, useState, type KeyboardEvent } from "react";
 /* eslint-disable jsx-a11y/no-noninteractive-tabindex -- Horizontally overflowing data regions must be keyboard-scrollable. */
 
 import { formatFeet } from "@/lib/estimator/design";
-import { FIXTURE_TYPES, type FixtureType } from "@/lib/estimator/fixtures";
+import { classifyFixture, FIXTURE_TYPES, type FixtureType } from "@/lib/estimator/fixtures";
 import type { LandscapeProcurementRow } from "@/lib/estimator/landscape-procurement";
 import type {
   LandscapeFixtureScheduleUpdate,
@@ -40,14 +40,21 @@ export function LandscapeFixtureScheduleTable({
     () => new Map(activeCatalog.map((item) => [item.id, item])),
     [activeCatalog],
   );
-  const lampCatalog = useMemo(() => {
-    const likelyLamps = activeCatalog.filter((item) =>
-      /(^|\b)(lamp|bulb|mr\d{2}|led)(\b|$)/i.test(
-        `${item.name} ${item.sku ?? ""} ${item.description ?? ""}`,
+  const fixtureCatalog = useMemo(
+    () => activeCatalog.filter((item) => item.kind === "product" && classifyFixture(item) !== null),
+    [activeCatalog],
+  );
+  const lampCatalog = useMemo(
+    () =>
+      activeCatalog.filter(
+        (item) =>
+          item.kind === "product" &&
+          /(^|\b)(lamp|bulb|mr\d{2})(\b|$)/i.test(
+            `${item.name} ${item.sku ?? ""} ${item.description ?? ""}`,
+          ),
       ),
-    );
-    return likelyLamps.length ? likelyLamps : activeCatalog;
-  }, [activeCatalog]);
+    [activeCatalog],
+  );
   const accessoryCatalog = useMemo(() => {
     const attachable = activeCatalog.filter((item) =>
       item.attach_targets?.some((target) => /landscape|fixture/i.test(target)),
@@ -64,7 +71,7 @@ export function LandscapeFixtureScheduleTable({
     >
       <table className="ll-data-table ll-fixture-schedule-table">
         <caption className="sr-only">
-          Fixture schedule with editable fixture type, lamp, and accessory assignments
+          Fixture schedule with editable fixture type and product, lamp, and accessory assignments
         </caption>
         <thead>
           <tr>
@@ -78,6 +85,9 @@ export function LandscapeFixtureScheduleTable({
         </thead>
         <tbody>
           {rows.map((row) => {
+            const fixtureOptions = fixtureCatalog.filter(
+              (item) => classifyFixture(item) === row.fixtureType,
+            );
             const selectedAccessoryIds = row.accessoryCatalogItemIds;
             const selectedAccessories = selectedAccessoryIds.map((id, index) => ({
               id,
@@ -114,6 +124,29 @@ export function LandscapeFixtureScheduleTable({
                       {FIXTURE_TYPES.map((fixture) => (
                         <option key={fixture.type} value={fixture.type}>
                           {fixture.type === "pathlight" ? "Pathlight" : fixture.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="ll-field-select">
+                    <span className="sr-only">Fixture product for fixture {row.number}</span>
+                    <select
+                      value={row.fixtureCatalogItemId ?? ""}
+                      aria-label={`Fixture product for fixture ${row.number}`}
+                      onChange={(event) => {
+                        const item = catalogById.get(event.target.value);
+                        onUpdate(row.itemId, {
+                          catalogItemId: item?.id,
+                          catalogSku: item?.sku?.trim() || undefined,
+                          lampCatalogItemId: undefined,
+                          accessoryCatalogItemIds: [],
+                        });
+                      }}
+                    >
+                      <option value="">Use package fixture</option>
+                      {fixtureOptions.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {catalogOptionLabel(item)}
                         </option>
                       ))}
                     </select>

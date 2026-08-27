@@ -65,10 +65,11 @@ describe("AIRenderModal", () => {
     );
   });
 
-  it("frames landscape renders as top-down aerial visualizations", async () => {
+  it("sends the rep’s direction and adds the landscape result to client preview", async () => {
     vi.mocked(estimatorApi.render).mockResolvedValue({
       image: "data:image/jpeg;base64,AERIAL_RENDER",
     });
+    const onGenerated = vi.fn();
 
     wrap(
       <AIRenderModal
@@ -77,21 +78,32 @@ describe("AIRenderModal", () => {
         design={DESIGN}
         productById={new Map()}
         mode="landscape"
+        onGenerated={onGenerated}
         onClose={() => {}}
       />,
     );
 
     expect(screen.getByRole("dialog", { name: "AI aerial render" })).toHaveTextContent(
-      /without changing viewpoint/i,
+      /without changing its viewpoint/i,
     );
-    fireEvent.click(screen.getByRole("button", { name: /generate aerial render/i }));
+    const prompt = screen.getByRole("textbox", { name: "Describe the finish" });
+    expect(prompt).toHaveValue("Make this look real.");
+    fireEvent.change(prompt, { target: { value: "Make the warm pools of light look natural." } });
+    fireEvent.click(screen.getByRole("button", { name: /generate client render/i }));
 
     await waitFor(() => expect(screen.getByAltText("AI aerial night render")).toBeInTheDocument());
     expect(estimatorApi.render).toHaveBeenCalledWith("ws-1", {
       image: "data:image/jpeg;base64,DESIGN",
       mode: "landscape",
-      prompt: null,
+      prompt: "Make the warm pools of light look natural.",
     });
+    expect(onGenerated).toHaveBeenCalledWith("data:image/jpeg;base64,AERIAL_RENDER");
+    fireEvent.click(screen.getByRole("button", { name: "Original" }));
+    expect(screen.getByAltText("Original aerial")).toHaveAttribute(
+      "src",
+      "data:image/png;base64,PHOTO",
+    );
+    expect(screen.getByText(/visual concepts, not installation guarantees/i)).toBeVisible();
   });
 
   it("shows the server error message when the render fails", async () => {

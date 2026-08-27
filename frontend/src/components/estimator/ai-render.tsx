@@ -10,8 +10,16 @@
  * because each render spends on the workspace's OpenAI account.
  */
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { Download, RefreshCw, Sparkles } from "lucide-react";
+import { useId, useState } from "react";
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { estimatorApi } from "@/lib/api/estimator";
 import { exportDesignJpeg } from "@/lib/estimator/export";
 import type { Design, Mode, PhotoInfo, Product } from "@/lib/estimator/types";
@@ -22,6 +30,7 @@ interface AIRenderModalProps {
   design: Design;
   productById: Map<string, Product>;
   mode?: Mode;
+  onGenerated?: (image: string) => void;
   onClose: () => void;
 }
 
@@ -38,24 +47,28 @@ export function AIRenderModal({
   design,
   productById,
   mode = "seasonal",
+  onGenerated,
   onClose,
 }: AIRenderModalProps) {
   const [image, setImage] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState(mode === "landscape" ? "Make this look real." : "");
   const [showOriginal, setShowOriginal] = useState(false);
-
+  const promptId = useId();
+  const promptCountId = useId();
   const render = useMutation({
     mutationFn: async (): Promise<string> => {
       const composited = await exportDesignJpeg(photo, design, productById);
       const result = await estimatorApi.render(workspaceId, {
         image: composited,
         mode,
-        prompt: null,
+        prompt: prompt.trim() || null,
       });
       return result.image;
     },
     onSuccess: (rendered) => {
       setImage(rendered);
       setShowOriginal(false);
+      onGenerated?.(rendered);
     },
   });
 
@@ -71,77 +84,111 @@ export function AIRenderModal({
   };
 
   return (
-    <div className="ai-backdrop">
-      <button
-        type="button"
-        className="ai-scrim"
-        aria-label="Close AI render"
-        disabled={working}
-        onClick={onClose}
-      />
-      <div
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !working) onClose();
+      }}
+    >
+      <DialogContent
         className="ai-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={isAerial ? "AI aerial render" : "AI realistic render"}
+        showCloseButton={!working}
+        onEscapeKeyDown={(event) => {
+          if (working) event.preventDefault();
+        }}
+        onPointerDownOutside={(event) => {
+          if (working) event.preventDefault();
+        }}
       >
-        <div className="ai-modal-head">
-          <h3>{isAerial ? "✨ AI aerial render" : "✨ AI realistic render"}</h3>
-          <button
-            className="ai-close"
-            type="button"
-            aria-label="Close"
-            disabled={working}
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </div>
+        <DialogHeader className="ai-modal-head">
+          <DialogTitle>
+            <Sparkles aria-hidden="true" />
+            {isAerial ? "AI aerial render" : "AI realistic render"}
+          </DialogTitle>
+          <DialogDescription className="ai-modal-note">
+            {isAerial
+              ? "Turn the active lighting plan into a realistic nighttime aerial without changing its viewpoint or fixture layout."
+              : "Turn the drawn design into a realistic nighttime photo while preserving the home and planned light positions."}{" "}
+            Each generation uses your workspace’s OpenAI account.
+          </DialogDescription>
+        </DialogHeader>
 
-        <p className="ai-modal-note">
-          {isAerial
-            ? "Turns the top-down lighting plan into a nighttime aerial visualization without changing viewpoint."
-            : "Turns the drawn design into a photorealistic night photo of this home — the closer for skeptical customers."}{" "}
-          Each render uses your workspace’s OpenAI account.
-        </p>
+        <div className="ai-prompt-field">
+          <label htmlFor={promptId}>Describe the finish</label>
+          <textarea
+            id={promptId}
+            value={prompt}
+            maxLength={180}
+            rows={2}
+            placeholder="Make this look real."
+            disabled={working}
+            aria-describedby={promptCountId}
+            onChange={(event) => setPrompt(event.target.value)}
+          />
+          <small id={promptCountId}>{prompt.length}/180 characters</small>
+        </div>
 
         <div className="ai-stage">
           {image ? (
             // eslint-disable-next-line @next/next/no-img-element -- render is a data URL, not a static asset
             <img
               src={showOriginal ? photo.dataUrl : image}
-              alt={isAerial ? "AI aerial night render" : "AI night render"}
-              onPointerDown={() => setShowOriginal(true)}
-              onPointerUp={() => setShowOriginal(false)}
-              onPointerLeave={() => setShowOriginal(false)}
+              alt={
+                showOriginal
+                  ? `Original ${isAerial ? "aerial" : "property photo"}`
+                  : isAerial
+                    ? "AI aerial night render"
+                    : "AI night render"
+              }
             />
           ) : working ? (
-            <div className="ai-progress">
-              <div className="ai-spinner" aria-hidden />
-              <p>
-                {isAerial ? "Rendering the aerial night plan…" : "Painting the night scene…"}{" "}
-                (~15–40s)
-              </p>
+            <div className="ai-progress" role="status" aria-live="polite">
+              <div className="ai-spinner" aria-hidden="true" />
+              <p>{isAerial ? "Rendering the aerial night plan…" : "Rendering the night scene…"}</p>
             </div>
           ) : (
             <div className="ai-placeholder">
-              <p>
-                {isAerial
-                  ? "Generate a top-down nighttime version of the aerial plan."
-                  : "Generate a photorealistic version of the drawn design."}
-              </p>
+              <Sparkles aria-hidden="true" />
+              <p>Generate a client-ready concept from the current mockup.</p>
             </div>
           )}
         </div>
 
         {image ? (
-          <p className="ai-compare-hint">
-            Press and hold the image to compare with the original {isAerial ? "aerial" : "photo"}.
-          </p>
+          <div className="ai-compare-controls">
+            <div role="group" aria-label="Compare AI render with original">
+              <button
+                type="button"
+                className={!showOriginal ? "active" : ""}
+                aria-pressed={!showOriginal}
+                onClick={() => setShowOriginal(false)}
+              >
+                AI render
+              </button>
+              <button
+                type="button"
+                className={showOriginal ? "active" : ""}
+                aria-pressed={showOriginal}
+                onClick={() => setShowOriginal(true)}
+              >
+                Original
+              </button>
+            </div>
+            <p role="status">
+              {onGenerated ? "Added to this session’s client preview." : "Ready to download."}
+            </p>
+          </div>
         ) : null}
 
+        <p className="ai-disclosure">
+          AI renders are visual concepts, not installation guarantees. Review placement, brightness,
+          and property details before sharing.
+        </p>
+
         {render.isError ? (
-          <p className="ai-error">{errorMessage(render.error)}</p>
+          <p className="ai-error" role="alert">
+            {errorMessage(render.error)}
+          </p>
         ) : null}
 
         <div className="ai-actions">
@@ -150,7 +197,8 @@ export function AIRenderModal({
           </button>
           {image ? (
             <button className="est-btn" type="button" onClick={download}>
-              ⬇ Download
+              <Download aria-hidden="true" />
+              Download
             </button>
           ) : null}
           <button
@@ -159,16 +207,22 @@ export function AIRenderModal({
             disabled={working}
             onClick={() => render.mutate()}
           >
-            {working
-              ? "Rendering…"
-              : image
-                ? "↻ Regenerate"
-                : isAerial
-                  ? "✨ Generate aerial render"
-                  : "✨ Generate realistic photo"}
+            {working ? (
+              "Rendering…"
+            ) : image ? (
+              <>
+                <RefreshCw aria-hidden="true" />
+                Regenerate
+              </>
+            ) : (
+              <>
+                <Sparkles aria-hidden="true" />
+                {isAerial ? "Generate client render" : "Generate realistic photo"}
+              </>
+            )}
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
