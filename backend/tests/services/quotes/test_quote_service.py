@@ -120,6 +120,38 @@ async def _make_location(
     return loc
 
 
+def _permanent_project_document() -> dict[str, object]:
+    return {
+        "version": 2,
+        "projectType": "permanent",
+        "activeShotId": "front",
+        "shots": [
+            {
+                "id": "front",
+                "photo": {
+                    "dataUrl": "data:image/png;base64,AAAA",
+                    "width": 1200,
+                    "height": 800,
+                },
+                "design": {
+                    "runs": [],
+                    "items": [
+                        {
+                            "id": "fixture-1",
+                            "productId": "product-1",
+                            "at": {"x": 100, "y": 120},
+                            "sizePx": 24,
+                        }
+                    ],
+                    "calibration": None,
+                },
+                "dusk": 0.4,
+            }
+        ],
+        "updatedAt": "2026-08-27T12:00:00.000Z",
+    }
+
+
 async def _make_catalog_item(
     db: AsyncSession,
     workspace_id: uuid.UUID,
@@ -1090,6 +1122,138 @@ async def test_create_quote_from_estimate_links_workspace_project_and_contact() 
 
         assert quote.contact_id == contact.id
         assert quote.lighting_project_id == project.id
+        assert quote.proposal_document is None
+
+
+async def test_create_quote_from_estimate_snapshots_preview_and_installation_shot() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        contact = await _make_contact(db, ws.id)
+        project = LightingProject(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            name="Pat permanent roofline",
+            document=_permanent_project_document(),
+        )
+        db.add(project)
+        await db.flush()
+
+        svc = QuoteService(db)
+        quote = await svc.create_quote_from_estimate(
+            ws.id,
+            EstimateQuoteRequest(
+                side="permanent",
+                feet=100,
+                lighting_project_id=project.id,
+                proposal_preview={
+                    "shot_id": "front",
+                    "image": "data:image/jpeg;base64,/9j/2Q==",
+                },
+            ),
+        )
+
+        assert quote.contact_id == contact.id
+        assert quote.lighting_project_id == project.id
+        assert quote.proposal_document is not None
+        assert quote.proposal_document["service"] == "permanent"
+        assert quote.proposal_document["mockups"] == [
+            {
+                "image": "data:image/jpeg;base64,/9j/2Q==",
+                "caption": "Pat permanent roofline proposed permanent lighting",
+            }
+        ]
+        await db.refresh(project)
+        assert project.installation_shot_id == "front"
+
+        sent = await svc.mark_sent(ws.id, quote.id)
+        assert sent.public_token
+        public = await svc.get_public_proposal(sent.public_token)
+        assert public.proposal_document is not None
+        assert public.proposal_document["mockups"] == quote.proposal_document["mockups"]
+
+
+async def test_create_quote_from_estimate_rejects_preview_for_missing_project_shot() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        contact = await _make_contact(db, ws.id)
+        project = LightingProject(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            name="Pat permanent roofline",
+            document=_permanent_project_document(),
+        )
+        db.add(project)
+        await db.flush()
+
+        with pytest.raises(ValidationError, match="shot is missing"):
+            await QuoteService(db).create_quote_from_estimate(
+                ws.id,
+                EstimateQuoteRequest(
+                    side="permanent",
+                    feet=100,
+                    lighting_project_id=project.id,
+                    proposal_preview={
+                        "shot_id": "other",
+                        "image": "data:image/jpeg;base64,/9j/2Q==",
+                    },
+                ),
+            )
+
+        await db.refresh(project)
+        assert project.installation_shot_id is None
+        stored_quote = await db.scalar(select(Quote).where(Quote.workspace_id == ws.id))
+        assert stored_quote is None
+
+
+async def test_create_quote_from_estimate_rejects_preview_for_an_undesigned_shot() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        contact = await _make_contact(db, ws.id)
+        document = _permanent_project_document()
+        shots = document["shots"]
+        assert isinstance(shots, list)
+        shots.append(
+            {
+                "id": "blank-side",
+                "photo": {
+                    "dataUrl": "data:image/png;base64,AAAA",
+                    "width": 1200,
+                    "height": 800,
+                },
+                "design": {"runs": [], "items": [], "planImages": [], "calibration": None},
+                "dusk": 0.4,
+            }
+        )
+        project = LightingProject(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            name="Pat permanent roofline",
+            document=document,
+        )
+        db.add(project)
+        await db.flush()
+
+        with pytest.raises(ValidationError, match="shot has no saved lighting design"):
+            await QuoteService(db).create_quote_from_estimate(
+                ws.id,
+                EstimateQuoteRequest(
+                    side="permanent",
+                    feet=100,
+                    lighting_project_id=project.id,
+                    proposal_preview={
+                        "shot_id": "blank-side",
+                        "image": "data:image/jpeg;base64,/9j/2Q==",
+                    },
+                ),
+            )
+
+        await db.refresh(project)
+        assert project.installation_shot_id is None
+        stored_quote = await db.scalar(select(Quote).where(Quote.workspace_id == ws.id))
+        assert stored_quote is None
 
 
 async def test_create_quote_from_estimate_rejects_other_workspace_project() -> None:

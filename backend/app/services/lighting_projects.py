@@ -19,6 +19,7 @@ from app.schemas.lighting_project import (
     LandscapeDraftDocument,
     LightingProjectCreate,
     LightingProjectDetail,
+    LightingProjectRevision,
     LightingProjectStatus,
     LightingProjectSummary,
     LightingProjectType,
@@ -242,6 +243,21 @@ class LightingProjectService:
         if project is None:
             raise NotFoundError("Lighting project not found")
         return self._detail(project)
+
+    async def get_project_revision(
+        self, workspace_id: uuid.UUID, project_id: uuid.UUID
+    ) -> LightingProjectRevision:
+        """Fetch only the version needed to detect another user's save."""
+
+        version = await self.db.scalar(
+            select(LightingProject.version).where(
+                LightingProject.id == project_id,
+                LightingProject.workspace_id == workspace_id,
+            )
+        )
+        if version is None:
+            raise NotFoundError("Lighting project not found")
+        return LightingProjectRevision(version=version)
 
     async def update_project(
         self,

@@ -17671,6 +17671,29 @@
         "title": "EstimateCustomLineCost",
         "type": "object"
       },
+      "EstimateProposalPreview": {
+        "description": "A bounded, rasterized customer-photo preview tied to one saved project shot.",
+        "properties": {
+          "image": {
+            "maxLength": 3000000,
+            "minLength": 1,
+            "title": "Image",
+            "type": "string"
+          },
+          "shot_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Shot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot_id",
+          "image"
+        ],
+        "title": "EstimateProposalPreview",
+        "type": "object"
+      },
       "EstimateQuoteRequest": {
         "description": "Convert a measured estimate into a real draft quote.\n\nReuses the estimate inputs (feet, decor, internal per-foot overrides, and the\noptional seasonal package) plus the client details from the share request,\nand adds ``side`` to choose which priced option becomes the quote: the\none-time ``permanent`` install or the ``seasonal`` (Christmas) job. Every line\nis recomputed server-side from the workspace pricing config — the rep's\nmeasurements are the only untrusted input, exactly like the estimate itself.",
         "properties": {
@@ -17832,6 +17855,16 @@
             },
             "title": "Permanent Complexity Feet",
             "type": "object"
+          },
+          "proposal_preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EstimateProposalPreview"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "proposal_side": {
             "default": "comparison",
@@ -23349,7 +23382,7 @@
         "type": "object"
       },
       "JobInstallationPlanResponse": {
-        "description": "Assignment-scoped, read-only projection of one selected installation sheet.",
+        "description": "Assignment-scoped, price-free plan with the customer's proposal decision.",
         "properties": {
           "design": {
             "$ref": "#/components/schemas/DesignSchema"
@@ -23394,6 +23427,34 @@
             "title": "Job Id",
             "type": "string"
           },
+          "payment_received_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Received At"
+          },
+          "payment_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "not_required",
+                  "pending",
+                  "paid"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Status"
+          },
           "photo": {
             "$ref": "#/components/schemas/PhotoSchema"
           },
@@ -23420,6 +23481,58 @@
           "project_version": {
             "title": "Project Version",
             "type": "integer"
+          },
+          "proposal_accepted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Accepted At"
+          },
+          "proposal_preview_caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Preview Caption"
+          },
+          "proposal_preview_image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Preview Image"
+          },
+          "proposal_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "draft",
+                  "sent",
+                  "approved",
+                  "declined",
+                  "expired"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Status"
           },
           "selected_shot_id": {
             "maxLength": 250,
@@ -27271,6 +27384,21 @@
           "created_by_id"
         ],
         "title": "LightingProjectDetail",
+        "type": "object"
+      },
+      "LightingProjectRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "LightingProjectRevision",
         "type": "object"
       },
       "LightingProjectSummary": {
@@ -82173,6 +82301,65 @@
           }
         ],
         "summary": "Update Lighting Project",
+        "tags": [
+          "Lighting Projects"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/lighting-projects/{project_id}/revision": {
+      "get": {
+        "description": "Get the lightweight version stamp used for live refresh.",
+        "operationId": "get_lighting_project_revision_api_v1_workspaces__workspace_id__lighting_projects__project_id__revision_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LightingProjectRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Lighting Project Revision",
         "tags": [
           "Lighting Projects"
         ]

@@ -15,16 +15,19 @@ Two boundaries live here:
   leak is structurally impossible, not just omitted.
 """
 
+import base64
+import binascii
 import uuid
 from typing import Literal, Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.pricing import (
     ChristmasPackagePricing,
     SeasonalItem,
     SeasonalItemCost,
 )
+from app.schemas.proposal_wizard import MAX_PROPOSAL_MOCKUP_IMAGE_CHARS
 
 # --------------------------------------------------------------------------- #
 # Rep estimate (authenticated)
@@ -260,6 +263,41 @@ class ComparisonShareResult(BaseModel):
     saved_to_customer: bool = False
 
 
+class EstimateProposalPreview(BaseModel):
+    """A bounded, rasterized customer-photo preview tied to one saved project shot."""
+
+    shot_id: str = Field(min_length=1, max_length=100)
+    image: str = Field(min_length=1, max_length=MAX_PROPOSAL_MOCKUP_IMAGE_CHARS)
+
+    @field_validator("image")
+    @classmethod
+    def validate_raster_data_url(cls, value: str) -> str:
+        header, separator, encoded = value.partition(",")
+        if separator != "," or header not in {
+            "data:image/jpeg;base64",
+            "data:image/png;base64",
+            "data:image/webp;base64",
+        }:
+            raise ValueError("Preview must be a JPEG, PNG, or WebP data URL")
+        try:
+            image = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("Preview image must contain valid base64 data") from exc
+        matches_declared_type = (
+            header == "data:image/jpeg;base64"
+            and image.startswith(b"\xff\xd8\xff")
+            or header == "data:image/png;base64"
+            and image.startswith(b"\x89PNG\r\n\x1a\n")
+            or header == "data:image/webp;base64"
+            and len(image) >= 12
+            and image.startswith(b"RIFF")
+            and image[8:12] == b"WEBP"
+        )
+        if not matches_declared_type:
+            raise ValueError("Preview image bytes do not match the declared raster type")
+        return value
+
+
 class EstimateQuoteRequest(ComparisonShareRequest):
     """Convert a measured estimate into a real draft quote.
 
@@ -274,11 +312,17 @@ class EstimateQuoteRequest(ComparisonShareRequest):
     side: Literal["permanent", "seasonal"] = "seasonal"
     deposit_percentage: float | None = Field(default=None, ge=0.01, le=100)
     lighting_project_id: uuid.UUID | None = None
+    proposal_preview: EstimateProposalPreview | None = None
 
     @model_validator(mode="after")
-    def deposit_applies_only_to_permanent_quote(self) -> Self:
+    def permanent_quote_fields_are_consistent(self) -> Self:
         if self.side != "permanent" and self.deposit_percentage is not None:
             raise ValueError("A deposit percentage can only be added to a permanent quote")
+        if self.proposal_preview is not None:
+            if self.side != "permanent":
+                raise ValueError("A proposal preview can only be added to a permanent quote")
+            if self.lighting_project_id is None:
+                raise ValueError("A proposal preview requires a saved lighting project")
         return self
 
 
