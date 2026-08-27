@@ -225,7 +225,8 @@ function ActiveProjectEditor({
       const quoteBuilder = document.getElementById("landscape-quote-builder");
       if (!quoteBuilder) return;
       quoteBuilder.focus({ preventScroll: true });
-      quoteBuilder.scrollIntoView({ block: "start", inline: "nearest" });
+      const packageOptions = document.getElementById("landscape-fixture-package");
+      (packageOptions ?? quoteBuilder).scrollIntoView({ block: "start", inline: "nearest" });
     });
   }, []);
 

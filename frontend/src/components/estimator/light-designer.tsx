@@ -1598,7 +1598,7 @@ function LandscapeProposalPanel({
           onAIRender={onAIRender}
         />
 
-        <fieldset className="ll-proposal-fieldset">
+        <fieldset id="landscape-fixture-package" className="ll-proposal-fieldset">
           <legend>Fixture package</legend>
           <p>
             Switch packages without redrawing. Every plan fixture resolves to that tier’s catalog
