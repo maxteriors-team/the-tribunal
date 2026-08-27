@@ -45,6 +45,7 @@ const PRICING = {
       label: "Best",
       tab: "Best",
       sections: [
+        { title: "Transformer", item_ids: ["best-transformer"] },
         { title: "Fixtures", item_ids: ["best-up", "shared-path"] },
         { title: "Specialty Fixtures", item_ids: ["59306832", "59407330"] },
         { title: "Wire", item_ids: ["best-wire-12", "best-wire-10"] },
@@ -55,6 +56,7 @@ const PRICING = {
       label: "Good",
       tab: "Good",
       sections: [
+        { title: "Transformer", item_ids: ["good-transformer"] },
         { title: "Fixtures", item_ids: ["good-up", "shared-path"] },
         { title: "Wire", item_ids: ["good-wire-12"] },
       ],
@@ -74,6 +76,8 @@ const CATALOG = [
     unit_price: 1295,
     attributes: { fixture_type: "underwater", unit_cost: 374.37 },
   }),
+  item("best-transformer", "Luxor Transformer"),
+  item("good-transformer", "Standard Transformer"),
   item("best-wire-12", "12/2 Landscape Wire", { unit_price: 1.25 }),
   item("best-wire-10", "10/2 Landscape Wire", { unit_price: 1.85 }),
   item("good-wire-12", "12/2 Standard Cable", { unit_price: 0.95 }),
@@ -110,6 +114,7 @@ describe("landscape proposal pricing payload", () => {
       pricing: PRICING,
       catalog: CATALOG,
       fixtureCounts: {},
+      transformerCount: 0,
       wireRuns: [],
       bistroRuns: runs,
       selectedTierKey: "best",
@@ -144,6 +149,7 @@ describe("landscape proposal pricing payload", () => {
       CATALOG,
       { uplight: 4, pathlight: 3 },
       WIRES,
+      0,
     );
 
     expect(quantities).toEqual(
@@ -157,6 +163,13 @@ describe("landscape proposal pricing payload", () => {
       ]),
     );
     expect((quantities ?? []).filter((line) => line.item_id === "shared-path")).toHaveLength(1);
+  });
+
+  it("prices every placed transformer with the product offered by each package", () => {
+    expect(buildLandscapeProposalQuantities(PRICING, CATALOG, {}, [], 2)).toEqual([
+      { item_id: "best-transformer", quantity: 2 },
+      { item_id: "good-transformer", quantity: 2 },
+    ]);
   });
 
   it("removes explicit product choices from package defaults and groups their SKUs", () => {
@@ -187,6 +200,7 @@ describe("landscape proposal pricing payload", () => {
       CATALOG,
       { walllight: 2, underwater: 3 },
       [],
+      0,
     );
 
     expect(quantities).toEqual([
@@ -202,6 +216,7 @@ describe("landscape proposal pricing payload", () => {
       pricing: PRICING,
       catalog: CATALOG,
       fixtureCounts: { uplight: 3 },
+      transformerCount: 0,
       fixedItems: [{ itemId: "designer-uplight", quantity: 1 }],
       wireRuns: [],
       selectedTierKey: "good",
@@ -223,6 +238,7 @@ describe("landscape proposal pricing payload", () => {
       pricing: PRICING,
       catalog: CATALOG,
       fixtureCounts: { uplight: 2 },
+      transformerCount: 0,
       wireRuns: [],
       selectedTierKey: "good",
       selectedCarePlanKey: null,
@@ -248,6 +264,7 @@ describe("landscape proposal pricing payload", () => {
       pricing: PRICING,
       catalog: CATALOG,
       fixtureCounts: { uplight: 4, pathlight: 3 },
+      transformerCount: 0,
       wireRuns: WIRES,
       selectedTierKey: "good",
       selectedCarePlanKey: "essential",

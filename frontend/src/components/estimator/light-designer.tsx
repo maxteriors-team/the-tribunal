@@ -3400,6 +3400,7 @@ export function LightDesigner({
           pricing,
           catalog: priceBook,
           fixtureCounts: landscapeFixturePricing.fixtureCounts,
+          transformerCount,
           fixedItems: landscapeFixturePricing.fixedItems,
           wireRuns: circuitLoads.map((circuit) => ({
             gauge: circuit.wireGauge,
