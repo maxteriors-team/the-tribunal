@@ -3171,8 +3171,12 @@ class QuoteService:
         OpenAI; every dollar stays server-computed.
         """
         from app.services.quotes.estimate_render import render_design
+        from app.services.rate_limiting.estimate_render_limiter import (
+            enforce_estimate_render_rate_limit,
+        )
 
         await get_or_404(self.db, Workspace, workspace_id)
+        await enforce_estimate_render_rate_limit(workspace_id)
         image = await render_design(
             self.db,
             workspace_id,

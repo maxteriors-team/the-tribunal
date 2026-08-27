@@ -67,6 +67,7 @@ import Link from "next/link";
 import { Children, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import { InventoryAvailabilityCard } from "@/components/estimator/inventory-availability-card";
+import { LandscapeClientPreview } from "@/components/landscape-lighting/studio/client-preview";
 import {
   DocumentActionButton,
   DocumentViewport,
@@ -1475,6 +1476,12 @@ function LandscapeElectricalSummary({
 }
 
 function LandscapeProposalPanel({
+  projectName,
+  contactName,
+  mockupImage,
+  aiImage,
+  aiRenderDisabledReason,
+  onAIRender,
   shots,
   rows,
   circuits,
@@ -1505,6 +1512,12 @@ function LandscapeProposalPanel({
   deliveryPending,
   deliveryStatus,
 }: {
+  projectName: string;
+  contactName?: string;
+  mockupImage: string | null;
+  aiImage: string | null;
+  aiRenderDisabledReason: string | null;
+  onAIRender: () => void;
   shots: DesignerShot[];
   rows: LandscapeFixtureScheduleRow[];
   circuits: LandscapeCircuitLoad[];
@@ -1570,6 +1583,19 @@ function LandscapeProposalPanel({
           </div>
           {estimateTotal !== null ? <strong>{formatCurrency(estimateTotal)}</strong> : null}
         </header>
+
+        <LandscapeClientPreview
+          projectName={projectName}
+          contactName={contactName}
+          mockupImage={mockupImage}
+          aiImage={aiImage}
+          fixtureCount={quoteFixtureRows.reduce((total, row) => total + row.count, 0)}
+          bistroRunCount={bistroRows.length}
+          packageName={selectedTier ? (selectedTier.name ?? selectedTier.label) : null}
+          priceLabel={selectedTier ? formatCurrency(selectedTier.pricing.cash_total) : null}
+          aiRenderDisabledReason={aiRenderDisabledReason}
+          onAIRender={onAIRender}
+        />
 
         <fieldset className="ll-proposal-fieldset">
           <legend>Fixture package</legend>
@@ -2082,6 +2108,12 @@ function PreconChecklistItem({ label, complete }: { label: string; complete: boo
 
 function LandscapeWorkspacePanel({
   tab,
+  projectName,
+  contactName,
+  mockupImage,
+  aiImage,
+  aiRenderDisabledReason,
+  onAIRender,
   shots,
   rows,
   scheduleRows,
@@ -2126,6 +2158,12 @@ function LandscapeWorkspacePanel({
   onUpload,
 }: {
   tab: Exclude<LandscapeWorkspaceTab, "drawing">;
+  projectName: string;
+  contactName?: string;
+  mockupImage: string | null;
+  aiImage: string | null;
+  aiRenderDisabledReason: string | null;
+  onAIRender: () => void;
   shots: DesignerShot[];
   rows: LandscapeFixtureScheduleRow[];
   scheduleRows: LandscapeScheduleRow[];
@@ -2303,6 +2341,12 @@ function LandscapeWorkspacePanel({
   if (tab === "proposal") {
     return (
       <LandscapeProposalPanel
+        projectName={projectName}
+        contactName={contactName}
+        mockupImage={mockupImage}
+        aiImage={aiImage}
+        aiRenderDisabledReason={aiRenderDisabledReason}
+        onAIRender={onAIRender}
         shots={shots}
         rows={rows}
         circuits={circuitLoads}
@@ -2614,6 +2658,9 @@ export function LightDesigner({
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>("loading");
   const [autosavedAt, setAutosavedAt] = useState<string | null>(null);
   const [proposalPreviews, setProposalPreviews] = useState<Record<string, string>>({});
+  const [aiRenderByShot, setAiRenderByShot] = useState<
+    Record<string, { image: string; designSignature: string }>
+  >({});
   const [proposalPreviewsPending, setProposalPreviewsPending] = useState(false);
   const [landscapeProposalSettings, setLandscapeProposalSettings] =
     useState<LandscapeProposalSettings>(initialLandscapeProposal);
@@ -2750,6 +2797,7 @@ export function LightDesigner({
       setShots([]);
       setActiveShotId(null);
       setProposalPreviews({});
+      setAiRenderByShot({});
       dispatch({ type: "RESET" });
       void loadLandscapeDraft(workspaceId)
         .then((draft) => {
@@ -2877,6 +2925,7 @@ export function LightDesigner({
       setShots(projectInitialDraft.shots);
       setActiveShotId(nextActiveShot?.id ?? null);
       setProposalPreviews({});
+      setAiRenderByShot({});
       setLandscapeTab(restoredState.activeWorkflowTab);
       setLandscapeSheetSize(restoredState.settings.paperSize);
       setLandscapePlanFit(restoredState.settings.planFit);
@@ -3166,6 +3215,15 @@ export function LightDesigner({
       : null;
   /** Anything drawn on the photo that's on screen (gates the AI render). */
   const activeDesignHas = hasDesign(design);
+  const activeDesignSignature = JSON.stringify(design);
+  const activeAIRender = activeShot ? aiRenderByShot[activeShot.id] : undefined;
+  const activeAIRenderImage =
+    activeAIRender?.designSignature === activeDesignSignature ? activeAIRender.image : null;
+  const aiRenderDisabledReason = activeDesignHas
+    ? null
+    : landscapeOnly
+      ? "Place at least one fixture before creating the client render."
+      : "Place at least one fixture before creating a photorealistic render.";
   const { calibrated } = designScale(design, photo?.width ?? 0);
 
   // Placed fixtures, resolved through the current package into the product the
@@ -3955,9 +4013,11 @@ export function LightDesigner({
       );
       return;
     }
-    const previewImages = liveShots.flatMap((shot) =>
-      proposalPreviews[shot.id] ? [proposalPreviews[shot.id]] : [],
-    );
+    const previewImages = liveShots.flatMap((shot) => {
+      const aiRender = aiRenderByShot[shot.id];
+      if (aiRender?.designSignature === JSON.stringify(shot.design)) return [aiRender.image];
+      return proposalPreviews[shot.id] ? [proposalPreviews[shot.id]] : [];
+    });
     landscapeQuoteMutation.mutate({
       ...landscapeProposalPayload,
       night_preview: previewImages.length
@@ -4116,14 +4176,8 @@ export function LightDesigner({
               <button
                 className="est-btn"
                 type="button"
-                disabled={!activeDesignHas}
-                title={
-                  activeDesignHas
-                    ? undefined
-                    : landscapeOnly
-                      ? "Place at least one fixture before creating the aerial night render."
-                      : "Place at least one fixture before creating a photorealistic render."
-                }
+                disabled={Boolean(aiRenderDisabledReason)}
+                title={aiRenderDisabledReason ?? undefined}
                 onClick={() => setAiOpen(true)}
               >
                 <Sparkles aria-hidden="true" />
@@ -4304,6 +4358,12 @@ export function LightDesigner({
           >
             <LandscapeWorkspacePanel
               tab={landscapeTab}
+              projectName={landscapeProject?.projectName?.trim() || "Landscape lighting plan"}
+              contactName={landscapeProject?.contactName}
+              mockupImage={activeShot ? (proposalPreviews[activeShot.id] ?? null) : null}
+              aiImage={activeAIRenderImage}
+              aiRenderDisabledReason={aiRenderDisabledReason}
+              onAIRender={() => setAiOpen(true)}
               shots={liveShots}
               rows={fixtureScheduleRows}
               scheduleRows={perFixtureSchedule}
@@ -4935,17 +4995,6 @@ export function LightDesigner({
                   {clientView ? <ComparisonCard view={clientView} /> : null}
                 </div>
               ) : null}
-
-              {aiOpen && photo ? (
-                <AIRenderModal
-                  workspaceId={workspaceId}
-                  photo={photo}
-                  design={design}
-                  productById={productById}
-                  mode={renderMode}
-                  onClose={() => setAiOpen(false)}
-                />
-              ) : null}
             </>
           ) : landscapeOnly ? (
             draftReady ? (
@@ -4995,6 +5044,24 @@ export function LightDesigner({
           )}
         </>
       )}
+
+      {aiOpen && photo ? (
+        <AIRenderModal
+          workspaceId={workspaceId}
+          photo={photo}
+          design={design}
+          productById={productById}
+          mode={renderMode}
+          onGenerated={(image) => {
+            if (!activeShot) return;
+            setAiRenderByShot((current) => ({
+              ...current,
+              [activeShot.id]: { image, designSignature: activeDesignSignature },
+            }));
+          }}
+          onClose={() => setAiOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

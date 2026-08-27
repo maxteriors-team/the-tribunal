@@ -110,7 +110,7 @@ async def test_raw_base64_without_data_prefix_is_accepted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_custom_prompt_overrides_default() -> None:
+async def test_custom_direction_keeps_the_placement_preserving_prompt() -> None:
     client = _fake_client("OK==")
     with patch.object(
         estimate_render, "create_workspace_openai_client", AsyncMock(return_value=client)
@@ -118,7 +118,17 @@ async def test_custom_prompt_overrides_default() -> None:
         await render_design(
             AsyncMock(), uuid.uuid4(), image=_PNG_DATA_URL, prompt="  make it pop  "
         )
-    assert client.images.edit.await_args.kwargs["prompt"] == "make it pop"
+    prompt = client.images.edit.await_args.kwargs["prompt"]
+    assert prompt.startswith(default_render_prompt("seasonal"))
+    assert "Additional styling direction: make it pop" in prompt
+    assert "preserve the supplied viewpoint" in prompt
+
+
+def test_custom_direction_is_bounded_to_the_provider_prompt_limit() -> None:
+    prompt = estimate_render.render_prompt("landscape", "x" * 2_000)
+    assert len(prompt) == 1_000
+    assert prompt.startswith(default_render_prompt("landscape"))
+    assert prompt.endswith("fixture positions, and light directions.")
 
 
 # --------------------------------------------------------------------------- #

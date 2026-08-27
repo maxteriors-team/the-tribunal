@@ -235,6 +235,30 @@ and install plan, not a generic dashboard.
   graphs, automatic conductor routing, field-verified voltage, quote snapshots, exports,
   and delivery remain later work and are not implied by this UI.
 
+### Client preview and AI render
+
+- **Design read:** this is a sales presentation inside a technical editor. The rep’s single
+  job is to help a homeowner understand the proposed nighttime result before reviewing
+  package details. Errors are costly because an attractive concept can be mistaken for a
+  guaranteed installation outcome.
+- **Thesis:** lead with one dark presentation board containing the active mockup, project
+  name, fixture count, selected package, and price. Keep quote controls below it. The image
+  stage is the product-specific memorable device; no decorative metrics or generic cards.
+- **Fixture ownership:** fixture product selection sits with fixture type and only shows
+  catalog products classified for that fixture. Lamp selection remains separate and only
+  shows lamp-like products, preventing transformers and fixtures from appearing there.
+- **AI flow:** `Make this look real` opens the shared Radix dialog with an editable, bounded
+  direction, explicit workspace-account cost language, pending/error/retry states, keyboard
+  comparison controls, download, and an AI-concept disclosure. A result replaces the mockup
+  in the client preview for the current design and is preferred when creating the quote.
+- **Safety boundary:** the browser never receives the provider key. The server keeps the
+  placement-preserving prompt, validates the data URL, authorizes workspace billing access,
+  and caps paid renders per workspace. Generated images remain session-only until included
+  in a saved quote or explicitly downloaded.
+- **Responsive behavior:** the presentation board uses image-plus-summary columns on wide
+  screens, then stacks image before summary below 840 px. All compare and generation actions
+  remain native buttons with visible keyboard focus and no pointer-only requirement.
+
 ### Production checks
 
 Check desktop and narrow dashboard/editor layouts, keyboard focus order, visible
