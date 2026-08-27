@@ -91,6 +91,7 @@ class QuoteBase(BaseModel):
     contact_id: int | None = None
     service_location_id: uuid.UUID | None = None
     opportunity_id: uuid.UUID | None = None
+    lighting_project_id: uuid.UUID | None = None
     title: str | None = Field(default=None, max_length=200)
     currency: str = "USD"
     tax_amount: float = Field(default=0.0, ge=0)

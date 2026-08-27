@@ -30,6 +30,7 @@ from app.models.field_service import (
     Technician,
 )
 from app.models.invoice import Invoice
+from app.models.lighting_project import LightingProject
 from app.models.opportunity import Opportunity
 from app.models.pipeline import Pipeline
 from app.models.quote import Quote
@@ -1056,6 +1057,72 @@ async def test_create_quote_from_estimate_persists_priced_lines_and_contact() ->
         assert [kit.model_dump() for kit in listed.items[0].selected_permanent_kits] == [
             {"feet": 100, "quantity": 1}
         ]
+
+
+async def test_create_quote_from_estimate_links_workspace_project_and_contact() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        contact = await _make_contact(db, ws.id)
+        project = LightingProject(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            name="Pat permanent roofline",
+            document={
+                "version": 2,
+                "projectType": "permanent",
+                "activeShotId": None,
+                "shots": [],
+                "updatedAt": "2026-08-26T12:00:00Z",
+            },
+        )
+        db.add(project)
+        await db.flush()
+
+        quote = await QuoteService(db).create_quote_from_estimate(
+            ws.id,
+            EstimateQuoteRequest(
+                side="permanent",
+                feet=100,
+                lighting_project_id=project.id,
+            ),
+        )
+
+        assert quote.contact_id == contact.id
+        assert quote.lighting_project_id == project.id
+
+
+async def test_create_quote_from_estimate_rejects_other_workspace_project() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        other_ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        other_contact = await _make_contact(db, other_ws.id)
+        project = LightingProject(
+            workspace_id=other_ws.id,
+            contact_id=other_contact.id,
+            name="Other tenant project",
+            document={
+                "version": 2,
+                "projectType": "permanent",
+                "activeShotId": None,
+                "shots": [],
+                "updatedAt": "2026-08-26T12:00:00Z",
+            },
+        )
+        db.add(project)
+        await db.flush()
+
+        with pytest.raises(HTTPException, match="Lighting project not found") as exc_info:
+            await QuoteService(db).create_quote_from_estimate(
+                ws.id,
+                EstimateQuoteRequest(
+                    side="permanent",
+                    feet=100,
+                    lighting_project_id=project.id,
+                ),
+            )
+        assert exc_info.value.status_code == 404
 
 
 async def test_create_quote_from_complex_estimate_persists_overall_discount() -> None:
