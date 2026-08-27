@@ -282,7 +282,6 @@ describe("landscape proposal pricing payload", () => {
       title: "Smith Residence",
       categories: ["landscape"],
       selected_tier: "good",
-      customer_can_select_package: false,
       care_plan_tier: "essential",
       care_count_manual: 7,
       night_preview: null,

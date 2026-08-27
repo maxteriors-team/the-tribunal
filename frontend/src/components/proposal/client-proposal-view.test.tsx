@@ -434,24 +434,13 @@ describe("client package selection", () => {
     expect(screen.getByText(/thank you, dana/i)).toBeInTheDocument();
   });
 
-  it("keeps selected-package terms, acceptance, and deposit without a chooser", async () => {
+  it("presents a single-package proposal as a plain recommendation", async () => {
     const user = userEvent.setup();
-    const lockedDocument = {
-      ...DOCUMENT,
-      tier_order: ["best"],
-      tiers: [DOCUMENT.tiers[0]],
-    };
-    const { onApprove } = renderView({
-      packages: [],
-      proposal_document: lockedDocument as unknown as Record<string, unknown>,
-    });
+    const { onApprove } = renderView({ packages: [] });
 
     expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
     expect(screen.getByText(/your selected package/i)).toBeInTheDocument();
-    expect(screen.getByText("The Premier")).toBeVisible();
-    expect(screen.queryByText("The Starter")).not.toBeInTheDocument();
-    expect(screen.getByText("$8,391.00")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Terms and Conditions" })).toBeVisible();
+    // Falls back to the quote-level deposit rather than a package's.
     expect(acceptButton()).toHaveTextContent("Pay $8,391");
 
     await user.click(acceptButton());

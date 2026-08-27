@@ -221,7 +221,6 @@ export function buildLandscapeProposalPayload({
       }))
       .filter((line) => line.description && line.net_amount > 0),
     selected_tier: selectedTierKey,
-    customer_can_select_package: false,
     care_plan_tier: selectedCarePlanKey,
     care_count_manual: careFixtureCount,
     deposit: pricing.deposit?.enabled

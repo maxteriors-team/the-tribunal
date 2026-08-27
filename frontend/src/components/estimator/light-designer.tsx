@@ -2049,13 +2049,12 @@ function LandscapeProposalPanel({
               Draft quote {createdQuote.number} was created from the measured Bistro layout,
               selected package, care plan, fixture pricing, and any catalog-priced wire.
             </p>
-            <p>The customer link is locked to the highlighted fixture package.</p>
             <div>
               <strong>Collect payment in three steps</strong>
               <ol className="list-decimal space-y-1 pl-5 text-sm">
                 <li>Set the deposit due when the customer accepts.</li>
                 <li>Open the quote to preview the client acceptance and payment page.</li>
-                <li>Email or text the selected package so the customer can accept and pay.</li>
+                <li>Email or text the proposal so the customer can accept and pay in Stripe.</li>
               </ol>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -2075,7 +2074,7 @@ function LandscapeProposalPanel({
                 disabled={deliveryPending}
                 onClick={() => onDeliverQuote("email")}
               >
-                Email selected package
+                Email proposal
               </button>
               <button
                 className="est-btn"
@@ -2083,7 +2082,7 @@ function LandscapeProposalPanel({
                 disabled={deliveryPending}
                 onClick={() => onDeliverQuote("sms")}
               >
-                Text selected package
+                Text proposal
               </button>
             </div>
             {deliveryStatus ? <p role="status">{deliveryStatus}</p> : null}
