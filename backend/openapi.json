@@ -40547,6 +40547,14 @@
               }
             ]
           },
+          "fixed_items": {
+            "items": {
+              "$ref": "#/components/schemas/WizardFixtureQty"
+            },
+            "maxItems": 100,
+            "title": "Fixed Items",
+            "type": "array"
+          },
           "lighting_project_id": {
             "anyOf": [
               {

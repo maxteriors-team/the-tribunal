@@ -26497,6 +26497,8 @@ export interface components {
             /** Contact Id */
             contact_id?: number | null;
             deposit?: components["schemas"]["WizardDepositSelection"] | null;
+            /** Fixed Items */
+            fixed_items?: components["schemas"]["WizardFixtureQty"][];
             /** Lighting Project Id */
             lighting_project_id?: string | null;
             /** Mockups */
