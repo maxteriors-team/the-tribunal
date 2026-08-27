@@ -147,6 +147,7 @@ import {
 import {
   buildLandscapeProposalPayload,
   hasUnpriceableBistroRuns,
+  splitLandscapeFixturePricing,
 } from "@/lib/estimator/landscape-proposal";
 import {
   buildLandscapeSchedule as buildPerFixtureSchedule,
@@ -3251,6 +3252,7 @@ export function LightDesigner({
     0,
   );
   const perFixtureSchedule = buildPerFixtureSchedule(liveShots, products, priceBook ?? []);
+  const landscapeFixturePricing = splitLandscapeFixturePricing(perFixtureSchedule, inputs.fixtures);
   const fixtureScheduleRows: LandscapeFixtureScheduleRow[] = (() => {
     const rows: LandscapeFixtureScheduleRow[] = fixtureLines.map((line) => {
       const beamLabels = new Set<string>();
@@ -3397,7 +3399,8 @@ export function LightDesigner({
       : buildLandscapeProposalPayload({
           pricing,
           catalog: priceBook,
-          fixtureCounts: inputs.fixtures,
+          fixtureCounts: landscapeFixturePricing.fixtureCounts,
+          fixedItems: landscapeFixturePricing.fixedItems,
           wireRuns: circuitLoads.map((circuit) => ({
             gauge: circuit.wireGauge,
             lengthFeet: circuit.lengthFeet,
@@ -3417,7 +3420,9 @@ export function LightDesigner({
   const landscapeProposalSignature = JSON.stringify(landscapeProposalPayload);
   const landscapeProposalHasRequirements = Boolean(
     landscapeProposalPayload &&
-    (landscapeProposalPayload.quantities?.length || landscapeProposalPayload.bistro?.runs?.length),
+    (landscapeProposalPayload.quantities?.length ||
+      landscapeProposalPayload.fixed_items?.length ||
+      landscapeProposalPayload.bistro?.runs?.length),
   );
   const landscapeProposalQuery = useQuery({
     queryKey: queryKeys.lightingProjects.proposalPreview(workspaceId, landscapeProposalSignature),

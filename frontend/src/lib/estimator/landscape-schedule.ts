@@ -12,6 +12,7 @@ export interface LandscapeScheduleRow {
   fixtureType: string;
   fixtureName: string;
   fixtureCatalogItemId: string | null;
+  fixtureCatalogItemIsOverride: boolean;
   fixtureSku: string | null;
   lampCatalogItemId: string | null;
   lampName: string | null;
@@ -83,6 +84,7 @@ export function buildLandscapeSchedule(
         product?.target.field === "landscape" ? product.target.fixtureType : "unresolved",
       fixtureName: fixture?.name ?? product?.productName ?? product?.name ?? "Unresolved fixture",
       fixtureCatalogItemId: fixture?.id ?? item.catalogItemId ?? null,
+      fixtureCatalogItemIsOverride: item.catalogItemOverride === true,
       fixtureSku: fixture?.sku ?? item.catalogSku ?? product?.sku ?? null,
       lampCatalogItemId: lamp?.id ?? item.lampCatalogItemId ?? null,
       lampName: lamp?.name ?? product?.lampLabel ?? null,
@@ -100,6 +102,7 @@ export interface LandscapeFixtureScheduleUpdate {
   productId?: string;
   catalogItemId?: string;
   catalogSku?: string;
+  catalogItemOverride?: boolean;
   lampCatalogItemId?: string;
   accessoryCatalogItemIds?: string[];
 }
@@ -136,6 +139,7 @@ export function copyScheduleSelectionToType(
               ...item,
               catalogItemId: source.catalogItemId,
               catalogSku: source.catalogSku,
+              catalogItemOverride: source.catalogItemOverride,
               lampCatalogItemId: source.lampCatalogItemId,
               accessoryCatalogItemIds: source.accessoryCatalogItemIds,
             }

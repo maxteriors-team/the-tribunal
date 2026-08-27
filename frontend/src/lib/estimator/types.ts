@@ -266,6 +266,8 @@ export interface PlacedItem {
   /** Stable CRM catalog references; live catalog data remains authoritative. */
   catalogItemId?: string;
   catalogSku?: string;
+  /** True when the rep chose this exact product instead of package-default substitution. */
+  catalogItemOverride?: boolean;
   lampCatalogItemId?: string;
   accessoryCatalogItemIds?: string[];
   transformerZoneId?: string;

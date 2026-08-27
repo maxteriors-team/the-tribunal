@@ -245,8 +245,9 @@ and install plan, not a generic dashboard.
   name, fixture count, selected package, and price. Keep quote controls below it. The image
   stage is the product-specific memorable device; no decorative metrics or generic cards.
 - **Fixture ownership:** fixture product selection sits with fixture type and only shows
-  catalog products classified for that fixture. Lamp selection remains separate and only
-  shows lamp-like products, preventing transformers and fixtures from appearing there.
+  catalog products classified for that fixture. Choosing a product locks that exact SKU into
+  every package and immediately reprices the proposal; `Use package fixture` restores tier
+  substitution. Lamp selection remains separate and only shows lamp-like products.
 - **AI flow:** `Make this look real` opens the shared Radix dialog with an editable, bounded
   direction, explicit workspace-account cost language, pending/error/retry states, keyboard
   comparison controls, download, and an AI-concept disclosure. A result replaces the mockup

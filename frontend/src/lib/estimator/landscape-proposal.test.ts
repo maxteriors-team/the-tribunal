@@ -8,6 +8,7 @@ import {
   buildLandscapeProposalPayload,
   buildLandscapeProposalQuantities,
   hasUnpriceableBistroRuns,
+  splitLandscapeFixturePricing,
 } from "./landscape-proposal";
 
 function item(
@@ -158,6 +159,28 @@ describe("landscape proposal pricing payload", () => {
     expect((quantities ?? []).filter((line) => line.item_id === "shared-path")).toHaveLength(1);
   });
 
+  it("removes explicit product choices from package defaults and groups their SKUs", () => {
+    const rows = [
+      {
+        fixtureType: "uplight",
+        fixtureCatalogItemId: "id-best-up",
+        fixtureCatalogItemIsOverride: false,
+        fixtureSku: "best-up",
+      },
+      {
+        fixtureType: "uplight",
+        fixtureCatalogItemId: "id-designer-up",
+        fixtureCatalogItemIsOverride: true,
+        fixtureSku: "designer-up",
+      },
+    ];
+
+    expect(splitLandscapeFixturePricing(rows, { uplight: 2 })).toEqual({
+      fixtureCounts: { uplight: 1 },
+      fixedItems: [{ itemId: "designer-up", quantity: 1 }],
+    });
+  });
+
   it("quotes the approved specialty products without substituting another fixture type", () => {
     const quantities = buildLandscapeProposalQuantities(
       PRICING,
@@ -172,6 +195,27 @@ describe("landscape proposal pricing payload", () => {
     ]);
     expect(CATALOG.find((catalogItem) => catalogItem.sku === "59306832")?.unit_price).toBe(775);
     expect(CATALOG.find((catalogItem) => catalogItem.sku === "59407330")?.unit_price).toBe(1295);
+  });
+
+  it("marks explicit fixture choices as fixed products without double-counting care", () => {
+    const payload = buildLandscapeProposalPayload({
+      pricing: PRICING,
+      catalog: CATALOG,
+      fixtureCounts: { uplight: 3 },
+      fixedItems: [{ itemId: "designer-uplight", quantity: 1 }],
+      wireRuns: [],
+      selectedTierKey: "good",
+      selectedCarePlanKey: null,
+    });
+
+    expect(payload.fixed_items).toEqual([{ item_id: "designer-uplight", quantity: 1 }]);
+    expect(payload.care_count_manual).toBe(4);
+    expect(payload.quantities).toEqual(
+      expect.arrayContaining([
+        { item_id: "best-up", quantity: 3 },
+        { item_id: "good-up", quantity: 3 },
+      ]),
+    );
   });
 
   it("includes valid additional line items in server-priced package totals", () => {

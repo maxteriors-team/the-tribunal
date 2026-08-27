@@ -260,6 +260,9 @@ class ProposalWizardPayload(BaseModel):
     lighting_project_id: uuid.UUID | None = None
     client: WizardClient | None = None
     quantities: list[WizardFixtureQty] = Field(default_factory=list)
+    # Exact catalog products deliberately selected in the fixture schedule. They
+    # are priced into every package instead of being replaced by tier defaults.
+    fixed_items: list[WizardFixtureQty] = Field(default_factory=list, max_length=100)
     additional_charges: list[WizardCharge] = Field(default_factory=list)
     # Tier the client is buying; defaults to the highest-value ("headline") tier.
     selected_tier: str | None = None

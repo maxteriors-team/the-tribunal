@@ -5,6 +5,7 @@ import {
   type FixtureType,
   type QuotedLandscapeWireGauge,
 } from "@/lib/estimator/fixtures";
+import type { LandscapeScheduleRow } from "@/lib/estimator/landscape-schedule";
 import type {
   CatalogItemResponse,
   PricingSettings,
@@ -37,6 +38,7 @@ export interface BuildLandscapeProposalPayloadOptions extends LandscapeProposalL
   pricing: PricingSettings;
   catalog: CatalogItemResponse[];
   fixtureCounts: Partial<Record<FixtureType, number>>;
+  fixedItems?: Array<{ itemId: string; quantity: number }>;
   wireRuns: LandscapeWireQuoteInput[];
   bistroRuns?: LandscapeBistroQuoteInput[];
   selectedTierKey: string | null;
@@ -80,6 +82,33 @@ export function aggregateBistroRuns(
   return (["temporary", "permanent"] as const).flatMap((installation) =>
     totals[installation].feet > 0 ? [{ installation, ...totals[installation] }] : [],
   );
+}
+
+export function splitLandscapeFixturePricing(
+  rows: readonly Pick<
+    LandscapeScheduleRow,
+    "fixtureType" | "fixtureCatalogItemId" | "fixtureCatalogItemIsOverride" | "fixtureSku"
+  >[],
+  totals: Partial<Record<FixtureType, number>>,
+): {
+  fixtureCounts: Partial<Record<FixtureType, number>>;
+  fixedItems: Array<{ itemId: string; quantity: number }>;
+} {
+  const fixtureCounts = { ...totals };
+  const fixed = new Map<string, number>();
+  const knownTypes = new Set(FIXTURE_TYPES.map((fixture) => fixture.type));
+  for (const row of rows) {
+    if (!row.fixtureCatalogItemIsOverride || !row.fixtureCatalogItemId) continue;
+    if (!knownTypes.has(row.fixtureType as FixtureType)) continue;
+    const fixtureType = row.fixtureType as FixtureType;
+    fixtureCounts[fixtureType] = Math.max(0, (fixtureCounts[fixtureType] ?? 0) - 1);
+    const itemId = row.fixtureSku?.trim() || row.fixtureCatalogItemId;
+    fixed.set(itemId, (fixed.get(itemId) ?? 0) + 1);
+  }
+  return {
+    fixtureCounts,
+    fixedItems: [...fixed].map(([itemId, quantity]) => ({ itemId, quantity })),
+  };
 }
 
 export function hasUnpriceableBistroRuns(runs: LandscapeBistroQuoteInput[]): boolean {
@@ -126,6 +155,7 @@ export function buildLandscapeProposalPayload({
   pricing,
   catalog,
   fixtureCounts,
+  fixedItems = [],
   wireRuns,
   bistroRuns = [],
   selectedTierKey,
@@ -137,10 +167,15 @@ export function buildLandscapeProposalPayload({
   lightingProjectId,
   title,
 }: BuildLandscapeProposalPayloadOptions): ProposalWizardPayload {
-  const careFixtureCount = FIXTURE_TYPES.reduce(
-    (total, fixture) => total + Math.max(0, fixtureCounts[fixture.type] ?? 0),
-    0,
-  );
+  const careFixtureCount =
+    FIXTURE_TYPES.reduce(
+      (total, fixture) => total + Math.max(0, fixtureCounts[fixture.type] ?? 0),
+      0,
+    ) +
+    fixedItems.reduce(
+      (total, item) => total + (Number.isFinite(item.quantity) ? Math.max(0, item.quantity) : 0),
+      0,
+    );
   const groupedBistroRuns = aggregateBistroRuns(bistroRuns);
   return {
     pricing_source: "price_book",
@@ -151,6 +186,9 @@ export function buildLandscapeProposalPayload({
     title: title?.trim() || "Landscape lighting proposal",
     categories: groupedBistroRuns.length ? ["landscape", "bistro"] : ["landscape"],
     quantities: buildLandscapeProposalQuantities(pricing, catalog, fixtureCounts, wireRuns),
+    fixed_items: fixedItems
+      .filter((item) => item.itemId && Number.isFinite(item.quantity) && item.quantity > 0)
+      .map((item) => ({ item_id: item.itemId, quantity: item.quantity })),
     bistro: groupedBistroRuns.length
       ? {
           product: "color",

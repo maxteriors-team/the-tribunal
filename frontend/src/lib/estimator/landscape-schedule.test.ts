@@ -95,6 +95,7 @@ const shots: DesignerShot[] = [
           sizePx: 30,
           catalogItemId: "manual-fixture",
           catalogSku: "MANUAL-FIXTURE",
+          catalogItemOverride: true,
           lampCatalogItemId: "manual-lamp",
           accessoryCatalogItemIds: ["manual-shield"],
         },
@@ -111,6 +112,7 @@ describe("landscape fixture schedule type updates", () => {
       productId: "fixture-downlight",
       catalogItemId: undefined,
       catalogSku: undefined,
+      catalogItemOverride: undefined,
       lampCatalogItemId: undefined,
       accessoryCatalogItemIds: [],
     });
@@ -120,6 +122,7 @@ describe("landscape fixture schedule type updates", () => {
       productId: "fixture-downlight",
       catalogItemId: undefined,
       catalogSku: undefined,
+      catalogItemOverride: undefined,
       lampCatalogItemId: undefined,
       accessoryCatalogItemIds: [],
     });
@@ -155,11 +158,22 @@ describe("landscape fixture schedule type updates", () => {
     );
   });
 
+  it("distinguishes package fixture mappings from explicit product choices", () => {
+    const schedule = buildLandscapeSchedule(shots, products, catalog);
+    expect(
+      schedule.find((row) => row.itemId === "fixture-front")?.fixtureCatalogItemIsOverride,
+    ).toBe(false);
+    expect(
+      schedule.find((row) => row.itemId === "fixture-back")?.fixtureCatalogItemIsOverride,
+    ).toBe(true);
+  });
+
   it("keeps an unsupported package type unresolved instead of substituting another fixture", () => {
     const updated = updateFixtureScheduleSelection(shots, "fixture-back", {
       productId: "fixture-underwater",
       catalogItemId: undefined,
       catalogSku: undefined,
+      catalogItemOverride: undefined,
       lampCatalogItemId: undefined,
       accessoryCatalogItemIds: [],
     });

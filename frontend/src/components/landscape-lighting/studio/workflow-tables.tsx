@@ -116,6 +116,7 @@ export function LandscapeFixtureScheduleTable({
                           productId: `fixture-${fixtureType}`,
                           catalogItemId: undefined,
                           catalogSku: undefined,
+                          catalogItemOverride: undefined,
                           lampCatalogItemId: undefined,
                           accessoryCatalogItemIds: [],
                         });
@@ -131,19 +132,22 @@ export function LandscapeFixtureScheduleTable({
                   <label className="ll-field-select">
                     <span className="sr-only">Fixture product for fixture {row.number}</span>
                     <select
-                      value={row.fixtureCatalogItemId ?? ""}
+                      value={
+                        row.fixtureCatalogItemIsOverride ? (row.fixtureCatalogItemId ?? "") : ""
+                      }
                       aria-label={`Fixture product for fixture ${row.number}`}
                       onChange={(event) => {
                         const item = catalogById.get(event.target.value);
                         onUpdate(row.itemId, {
                           catalogItemId: item?.id,
                           catalogSku: item?.sku?.trim() || undefined,
+                          catalogItemOverride: item ? true : undefined,
                           lampCatalogItemId: undefined,
                           accessoryCatalogItemIds: [],
                         });
                       }}
                     >
-                      <option value="">Use package fixture</option>
+                      <option value="">Use package fixture (tier-priced)</option>
                       {fixtureOptions.map((item) => (
                         <option key={item.id} value={item.id}>
                           {catalogOptionLabel(item)}
