@@ -16,6 +16,8 @@ logger = structlog.get_logger()
 
 ESTIMATE_RENDER_USER_LIMIT = 12
 ESTIMATE_RENDER_WORKSPACE_LIMIT = 12
+# simplification: this also caps BYOK workspaces at 120/hour; split counters by
+# credential source when legitimate platform volume approaches that ceiling.
 ESTIMATE_RENDER_PLATFORM_LIMIT = 120
 ESTIMATE_RENDER_WINDOW_SECONDS = 3600
 _KEY_PREFIX = "rate_limit:estimate_render"
