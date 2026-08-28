@@ -26,9 +26,15 @@
   /* Motion */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
 
+  /* Typeface. Both historical roles resolve to the one brand family (Golos
+     Text, from `proposal-fonts.ts`); weight, not a second typeface, separates
+     display from UI. Repointing here keeps the ~40 rules below untouched. */
+  --font-cormorant: var(--font-golos-proposal);
+  --font-montserrat: var(--font-golos-proposal);
+
   background: var(--black);
   color: var(--t2);
-  font-family: var(--font-montserrat), "Montserrat", sans-serif;
+  font-family: var(--font-montserrat), sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
@@ -122,15 +128,14 @@
     color: var(--gold-d);
   }
   .calc-title {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(40px, 6vw, 60px);
-    font-weight: 300;
+    font-weight: 700;
     color: var(--t1);
     line-height: 1;
     letter-spacing: 0.02em;
   }
   .calc-title em {
-    font-style: italic;
     color: var(--gold-l);
   }
   .calc-rule {
@@ -242,14 +247,13 @@
     margin-bottom: 9px;
   }
   .wizard-title {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(28px, 4vw, 38px);
-    font-weight: 300;
+    font-weight: 700;
     color: var(--t1);
     line-height: 1;
   }
   .wizard-title em {
-    font-style: italic;
     color: var(--gold-l);
   }
   .wizard-copy {
@@ -325,9 +329,9 @@
     color: var(--t4);
   }
   .wizard-mini-total strong {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 22px;
-    font-weight: 300;
+    font-weight: 700;
     color: var(--gold);
   }
   .wizard-review-intro {
@@ -365,15 +369,14 @@
     margin-bottom: 16px;
   }
   .sales-story-title {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(34px, 6vw, 54px);
-    font-weight: 300;
+    font-weight: 700;
     line-height: 0.98;
     color: var(--t1);
     letter-spacing: 0.01em;
   }
   .sales-story-title em {
-    font-style: italic;
     color: var(--gold-l);
   }
   .sales-story-body {
@@ -495,9 +498,9 @@
     margin-bottom: 6px;
   }
   .sales-story-package strong {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 26px;
-    font-weight: 300;
+    font-weight: 700;
     color: var(--gold);
   }
   @media (max-width: 620px) {
@@ -759,8 +762,7 @@
     text-transform: none;
     opacity: 0.7;
     margin-top: 2px;
-    font-style: italic;
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
   }
   .tier-panel {
     display: none;
@@ -792,7 +794,7 @@
     color: var(--t3);
   }
   .fixture-section-subtotal {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 17px;
     font-weight: 400;
     color: var(--gold);
@@ -837,7 +839,7 @@
     gap: 10px;
   }
   .fix-line-total {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 16px;
     font-weight: 400;
     color: var(--t4);
@@ -937,7 +939,7 @@
   .dollar-sign {
     font-size: 13px;
     color: var(--t3);
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
   }
   .additional-amount {
     background: none;
@@ -1047,10 +1049,9 @@
     color: var(--gold-d);
   }
   .total-card-name {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 16px;
     font-weight: 400;
-    font-style: italic;
     color: var(--t3);
     margin-bottom: 8px;
   }
@@ -1058,9 +1059,9 @@
     color: var(--t2);
   }
   .total-card-amount {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 28px;
-    font-weight: 300;
+    font-weight: 700;
     color: #2a2a2a;
     transition: color 0.3s;
     letter-spacing: 0.01em;
@@ -1111,10 +1112,9 @@
     margin-bottom: 4px;
   }
   .care-head-title {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 24px;
     font-weight: 400;
-    font-style: italic;
     color: var(--t1);
     line-height: 1;
   }
@@ -1217,7 +1217,7 @@
     padding: 3px 8px;
   }
   .care-tier-name {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 20px;
     font-weight: 400;
     color: var(--t1);
@@ -1225,9 +1225,9 @@
     margin-top: 4px;
   }
   .care-tier-price {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 30px;
-    font-weight: 300;
+    font-weight: 700;
     color: var(--gold);
     line-height: 1;
   }
@@ -1271,9 +1271,9 @@
     max-width: 330px;
   }
   .care-savings-amount {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 40px;
-    font-weight: 300;
+    font-weight: 700;
     color: var(--gold);
     line-height: 0.9;
     white-space: nowrap;
@@ -1377,7 +1377,7 @@
     font-weight: 700;
   }
   .bistro-tier-name {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 20px;
     font-weight: 400;
     color: var(--t1);
@@ -1391,7 +1391,7 @@
     min-height: 30px;
   }
   .bistro-tier-rate {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 17px;
     font-weight: 400;
     color: var(--t4);
@@ -1442,7 +1442,6 @@
     padding: 14px 0;
     font-size: 12px;
     color: var(--t4);
-    font-style: italic;
     text-align: center;
   }
   .bistro-quote-row {
@@ -1478,22 +1477,20 @@
     color: var(--gold-d);
   }
   .bistro-quote-row.total .bistro-quote-val {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 28px;
-    font-weight: 300;
+    font-weight: 700;
     color: var(--gold);
   }
   .bistro-coverage-note {
     font-size: 11px;
     color: var(--t4);
-    font-style: italic;
     padding: 6px 0 2px;
   }
   .bistro-min-note {
     font-size: 11px;
     color: var(--gold-d);
     margin-top: 10px;
-    font-style: italic;
   }
 
   /* Buttons */
@@ -1783,9 +1780,9 @@
     background: var(--gold-d);
   }
   .present-hi {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(16px, 2.2vw, 22px);
-    font-weight: 300;
+    font-weight: 700;
     color: var(--t3);
     letter-spacing: 0.04em;
     margin-bottom: 10px;
@@ -1795,10 +1792,9 @@
     font-weight: 400;
   }
   .present-name {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(52px, 8vw, 88px);
-    font-weight: 300;
-    font-style: italic;
+    font-weight: 700;
     color: var(--t1);
     line-height: 0.92;
     letter-spacing: 0.01em;
@@ -1826,10 +1822,9 @@
     transform: rotate(45deg);
   }
   .present-tagline {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(19px, 2.5vw, 26px);
-    font-weight: 300;
-    font-style: italic;
+    font-weight: 700;
     color: var(--t2);
     line-height: 1.6;
     max-width: 560px;
@@ -1872,10 +1867,9 @@
     margin-bottom: 16px;
   }
   .value-bar-text {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(22px, 3.2vw, 32px);
-    font-weight: 300;
-    font-style: italic;
+    font-weight: 700;
     color: var(--t1);
     line-height: 1.5;
     max-width: 640px;
@@ -1983,10 +1977,9 @@
     color: rgba(255, 255, 255, 0.5);
   }
   .pkg-name {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(34px, 4vw, 46px);
-    font-weight: 300;
-    font-style: italic;
+    font-weight: 700;
     line-height: 0.95;
     letter-spacing: 0.01em;
     margin-bottom: 14px;
@@ -2024,9 +2017,9 @@
     border-color: rgba(255, 255, 255, 0.15);
   }
   .pkg-price {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(44px, 5.5vw, 64px);
-    font-weight: 300;
+    font-weight: 700;
     line-height: 0.9;
     letter-spacing: 0.01em;
   }
@@ -2052,9 +2045,8 @@
     color: rgba(255, 255, 255, 0.4);
   }
   .pkg-subprice {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 15px;
-    font-style: italic;
     color: var(--t3);
     margin-top: 10px;
   }
@@ -2075,9 +2067,8 @@
   /* Pointer to the financing block. Sits under .pkg-subprice when a package
      takes a deposit, so it stays one step quieter than the amount due. */
   .pkg-monthly {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 14px;
-    font-style: italic;
     color: var(--t4);
     margin-top: 6px;
   }
@@ -2088,9 +2079,8 @@
     color: rgba(255, 255, 255, 0.45);
   }
   .pkg-cash {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 15px;
-    font-style: italic;
     color: var(--t3);
     margin-top: 4px;
   }
@@ -2211,9 +2201,8 @@
     padding: 26px 28px;
   }
   .wg-item-title {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 18px;
-    font-style: italic;
     color: var(--gold-l);
     margin-bottom: 8px;
   }
@@ -2292,10 +2281,9 @@
     padding: 28px 24px;
   }
   .step-num {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 48px;
-    font-weight: 300;
-    font-style: italic;
+    font-weight: 700;
     color: rgba(212, 175, 90, 0.15);
     line-height: 1;
     margin-bottom: 12px;
@@ -2322,10 +2310,9 @@
     animation: sw-up 0.8s var(--ease) 0.28s both;
   }
   .trust-heading {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 26px;
     font-weight: 400;
-    font-style: italic;
     color: var(--t1);
     margin-bottom: 12px;
   }
@@ -2354,7 +2341,7 @@
     font-weight: 400;
   }
   .addon-bar-amount {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 17px;
     color: var(--gold-d);
   }
@@ -2385,10 +2372,9 @@
     margin-bottom: 16px;
   }
   .cta-heading {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(32px, 5vw, 52px);
-    font-weight: 300;
-    font-style: italic;
+    font-weight: 700;
     color: var(--t1);
     margin-bottom: 12px;
     line-height: 1;
@@ -2536,17 +2522,15 @@
     flex: 1;
   }
   .guarantee-title {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(22px, 3vw, 30px);
     font-weight: 400;
-    font-style: italic;
     color: var(--t1);
     line-height: 1;
     margin-bottom: 8px;
   }
   .guarantee-title em {
     color: var(--gold-l);
-    font-style: italic;
   }
   .guarantee-body {
     font-size: 13px;
@@ -2608,10 +2592,9 @@
     background: var(--bdr);
   }
   .pcare-name {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(30px, 4vw, 42px);
-    font-weight: 300;
-    font-style: italic;
+    font-weight: 700;
     color: var(--t1);
     line-height: 1;
     margin-bottom: 10px;
@@ -2620,9 +2603,9 @@
     color: var(--gold-l);
   }
   .pcare-price {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 30px;
-    font-weight: 300;
+    font-weight: 700;
     color: var(--gold);
     margin-bottom: 20px;
   }
@@ -2676,9 +2659,9 @@
     margin-bottom: 8px;
   }
   .pcare-savings-amount {
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: clamp(48px, 7vw, 64px);
-    font-weight: 300;
+    font-weight: 700;
     color: var(--gold);
     line-height: 0.9;
     letter-spacing: 0.01em;
@@ -2696,8 +2679,7 @@
     color: var(--t3);
     line-height: 1.55;
     margin-top: 14px;
-    font-style: italic;
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
   }
 
   /* Night mode */
@@ -2784,8 +2766,7 @@
     justify-content: center;
     text-align: center;
     color: var(--t4);
-    font-family: var(--font-cormorant), serif;
-    font-style: italic;
+    font-family: var(--font-cormorant), sans-serif;
     font-size: 18px;
     padding: 24px;
     pointer-events: none;
@@ -2913,8 +2894,7 @@
   .night-hint {
     font-size: 11px;
     color: var(--t4);
-    font-style: italic;
-    font-family: var(--font-cormorant), serif;
+    font-family: var(--font-cormorant), sans-serif;
   }
 
   /* One frame per designed photo (front, back, walkway), stacked full-width:
@@ -3540,8 +3520,8 @@
   color: var(--t3);
 }
 .proposal-view .grand-row strong {
-  font-family: var(--font-cormorant), serif;
-  font-weight: 300;
+  font-family: var(--font-cormorant), sans-serif;
+  font-weight: 700;
   color: var(--t1);
   font-size: 22px;
 }
@@ -3564,10 +3544,9 @@
  * tokens above; only the itemized table + totals are bespoke here.
  * ------------------------------------------------------------------ */
 .proposal-view .pq-hero-title {
-  font-family: var(--font-cormorant), serif;
+  font-family: var(--font-cormorant), sans-serif;
   font-size: clamp(38px, 6vw, 64px);
-  font-weight: 300;
-  font-style: italic;
+  font-weight: 700;
   color: var(--t1);
   line-height: 0.96;
   letter-spacing: 0.01em;
@@ -3644,7 +3623,7 @@
   color: var(--t4);
 }
 .proposal-view .pq-amount {
-  font-family: var(--font-cormorant), serif;
+  font-family: var(--font-cormorant), sans-serif;
   font-size: 18px;
   font-weight: 400;
   color: var(--t1);
@@ -3701,8 +3680,8 @@
   color: var(--t3);
 }
 .proposal-view .pq-total-row strong {
-  font-family: var(--font-cormorant), serif;
-  font-weight: 300;
+  font-family: var(--font-cormorant), sans-serif;
+  font-weight: 700;
   color: var(--t1);
   font-size: 20px;
   font-variant-numeric: tabular-nums;
@@ -3750,9 +3729,9 @@
   color: var(--gold-d);
 }
 .proposal-view .dep-amount {
-  font-family: var(--font-cormorant), serif;
+  font-family: var(--font-cormorant), sans-serif;
   font-size: 34px;
-  font-weight: 300;
+  font-weight: 700;
   color: var(--gold);
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -4030,10 +4009,9 @@
 }
 
 .proposal-view .xv-title {
-  font-family: var(--font-cormorant), serif;
+  font-family: var(--font-cormorant), sans-serif;
   font-size: clamp(24px, 3.4vw, 32px);
   font-weight: 400;
-  font-style: italic;
   color: var(--t1);
   line-height: 1.15;
   margin-bottom: 6px;
@@ -4041,7 +4019,6 @@
 
 .proposal-view .xv-title em {
   color: var(--gold-l);
-  font-style: italic;
 }
 
 .proposal-view .xv-sub {
@@ -4087,9 +4064,8 @@
 }
 
 .proposal-view .xv-item-title {
-  font-family: var(--font-cormorant), serif;
+  font-family: var(--font-cormorant), sans-serif;
   font-size: 19px;
-  font-style: italic;
   color: var(--gold-l);
   margin-bottom: 7px;
   line-height: 1.2;

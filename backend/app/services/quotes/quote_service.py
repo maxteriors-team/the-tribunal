@@ -2249,29 +2249,53 @@ class QuoteService:
             deposit_amount=due,
         )
 
+    def _accepted_tier_warranty(self, quote: Quote) -> str | None:
+        """Warranty copy for the package this quote sits on, if the snapshot has one."""
+        document = quote.proposal_document
+        if not isinstance(document, Mapping):
+            return None
+        selected = document.get("selected_tier")
+        tiers = document.get("tiers")
+        if not selected or not isinstance(tiers, list):
+            return None
+        for tier in tiers:
+            if isinstance(tier, Mapping) and tier.get("key") == selected:
+                warranty = tier.get("warranty")
+                return str(warranty) if warranty else None
+        return None
+
     async def _send_acceptance_receipt(self, quote: Quote, *, deposit_amount: float | None) -> None:
         """Best-effort transactional receipt for the customer who accepted."""
         contact = quote.contact
         workspace = quote.workspace
         if contact is None or not contact.email:
             return
+        # Same branding the client proposal page renders, so the receipt and the
+        # page the customer just accepted on carry one identity.
+        template = get_proposal_template(workspace)
         try:
             await send_quote_acceptance_receipt(
                 to_email=contact.email,
                 customer_name=contact.first_name or contact.full_name or "there",
-                business_name=workspace.name,
+                business_name=template.business_name or workspace.name,
                 quote_number=quote.number,
                 quote_title=quote.title or f"Proposal {quote.number}",
                 total=float(quote.total),
                 currency=quote.currency,
                 accepted_at=quote.approved_at or datetime.now(UTC),
                 idempotency_key=derive_outbound_key("quote_acceptance_receipt", quote.id),
-                support_email=str(workspace.settings.get("support_email") or "") or None,
-                support_phone=str(workspace.settings.get("support_phone") or "") or None,
+                logo_url=template.logo_url,
+                support_email=template.business_email
+                or str(workspace.settings.get("support_email") or "")
+                or None,
+                support_phone=template.business_phone
+                or str(workspace.settings.get("support_phone") or "")
+                or None,
                 deposit_required=deposit_amount is not None,
                 deposit_amount=deposit_amount,
                 deposit_paid=quote.deposit_paid_at is not None,
                 proposal_url=f"{settings.frontend_url.rstrip('/')}/p/quotes/{quote.public_token}",
+                warranty=self._accepted_tier_warranty(quote),
             )
         except Exception as exc:  # pragma: no cover - best-effort receipt
             self.log.warning(

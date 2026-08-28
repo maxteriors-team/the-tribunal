@@ -18,12 +18,28 @@ never turns a settings read into a 500.
 from datetime import date
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.pricing import FinancingEstimate
 
 # Accepts ``#rgb`` or ``#rrggbb`` (case-insensitive).
 _HEX_COLOR = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+
+
+def _http_url_or_none(value: str | None) -> str | None:
+    """Return ``value`` only when it is an ``http(s)`` URL, else ``None``.
+
+    The logo is operator-supplied and renders as ``<img src>`` on the public,
+    unauthenticated proposal page and in outbound receipt email. Restricting it
+    to http(s) keeps ``javascript:`` and multi-megabyte ``data:`` payloads out of
+    both sinks. Mirrors ``email_layout._safe_url``, which already refuses
+    non-HTTP schemes at the email boundary.
+    """
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return None
+    return cleaned if cleaned.lower().startswith(("http://", "https://")) else None
+
 
 # Sensible brand defaults so the proposal page looks intentional before the
 # operator customizes anything (dark slate primary, blue accent).
@@ -53,6 +69,18 @@ class ProposalTemplateSettings(BaseModel):
     # Small print at the bottom of every proposal (license #, thank-you, etc.).
     footer: str | None = None
 
+    @field_validator("logo_url", mode="after")
+    @classmethod
+    def _drop_non_http_logo(cls, value: str | None) -> str | None:
+        """Drop a non-http(s) logo on read instead of serving it.
+
+        Rows written before ``ProposalTemplateUpdate`` validated the scheme are
+        already in the database, so the read path fails closed too rather than
+        relying on a backfill. Read stays lenient: a bad value becomes ``None``
+        (no logo) instead of raising and 500-ing every proposal render.
+        """
+        return _http_url_or_none(value)
+
 
 class ProposalTemplateUpdate(BaseModel):
     """Partial update of the proposal template (merged into the settings blob).
@@ -64,6 +92,18 @@ class ProposalTemplateUpdate(BaseModel):
 
     business_name: str | None = Field(default=None, max_length=200)
     logo_url: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("logo_url", mode="after")
+    @classmethod
+    def _require_http_logo(cls, value: str | None) -> str | None:
+        """Reject a logo URL that is not http(s) at the write boundary."""
+        if value is None:
+            return None
+        validated = _http_url_or_none(value)
+        if validated is None:
+            raise ValueError("logo_url must be an http(s) URL")
+        return validated
+
     brand_color: str | None = Field(default=None, pattern=_HEX_COLOR)
     accent_color: str | None = Field(default=None, pattern=_HEX_COLOR)
     business_address: str | None = Field(default=None, max_length=500)

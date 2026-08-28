@@ -21,6 +21,7 @@ from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
+from app.models.quote import Quote
 from app.models.workspace import Workspace
 from app.schemas.proposal import PublicProposal, PublicProposalLineItem
 from app.schemas.quote import QuoteCreate, QuoteLineItemCreate
@@ -235,6 +236,56 @@ async def test_public_approve_flips_status_and_is_idempotent(
         proposal = await svc.get_public_proposal(token)
         assert proposal.status == "approved"
         assert proposal.is_decided is True
+
+
+async def test_acceptance_receipt_carries_brand_logo_and_accepted_warranty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The receipt must show the workspace logo and the bought package's warranty.
+
+    ``send_quote_acceptance_receipt`` has always accepted ``logo_url``, but the
+    caller never passed it, so every receipt went out unbranded. Pin both here:
+    a silently-dropped keyword is invisible in a green suite otherwise.
+    """
+    receipt = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "app.services.quotes.quote_service.send_quote_acceptance_receipt",
+        receipt,
+    )
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(
+            db,
+            settings={
+                "proposal_template": {
+                    "business_name": "Maxteriors Lighting",
+                    "logo_url": "https://cdn.example.com/logo.png",
+                    "business_email": "hello@maxteriors.example",
+                }
+            },
+        )
+        contact = await _make_contact(db, ws.id)
+        svc = QuoteService(db)
+        token, quote_id = await _sent_quote(svc, ws.id, contact.id)
+
+        quote = await db.get(Quote, quote_id)
+        assert quote is not None
+        quote.proposal_document = {
+            "selected_tier": "better",
+            "tiers": [
+                {"key": "good", "warranty": "Essential system package"},
+                {"key": "better", "warranty": "Premium system package"},
+            ],
+        }
+        await db.commit()
+
+        await svc.approve_public(token, proposal_version=1)
+
+        kwargs = receipt.await_args.kwargs
+        assert kwargs["logo_url"] == "https://cdn.example.com/logo.png"
+        # The warranty of the tier they bought, not the first or cheapest one.
+        assert kwargs["warranty"] == "Premium system package"
+        assert kwargs["business_name"] == "Maxteriors Lighting"
+        assert kwargs["support_email"] == "hello@maxteriors.example"
 
 
 async def test_public_decline_records_reason() -> None:

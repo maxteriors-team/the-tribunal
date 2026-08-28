@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Manrope } from "next/font/google";
+import { Golos_Text } from "next/font/google";
 
 import { Spotlight } from "@/components/effects/spotlight";
 import { PRODUCT_BRAND } from "@/lib/brand";
@@ -8,14 +8,13 @@ import "./globals.css";
 
 import EZPixelClient from "../../ez-pixel.client";
 
-const inter = Inter({
-  variable: "--font-inter",
+// Golos Text is the Maxteriors brand face: maxteriorslighting.com loads it at
+// weights 400–900 and uses nothing else. One variable family now covers both
+// body and headings, so the app ships a single font instead of Inter + Manrope.
+const golos = Golos_Text({
+  variable: "--font-golos",
   subsets: ["latin"],
-});
-
-const manrope = Manrope({
-  variable: "--font-manrope",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -45,7 +44,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${manrope.variable} font-sans antialiased relative min-h-screen`}
+        className={`${golos.variable} font-sans antialiased relative min-h-screen`}
       >
         <EZPixelClient />
 

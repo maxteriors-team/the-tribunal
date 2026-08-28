@@ -34,6 +34,7 @@ import {
 } from "./document";
 import { FinancingEstimate, financingFromSnapshot } from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
+import { proposalAccentVars } from "./proposal-brand";
 import { proposalFontVars } from "./proposal-fonts";
 import {
   StandardExperience,
@@ -222,7 +223,10 @@ export function ClientProposalView({
         : "Approve Proposal";
 
   return (
-    <div className={`proposal-view${festive ? " is-christmas" : ""} ${proposalFontVars}`}>
+    <div
+      className={`proposal-view${festive ? " is-christmas" : ""} ${proposalFontVars}`}
+      style={proposalAccentVars(branding.brand_color)}
+    >
       <div className="present-nav no-print">
         <div className="present-nav-brand">{`${brandName} · Proposal ${data.number}`}</div>
         <div className="present-nav-actions">

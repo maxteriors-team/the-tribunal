@@ -147,3 +147,27 @@ describe("plain quote on-site payment", () => {
     expect(screen.getByRole("button", { name: /Approve & Pay Now/ })).toBeVisible();
   });
 });
+
+describe("plain quote branding", () => {
+  it("renders the workspace logo, since this page is the receipt of record", () => {
+    renderQuote({
+      branding: {
+        business_name: "Maxteriors",
+        brand_color: "#d4af5a",
+        accent_color: "#d4af5a",
+        logo_url: "https://api.example.com/static/brand/maxteriors-logo.png",
+      },
+    });
+
+    expect(screen.getByRole("img", { name: "Maxteriors" })).toHaveAttribute(
+      "src",
+      "https://api.example.com/static/brand/maxteriors-logo.png",
+    );
+  });
+
+  it("renders no logo image when the workspace has not set one", () => {
+    renderQuote();
+
+    expect(screen.queryByRole("img", { name: "Maxteriors" })).toBeNull();
+  });
+});

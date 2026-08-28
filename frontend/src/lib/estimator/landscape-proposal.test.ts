@@ -288,4 +288,25 @@ describe("landscape proposal pricing payload", () => {
       night_preview: null,
     });
   });
+
+  it("charges the rep's deposit percentage, and none when it is cleared to zero", () => {
+    const base = {
+      pricing: PRICING,
+      catalog: CATALOG,
+      fixtureCounts: { uplight: 4 },
+      transformerCount: 0,
+      wireRuns: WIRES,
+      selectedTierKey: "good",
+      selectedCarePlanKey: null,
+    };
+
+    // An explicit percentage is what the client is asked to pay today.
+    expect(buildLandscapeProposalPayload({ ...base, depositPercent: 50 }).deposit).toEqual({
+      mode: "percentage",
+      value: 50,
+    });
+    // Clearing it to zero is a deliberate "no deposit", not a fallback to the
+    // workspace default — otherwise the rep could never send a $0-down proposal.
+    expect(buildLandscapeProposalPayload({ ...base, depositPercent: null }).deposit).toBeNull();
+  });
 });

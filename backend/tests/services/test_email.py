@@ -292,7 +292,11 @@ async def test_quote_acceptance_receipt_is_transactional_and_itemized(
     assert "Dana &lt;Homeowner&gt;" in params["html"]
     assert "USD 4,242.50" in params["html"]
     assert "USD 2,121.25 (due)" in params["html"]
-    assert "View accepted proposal" in params["html"]
+    # The receipt links to the proposal page rather than attaching a PDF, so the
+    # label has to name the download and the URL has to survive rendering.
+    assert "View receipt &amp; save as PDF" in params["html"]
+    assert "https://app.example/p/quotes/token" in params["html"]
+    assert "Save as PDF" in params["text"]
     assert "unsubscribe" not in params["html"].lower()
     assert call.args[1] == {"idempotency_key": str(key)}
 
