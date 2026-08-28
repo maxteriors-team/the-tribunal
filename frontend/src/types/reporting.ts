@@ -22,6 +22,13 @@ export type AttributionGapReport = Schemas["AttributionGapReport"];
  */
 export type SalesPerformanceBreakdownRow = Schemas["SalesPerformanceBreakdownRow"];
 
+/**
+ * A closer's slice, plus the same metrics split across that rep's own service
+ * lines. Structurally a breakdown row, so the shared table renders it unchanged
+ * and only the expandable variant reads `by_service`.
+ */
+export type SalesPerformanceCloserRow = Schemas["SalesPerformanceCloserRow"];
+
 export interface ARAgingBucket {
   label: string;
   amount: number;

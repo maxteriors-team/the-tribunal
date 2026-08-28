@@ -49841,6 +49841,95 @@
         "title": "SalesPerformanceBreakdownRow",
         "type": "object"
       },
+      "SalesPerformanceCloserRow": {
+        "description": "One rep's totals, plus the same metrics split across their service lines.\n\nThe drill-down is nested rather than returned as a second flat list keyed by\n``(closer, service)``: the pairing is what makes it readable (\"Dana closes\ngutters at 60% but lighting at 12%\"), and a flat list forces every client to\nre-group it. Sub-rows are ranked by approved revenue like every other\nbreakdown, and their ``quotes_issued`` sums to the parent's, so a rep's\nservices always account for all of their quoted volume.",
+        "properties": {
+          "attach_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Share (0..1) of approved quotes carrying at least one attached service, or null with no approvals",
+            "title": "Attach Rate"
+          },
+          "avg_job_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean approved quote total, or null with no approvals",
+            "title": "Avg Job Value"
+          },
+          "by_service": {
+            "description": "This rep's performance split by the dominant service line of each quote; the uncategorized bucket carries a null key",
+            "items": {
+              "$ref": "#/components/schemas/SalesPerformanceBreakdownRow"
+            },
+            "title": "By Service",
+            "type": "array"
+          },
+          "close_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "approved / (approved + declined + expired) as a 0..1 ratio, or null when nothing in this group was decided",
+            "title": "Close Rate"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable group identifier (user id, lead-source type, or service category); null for the unassigned/unattributed/uncategorized bucket",
+            "title": "Key"
+          },
+          "label": {
+            "description": "Human-readable group name",
+            "title": "Label",
+            "type": "string"
+          },
+          "quotes_approved": {
+            "description": "Quotes in this group the customer approved",
+            "title": "Quotes Approved",
+            "type": "integer"
+          },
+          "quotes_issued": {
+            "description": "Quotes in this group that left draft",
+            "title": "Quotes Issued",
+            "type": "integer"
+          },
+          "revenue_approved": {
+            "description": "Summed total of this group's approved quotes",
+            "title": "Revenue Approved",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "quotes_issued",
+          "quotes_approved",
+          "revenue_approved"
+        ],
+        "title": "SalesPerformanceCloserRow",
+        "type": "object"
+      },
       "SalesPerformanceReport": {
         "description": "Sales performance over a quote cohort.\n\nQuotes are cohorted by creation date inside the inclusive window, so a quote\nand the decision it later earned are reported together. Drafts never count\n(they never reached a customer) and still-``sent`` quotes are undecided, so\nthey are excluded from the close-rate denominator rather than counted as\nlosses. Every rate is null instead of zero when its denominator is empty.",
         "properties": {
@@ -49924,9 +50013,9 @@
             "type": "number"
           },
           "by_closer": {
-            "description": "Performance grouped by the user who created the quote",
+            "description": "Performance grouped by the user who created the quote, each row carrying its own per-service drill-down",
             "items": {
-              "$ref": "#/components/schemas/SalesPerformanceBreakdownRow"
+              "$ref": "#/components/schemas/SalesPerformanceCloserRow"
             },
             "title": "By Closer",
             "type": "array"

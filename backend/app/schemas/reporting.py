@@ -122,6 +122,26 @@ class SalesPerformanceBreakdownRow(BaseModel):
     )
 
 
+class SalesPerformanceCloserRow(SalesPerformanceBreakdownRow):
+    """One rep's totals, plus the same metrics split across their service lines.
+
+    The drill-down is nested rather than returned as a second flat list keyed by
+    ``(closer, service)``: the pairing is what makes it readable ("Dana closes
+    gutters at 60% but lighting at 12%"), and a flat list forces every client to
+    re-group it. Sub-rows are ranked by approved revenue like every other
+    breakdown, and their ``quotes_issued`` sums to the parent's, so a rep's
+    services always account for all of their quoted volume.
+    """
+
+    by_service: list[SalesPerformanceBreakdownRow] = Field(
+        default_factory=list,
+        description=(
+            "This rep's performance split by the dominant service line of each "
+            "quote; the uncategorized bucket carries a null key"
+        ),
+    )
+
+
 class SalesPerformanceReport(BaseModel):
     """Sales performance over a quote cohort.
 
@@ -226,8 +246,12 @@ class SalesPerformanceReport(BaseModel):
             "unmarked appointment is unknown attendance, not an absence."
         ),
     )
-    by_closer: list[SalesPerformanceBreakdownRow] = Field(
-        ..., description="Performance grouped by the user who created the quote"
+    by_closer: list[SalesPerformanceCloserRow] = Field(
+        ...,
+        description=(
+            "Performance grouped by the user who created the quote, each row "
+            "carrying its own per-service drill-down"
+        ),
     )
     by_lead_source: list[SalesPerformanceBreakdownRow] = Field(
         ...,

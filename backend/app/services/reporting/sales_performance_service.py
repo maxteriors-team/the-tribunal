@@ -53,7 +53,11 @@ from app.models.lead_source import LeadSource, LeadSourceType
 from app.models.opportunity import Opportunity
 from app.models.quote import Quote
 from app.models.user import User
-from app.schemas.reporting import SalesPerformanceBreakdownRow, SalesPerformanceReport
+from app.schemas.reporting import (
+    SalesPerformanceBreakdownRow,
+    SalesPerformanceCloserRow,
+    SalesPerformanceReport,
+)
 from app.services.quotes.quote_expiry import effective_status
 from app.services.reporting.booked_revenue import get_booked_revenue_totals
 from app.services.reporting.reporting_service import _require_single_currency
@@ -246,23 +250,53 @@ def _row(key: str | None, label: str, facts: Sequence[QuoteFact]) -> SalesPerfor
     )
 
 
-def _breakdown(
+def _group(
     facts: Sequence[QuoteFact],
     identity: Callable[[QuoteFact], tuple[str | None, str]],
-) -> list[SalesPerformanceBreakdownRow]:
-    """Group ``facts`` by ``identity`` and rank the resulting rows.
-
-    Ordered by approved revenue, then issued volume, then label — deterministic
-    even when several groups tie at zero.
-    """
+) -> dict[str | None, tuple[str, list[QuoteFact]]]:
+    """Bucket ``facts`` by ``identity``, preserving each group's label."""
     groups: dict[str | None, tuple[str, list[QuoteFact]]] = {}
     for fact in facts:
         key, label = identity(fact)
         groups.setdefault(key, (label, []))[1].append(fact)
+    return groups
 
-    rows = [_row(key, label, group) for key, (label, group) in groups.items()]
+
+def _rank[RowT: SalesPerformanceBreakdownRow](rows: list[RowT]) -> list[RowT]:
+    """Order rows by approved revenue, then issued volume, then label.
+
+    Deterministic even when several groups tie at zero, so a report reloaded
+    with no new sales does not reshuffle under the reader.
+    """
     rows.sort(key=lambda row: (-row.revenue_approved, -row.quotes_issued, row.label))
     return rows
+
+
+def _breakdown(
+    facts: Sequence[QuoteFact],
+    identity: Callable[[QuoteFact], tuple[str | None, str]],
+) -> list[SalesPerformanceBreakdownRow]:
+    """Group ``facts`` by ``identity`` and rank the resulting rows."""
+    return _rank(
+        [_row(key, label, group) for key, (label, group) in _group(facts, identity).items()]
+    )
+
+
+def _closer_breakdown(facts: Sequence[QuoteFact]) -> list[SalesPerformanceCloserRow]:
+    """Per-rep rows, each carrying that rep's own per-service split.
+
+    The sub-rows are computed from the rep's own quotes, so every rate in a
+    drill-down has the same meaning as the parent's — just a narrower cohort.
+    """
+    return _rank(
+        [
+            SalesPerformanceCloserRow(
+                **_row(key, label, group).model_dump(),
+                by_service=_breakdown(group, _service_identity),
+            )
+            for key, (label, group) in _group(facts, _closer_identity).items()
+        ]
+    )
 
 
 def _closer_identity(fact: QuoteFact) -> tuple[str | None, str]:
@@ -343,7 +377,7 @@ def assemble_sales_performance(
         appointments_no_show=appointments.no_show,
         jobs_completed=jobs_completed,
         show_up_rate=show_up_rate(appointments),
-        by_closer=_breakdown(issued, _closer_identity),
+        by_closer=_closer_breakdown(issued),
         by_lead_source=_breakdown(issued, _lead_source_identity),
         by_primary_service=_breakdown(issued, _service_identity),
     )

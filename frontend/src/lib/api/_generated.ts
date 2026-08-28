@@ -30124,6 +30124,64 @@ export interface components {
             revenue_approved: number;
         };
         /**
+         * SalesPerformanceCloserRow
+         * @description One rep's totals, plus the same metrics split across their service lines.
+         *
+         *     The drill-down is nested rather than returned as a second flat list keyed by
+         *     ``(closer, service)``: the pairing is what makes it readable ("Dana closes
+         *     gutters at 60% but lighting at 12%"), and a flat list forces every client to
+         *     re-group it. Sub-rows are ranked by approved revenue like every other
+         *     breakdown, and their ``quotes_issued`` sums to the parent's, so a rep's
+         *     services always account for all of their quoted volume.
+         */
+        SalesPerformanceCloserRow: {
+            /**
+             * Attach Rate
+             * @description Share (0..1) of approved quotes carrying at least one attached service, or null with no approvals
+             */
+            attach_rate?: number | null;
+            /**
+             * Avg Job Value
+             * @description Mean approved quote total, or null with no approvals
+             */
+            avg_job_value?: number | null;
+            /**
+             * By Service
+             * @description This rep's performance split by the dominant service line of each quote; the uncategorized bucket carries a null key
+             */
+            by_service?: components["schemas"]["SalesPerformanceBreakdownRow"][];
+            /**
+             * Close Rate
+             * @description approved / (approved + declined + expired) as a 0..1 ratio, or null when nothing in this group was decided
+             */
+            close_rate?: number | null;
+            /**
+             * Key
+             * @description Stable group identifier (user id, lead-source type, or service category); null for the unassigned/unattributed/uncategorized bucket
+             */
+            key?: string | null;
+            /**
+             * Label
+             * @description Human-readable group name
+             */
+            label: string;
+            /**
+             * Quotes Approved
+             * @description Quotes in this group the customer approved
+             */
+            quotes_approved: number;
+            /**
+             * Quotes Issued
+             * @description Quotes in this group that left draft
+             */
+            quotes_issued: number;
+            /**
+             * Revenue Approved
+             * @description Summed total of this group's approved quotes
+             */
+            revenue_approved: number;
+        };
+        /**
          * SalesPerformanceReport
          * @description Sales performance over a quote cohort.
          *
@@ -30184,9 +30242,9 @@ export interface components {
             booked_revenue: number;
             /**
              * By Closer
-             * @description Performance grouped by the user who created the quote
+             * @description Performance grouped by the user who created the quote, each row carrying its own per-service drill-down
              */
-            by_closer: components["schemas"]["SalesPerformanceBreakdownRow"][];
+            by_closer: components["schemas"]["SalesPerformanceCloserRow"][];
             /**
              * By Lead Source
              * @description Performance grouped by the acquisition channel attributed to the quote's opportunity
