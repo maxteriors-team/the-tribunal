@@ -190,6 +190,62 @@ class ProposalMockup(BaseModel):
     caption: str | None = Field(default=None, max_length=160)
 
 
+def _clean_text(value: str | None) -> str | None:
+    """Trim operator free text, treating a whitespace-only entry as absent."""
+    cleaned = (value or "").strip()
+    return cleaned or None
+
+
+class ProposalNarrative(BaseModel):
+    """Operator-authored project terms shown to the client.
+
+    These are the fields the quote builder collects under "Design narrative":
+    what the lighting is meant to do, who supplies line-voltage work, and any
+    workmanship commitments. They were rendered as inputs but bound to nothing,
+    so a rep could type them, save, and have them silently discarded.
+
+    All values are plain operator free text and are escaped at render time; the
+    length caps bound the snapshot row rather than validating meaning.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    design_intent: str | None = Field(default=None, max_length=2000)
+    electrical_responsibility: str | None = Field(default=None, max_length=500)
+    commitments: str | None = Field(default=None, max_length=2000)
+    # The signatory the rep recorded. This is *not* proof the client signed:
+    # consent of record is the client's own approve action on the public page,
+    # which is timestamped server-side. Rendered as "prepared for", never as a
+    # completed signature, so the page cannot assert consent nobody gave.
+    signature_name: str | None = Field(default=None, max_length=120)
+    signature_date: str | None = Field(default=None, max_length=40)
+
+    @field_validator(
+        "design_intent",
+        "electrical_responsibility",
+        "commitments",
+        "signature_name",
+        "signature_date",
+        mode="after",
+    )
+    @classmethod
+    def _blank_is_absent(cls, value: str | None) -> str | None:
+        return _clean_text(value)
+
+    @property
+    def is_empty(self) -> bool:
+        """True when nothing was filled in, so callers can store ``None``."""
+        return not any(
+            (
+                self.design_intent,
+                self.electrical_responsibility,
+                self.commitments,
+                self.signature_name,
+                self.signature_date,
+            )
+        )
+
+
 # One composited photo may not exceed this many characters of base64. Same cap
 # as a rep-uploaded mockup: both are inline data URLs in the same snapshot row.
 MAX_NIGHT_PREVIEW_IMAGE_CHARS = 3_000_000
@@ -285,6 +341,9 @@ class ProposalWizardPayload(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     notes: str | None = None
     terms: str | None = None
+    # Operator-authored project terms (design intent, electrical responsibility,
+    # commitments, recorded signatory) shown on the client proposal page.
+    narrative: ProposalNarrative | None = None
     # Optional upfront deposit; falls back to the workspace default when null.
     deposit: WizardDepositSelection | None = None
     # Set when the rep saw the attach prompt and chose to skip the add-on. Only
@@ -484,6 +543,8 @@ class ProposalDocument(BaseModel):
     inventory_availability: QuoteInventoryAvailability | None = None
     notes: str | None = None
     terms: str | None = None
+    # Operator-authored project terms carried through to the client page.
+    narrative: ProposalNarrative | None = None
     # The cross-sell prompt this selection currently earns, e.g. a roof job with
     # no gutters on it. **Preview-only and never persisted**: the live preview
     # sets it so the builder can prompt the rep while the quote is still being
@@ -530,6 +591,9 @@ CLIENT_SAFE_DOCUMENT_FIELDS: frozenset[str] = frozenset(
         "deposit_amount",
         "notes",
         "terms",
+        # Operator-authored project terms. Safe to show: this is the same copy
+        # the rep is describing to the customer, not internal fulfilment data.
+        "narrative",
     }
 )
 

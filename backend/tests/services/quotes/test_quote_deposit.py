@@ -534,3 +534,54 @@ async def test_reconcile_reports_unpaid_when_stripe_not_paid(monkeypatch) -> Non
         assert status.deposit_paid is False
         refreshed = await db.get(Quote, quote_id)
         assert refreshed.deposit_paid_at is None
+
+
+async def test_accepting_a_quote_produces_a_deposit_payment_intent(monkeypatch) -> None:
+    """Accept must hand off to Stripe, not just flip the quote to approved.
+
+    The client page rolls straight from "Approve & Pay Deposit" into checkout on
+    the strength of ``deposit_required``. If accept reported no deposit, or the
+    checkout it triggers did not persist a payment intent, the operator would
+    see an approved quote with no money attached and no way to reconcile it.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        svc = QuoteService(db)
+        token, quote_id = await _sent_quote_with_deposit(svc, ws.id, contact.id)
+
+        approved = await svc.approve_public(token, proposal_version=None)
+
+        # Accept alone collects nothing; it tells the page money is owed.
+        assert approved.status == "approved"
+        assert approved.deposit_required is True
+        assert approved.deposit_amount == 321.0
+
+        monkeypatch.setattr(deposit.call_payment_service, "is_payment_configured", lambda: True)
+
+        async def _fake_session(**kwargs):
+            # An approved quote is still chargeable, and for the accepted total.
+            assert kwargs["amount"] == 321.0
+            assert kwargs["metadata"]["quote_id"] == str(quote_id)
+            return CheckoutSessionResult(
+                session_id="cs_accept_1",
+                url="https://checkout.stripe.test/pay/cs_accept_1",
+                payment_intent_id="pi_accept_1",
+            )
+
+        monkeypatch.setattr(
+            deposit.call_payment_service, "create_payment_checkout_session", _fake_session
+        )
+
+        checkout = await deposit.create_deposit_checkout_session(db, token)
+
+        assert checkout.url == "https://checkout.stripe.test/pay/cs_accept_1"
+        assert checkout.amount == 321.0
+
+        refreshed = await db.get(Quote, quote_id)
+        assert refreshed is not None
+        # The payment intent is what reconciles the money back to this quote.
+        assert refreshed.deposit_payment_intent_id == "pi_accept_1"
+        assert refreshed.deposit_checkout_session_id == "cs_accept_1"
+        # Still unpaid until Stripe confirms; accept must not fake a payment.
+        assert refreshed.deposit_paid_at is None

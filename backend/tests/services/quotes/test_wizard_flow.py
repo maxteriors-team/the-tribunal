@@ -996,6 +996,78 @@ async def test_landscape_wizard_snapshots_visual_workspace_deposit_and_link() ->
         assert no_deposit.deposit_required is False
 
 
+async def test_landscape_quote_defaults_the_installation_sheet_when_unset() -> None:
+    """A project with a drawn design must be quotable without picking a sheet.
+
+    ``installation_shot_id`` is set by a small secondary button that nobody
+    found: every lighting project in production had it unset, so quote creation
+    raised and no landscape deposit could ever be collected. The server now
+    defaults it to the first sheet that carries a design.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_lighting_workspace(db)
+        svc = QuoteService(db)
+        contact = Contact(
+            workspace_id=ws.id,
+            first_name="Dana",
+            phone_number="+15550001111",
+            phone_hash="wizard-default-sheet",
+        )
+        db.add(contact)
+        await db.flush()
+
+        def _shot(shot_id: str, runs: list[dict[str, object]]) -> dict[str, object]:
+            return {
+                "id": shot_id,
+                "photo": {
+                    "dataUrl": "data:image/png;base64,AAAA",
+                    "width": 1200,
+                    "height": 800,
+                },
+                "design": {
+                    "calibration": None,
+                    "runs": runs,
+                    "items": [],
+                    "planImages": [],
+                },
+                "dusk": 0.35,
+            }
+
+        run = {
+            "id": "run-1",
+            "productId": "uplight",
+            "points": [{"x": 0.1, "y": 0.2}, {"x": 0.3, "y": 0.4}],
+        }
+        project = LightingProject(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            name="Backyard",
+            # First sheet is a blank capture; the design lives on the second.
+            document={
+                "version": 2,
+                "activeShotId": "blank",
+                "shots": [_shot("blank", []), _shot("designed", [run])],
+                "updatedAt": "2026-08-28T00:00:00Z",
+            },
+            version=1,
+            installation_shot_id=None,
+        )
+        db.add(project)
+        await db.flush()
+
+        payload = _payload()
+        payload.contact_id = contact.id
+        payload.categories = ["landscape"]
+        payload.bistro = None
+        payload.lighting_project_id = project.id
+
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+
+        # The sheet that actually carries a design, not merely the first one.
+        assert project.installation_shot_id == "designed"
+        assert saved.lighting_project_id == project.id
+
+
 async def test_wizard_links_contact_and_converts_to_scheduled_job() -> None:
     """A wizard quote with client phone details resolves/creates a contact so an
     approved quote can convert into a job (which needs a contact)."""

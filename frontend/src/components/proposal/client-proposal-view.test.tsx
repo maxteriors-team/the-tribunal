@@ -666,3 +666,59 @@ describe("ClientProposalView — seasonal Christmas", () => {
     expect(screen.getByText("Christmas Lighting")).toBeInTheDocument();
   });
 });
+
+describe("operator-authored project terms", () => {
+  const NARRATIVE = {
+    design_intent: "Warm arrival lighting with focal uplights on the oaks.",
+    electrical_responsibility: "Client supplies the 120V GFCI outlet.",
+    commitments: "Five-year workmanship warranty on all fixtures.",
+    signature_name: "Raymond Fair",
+    signature_date: "2026-08-28",
+  };
+
+  /** Render the client page with a narrative on the stored snapshot. */
+  const withNarrative = (narrative: Partial<typeof NARRATIVE> | null) =>
+    renderView({
+      proposal_document: { ...DOCUMENT, narrative } as unknown as Record<string, unknown>,
+    });
+
+  it("renders every persisted narrative field the rep filled in", () => {
+    // These four inputs were bound to nothing in the quote builder: a rep could
+    // type them, save, and have them silently discarded before reaching here.
+    withNarrative(NARRATIVE);
+
+    expect(screen.getByText("Design intent")).toBeVisible();
+    expect(screen.getByText(NARRATIVE.design_intent)).toBeVisible();
+    expect(screen.getByText("Electrical responsibility")).toBeVisible();
+    expect(screen.getByText(NARRATIVE.electrical_responsibility)).toBeVisible();
+    expect(screen.getByText("Our commitments")).toBeVisible();
+    expect(screen.getByText(NARRATIVE.commitments)).toBeVisible();
+  });
+
+  it("labels a recorded signatory as prepared-for, never as signed", () => {
+    // The name is something the rep typed, not consent the client gave. The
+    // binding acceptance is the approve action, which the server timestamps.
+    withNarrative(NARRATIVE);
+
+    expect(screen.getByText("Prepared for signature")).toBeVisible();
+    expect(screen.getByText(/Raymond Fair · 2026-08-28/)).toBeVisible();
+    expect(screen.queryByText(/signed by/i)).toBeNull();
+  });
+
+  it("omits each section the rep left blank instead of rendering an empty heading", () => {
+    withNarrative({ design_intent: NARRATIVE.design_intent });
+
+    expect(screen.getByText("Design intent")).toBeVisible();
+    expect(screen.queryByText("Electrical responsibility")).toBeNull();
+    expect(screen.queryByText("Our commitments")).toBeNull();
+    expect(screen.queryByText("Prepared for signature")).toBeNull();
+  });
+
+  it("renders no narrative sections at all for a snapshot without one", () => {
+    withNarrative(null);
+
+    expect(screen.queryByText("Design intent")).toBeNull();
+    expect(screen.queryByText("Our commitments")).toBeNull();
+    expect(screen.queryByText("Prepared for signature")).toBeNull();
+  });
+});
