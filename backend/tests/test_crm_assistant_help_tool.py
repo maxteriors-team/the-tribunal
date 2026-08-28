@@ -26,7 +26,7 @@ from app.services.knowledge.product_help import ProductHelpError
 
 @pytest.fixture
 def tools() -> HelpAssistantTools:
-    context = CRMToolContext(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=1)
+    context = CRMToolContext(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=1, role="owner")
     return HelpAssistantTools(context)
 
 
@@ -41,7 +41,7 @@ class TestRegistration:
 
     @pytest.mark.asyncio
     async def test_executor_dispatches_the_tool(self) -> None:
-        executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=1)
+        executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=1, role="owner")
 
         assert "search_help" in executor.handlers
 

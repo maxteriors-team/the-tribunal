@@ -125,7 +125,7 @@ async def test_list_automations_returns_summaries(
 ) -> None:
     automation = _make_automation(workspace_id=workspace_id)
     db.execute.return_value = _ExecuteResult([automation])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("list_automations", {"active_only": True})
 
@@ -157,7 +157,7 @@ async def test_create_automation_queues_pending_approval_when_not_confirmed(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
     payload = {
         "name": "Missed call textback",
         "trigger_type": "missed_call",
@@ -199,7 +199,7 @@ async def test_approved_create_automation_pending_action_creates_row(
             "actions": [{"type": "send_sms", "config": {"message": "Sorry we missed you!"}}],
         },
         description="Create automation Missed call textback",
-        context={"source": "crm_assistant", "user_id": 7},
+        context={"source": "crm_assistant", "user_id": 7, "role": "owner"},
         status="approved",
     )
     service = ApprovalGateService()
@@ -220,7 +220,7 @@ async def test_create_automation_rejects_invalid_trigger(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "create_automation",
@@ -242,7 +242,7 @@ async def test_create_automation_requires_actions(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "create_automation",
@@ -261,7 +261,7 @@ async def test_enable_automation_not_found(
     workspace_id: uuid.UUID,
 ) -> None:
     db.execute.return_value = _ExecuteResult([])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "enable_automation",
@@ -281,7 +281,7 @@ async def test_enable_automation_rejects_invalid_id(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "enable_automation",
@@ -301,7 +301,7 @@ async def test_enable_automation_activates_when_confirmed(
 ) -> None:
     automation = _make_automation(workspace_id=workspace_id, is_active=False)
     db.execute.return_value = _ExecuteResult([automation])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "enable_automation",
@@ -319,7 +319,7 @@ async def test_disable_automation_sets_inactive_without_confirmation(
 ) -> None:
     automation = _make_automation(workspace_id=workspace_id, is_active=True)
     db.execute.return_value = _ExecuteResult([automation])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "disable_automation",
@@ -362,7 +362,7 @@ async def test_get_automation_returns_full_workspace_scoped_configuration(
 ) -> None:
     automation = _make_automation(workspace_id=workspace_id)
     db.execute.return_value = _ExecuteResult([automation])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("get_automation", {"automation_id": str(automation.id)})
 
@@ -380,7 +380,7 @@ async def test_update_automation_replaces_wait_with_complete_action_list(
 ) -> None:
     automation = _make_automation(workspace_id=workspace_id, is_active=False)
     db.execute.return_value = _ExecuteResult([automation])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
     actions = [
         {"type": "send_sms", "config": {"message": "Thanks {first_name}!"}},
         {"type": "wait", "config": {"hours": 24}},
@@ -404,7 +404,7 @@ async def test_update_automation_rejects_empty_actions(
 ) -> None:
     automation = _make_automation(workspace_id=workspace_id)
     db.execute.return_value = _ExecuteResult([automation])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "update_automation",
@@ -423,7 +423,7 @@ async def test_update_automation_without_changes_is_actionable(
 ) -> None:
     automation = _make_automation(workspace_id=workspace_id)
     db.execute.return_value = _ExecuteResult([automation])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "update_automation",
@@ -441,7 +441,7 @@ async def test_delete_automation_removes_workspace_scoped_row_after_approval(
 ) -> None:
     automation = _make_automation(workspace_id=workspace_id)
     db.execute.return_value = _ExecuteResult([automation])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "delete_automation",

@@ -7,9 +7,11 @@ Mirrors the prompt-hint style in ezcoder's tools/prompt-hints.ts.
 from copy import deepcopy
 from typing import Any
 
+from app.core.permissions import role_can
 from app.models.campaign import CampaignContactStatus, CampaignStatus, CampaignType
 from app.schemas.automation import AUTOMATION_ACTION_TYPES, AUTOMATION_TRIGGER_TYPES
 from app.schemas.offer import DiscountType, GuaranteeType, UrgencyType
+from app.services.ai.crm_assistant._tool_metadata import tool_capability
 
 # ── Closed value sets ────────────────────────────────────────────────
 # These used to live only in prose descriptions, so the model guessed. The
@@ -1378,5 +1380,24 @@ CRM_TOOLS: list[dict[str, Any]] = [
 
 
 def get_crm_tools() -> list[dict[str, Any]]:
-    """Return the CRM tool definitions for OpenAI function calling."""
+    """Return the full CRM tool catalog for OpenAI function calling.
+
+    This is the unfiltered catalog. Anything that actually talks to a model on
+    behalf of a user must call :func:`tools_for_role` instead.
+    """
     return _apply_tool_policy_metadata(CRM_TOOLS)
+
+
+def tools_for_role(role: str) -> list[dict[str, Any]]:
+    """Return only the tool definitions ``role`` is allowed to run.
+
+    Withholding a schema keeps the model from proposing an action the caller
+    cannot take, which is a UX and token win rather than a control: the binding
+    check is in :meth:`CRMToolExecutor.execute`, which re-tests the same
+    capability on every call. A field technician gets an empty list.
+    """
+    return [
+        tool
+        for tool in get_crm_tools()
+        if role_can(role, tool_capability(tool["function"]["name"]))
+    ]

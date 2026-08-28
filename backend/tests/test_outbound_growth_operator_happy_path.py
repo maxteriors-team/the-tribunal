@@ -148,7 +148,7 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
             _ExecuteResult([len(contacts)]),
         ]
     )
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     draft_result = await executor.execute(
         "plan_outbound_growth_workflow",

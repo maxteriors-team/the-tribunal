@@ -111,7 +111,7 @@ def test_executor_registers_every_declared_crm_tool(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
     declared_tools = {tool["function"]["name"] for tool in get_crm_tools()}
 
     assert declared_tools.issubset(executor.handlers.keys())
@@ -123,7 +123,7 @@ async def test_search_contacts_returns_contact_summaries(
 ) -> None:
     contact = _make_contact(workspace_id)
     db.execute.return_value = _ExecuteResult([contact])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("search_contacts", {"query": "Ava", "limit": 5})
 
@@ -166,7 +166,7 @@ async def test_create_contact_creates_workspace_contact(
     workspace_id: uuid.UUID,
 ) -> None:
     db.execute.return_value = _ExecuteResult([])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "create_contact",
@@ -206,7 +206,7 @@ async def test_list_appointments_returns_upcoming_summaries(
         notes="Discovery call",
     )
     db.execute.return_value = _ExecuteResult([appointment])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("list_appointments", {"limit": 3})
 
@@ -250,7 +250,7 @@ async def test_list_opportunities_returns_pipeline_summaries(
         updated_at=datetime(2026, 5, 2, tzinfo=UTC),
     )
     db.execute.return_value = _ExecuteResult([opportunity])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("list_opportunities", {"limit": 10})
 
@@ -288,7 +288,7 @@ async def test_confirmed_assign_ai_responder_updates_conversation(
         ai_paused_until=datetime(2026, 5, 3, tzinfo=UTC),
     )
     db.execute.side_effect = [_ExecuteResult([conversation]), _ExecuteResult([agent])]
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "assign_ai_responder",

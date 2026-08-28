@@ -83,7 +83,7 @@ async def test_create_appointment_is_approval_gated(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
     payload = {
         "contact_id": 101,
         "scheduled_at": "2026-09-01T14:00:00+00:00",
@@ -106,7 +106,7 @@ async def test_approved_create_appointment_executes_crud_handler(
 ) -> None:
     appointment = _appointment(workspace_id)
     create = AsyncMock(return_value=appointment)
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     with patch(
         "app.services.ai.crm_assistant._appointment_tools.AppointmentService.create_appointment",
@@ -136,7 +136,7 @@ async def test_get_appointment_is_workspace_scoped(
     workspace_id: uuid.UUID,
 ) -> None:
     db.execute.return_value = _ExecuteResult([_appointment(workspace_id)])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("get_appointment", {"appointment_id": 301})
 
@@ -153,7 +153,7 @@ async def test_approved_update_reschedules_appointment(
 ) -> None:
     updated = _appointment(workspace_id, scheduled_at=datetime(2026, 9, 2, 16, 30, tzinfo=UTC))
     update = AsyncMock(return_value=updated)
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     with patch(
         "app.services.ai.crm_assistant._appointment_tools.AppointmentService.update_appointment",
@@ -177,7 +177,7 @@ async def test_approved_delete_checks_scope_then_deletes(
 ) -> None:
     db.execute.return_value = _ExecuteResult([_appointment(workspace_id)])
     delete = AsyncMock(return_value=None)
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     with patch(
         "app.services.ai.crm_assistant._appointment_tools.AppointmentService.delete_appointment",

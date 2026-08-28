@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.encryption import hash_phone
 from app.core.metrics import observe_sms_sent
+from app.core.roles import WorkspaceRole
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message, MessageChannel
 from app.models.phone_number import PhoneNumber
@@ -156,11 +157,19 @@ async def process_inbound_text_event(
             log.info("detected_operator_sms", user_id=operator_user.id)
             from app.services.ai.crm_assistant import process_assistant_message
 
+            # Texting the assistant from a registered phone is the same
+            # privileged surface as the in-app chat, so it carries the same
+            # role. Resolved from the membership rather than assumed: without
+            # it a field technician with their number on file would reach every
+            # CRM tool by text. Missing membership fails closed to the field
+            # tier, which holds no assistant tool capability.
+            role = await _operator_workspace_role(db, operator_user.id, event.workspace_id)
             await process_assistant_message(
                 db=db,
                 workspace_id=event.workspace_id,
                 user_id=operator_user.id,
                 message=event.body,
+                role=role,
                 response_channel=event.response_channel,
                 sms_from_number=event.to_number,
                 sms_to_number=event.from_number,
@@ -478,6 +487,27 @@ async def _resolve_default_agent_id(
         agent_id=str(default_agent.id),
     )
     return default_agent.id
+
+
+async def _operator_workspace_role(
+    db: AsyncSession,
+    user_id: int,
+    workspace_id: uuid.UUID,
+) -> str:
+    """Return the operator's role in this workspace, or the lowest tier.
+
+    Fail-closed: a user with no membership row resolves to ``technician``, which
+    the capability matrix maps to the field tier and which therefore holds no
+    CRM assistant tool.
+    """
+    result = await db.execute(
+        select(WorkspaceMembership.role).where(
+            WorkspaceMembership.user_id == user_id,
+            WorkspaceMembership.workspace_id == workspace_id,
+        )
+    )
+    role: str | None = result.scalar_one_or_none()
+    return role or WorkspaceRole.TECHNICIAN.value
 
 
 async def check_operator_by_phone(

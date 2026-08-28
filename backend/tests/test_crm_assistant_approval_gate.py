@@ -54,7 +54,7 @@ def db() -> MagicMock:
 
 
 def _executor(db: MagicMock) -> CRMToolExecutor:
-    return CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=7)
+    return CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=7, role="owner")
 
 
 def _payload_for(tool: str) -> dict[str, Any]:

@@ -42,7 +42,7 @@ from app.services.ai.context_observability import (
 from app.services.ai.crm_assistant._context_builder import build_context_message
 from app.services.ai.crm_assistant._summarizer import maybe_summarize
 from app.services.ai.crm_assistant._tool_executor import CRMToolExecutor
-from app.services.ai.crm_assistant._tools import get_crm_tools
+from app.services.ai.crm_assistant._tools import tools_for_role
 from app.services.ai.image_input import build_chat_image_content_part
 from app.services.ai.openai_credentials import create_workspace_openai_client
 
@@ -497,12 +497,12 @@ async def _execute_tool_calls_sequential(
     return results
 
 
-def _api_params(api_messages: list[dict[str, Any]], cache_key: str) -> dict[str, Any]:
+def _api_params(api_messages: list[dict[str, Any]], cache_key: str, role: str) -> dict[str, Any]:
     """Build OpenAI chat completion parameters shared by normal and stream calls."""
     return {
         "model": MODEL,
         "messages": api_messages,
-        "tools": get_crm_tools(),
+        "tools": tools_for_role(role),
         "tool_choice": "auto",
         "temperature": TEMPERATURE,
         "max_completion_tokens": MAX_COMPLETION_TOKENS,
@@ -545,10 +545,16 @@ async def enhance_assistant_prompt(
     db: AsyncSession,
     workspace_id: uuid.UUID,
     prompt: str,
+    role: str,
 ) -> str:
-    """Rewrite a draft for precision while leaving final approval to the operator."""
+    """Rewrite a draft for precision while leaving final approval to the operator.
+
+    ``role`` narrows the advertised tool list to what the caller can actually
+    run, so the rewrite cannot coach an operator toward an action their role is
+    refused for.
+    """
     client = await create_workspace_openai_client(db, workspace_id)
-    available_tools = ", ".join(tool["function"]["name"] for tool in get_crm_tools())
+    available_tools = ", ".join(tool["function"]["name"] for tool in tools_for_role(role))
     enhancement_instructions = f"{ENHANCE_PROMPT_SYSTEM}\n\nAvailable tools: {available_tools}"
     response = await asyncio.wait_for(
         client.chat.completions.create(
@@ -572,9 +578,10 @@ async def _collect_stream_turn(
     client: Any,
     api_messages: list[dict[str, Any]],
     cache_key: str,
+    role: str,
 ) -> AsyncIterator[AssistantStreamEvent]:
     """Stream one OpenAI assistant turn while accumulating text and tool calls."""
-    api_params = {**_api_params(api_messages, cache_key), "stream": True}
+    api_params = {**_api_params(api_messages, cache_key, role), "stream": True}
     stream = await asyncio.wait_for(
         client.chat.completions.create(**api_params),
         timeout=LLM_TIMEOUT_SECONDS,
@@ -627,10 +634,15 @@ async def stream_assistant_message(  # noqa: PLR0912, PLR0915
     workspace_id: uuid.UUID,
     user_id: int,
     message: str,
+    role: str,
     conversation_id: uuid.UUID | None = None,
     image: str | None = None,
 ) -> AsyncIterator[AssistantStreamEvent]:
-    """Process an operator message and yield assistant stream events."""
+    """Process an operator message and yield assistant stream events.
+
+    ``role`` is the caller's workspace role. It selects which tools the model is
+    offered and is re-checked per tool call by :class:`CRMToolExecutor`.
+    """
     log = logger.bind(
         workspace_id=str(workspace_id),
         user_id=user_id,
@@ -654,13 +666,13 @@ async def stream_assistant_message(  # noqa: PLR0912, PLR0915
     _attach_image_to_last_user_message(api_messages, image)
 
     actions_taken: list[dict[str, Any]] = []
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=user_id)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=user_id, role=role)
     final_message: AssistantMessage | None = None
 
     try:
         for _turn_idx in range(MAX_TOOL_TURNS):
             turn_result: AssistantStreamEvent | None = None
-            async for event in _collect_stream_turn(client, api_messages, cache_key):
+            async for event in _collect_stream_turn(client, api_messages, cache_key, role):
                 if event.get("type") == "turn_complete":
                     turn_result = event
                     continue
@@ -799,6 +811,7 @@ async def process_assistant_message(  # noqa: PLR0915
     workspace_id: uuid.UUID,
     user_id: int,
     message: str,
+    role: str,
     conversation_id: uuid.UUID | None = None,
     image: str | None = None,
     response_channel: str = "in_app",
@@ -806,6 +819,11 @@ async def process_assistant_message(  # noqa: PLR0915
     sms_to_number: str | None = None,
 ) -> dict[str, Any]:
     """Process an operator message through the CRM assistant.
+
+    ``role`` is the caller's workspace role, resolved from their membership by
+    the caller (HTTP route or SMS operator lookup) and never from the message
+    text. It selects the tools the model is offered, and every tool call is
+    re-checked against it in :class:`CRMToolExecutor`.
 
     Returns a dict with:
         response: str — final assistant text
@@ -842,13 +860,13 @@ async def process_assistant_message(  # noqa: PLR0915
     _attach_image_to_last_user_message(api_messages, image)
 
     actions_taken: list[dict[str, Any]] = []
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=user_id)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=user_id, role=role)
     final_text: str | None = None
 
     try:
         # ── 4. Tool loop ───────────────────────────────────────────────
         for turn_idx in range(MAX_TOOL_TURNS):
-            api_params = _api_params(api_messages, cache_key)
+            api_params = _api_params(api_messages, cache_key, role)
             response = await asyncio.wait_for(
                 client.chat.completions.create(**api_params),
                 timeout=LLM_TIMEOUT_SECONDS,

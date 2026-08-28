@@ -285,10 +285,12 @@ async def test_inbound_message_operator_routes_to_crm_assistant(
     # Execute order:
     #   1. PhoneNumber lookup
     #   2. _check_operator User SELECT (returns the workspace member)
+    #   3. membership role SELECT (the assistant runs with the texter's role)
     db = _make_db(
         execute_returns=[
             _Result(scalar=phone_record),
             _Result(scalar=operator),
+            _Result(scalar="manager"),
         ]
     )
     _patch_session_local(monkeypatch, db)
@@ -301,6 +303,9 @@ async def test_inbound_message_operator_routes_to_crm_assistant(
     await handlers.handle_inbound_message(sms_inbound, _make_log())
 
     process_assistant.assert_awaited_once()
+    # Texting the assistant is the same privileged surface as the in-app chat,
+    # so it must carry the texter's real role rather than an implied admin one.
+    assert process_assistant.await_args.kwargs["role"] == "manager"
     # Operator path must NOT re-enter the contact AI pipeline.
     _stub_modules["schedule_ai_response"].assert_not_awaited()
 

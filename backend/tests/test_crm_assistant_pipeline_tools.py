@@ -56,7 +56,7 @@ async def test_list_pipeline_stages_returns_pipeline_and_stage_ids_in_order() ->
     db.execute = AsyncMock(
         return_value=_ExecuteResult([(pipeline, new_lead), (pipeline, qualified)])
     )
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("list_pipeline_stages", {})
 
@@ -99,7 +99,7 @@ async def test_list_pipeline_stages_filters_names_and_scopes_workspace() -> None
     workspace_id = uuid.uuid4()
     db = MagicMock()
     db.execute = AsyncMock(return_value=_ExecuteResult([]))
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "list_pipeline_stages",
