@@ -137,9 +137,7 @@ def test_deploy_dir_reports_itself_as_not_ignored(outer_repo: Path) -> None:
     assert from_main.returncode == 0, "main worktree should report the checkout ignored"
 
 
-def test_refuses_to_deploy_from_a_gitignored_worktree(
-    outer_repo: Path, railway_stub: Path
-) -> None:
+def test_refuses_to_deploy_from_a_gitignored_worktree(outer_repo: Path, railway_stub: Path) -> None:
     """The real failure: a deploy that reports success and changes nothing."""
     worktree = outer_repo / ".worktrees" / "wt"
     _git("worktree", "add", "-q", "--detach", str(worktree), "HEAD", cwd=outer_repo)
@@ -190,9 +188,7 @@ def test_clean_checkout_still_reaches_the_upload(outer_repo: Path, railway_stub:
     assert not (outer_repo / "backend" / "app" / "build_info.json").exists()
 
 
-def test_override_allows_a_deliberate_ignored_deploy(
-    outer_repo: Path, railway_stub: Path
-) -> None:
+def test_override_allows_a_deliberate_ignored_deploy(outer_repo: Path, railway_stub: Path) -> None:
     """An escape hatch, because a wrong guard must never be unbypassable."""
     worktree = outer_repo / ".worktrees" / "wt"
     _git("worktree", "add", "-q", "--detach", str(worktree), "HEAD", cwd=outer_repo)
@@ -202,3 +198,40 @@ def test_override_allows_a_deliberate_ignored_deploy(
     assert result.returncode == 0, result.stderr
     assert "DEPLOY_ALLOW_IGNORED=1" in result.stdout
     assert railway_stub.exists(), "override should let the upload proceed"
+
+
+def test_upload_independent_sha_is_published_before_the_upload(
+    outer_repo: Path, railway_stub: Path
+) -> None:
+    """`/version` must be able to name the running commit after a manual deploy.
+
+    The build stamp cannot carry the SHA on its own: `railway up` builds its
+    upload from git's view of the tree, and the stamp is deliberately untracked
+    (a committed stamp would report a *stale* SHA, which is worse than
+    "unknown"), so it never reaches the builder. Every manual deploy therefore
+    reported "unknown" and `make smoke.backend` failed its SHA check.
+
+    `BUILD_COMMIT_SHA` is read from the environment at runtime, so it does not
+    depend on the upload carrying a file.
+    """
+    head = _git("rev-parse", "HEAD", cwd=outer_repo)
+
+    result = _run_deploy(outer_repo, railway_stub)
+
+    assert result.returncode == 0, result.stderr
+    calls = railway_stub.read_text().splitlines()
+
+    variable_calls = [line for line in calls if line.startswith("variables")]
+    assert variable_calls, f"BUILD_COMMIT_SHA was never published: {calls}"
+    published = variable_calls[0]
+    assert f"BUILD_COMMIT_SHA={head}" in published
+
+    # Setting a service variable normally triggers its own deploy, which would
+    # ship the *old* code stamped with the *new* SHA -- a lie in the one place
+    # that exists to be trusted during an incident.
+    assert "--skip-deploys" in published
+
+    # And it has to land before the upload, or the running container starts
+    # without it and reports "unknown" until something else restarts it.
+    upload_index = next(i for i, line in enumerate(calls) if line.startswith("up "))
+    assert calls.index(published) < upload_index
