@@ -25,6 +25,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
 
 from app.api.deps import (
@@ -666,6 +667,40 @@ async def test_appointment_reminder_stays_open_to_the_field_tier(
         assert await _status(client, "POST", suffix) != 403
         # The schedule itself stays readable too.
         assert await _status(client, "GET", "/appointments") != 403
+
+
+def test_appointment_reminder_takes_no_request_body() -> None:
+    """The invariant the decision above rests on: the caller supplies no content.
+
+    Leaving this route open is only defensible because a caller cannot say
+    anything through it. They pick one of their own appointments and the server
+    sends a stock reminder; there is no field to put arbitrary text in, so it
+    cannot be used to message a customer freely. Owner scoping and the rate limit
+    then cap who and how often.
+
+    **A request body would end that.** The moment this route accepts one — a
+    custom message, a different recipient, an override — it becomes a general
+    send and needs ``Capability.COMMS_SEND``, which the matrix withholds from the
+    field tier. A prose comment would not survive that change; this fails.
+
+    Asserted on FastAPI's own resolved ``body_params`` rather than
+    ``inspect.signature``, because that is what actually decides whether a field
+    is read from the request body: a Pydantic model, an explicit ``Body(...)``,
+    or a bare non-scalar annotation all land here, while ``Query``/``Path``/
+    ``Depends`` params correctly do not. Reading the signature by hand would have
+    to re-implement that resolution and would get it subtly wrong.
+    """
+    suffix = "/appointments/{appointment_id}/send-reminder"
+    route = next(r for r in app.routes if isinstance(r, APIRoute) and r.path.endswith(suffix))
+
+    body_params = [p.name for p in route.dependant.body_params]
+    assert body_params == [], (
+        "send-reminder now accepts a request body "
+        f"({', '.join(body_params)}). It is ungated on purpose because a caller "
+        "cannot supply content through it — that is no longer true. Gate the "
+        "route on Capability.COMMS_SEND and update the test above, or drop the "
+        "body."
+    )
 
 
 async def test_technician_cannot_probe_quo_contact_history(
