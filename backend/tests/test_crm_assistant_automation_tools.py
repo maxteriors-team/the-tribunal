@@ -10,12 +10,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.models.automation import Automation
-from app.models.pending_action import PendingAction
-from app.schemas.automation import AUTOMATION_TRIGGER_TYPES
 from app.services.ai.crm_assistant._tool_executor import CRMToolExecutor
 from app.services.ai.crm_assistant._tool_metadata import get_approved_action_executor
-from app.services.ai.crm_assistant._tools import get_crm_tools
-from app.services.approval.approval_gate_service import ApprovalGateService
+from app.services.ai.crm_assistant._tools import (
+    CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES,
+    get_crm_tools,
+)
 
 
 def _make_automation(**overrides: Any) -> Automation:
@@ -92,19 +92,18 @@ def test_automation_tools_are_registered() -> None:
 def test_automation_tool_confirmation_and_executor_bindings() -> None:
     tools_by_name = {tool["function"]["name"]: tool for tool in get_crm_tools()}
 
-    # Gated tools bind an approved-action executor, and none of them expose a
-    # model-settable approval flag: approval lives in the executor alone.
-    for tool_name in (
-        "create_automation",
-        "update_automation",
-        "enable_automation",
-        "delete_automation",
-    ):
+    for tool_name in ("enable_automation", "delete_automation"):
         properties = tools_by_name[tool_name]["function"]["parameters"]["properties"]
         assert "confirmed" not in properties
         assert get_approved_action_executor(f"crm_assistant.{tool_name}") is not None
 
-    for tool_name in ("list_automations", "get_automation", "disable_automation"):
+    for tool_name in (
+        "list_automations",
+        "get_automation",
+        "create_automation",
+        "update_automation",
+        "disable_automation",
+    ):
         properties = tools_by_name[tool_name]["function"]["parameters"]["properties"]
         assert "confirmed" not in properties
         assert get_approved_action_executor(f"crm_assistant.{tool_name}") is None
@@ -116,7 +115,7 @@ def test_create_automation_trigger_enum_matches_schema() -> None:
         "trigger_type"
     ]
 
-    assert trigger_property["enum"] == list(AUTOMATION_TRIGGER_TYPES)
+    assert trigger_property["enum"] == list(CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES)
 
 
 async def test_list_automations_returns_summaries(
@@ -153,7 +152,7 @@ async def test_list_automations_returns_summaries(
     assert workspace_id.hex in compiled
 
 
-async def test_create_automation_queues_pending_approval_when_not_confirmed(
+async def test_create_automation_creates_inactive_draft_without_approval(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
@@ -166,54 +165,33 @@ async def test_create_automation_queues_pending_approval_when_not_confirmed(
 
     result = await executor.execute("create_automation", payload)
 
-    assert result == {
-        "success": False,
-        "code": "pending_approval",
-        "pending_approval": True,
-        "pending_action_id": str(db.add.call_args.args[0].id),
-        "message": "Approval required before I can create this automation.",
-        "retryable": False,
-        "hint": (
-            "Tell the operator it is waiting for their approval in this chat. "
-            "Do not call the tool again."
-        ),
-    }
-    pending_action = db.add.call_args.args[0]
-    assert pending_action.action_type == "crm_assistant.create_automation"
-    assert pending_action.action_payload == payload
-    assert pending_action.description == "Create automation Missed call textback"
-
-
-async def test_approved_create_automation_pending_action_creates_row(
-    db: MagicMock,
-    workspace_id: uuid.UUID,
-) -> None:
-    action = PendingAction(
-        id=uuid.uuid4(),
-        workspace_id=workspace_id,
-        agent_id=None,
-        action_type="crm_assistant.create_automation",
-        action_payload={
-            "name": "Missed call textback",
-            "trigger_type": "missed_call",
-            "actions": [{"type": "send_sms", "config": {"message": "Sorry we missed you!"}}],
-        },
-        description="Create automation Missed call textback",
-        context={"source": "crm_assistant", "user_id": 7, "role": "owner"},
-        status="approved",
-    )
-    service = ApprovalGateService()
-
-    result = await service.execute_approved_action(db, action)
-
     assert result["success"] is True
-    assert result["tool"] == "create_automation"
     created = db.add.call_args.args[0]
     assert isinstance(created, Automation)
     assert created.workspace_id == workspace_id
-    assert created.name == "Missed call textback"
-    assert created.trigger_type == "missed_call"
-    assert created.actions == [{"type": "send_sms", "config": {"message": "Sorry we missed you!"}}]
+    assert created.is_active is False
+    assert created.actions == payload["actions"]
+
+
+async def test_create_automation_rejects_model_set_active_state(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
+
+    result = await executor.execute(
+        "create_automation",
+        {
+            "name": "Unsafe",
+            "trigger_type": "missed_call",
+            "actions": [{"type": "send_sms", "config": {"message": "hi"}}],
+            "is_active": True,
+        },
+    )
+
+    assert result["success"] is False
+    assert result["code"] == "invalid_argument"
+    db.add.assert_not_called()
 
 
 async def test_create_automation_rejects_invalid_trigger(
@@ -234,7 +212,7 @@ async def test_create_automation_rejects_invalid_trigger(
 
     assert result["success"] is False
     assert result["code"] == "invalid_argument"
-    assert "trigger_type" in result["detail"]
+    assert "unsupported" in result["detail"]
     db.add.assert_not_called()
 
 
@@ -252,7 +230,7 @@ async def test_create_automation_requires_actions(
 
     assert result["success"] is False
     assert result["code"] == "invalid_argument"
-    assert result["message"] == "An automation needs at least one action."
+    assert "between 1 and 50" in result["detail"]
     db.add.assert_not_called()
 
 
@@ -402,7 +380,7 @@ async def test_update_automation_rejects_empty_actions(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    automation = _make_automation(workspace_id=workspace_id)
+    automation = _make_automation(workspace_id=workspace_id, is_active=False)
     db.execute.return_value = _ExecuteResult([automation])
     executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
@@ -413,7 +391,7 @@ async def test_update_automation_rejects_empty_actions(
     )
 
     assert result["code"] == "invalid_argument"
-    assert "at least one action" in result["message"]
+    assert "between 1 and 50" in result["detail"]
     db.flush.assert_not_awaited()
 
 
@@ -421,7 +399,7 @@ async def test_update_automation_without_changes_is_actionable(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    automation = _make_automation(workspace_id=workspace_id)
+    automation = _make_automation(workspace_id=workspace_id, is_active=False)
     db.execute.return_value = _ExecuteResult([automation])
     executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
@@ -433,6 +411,135 @@ async def test_update_automation_without_changes_is_actionable(
 
     assert result["code"] == "invalid_argument"
     assert result["hint"] == "Provide at least one field to update."
+
+
+async def test_update_automation_refuses_active_content_edits(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    automation = _make_automation(workspace_id=workspace_id, is_active=True)
+    db.execute.return_value = _ExecuteResult([automation])
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
+
+    result = await executor.execute(
+        "update_automation",
+        {"automation_id": str(automation.id), "name": "Changed while live"},
+    )
+
+    assert result["code"] == "conflict"
+    assert automation.name == "Thank reviewers"
+    db.flush.assert_not_awaited()
+
+
+async def test_create_automation_rejects_cyclic_branch_targets(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
+
+    result = await executor.execute(
+        "create_automation",
+        {
+            "name": "Loop",
+            "trigger_type": "missed_call",
+            "actions": [
+                {
+                    "id": "decision",
+                    "type": "branch",
+                    "config": {
+                        "condition": {
+                            "rules": [
+                                {
+                                    "field": "status",
+                                    "operator": "equals",
+                                    "value": "new",
+                                }
+                            ]
+                        },
+                        "then_goto": "decision",
+                        "else_goto": "__end__",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert result["code"] == "invalid_argument"
+    assert "cycles" in result["detail"]
+    db.add.assert_not_called()
+
+
+async def test_create_automation_persists_branch_step_ids(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
+
+    result = await executor.execute(
+        "create_automation",
+        {
+            "name": "Qualified path",
+            "trigger_type": "missed_call",
+            "actions": [
+                {
+                    "id": "decision",
+                    "type": "branch",
+                    "config": {
+                        "condition": {
+                            "rules": [
+                                {
+                                    "field": "status",
+                                    "operator": "equals",
+                                    "value": "qualified",
+                                }
+                            ]
+                        },
+                        "then_goto": "send",
+                        "else_goto": "__end__",
+                    },
+                },
+                {
+                    "id": "send",
+                    "type": "send_sms",
+                    "config": {"message": "Thanks for qualifying."},
+                },
+            ],
+        },
+    )
+
+    assert result["success"] is True
+    created = db.add.call_args.args[0]
+    assert [action["id"] for action in created.actions] == ["decision", "send"]
+    assert created.actions[0]["config"]["condition"]["logic"] == "and"
+
+
+async def test_create_automation_rejects_foreign_resource_ids(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+) -> None:
+    campaign_id = uuid.uuid4()
+    db.execute.return_value = _ExecuteResult([])
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
+
+    result = await executor.execute(
+        "create_automation",
+        {
+            "name": "Foreign campaign",
+            "trigger_type": "missed_call",
+            "actions": [
+                {
+                    "type": "enroll_campaign",
+                    "config": {"campaign_id": str(campaign_id)},
+                }
+            ],
+        },
+    )
+
+    assert result["code"] == "not_found"
+    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "workspace_id" in compiled
+    assert workspace_id.hex in compiled
+    db.add.assert_not_called()
 
 
 async def test_delete_automation_removes_workspace_scoped_row_after_approval(

@@ -7,13 +7,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.permissions import Capability
+from app.core.permissions import Capability, role_can
 from app.core.roles import WorkspaceRole
 from app.models.pending_action import PendingAction
+from app.models.workspace import WorkspaceMembership
 from app.services.ai.crm_assistant._tool_context import ToolArguments, ToolHandler
-from app.services.ai.crm_assistant._tool_errors import internal_error
+from app.services.ai.crm_assistant._tool_errors import internal_error, not_permitted
 
 type ApprovedActionExecutor = Callable[[AsyncSession, PendingAction], Awaitable[dict[str, Any]]]
 
@@ -86,17 +88,34 @@ async def execute_approved_crm_assistant_tool(
     tool_name = action.action_type.removeprefix(CRM_ASSISTANT_ACTION_PREFIX)
     raw_user_id = action.context.get("user_id", 0)
     try:
-        user_id = int(raw_user_id) if isinstance(raw_user_id, int | str) else 0
+        user_id = (
+            int(raw_user_id)
+            if not isinstance(raw_user_id, bool) and isinstance(raw_user_id, int | str)
+            else 0
+        )
     except ValueError:
         user_id = 0
-    # The role the action was queued under, recorded at queue time from the
-    # caller's membership. Approval clears the *approval* gate, not the
-    # *capability* gate: an approver must not be able to execute a tool the
-    # requester was never allowed to run. Missing (actions queued before roles
-    # were recorded) fails closed through the field tier, which holds no tool
-    # capability, so such an action errors rather than running unchecked.
-    raw_role = action.context.get("role")
-    role = raw_role if isinstance(raw_role, str) and raw_role else WorkspaceRole.TECHNICIAN.value
+
+    membership_result = await db.execute(
+        select(WorkspaceMembership).where(
+            WorkspaceMembership.workspace_id == action.workspace_id,
+            WorkspaceMembership.user_id == user_id,
+        )
+    )
+    membership = membership_result.scalar_one_or_none()
+    # The queued role is audit context only; authorization uses this current membership.
+    role = membership.role if membership is not None else None
+    known_roles = {workspace_role.value for workspace_role in WorkspaceRole}
+    required_capability = tool_capability(tool_name)
+    if role not in known_roles or not role_can(role, required_capability):
+        return {
+            "tool": tool_name,
+            **not_permitted(
+                "The requester no longer has permission to run this action.",
+                "Review their current workspace membership and queue a new action if appropriate.",
+            ),
+        }
+
     executor = CRMToolExecutor(
         db=db,
         workspace_id=action.workspace_id,
@@ -189,6 +208,9 @@ _TOOL_CAPABILITIES: dict[str, Capability] = {
     "get_contact_context": Capability.CRM_READ,
     "get_conversation": Capability.CRM_READ,
     "list_recent_conversations": Capability.CRM_READ,
+    "list_tags": Capability.CRM_READ,
+    "list_segments": Capability.CRM_READ,
+    "preview_segment": Capability.CRM_READ,
     "list_campaigns": Capability.CRM_READ,
     "list_campaign_contacts": Capability.CRM_READ,
     "summarize_campaign": Capability.CRM_READ,
@@ -199,6 +221,7 @@ _TOOL_CAPABILITIES: dict[str, Capability] = {
     "list_offers": Capability.CRM_READ,
     "get_offer_details": Capability.CRM_READ,
     "list_opportunities": Capability.CRM_READ,
+    "get_opportunity": Capability.CRM_READ,
     "list_pipeline_stages": Capability.CRM_READ,
     "list_appointments": Capability.CRM_READ,
     "get_appointment": Capability.CRM_READ,
@@ -210,9 +233,15 @@ _TOOL_CAPABILITIES: dict[str, Capability] = {
     "update_contact": Capability.CRM_WRITE,
     "add_contact_note": Capability.CRM_WRITE,
     "add_contact_tags": Capability.CRM_WRITE,
+    "create_segment": Capability.CRM_WRITE,
+    "update_segment": Capability.CRM_WRITE,
+    # ── owner-scoped pipeline writes: pipeline:write_own ────────────────
+    "create_opportunity": Capability.PIPELINE_WRITE_OWN,
+    "update_opportunity": Capability.PIPELINE_WRITE_OWN,
     # ── outreach authoring: outreach:write ─────────────────────────────
     "create_campaign": Capability.OUTREACH_WRITE,
     "update_campaign": Capability.OUTREACH_WRITE,
+    "enroll_campaign_audience": Capability.OUTREACH_WRITE,
     "start_campaign": Capability.OUTREACH_WRITE,
     "pause_campaign": Capability.OUTREACH_WRITE,
     "resume_campaign": Capability.OUTREACH_WRITE,
@@ -284,6 +313,26 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
         handler=_missing_handler,
         risk_level=ToolRiskLevel.MEDIUM,
     ),
+    "create_segment": CRMToolMetadata(
+        name="create_segment",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
+    "update_segment": CRMToolMetadata(
+        name="update_segment",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
+    "create_opportunity": CRMToolMetadata(
+        name="create_opportunity",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
+    "update_opportunity": CRMToolMetadata(
+        name="update_opportunity",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
     "create_campaign": CRMToolMetadata(
         name="create_campaign",
         handler=_missing_handler,
@@ -291,6 +340,11 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
     ),
     "update_campaign": CRMToolMetadata(
         name="update_campaign",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.MEDIUM,
+    ),
+    "enroll_campaign_audience": CRMToolMetadata(
+        name="enroll_campaign_audience",
         handler=_missing_handler,
         risk_level=ToolRiskLevel.MEDIUM,
     ),
@@ -356,26 +410,12 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
     "create_automation": CRMToolMetadata(
         name="create_automation",
         handler=_missing_handler,
-        risk_level=ToolRiskLevel.HIGH,
-        approval=ApprovalPolicy(
-            required=True,
-            requires_confirmation=True,
-            pending_message="Approval required before I can create this automation.",
-        ),
-        approved_executor=execute_approved_crm_assistant_tool,
-        description_template="Create automation {name}",
+        risk_level=ToolRiskLevel.MEDIUM,
     ),
     "update_automation": CRMToolMetadata(
         name="update_automation",
         handler=_missing_handler,
-        risk_level=ToolRiskLevel.HIGH,
-        approval=ApprovalPolicy(
-            required=True,
-            requires_confirmation=True,
-            pending_message="Approval required before I can update this automation.",
-        ),
-        approved_executor=execute_approved_crm_assistant_tool,
-        description_template="Update automation {automation_id}",
+        risk_level=ToolRiskLevel.MEDIUM,
     ),
     "enable_automation": CRMToolMetadata(
         name="enable_automation",
