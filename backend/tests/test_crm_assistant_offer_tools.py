@@ -457,6 +457,7 @@ async def test_approved_crm_assistant_pending_action_executes_bound_tool(
         context={"source": "crm_assistant", "user_id": 7, "role": "owner"},
         status="approved",
     )
+    db.execute.return_value = _ExecuteResult([MagicMock(role="owner")])
     service = ApprovalGateService()
 
     result = await service.execute_approved_action(db, action)
@@ -583,14 +584,39 @@ async def test_outbound_growth_workflow_creates_draft_campaign(
     phone = _make_phone_number(workspace_id=workspace_id)
     contact = _make_contact(workspace_id=workspace_id)
     agent = _make_agent(workspace_id=workspace_id)
-    db.execute.side_effect = [
-        _ExecuteResult([offer]),
-        _ExecuteResult([segment]),
-        _ExecuteResult([phone]),
-        _ExecuteResult([contact]),
-        _ExecuteResult([agent]),
-        _ExecuteResult([1]),
-    ]
+    execute_index = 0
+
+    def execute_side_effect(_statement: Any) -> _ExecuteResult:
+        nonlocal execute_index
+        if execute_index == 6:
+            campaign_row = next(
+                call.args[0] for call in db.add.call_args_list if isinstance(call.args[0], Campaign)
+            )
+            if campaign_row.id is None:
+                campaign_row.id = uuid.uuid4()
+            if campaign_row.total_contacts is None:
+                campaign_row.total_contacts = 0
+            result = _ExecuteResult([campaign_row])
+        else:
+            results = {
+                0: _ExecuteResult([offer]),
+                1: _ExecuteResult([segment]),
+                2: _ExecuteResult([phone]),
+                3: _ExecuteResult([1]),
+                4: _ExecuteResult([contact]),
+                5: _ExecuteResult([agent]),
+                7: _ExecuteResult([segment]),
+                8: _ExecuteResult([1]),
+                9: _ExecuteResult([contact]),
+                10: _ExecuteResult([]),
+                11: _ExecuteResult([contact.id]),
+                12: _ExecuteResult([1]),
+            }
+            result = results[execute_index]
+        execute_index += 1
+        return result
+
+    db.execute.side_effect = execute_side_effect
     executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
@@ -609,13 +635,14 @@ async def test_outbound_growth_workflow_creates_draft_campaign(
     assert result["draft"]["created"] is True
     assert result["responder_agent"]["action"] == "recommended_existing"
     assert result["previews"][0]["message"].startswith("Hi Ava")
-    # Preview CampaignContact rows are added after the Campaign itself.
     added_objects = [call.args[0] for call in db.add.call_args_list]
     created_campaign = next(obj for obj in added_objects if isinstance(obj, Campaign))
     assert created_campaign.workspace_id == workspace_id
     assert created_campaign.offer_id == offer.id
     assert created_campaign.agent_id == agent.id
     assert created_campaign.status == CampaignStatus.DRAFT
+    assert created_campaign.total_contacts == 1
+    assert result["draft"]["enrolled_contacts"] == 1
     assert created_campaign.initial_message is not None
     assert "{first_name}" in created_campaign.initial_message
     assert "explicitly confirm start_campaign" in result["next_approval_step"]

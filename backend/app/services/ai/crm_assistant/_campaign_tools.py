@@ -38,6 +38,10 @@ from app.services.ai.crm_assistant._tool_errors import (
     unavailable,
     validation_failed,
 )
+from app.services.campaigns.audience_service import (
+    CampaignAudienceError,
+    CampaignAudienceService,
+)
 from app.services.campaigns.campaign_lifecycle import (
     CampaignLifecycleError,
     count_campaign_contacts,
@@ -128,6 +132,48 @@ def _parse_campaign_times(data: dict[str, Any]) -> dict[str, Any] | None:
     return data
 
 
+def _campaign_audience_arguments(
+    args: ToolArguments,
+) -> tuple[uuid.UUID, uuid.UUID | None, list[int] | None]:
+    campaign_id = parse_uuid(args.get("campaign_id"))
+    if campaign_id is None:
+        raise CampaignAudienceError("invalid_campaign_id", "Invalid campaign id.")
+
+    has_segment = args.get("segment_id") not in (None, "")
+    has_contacts = "contact_ids" in args
+    if has_segment == has_contacts:
+        raise CampaignAudienceError(
+            "invalid_source", "Provide exactly one of segment_id or contact_ids."
+        )
+    if has_segment:
+        segment_id = parse_uuid(args.get("segment_id"))
+        if segment_id is None:
+            raise CampaignAudienceError("invalid_segment_id", "Invalid segment id.")
+        return campaign_id, segment_id, None
+
+    contact_ids = args.get("contact_ids")
+    if not isinstance(contact_ids, list):
+        raise CampaignAudienceError(
+            "invalid_contact_ids", "contact_ids must be a non-empty list of contact IDs."
+        )
+    return campaign_id, None, contact_ids
+
+
+def _campaign_audience_error(exc: CampaignAudienceError) -> dict[str, object]:
+    if exc.code == "invalid_campaign_id":
+        return invalid_id("campaign_id", "Call list_campaigns to get a valid campaign id.")
+    if exc.code == "invalid_segment_id":
+        return invalid_id("segment_id", "Call list_segments to get a valid segment id.")
+    if exc.code == "not_found":
+        return not_found(
+            "Campaign or audience resource",
+            "List campaigns, segments, or contacts and use IDs from this workspace.",
+        )
+    if exc.code == "campaign_not_draft":
+        return conflict(str(exc), "Create or select a draft campaign before enrollment.")
+    return invalid_argument(str(exc), "Narrow or correct the audience, then retry.")
+
+
 class CampaignAssistantTools:
     """Read, send, and lifecycle tools for campaigns."""
 
@@ -140,6 +186,7 @@ class CampaignAssistantTools:
             "create_campaign": self.create_campaign,
             "update_campaign": self.update_campaign,
             "list_campaign_contacts": self.list_campaign_contacts,
+            "enroll_campaign_audience": self.enroll_campaign_audience,
             "send_sms": self.send_sms,
             "start_campaign": self.start_campaign,
             "pause_campaign": self.pause_campaign,
@@ -442,6 +489,38 @@ class CampaignAssistantTools:
             ],
             total=int(total or 0),
         )
+
+    async def enroll_campaign_audience(self, args: ToolArguments) -> dict[str, object]:
+        """Enroll one bounded audience into a draft without sending messages."""
+
+        try:
+            campaign_id, segment_id, contact_ids = _campaign_audience_arguments(args)
+            result = await CampaignAudienceService(
+                self.context.db, self.context.workspace_id
+            ).enroll(
+                campaign_id=campaign_id,
+                segment_id=segment_id,
+                contact_ids=contact_ids,
+            )
+        except CampaignAudienceError as exc:
+            return _campaign_audience_error(exc)
+
+        await self.context.db.flush()
+        return {
+            "success": True,
+            "data": {
+                "campaign_id": str(campaign_id),
+                "source_count": result.source_count,
+                "eligible_count": result.eligible_count,
+                "added_count": result.added_count,
+                "duplicate_count": result.duplicate_count,
+                "ineligible_count": result.ineligible_count,
+            },
+            "hint": (
+                "Audience enrollment changed only the draft; starting the campaign remains "
+                "a separate approval-gated action."
+            ),
+        }
 
     async def send_sms(self, args: ToolArguments) -> dict[str, object]:
         from app.models.phone_number import PhoneNumber

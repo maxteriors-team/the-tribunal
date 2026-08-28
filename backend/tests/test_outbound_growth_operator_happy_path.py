@@ -37,6 +37,10 @@ class _ExecuteResult:
     def scalars(self) -> _ScalarResult:
         return _ScalarResult(self._rows)
 
+    def scalar_one(self) -> Any:
+        assert len(self._rows) == 1
+        return self._rows[0]
+
     def scalar_one_or_none(self) -> Any | None:
         return self._rows[0] if self._rows else None
 
@@ -129,6 +133,9 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     contacts = [
         _make_contact(101, workspace_id, "Ava", "+1555000101"),
         _make_contact(102, workspace_id, "Mia", "+1555000102"),
+        _make_contact(103, workspace_id, "Noah", "+1555000103"),
+        _make_contact(104, workspace_id, "Liam", "+1555000104"),
+        _make_contact(105, workspace_id, "Emma", "+1555000105"),
     ]
     db = MagicMock()
     db.add = MagicMock()
@@ -136,18 +143,39 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     db.commit = AsyncMock()
     db.refresh = AsyncMock()
     db.get = AsyncMock()
-    db.execute = AsyncMock(
-        side_effect=[
-            _ExecuteResult([offer]),
-            _ExecuteResult([segment]),
-            # _resolve_phone_number always queries for the sending number, even
-            # when one is supplied, so it must be accounted for here.
-            _ExecuteResult([MagicMock(phone_number="+15550009999")]),
-            _ExecuteResult(contacts),
-            _ExecuteResult([responder]),
-            _ExecuteResult([len(contacts)]),
-        ]
-    )
+    execute_index = 0
+
+    def execute_side_effect(_statement: Any) -> _ExecuteResult:
+        nonlocal execute_index
+        if execute_index == 6:
+            campaign_row = next(
+                call.args[0] for call in db.add.call_args_list if isinstance(call.args[0], Campaign)
+            )
+            if campaign_row.id is None:
+                campaign_row.id = uuid.uuid4()
+            if campaign_row.total_contacts is None:
+                campaign_row.total_contacts = 0
+            result = _ExecuteResult([campaign_row])
+        else:
+            results = {
+                0: _ExecuteResult([offer]),
+                1: _ExecuteResult([segment]),
+                2: _ExecuteResult([MagicMock(phone_number="+15550009999")]),
+                3: _ExecuteResult([len(contacts)]),
+                4: _ExecuteResult(contacts[:3]),
+                5: _ExecuteResult([responder]),
+                7: _ExecuteResult([segment]),
+                8: _ExecuteResult([len(contacts)]),
+                9: _ExecuteResult(contacts),
+                10: _ExecuteResult([]),
+                11: _ExecuteResult([contact.id for contact in contacts]),
+                12: _ExecuteResult([len(contacts)]),
+            }
+            result = results[execute_index]
+        execute_index += 1
+        return result
+
+    db.execute = AsyncMock(side_effect=execute_side_effect)
     executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     draft_result = await executor.execute(
@@ -168,6 +196,7 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     assert [preview["contact_name"] for preview in draft_result["previews"]] == [
         "Ava Rivera",
         "Mia Rivera",
+        "Noah Rivera",
     ]
     assert draft_result["previews"][0]["message"].startswith("Hi Ava")
     assert "batch video ads audit" in draft_result["messages"]["initial"]
@@ -184,7 +213,6 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     campaign = next(
         call.args[0] for call in db.add.call_args_list if isinstance(call.args[0], Campaign)
     )
-    campaign.id = uuid.uuid4()
     campaign.messages_sent = 0
     campaign.messages_failed = 0
     campaign.contacts_opted_out = 0
@@ -193,13 +221,15 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     assert campaign.name == "Batch Video Ads → Dormant ecommerce leads"
     assert campaign.agent_id == responder.id
     assert campaign.status == CampaignStatus.DRAFT
-    # Enrollment adds CampaignContact rows directly via db.add (appending to the
-    # lazy campaign.campaign_contacts collection would emit a sync lazy-load and
-    # raise MissingGreenlet under the async engine).
-    enrolled = [
-        call.args[0] for call in db.add.call_args_list if isinstance(call.args[0], CampaignContact)
-    ]
-    assert [link.contact_id for link in enrolled] == [101, 102]
+    assert draft_result["draft"]["enrolled_contacts"] == len(contacts)
+    assert draft_result["draft"]["ineligible_contacts"] == 0
+    assert campaign.total_contacts == len(contacts)
+    insert_statement = db.execute.await_args_list[11].args[0]
+    insert_params = insert_statement.compile().params
+    enrolled_contact_ids = {
+        value for key, value in insert_params.items() if key.startswith("contact_id")
+    }
+    assert enrolled_contact_ids == {contact.id for contact in contacts}
 
     db.execute = AsyncMock(
         side_effect=[_ExecuteResult([campaign]), _ExecuteResult([len(contacts)])]

@@ -10,11 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.agent import Agent
-from app.models.campaign import Campaign, CampaignContact, CampaignStatus, CampaignType
+from app.models.campaign import Campaign, CampaignStatus, CampaignType
 from app.models.contact import Contact
 from app.models.offer import Offer
 from app.models.phone_number import PhoneNumber
 from app.models.segment import Segment
+from app.services.campaigns.audience_service import CampaignAudienceService
+from app.services.contacts.contact_filter_validation import validate_contact_filter_rules
 from app.services.contacts.contact_filters import apply_contact_filters
 
 WorkflowStatus = Literal["needs_input", "draft_ready"]
@@ -99,6 +101,9 @@ class OutboundGrowthWorkflowService:
         assert segment is not None
         assert selected_phone is not None
 
+        audience_count = await self._count_segment_contacts(segment)
+        if create_draft:
+            CampaignAudienceService.check_batch_size(audience_count)
         preview_contacts = await self._preview_contacts(segment)
         draft_plan = _build_campaign_plan(intent, offer, segment)
         responder = await self._resolve_responder_agent(
@@ -108,6 +113,7 @@ class OutboundGrowthWorkflowService:
         )
         campaign = None
         enrolled_count = 0
+        ineligible_count = 0
         if create_draft:
             campaign = await self._create_campaign_draft(
                 plan=draft_plan,
@@ -115,7 +121,12 @@ class OutboundGrowthWorkflowService:
                 agent_id=_uuid_or_none(responder.agent_id),
                 from_phone_number=selected_phone,
             )
-            enrolled_count = await self._enroll_preview_contacts(campaign, preview_contacts)
+            enrollment = await CampaignAudienceService(self.db, self.workspace_id).enroll(
+                campaign_id=campaign.id,
+                segment_id=segment.id,
+            )
+            enrolled_count = enrollment.added_count
+            ineligible_count = enrollment.ineligible_count
             await self.db.flush()
 
         return {
@@ -123,14 +134,18 @@ class OutboundGrowthWorkflowService:
             "status": "draft_ready",
             "intent": intent,
             "offer": _serialize_offer(offer),
-            "segment": await self._serialize_segment(segment),
+            "segment": {
+                **await self._serialize_segment(segment),
+                "contact_count": audience_count,
+            },
             "draft": {
                 "campaign_id": str(campaign.id) if campaign else None,
                 "name": draft_plan.name,
                 "description": draft_plan.description,
                 "status": CampaignStatus.DRAFT.value,
                 "created": campaign is not None,
-                "enrolled_preview_contacts": enrolled_count,
+                "enrolled_contacts": enrolled_count,
+                "ineligible_contacts": ineligible_count,
             },
             "angles": [draft_plan.angle],
             "messages": {
@@ -264,24 +279,24 @@ class OutboundGrowthWorkflowService:
         }
 
     async def _count_segment_contacts(self, segment: Segment) -> int:
-        definition = segment.definition or {}
+        rules, logic = _validated_segment_filters(segment)
         query = apply_contact_filters(
             select(func.count(Contact.id)),
             self.workspace_id,
-            filter_rules=definition.get("rules"),
-            filter_logic=definition.get("logic", "and"),
+            filter_rules=rules,
+            filter_logic=logic,
         ).where(Contact.workspace_id == self.workspace_id)
         result = await self.db.execute(query)
         count = result.scalar()
         return int(count or 0)
 
     async def _preview_contacts(self, segment: Segment) -> list[dict[str, Any]]:
-        definition = segment.definition or {}
+        rules, logic = _validated_segment_filters(segment)
         query = apply_contact_filters(
             select(Contact),
             self.workspace_id,
-            filter_rules=definition.get("rules"),
-            filter_logic=definition.get("logic", "and"),
+            filter_rules=rules,
+            filter_logic=logic,
         )
         query = (
             query.where(Contact.workspace_id == self.workspace_id)
@@ -381,23 +396,13 @@ class OutboundGrowthWorkflowService:
         await self.db.flush()
         return campaign
 
-    async def _enroll_preview_contacts(
-        self,
-        campaign: Campaign,
-        preview_contacts: list[dict[str, Any]],
-    ) -> int:
-        # Add rows directly instead of appending to the lazy
-        # ``campaign.campaign_contacts`` collection: touching an unloaded
-        # collection on a flushed instance emits a synchronous lazy load,
-        # which raises MissingGreenlet under the async engine.
-        for contact in preview_contacts:
-            self.db.add(
-                CampaignContact(
-                    campaign_id=campaign.id,
-                    contact_id=int(contact["id"]),
-                )
-            )
-        return len(preview_contacts)
+
+def _validated_segment_filters(segment: Segment) -> tuple[list[dict[str, Any]], str]:
+    definition = segment.definition if isinstance(segment.definition, dict) else {}
+    return validate_contact_filter_rules(
+        definition.get("rules"),
+        definition.get("logic", "and"),
+    )
 
 
 def _parse_uuid(raw_value: Any) -> uuid.UUID | None:

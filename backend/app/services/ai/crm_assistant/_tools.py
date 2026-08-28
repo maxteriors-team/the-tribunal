@@ -12,6 +12,12 @@ from app.models.campaign import CampaignContactStatus, CampaignStatus, CampaignT
 from app.schemas.automation import AUTOMATION_ACTION_TYPES, AUTOMATION_TRIGGER_TYPES
 from app.schemas.offer import DiscountType, GuaranteeType, UrgencyType
 from app.services.ai.crm_assistant._tool_metadata import tool_capability
+from app.services.campaigns.audience_service import MAX_CAMPAIGN_AUDIENCE_SIZE
+from app.services.contacts.contact_filter_validation import (
+    CONTACT_FILTER_ENUM_VALUES,
+    MAX_CONTACT_FILTER_RULES,
+    MAX_FILTER_LIST_VALUES,
+)
 
 # ── Closed value sets ────────────────────────────────────────────────
 # These used to live only in prose descriptions, so the model guessed. The
@@ -28,6 +34,136 @@ GUARANTEE_TYPES = [guarantee.value for guarantee in GuaranteeType]
 URGENCY_TYPES = [urgency.value for urgency in UrgencyType]
 CONTACT_STATUSES = ["new", "contacted", "qualified", "converted", "lost"]
 CONTACT_TAG_MATCH_MODES = ["any", "all", "none"]
+CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES = tuple(
+    trigger
+    for trigger in AUTOMATION_TRIGGER_TYPES
+    if trigger not in {"event", "generic_event", "schedule", "condition"}
+)
+CRM_ASSISTANT_AUTOMATION_ACTION_TYPES = tuple(
+    action for action in AUTOMATION_ACTION_TYPES if action not in {"add_tag", "delay"}
+)
+
+
+def _filter_rule_variant(
+    fields: list[str],
+    operators: list[str],
+    *,
+    value_schema: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "field": {"type": "string", "enum": fields},
+        "operator": {"type": "string", "enum": operators},
+    }
+    required = ["field", "operator"]
+    if value_schema is not None:
+        properties["value"] = value_schema
+        required.append("value")
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+    }
+
+
+def _contact_filter_rules_schema() -> dict[str, Any]:
+    text = {"type": "string", "minLength": 1, "maxLength": 500}
+    number = {"type": "number", "minimum": 0, "maximum": 1_000_000_000}
+    string_list = {
+        "type": "array",
+        "items": text,
+        "minItems": 1,
+        "maxItems": MAX_FILTER_LIST_VALUES,
+        "uniqueItems": True,
+    }
+    variants = [
+        _filter_rule_variant(["source"], ["equals", "contains"], value_schema=text),
+        _filter_rule_variant(["source"], ["in"], value_schema=string_list),
+        _filter_rule_variant(
+            ["lead_score", "engagement_score", "noshow_count"],
+            ["equals", "gt", "gte", "lt", "lte"],
+            value_schema=number,
+        ),
+        _filter_rule_variant(
+            [
+                "is_qualified",
+                "qualification_signals.budget",
+                "qualification_signals.authority",
+                "qualification_signals.need",
+                "qualification_signals.timeline",
+            ],
+            ["is_true", "is_false"],
+        ),
+        _filter_rule_variant(
+            ["created_at", "last_engaged_at"],
+            ["before", "after"],
+            value_schema={"type": "string", "minLength": 1, "maxLength": 50},
+        ),
+        _filter_rule_variant(
+            ["created_at", "last_engaged_at"],
+            ["is_null", "is_not_null"],
+        ),
+        _filter_rule_variant(
+            ["tags"],
+            ["has_any", "has_all"],
+            value_schema={
+                "type": "array",
+                "items": {"type": "string", "format": "uuid"},
+                "minItems": 1,
+                "maxItems": MAX_FILTER_LIST_VALUES,
+                "uniqueItems": True,
+            },
+        ),
+    ]
+    for field in (
+        "status",
+        "enrichment_status",
+        "sms_consent_status",
+        "last_appointment_status",
+    ):
+        values = sorted(CONTACT_FILTER_ENUM_VALUES[field])
+        variants.extend(
+            [
+                _filter_rule_variant(
+                    [field],
+                    ["equals"],
+                    value_schema={"type": "string", "enum": values},
+                ),
+                _filter_rule_variant(
+                    [field],
+                    ["in"],
+                    value_schema={
+                        "type": "array",
+                        "items": {"type": "string", "enum": values},
+                        "minItems": 1,
+                        "maxItems": len(values),
+                        "uniqueItems": True,
+                    },
+                ),
+            ]
+        )
+    variants.append(_filter_rule_variant(["last_appointment_status"], ["is_null", "is_not_null"]))
+    return {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": MAX_CONTACT_FILTER_RULES,
+        "items": {"oneOf": variants},
+    }
+
+
+def _opportunity_write_properties() -> dict[str, Any]:
+    return {
+        "name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "description": {"type": "string", "maxLength": 5_000},
+        "amount": {"type": "number", "minimum": 0},
+        "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+        "expected_close_date": {"type": "string", "format": "date"},
+        "source": {"type": "string", "maxLength": 255},
+        "status": {"type": "string", "enum": ["open", "won", "lost", "abandoned"]},
+        "lost_reason": {"type": "string", "maxLength": 2_000},
+        "stage_id": {"type": "string", "format": "uuid"},
+        "primary_contact_id": {"type": ["integer", "null"], "minimum": 1},
+        "assigned_user_id": {"type": ["integer", "null"], "minimum": 1},
+    }
 
 
 def _closed_config(
@@ -36,16 +172,20 @@ def _closed_config(
     required: list[str] | None = None,
     description: str,
     any_of: list[dict[str, Any]] | None = None,
+    one_of: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     schema: dict[str, Any] = {
         "type": "object",
         "description": description,
         "properties": properties,
+        "additionalProperties": False,
     }
     if required:
         schema["required"] = required
     if any_of:
         schema["anyOf"] = any_of
+    if one_of:
+        schema["oneOf"] = one_of
     return schema
 
 
@@ -87,9 +227,13 @@ def _automation_trigger_config_schema() -> dict[str, Any]:
                 ),
                 properties={
                     "lead_source_public_key": {"type": "string", "minLength": 1},
-                    "lead_source_id": {"type": "string", "description": "Lead source UUID"},
+                    "lead_source_id": {"type": "string", "format": "uuid"},
                     "source_detail": {"type": "string", "minLength": 1},
                 },
+            ),
+            _closed_config(
+                description="job_completed: optionally restrict to lighting projects",
+                properties={"lighting_project_only": {"type": "boolean"}},
             ),
             _closed_config(
                 description="All other triggers: pass an empty object",
@@ -109,6 +253,10 @@ def _automation_action_variant(
         "type": "object",
         "description": description,
         "properties": {
+            "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+            },
             "type": {"type": "string", "enum": action_types},
             "config": config,
         },
@@ -132,6 +280,8 @@ def _automation_actions_schema() -> dict[str, Any]:
                 description="SMS template configuration",
                 properties={
                     "message": {"type": "string", "minLength": 1},
+                    "agent_id": {"type": "string", "format": "uuid"},
+                    "require_consent": {"type": "boolean"},
                     "fallbacks": fallbacks,
                 },
                 required=["message"],
@@ -145,26 +295,17 @@ def _automation_actions_schema() -> dict[str, Any]:
                 properties={
                     "subject": {"type": "string", "minLength": 1},
                     "message": {"type": "string", "minLength": 1},
-                    "body": {
-                        "type": "string",
-                        "minLength": 1,
-                        "description": "Legacy alias for message",
-                    },
                     "fallbacks": fallbacks,
                 },
-                required=["subject"],
-                any_of=[{"required": ["message"]}, {"required": ["body"]}],
+                required=["subject", "message"],
             ),
         ),
         _automation_action_variant(
             ["make_call"],
             description="Place an outbound AI voice call",
             config=_closed_config(
-                description="Optional voice agent and Telnyx connection overrides",
-                properties={
-                    "agent_id": {"type": "string", "description": "Voice agent UUID"},
-                    "connection_id": {"type": "string", "minLength": 1},
-                },
+                description="Optional workspace voice agent; provider setup stays admin-managed",
+                properties={"agent_id": {"type": "string", "format": "uuid"}},
             ),
         ),
         _automation_action_variant(
@@ -172,7 +313,7 @@ def _automation_actions_schema() -> dict[str, Any]:
             description="Enroll the matched contact in a running or scheduled campaign",
             config=_closed_config(
                 description="Target campaign",
-                properties={"campaign_id": {"type": "string", "description": "Campaign UUID"}},
+                properties={"campaign_id": {"type": "string", "format": "uuid"}},
                 required=["campaign_id"],
             ),
         ),
@@ -182,7 +323,7 @@ def _automation_actions_schema() -> dict[str, Any]:
             config=_closed_config(
                 description="Target drip campaign",
                 properties={
-                    "drip_campaign_id": {"type": "string", "description": "Drip campaign UUID"},
+                    "drip_campaign_id": {"type": "string", "format": "uuid"},
                     "enroll_contact": {
                         "type": "boolean",
                         "description": (
@@ -203,9 +344,10 @@ def _automation_actions_schema() -> dict[str, Any]:
             config=_closed_config(
                 description="Destination pipeline stage",
                 properties={
-                    "stage_id": {"type": "string", "description": "Pipeline stage UUID"},
+                    "stage_id": {"type": "string", "format": "uuid"},
                     "pipeline_id": {
                         "type": "string",
+                        "format": "uuid",
                         "description": "Optional pipeline UUID; it must own the selected stage",
                     },
                 },
@@ -213,20 +355,55 @@ def _automation_actions_schema() -> dict[str, Any]:
             ),
         ),
         _automation_action_variant(
-            ["apply_tag", "add_tag"],
+            ["apply_tag"],
             description="Apply a workspace tag to the matched contact",
             config=_closed_config(
                 description="Tag to apply",
-                properties={"tag": {"type": "string", "minLength": 1}},
+                properties={"tag": {"type": "string", "minLength": 1, "maxLength": 100}},
                 required=["tag"],
             ),
         ),
         _automation_action_variant(
-            ["wait", "delay"],
+            ["wait"],
             description="Pause the action sequence, then resume later",
             config=_closed_config(
-                description="Delay duration (defaults to one hour)",
-                properties={"hours": {"type": "integer", "minimum": 1, "maximum": 8760}},
+                description="Exactly one positive duration, bounded to 365 days",
+                properties={
+                    "minutes": {"type": "integer", "minimum": 1, "maximum": 525_600},
+                    "hours": {"type": "integer", "minimum": 1, "maximum": 8_760},
+                    "days": {"type": "integer", "minimum": 1, "maximum": 365},
+                },
+                one_of=[
+                    {"required": ["minutes"]},
+                    {"required": ["hours"]},
+                    {"required": ["days"]},
+                ],
+            ),
+        ),
+        _automation_action_variant(
+            ["branch"],
+            description="Route a contact based on strict contact-filter rules",
+            config=_closed_config(
+                description="Condition and explicit destination step IDs",
+                properties={
+                    "condition": {
+                        "type": "object",
+                        "properties": {
+                            "logic": {"type": "string", "enum": ["and", "or"]},
+                            "rules": _contact_filter_rules_schema(),
+                        },
+                        "required": ["rules"],
+                    },
+                    "then_goto": {
+                        "type": "string",
+                        "pattern": "^(?:__end__|[A-Za-z][A-Za-z0-9_-]{0,63})$",
+                    },
+                    "else_goto": {
+                        "type": "string",
+                        "pattern": "^(?:__end__|[A-Za-z][A-Za-z0-9_-]{0,63})$",
+                    },
+                },
+                required=["condition", "then_goto", "else_goto"],
             ),
         ),
     ]
@@ -234,10 +411,18 @@ def _automation_actions_schema() -> dict[str, Any]:
         "type": "array",
         "description": "Actions run in order when the trigger fires",
         "minItems": 1,
+        "maxItems": 50,
         "items": {
             "type": "object",
             "properties": {
-                "type": {"type": "string", "enum": list(AUTOMATION_ACTION_TYPES)},
+                "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+                },
+                "type": {
+                    "type": "string",
+                    "enum": list(CRM_ASSISTANT_AUTOMATION_ACTION_TYPES),
+                },
                 "config": {"type": "object"},
             },
             "required": ["type", "config"],
@@ -544,6 +729,93 @@ CRM_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "list_tags",
+            "description": "List workspace tag IDs and names for saved audience filters.",
+            "parameters": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 100}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_segments",
+            "description": "List reusable saved contact audiences in this workspace.",
+            "parameters": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 50}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "preview_segment",
+            "description": (
+                "Return the current matching count and a bounded contact sample for one "
+                "saved audience. Preview before campaign enrollment."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "segment_id": {"type": "string", "format": "uuid"},
+                    "sample_limit": {"type": "integer", "minimum": 1, "maximum": 25},
+                },
+                "required": ["segment_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_segment",
+            "description": (
+                "Create a dynamic saved audience from strict contact filters. Use list_tags "
+                "for tag UUIDs. This only saves targeting rules; it sends nothing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "minLength": 1, "maxLength": 255},
+                    "description": {"type": "string", "maxLength": 2000},
+                    "filter_logic": {"type": "string", "enum": ["and", "or"]},
+                    "filter_rules": _contact_filter_rules_schema(),
+                },
+                "required": ["name", "filter_rules"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_segment",
+            "description": (
+                "Update a saved audience and recompute its current count. Use list_tags "
+                "for tag UUIDs."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "segment_id": {"type": "string", "format": "uuid"},
+                    "name": {"type": "string", "minLength": 1, "maxLength": 255},
+                    "description": {"type": ["string", "null"], "maxLength": 2000},
+                    "filter_logic": {"type": "string", "enum": ["and", "or"]},
+                    "filter_rules": _contact_filter_rules_schema(),
+                },
+                "required": ["segment_id"],
+                "anyOf": [
+                    {"required": ["name"]},
+                    {"required": ["description"]},
+                    {"required": ["filter_logic"]},
+                    {"required": ["filter_rules"]},
+                ],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_campaigns",
             "description": "List campaigns. Filter by status if provided.",
             "parameters": {
@@ -661,6 +933,36 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     "guarantee_window_days": {"type": "integer", "minimum": 1},
                 },
                 "required": ["campaign_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "enroll_campaign_audience",
+            "description": (
+                "Enroll one validated segment or explicit contact list into a draft campaign. "
+                "Existing enrollments are deduplicated, contacts missing the campaign channel "
+                "are counted and skipped, and no outreach is sent."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "campaign_id": {"type": "string", "format": "uuid"},
+                    "segment_id": {"type": "string", "format": "uuid"},
+                    "contact_ids": {
+                        "type": "array",
+                        "items": {"type": "integer", "minimum": 1},
+                        "minItems": 1,
+                        "maxItems": MAX_CAMPAIGN_AUDIENCE_SIZE,
+                        "uniqueItems": True,
+                    },
+                },
+                "required": ["campaign_id"],
+                "oneOf": [
+                    {"required": ["segment_id"]},
+                    {"required": ["contact_ids"]},
+                ],
             },
         },
     },
@@ -827,8 +1129,8 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "create_automation",
             "description": (
-                "Create a workflow automation: when a trigger fires, run actions in order. "
-                "Templates may use {first_name} and event fields. Requires explicit confirmation."
+                "Create an inactive workflow draft with executable triggers and ordered actions. "
+                "Use enable_automation separately after reviewing it."
             ),
             "parameters": {
                 "type": "object",
@@ -837,18 +1139,11 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     "description": {"type": "string"},
                     "trigger_type": {
                         "type": "string",
-                        "enum": list(AUTOMATION_TRIGGER_TYPES),
-                        "description": (
-                            "Event that fires the automation. event, schedule, and condition are "
-                            "legacy values; prefer a specific lifecycle trigger."
-                        ),
+                        "enum": list(CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES),
+                        "description": "Runtime-supported event or condition trigger.",
                     },
                     "trigger_config": _automation_trigger_config_schema(),
                     "actions": _automation_actions_schema(),
-                    "is_active": {
-                        "type": "boolean",
-                        "description": "Activate immediately (default true)",
-                    },
                 },
                 "required": ["name", "trigger_type", "actions"],
             },
@@ -859,25 +1154,30 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "update_automation",
             "description": (
-                "Update an existing automation's name, trigger, complete ordered action list, "
-                "or active state. Read it first with get_automation. Replacing actions requires "
-                "the full list, not only the changed action. Requires explicit confirmation."
+                "Edit an inactive automation draft. Disable active automations first. Replacing "
+                "actions requires the complete ordered list; activation remains separate."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "automation_id": {"type": "string", "description": "Automation UUID"},
                     "name": {"type": "string", "minLength": 1},
-                    "description": {"type": "string"},
+                    "description": {"type": ["string", "null"]},
                     "trigger_type": {
                         "type": "string",
-                        "enum": list(AUTOMATION_TRIGGER_TYPES),
+                        "enum": list(CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES),
                     },
                     "trigger_config": _automation_trigger_config_schema(),
                     "actions": _automation_actions_schema(),
-                    "is_active": {"type": "boolean"},
                 },
                 "required": ["automation_id"],
+                "anyOf": [
+                    {"required": ["name"]},
+                    {"required": ["description"]},
+                    {"required": ["trigger_type"]},
+                    {"required": ["trigger_config"]},
+                    {"required": ["actions"]},
+                ],
             },
         },
     },
@@ -1216,14 +1516,64 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "list_opportunities",
             "description": (
-                "List pipeline opportunities/deals across the workspace. For one resolved "
-                "contact's open opportunities and surrounding state, use get_contact_context."
+                "List visible pipeline opportunities. Sales reps see only opportunities assigned "
+                "to themselves; managers and admins see the workspace."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 50}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_opportunity",
+            "description": (
+                "Get one visible opportunity with its activities and tasks. Sales reps may only "
+                "open opportunities assigned to themselves."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"opportunity_id": {"type": "string", "format": "uuid"}},
+                "required": ["opportunity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_opportunity",
+            "description": (
+                "Create a pipeline opportunity using existing workspace resources. Sales reps "
+                "are always assigned as the owner, regardless of assigned_user_id."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "description": "Max results (default 10)"},
+                    "pipeline_id": {"type": "string", "format": "uuid"},
+                    **_opportunity_write_properties(),
                 },
+                "required": ["pipeline_id", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_opportunity",
+            "description": (
+                "Update a visible opportunity without deleting it. Sales reps may only update "
+                "their own opportunities and remain self-assigned."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "opportunity_id": {"type": "string", "format": "uuid"},
+                    **_opportunity_write_properties(),
+                },
+                "required": ["opportunity_id"],
+                "anyOf": [{"required": [field]} for field in _opportunity_write_properties()],
             },
         },
     },

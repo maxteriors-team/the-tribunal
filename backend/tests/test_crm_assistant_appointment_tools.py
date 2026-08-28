@@ -147,6 +147,55 @@ async def test_get_appointment_is_workspace_scoped(
     assert "appointments.id = 301" in compiled
 
 
+@pytest.mark.parametrize(
+    ("role", "visible_to_user_id"),
+    [("sales_rep", 7), ("manager", None)],
+)
+async def test_list_appointments_applies_calendar_owner_scope(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+    role: str,
+    visible_to_user_id: int | None,
+) -> None:
+    page = MagicMock(items=[], total=0)
+    page.items = []
+    page.total = 0
+    list_appointments = AsyncMock(return_value=page)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role=role)
+
+    with patch(
+        "app.services.ai.crm_assistant._appointment_tools.AppointmentService.list_appointments",
+        list_appointments,
+    ):
+        result = await executor.execute("list_appointments", {"include_past": True})
+
+    assert result["success"] is True
+    assert list_appointments.await_args.kwargs["visible_to_user_id"] == visible_to_user_id
+
+
+@pytest.mark.parametrize(
+    ("role", "visible_to_user_id"),
+    [("sales_rep", 7), ("manager", None)],
+)
+async def test_get_appointment_applies_calendar_owner_scope(
+    db: MagicMock,
+    workspace_id: uuid.UUID,
+    role: str,
+    visible_to_user_id: int | None,
+) -> None:
+    get_appointment = AsyncMock(return_value=_appointment(workspace_id))
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role=role)
+
+    with patch(
+        "app.services.ai.crm_assistant._appointment_tools.AppointmentService.get_appointment",
+        get_appointment,
+    ):
+        result = await executor.execute("get_appointment", {"appointment_id": 301})
+
+    assert result["success"] is True
+    assert get_appointment.await_args.kwargs["visible_to_user_id"] == visible_to_user_id
+
+
 async def test_approved_update_reschedules_appointment(
     db: MagicMock,
     workspace_id: uuid.UUID,
