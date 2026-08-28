@@ -10,7 +10,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, CanManageWorkspace, CurrentUser, get_workspace
+from app.api.deps import DB, CanManageWorkspace, CurrentUser, get_workspace, require_capability
+from app.core.permissions import Capability
 from app.models.workspace import Workspace
 from app.schemas.review import (
     GeneratedReviewReply,
@@ -34,7 +35,11 @@ from app.schemas.review import (
 from app.services.ai.review_reply_generator import generate_review_reply
 from app.services.reviews import ReviewService
 
-router = APIRouter()
+# Reputation data is customer data (names, ratings, private feedback), so
+# ``crm:read`` is the floor for the whole authenticated router — the same gate
+# ``/contacts`` uses. The public rating-gate router below is deliberately
+# unauthenticated and carries no dependency.
+router = APIRouter(dependencies=[Depends(require_capability(Capability.CRM_READ))])
 public_router = APIRouter()
 
 
@@ -109,6 +114,10 @@ async def list_review_requests(
     "/requests",
     response_model=ReviewRequestSendResult,
     status_code=status.HTTP_201_CREATED,
+    # Texts a customer from a workspace number, so it needs the same capability
+    # as any other outbound message rather than just the router's read floor.
+    # Finding 2 of docs/technician-role-audit.md.
+    dependencies=[Depends(require_capability(Capability.COMMS_SEND))],
 )
 async def create_review_request(
     workspace_id: uuid.UUID,

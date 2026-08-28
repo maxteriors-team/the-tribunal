@@ -22,7 +22,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import outbound_missions as outbound_missions_module
 from app.db.pagination import PaginationResult
 from app.models.lead_discovery_job import DiscoveryJobStatus, DiscoverySourceType
@@ -262,9 +262,20 @@ def _make_auth_test_app(
     async def override_get_current_user() -> MagicMock:
         return mock_user
 
+    async def override_get_membership() -> MagicMock:
+        # The router requires ``outreach:write``. These tests cover routing and
+        # service wiring, not authorization, so the owner role preserves the
+        # access they were written against;
+        # ``tests/api/test_technician_surface_probe.py`` owns role behaviour.
+        membership = MagicMock()
+        membership.role = "owner"
+        membership.workspace_id = WS_ID
+        return membership
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_workspace] = override_get_workspace
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_membership] = override_get_membership
 
     app.include_router(
         outbound_missions_module.router,

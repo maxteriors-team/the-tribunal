@@ -221,15 +221,34 @@ class JobCostingService:
         return self._time_entry_response(entry, include_costs=include_costs)
 
     async def delete_time_entry(
-        self, job_id: uuid.UUID, workspace_id: uuid.UUID, entry_id: uuid.UUID
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        entry_id: uuid.UUID,
+        *,
+        restrict_to_user_id: int | None = None,
     ) -> None:
+        """Delete a time entry, optionally only if ``restrict_to_user_id`` logged it.
+
+        Time entries are payroll input, so a caller without ``attendance:manage``
+        may only delete their own (see
+        :func:`app.core.permissions.time_entry_owner_scope`). The restriction is
+        an extra filter on the lookup rather than a check after it, so someone
+        else's entry reads as "not found" and its existence is not disclosed.
+        """
         await self._assert_job(job_id, workspace_id)
+        ownership = (
+            (TimeEntry.created_by_id == restrict_to_user_id,)
+            if restrict_to_user_id is not None
+            else ()
+        )
         entry = await assert_workspace_owned(
             self.db,
             TimeEntry,
             entry_id,
             workspace_id,
             TimeEntry.job_id == job_id,
+            *ownership,
             detail="Time entry not found",
         )
         await self.db.delete(entry)

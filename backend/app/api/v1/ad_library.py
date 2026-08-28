@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DB, CurrentUser, WorkspaceAccess
+from app.api.deps import DB, CurrentUser, WorkspaceAccess, require_capability
 from app.api.service_errors import ServiceErrorRoute
+from app.core.permissions import Capability
 from app.models.ad_advertiser import AdPlatform
 from app.schemas.ad_advertiser import AdAdvertiserDetail, PaginatedAdAdvertisers
 from app.schemas.ad_library import (
@@ -30,7 +31,14 @@ from app.schemas.ad_library import (
 from app.schemas.lead_discovery_job import LeadDiscoveryJobResponse
 from app.services.ad_intelligence.ad_library_service import AdLibraryService
 
-router = APIRouter(route_class=ServiceErrorRoute)
+# Ad-library discovery: billed provider searches, plus promoting an advertiser
+# into a contact. Same floor as the other lead-sourcing routers so the whole
+# prospecting surface gates consistently at ``outreach:write``. Finding 2 of
+# docs/technician-role-audit.md.
+router = APIRouter(
+    route_class=ServiceErrorRoute,
+    dependencies=[Depends(require_capability(Capability.OUTREACH_WRITE))],
+)
 
 
 @router.post(

@@ -11,10 +11,11 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DB, CurrentUser, WorkspaceAccess
+from app.api.deps import DB, CurrentUser, WorkspaceAccess, require_capability
 from app.api.service_errors import ServiceErrorRoute
+from app.core.permissions import Capability
 from app.models.lead_discovery_job import DiscoveryJobStatus, DiscoverySourceType
 from app.models.lead_prospect import ProspectIdentityKind, ProspectStatus
 from app.models.outbound_mission import MissionStatus, OutboundMission
@@ -35,7 +36,15 @@ from app.schemas.outbound_mission import (
 from app.schemas.outbound_sequence import OutboundSequenceEnrollmentResponse
 from app.services.outbound.mission_service import OutboundMissionService
 
-router = APIRouter(route_class=ServiceErrorRoute)
+# Outbound missions launch cold telephony/email at scale and hold the prospect
+# lists they were built from, so this is a sales surface, not an operational one.
+# ``outreach:write`` is the floor (sales tier and up), matching the campaigns
+# router: a tier that cannot author a campaign must not be able to run one here
+# instead. Finding 2 of docs/technician-role-audit.md.
+router = APIRouter(
+    route_class=ServiceErrorRoute,
+    dependencies=[Depends(require_capability(Capability.OUTREACH_WRITE))],
+)
 
 
 @router.post(

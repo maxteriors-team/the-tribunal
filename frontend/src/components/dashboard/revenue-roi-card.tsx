@@ -108,7 +108,8 @@ function LoadingSkeleton() {
 // ---------------------------------------------------------------------------
 
 interface RevenueRoiCardProps {
-  revenueStats: RevenueStats | undefined;
+  /** Null when the caller lacks `reports:view`; the card then renders nothing. */
+  revenueStats: RevenueStats | null | undefined;
   isPending: boolean;
 }
 

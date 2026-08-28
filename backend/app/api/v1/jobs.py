@@ -28,7 +28,7 @@ from app.api.deps import (
     WorkspaceDispatcher,
 )
 from app.api.service_errors import ServiceErrorRoute
-from app.core.permissions import Capability, role_can
+from app.core.permissions import Capability, role_can, time_entry_owner_scope
 from app.models.field_service import JobStatus
 from app.models.workspace import WorkspaceMembership
 from app.schemas.inventory import (
@@ -500,10 +500,22 @@ async def delete_time_entry(
     job_id: uuid.UUID,
     entry_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    membership: CurrentMembership,
+    current_user: CurrentUser,
     db: TransactionalDB,
 ) -> None:
-    """Delete a time entry."""
-    await JobCostingService(db).delete_time_entry(job_id, workspace.id, entry_id)
+    """Delete a time entry the caller logged (any entry with ``attendance:manage``).
+
+    Payroll input, so it is owner-scoped rather than merely workspace-scoped:
+    without the scope a technician could delete a colleague's hours. Finding 4
+    of docs/technician-role-audit.md.
+    """
+    await JobCostingService(db).delete_time_entry(
+        job_id,
+        workspace.id,
+        entry_id,
+        restrict_to_user_id=time_entry_owner_scope(membership.role, current_user.id),
+    )
 
 
 @router.get("/{job_id}/expenses", response_model=list[JobExpenseResponse])

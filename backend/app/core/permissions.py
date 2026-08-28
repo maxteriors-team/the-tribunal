@@ -286,6 +286,20 @@ def appointment_owner_scope(role: str, user_id: int) -> int | None:
     return user_id
 
 
+def time_entry_owner_scope(role: str, user_id: int) -> int | None:
+    """Return the user id time-entry edits are restricted to, or ``None``.
+
+    Object-level scoping for payroll input. Time entries feed labor cost, so a
+    technician correcting their own mistake is routine while editing a
+    colleague's row is not. Holders of ``attendance:manage`` (admin tier) may
+    fix anyone's; everyone else is confined to entries they created.
+
+    Fail-closed: unknown/legacy roles resolve to the field tier, which lacks
+    ``attendance:manage``, so they get the restricted path.
+    """
+    return None if role_can(role, Capability.ATTENDANCE_MANAGE) else user_id
+
+
 def upsell_job_scope_required(role: str) -> bool:
     """Return True when ``role`` may only upsell on jobs assigned to the caller.
 

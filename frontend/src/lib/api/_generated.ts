@@ -4744,6 +4744,14 @@ export interface paths {
          *     - Today's overview
          *     - Appointment metrics
          *
+         *     The dollar-denominated blocks (``revenue_stats``, ``lead_source_roi_stats``)
+         *     require ``reports:view`` and are omitted otherwise, which is the matrix's
+         *     documented intent: the manager tier runs operations but does not get
+         *     reports. Stripped here rather than in the UI, so the numbers never leave the
+         *     server for a caller who may not see them. ``deal_coach_stats`` stays: it is
+         *     pipeline *risk* triage that the sales tier works from daily, not a revenue
+         *     report.
+         *
          *     Results are cached in Redis for 5 minutes to reduce database load.
          */
         get: operations["get_dashboard_stats_api_v1_workspaces__workspace_id__dashboard_stats_get"];
@@ -6295,7 +6303,11 @@ export interface paths {
         post?: never;
         /**
          * Delete Time Entry
-         * @description Delete a time entry.
+         * @description Delete a time entry the caller logged (any entry with ``attendance:manage``).
+         *
+         *     Payroll input, so it is owner-scoped rather than merely workspace-scoped:
+         *     without the scope a technician could delete a colleague's hours. Finding 4
+         *     of docs/technician-role-audit.md.
          */
         delete: operations["delete_time_entry_api_v1_workspaces__workspace_id__jobs__job_id__time_entries__entry_id__delete"];
         options?: never;
@@ -16848,6 +16860,10 @@ export interface components {
         /**
          * DashboardResponse
          * @description Complete dashboard response.
+         *
+         *     ``revenue_stats`` and ``lead_source_roi_stats`` are the dollar-denominated
+         *     blocks. They are ``None`` for callers without ``reports:view`` — see
+         *     :func:`app.api.v1.dashboard.get_dashboard_stats`.
          */
         DashboardResponse: {
             /** Agent Stats */
@@ -16857,10 +16873,10 @@ export interface components {
             campaign_stats: components["schemas"]["CampaignStat"][];
             deal_coach_stats: components["schemas"]["DealCoachStats"];
             knowledge_base_stats: components["schemas"]["KnowledgeBaseStats"];
-            lead_source_roi_stats?: components["schemas"]["LeadSourceROIStats"];
+            lead_source_roi_stats?: components["schemas"]["LeadSourceROIStats"] | null;
             /** Recent Activity */
             recent_activity: components["schemas"]["RecentActivity"][];
-            revenue_stats: components["schemas"]["RevenueStats"];
+            revenue_stats?: components["schemas"]["RevenueStats"] | null;
             reviews_stats: components["schemas"]["ReviewsStats"];
             roleplay_stats: components["schemas"]["RoleplayStats"];
             speed_to_lead_stats: components["schemas"]["SpeedToLeadStats"];

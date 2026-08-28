@@ -7,8 +7,13 @@ member; writes are role-gated:
 - Business locations (the company's own branches / business units) — managed by
   the ``locations:manage`` capability (:data:`CanManageLocations`, admin +
   manager); any member may read so the location filter dropdown works for all.
-- Service locations (customer job sites) — created/edited by dispatchers and up
+- Service locations (customer job sites) — **reads** need ``crm:read``, because a
+  job site is a customer's address and this router would otherwise be a way
+  around the ``/contacts`` gate; created/edited by dispatchers and up
   (:data:`WorkspaceDispatcher`), since CSRs and dispatchers manage sites.
+  Field technicians still get the address for the job they are on: it is
+  embedded in the job payload as ``JobSiteSummary`` (see
+  ``tests/api/test_rbac.py``), which is scoped to their own assignments.
 - Crews and technicians (the field roster) — managed by managers and up
   (:data:`WorkspaceManager`).
 
@@ -19,7 +24,7 @@ request-scoped DB session.
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.deps import (
     DB,
@@ -28,8 +33,10 @@ from app.api.deps import (
     WorkspaceAccess,
     WorkspaceDispatcher,
     WorkspaceManager,
+    require_capability,
 )
 from app.api.service_errors import ServiceErrorRoute
+from app.core.permissions import Capability
 from app.schemas.field_service import (
     BusinessLocationCreate,
     BusinessLocationListResponse,
@@ -59,7 +66,15 @@ from app.services.field_service import (
 # Validation) raised by the service layer onto HTTP responses at the boundary,
 # so the services stay free of web-framework coupling.
 business_locations_router = APIRouter(route_class=ServiceErrorRoute)
-locations_router = APIRouter(route_class=ServiceErrorRoute)
+# Service locations are customer job sites — the same addresses the field tier is
+# 403 on at ``/contacts``. Gated on the router so every route, including future
+# ones, needs ``crm:read``. Finding 3 of docs/technician-role-audit.md.
+locations_router = APIRouter(
+    route_class=ServiceErrorRoute,
+    dependencies=[Depends(require_capability(Capability.CRM_READ))],
+)
+# Crews and technicians are the field roster, not customer data: a technician
+# may see who else is on their crew, so these keep plain membership reads.
 crews_router = APIRouter(route_class=ServiceErrorRoute)
 technicians_router = APIRouter(route_class=ServiceErrorRoute)
 

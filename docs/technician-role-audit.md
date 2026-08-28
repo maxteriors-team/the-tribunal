@@ -4,14 +4,18 @@
 capabilities `jobs:read` + `attendance:use`) actually confined to the jobs
 schedule, as `app/core/permissions.py` claims?
 
-**Answer: not yet, but the worst hole is closed.** The capability matrix itself
-is sound and its gates work where they are applied. The gap is *coverage*: ~40
-workspace surfaces carry no capability gate at all.
+**Answer: findings 1-4 are closed.** The capability matrix itself was already
+sound; the gap was *coverage* — ~40 workspace surfaces carried no capability
+gate at all, so the matrix was not the enforcement point it claimed to be on
+those routes.
 
-**Status 2026-08-27:** finding 1 (the CRM assistant) is fixed. Findings 2–4 are
-still open and are pinned as strict `xfail` tests in
-`backend/tests/api/test_technician_surface_probe.py`, so each one flips that
-suite red the moment it is fixed — the file is the checklist.
+**Status 2026-08-27:** findings 1-4 fixed, each with an assertion in
+`backend/tests/api/test_technician_surface_probe.py` (51 tests, no xfails).
+Finding 5 is documentation drift. Some surfaces named inside findings 2 and 4
+are explicitly **still open** and called out below; the remaining ungated routes
+from the sweep were not re-triaged in this pass. Anything found later should
+land in that file as a strict `xfail` carrying its finding number, so the gap
+stays visible and the test fails the moment the hole is closed.
 
 ## How this was checked
 
@@ -88,45 +92,74 @@ below dispatch keep booking through the appointments UI, which is untouched.
 in their context and now fail closed on approval. The operator re-asks the
 assistant; nothing is lost but the queued request.
 
-### 2. High — workspace financials, prospect data, and outbound spend
+### 2. ~~High~~ FIXED 2026-08-27 — workspace financials, prospect data, outbound spend
 
-No gate in the dependency tree and none in the handler
-(`app/api/v1/dashboard.py`, `prospects.py`, `outbound_missions.py`,
-`ad_library.py`, `reviews.py`, `pending_actions.py` contain zero `role_can`
-calls):
+Six routers had no gate in the dependency tree and none in the handler. Each now
+carries a **router-level** capability dependency, so a new endpoint added to any
+of them inherits the gate instead of defaulting open:
 
-| Surface | What a technician gets | Should be |
+| Router | Gate applied | Why |
 |---|---|---|
-| `GET /dashboard/stats`, `/dashboard/today-queue` | revenue, campaign, agent metrics | `reports:view` (owner/admin) |
-| `POST /prospects/{id}/reveal-phone` \| `reveal-email` | paid enrichment on the owner's account | `crm:write` / `outreach:write` |
-| `POST /prospects/search`, `/find-leads-ai/search`, `/ad-library/search` | paid lead sourcing | `outreach:write` |
-| `POST /outbound-missions`, `/outbound-missions/{id}/start` | launches outbound telephony/email | `outreach:write` |
-| `POST /reviews/requests` | sends SMS to customers | `comms:send` (field tier lacks it by design) |
-| `POST /pending-actions/{id}/approve` | approves queued AI actions | `outreach:write` or higher |
-| `GET/POST /lead-magnets`, `/referral-partners` | marketing collateral + partner payouts | `outreach:write` |
+| `dashboard.py` | `crm:read` floor; `revenue_stats` + `lead_source_roi_stats` need `reports:view` | the dashboard aggregates the whole CRM, including money |
+| `prospects.py` | `outreach:write` | every route is paid people search or per-reveal enrichment |
+| `find_leads_ai.py` | `outreach:write` | billed Google Places search plus bulk contact import |
+| `ad_library.py` | `outreach:write` | billed provider search; promoting advertisers into contacts |
+| `outbound_missions.py` | `outreach:write` | missions launch cold telephony/email at scale |
+| `reviews.py` | `crm:read` floor; `POST /requests` needs `comms:send` | review requests text customers |
 
 The spend items matter twice: they are money, and the field tier is deliberately
 denied `comms:send` precisely so a technician cannot message customers.
 
-### 3. High — the customer address book via a side door
+**The revenue split is enforcement of documented policy, not a new product
+call.** The matrix docstring already says the manager tier "run[s] operations
+(CRM, jobs, billing); **no** reports". So the dollar-denominated blocks are
+stripped server-side for anyone without `reports:view` rather than hidden in the
+UI — the numbers never leave the process. `deal_coach_stats` deliberately stays:
+it is pipeline *risk* triage the sales tier works from daily, not a revenue
+report. The frontend cards now accept `null` and the dashboard hides both
+shells, so a manager sees a shorter page rather than two empty cards.
 
-`GET /service-locations` returns 200 for a technician (`RUNTIME`).
-`app/api/v1/field_service.py` has no capability check, so every customer site
-address in the workspace is readable — the same data the field tier is 403 on at
-`/contacts`. `tests/api/test_rbac.py:598` asserts in a comment that this surface
-*is* denied; that comment is wrong, and no test covers it.
+Still open on this theme, and **not** fixed here: `POST /pending-actions/{id}/approve`
+and `GET/POST /lead-magnets`, `/referral-partners`. They were listed in the
+original finding but fall outside the routers named in this pass.
 
-`GET /crews`, `/technicians`, `/recurring-jobs` are open on the same router.
-Crew/technician rosters are arguably fine for the field tier; the site list is
-not.
+### 3. ~~High~~ FIXED 2026-08-27 — the customer address book via a side door
 
-### 4. Medium — job-adjacent writes with no owner scoping
+`GET /service-locations` returned 200 for a technician (`RUNTIME`): every
+customer site address in the workspace, the same data the field tier is 403 on
+at `/contacts`.
 
-`DELETE /jobs/{job_id}/time-entries/{entry_id}` reached the handler as a
-technician (`RUNTIME` 404, i.e. past authorization to the row lookup). Time
-entries are payroll input; nothing checks that the entry belongs to the caller.
-`GET /jobs/{id}/materials` and `/jobs/{id}/neighbors` are likewise open, and
-`/neighbors` is a lead-generation surface, not an operational one.
+`locations_router` in `app/api/v1/field_service.py` now requires `crm:read`.
+Field technicians still get the address for the job they are on — it is embedded
+in the job payload as `JobSiteSummary`, scoped to their own assignments, which
+`tests/api/test_rbac.py` already pins.
+
+`crews_router` and `technicians_router` were left open on purpose: the crew
+roster is not customer data, and a technician may see who else is on their crew.
+A test asserts they stay reachable, so the gate cannot creep.
+
+The false comment at `tests/api/test_rbac.py:598` claiming this was already
+denied has been corrected.
+
+### 4. ~~Medium~~ FIXED 2026-08-27 — time entries with no owner scoping
+
+`DELETE /jobs/{job_id}/time-entries/{entry_id}` was workspace-scoped only, so a
+technician could delete a colleague's payroll hours.
+
+Fixed with object-level scoping rather than a capability gate, because a
+technician correcting their *own* entry is routine: `time_entry_owner_scope()`
+in `permissions.py` (matching the existing `pipeline_owner_scope` /
+`quote_owner_scope` / `appointment_owner_scope` helpers) returns the caller's
+user id unless they hold `attendance:manage`. The service applies it as an extra
+filter on the lookup, so someone else's entry reads as **404** — its existence
+is not disclosed.
+
+Because 404 is the correct answer, a status-code assertion would prove nothing
+against a stubbed database; the test asserts the scope helper's decisions and
+that the route actually passes the value down.
+
+Still open: `GET /jobs/{id}/materials` and `/jobs/{id}/neighbors` remain
+ungated. `/neighbors` is a lead-generation surface, not an operational one.
 
 ### 5. Low — documentation drift
 
@@ -149,13 +182,19 @@ entries are payroll input; nothing checks that the entry belongs to the caller.
 - Data-layer (row-level) enforcement — every check found here is at the API
   layer, so a future service-layer caller bypasses all of it.
 
-## Suggested order
+## What is left
 
 1. ~~Assistant tool surface (finding 1)~~ — **done 2026-08-27.**
 2. ~~Fix the false `/service-locations` comment in `test_rbac.py`~~ — **done.**
-3. Dashboard + spend routes (finding 2).
-4. `/service-locations` (finding 3).
-5. Time-entry ownership (finding 4).
-6. Extend `tests/api/test_capability_route_matrix.py` to fail on **any** new
+3. ~~Dashboard + spend routers (finding 2)~~ — **done.**
+4. ~~`/service-locations` (finding 3)~~ — **done.**
+5. ~~Time-entry ownership (finding 4)~~ — **done.**
+6. Named inside findings 2 and 4 but **not** fixed:
+   `POST /pending-actions/{id}/approve`, `/lead-magnets`, `/referral-partners`,
+   `GET /jobs/{id}/materials`, `GET /jobs/{id}/neighbors`.
+7. Re-run the ungated-route sweep. The original one found ~40 candidates and
+   this pass gated 7 routers; the remainder were never triaged one by one.
+8. Extend `tests/api/test_capability_route_matrix.py` to fail on **any** new
    workspace route that ships without a capability marker, so coverage cannot
-   silently regress again.
+   silently regress again. Router-level dependencies (the pattern used
+   throughout this pass) make that check cheap to satisfy.
