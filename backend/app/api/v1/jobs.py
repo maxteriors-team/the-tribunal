@@ -29,7 +29,12 @@ from app.api.deps import (
     WorkspaceDispatcher,
 )
 from app.api.service_errors import ServiceErrorRoute
-from app.core.permissions import Capability, role_can, time_entry_owner_scope
+from app.core.permissions import (
+    Capability,
+    job_expense_owner_scope,
+    role_can,
+    time_entry_owner_scope,
+)
 from app.models.field_service import JobStatus
 from app.models.workspace import WorkspaceMembership
 from app.schemas.inventory import (
@@ -560,10 +565,22 @@ async def delete_expense(
     job_id: uuid.UUID,
     expense_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    membership: CurrentMembership,
+    current_user: CurrentUser,
     db: TransactionalDB,
 ) -> None:
-    """Delete an expense."""
-    await JobCostingService(db).delete_expense(job_id, workspace.id, expense_id)
+    """Delete an expense the caller recorded (any expense with ``billing:write``).
+
+    Owner-scoped for the same reason time entries are, and for one more: reading
+    this job's expenses needs ``billing:read``, so a tier that cannot see a cost
+    must not be able to destroy it. Another member's expense reads as 404.
+    """
+    await JobCostingService(db).delete_expense(
+        job_id,
+        workspace.id,
+        expense_id,
+        restrict_to_user_id=job_expense_owner_scope(membership.role, current_user.id),
+    )
 
 
 @router.get("/{job_id}/profitability", response_model=JobProfitability)

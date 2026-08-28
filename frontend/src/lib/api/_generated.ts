@@ -5186,6 +5186,12 @@ export interface paths {
         /**
          * Get Active Quo Line
          * @description Return the selected Quo line without exposing integration secrets.
+         *
+         *     Every sibling route in this module requires ``workspace:manage``; this one is
+         *     the messaging UI's pre-flight check, so it takes the lower ``crm:read`` floor
+         *     rather than being left open. It needs *a* gate because passing ``contact_id``
+         *     reveals whether that contact has Quo conversation history — an existence
+         *     oracle over the same contacts the field tier is 403 on at ``/contacts``.
          */
         get: operations["get_active_quo_line_api_v1_workspaces__workspace_id__integrations_quo_active_line_get"];
         put?: never;
@@ -5951,7 +5957,11 @@ export interface paths {
         post?: never;
         /**
          * Delete Expense
-         * @description Delete an expense.
+         * @description Delete an expense the caller recorded (any expense with ``billing:write``).
+         *
+         *     Owner-scoped for the same reason time entries are, and for one more: reading
+         *     this job's expenses needs ``billing:read``, so a tier that cannot see a cost
+         *     must not be able to destroy it. Another member's expense reads as 404.
          */
         delete: operations["delete_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses__expense_id__delete"];
         options?: never;

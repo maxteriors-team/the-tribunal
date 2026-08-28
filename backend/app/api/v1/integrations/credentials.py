@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import (
     DB,
     CanManageWorkspace,
+    CanReadCRM,
     CurrentUser,
     WorkspaceAccess,
     WorkspaceAdminAccess,
@@ -265,10 +266,18 @@ async def list_integrations(
 @router.get("/quo/active-line", response_model=QuoActiveLineStatus)
 async def get_active_quo_line(
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
     db: DB,
     contact_id: int | None = Query(default=None, ge=1),
 ) -> QuoActiveLineStatus:
-    """Return the selected Quo line without exposing integration secrets."""
+    """Return the selected Quo line without exposing integration secrets.
+
+    Every sibling route in this module requires ``workspace:manage``; this one is
+    the messaging UI's pre-flight check, so it takes the lower ``crm:read`` floor
+    rather than being left open. It needs *a* gate because passing ``contact_id``
+    reveals whether that contact has Quo conversation history — an existence
+    oracle over the same contacts the field tier is 403 on at ``/contacts``.
+    """
     has_contact_history = False
     if contact_id is not None:
         has_contact_history = (

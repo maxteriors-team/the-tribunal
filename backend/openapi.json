@@ -75930,7 +75930,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/integrations/quo/active-line": {
       "get": {
-        "description": "Return the selected Quo line without exposing integration secrets.",
+        "description": "Return the selected Quo line without exposing integration secrets.\n\nEvery sibling route in this module requires ``workspace:manage``; this one is\nthe messaging UI's pre-flight check, so it takes the lower ``crm:read`` floor\nrather than being left open. It needs *a* gate because passing ``contact_id``\nreveals whether that contact has Quo conversation history — an existence\noracle over the same contacts the field tier is 403 on at ``/contacts``.",
         "operationId": "get_active_quo_line_api_v1_workspaces__workspace_id__integrations_quo_active_line_get",
         "parameters": [
           {
@@ -79216,7 +79216,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/expenses/{expense_id}": {
       "delete": {
-        "description": "Delete an expense.",
+        "description": "Delete an expense the caller recorded (any expense with ``billing:write``).\n\nOwner-scoped for the same reason time entries are, and for one more: reading\nthis job's expenses needs ``billing:read``, so a tier that cannot see a cost\nmust not be able to destroy it. Another member's expense reads as 404.",
         "operationId": "delete_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses__expense_id__delete",
         "parameters": [
           {

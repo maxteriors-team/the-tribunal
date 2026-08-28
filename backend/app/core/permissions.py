@@ -286,6 +286,22 @@ def appointment_owner_scope(role: str, user_id: int) -> int | None:
     return user_id
 
 
+def job_expense_owner_scope(role: str, user_id: int) -> int | None:
+    """Return the user id expense deletes are restricted to, or ``None``.
+
+    Object-level scoping for job costs, mirroring
+    :func:`time_entry_owner_scope`. Recording an expense is open to any member so
+    a technician can log that a cost happened, and undoing their own mistake is
+    part of that. Deleting a colleague's cost record is not: it changes the job's
+    profitability, and the field tier cannot even *read* expenses
+    (``GET /jobs/{id}/expenses`` needs ``billing:read``), so it must not be able
+    to destroy them either. Holders of ``billing:write`` may delete anyone's.
+
+    Fail-closed: unknown/legacy roles resolve to the restricted path.
+    """
+    return None if role_can(role, Capability.BILLING_WRITE) else user_id
+
+
 def time_entry_owner_scope(role: str, user_id: int) -> int | None:
     """Return the user id time-entry edits are restricted to, or ``None``.
 

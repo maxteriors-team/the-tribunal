@@ -14,6 +14,7 @@ from app.api.deps import (
     CurrentMembership,
     CurrentUser,
     WorkspaceAccess,
+    require_capability,
     require_route_capabilities,
 )
 from app.core.permissions import Capability, role_can
@@ -35,7 +36,13 @@ from app.schemas.nudge import (
 from app.services.cards.card_service import CardService
 from app.services.cards.card_templates import render_template
 
-router = APIRouter()
+# Nudges are AI follow-up suggestions about specific customers: every response
+# carries ``contact_name``, ``contact_phone`` and ``contact_company``. That is
+# the same PII ``/contacts`` gates, so ``crm:read`` is the floor for the whole
+# router — reads and the act/dismiss/snooze writes alike, since acting on a
+# nudge requires seeing whose it is. Declared on the router so a new endpoint
+# inherits the gate rather than defaulting open.
+router = APIRouter(dependencies=[Depends(require_capability(Capability.CRM_READ))])
 
 
 def _nudge_to_response(nudge: HumanNudge) -> NudgeResponse:

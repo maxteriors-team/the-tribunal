@@ -7,7 +7,12 @@ from typing import Annotated, Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import DB, CurrentMembership, CurrentUser, get_workspace
+from app.api.deps import (
+    DB,
+    CurrentMembership,
+    CurrentUser,
+    get_workspace,
+)
 from app.core.permissions import appointment_owner_scope
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.appointment import (
@@ -211,6 +216,15 @@ async def delete_appointment(
     )
 
 
+# Deliberately NOT gated on ``comms:send``, though it does send an SMS.
+#
+# The 2026-08-28 sweep flagged this and the gate was reverted: unlike the bulk
+# messaging surfaces the matrix withholds from the field tier, this sends a
+# *templated* reminder, only for an appointment the caller can already see
+# (``_calendar_scope_user_id`` below), and is rate-limited per user. A technician
+# reminding their own customer about today's job is the field workflow, not an
+# escape from it, and ``tests/api/test_calendar_scope_api.py`` pins that intent.
+# Widen the payload to free text and this reasoning no longer holds.
 @router.post(
     "/{appointment_id}/send-reminder",
     response_model=dict,

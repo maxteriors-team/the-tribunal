@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_capability
+from app.core.permissions import Capability
 from app.models.call_outcome import CallOutcome
 from app.models.conversation import Message
 from app.models.workspace import Workspace
@@ -18,7 +19,10 @@ from app.schemas.call_outcome import (
 )
 from app.services.ai.call_outcome_service import CallOutcomeService
 
-router = APIRouter()
+# A call outcome is the disposition of a customer conversation, and it feeds
+# pipeline reporting. ``crm:read`` is the floor, matching the conversation
+# surfaces it annotates. Declared on the router so a new endpoint inherits it.
+router = APIRouter(dependencies=[Depends(require_capability(Capability.CRM_READ))])
 
 
 async def _get_message_for_workspace(

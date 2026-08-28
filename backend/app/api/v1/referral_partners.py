@@ -12,10 +12,17 @@ service layer's typed errors onto HTTP responses at the boundary.
 
 import uuid
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import DB, TransactionalDB, WorkspaceAccess, WorkspaceManager
+from app.api.deps import (
+    DB,
+    TransactionalDB,
+    WorkspaceAccess,
+    WorkspaceManager,
+    require_capability,
+)
 from app.api.service_errors import ServiceErrorRoute
+from app.core.permissions import Capability
 from app.models.referral_partner import ReferralPartnerType
 from app.schemas.referral_partner import (
     DEFAULT_QUIET_AFTER_DAYS,
@@ -27,7 +34,15 @@ from app.schemas.referral_partner import (
 )
 from app.services.lead_sources.referral_partner_service import ReferralPartnerService
 
-router = APIRouter(route_class=ServiceErrorRoute)
+# Partner records carry a name, email, phone and an optional link to the CRM
+# contact the partner already is — customer PII by another name — and the
+# scoreboard ranks who sends business. ``crm:read`` is the floor, the same gate
+# ``/contacts`` uses. Writes are already dispatcher-gated per route via
+# ``WorkspaceManager``.
+router = APIRouter(
+    route_class=ServiceErrorRoute,
+    dependencies=[Depends(require_capability(Capability.CRM_READ))],
+)
 
 
 @router.get("", response_model=ReferralPartnerListResponse)
