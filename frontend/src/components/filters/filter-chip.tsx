@@ -10,6 +10,7 @@ interface FilterChipProps {
 }
 
 const FIELD_LABELS: Record<string, string> = {
+  name: "Name",
   status: "Status",
   tags: "Tags",
   lead_score: "Lead Score",
@@ -50,6 +51,7 @@ const OPERATOR_LABELS: Record<string, string> = {
   is_false: "is false",
   is_null: "is empty",
   is_not_null: "is not empty",
+  is_unknown: "is unknown",
 };
 
 function formatValue(value: FilterRule["value"]): string {
@@ -65,7 +67,9 @@ function formatValue(value: FilterRule["value"]): string {
 export function FilterChip({ rule, onRemove }: FilterChipProps) {
   const fieldLabel = FIELD_LABELS[rule.field] ?? rule.field;
   const operatorLabel = OPERATOR_LABELS[rule.operator] ?? rule.operator;
-  const showValue = !["is_true", "is_false", "is_null", "is_not_null"].includes(rule.operator);
+  const showValue = !["is_true", "is_false", "is_null", "is_not_null", "is_unknown"].includes(
+    rule.operator,
+  );
 
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium">

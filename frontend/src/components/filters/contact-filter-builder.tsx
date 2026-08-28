@@ -34,6 +34,12 @@ interface FieldOption {
 
 const FIELD_OPTIONS: FieldOption[] = [
   {
+    value: "name",
+    label: "Name",
+    operators: [{ value: "is_unknown", label: "is unknown" }],
+    valueType: "text",
+  },
+  {
     value: "status",
     label: "Status",
     operators: [
@@ -283,7 +289,7 @@ export function ContactFilterBuilder({
     setOpen(false);
   };
 
-  const noValueOperators = ["is_true", "is_false", "is_null", "is_not_null"];
+  const noValueOperators = ["is_true", "is_false", "is_null", "is_not_null", "is_unknown"];
 
   return (
     <div className="space-y-2">
