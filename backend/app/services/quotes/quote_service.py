@@ -1716,6 +1716,11 @@ class QuoteService:
                 expiry_date=expiry,
                 notes=quote.notes,
                 proposal_url=proposal_url,
+                # Same mark the proposal page carries, so the email and the
+                # page it opens read as one document.
+                logo_url=get_proposal_template(quote.workspace).logo_url
+                if quote.workspace
+                else None,
                 # Explicit deliveries are intentional attempts, including the
                 # "Re-send email" action, and must create a new provider message.
                 # The courtesy email on mark_sent stays revision-idempotent so a

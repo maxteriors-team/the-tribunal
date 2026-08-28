@@ -1017,6 +1017,7 @@ async def send_quote_email(
     expiry_date: str | None = None,
     notes: str | None = None,
     proposal_url: str | None = None,
+    logo_url: str | None = None,
     idempotency_key: uuid.UUID | None = None,
 ) -> bool:
     """Email a customer their quote/estimate.
@@ -1027,99 +1028,49 @@ async def send_quote_email(
     prominent "View your proposal" button is rendered so the customer can open,
     review, and approve/decline online. Returns True only when the provider
     accepted the send.
+
+    Rendered through the shared branded layout so this email carries the same
+    logo, colour and typeface as the proposal page it links to. It previously
+    hand-rolled its own HTML, which meant the first thing a customer received
+    looked nothing like the document it opened.
     """
     subject = f"Quote {quote_number} from {workspace_name}"
 
-    body_style = (
-        "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; "
-        "line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;"
-    )
-    label_style = "color: #666; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;"
-    value_style = "font-size: 16px; font-weight: 600; color: #1a1a1a; margin: 2px 0 16px 0;"
-
-    title_row = ""
+    details: dict[str, str] = {}
     if title:
-        title_row = (
-            f'<p style="{label_style}">For</p><p style="{value_style}">{html_escape(title)}</p>'
-        )
-
-    expiry_row = ""
+        details["For"] = title
+    details["Total"] = amount_str
     if expiry_date:
-        expiry_row = (
-            f'<p style="{label_style}">Valid until</p>'
-            f'<p style="{value_style}">{html_escape(expiry_date)}</p>'
-        )
+        details["Valid until"] = expiry_date
 
-    notes_block = ""
-    if notes:
-        notes_block = f'<p style="color: #555; margin: 24px 0;">{html_escape(notes)}</p>'
-
-    view_button = ""
-    if proposal_url:
-        # proposal_url is built server-side from settings.frontend_url + the
-        # quote's own share token, not user input. Keep the URL visible below
-        # the button because some inboxes strip button styles or HTML entirely.
-        escaped_proposal_url = html_escape(proposal_url)
-        view_button = (
-            '<div style="text-align: center; margin: 32px 0;">'
-            f'<a href="{escaped_proposal_url}" '
-            'style="background-color: #1a1a1a; color: #ffffff; padding: 14px 28px; '
-            "border-radius: 8px; text-decoration: none; font-weight: 600; "
-            'display: inline-block;">View your proposal</a></div>'
-            '<p style="color: #666; font-size: 13px; text-align: center;">'
-            "Button not showing? Copy and paste this link:<br>"
-            f'<a href="{escaped_proposal_url}" style="word-break: break-all;">'
-            f"{escaped_proposal_url}</a></p>"
-        )
-
-    html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="{body_style}">
-    <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #1a1a1a; margin-bottom: 5px;">Quote {html_escape(quote_number)}</h1>
-    </div>
-    <p>You have a new quote from <strong>{html_escape(workspace_name)}</strong>.</p>
-    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 24px 0;">
-        {title_row}
-        <p style="{label_style}">Total</p>
-        <p style="{value_style}">{html_escape(amount_str)}</p>
-        {expiry_row}
-    </div>
-    {view_button}
-    {notes_block}
-    <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-    <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent by {html_escape(workspace_name)} via Maxteriors
-    </p>
-</body>
-</html>"""
-
-    text_rows = [
-        f"Quote {quote_number}",
-        "",
-        f"You have a new quote from {workspace_name}.",
+    blocks: list[Any] = [
+        Paragraph(f"You have a new quote from {workspace_name}."),
+        Details(details),
     ]
-    if title:
-        text_rows.append(f"For: {title}")
-    text_rows.append(f"Total: {amount_str}")
-    if expiry_date:
-        text_rows.append(f"Valid until: {expiry_date}")
     if proposal_url:
-        text_rows.extend(["", "View your proposal:", proposal_url])
+        # Built server-side from settings.frontend_url plus the quote's own
+        # share token, never from user input.
+        blocks.append(Button("View your proposal", proposal_url))
+        # Some inboxes strip button styling or HTML entirely, so the link is
+        # also written out in full. `Paragraph` auto-links a bare URL, so this
+        # stays clickable where the button does not survive.
+        blocks.append(Paragraph(f"Button not showing? Copy and paste this link: {proposal_url}"))
     if notes:
-        text_rows.extend(["", notes])
-    text_rows.extend(["", f"Sent by {workspace_name} via Maxteriors"])
+        blocks.append(Paragraph(notes))
+
+    rendered = render_email(
+        category=EmailCategory.TRANSACTIONAL,
+        heading=f"Quote {quote_number}",
+        blocks=blocks,
+        brand=_brand(workspace_name, logo_url),
+    )
 
     params: dict[str, Any] = {
         "from": _from_address(),
         "to": [to_email],
         "subject": subject,
-        "html": html_content,
-        "text": "\n".join(text_rows),
+        "html": rendered.html,
+        "text": rendered.text,
     }
 
     response = await _send(params, idempotency_key=idempotency_key)
