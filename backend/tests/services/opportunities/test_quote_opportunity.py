@@ -29,6 +29,7 @@ from app.services.opportunities.default_pipeline import (
     QUOTE_SENT_STAGE_NAME,
     ensure_default_pipeline,
 )
+from app.services.opportunities.opportunity_service import OpportunityService
 from app.services.opportunities.pipeline_removal import remove_from_pipeline
 from app.services.opportunities.quote_opportunity import (
     mark_quote_approved_on_pipeline,
@@ -433,6 +434,24 @@ async def test_removal_keeps_the_card_and_its_history() -> None:
         ).scalar_one()
         assert repeat == 1
 
+        await db.rollback()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_removed_card_is_omitted_from_pipeline_listing() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        removed, _ = await _open_deal(db, ws.id, contact, "Qualified")
+        await remove_from_pipeline(db, removed)
+        active, _ = await _open_deal(db, ws.id, contact, "Quote Sent / Follow Up")
+
+        page = await OpportunityService(db).list_opportunities(
+            ws.id, pipeline_id=active.pipeline_id
+        )
+
+        assert [opportunity.id for opportunity in page.items] == [active.id]
         await db.rollback()
 
 
