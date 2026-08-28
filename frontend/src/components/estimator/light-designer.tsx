@@ -1498,6 +1498,9 @@ function LandscapeProposalPanel({
   selectedCarePlanKey,
   wireItems,
   additionalLineItems,
+  depositInput,
+  depositValid,
+  onDepositInputChange,
   pricingPending,
   pricingError,
   onRetryPricing,
@@ -1534,6 +1537,9 @@ function LandscapeProposalPanel({
   selectedCarePlanKey: string | null;
   wireItems: Map<10 | 12, CatalogItemResponse | null>;
   additionalLineItems: LandscapeProposalLineItem[];
+  depositInput: string;
+  depositValid: boolean;
+  onDepositInputChange: (value: string) => void;
   pricingPending: boolean;
   pricingError: string | null;
   onRetryPricing: () => void;
@@ -1556,6 +1562,13 @@ function LandscapeProposalPanel({
   const bistroPricing = document?.bistro?.pricing_mode === "installation" ? document.bistro : null;
   const estimateTotal =
     document?.grand_financed_total ?? selectedTier?.pricing.financed_total ?? null;
+  // Preview the deposit off the same financed total the server charges on, so
+  // the number the rep reads here is the number the client is asked to pay.
+  const depositPct = depositValid ? Number(depositInput.trim() || 0) : 0;
+  const depositDueToday =
+    estimateTotal !== null && depositPct > 0
+      ? Math.round(((estimateTotal * depositPct) / 100) * 100) / 100
+      : null;
   const wireTotals = new Map<8 | 10 | 12 | 14, number | null>();
   for (const circuit of circuits) {
     const previous = wireTotals.get(circuit.wireGauge);
@@ -1949,8 +1962,32 @@ function LandscapeProposalPanel({
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-2">
-              <span>Payment milestones</span>
-              <input defaultValue="50% scheduling deposit, 50% at completion" />
+              <span>Deposit due on approval</span>
+              <span className="est-quote-deposit-input">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="50"
+                  value={depositInput}
+                  aria-invalid={!depositValid}
+                  aria-describedby="ll-deposit-hint"
+                  onChange={(event) => onDepositInputChange(event.target.value)}
+                />
+                <span aria-hidden="true">%</span>
+              </span>
+              <small
+                id="ll-deposit-hint"
+                className={depositValid ? "ll-panel-footnote" : "ll-proposal-error"}
+              >
+                {!depositValid
+                  ? "Enter a deposit between 0 and 100%."
+                  : depositDueToday !== null
+                    ? `${formatCurrency(depositDueToday)} due today, balance on completion.`
+                    : "Set 0 to send this proposal without collecting a deposit."}
+              </small>
             </label>
             <label className="grid gap-2">
               <span>Electrical responsibility</span>
@@ -2051,12 +2088,16 @@ function LandscapeProposalPanel({
             </p>
             <p>The customer link is locked to the highlighted fixture package.</p>
             <div>
-              <strong>Collect payment in three steps</strong>
-              <ol className="list-decimal space-y-1 pl-5 text-sm">
-                <li>Set the deposit due when the customer accepts.</li>
-                <li>Open the quote to preview the client acceptance and payment page.</li>
-                <li>Email or text the selected package so the customer can accept and pay.</li>
-              </ol>
+              <strong>
+                {createdQuote.deposit_amount != null && createdQuote.deposit_amount > 0
+                  ? `${formatCurrency(createdQuote.deposit_amount)} deposit is set on this quote`
+                  : "This quote collects no deposit"}
+              </strong>
+              <p className="text-sm">
+                {createdQuote.deposit_amount != null && createdQuote.deposit_amount > 0
+                  ? "Email or text it and the customer accepts, then pays that deposit by card on the same page."
+                  : "Set a deposit below if you want the customer to pay when they accept."}
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
@@ -2064,7 +2105,7 @@ function LandscapeProposalPanel({
                 type="button"
                 onClick={() => setPaymentTermsOpen(true)}
               >
-                Set deposit & payment terms
+                Change deposit & payment terms
               </button>
               <Link className="est-btn" href="/quotes">
                 Open quote & preview payment page
@@ -2140,6 +2181,9 @@ function LandscapeWorkspacePanel({
   selectedCarePlanKey,
   wireItems,
   additionalLineItems,
+  depositInput,
+  depositValid,
+  onDepositInputChange,
   pricingPending,
   pricingError,
   onRetryPricing,
@@ -2193,6 +2237,9 @@ function LandscapeWorkspacePanel({
   selectedCarePlanKey: string | null;
   wireItems: Map<10 | 12, CatalogItemResponse | null>;
   additionalLineItems: LandscapeProposalLineItem[];
+  depositInput: string;
+  depositValid: boolean;
+  onDepositInputChange: (value: string) => void;
   pricingPending: boolean;
   pricingError: string | null;
   onRetryPricing: () => void;
@@ -2364,6 +2411,9 @@ function LandscapeWorkspacePanel({
         selectedCarePlanKey={selectedCarePlanKey}
         wireItems={wireItems}
         additionalLineItems={additionalLineItems}
+        depositInput={depositInput}
+        depositValid={depositValid}
+        onDepositInputChange={onDepositInputChange}
         pricingPending={pricingPending}
         pricingError={pricingError}
         onRetryPricing={onRetryPricing}
@@ -3397,6 +3447,26 @@ export function LightDesigner({
   );
   const hasLandscape = fixtureCount > 0 || transformerCount > 0 || inputs.bistro_feet > 0;
 
+  // Deposit the landscape proposal will actually charge. Seeded from the
+  // workspace default when it has one, else 50% — a landscape quote that
+  // carries no deposit reaches the client with no way to pay, which is the
+  // failure this control exists to prevent.
+  const [landscapeDepositInput, setLandscapeDepositInput] = useState<string>(() =>
+    pricing?.deposit?.enabled && pricing.deposit.mode === "percentage" && pricing.deposit.value > 0
+      ? String(pricing.deposit.value)
+      : "50",
+  );
+  const trimmedLandscapeDeposit = landscapeDepositInput.trim();
+  const parsedLandscapeDeposit =
+    trimmedLandscapeDeposit === "" ? 0 : Number(trimmedLandscapeDeposit);
+  const landscapeDepositValid =
+    Number.isFinite(parsedLandscapeDeposit) &&
+    parsedLandscapeDeposit >= 0 &&
+    parsedLandscapeDeposit <= 100;
+  // 0 (or blank) is a deliberate "no deposit", not a fallback to the default.
+  const landscapeDepositPercent =
+    landscapeDepositValid && parsedLandscapeDeposit > 0 ? parsedLandscapeDeposit : null;
+
   const landscapeProposalPayload: ProposalWizardPayload | null =
     !landscapeOnly || !pricing || !priceBook || !effectiveLandscapeTierKey
       ? null
@@ -3421,6 +3491,7 @@ export function LightDesigner({
             ? landscapeProject.projectId
             : undefined,
           title: landscapeProjectName,
+          depositPercent: landscapeDepositPercent,
         });
   const landscapeProposalSignature = JSON.stringify(landscapeProposalPayload);
   const landscapeProposalHasRequirements = Boolean(
@@ -3834,9 +3905,7 @@ export function LightDesigner({
   const permanentProjectPreviewReady =
     !landscapeProject ||
     Boolean(
-      landscapeProject.projectId &&
-        permanentPreviewShot &&
-        hasDesign(permanentPreviewShot.design),
+      landscapeProject.projectId && permanentPreviewShot && hasDesign(permanentPreviewShot.design),
     );
 
   const quoteSignature = (side: "permanent" | "seasonal") =>
@@ -3883,7 +3952,9 @@ export function LightDesigner({
             }
           : undefined;
       if (side === "permanent" && landscapeProject && !proposalPreview) {
-        throw new Error("Save a lighting design on the selected photo before creating its proposal");
+        throw new Error(
+          "Save a lighting design on the selected photo before creating its proposal",
+        );
       }
       return estimatorApi.createQuote(workspaceId, {
         ...shareParams,
@@ -3951,8 +4022,7 @@ export function LightDesigner({
   const canSend = (channel: SendChannel) =>
     hasHolidayProposal &&
     (channel === "email" ? clientEmail : clientPhone).trim().length > 0 &&
-    (proposalSide !== "permanent" ||
-      (permanentDepositValid && permanentProjectPreviewReady));
+    (proposalSide !== "permanent" || (permanentDepositValid && permanentProjectPreviewReady));
   const sendEstimate = async (channel: SendChannel) => {
     if (!canSend(channel) || sendPending) return;
     setSendingChannel(channel);
@@ -4109,7 +4179,9 @@ export function LightDesigner({
                   ? "Pricing this package now."
                   : landscapePricingError
                     ? "Retry proposal pricing before creating a quote."
-                    : null;
+                    : !landscapeDepositValid
+                      ? "Enter a deposit between 0 and 100%."
+                      : null;
   const createLandscapeQuote = async () => {
     if (!landscapeProposalPayload || landscapeQuoteDisabledReason) return;
     try {
@@ -4505,6 +4577,9 @@ export function LightDesigner({
               selectedCarePlanKey={selectedLandscapeCarePlanKey}
               wireItems={selectedTierWireItems}
               additionalLineItems={landscapeAdditionalLineItems}
+              depositInput={landscapeDepositInput}
+              depositValid={landscapeDepositValid}
+              onDepositInputChange={setLandscapeDepositInput}
               pricingPending={landscapeProposalQuery.isFetching}
               pricingError={landscapePricingError}
               onRetryPricing={() => void landscapeProposalQuery.refetch()}
@@ -4923,7 +4998,9 @@ export function LightDesigner({
                               ) : (
                                 <>
                                   <Mail aria-hidden="true" />
-                                  {proposalSide === "permanent" ? "Email proposal" : "Email estimate"}
+                                  {proposalSide === "permanent"
+                                    ? "Email proposal"
+                                    : "Email estimate"}
                                 </>
                               )}
                             </button>
@@ -4950,8 +5027,8 @@ export function LightDesigner({
                           </div>
                           {proposalSide === "permanent" ? (
                             <div className="est-customer-hint">
-                              Email or text creates and sends the full proposal. The customer accepts
-                              it there, then pays the deposit by card.
+                              Email or text creates and sends the full proposal. The customer
+                              accepts it there, then pays the deposit by card.
                             </div>
                           ) : null}
                           <button

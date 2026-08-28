@@ -130,6 +130,28 @@ async def test_invalid_color_rejected(auth_client: AsyncClient) -> None:
     assert resp.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "logo_url",
+    ["javascript:alert(1)", "JaVaScRiPt:alert(1)", "data:image/svg+xml;base64,PHN2Zz4="],
+)
+async def test_non_http_logo_url_rejected(auth_client: AsyncClient, logo_url: str) -> None:
+    """The logo renders as ``<img src>`` on a public page, so bad schemes 422."""
+    resp = await auth_client.put(_url(), json={"logo_url": logo_url})
+    assert resp.status_code == 422
+
+    # And nothing was persisted: a rejected write must not partially apply.
+    body = (await auth_client.get(_url())).json()
+    assert body["logo_url"] is None
+
+
+async def test_http_logo_url_accepted(auth_client: AsyncClient) -> None:
+    resp = await auth_client.put(
+        _url(), json={"logo_url": "https://cdn.example.com/logo.png"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["logo_url"] == "https://cdn.example.com/logo.png"
+
+
 async def test_unauthenticated_rejected() -> None:
     app = FastAPI(lifespan=_test_lifespan)
 

@@ -6,8 +6,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
-  --font-heading: var(--font-manrope);
+  /* One brand face for both roles — see `Golos_Text` in app/layout.tsx. */
+  --font-sans: var(--font-golos);
+  --font-heading: var(--font-golos);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -71,7 +72,7 @@
   --popover: #ffffff;
   --popover-foreground: #0a0a0a;
   /* Primary - Yellow */
-  --primary: #ffb90a;
+  --primary: #fcb400;
   --primary-foreground: #0a0a0a;
   /* Secondary */
   --secondary: #f4f4f5;
@@ -93,9 +94,9 @@
   /* Border & Input */
   --border: rgba(10, 10, 10, 0.1);
   --input: rgba(10, 10, 10, 0.12);
-  --ring: #ffb90a;
+  --ring: #fcb400;
   /* Chart colors */
-  --chart-1: #ffb90a;
+  --chart-1: #fcb400;
   --chart-2: #0a0a0a;
   --chart-3: #eab308;
   --chart-4: #a1a1aa;
@@ -103,12 +104,12 @@
   /* Sidebar - black with yellow highlight */
   --sidebar: #0a0a0a;
   --sidebar-foreground: #e4e4e7;
-  --sidebar-primary: #ffb90a;
+  --sidebar-primary: #fcb400;
   --sidebar-primary-foreground: #0a0a0a;
   --sidebar-accent: #1c1c1f;
   --sidebar-accent-foreground: #fafafa;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #ffb90a;
+  --sidebar-ring: #fcb400;
   /* Scrollbars */
   --scrollbar-track: rgba(244, 244, 245, 0.6);
   --scrollbar-thumb: rgba(10, 10, 10, 0.25);
@@ -138,7 +139,7 @@
   --popover: #141414;
   --popover-foreground: #ececec;
   /* Primary - Yellow */
-  --primary: #ffb90a;
+  --primary: #fcb400;
   --primary-foreground: #0a0a0a;
   /* Secondary */
   --secondary: #27272a;
@@ -160,9 +161,9 @@
   /* Border & Input */
   --border: rgba(255, 255, 255, 0.1);
   --input: rgba(255, 255, 255, 0.12);
-  --ring: #ffb90a;
+  --ring: #fcb400;
   /* Chart colors */
-  --chart-1: #ffb90a;
+  --chart-1: #fcb400;
   --chart-2: #fde047;
   --chart-3: #eab308;
   --chart-4: #a1a1aa;
@@ -170,12 +171,12 @@
   /* Sidebar */
   --sidebar: #000000;
   --sidebar-foreground: #e4e4e7;
-  --sidebar-primary: #ffb90a;
+  --sidebar-primary: #fcb400;
   --sidebar-primary-foreground: #0a0a0a;
   --sidebar-accent: #1c1c1f;
   --sidebar-accent-foreground: #fafafa;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #ffb90a;
+  --sidebar-ring: #fcb400;
   /* Scrollbars */
   --scrollbar-track: rgba(39, 39, 42, 0.55);
   --scrollbar-thumb: rgba(255, 185, 10, 0.35);
@@ -325,7 +326,7 @@
   h4,
   h5,
   h6 {
-    font-family: var(--font-manrope), sans-serif;
+    font-family: var(--font-golos), sans-serif;
   }
 }
 

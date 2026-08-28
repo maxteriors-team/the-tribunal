@@ -283,8 +283,14 @@ async def send_quote_acceptance_receipt(
     deposit_amount: float | None = None,
     deposit_paid: bool = False,
     proposal_url: str | None = None,
+    warranty: str | None = None,
 ) -> bool:
-    """Send the customer a transactional receipt for their accepted quote."""
+    """Send the customer a transactional receipt for their accepted quote.
+
+    ``warranty`` is the accepted package's own warranty line, so the receipt the
+    customer keeps states the coverage they actually bought rather than a
+    generic promise.
+    """
     currency_code = (currency or "USD").upper()
     accepted_label = accepted_at.astimezone(UTC).strftime("%B %-d, %Y at %-I:%M %p UTC")
     receipt_lines = [
@@ -313,8 +319,20 @@ async def send_quote_acceptance_receipt(
             }
         ),
     ]
+    if warranty:
+        blocks.append(Paragraph(f"Warranty: {warranty}"))
     if proposal_url:
-        blocks.append(Button("View accepted proposal", proposal_url))
+        # The linked page is the receipt of record: it carries the brand, the
+        # warranty and the paid state, and its "Save as PDF" control prints a
+        # branded copy. We link rather than attach so the customer always sees
+        # the current document instead of a stale snapshot.
+        blocks.append(Button("View receipt & save as PDF", proposal_url))
+        blocks.append(
+            Paragraph(
+                "Open the link above and choose \u201cSave as PDF\u201d to download a "
+                "copy for your records."
+            )
+        )
     blocks.append(
         Paragraph(
             "Keep this email for your records. The team will contact you about "

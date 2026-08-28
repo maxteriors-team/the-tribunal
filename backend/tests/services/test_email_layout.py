@@ -118,8 +118,24 @@ class TestEscaping:
 
 class TestBranding:
     def test_uses_the_app_primary_colour(self):
-        assert BRAND.primary == "#ffb90a"
-        assert "#ffb90a" in _render().html
+        # Amber sampled from the logo, shared with the proposal page.
+        assert BRAND.primary == "#fcb400"
+        assert "#fcb400" in _render().html
+
+    def test_uses_the_brand_typeface_with_a_safe_fallback(self):
+        """Mail clients rarely load webfonts, so the stack must degrade sanely.
+
+        Golos Text is named first for the clients that do have it; the rest of
+        the stack is the platform grotesque, never a serif, so an unstyled send
+        still looks like the same brand rather than a different document.
+        """
+        html = _render(blocks=[Paragraph("x"), Button("Go", "https://e.com")]).html
+
+        assert "'Golos Text'" in html
+        assert "Arial, sans-serif" in html
+        # The serif pairing the proposal page dropped must not linger here.
+        assert "Cormorant" not in html
+        assert "serif;" not in html.replace("sans-serif;", "")
 
     def test_no_rgba_which_degrades_to_black_in_older_clients(self):
         assert "rgba(" not in _render().html
@@ -133,7 +149,7 @@ class TestBranding:
 
     def test_button_is_table_wrapped_for_outlook(self):
         html = _render(blocks=[Button("Book now", "https://example.com")]).html
-        assert 'bgcolor="#ffb90a"' in html
+        assert f'bgcolor="{BRAND.primary}"' in html
 
     def test_custom_brand_overrides_the_palette(self):
         html = _render(brand=Brand(business_name="Acme Gutters", primary="#00aaff")).html
@@ -225,18 +241,36 @@ class TestListUnsubscribeHeaders:
 class TestHeaderLogo:
     """The header band must never hide the logo it is drawn behind.
 
-    Our wordmark is the brand's primary yellow, so rendering it on a primary
-    band makes the company name vanish into the background — a send that looks
-    broken rather than branded.
+    The logo is built for dark surfaces: an amber wordmark above white
+    "EXTERIOR LIGHTING". A primary-yellow band swallows the amber, and a white
+    band swallows the white line — either way the send looks broken rather than
+    branded, so the band is the brand's ink.
     """
 
-    def test_logo_gets_a_white_band_with_a_primary_rule(self):
+    def _header(self, html: str) -> str:
+        """Just the masthead. Asserting against the whole document is useless:
+
+        `#ffffff` also appears in the card below, so an unscoped substring check
+        passes even when the band is the wrong colour.
+        """
+        return html.split('<tr><td style="padding:16px 20px;">')[0]
+
+    def test_logo_gets_an_ink_band_with_a_primary_rule(self):
         brand = Brand(logo_url="https://go.example.com/static/brand/maxteriors-logo.png")
         html = _render(brand=brand).html
+        header = self._header(html)
 
-        assert f"background-color:{brand.surface}" in html
-        assert f"border-bottom:4px solid {brand.primary}" in html
+        assert f"background-color:{brand.foreground}" in header
+        assert f"border-bottom:4px solid {brand.primary}" in header
+        # The image itself sits in the cell just past the band markup.
         assert 'src="https://go.example.com/static/brand/maxteriors-logo.png"' in html
+
+    def test_logo_band_is_never_white(self):
+        """The white line in the logo would be invisible on a white band."""
+        brand = Brand(logo_url="https://go.example.com/static/brand/maxteriors-logo.png")
+        header = self._header(_render(brand=brand).html)
+
+        assert f"background-color:{brand.surface}" not in header
 
     def test_logo_is_never_drawn_on_the_primary_band(self):
         brand = Brand(logo_url="https://go.example.com/static/brand/maxteriors-logo.png")

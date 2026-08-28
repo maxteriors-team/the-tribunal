@@ -46,6 +46,12 @@ export interface BuildLandscapeProposalPayloadOptions extends LandscapeProposalL
   selectedTierKey: string | null;
   selectedCarePlanKey: string | null;
   additionalLineItems?: Array<{ description: string; amount: number }>;
+  /**
+   * Deposit percentage the rep set on the proposal panel. Overrides the
+   * workspace default so a landscape quote carries payment terms even in a
+   * workspace that never enabled one; `null` means "charge no deposit".
+   */
+  depositPercent?: number | null;
 }
 
 function addQuantity(quantities: Map<string, number>, itemId: string | null, quantity: number) {
@@ -175,6 +181,7 @@ export function buildLandscapeProposalPayload({
   serviceLocationId,
   lightingProjectId,
   title,
+  depositPercent,
 }: BuildLandscapeProposalPayloadOptions): ProposalWizardPayload {
   const careFixtureCount =
     FIXTURE_TYPES.reduce(
@@ -224,9 +231,15 @@ export function buildLandscapeProposalPayload({
     customer_can_select_package: false,
     care_plan_tier: selectedCarePlanKey,
     care_count_manual: careFixtureCount,
-    deposit: pricing.deposit?.enabled
-      ? { mode: pricing.deposit.mode, value: pricing.deposit.value }
-      : null,
+    // The rep's explicit percentage wins; without one fall back to the
+    // workspace default. Both may be absent, and then the quote requests no
+    // deposit and the client page shows no pay button.
+    deposit:
+      depositPercent != null && depositPercent > 0
+        ? { mode: "percentage", value: depositPercent }
+        : depositPercent === undefined && pricing.deposit?.enabled
+          ? { mode: pricing.deposit.mode, value: pricing.deposit.value }
+          : null,
     night_preview: null,
     mockups: [],
   } as ProposalWizardPayload & { lighting_project_id?: string | null };

@@ -88,7 +88,9 @@ export function ProposalSettingsTab() {
               ) : null}
             </div>
             <p className="text-xs text-muted-foreground">
-              Paste a public URL to your logo image (PNG or SVG works best).
+              Paste a public URL to your logo image (PNG or SVG works best). Must start
+              with https:// — it appears on your public proposal page and on customer
+              receipts.
             </p>
           </div>
 

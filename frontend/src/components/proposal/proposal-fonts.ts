@@ -1,26 +1,25 @@
 /**
- * Client-proposal typography — Cormorant Garamond (display) + Montserrat (UI),
- * self-hosted via `next/font/google` and exposed as CSS variables so
- * `proposal-theme.css` can reference them with no FOUT and no hashed class name.
+ * Client-proposal typography — Golos Text, the Maxteriors brand face.
+ *
+ * The page previously paired Cormorant Garamond (display serif) with Montserrat
+ * (UI). That serif read as a different company from the heavy geometric logo
+ * sitting directly above it, so both roles now resolve to the one brand family
+ * that maxteriorslighting.com uses; weight carries the display/UI distinction
+ * instead of a second typeface.
+ *
+ * `proposal-theme.css` maps its historical `--font-cormorant` / `--font-montserrat`
+ * variables onto this one, so the ~40 rules referencing them keep working and
+ * this file stays the single place the proposal's typeface is decided.
  *
  * Spread `proposalFontVars` onto the `.proposal-view` root element.
  */
-import { Cormorant_Garamond, Montserrat } from "next/font/google";
+import { Golos_Text } from "next/font/google";
 
-export const cormorant = Cormorant_Garamond({
-  variable: "--font-cormorant",
+export const golos = Golos_Text({
+  variable: "--font-golos-proposal",
   subsets: ["latin"],
-  weight: ["300", "400", "600"],
-  style: ["normal", "italic"],
   display: "swap",
 });
 
-export const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
-
-/** Combined variable class to spread onto the `.proposal-view` root element. */
-export const proposalFontVars = `${cormorant.variable} ${montserrat.variable}`;
+/** Variable class to spread onto the `.proposal-view` root element. */
+export const proposalFontVars = golos.variable;

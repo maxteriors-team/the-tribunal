@@ -19,6 +19,7 @@ import type { PublicProposal } from "@/types/proposal";
 import { DepositPanel } from "./deposit-panel";
 import { FinancingEstimate } from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
+import { proposalAccentVars } from "./proposal-brand";
 import { proposalFontVars } from "./proposal-fonts";
 
 import "./proposal-theme.css";
@@ -94,7 +95,10 @@ export function PlainQuoteView({
     .join(" \u00b7 ");
 
   return (
-    <div className={`proposal-view ${proposalFontVars}`}>
+    <div
+      className={`proposal-view ${proposalFontVars}`}
+      style={proposalAccentVars(branding.brand_color)}
+    >
       <div className="present-nav no-print">
         <div className="present-nav-brand">{`${brandName} \u00b7 Proposal ${data.number}`}</div>
         <div className="present-nav-actions">
@@ -119,6 +123,12 @@ export function PlainQuoteView({
 
         {/* Hero */}
         <div className="present-hero">
+          {/* This page is the receipt of record, so it carries the brand mark
+              the same way the rich proposal view does. */}
+          {branding.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- workspace-uploaded logo URL
+            <img src={branding.logo_url} alt={brandName} className="pp-logo" />
+          ) : null}
           <div className="present-eyebrow">Proposal {data.number}</div>
           {data.client_name ? (
             <div className="present-hi">

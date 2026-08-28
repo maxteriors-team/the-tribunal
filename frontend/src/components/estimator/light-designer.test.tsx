@@ -427,6 +427,8 @@ describe("LightDesigner", () => {
       subtotal: 1500,
       tax_amount: 0,
       total: 1500,
+      deposit_percentage: 50,
+      deposit_amount: 750,
       currency: "USD",
       attach_count: 0,
       attach_value: 0,
@@ -790,9 +792,8 @@ describe("LightDesigner", () => {
   });
 
   it("keeps permanent proposal creation disabled until the selected shot has a design", async () => {
-    const actualDesign = await vi.importActual<typeof import("@/lib/estimator/design")>(
-      "@/lib/estimator/design",
-    );
+    const actualDesign =
+      await vi.importActual<typeof import("@/lib/estimator/design")>("@/lib/estimator/design");
     vi.mocked(hasDesign).mockImplementation(actualDesign.hasDesign);
     const flushBeforeProposal = vi.fn().mockResolvedValue(undefined);
     const adapter: LandscapeProjectPersistenceAdapter = {
@@ -993,12 +994,7 @@ describe("LightDesigner", () => {
     fireEvent.click(textBtn);
 
     await waitFor(() =>
-      expect(quotesApi.deliver).toHaveBeenCalledWith(
-        "ws_1",
-        "quote-1",
-        "sms",
-        "+15551234567",
-      ),
+      expect(quotesApi.deliver).toHaveBeenCalledWith("ws_1", "quote-1", "sms", "+15551234567"),
     );
     expect(estimatorApi.share).not.toHaveBeenCalled();
     expect(estimatorApi.deliver).not.toHaveBeenCalled();
@@ -1963,6 +1959,9 @@ describe("LightDesigner", () => {
             expect.objectContaining({ item_id: "best-zd-up", quantity: 2 }),
           ]),
           selected_tier: "better",
+          // Default-on deposit: the panel sends real payment terms without the
+          // rep configuring anything, so the client page renders a Pay button.
+          deposit: { mode: "percentage", value: 50 },
           customer_can_select_package: false,
           care_plan_tier: "essential",
           care_count_manual: 2,
@@ -1977,16 +1976,18 @@ describe("LightDesigner", () => {
     );
     expect(adapter.flushBeforeProposal).toHaveBeenCalled();
     expect(await screen.findByText(/Draft quote Q-1042 was created/i)).toBeInTheDocument();
-    expect(screen.getByText(/customer link is locked to the highlighted fixture package/i)).toBeVisible();
-    expect(screen.getByText("Collect payment in three steps")).toBeVisible();
-    expect(screen.getByText(/Set the deposit due when the customer accepts/i)).toBeVisible();
+    expect(
+      screen.getByText(/customer link is locked to the highlighted fixture package/i),
+    ).toBeVisible();
+    expect(screen.getByText("$750.00 deposit is set on this quote")).toBeVisible();
+    expect(screen.getByText(/pays that deposit by card on the same page/i)).toBeVisible();
     expect(screen.getByRole("link", { name: "Open quote & preview payment page" })).toHaveAttribute(
       "href",
       "/quotes",
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Set deposit & payment terms" }));
+    await user.click(screen.getByRole("button", { name: "Change deposit & payment terms" }));
 
     expect(await screen.findByRole("dialog", { name: "Quote payment terms" })).toBeVisible();
     await waitFor(() =>
@@ -2178,7 +2179,9 @@ describe("LightDesigner", () => {
     fireEvent.click(createQuote);
     expect(await screen.findByText(/Draft quote Q-1042 was created/i)).toBeVisible();
 
-    expect(screen.getByText(/customer link is locked to the highlighted fixture package/i)).toBeVisible();
+    expect(
+      screen.getByText(/customer link is locked to the highlighted fixture package/i),
+    ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Email selected package" }));
     await waitFor(() =>
       expect(salesWizardApi.deliver).toHaveBeenNthCalledWith(1, "ws_1", "quote-1", "email"),

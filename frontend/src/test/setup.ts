@@ -91,10 +91,7 @@ const mockFont = () => ({
 // Vitest validates named exports against the mock, so each loader the app uses
 // is listed here; add a font here when a component starts importing one.
 vi.mock("next/font/google", () => ({
-  Cormorant_Garamond: mockFont,
-  Inter: mockFont,
-  Manrope: mockFont,
-  Montserrat: mockFont,
+  Golos_Text: mockFont,
 }));
 vi.mock("next/font/local", () => ({ default: mockFont }));
 

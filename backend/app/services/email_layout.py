@@ -78,8 +78,9 @@ class Brand:
     """
 
     business_name: str = "Maxteriors"
-    # --primary / --primary-foreground
-    primary: str = "#ffb90a"
+    # --primary / --primary-foreground. The amber is sampled from the logo
+    # (maxteriorslighting.com), so mail, the proposal page and the mark agree.
+    primary: str = "#fcb400"
     on_primary: str = "#0a0a0a"
     # --background / --foreground
     background: str = "#fafafa"
@@ -108,16 +109,17 @@ BRAND = Brand()
 RADIUS = "10px"
 CONTENT_WIDTH = "600px"
 
-# Webfonts do not load reliably in mail clients, so the app's Inter/Manrope are
-# named first and fall back to the platform UI stack that most closely matches.
+# Webfonts do not load reliably in mail clients, so the brand face is named
+# first and falls back to the platform UI stack that most closely matches.
+# Golos Text is a geometric grotesque, so the fallbacks are the closest
+# always-present equivalents rather than a serif that would reflow the layout.
 _FONT_BODY = (
-    "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, "
+    "'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, "
     "'Helvetica Neue', Arial, sans-serif"
 )
-_FONT_HEADING = (
-    "Manrope, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, "
-    "'Helvetica Neue', Arial, sans-serif"
-)
+# One family for both roles, matching the app and the proposal page: weight
+# carries the display/UI distinction, not a second typeface.
+_FONT_HEADING = _FONT_BODY
 
 # Mirrors app.services.email._BARE_URL_RE — the character class excludes the
 # quote/angle characters that could otherwise close an href early.
@@ -406,16 +408,17 @@ def render_email(
 
     body_html = "".join(_render_block(block, brand) for block in blocks)
 
-    # A full-colour logo is drawn for white, not for the brand's own primary: our
-    # wordmark is yellow, so on the yellow band it disappears into it. So the
-    # header band is white whenever a logo is set (with the primary kept as the
-    # rule beneath it, matching the owner's-guide masthead these emails link to),
-    # and stays a solid primary band with the wordmark set in text when it is not.
+    # The header band has to contrast with the logo drawn on it. Ours is built
+    # for dark surfaces — amber wordmark over white "EXTERIOR LIGHTING" — so a
+    # white band swallows half of it and the primary yellow band swallows the
+    # other half. The ink band matches the client proposal page these emails
+    # link to (`--black: #0a0a0a`), with the primary kept as the rule beneath.
+    # Without a logo the wordmark is set in text on the primary band as before.
     logo_html = ""
     header_background = brand.primary
     header_rule = ""
     if brand.logo_url:
-        header_background = brand.surface
+        header_background = brand.foreground
         header_rule = f"border-bottom:4px solid {brand.primary};"
         logo_html = (
             f'<img src="{_safe_url(brand.logo_url)}" alt="{html_escape(brand.business_name)}" '
