@@ -14,9 +14,13 @@ from typing import Any
 import pytest
 
 from app.models.campaign import CampaignStatus
-from app.schemas.automation import AUTOMATION_ACTION_TYPES, AUTOMATION_TRIGGER_TYPES
 from app.schemas.offer import DiscountType, GuaranteeType, UrgencyType
-from app.services.ai.crm_assistant._tools import CRM_TOOLS, get_crm_tools
+from app.services.ai.crm_assistant._tools import (
+    CRM_ASSISTANT_AUTOMATION_ACTION_TYPES,
+    CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES,
+    CRM_TOOLS,
+    get_crm_tools,
+)
 
 _TOOLS = {tool["function"]["name"]: tool["function"] for tool in get_crm_tools()}
 
@@ -54,15 +58,18 @@ class TestEnums:
         """'active' is what a model reaches for; it is not a campaign status."""
         assert "active" not in _schema("list_campaigns", "status")["enum"]
 
-    def test_automation_trigger_enum_tracks_the_schema_constant(self) -> None:
-        assert _schema("create_automation", "trigger_type")["enum"] == list(
-            AUTOMATION_TRIGGER_TYPES
-        )
+    def test_automation_trigger_enum_only_exposes_runtime_supported_values(self) -> None:
+        values = _schema("create_automation", "trigger_type")["enum"]
 
-    def test_automation_action_type_is_enumerated(self) -> None:
-        schema = _schema("create_automation", "actions", "[]", "type")
+        assert values == list(CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES)
+        assert not {"event", "generic_event", "schedule", "condition"}.intersection(values)
 
-        assert schema["enum"] == list(AUTOMATION_ACTION_TYPES)
+    def test_automation_action_type_only_exposes_canonical_values(self) -> None:
+        values = _schema("create_automation", "actions", "[]", "type")["enum"]
+
+        assert values == list(CRM_ASSISTANT_AUTOMATION_ACTION_TYPES)
+        assert "add_tag" not in values
+        assert "delay" not in values
 
     @pytest.mark.parametrize("tool", ["create_agent", "update_agent"])
     def test_channel_mode_is_enumerated(self, tool: str) -> None:
@@ -125,6 +132,37 @@ class TestStrictSchemas:
             variant["properties"]["config"]["additionalProperties"] is False
             for variant in action_item["anyOf"]
         )
+
+    def test_every_automation_action_has_one_closed_config_variant(self) -> None:
+        action_item = _schema("create_automation", "actions", "[]")
+        covered = [
+            action_type
+            for variant in action_item["anyOf"]
+            for action_type in variant["properties"]["type"]["enum"]
+        ]
+
+        assert sorted(covered) == sorted(CRM_ASSISTANT_AUTOMATION_ACTION_TYPES)
+        assert len(covered) == len(set(covered))
+        for variant in action_item["anyOf"]:
+            assert variant["properties"]["config"]["additionalProperties"] is False
+
+    def test_branch_schema_has_step_ids_strict_filters_and_targets(self) -> None:
+        action_item = _schema("create_automation", "actions", "[]")
+        branch = next(
+            variant
+            for variant in action_item["anyOf"]
+            if variant["properties"]["type"]["enum"] == ["branch"]
+        )
+        config = branch["properties"]["config"]
+
+        assert "id" in action_item["properties"]
+        assert config["required"] == ["condition", "then_goto", "else_goto"]
+        assert config["properties"]["condition"]["properties"]["rules"]["minItems"] == 1
+        assert config["properties"]["condition"]["additionalProperties"] is False
+
+    @pytest.mark.parametrize("tool", ["create_automation", "update_automation"])
+    def test_automation_drafts_cannot_set_active_state(self, tool: str) -> None:
+        assert "is_active" not in _TOOLS[tool]["parameters"]["properties"]
 
     def test_nested_array_item_objects_are_hardened(self) -> None:
         item = _schema("create_offer_draft", "value_stack_items", "[]")

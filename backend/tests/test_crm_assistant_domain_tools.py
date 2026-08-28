@@ -6,12 +6,12 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.models.agent import Agent
-from app.models.appointment import Appointment, AppointmentStatus
+from app.models.appointment import AppointmentStatus
 from app.models.contact import Contact
 from app.models.conversation import Conversation
 from app.models.opportunity import Opportunity
@@ -196,19 +196,30 @@ async def test_list_appointments_returns_upcoming_summaries(
     workspace_id: uuid.UUID,
 ) -> None:
     scheduled_at = datetime.now(UTC) + timedelta(days=1)
-    appointment = Appointment(
-        id=301,
-        workspace_id=workspace_id,
-        contact_id=101,
-        scheduled_at=scheduled_at,
-        duration_minutes=45,
-        status=AppointmentStatus.SCHEDULED,
-        notes="Discovery call",
-    )
-    db.execute.return_value = _ExecuteResult([appointment])
+    appointment_response = MagicMock()
+    appointment_response.model_dump.return_value = {
+        "id": 301,
+        "contact_id": 101,
+        "scheduled_at": scheduled_at.isoformat(),
+        "duration_minutes": 45,
+        "service_type": None,
+        "status": AppointmentStatus.SCHEDULED,
+        "notes": "Discovery call",
+        "meeting_url": None,
+        "calendar_event_url": None,
+        "sync_status": None,
+    }
+    page = MagicMock(items=[appointment_response], total=1)
+    page.items = [appointment_response]
+    page.total = 1
+    list_appointments = AsyncMock(return_value=page)
     executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
-    result = await executor.execute("list_appointments", {"limit": 3})
+    with patch(
+        "app.services.ai.crm_assistant._appointment_tools.AppointmentService.list_appointments",
+        list_appointments,
+    ):
+        result = await executor.execute("list_appointments", {"limit": 3})
 
     assert result == {
         "success": True,
@@ -249,10 +260,26 @@ async def test_list_opportunities_returns_pipeline_summaries(
         created_at=datetime(2026, 5, 1, tzinfo=UTC),
         updated_at=datetime(2026, 5, 2, tzinfo=UTC),
     )
-    db.execute.return_value = _ExecuteResult([opportunity])
+    opportunity_response = MagicMock()
+    opportunity_response.model_dump.return_value = {
+        "id": str(opportunity.id),
+        "name": "Spring HVAC replacement",
+        "status": "open",
+        "amount": 12500.5,
+        "probability": 65,
+        "primary_contact_id": 101,
+    }
+    page = MagicMock(items=[opportunity_response], total=1)
+    page.items = [opportunity_response]
+    page.total = 1
+    list_opportunities = AsyncMock(return_value=page)
     executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
-    result = await executor.execute("list_opportunities", {"limit": 10})
+    with patch(
+        "app.services.ai.crm_assistant._opportunity_tools.OpportunityService.list_opportunities",
+        list_opportunities,
+    ):
+        result = await executor.execute("list_opportunities", {"limit": 10})
 
     assert result == {
         "success": True,

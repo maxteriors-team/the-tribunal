@@ -20,6 +20,7 @@ from app.services.ai.crm_assistant._help_tools import HelpAssistantTools
 from app.services.ai.crm_assistant._offer_tools import OfferAssistantTools
 from app.services.ai.crm_assistant._opportunity_tools import OpportunityAssistantTools
 from app.services.ai.crm_assistant._outbound_tools import OutboundAssistantTools
+from app.services.ai.crm_assistant._segment_tools import SegmentAssistantTools
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
 from app.services.ai.crm_assistant._tool_errors import (
     internal_error,
@@ -94,6 +95,7 @@ class CRMToolExecutor:
         handlers: dict[str, ToolHandler] = {}
         modules = (
             ContactAssistantTools(self.context),
+            SegmentAssistantTools(self.context),
             CampaignAssistantTools(self.context),
             AutomationAssistantTools(self.context),
             AgentAssistantTools(self.context),

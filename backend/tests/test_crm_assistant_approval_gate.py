@@ -3,7 +3,7 @@
 The gate used to read ``args.get("confirmed")``, and ``confirmed`` was a
 declared parameter in the tool schema the model writes. Nothing required a
 human: the model could emit ``confirmed: true`` itself and walk straight past
-approval on send_sms, start_campaign, create_automation and create_agent.
+approval on send_sms, campaign starts, automation activation, and agent changes.
 ``user_confirmed`` was honoured too and appeared in no schema at all.
 
 Approval state now lives only in the executor and the /pending-actions flow.
@@ -15,13 +15,15 @@ import json
 import uuid
 from dataclasses import replace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.models.pending_action import PendingAction
 from app.services.ai.crm_assistant._tool_executor import CRMToolExecutor
 from app.services.ai.crm_assistant._tool_metadata import (
     CRM_ASSISTANT_ACTION_PREFIX,
+    execute_approved_crm_assistant_tool,
     get_tool_policy,
 )
 from app.services.ai.crm_assistant._tools import get_crm_tools
@@ -31,8 +33,6 @@ GATED_TOOLS = (
     "send_sms",
     "start_campaign",
     "resume_campaign",
-    "create_automation",
-    "update_automation",
     "enable_automation",
     "delete_automation",
     "create_agent",
@@ -177,3 +177,102 @@ class TestApprovedPathStillExecutes:
         for tool in GATED_TOOLS:
             executor = get_approved_action_executor(f"{CRM_ASSISTANT_ACTION_PREFIX}{tool}")
             assert executor is not None, f"{tool} can be queued but never executed"
+
+
+class _MembershipResult:
+    def __init__(self, membership: object | None) -> None:
+        self.membership = membership
+
+    def scalar_one_or_none(self) -> object | None:
+        return self.membership
+
+
+def _approved_start_action(workspace_id: uuid.UUID) -> PendingAction:
+    return PendingAction(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        agent_id=None,
+        action_type="crm_assistant.start_campaign",
+        action_payload={"campaign_id": str(uuid.uuid4())},
+        description="Start campaign",
+        context={"source": "crm_assistant", "user_id": 7, "role": "owner"},
+        status="approved",
+    )
+
+
+class TestApprovalTimeReauthorization:
+    async def test_current_membership_role_replaces_queued_snapshot(self) -> None:
+        workspace_id = uuid.uuid4()
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=_MembershipResult(MagicMock(role="manager")))
+        action = _approved_start_action(workspace_id)
+
+        with patch(
+            "app.services.ai.crm_assistant._tool_executor.CRMToolExecutor"
+        ) as executor_class:
+            executor_class.return_value.execute = AsyncMock(
+                return_value={"success": True, "ran": True}
+            )
+            result = await execute_approved_crm_assistant_tool(db, action)
+
+        assert result == {"tool": "start_campaign", "success": True, "ran": True}
+        executor_class.assert_called_once_with(
+            db=db,
+            workspace_id=workspace_id,
+            user_id=7,
+            role="manager",
+        )
+
+    @pytest.mark.parametrize("current_role", [None, "unknown_role", "technician"])
+    async def test_removed_unknown_or_downgraded_membership_denies_execution(
+        self, current_role: str | None
+    ) -> None:
+        db = MagicMock()
+        membership = MagicMock(role=current_role) if current_role is not None else None
+        db.execute = AsyncMock(return_value=_MembershipResult(membership))
+        action = _approved_start_action(uuid.uuid4())
+
+        with patch(
+            "app.services.ai.crm_assistant._tool_executor.CRMToolExecutor"
+        ) as executor_class:
+            result = await execute_approved_crm_assistant_tool(db, action)
+
+        assert result["success"] is False
+        assert result["code"] == "not_permitted"
+        executor_class.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("tool", "payload"),
+    [
+        (
+            "create_segment",
+            {
+                "name": "New leads",
+                "filter_rules": [{"field": "status", "operator": "equals", "value": "new"}],
+            },
+        ),
+        ("update_segment", {"segment_id": str(uuid.uuid4()), "name": "Owned"}),
+        (
+            "enroll_campaign_audience",
+            {"campaign_id": str(uuid.uuid4()), "contact_ids": [1]},
+        ),
+        (
+            "create_opportunity",
+            {"pipeline_id": str(uuid.uuid4()), "name": "New opportunity"},
+        ),
+        (
+            "update_opportunity",
+            {"opportunity_id": str(uuid.uuid4()), "name": "Changed"},
+        ),
+    ],
+)
+async def test_new_write_tools_deny_direct_technician_execution(
+    db: MagicMock, tool: str, payload: dict[str, Any]
+) -> None:
+    executor = CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=7, role="technician")
+
+    result = await executor.execute(tool, payload)
+
+    assert result["code"] == "not_permitted"
+    db.execute.assert_not_awaited()
