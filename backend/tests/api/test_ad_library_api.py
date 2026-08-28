@@ -21,7 +21,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.deps import get_current_user, get_db, get_workspace
+from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import ad_library as ad_library_module
 from app.models.lead_discovery_job import DiscoveryJobStatus, DiscoverySourceType
 from app.services.ad_intelligence.errors import (
@@ -80,6 +80,19 @@ def _mock_job() -> MagicMock:
     return job
 
 
+def _mock_membership() -> MagicMock:
+    """An owner membership for the router's ``outreach:write`` gate.
+
+    These tests cover routing and service wiring, not authorization; the owner
+    role preserves the access they were written against.
+    ``tests/api/test_technician_surface_probe.py`` owns the role behaviour.
+    """
+    membership = MagicMock()
+    membership.role = "owner"
+    membership.workspace_id = WS_ID
+    return membership
+
+
 def _make_app(*, with_auth: bool) -> FastAPI:
     app = FastAPI(lifespan=_test_lifespan)
     if with_auth:
@@ -91,6 +104,7 @@ def _make_app(*, with_auth: bool) -> FastAPI:
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_workspace] = lambda: _mock_workspace()
         app.dependency_overrides[get_current_user] = lambda: _mock_user()
+        app.dependency_overrides[get_membership] = _mock_membership
     app.include_router(
         ad_library_module.router,
         prefix="/api/v1/workspaces/{workspace_id}/ad-library",

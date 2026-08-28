@@ -214,13 +214,15 @@ export interface DashboardResponse {
   agent_stats: AgentStat[];
   today_overview: TodayOverview;
   appointment_stats: AppointmentStats;
-  revenue_stats: RevenueStats;
+  /** Null without `reports:view` — the server strips it, it is not merely hidden. */
+  revenue_stats: RevenueStats | null;
   speed_to_lead_stats: SpeedToLeadStats;
   reviews_stats: ReviewsStats;
   deal_coach_stats: DealCoachStats;
   roleplay_stats: RoleplayStats;
   knowledge_base_stats: KnowledgeBaseStats;
-  lead_source_roi_stats: LeadSourceRoiStats;
+  /** Null without `reports:view` — the server strips it, it is not merely hidden. */
+  lead_source_roi_stats: LeadSourceRoiStats | null;
 }
 
 export type TodayQueueKind =

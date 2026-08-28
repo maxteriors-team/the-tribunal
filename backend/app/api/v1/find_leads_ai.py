@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from openai import AsyncOpenAI
 from sqlalchemy import select
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_capability
 from app.core.config import settings
+from app.core.permissions import Capability
 from app.models.contact import Contact
 from app.models.workspace import Workspace
 from app.schemas.find_leads_ai import (
@@ -40,7 +41,11 @@ from app.utils.phone import normalize_phone_safe
 
 logger = structlog.get_logger()
 
-router = APIRouter()
+# Billed Google Places search plus a bulk contact import. ``outreach:write`` is
+# the floor (sales tier and up), matching the prospecting router: operational
+# tiers must not be able to spend the owner's lead-sourcing budget. Finding 2 of
+# docs/technician-role-audit.md.
+router = APIRouter(dependencies=[Depends(require_capability(Capability.OUTREACH_WRITE))])
 
 
 @router.post("/search", response_model=BusinessSearchResponse)

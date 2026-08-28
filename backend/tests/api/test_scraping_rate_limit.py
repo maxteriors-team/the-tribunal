@@ -47,9 +47,20 @@ def _make_test_app() -> FastAPI:
     async def _override_workspace() -> MagicMock:
         return fake_workspace
 
+    async def _override_membership() -> MagicMock:
+        # The lead-sourcing routers require ``outreach:write``. This file tests
+        # rate limiting, not authorization, so the owner role preserves the
+        # access it was written against;
+        # ``tests/api/test_technician_surface_probe.py`` owns role behaviour.
+        membership = MagicMock()
+        membership.role = "owner"
+        membership.workspace_id = fake_workspace.id
+        return membership
+
     app.dependency_overrides[deps.get_current_user] = _override_user
     app.dependency_overrides[deps.get_db] = _override_db
     app.dependency_overrides[deps.get_workspace] = _override_workspace
+    app.dependency_overrides[deps.get_membership] = _override_membership
 
     return app
 

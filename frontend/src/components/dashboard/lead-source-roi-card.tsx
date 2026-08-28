@@ -52,7 +52,8 @@ function LoadingSkeleton() {
 }
 
 interface LeadSourceRoiCardProps {
-  stats: LeadSourceRoiStats | undefined;
+  /** Null when the caller lacks `reports:view`; the card then renders nothing. */
+  stats: LeadSourceRoiStats | null | undefined;
   isPending: boolean;
 }
 

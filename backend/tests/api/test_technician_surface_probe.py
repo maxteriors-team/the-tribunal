@@ -5,10 +5,10 @@ The capability matrix in :mod:`app.core.permissions` says the field tier sees
 claim: it drives the real ASGI app with an overridden `technician` identity and
 asserts each surface answers 403.
 
-Written from the 2026-08-27 audit in ``docs/technician-role-audit.md``. The
-routes that are *still* open are marked ``xfail`` with their finding number
-rather than deleted, so the coverage gap stays visible and the tests flip to
-``XPASS`` the moment each hole is closed.
+Written from the 2026-08-27 audit in ``docs/technician-role-audit.md``, whose
+findings 1-4 are all closed as of that date. Any hole found later should land
+here as a strict ``xfail`` carrying its finding number, so the gap stays visible
+and the test flips to a failure the moment the hole is closed.
 
 The identity is overridden rather than seeded because the point of measurement
 is the dependency graph — capability gates run before any handler touches the
@@ -34,7 +34,12 @@ from app.api.deps import (
     get_membership,
     get_workspace,
 )
-from app.core.permissions import Capability, capabilities_for, role_can
+from app.core.permissions import (
+    Capability,
+    capabilities_for,
+    role_can,
+    time_entry_owner_scope,
+)
 from app.core.roles import WorkspaceRole
 from app.main import app
 from app.services.ai.crm_assistant._tool_metadata import _TOOL_CAPABILITIES, tool_capability
@@ -252,99 +257,128 @@ def test_executor_requires_an_explicit_role() -> None:
         CRMToolExecutor(db=AsyncMock(), workspace_id=WORKSPACE_ID, user_id=1)  # type: ignore[call-arg]
 
 
-# ── Findings 2-4: still open, tracked as xfail ────────────────────────────
+# ── Findings 2-4: fixed 2026-08-27 ────────────────────────────────────────
 
 
-@pytest.mark.xfail(
-    reason="Finding 2 (docs/technician-role-audit.md): dashboard.py has no capability "
-    "gate, so the field tier reads workspace revenue and campaign metrics that "
-    "reports:view is meant to restrict to the admin tier.",
-    strict=True,
-)
 @pytest.mark.parametrize("suffix", ["/dashboard/stats", "/dashboard/today-queue"])
 async def test_technician_cannot_read_dashboard_metrics(
     technician_client: AsyncClient, suffix: str
 ) -> None:
+    """Finding 2: the dashboard aggregates the CRM, including revenue."""
     async with technician_client as client:
         assert await _status(client, "GET", suffix) == 403
 
 
-@pytest.mark.xfail(
-    reason="Finding 2 (docs/technician-role-audit.md): prospects.py has no capability "
-    "gate; reveal-phone/reveal-email spend the owner's enrichment credits.",
-    strict=True,
-)
 @pytest.mark.parametrize(
     ("method", "suffix", "body"),
     [
         ("POST", f"/prospects/{OTHER_ID}/reveal-phone", None),
+        ("POST", f"/prospects/{OTHER_ID}/reveal-email", None),
         ("POST", "/prospects/search", {"query": "austin"}),
+        ("POST", "/prospects/add-to-mission", {"prospect_ids": []}),
         ("POST", "/find-leads-ai/search", {"query": "roof cleaning austin"}),
+        ("POST", "/ad-library/search", {"query": "pressure washing", "country": "US"}),
+        ("GET", "/ad-library/advertisers", None),
     ],
 )
 async def test_technician_cannot_spend_on_prospecting(
     technician_client: AsyncClient, method: str, suffix: str, body: Any
 ) -> None:
+    """Finding 2: paid enrichment and lead sourcing bill the owner per request."""
     async with technician_client as client:
         assert await _status(client, method, suffix, body) == 403
 
 
-@pytest.mark.xfail(
-    reason="Finding 2 (docs/technician-role-audit.md): outbound_missions.py has no "
-    "capability gate, so the field tier can launch outbound telephony/email.",
-    strict=True,
-)
 @pytest.mark.parametrize(
     ("method", "suffix", "body"),
     [
         ("GET", "/outbound-missions", None),
         ("POST", "/outbound-missions", {"name": "m", "goal": "g"}),
         ("POST", f"/outbound-missions/{OTHER_ID}/start", None),
+        ("POST", f"/outbound-missions/{OTHER_ID}/resume", None),
     ],
 )
 async def test_technician_cannot_run_outbound_missions(
     technician_client: AsyncClient, method: str, suffix: str, body: Any
 ) -> None:
+    """Finding 2: missions launch cold telephony/email at scale."""
     async with technician_client as client:
         assert await _status(client, method, suffix, body) == 403
 
 
-@pytest.mark.xfail(
-    reason="Finding 2 (docs/technician-role-audit.md): reviews.py has no capability "
-    "gate, so the field tier can text customers despite the matrix deliberately "
-    "withholding comms:send from it.",
-    strict=True,
-)
-async def test_technician_cannot_send_review_requests(technician_client: AsyncClient) -> None:
+@pytest.mark.parametrize("suffix", ["/reviews/requests", "/reviews", "/reviews/summary"])
+async def test_technician_cannot_reach_reviews(technician_client: AsyncClient, suffix: str) -> None:
+    """Finding 2: review requests text customers; the matrix withholds comms:send."""
+    method = "POST" if suffix.endswith("requests") else "GET"
     async with technician_client as client:
-        status = await _status(
-            client, "POST", "/reviews/requests", {"contact_id": 1, "channel": "sms"}
-        )
+        status = await _status(client, method, suffix, {"contact_id": 1, "channel": "sms"})
         assert status == 403
 
 
-@pytest.mark.xfail(
-    reason="Finding 3 (docs/technician-role-audit.md): field_service.py has no "
-    "capability gate, so /service-locations returns every customer site address "
-    "the same technician is 403 on at /contacts.",
-    strict=True,
-)
-async def test_technician_cannot_read_service_locations(technician_client: AsyncClient) -> None:
-    async with technician_client as client:
-        assert await _status(client, "GET", "/service-locations") == 403
+def test_review_gate_does_not_cost_the_tiers_that_legitimately_text() -> None:
+    """The comms:send gate must not lock out sales or the member tier."""
+    assert role_can(WorkspaceRole.SALES_REP.value, Capability.COMMS_SEND)
+    assert role_can(WorkspaceRole.MEMBER.value, Capability.COMMS_SEND)
 
 
-@pytest.mark.xfail(
-    reason="Finding 4 (docs/technician-role-audit.md): job time entries are payroll "
-    "input and nothing checks the entry belongs to the caller.",
-    strict=True,
-)
-async def test_technician_cannot_delete_another_techs_time_entry(
-    technician_client: AsyncClient,
+@pytest.mark.parametrize("suffix", ["/service-locations", f"/service-locations/{OTHER_ID}"])
+async def test_technician_cannot_read_service_locations(
+    technician_client: AsyncClient, suffix: str
 ) -> None:
+    """Finding 3: job sites are customer addresses, the same data as /contacts."""
     async with technician_client as client:
-        status = await _status(client, "DELETE", f"/jobs/{OTHER_ID}/time-entries/{OTHER_ID}")
-        assert status == 403
+        assert await _status(client, "GET", suffix) == 403
+
+
+async def test_technician_keeps_the_crew_roster(technician_client: AsyncClient) -> None:
+    """The service-location gate must not cost a technician their own roster."""
+    async with technician_client as client:
+        assert await _status(client, "GET", "/crews") != 403
+        assert await _status(client, "GET", "/technicians") != 403
+
+
+def test_time_entry_edits_are_scoped_to_their_author() -> None:
+    """Finding 4: time entries are payroll input, so deletes are owner-scoped.
+
+    Asserted on the scope helper rather than an HTTP status because the correct
+    answer for someone else's row is 404 (do not disclose that it exists), which
+    a stubbed database returns either way — a status assertion would prove
+    nothing here.
+    """
+    assert time_entry_owner_scope(TECHNICIAN, 7) == 7
+    assert time_entry_owner_scope(WorkspaceRole.MEMBER.value, 7) == 7
+    assert time_entry_owner_scope(WorkspaceRole.MANAGER.value, 7) == 7
+    assert time_entry_owner_scope(WorkspaceRole.OWNER.value, 7) is None
+    # Fail closed: an unrecognised role gets the restricted path.
+    assert time_entry_owner_scope("legacy_role_from_2019", 7) == 7
+
+
+async def test_delete_time_entry_applies_the_owner_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Finding 4: the route must pass the scope down, not merely compute it."""
+    from app.api.v1 import jobs
+
+    captured: dict[str, Any] = {}
+
+    class _Service:
+        def __init__(self, _db: Any) -> None:
+            pass
+
+        async def delete_time_entry(self, *_args: Any, **kwargs: Any) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(jobs, "JobCostingService", _Service)
+    await jobs.delete_time_entry(
+        job_id=OTHER_ID,
+        entry_id=OTHER_ID,
+        workspace=types.SimpleNamespace(id=WORKSPACE_ID),  # type: ignore[arg-type]
+        membership=types.SimpleNamespace(role=TECHNICIAN),  # type: ignore[arg-type]
+        current_user=types.SimpleNamespace(id=7),  # type: ignore[arg-type]
+        db=AsyncMock(),
+    )
+
+    assert captured["restrict_to_user_id"] == 7
 
 
 # ── The matrix claim these tests exist to defend ──────────────────────────

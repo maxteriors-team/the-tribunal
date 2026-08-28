@@ -15273,7 +15273,7 @@
         "type": "object"
       },
       "DashboardResponse": {
-        "description": "Complete dashboard response.",
+        "description": "Complete dashboard response.\n\n``revenue_stats`` and ``lead_source_roi_stats`` are the dollar-denominated\nblocks. They are ``None`` for callers without ``reports:view`` — see\n:func:`app.api.v1.dashboard.get_dashboard_stats`.",
         "properties": {
           "agent_stats": {
             "items": {
@@ -15299,7 +15299,14 @@
             "$ref": "#/components/schemas/KnowledgeBaseStats"
           },
           "lead_source_roi_stats": {
-            "$ref": "#/components/schemas/LeadSourceROIStats"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeadSourceROIStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "recent_activity": {
             "items": {
@@ -15309,7 +15316,14 @@
             "type": "array"
           },
           "revenue_stats": {
-            "$ref": "#/components/schemas/RevenueStats"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevenueStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reviews_stats": {
             "$ref": "#/components/schemas/ReviewsStats"
@@ -15334,7 +15348,6 @@
           "agent_stats",
           "today_overview",
           "appointment_stats",
-          "revenue_stats",
           "speed_to_lead_stats",
           "reviews_stats",
           "deal_coach_stats",
@@ -74396,7 +74409,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/dashboard/stats": {
       "get": {
-        "description": "Get dashboard statistics for a workspace.\n\nReturns comprehensive dashboard data including:\n- Core stats (contacts, campaigns, calls, messages)\n- Recent activity feed\n- Active campaign progress\n- Agent performance metrics\n- Today's overview\n- Appointment metrics\n\nResults are cached in Redis for 5 minutes to reduce database load.",
+        "description": "Get dashboard statistics for a workspace.\n\nReturns comprehensive dashboard data including:\n- Core stats (contacts, campaigns, calls, messages)\n- Recent activity feed\n- Active campaign progress\n- Agent performance metrics\n- Today's overview\n- Appointment metrics\n\nThe dollar-denominated blocks (``revenue_stats``, ``lead_source_roi_stats``)\nrequire ``reports:view`` and are omitted otherwise, which is the matrix's\ndocumented intent: the manager tier runs operations but does not get\nreports. Stripped here rather than in the UI, so the numbers never leave the\nserver for a caller who may not see them. ``deal_coach_stats`` stays: it is\npipeline *risk* triage that the sales tier works from daily, not a revenue\nreport.\n\nResults are cached in Redis for 5 minutes to reduce database load.",
         "operationId": "get_dashboard_stats_api_v1_workspaces__workspace_id__dashboard_stats_get",
         "parameters": [
           {
@@ -80405,7 +80418,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/{entry_id}": {
       "delete": {
-        "description": "Delete a time entry.",
+        "description": "Delete a time entry the caller logged (any entry with ``attendance:manage``).\n\nPayroll input, so it is owner-scoped rather than merely workspace-scoped:\nwithout the scope a technician could delete a colleague's hours. Finding 4\nof docs/technician-role-audit.md.",
         "operationId": "delete_time_entry_api_v1_workspaces__workspace_id__jobs__job_id__time_entries__entry_id__delete",
         "parameters": [
           {

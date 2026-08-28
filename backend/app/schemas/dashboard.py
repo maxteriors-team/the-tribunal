@@ -182,7 +182,12 @@ class KnowledgeBaseStats(BaseModel):
 
 
 class DashboardResponse(BaseModel):
-    """Complete dashboard response."""
+    """Complete dashboard response.
+
+    ``revenue_stats`` and ``lead_source_roi_stats`` are the dollar-denominated
+    blocks. They are ``None`` for callers without ``reports:view`` — see
+    :func:`app.api.v1.dashboard.get_dashboard_stats`.
+    """
 
     stats: DashboardStats
     recent_activity: list[RecentActivity]
@@ -190,10 +195,10 @@ class DashboardResponse(BaseModel):
     agent_stats: list[AgentStat]
     today_overview: TodayOverview
     appointment_stats: AppointmentStats
-    revenue_stats: RevenueStats
+    revenue_stats: RevenueStats | None = None
     speed_to_lead_stats: SpeedToLeadStats
     reviews_stats: ReviewsStats
     deal_coach_stats: DealCoachStats
     roleplay_stats: RoleplayStats
     knowledge_base_stats: KnowledgeBaseStats
-    lead_source_roi_stats: LeadSourceROIStats = Field(default_factory=LeadSourceROIStats)
+    lead_source_roi_stats: LeadSourceROIStats | None = Field(default_factory=LeadSourceROIStats)

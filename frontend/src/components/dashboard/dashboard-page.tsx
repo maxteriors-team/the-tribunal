@@ -84,21 +84,27 @@ export function DashboardPage() {
         </motion.div>
       )}
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.12 }}
-      >
-        <RevenueRoiCard revenueStats={data?.revenue_stats} isPending={isPending} />
-      </motion.div>
+      {/* The server sends these blocks as null without `reports:view`, so hide the
+          shells too rather than rendering two permanently empty cards. */}
+      {can("reports:view") && (
+        <>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.12 }}
+          >
+            <RevenueRoiCard revenueStats={data?.revenue_stats} isPending={isPending} />
+          </motion.div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.13 }}
-      >
-        <LeadSourceRoiCard stats={data?.lead_source_roi_stats} isPending={isPending} />
-      </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.13 }}
+          >
+            <LeadSourceRoiCard stats={data?.lead_source_roi_stats} isPending={isPending} />
+          </motion.div>
+        </>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}

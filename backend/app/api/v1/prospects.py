@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 
-from app.api.deps import DB, CurrentUser, WorkspaceAccess
+from app.api.deps import DB, CurrentUser, WorkspaceAccess, require_capability
 from app.api.service_errors import ServiceErrorRoute
 from app.core.config import settings
+from app.core.permissions import Capability
 from app.schemas.prospect_search import (
     AddToMissionRequest,
     AddToMissionResponse,
@@ -30,7 +31,15 @@ from app.services.exceptions import ServiceUnavailableError
 from app.services.lead_discovery.prospect_search_service import ProspectSearchService
 from app.services.rate_limiting.scraping_limiter import enforce_scraping_rate_limit
 
-router = APIRouter(route_class=ServiceErrorRoute)
+# Every route here spends the owner's money: paid people search, per-reveal
+# email/phone enrichment, and live site crawls. ``outreach:write`` is the floor
+# (sales tier and up) so no operational tier can run up a bill. Declared on the
+# router so a new prospecting endpoint inherits the gate instead of defaulting
+# open. Finding 2 of docs/technician-role-audit.md.
+router = APIRouter(
+    route_class=ServiceErrorRoute,
+    dependencies=[Depends(require_capability(Capability.OUTREACH_WRITE))],
+)
 
 
 @router.post("/search", response_model=PeopleSearchResponse)
