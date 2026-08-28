@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Users, CheckSquare, X, Plus, Upload, MoreHorizontal } from "lucide-react";
+import { Users, CheckSquare, X, Plus, Upload, MoreHorizontal, UserX } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -50,7 +50,12 @@ import type { ContactIdsParams, ContactsListParams } from "@/lib/api/contacts";
 import { useContactStore } from "@/lib/contact-store";
 import { queryKeys } from "@/lib/query-keys";
 import { formatNumber } from "@/lib/utils/number";
-import type { Contact, ContactStatus } from "@/types";
+import type { Contact, ContactStatus, FilterDefinition } from "@/types";
+
+const UNKNOWN_CONTACTS_FILTER: FilterDefinition = {
+  logic: "and",
+  rules: [{ field: "name", operator: "is_unknown", value: "" }],
+};
 
 export function ContactsPage() {
   const searchParams = useSearchParams();
@@ -201,6 +206,16 @@ export function ContactsPage() {
     setIsSelectionMode(!isSelectionMode);
   };
 
+  const handleReviewUnknownContacts = () => {
+    selection.clear();
+    setSelectAllMatchingIds(null);
+    setInputValue("");
+    setSearchQuery("");
+    setStatusFilter(null);
+    setFilters(UNKNOWN_CONTACTS_FILTER);
+    setIsSelectionMode(true);
+  };
+
   const handleSelectContact = (contactId: number, _checked: boolean, shiftKey: boolean) => {
     // Breaking out of "select all matching": materialize the overlay into the
     // base selection, then toggle the clicked row on top of it.
@@ -303,6 +318,12 @@ export function ContactsPage() {
                     <DropdownMenuItem onClick={() => setIsImportDialogOpen(true)}>
                       <Upload className="mr-2 h-4 w-4" />
                       Import CSV
+                    </DropdownMenuItem>
+                  )}
+                  {canWriteContacts && (
+                    <DropdownMenuItem onClick={handleReviewUnknownContacts}>
+                      <UserX className="mr-2 h-4 w-4" />
+                      Review unknown contacts
                     </DropdownMenuItem>
                   )}
                   {contacts.length > 0 && (

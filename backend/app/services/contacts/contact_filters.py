@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.contact import Contact
@@ -146,7 +146,13 @@ def _build_simple_tag_condition(
 
 
 def _resolve_contact_extra(field: str, operator: str, value: Any) -> ColumnElement[bool] | None:
-    """Resolve non-column contact filter fields (``tags`` and JSONB signals)."""
+    """Resolve computed-name, tag, and JSONB contact filter fields."""
+    if field == "name":
+        first_name_is_empty = or_(Contact.first_name.is_(None), Contact.first_name == "")
+        last_name_is_empty = or_(Contact.last_name.is_(None), Contact.last_name == "")
+        if operator == "is_unknown":
+            return and_(first_name_is_empty, last_name_is_empty)
+        return None
     if field == "tags":
         return _build_tag_condition(operator, value)
     if field.startswith("qualification_signals."):

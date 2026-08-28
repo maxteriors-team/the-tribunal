@@ -122,6 +122,18 @@ class TestContactFiltersBehaviorPreserved:
         sql = _sql(stmt)
         assert " OR " in sql.upper()
 
+    def test_filter_rules_unknown_name_requires_both_name_parts_empty(self) -> None:
+        stmt = apply_contact_filters(
+            select(Contact),
+            _WORKSPACE_ID,
+            filter_rules=[{"field": "name", "operator": "is_unknown", "value": ""}],
+        )
+        sql = _sql(stmt)
+        assert (
+            "(contacts.first_name IS NULL OR contacts.first_name = '') "
+            "AND (contacts.last_name IS NULL OR contacts.last_name = '')"
+        ) in sql
+
     def test_filter_rules_tag_membership_extra_resolver(self) -> None:
         tag_id = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
         stmt = apply_contact_filters(
