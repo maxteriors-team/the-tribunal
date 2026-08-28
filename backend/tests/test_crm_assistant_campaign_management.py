@@ -42,7 +42,9 @@ def db() -> MagicMock:
 
 @pytest.fixture
 def tools(db: MagicMock, workspace_id: uuid.UUID) -> CampaignAssistantTools:
-    return CampaignAssistantTools(CRMToolContext(db=db, workspace_id=workspace_id, user_id=7, role="owner"))
+    return CampaignAssistantTools(
+        CRMToolContext(db=db, workspace_id=workspace_id, user_id=7, role="owner")
+    )
 
 
 def _campaign(workspace_id: uuid.UUID, **overrides: Any) -> Campaign:

@@ -41,7 +41,9 @@ class TestRegistration:
 
     @pytest.mark.asyncio
     async def test_executor_dispatches_the_tool(self) -> None:
-        executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=1, role="owner")
+        executor = CRMToolExecutor(
+            db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=1, role="owner"
+        )
 
         assert "search_help" in executor.handlers
 

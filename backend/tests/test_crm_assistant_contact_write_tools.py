@@ -35,7 +35,9 @@ def db() -> MagicMock:
 
 @pytest.fixture
 def tools(db: MagicMock, workspace_id: uuid.UUID) -> ContactAssistantTools:
-    return ContactAssistantTools(CRMToolContext(db=db, workspace_id=workspace_id, user_id=7, role="owner"))
+    return ContactAssistantTools(
+        CRMToolContext(db=db, workspace_id=workspace_id, user_id=7, role="owner")
+    )
 
 
 def _contact(workspace_id: uuid.UUID, **overrides: Any) -> Contact:
