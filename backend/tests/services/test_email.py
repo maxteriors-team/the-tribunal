@@ -337,6 +337,29 @@ async def test_quote_email_renders_visible_and_plain_text_proposal_links(
 
 
 @pytest.mark.asyncio
+async def test_quote_email_carries_the_workspace_logo(fake_resend: _FakeResend) -> None:
+    """The delivery email is the customer's first impression of the proposal.
+
+    It used to hand-roll its own HTML with no branding at all, so the email and
+    the page it opened looked like two different companies.
+    """
+    sent = await email.send_quote_email(
+        to_email="client@example.com",
+        workspace_name="Maxteriors Lighting",
+        quote_number="QUO-000044",
+        amount_str="2,400.00 USD",
+        proposal_url="https://app.example.com/p/quotes/tok",
+        logo_url="https://cdn.example.com/static/brand/maxteriors-logo.png",
+    )
+
+    assert sent is True
+    html = fake_resend.Emails.send_async.await_args.args[0]["html"]
+    assert 'src="https://cdn.example.com/static/brand/maxteriors-logo.png"' in html
+    # The band behind the logo is the brand ink, matching the proposal page.
+    assert "background-color:#0a0a0a" in html
+
+
+@pytest.mark.asyncio
 async def test_quote_email_omits_button_without_proposal_url(fake_resend: _FakeResend) -> None:
     sent = await email.send_quote_email(
         to_email="client@example.com",
