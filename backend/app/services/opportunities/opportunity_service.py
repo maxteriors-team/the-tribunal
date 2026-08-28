@@ -247,12 +247,16 @@ class OpportunityService:
         ``contact_id`` narrows to the deals a single contact is the primary
         contact on — what the contact sidebar renders so an operator can see a
         lead is already on the board instead of adding a duplicate card.
+
+        Pipeline and stage filters represent board views, which omit inactive
+        cards while contact history remains available without those filters.
         """
         query = apply_opportunity_filters(
             select(Opportunity),
             workspace_id,
             pipeline_id=pipeline_id,
             stage_id=stage_id,
+            is_active=True if pipeline_id is not None or stage_id is not None else None,
             owner_id=owner_id,
             contact_id=contact_id,
             status=opportunity_status,
