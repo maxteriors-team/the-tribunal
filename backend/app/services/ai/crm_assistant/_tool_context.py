@@ -16,11 +16,19 @@ type ToolHandler = Callable[[ToolArguments], Awaitable[ToolResult]]
 
 @dataclass(slots=True, frozen=True)
 class CRMToolContext:
-    """Per-request dependencies shared by assistant tool handlers."""
+    """Per-request dependencies shared by assistant tool handlers.
+
+    ``role`` is the caller's workspace role string, carried so the tool layer can
+    apply the same capability matrix the HTTP routes use. It is set from the
+    resolved :class:`~app.models.workspace.WorkspaceMembership`, never from
+    model output or a tool payload, so the assistant cannot claim a role it does
+    not hold.
+    """
 
     db: AsyncSession
     workspace_id: uuid.UUID
     user_id: int
+    role: str
 
 
 def parse_uuid(raw_value: Any) -> uuid.UUID | None:

@@ -92,7 +92,7 @@ class TestErrorShape:
 class TestExecutorErrorClassification:
     @staticmethod
     def _executor(db: AsyncMock) -> CRMToolExecutor:
-        return CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=1)
+        return CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=1, role="owner")
 
     async def test_unknown_tool_is_named_and_not_retryable(self) -> None:
         result = await self._executor(AsyncMock()).execute("teleport_contact", {})
@@ -153,9 +153,9 @@ class TestNoLeakage:
         db = AsyncMock()
         db.scalar.side_effect = RuntimeError(secret)
 
-        result = await CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=1).execute(
-            "search_contacts", {"query": "bob"}
-        )
+        result = await CRMToolExecutor(
+            db=db, workspace_id=uuid.uuid4(), user_id=1, role="owner"
+        ).execute("search_contacts", {"query": "bob"})
 
         assert secret not in str(result)
         assert "hunter2" not in str(result)
@@ -166,9 +166,9 @@ class TestNoLeakage:
             "SELECT * FROM contacts WHERE phone_hash = 'abc'", {}, Exception("fatal")
         )
 
-        result = await CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=1).execute(
-            "search_contacts", {"query": "bob"}
-        )
+        result = await CRMToolExecutor(
+            db=db, workspace_id=uuid.uuid4(), user_id=1, role="owner"
+        ).execute("search_contacts", {"query": "bob"})
 
         assert "phone_hash" not in str(result)
         assert "SELECT" not in str(result)

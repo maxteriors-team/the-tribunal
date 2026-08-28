@@ -9,6 +9,7 @@ import structlog
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import role_can
 from app.services.ai.crm_assistant._agent_tools import AgentAssistantTools
 from app.services.ai.crm_assistant._appointment_tools import AppointmentAssistantTools
 from app.services.ai.crm_assistant._automation_tools import AutomationAssistantTools
@@ -60,11 +61,31 @@ def _safe_traceback_frames(exc: BaseException) -> list[dict[str, object]]:
 class CRMToolExecutor:
     """Execute CRM tool calls on behalf of the assistant."""
 
-    def __init__(self, db: AsyncSession, workspace_id: uuid.UUID, user_id: int) -> None:
-        self.context = CRMToolContext(db=db, workspace_id=workspace_id, user_id=user_id)
+    def __init__(
+        self,
+        db: AsyncSession,
+        workspace_id: uuid.UUID,
+        user_id: int,
+        *,
+        role: str,
+    ) -> None:
+        """Bind an executor to one caller.
+
+        ``role`` is keyword-only and required: this is the layer that decides
+        whether a tool may run at all, so a caller that forgets it fails at
+        construction rather than silently executing as somebody privileged.
+        """
+
+        self.context = CRMToolContext(
+            db=db,
+            workspace_id=workspace_id,
+            user_id=user_id,
+            role=role,
+        )
         self.db = db
         self.workspace_id = workspace_id
         self.user_id = user_id
+        self.role = role
         self.log = structlog.get_logger(service="crm_tool_executor")
         self.tool_metadata = self._build_tool_metadata()
         self.handlers = {name: metadata.handler for name, metadata in self.tool_metadata.items()}
@@ -130,6 +151,10 @@ class CRMToolExecutor:
             context={
                 "source": "crm_assistant",
                 "user_id": self.user_id,
+                # Recorded so the post-approval execution re-checks the
+                # *requester's* capability, not the approver's. Approval clears
+                # the approval gate only.
+                "role": self.role,
                 "risk_level": metadata.risk_level.value,
                 "requires_confirmation": metadata.requires_confirmation,
             },
@@ -159,6 +184,34 @@ class CRMToolExecutor:
             ),
         }
 
+    def _refusal(self, function_name: str) -> dict[str, Any] | None:
+        """Return a refusal for an unknown or unauthorized tool, else ``None``.
+
+        The capability half is the binding authorization check. Tool schemas are
+        already filtered to the caller's role before the model sees them, but
+        that is a hint to the model, not a control: a hallucinated or replayed
+        tool name must still be refused. Runs before the approval gate so an
+        unauthorized call is never queued for a human to rubber-stamp.
+        """
+
+        metadata = self.tool_metadata.get(function_name)
+        if metadata is None:
+            self.log.warning("unknown_tool_called", function_name=function_name)
+            return unknown_tool(function_name)
+
+        if not role_can(self.role, metadata.required_capability):
+            self.log.warning(
+                "crm_assistant_tool_denied",
+                function_name=function_name,
+                role=self.role,
+                required_capability=metadata.required_capability.value,
+            )
+            return not_permitted(
+                f"Your role does not have permission to run {function_name}.",
+                "Tell the operator to ask an admin; do not retry or try another tool.",
+            )
+        return None
+
     async def execute(
         self,
         function_name: str,
@@ -171,13 +224,15 @@ class CRMToolExecutor:
         ``approval_granted`` is the *only* way to skip the approval gate, and it
         is a Python keyword argument — not tool JSON — so a model cannot reach
         it. Only :func:`execute_approved_crm_assistant_tool`, running after a
-        human approved the pending action, passes it.
+        human approved the pending action, passes it. It does **not** skip the
+        capability check in :meth:`_refusal`: approval clears the approval gate,
+        not the caller's authority.
         """
 
-        metadata = self.tool_metadata.get(function_name)
-        if metadata is None:
-            self.log.warning("unknown_tool_called", function_name=function_name)
-            return unknown_tool(function_name)
+        refusal = self._refusal(function_name)
+        if refusal is not None:
+            return refusal
+        metadata = self.tool_metadata[function_name]
 
         arguments, forged_flags = self._strip_approval_flags(arguments)
         if forged_flags and not approval_granted:

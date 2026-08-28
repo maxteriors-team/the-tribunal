@@ -30,7 +30,7 @@ async def test_recent_conversation_exposes_contact_id_and_truthful_count() -> No
     db = MagicMock()
     db.execute = AsyncMock(return_value=rows)
     db.scalar = AsyncMock(return_value=8)
-    tools = ConversationAssistantTools(CRMToolContext(db=db, workspace_id=workspace_id, user_id=7))
+    tools = ConversationAssistantTools(CRMToolContext(db=db, workspace_id=workspace_id, user_id=7, role="owner"))
 
     result = await tools.list_recent_conversations({"limit": 1})
 
@@ -60,7 +60,7 @@ async def test_unlinked_conversation_reports_null_contact_id_honestly() -> None:
     db = MagicMock()
     db.execute = AsyncMock(return_value=rows)
     db.scalar = AsyncMock(return_value=1)
-    tools = ConversationAssistantTools(CRMToolContext(db=db, workspace_id=workspace_id, user_id=7))
+    tools = ConversationAssistantTools(CRMToolContext(db=db, workspace_id=workspace_id, user_id=7, role="owner"))
 
     result = await tools.list_recent_conversations({})
 

@@ -80,7 +80,7 @@ async def test_list_agents_includes_prompt_and_enabled_tools(
 ) -> None:
     agent = _agent(workspace_id)
     db.execute.return_value = _ExecuteResult([agent])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("list_agents", {"limit": 10})
 
@@ -95,7 +95,7 @@ async def test_get_agent_returns_prompt_from_workspace_scoped_lookup(
 ) -> None:
     agent = _agent(workspace_id)
     db.execute.return_value = _ExecuteResult([agent])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("get_agent", {"agent_id": str(agent.id)})
 
@@ -111,7 +111,7 @@ async def test_get_agent_rejects_an_invalid_id(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("get_agent", {"agent_id": "not-a-uuid"})
 

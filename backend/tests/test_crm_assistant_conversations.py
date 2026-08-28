@@ -14,9 +14,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import Select
 
 from app.api.v1 import crm_assistant
+from app.core.roles import WorkspaceRole
 from app.models.assistant_conversation import AssistantConversation, AssistantMessage
 from app.models.user import User
-from app.models.workspace import Workspace
+from app.models.workspace import Workspace, WorkspaceMembership
 
 
 class _ScalarResult:
@@ -59,6 +60,20 @@ def _workspace(workspace_id: uuid.UUID) -> Workspace:
         slug=f"growth-studio-{workspace_id.hex[:8]}",
         settings={},
         is_active=True,
+    )
+
+
+def _membership(workspace_id: uuid.UUID, user_id: int = 7) -> WorkspaceMembership:
+    """An owner membership: these tests cover threading, not authorization.
+
+    The assistant routes now take the caller's role from their membership and
+    hand it to the processor, so the handler needs one.
+    ``tests/api/test_technician_surface_probe.py`` owns the role behaviour.
+    """
+    return WorkspaceMembership(
+        workspace_id=workspace_id,
+        user_id=user_id,
+        role=WorkspaceRole.OWNER.value,
     )
 
 
@@ -172,6 +187,7 @@ async def _noop_stream(
     workspace_id: uuid.UUID,
     user_id: int,
     message: str,
+    role: str,
     conversation_id: uuid.UUID | None = None,
     image: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
@@ -212,11 +228,13 @@ async def test_chat_route_passes_conversation_id_to_processor(
         ),
         current_user=current_user,
         db=db,
+        membership=_membership(workspace_id),
         workspace=workspace,
     )
 
     assert captured["conversation_id"] == conversation_id
     assert captured["message"] == "Use this thread"
+    assert captured["role"] == WorkspaceRole.OWNER.value
     assert response.conversation_id == str(conversation_id)
 
 
@@ -314,11 +332,15 @@ async def test_stream_endpoint_emits_sse_frames(monkeypatch: pytest.MonkeyPatch)
     async def get_db_override() -> AsyncIterator[MagicMock]:
         yield MagicMock()
 
+    async def get_membership_override() -> WorkspaceMembership:
+        return _membership(workspace_id)
+
     monkeypatch.setattr(crm_assistant, "stream_assistant_message", _noop_stream)
-    from app.api.deps import get_current_user, get_db, get_workspace
+    from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 
     app.dependency_overrides[get_current_user] = get_current_user_override
     app.dependency_overrides[get_workspace] = get_workspace_override
+    app.dependency_overrides[get_membership] = get_membership_override
     app.dependency_overrides[get_db] = get_db_override
 
     async with AsyncClient(

@@ -255,7 +255,7 @@ async def test_list_offers_returns_campaign_ready_summaries(
 ) -> None:
     offer = _make_offer(workspace_id=workspace_id)
     db.execute.return_value = _ExecuteResult([offer])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("list_offers", {"limit": 5, "active_only": True})
 
@@ -283,7 +283,7 @@ async def test_get_offer_details_rejects_invalid_offer_id(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("get_offer_details", {"offer_id": "not-a-uuid"})
 
@@ -299,7 +299,7 @@ async def test_get_offer_details_returns_full_offer(
 ) -> None:
     offer = _make_offer(workspace_id=workspace_id)
     db.execute.return_value = _ExecuteResult([offer])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("get_offer_details", {"offer_id": str(offer.id)})
 
@@ -318,7 +318,7 @@ async def test_get_offer_details_hides_cross_workspace_offers(
     workspace_id: uuid.UUID,
 ) -> None:
     db.execute.return_value = _ExecuteResult([])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("get_offer_details", {"offer_id": str(uuid.uuid4())})
 
@@ -334,7 +334,7 @@ async def test_create_offer_draft_forces_inactive_draft(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "create_offer_draft",
@@ -366,7 +366,7 @@ async def test_update_offer_draft_validates_and_updates_existing_offer(
 ) -> None:
     offer = _make_offer(workspace_id=workspace_id)
     db.execute.return_value = _ExecuteResult([offer])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "update_offer_draft",
@@ -392,7 +392,7 @@ async def test_update_offer_draft_requires_fields(
 ) -> None:
     offer = _make_offer(workspace_id=workspace_id)
     db.execute.return_value = _ExecuteResult([offer])
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute("update_offer_draft", {"offer_id": str(offer.id)})
 
@@ -406,7 +406,7 @@ async def test_gated_outbound_action_creates_pending_action(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "create_agent",
@@ -434,6 +434,9 @@ async def test_gated_outbound_action_creates_pending_action(
     assert pending_action.context == {
         "source": "crm_assistant",
         "user_id": 7,
+        # Recorded at queue time so the post-approval run re-checks the
+        # requester's capability rather than trusting the approver's.
+        "role": "owner",
         "risk_level": "high",
         "requires_confirmation": True,
     }
@@ -451,7 +454,7 @@ async def test_approved_crm_assistant_pending_action_executes_bound_tool(
         action_type="crm_assistant.create_agent",
         action_payload={"name": "Closer", "system_prompt": "Qualify and book."},
         description="Create AI agent Closer",
-        context={"source": "crm_assistant", "user_id": 7},
+        context={"source": "crm_assistant", "user_id": 7, "role": "owner"},
         status="approved",
     )
     service = ApprovalGateService()
@@ -481,7 +484,7 @@ async def test_rejected_crm_assistant_pending_action_does_not_execute(
         action_type="crm_assistant.create_agent",
         action_payload={"name": "Closer", "system_prompt": "Qualify and book."},
         description="Create AI agent Closer",
-        context={"source": "crm_assistant", "user_id": 7},
+        context={"source": "crm_assistant", "user_id": 7, "role": "owner"},
         status="pending",
     )
     db.execute.return_value = _ExecuteResult([action])
@@ -518,7 +521,7 @@ async def test_outbound_growth_workflow_asks_for_missing_context(
         _ExecuteResult([]),
         _ExecuteResult([]),
     ]
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "plan_outbound_growth_workflow",
@@ -547,7 +550,7 @@ async def test_outbound_growth_workflow_rejects_cross_workspace_sending_number(
         _ExecuteResult([]),
         _ExecuteResult([]),
     ]
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "plan_outbound_growth_workflow",
@@ -588,7 +591,7 @@ async def test_outbound_growth_workflow_creates_draft_campaign(
         _ExecuteResult([agent]),
         _ExecuteResult([1]),
     ]
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "plan_outbound_growth_workflow",
@@ -622,7 +625,7 @@ async def test_confirmed_agent_creation_executes_immediately(
     db: MagicMock,
     workspace_id: uuid.UUID,
 ) -> None:
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "create_agent",
@@ -644,7 +647,7 @@ async def test_confirmed_start_campaign_runs_existing_validation(
 ) -> None:
     campaign = _make_campaign(workspace_id=workspace_id)
     db.execute.side_effect = [_ExecuteResult([campaign]), _ExecuteResult([2])]
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "start_campaign",
@@ -664,7 +667,7 @@ async def test_confirmed_start_campaign_rejects_empty_campaign(
 ) -> None:
     campaign = _make_campaign(workspace_id=workspace_id)
     db.execute.side_effect = [_ExecuteResult([campaign]), _ExecuteResult([0])]
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=7, role="owner")
 
     result = await executor.execute(
         "start_campaign",

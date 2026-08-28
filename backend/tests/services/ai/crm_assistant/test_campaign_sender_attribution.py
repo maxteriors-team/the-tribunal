@@ -46,6 +46,7 @@ async def test_send_sms_snapshots_context_user_with_workspace_membership() -> No
             db=db,
             workspace_id=workspace_id,
             user_id=sender.id,
+            role="owner",
         )
     )
 

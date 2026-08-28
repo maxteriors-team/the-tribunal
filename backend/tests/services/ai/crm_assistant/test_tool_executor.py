@@ -20,13 +20,13 @@ def test_tool_spec_handler_parity() -> None:
     assert spec_names, "CRM tool registry is empty"
     assert len(CRM_TOOLS) == len(spec_names)
 
-    executor = CRMToolExecutor(db=MagicMock(), workspace_id=uuid.uuid4(), user_id=1)
+    executor = CRMToolExecutor(db=MagicMock(), workspace_id=uuid.uuid4(), user_id=1, role="owner")
 
     assert spec_names == set(executor.handlers)
 
 
 def test_get_contact_context_is_explicitly_read_only() -> None:
-    executor = CRMToolExecutor(db=MagicMock(), workspace_id=uuid.uuid4(), user_id=1)
+    executor = CRMToolExecutor(db=MagicMock(), workspace_id=uuid.uuid4(), user_id=1, role="owner")
 
     metadata = executor.tool_metadata["get_contact_context"]
     assert metadata.risk_level is ToolRiskLevel.LOW
@@ -37,7 +37,7 @@ def test_get_contact_context_is_explicitly_read_only() -> None:
 @pytest.mark.asyncio
 async def test_execute_unknown_tool_returns_error() -> None:
     """Unknown tool names should return a structured error, not raise."""
-    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=1)
+    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=1, role="owner")
     result = await executor.execute("nonexistent_tool", {})
     assert result["success"] is False
     assert result["code"] == "unknown_tool"
@@ -54,7 +54,7 @@ async def test_execute_handler_exception_returns_error() -> None:
     db = AsyncMock()
     db.execute.side_effect = RuntimeError("db down")
 
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=1)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=1, role="owner")
     result = await executor.execute("search_contacts", {"query": "x"})
     assert result["success"] is False
     assert result["code"] == "internal"
@@ -85,7 +85,7 @@ async def test_search_contacts_filters_by_workspace() -> None:
     db.execute = fake_execute  # type: ignore[assignment]
     db.scalar = fake_scalar  # type: ignore[assignment]
 
-    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=1)
+    executor = CRMToolExecutor(db=db, workspace_id=workspace_id, user_id=1, role="owner")
     out = await executor.execute("search_contacts", {"query": "alice"})
 
     assert out["success"] is True
@@ -126,7 +126,7 @@ async def test_search_contacts_returns_dated_followup_evidence() -> None:
     result.scalars.return_value.all.return_value = [contact]
     db = AsyncMock()
     db.execute.return_value = result
-    executor = CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=1)
+    executor = CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=1, role="owner")
 
     response = await executor.execute("search_contacts", {"query": "Ava", "limit": 5})
 
@@ -194,7 +194,7 @@ async def test_search_contacts_marks_ambiguous_names_for_identity_resolution() -
     result_proxy = MagicMock()
     result_proxy.scalars.return_value.all.return_value = [_contact(701), _contact(702)]
     db.execute.return_value = result_proxy
-    executor = CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=42)
+    executor = CRMToolExecutor(db=db, workspace_id=uuid.uuid4(), user_id=42, role="owner")
 
     result = await executor.execute("search_contacts", {"query": "Alex Kim"})
 
@@ -238,7 +238,7 @@ async def test_get_contact_context_returns_full_bounded_cross_channel_timeline(
         "ContactContextSnapshotService",
         SnapshotServiceStub,
     )
-    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=42)
+    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=42, role="owner")
 
     result = await executor.execute(
         "get_contact_context",
@@ -296,7 +296,7 @@ async def test_get_contact_context_preserves_current_state_and_stale_conflict_ev
         "ContactContextSnapshotService",
         SnapshotServiceStub,
     )
-    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=42)
+    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=42, role="owner")
 
     result = await executor.execute("get_contact_context", {"contact_id": 512})
 
@@ -336,7 +336,7 @@ async def test_get_contact_context_pages_older_timeline_items(
         "ContactContextSnapshotService",
         SnapshotServiceStub,
     )
-    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=workspace_id, user_id=42)
+    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=workspace_id, user_id=42, role="owner")
 
     result = await executor.execute(
         "get_contact_context",
@@ -375,7 +375,7 @@ async def test_get_contact_context_denies_cross_workspace_contact_without_disclo
         "ContactContextSnapshotService",
         SnapshotServiceStub,
     )
-    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=workspace_id, user_id=42)
+    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=workspace_id, user_id=42, role="owner")
 
     result = await executor.execute("get_contact_context", {"contact_id": 9001})
 
@@ -391,7 +391,7 @@ async def test_executor_error_telemetry_excludes_raw_pii() -> None:
     async def failing_handler(_args: dict[str, object]) -> dict[str, object]:
         raise RuntimeError("Customer jane.private@example.com at +15551234567")
 
-    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=42)
+    executor = CRMToolExecutor(db=AsyncMock(), workspace_id=uuid.uuid4(), user_id=42, role="owner")
     executor.tool_metadata["pii_failure"] = CRMToolMetadata(
         name="pii_failure",
         handler=failing_handler,

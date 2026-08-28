@@ -80,6 +80,7 @@ async def test_enhance_prompt_uses_workspace_client_without_executing_tools() ->
             db,
             workspace_id,
             "Who needs follow-up?",
+            "owner",
         )
 
     client_factory.assert_awaited_once_with(db, workspace_id)
@@ -115,6 +116,7 @@ async def test_simple_response_no_tools() -> None:
             workspace_id=workspace_id,
             user_id=42,
             message="hi",
+            role="owner",
         )
 
     assert result["response"] == "Hello, operator."
@@ -155,6 +157,7 @@ async def test_stream_uses_workspace_openai_client() -> None:
                 workspace_id=workspace_id,
                 user_id=42,
                 message="hi",
+                role="owner",
             )
         ]
 
@@ -265,6 +268,7 @@ async def test_stream_emits_pending_approval_with_action() -> None:
                 workspace_id=workspace_id,
                 user_id=42,
                 message="Start it",
+                role="owner",
             )
         ]
 
@@ -324,6 +328,7 @@ async def test_tool_loop_dispatches_and_records_actions() -> None:
             workspace_id=workspace_id,
             user_id=42,
             message="how many contacts?",
+            role="owner",
         )
 
     assert result["response"] == "You have 5 contacts."
@@ -381,6 +386,7 @@ async def test_five_contact_summary_can_reach_terminal_response() -> None:
             workspace_id=workspace_id,
             user_id=42,
             message="Summarize my five newest contacts.",
+            role="owner",
         )
 
     assert result["response"] == "Contact summary complete."
@@ -425,6 +431,7 @@ async def test_prompt_cache_key_passed_to_openai_call() -> None:
             workspace_id=workspace_id,
             user_id=99,
             message="ping",
+            role="owner",
         )
 
     assert create.await_count == 1
@@ -441,7 +448,7 @@ def test_tool_calls_disable_reasoning_effort() -> None:
     tools, omitting this 400s the entire feature — and no mocked test notices,
     since the mock accepts any kwargs. This shipped to production once already.
     """
-    params = processor._api_params([{"role": "user", "content": "hi"}], "cache-key")
+    params = processor._api_params([{"role": "user", "content": "hi"}], "cache-key", "owner")
 
     assert params["tools"], "the guard only matters because tools are always sent"
     assert params["reasoning_effort"] == "none"

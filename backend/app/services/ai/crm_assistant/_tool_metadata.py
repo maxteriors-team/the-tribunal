@@ -9,6 +9,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import Capability
+from app.core.roles import WorkspaceRole
 from app.models.pending_action import PendingAction
 from app.services.ai.crm_assistant._tool_context import ToolArguments, ToolHandler
 from app.services.ai.crm_assistant._tool_errors import internal_error
@@ -44,6 +46,7 @@ class CRMToolMetadata:
     approval: ApprovalPolicy = ApprovalPolicy()
     approved_executor: ApprovedActionExecutor | None = None
     description_template: str | None = None
+    required_capability: Capability = Capability.WORKSPACE_MANAGE
 
     @property
     def action_type(self) -> str:
@@ -86,7 +89,20 @@ async def execute_approved_crm_assistant_tool(
         user_id = int(raw_user_id) if isinstance(raw_user_id, int | str) else 0
     except ValueError:
         user_id = 0
-    executor = CRMToolExecutor(db=db, workspace_id=action.workspace_id, user_id=user_id)
+    # The role the action was queued under, recorded at queue time from the
+    # caller's membership. Approval clears the *approval* gate, not the
+    # *capability* gate: an approver must not be able to execute a tool the
+    # requester was never allowed to run. Missing (actions queued before roles
+    # were recorded) fails closed through the field tier, which holds no tool
+    # capability, so such an action errors rather than running unchecked.
+    raw_role = action.context.get("role")
+    role = raw_role if isinstance(raw_role, str) and raw_role else WorkspaceRole.TECHNICIAN.value
+    executor = CRMToolExecutor(
+        db=db,
+        workspace_id=action.workspace_id,
+        user_id=user_id,
+        role=role,
+    )
     # A human approved this pending action, so the gate is satisfied. This is
     # passed as a keyword argument rather than a tool-payload key precisely so
     # the model can never forge it.
@@ -102,6 +118,19 @@ def get_tool_policy(tool_name: str) -> CRMToolMetadata:
     """Return policy metadata for a tool before a concrete handler is bound."""
 
     return _TOOL_POLICY_OVERRIDES.get(tool_name, _DEFAULT_TOOL_POLICY)
+
+
+def tool_capability(tool_name: str) -> Capability:
+    """Return the capability a caller must hold to run ``tool_name``.
+
+    Unlisted tools resolve to :data:`Capability.WORKSPACE_MANAGE` (admin only),
+    so a tool added without a policy entry is admin-gated by omission rather
+    than open by omission. ``tests/api/test_technician_surface_probe.py`` asserts
+    every declared tool appears in :data:`_TOOL_CAPABILITIES`, so the fallback is
+    a safety net and not the intended path.
+    """
+
+    return _TOOL_CAPABILITIES.get(tool_name, Capability.WORKSPACE_MANAGE)
 
 
 def get_approved_action_executor(action_type: str) -> ApprovedActionExecutor | None:
@@ -129,8 +158,85 @@ def build_tool_metadata(
             approval=policy.approval,
             approved_executor=policy.approved_executor,
             description_template=policy.description_template,
+            required_capability=tool_capability(name),
         )
     return metadata
+
+
+# Tool → capability required to run it.
+#
+# Each entry mirrors the capability the equivalent HTTP route already enforces,
+# so the assistant cannot become a side door around the router gates:
+#
+#   * contacts   (``app/api/v1/contacts.py``)   read ``crm:read``, write ``crm:write``
+#   * campaigns  (``app/api/v1/campaigns.py``)  read ``crm:read``, write ``outreach:write``
+#   * automations(``app/api/v1/automations.py``)read ``crm:read``, write ``outreach:write``
+#   * offers     (``app/api/v1/offers.py``)     read ``crm:read``, write ``outreach:write``
+#   * agents     (``app/api/v1/agents.py``)     read ``crm:read``, write ``workspace:manage``
+#   * outbound SMS                              ``comms:send``
+#   * dashboard metrics                         ``reports:view``
+#
+# Appointment writes are the one policy this map *sets* rather than mirrors:
+# ``app/api/v1/appointments.py`` carries no capability gate today (tracked as an
+# open finding), so scheduling is mapped to ``jobs:write`` — the schedule is the
+# dispatch tier's surface. Tiers below dispatch keep booking through the
+# appointments UI, which this map does not touch.
+_TOOL_CAPABILITIES: dict[str, Capability] = {
+    # ── reads: crm:read ────────────────────────────────────────────────
+    "search_contacts": Capability.CRM_READ,
+    "find_contacts": Capability.CRM_READ,
+    "get_contact": Capability.CRM_READ,
+    "get_contact_context": Capability.CRM_READ,
+    "get_conversation": Capability.CRM_READ,
+    "list_recent_conversations": Capability.CRM_READ,
+    "list_campaigns": Capability.CRM_READ,
+    "list_campaign_contacts": Capability.CRM_READ,
+    "summarize_campaign": Capability.CRM_READ,
+    "list_automations": Capability.CRM_READ,
+    "get_automation": Capability.CRM_READ,
+    "list_agents": Capability.CRM_READ,
+    "get_agent": Capability.CRM_READ,
+    "list_offers": Capability.CRM_READ,
+    "get_offer_details": Capability.CRM_READ,
+    "list_opportunities": Capability.CRM_READ,
+    "list_pipeline_stages": Capability.CRM_READ,
+    "list_appointments": Capability.CRM_READ,
+    "get_appointment": Capability.CRM_READ,
+    "get_today_queue": Capability.CRM_READ,
+    # ── revenue/performance metrics: reports:view (admin tier) ─────────
+    "get_dashboard_stats": Capability.REPORTS_VIEW,
+    # ── contact writes: crm:write ──────────────────────────────────────
+    "create_contact": Capability.CRM_WRITE,
+    "update_contact": Capability.CRM_WRITE,
+    "add_contact_note": Capability.CRM_WRITE,
+    "add_contact_tags": Capability.CRM_WRITE,
+    # ── outreach authoring: outreach:write ─────────────────────────────
+    "create_campaign": Capability.OUTREACH_WRITE,
+    "update_campaign": Capability.OUTREACH_WRITE,
+    "start_campaign": Capability.OUTREACH_WRITE,
+    "pause_campaign": Capability.OUTREACH_WRITE,
+    "resume_campaign": Capability.OUTREACH_WRITE,
+    "plan_outbound_growth_workflow": Capability.OUTREACH_WRITE,
+    "create_automation": Capability.OUTREACH_WRITE,
+    "update_automation": Capability.OUTREACH_WRITE,
+    "enable_automation": Capability.OUTREACH_WRITE,
+    "disable_automation": Capability.OUTREACH_WRITE,
+    "delete_automation": Capability.OUTREACH_WRITE,
+    "create_offer_draft": Capability.OUTREACH_WRITE,
+    "update_offer_draft": Capability.OUTREACH_WRITE,
+    # ── customer messaging: comms:send ─────────────────────────────────
+    "send_sms": Capability.COMMS_SEND,
+    # ── schedule writes: jobs:write ────────────────────────────────────
+    "create_appointment": Capability.JOBS_WRITE,
+    "update_appointment": Capability.JOBS_WRITE,
+    "delete_appointment": Capability.JOBS_WRITE,
+    # ── AI agent configuration: workspace:manage ───────────────────────
+    "create_agent": Capability.WORKSPACE_MANAGE,
+    "update_agent": Capability.WORKSPACE_MANAGE,
+    "assign_ai_responder": Capability.WORKSPACE_MANAGE,
+    # ── product help: any member who can reach the assistant ───────────
+    "search_help": Capability.CRM_READ,
+}
 
 
 CRM_ASSISTANT_ACTION_PREFIX = "crm_assistant."

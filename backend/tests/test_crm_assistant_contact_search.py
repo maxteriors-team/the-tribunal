@@ -147,7 +147,7 @@ class TestCreateContactDuplicateGuard:
         result = MagicMock()
         result.scalar_one_or_none = MagicMock(return_value=existing)
         db.execute = AsyncMock(return_value=result)
-        context = CRMToolContext(db=db, workspace_id=uuid.uuid4(), user_id=1)
+        context = CRMToolContext(db=db, workspace_id=uuid.uuid4(), user_id=1, role="owner")
         return ContactAssistantTools(context), db
 
     async def test_guard_queries_the_hash_column_not_the_encrypted_one(self) -> None:

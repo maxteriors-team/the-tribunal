@@ -10,7 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import StreamingResponse
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CanReadCRM, CurrentUser, get_workspace, require_capability
+from app.core.permissions import Capability
 from app.models.assistant_conversation import AssistantConversation, AssistantMessage
 from app.models.workspace import Workspace
 from app.schemas.crm_assistant import (
@@ -30,7 +31,13 @@ from app.services.ai.crm_assistant import (
     stream_assistant_message,
 )
 
-router = APIRouter()
+# The assistant reaches most of the CRM through its tool layer, so it must not
+# be a wider door than the surfaces it drives. ``crm:read`` is the floor to talk
+# to it at all, which excludes the field and lead-technician tiers exactly as
+# ``/contacts`` does. Per-tool authority is narrower still and is enforced in
+# ``CRMToolExecutor`` against the same capability matrix. Declared on the router
+# so a new assistant endpoint inherits the gate instead of defaulting open.
+router = APIRouter(dependencies=[Depends(require_capability(Capability.CRM_READ))])
 
 
 def _message_response(message: AssistantMessage) -> AssistantMessageResponse:
@@ -107,10 +114,13 @@ async def enhance_prompt(
     workspace_id: uuid.UUID,
     request: AssistantPromptEnhanceRequest,
     db: DB,
+    membership: CanReadCRM,
     _workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> AssistantPromptEnhanceResponse:
     """Rewrite an operator draft for review without executing it."""
-    enhanced_prompt = await enhance_assistant_prompt(db, workspace_id, request.prompt)
+    enhanced_prompt = await enhance_assistant_prompt(
+        db, workspace_id, request.prompt, membership.role
+    )
     return AssistantPromptEnhanceResponse(enhanced_prompt=enhanced_prompt)
 
 
@@ -120,6 +130,7 @@ async def chat_with_assistant(
     request: AssistantChatRequest,
     current_user: CurrentUser,
     db: DB,
+    membership: CanReadCRM,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> AssistantChatResponse:
     """Send a message to the CRM assistant and get a response."""
@@ -128,6 +139,7 @@ async def chat_with_assistant(
         workspace_id=workspace_id,
         user_id=current_user.id,
         message=request.message,
+        role=membership.role,
         conversation_id=request.conversation_id,
         image=request.image,
     )
@@ -144,6 +156,7 @@ async def stream_chat_with_assistant(
     request: AssistantChatRequest,
     current_user: CurrentUser,
     db: DB,
+    membership: CanReadCRM,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> StreamingResponse:
     """Stream an assistant response as server-sent events."""
@@ -154,6 +167,7 @@ async def stream_chat_with_assistant(
             workspace_id=workspace_id,
             user_id=current_user.id,
             message=request.message,
+            role=membership.role,
             conversation_id=request.conversation_id,
             image=request.image,
         ):

@@ -596,9 +596,15 @@ async def test_texting_a_contact_is_allowed_for_messaging_tiers() -> None:
 #
 # A technician needs "what am I doing, and where": site address, customer name
 # and phone, access notes, and the scope of work. They must receive **no money**.
-# Because the field tier is denied ``/contacts`` and ``/service-locations``
-# (crm:read), that data has to be embedded server-side — which makes the job
-# payload the place a price could leak. These tests are the guard.
+# Because the field tier is denied ``/contacts`` (crm:read), that data has to be
+# embedded server-side — which makes the job payload the place a price could
+# leak. These tests are the guard.
+#
+# ``/service-locations`` is NOT denied today: ``app/api/v1/field_service.py``
+# carries no capability gate, so the field tier can read every customer site
+# address directly. Tracked as finding 3 in ``docs/technician-role-audit.md``
+# and pinned as a strict xfail in ``tests/api/test_technician_surface_probe.py``
+# so this comment cannot drift back into a false claim.
 # --------------------------------------------------------------------------- #
 
 # Every money-ish token the technician's payload is grepped for. Matched against
