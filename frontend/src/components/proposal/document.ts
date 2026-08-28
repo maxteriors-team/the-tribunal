@@ -102,6 +102,16 @@ export interface ProposalDoc {
   grand_financed_total: number;
   grand_cash_total: number;
   grand_monthly_payment: number;
+  narrative: ProposalNarrativeView | null;
+}
+
+/** Operator-authored project terms carried from the builder to the client. */
+export interface ProposalNarrativeView {
+  design_intent: string | null;
+  electrical_responsibility: string | null;
+  commitments: string | null;
+  signature_name: string | null;
+  signature_date: string | null;
 }
 
 const SERVICES: readonly ProposalService[] = [
@@ -127,6 +137,15 @@ export function normalizeProposalDocument(doc: ProposalDocument): ProposalDoc {
   return {
     service: parseService(doc.service),
     client: doc.client ?? null,
+    narrative: doc.narrative
+      ? {
+          design_intent: doc.narrative.design_intent ?? null,
+          electrical_responsibility: doc.narrative.electrical_responsibility ?? null,
+          commitments: doc.narrative.commitments ?? null,
+          signature_name: doc.narrative.signature_name ?? null,
+          signature_date: doc.narrative.signature_date ?? null,
+        }
+      : null,
     tier_order: doc.tier_order ?? [],
     tiers: (doc.tiers ?? []).map((tier: ProposalTierView) => ({
       key: tier.key,

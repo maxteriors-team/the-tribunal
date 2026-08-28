@@ -52,6 +52,35 @@ export interface BuildLandscapeProposalPayloadOptions extends LandscapeProposalL
    * workspace that never enabled one; `null` means "charge no deposit".
    */
   depositPercent?: number | null;
+  /** Operator-authored project terms shown on the client proposal page. */
+  narrative?: LandscapeNarrative | null;
+}
+
+/**
+ * Free-text project terms the rep fills in on the proposal panel.
+ *
+ * Kept as plain strings (not trimmed here) so the inputs stay controlled; the
+ * payload builder drops blank values and the server trims what it stores.
+ */
+export interface LandscapeNarrative {
+  designIntent: string;
+  electricalResponsibility: string;
+  commitments: string;
+  signatureName: string;
+  signatureDate: string;
+}
+
+/** Snake-case narrative for the API, or `null` when nothing was filled in. */
+function narrativePayload(narrative: LandscapeNarrative | null | undefined) {
+  if (!narrative) return null;
+  const entries = {
+    design_intent: narrative.designIntent.trim() || null,
+    electrical_responsibility: narrative.electricalResponsibility.trim() || null,
+    commitments: narrative.commitments.trim() || null,
+    signature_name: narrative.signatureName.trim() || null,
+    signature_date: narrative.signatureDate.trim() || null,
+  };
+  return Object.values(entries).some(Boolean) ? entries : null;
 }
 
 function addQuantity(quantities: Map<string, number>, itemId: string | null, quantity: number) {
@@ -182,6 +211,7 @@ export function buildLandscapeProposalPayload({
   lightingProjectId,
   title,
   depositPercent,
+  narrative,
 }: BuildLandscapeProposalPayloadOptions): ProposalWizardPayload {
   const careFixtureCount =
     FIXTURE_TYPES.reduce(
@@ -240,6 +270,7 @@ export function buildLandscapeProposalPayload({
         : depositPercent === undefined && pricing.deposit?.enabled
           ? { mode: pricing.deposit.mode, value: pricing.deposit.value }
           : null,
+    narrative: narrativePayload(narrative),
     night_preview: null,
     mockups: [],
   } as ProposalWizardPayload & { lighting_project_id?: string | null };

@@ -39851,6 +39851,16 @@
             "title": "Mockups",
             "type": "array"
           },
+          "narrative": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalNarrative"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "night_preview": {
             "anyOf": [
               {
@@ -40282,6 +40292,73 @@
           "image"
         ],
         "title": "ProposalMockup",
+        "type": "object"
+      },
+      "ProposalNarrative": {
+        "description": "Operator-authored project terms shown to the client.\n\nThese are the fields the quote builder collects under \"Design narrative\":\nwhat the lighting is meant to do, who supplies line-voltage work, and any\nworkmanship commitments. They were rendered as inputs but bound to nothing,\nso a rep could type them, save, and have them silently discarded.\n\nAll values are plain operator free text and are escaped at render time; the\nlength caps bound the snapshot row rather than validating meaning.",
+        "properties": {
+          "commitments": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commitments"
+          },
+          "design_intent": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Design Intent"
+          },
+          "electrical_responsibility": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Electrical Responsibility"
+          },
+          "signature_date": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Date"
+          },
+          "signature_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signature Name"
+          }
+        },
+        "title": "ProposalNarrative",
         "type": "object"
       },
       "ProposalTemplateSettings": {
@@ -40746,6 +40823,16 @@
             "maxItems": 8,
             "title": "Mockups",
             "type": "array"
+          },
+          "narrative": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalNarrative"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "night_preview": {
             "anyOf": [

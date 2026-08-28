@@ -390,12 +390,31 @@ class QuoteService:
         # Unassigned is valid; a conflicting assignment still fails after all ownership checks.
         if opportunity_id is not None and project.opportunity_id not in {None, opportunity_id}:
             raise ValidationError("Lighting project does not belong to the selected opportunity")
-        if project.installation_shot_id is None:
-            raise ValidationError("Select and save an installation sheet before creating a quote")
         from app.schemas.lighting_project import LandscapeDraftDocument
 
         document = LandscapeDraftDocument.model_validate(project.document)
-        if project.installation_shot_id not in {shot.id for shot in document.shots}:
+        if project.installation_shot_id is None:
+            # The installation sheet is the drawing the crew builds from, and it
+            # also supplies the render on the client proposal. It used to be a
+            # hard prerequisite, but it is set by a small secondary button that
+            # nobody found: every project in production reached this branch and
+            # could never be quoted, so no landscape deposit was collectable.
+            # Default to the first sheet that actually has a design instead of
+            # refusing; the operator can still reassign it.
+            designed = next(
+                (
+                    shot
+                    for shot in document.shots
+                    if shot.design.runs or shot.design.items or shot.design.plan_images
+                ),
+                None,
+            )
+            if designed is None:
+                raise ValidationError(
+                    "Draw and save a lighting design on a sheet before creating a quote"
+                )
+            project.installation_shot_id = designed.id
+        elif project.installation_shot_id not in {shot.id for shot in document.shots}:
             raise ValidationError("Selected installation sheet is missing from the project")
         return project
 
@@ -2271,9 +2290,18 @@ class QuoteService:
 
     async def _send_acceptance_receipt(self, quote: Quote, *, deposit_amount: float | None) -> None:
         """Best-effort transactional receipt for the customer who accepted."""
-        contact = quote.contact
-        workspace = quote.workspace
+        # `_load_by_token` eager-loads contact and workspace, but `approve_quote`
+        # re-reads the quote and leaves both relationships unloaded. Touching
+        # `quote.contact` or `quote.workspace` here is then a lazy load, and a
+        # lazy load under asyncio raises MissingGreenlet — which surfaced as a 500
+        # on accept: the customer saw an error, the quote was left approved, and
+        # the page never handed off to Stripe. Fetch both by id instead of
+        # reading through the relationship, so neither can emit implicit IO.
+        contact = await self.db.get(Contact, quote.contact_id) if quote.contact_id else None
         if contact is None or not contact.email:
+            return
+        workspace = await self.db.get(Workspace, quote.workspace_id)
+        if workspace is None:
             return
         # Same branding the client proposal page renders, so the receipt and the
         # page the customer just accepted on carry one identity.

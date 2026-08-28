@@ -472,6 +472,13 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         fulfillment=selection.fulfillment,
         notes=payload.notes,
         terms=payload.terms,
+        # Drop an all-blank narrative rather than storing empty keys, so the
+        # client page can treat "absent" and "nothing filled in" the same way.
+        narrative=(
+            payload.narrative
+            if payload.narrative is not None and not payload.narrative.is_empty
+            else None
+        ),
     )
     return document, selection.line_items
 

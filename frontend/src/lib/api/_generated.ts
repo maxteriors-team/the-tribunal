@@ -26291,6 +26291,7 @@ export interface components {
             inventory_availability?: components["schemas"]["QuoteInventoryAvailability"] | null;
             /** Mockups */
             mockups?: components["schemas"]["ProposalMockup"][];
+            narrative?: components["schemas"]["ProposalNarrative"] | null;
             /** Night Preview */
             night_preview?: {
                 [key: string]: unknown;
@@ -26470,6 +26471,30 @@ export interface components {
             image: string;
         };
         /**
+         * ProposalNarrative
+         * @description Operator-authored project terms shown to the client.
+         *
+         *     These are the fields the quote builder collects under "Design narrative":
+         *     what the lighting is meant to do, who supplies line-voltage work, and any
+         *     workmanship commitments. They were rendered as inputs but bound to nothing,
+         *     so a rep could type them, save, and have them silently discarded.
+         *
+         *     All values are plain operator free text and are escaped at render time; the
+         *     length caps bound the snapshot row rather than validating meaning.
+         */
+        ProposalNarrative: {
+            /** Commitments */
+            commitments?: string | null;
+            /** Design Intent */
+            design_intent?: string | null;
+            /** Electrical Responsibility */
+            electrical_responsibility?: string | null;
+            /** Signature Date */
+            signature_date?: string | null;
+            /** Signature Name */
+            signature_name?: string | null;
+        };
+        /**
          * ProposalTemplateSettings
          * @description Branding + boilerplate for a workspace's client proposals (read view).
          *
@@ -26596,6 +26621,7 @@ export interface components {
             lighting_project_id?: string | null;
             /** Mockups */
             mockups?: components["schemas"]["ProposalMockup"][];
+            narrative?: components["schemas"]["ProposalNarrative"] | null;
             /** Night Preview */
             night_preview?: {
                 [key: string]: unknown;

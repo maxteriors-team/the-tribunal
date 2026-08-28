@@ -148,6 +148,7 @@ import {
   buildLandscapeProposalPayload,
   hasUnpriceableBistroRuns,
   splitLandscapeFixturePricing,
+  type LandscapeNarrative,
 } from "@/lib/estimator/landscape-proposal";
 import {
   buildLandscapeSchedule as buildPerFixtureSchedule,
@@ -1501,6 +1502,8 @@ function LandscapeProposalPanel({
   depositInput,
   depositValid,
   onDepositInputChange,
+  narrative,
+  onNarrativeChange,
   pricingPending,
   pricingError,
   onRetryPricing,
@@ -1540,6 +1543,8 @@ function LandscapeProposalPanel({
   depositInput: string;
   depositValid: boolean;
   onDepositInputChange: (value: string) => void;
+  narrative: LandscapeNarrative;
+  onNarrativeChange: (patch: Partial<LandscapeNarrative>) => void;
   pricingPending: boolean;
   pricingError: string | null;
   onRetryPricing: () => void;
@@ -1958,6 +1963,8 @@ function LandscapeProposalPanel({
             <textarea
               rows={3}
               placeholder="Describe arrival, entertaining, safety, and focal-point intent."
+              value={narrative.designIntent}
+              onChange={(event) => onNarrativeChange({ designIntent: event.target.value })}
             />
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -1991,7 +1998,13 @@ function LandscapeProposalPanel({
             </label>
             <label className="grid gap-2">
               <span>Electrical responsibility</span>
-              <input placeholder="Confirm who supplies line-voltage work" />
+              <input
+                placeholder="Confirm who supplies line-voltage work"
+                value={narrative.electricalResponsibility}
+                onChange={(event) =>
+                  onNarrativeChange({ electricalResponsibility: event.target.value })
+                }
+              />
             </label>
           </div>
           <label className="grid gap-2">
@@ -1999,16 +2012,27 @@ function LandscapeProposalPanel({
             <textarea
               rows={2}
               placeholder="Add only reviewed workmanship or service commitments."
+              value={narrative.commitments}
+              onChange={(event) => onNarrativeChange({ commitments: event.target.value })}
             />
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-2">
               <span>Client signature</span>
-              <input aria-label="Client signature name" />
+              <input
+                aria-label="Client signature name"
+                value={narrative.signatureName}
+                onChange={(event) => onNarrativeChange({ signatureName: event.target.value })}
+              />
             </label>
             <label className="grid gap-2">
               <span>Signature date</span>
-              <input type="date" aria-label="Signature date" />
+              <input
+                type="date"
+                aria-label="Signature date"
+                value={narrative.signatureDate}
+                onChange={(event) => onNarrativeChange({ signatureDate: event.target.value })}
+              />
             </label>
           </div>
         </div>
@@ -2184,6 +2208,8 @@ function LandscapeWorkspacePanel({
   depositInput,
   depositValid,
   onDepositInputChange,
+  narrative,
+  onNarrativeChange,
   pricingPending,
   pricingError,
   onRetryPricing,
@@ -2240,6 +2266,8 @@ function LandscapeWorkspacePanel({
   depositInput: string;
   depositValid: boolean;
   onDepositInputChange: (value: string) => void;
+  narrative: LandscapeNarrative;
+  onNarrativeChange: (patch: Partial<LandscapeNarrative>) => void;
   pricingPending: boolean;
   pricingError: string | null;
   onRetryPricing: () => void;
@@ -2414,6 +2442,8 @@ function LandscapeWorkspacePanel({
         depositInput={depositInput}
         depositValid={depositValid}
         onDepositInputChange={onDepositInputChange}
+        narrative={narrative}
+        onNarrativeChange={onNarrativeChange}
         pricingPending={pricingPending}
         pricingError={pricingError}
         onRetryPricing={onRetryPricing}
@@ -3467,6 +3497,22 @@ export function LightDesigner({
   const landscapeDepositPercent =
     landscapeDepositValid && parsedLandscapeDeposit > 0 ? parsedLandscapeDeposit : null;
 
+  // Operator-authored project terms. These rendered as inputs bound to nothing,
+  // so a rep could fill in the design narrative, save, and have it silently
+  // discarded; they now travel with the proposal to the client page.
+  const [landscapeNarrative, setLandscapeNarrative] = useState<LandscapeNarrative>({
+    designIntent: "",
+    electricalResponsibility: "",
+    commitments: "",
+    signatureName: "",
+    signatureDate: "",
+  });
+  const updateLandscapeNarrative = useCallback(
+    (patch: Partial<LandscapeNarrative>) =>
+      setLandscapeNarrative((prev) => ({ ...prev, ...patch })),
+    [],
+  );
+
   const landscapeProposalPayload: ProposalWizardPayload | null =
     !landscapeOnly || !pricing || !priceBook || !effectiveLandscapeTierKey
       ? null
@@ -3487,11 +3533,13 @@ export function LightDesigner({
           contactId: landscapeProject?.contactId,
           opportunityId: landscapeProject?.opportunityId,
           serviceLocationId: landscapeProject?.serviceLocationId,
-          lightingProjectId: landscapeProject?.installationShotId
-            ? landscapeProject.projectId
-            : undefined,
+          // Always link the project. This used to be withheld until an install
+          // sheet was picked, which is exactly what stopped the design render
+          // from ever reaching the client proposal.
+          lightingProjectId: landscapeProject?.projectId,
           title: landscapeProjectName,
           depositPercent: landscapeDepositPercent,
+          narrative: landscapeNarrative,
         });
   const landscapeProposalSignature = JSON.stringify(landscapeProposalPayload);
   const landscapeProposalHasRequirements = Boolean(
@@ -4163,8 +4211,11 @@ export function LightDesigner({
     : null;
   const landscapeQuoteDisabledReason = !serverBacked
     ? "Open a customer lighting project to create a CRM quote here."
-    : !landscapeProject?.installationShotId
-      ? "Select and save an installation sheet before creating a quote."
+    : // The install sheet is no longer a prerequisite: the server defaults it to
+      // the first sheet carrying a design, so requiring it here only reproduced
+      // the dead end that made this button do nothing.
+      !landscapeProject?.projectId
+      ? "Save this lighting project before creating a quote."
       : hasUnpriceableBistroRuns(bistroScheduleRows)
         ? "Set the drawing scale and installation type for every Bistro run before creating a quote."
         : fixtureCount === 0 && !hasBistroRuns
@@ -4580,6 +4631,8 @@ export function LightDesigner({
               depositInput={landscapeDepositInput}
               depositValid={landscapeDepositValid}
               onDepositInputChange={setLandscapeDepositInput}
+              narrative={landscapeNarrative}
+              onNarrativeChange={updateLandscapeNarrative}
               pricingPending={landscapeProposalQuery.isFetching}
               pricingError={landscapePricingError}
               onRetryPricing={() => void landscapeProposalQuery.refetch()}

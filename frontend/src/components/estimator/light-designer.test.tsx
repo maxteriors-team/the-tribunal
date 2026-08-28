@@ -2200,7 +2200,7 @@ describe("LightDesigner", () => {
     expect(await screen.findByText("Proposal texted to +15551234567.")).toBeVisible();
   });
 
-  it("requires and persists an installation-sheet selection before quoting", async () => {
+  it("persists an installation-sheet selection without blocking the quote", async () => {
     vi.mocked(designToEstimateInputs).mockReturnValue({
       feet: 0,
       christmas_items: {},
@@ -2241,13 +2241,19 @@ describe("LightDesigner", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use L-1 as installation sheet" }));
     await waitFor(() => expect(onSelectInstallationShot).toHaveBeenCalledWith("front"));
     await openProposalPreview();
+
+    // The project is always linked. Withholding it until an installation sheet
+    // was picked is what made "Create draft quote" do nothing: the sheet is set
+    // by a secondary button nobody found, so every project in production had it
+    // unset and no landscape deposit could ever be collected. The server now
+    // defaults the sheet to the first drawing that carries a design.
     await waitFor(() =>
       expect(salesWizardApi.preview).toHaveBeenLastCalledWith(
         "ws_1",
-        expect.objectContaining({ lighting_project_id: null }),
+        expect.objectContaining({ lighting_project_id: "project-1" }),
       ),
     );
-    expect(await screen.findByText(/Select and save an installation sheet/)).toBeInTheDocument();
+    expect(screen.queryByText(/Select and save an installation sheet/)).toBeNull();
   });
 
   it("can share and quote a line item with nothing drawn on the photo", async () => {

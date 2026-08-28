@@ -338,3 +338,44 @@ async def test_public_payload_leaks_no_internal_ids_or_costs() -> None:
     }
     assert leaked.isdisjoint(PublicProposal.model_fields)
     assert leaked.isdisjoint(PublicProposalLineItem.model_fields)
+
+
+async def test_public_approval_survives_a_detached_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accepting must not 500 when approval detaches the quote's workspace.
+
+    `_load_by_token` eager-loads `Quote.workspace`, but `approve_quote` re-reads
+    the quote and leaves that relationship unloaded. Reading `quote.workspace`
+    afterwards is then a lazy load, and a lazy load under asyncio raises
+    MissingGreenlet: the customer saw "An unexpected error occurred", the quote
+    was left approved, and the page never handed off to Stripe.
+
+    The approval runs in its own session, exactly as an HTTP request does. That
+    matters: reusing the session that built the fixtures leaves the Workspace
+    warm in the identity map, so the lazy load is satisfied without IO and the
+    bug cannot reproduce.
+    """
+    receipt = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "app.services.quotes.quote_service.send_quote_acceptance_receipt",
+        receipt,
+    )
+    async with AsyncSessionLocal() as setup:
+        ws = await _make_workspace(setup)
+        contact = await _make_contact(setup, ws.id)
+        token, quote_id = await _sent_quote(QuoteService(setup), ws.id, contact.id)
+        quote = await setup.get(Quote, quote_id)
+        assert quote is not None
+        quote.deposit_percentage = 50
+        await setup.commit()
+
+    async with AsyncSessionLocal() as request:
+        result = await QuoteService(request).approve_public(token, proposal_version=1)
+
+    assert result.status == "approved"
+    # The deposit hand-off the client page needs to reach Stripe checkout.
+    assert result.deposit_required is True
+    # And the receipt still went out, rather than the whole accept 500-ing.
+    assert receipt.await_count == 1
+    assert receipt.await_args.kwargs["business_name"]

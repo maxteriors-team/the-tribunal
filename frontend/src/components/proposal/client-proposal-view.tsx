@@ -665,6 +665,39 @@ export function ClientProposalView({
           </>
         )}
 
+        {/* Project terms the rep wrote on the quote builder. These inputs used
+            to be bound to nothing, so everything typed here was discarded. */}
+        {doc.narrative?.design_intent ? (
+          <div className="pp-terms">
+            <div className="section-heading">Design intent</div>
+            <p>{doc.narrative.design_intent}</p>
+          </div>
+        ) : null}
+        {doc.narrative?.electrical_responsibility ? (
+          <div className="pp-terms">
+            <div className="section-heading">Electrical responsibility</div>
+            <p>{doc.narrative.electrical_responsibility}</p>
+          </div>
+        ) : null}
+        {doc.narrative?.commitments ? (
+          <div className="pp-terms">
+            <div className="section-heading">Our commitments</div>
+            <p>{doc.narrative.commitments}</p>
+          </div>
+        ) : null}
+        {doc.narrative?.signature_name ? (
+          <div className="pp-terms">
+            <div className="section-heading">Prepared for signature</div>
+            {/* Deliberately "prepared for", never "signed by": this is a name the
+                rep typed, not consent. The binding acceptance is the client's own
+                approve action, which the backend timestamps. */}
+            <p>
+              {doc.narrative.signature_name}
+              {doc.narrative.signature_date ? ` · ${doc.narrative.signature_date}` : ""}
+            </p>
+          </div>
+        ) : null}
+
         {data.notes ? (
           <div className="pp-terms">
             <div className="section-heading">Notes</div>
