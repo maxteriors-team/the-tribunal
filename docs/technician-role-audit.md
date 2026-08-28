@@ -222,6 +222,68 @@ time, so approval clears the approval gate only.
 - Data-layer (row-level) enforcement — every check found here is at the API
   layer, so a future service-layer caller bypasses all of it.
 
+### 7. High — FIXED 2026-08-28 — the full ungated-route sweep
+
+Every earlier pass gated routers a human had *noticed*. This one walked every
+mounted route's dependency tree looking for a capability marker, a role
+allow-list, a custom dependency that calls `role_can`, or an owner-scope helper.
+**50 workspace-scoped routes had none of them.** 19 are now gated; the remaining
+31 are open on purpose and listed below.
+
+| Surface | Gate | Why |
+|---|---|---|
+| `scraping.py` (router) | `outreach:write` | `/search` spends billed Google Places calls, `/import` bulk-creates contacts |
+| `nudges.py` (router) | `crm:read` | every nudge carries `contact_name`, `contact_phone`, `contact_company` |
+| `call_feedback.py` (router) | `crm:read` | operator commentary on a specific customer call |
+| `call_outcomes.py` (router) | `crm:read` | the disposition of a customer conversation; feeds pipeline reporting |
+| `referral_partners.py` (router) | `crm:read` | partner name, email, phone, and a link to the CRM contact they already are |
+| `GET /integrations/quo/active-line` | `crm:read` | see below |
+| `DELETE /jobs/{id}/expenses/{id}` | owner-scoped | see below |
+
+**`/quo/active-line` was the only ungated route in a credentials module** where
+every sibling requires `workspace:manage`. It leaks no secret, but passing
+`contact_id` returns whether that contact has Quo conversation history — an
+existence oracle over the same contacts the field tier is 403 on at
+`/contacts`. It takes the lower `crm:read` floor because the messaging UI calls
+it as a pre-flight check.
+
+**Job expenses could be deleted by anyone but read by almost nobody.**
+`GET /jobs/{id}/expenses` requires `billing:read` with an explicit comment
+saying a technician has no use for job costs — while `DELETE` next to it had no
+check at all. Recording an expense stays open (a technician logs that a cost
+happened, and the response only echoes what they submitted), and undoing their
+own is part of that; `job_expense_owner_scope()` confines deletes to the
+recorder unless the caller holds `billing:write`. Another member's expense reads
+as 404.
+
+#### Considered and deliberately rejected
+
+`POST /appointments/{id}/send-reminder` sends an SMS with no `comms:send` check,
+and was gated during this pass. **The gate was reverted**: it broke
+`tests/api/test_calendar_scope_api.py`, which pins the opposite intent, and on
+reading the route the existing design is coherent. The payload is a *templated*
+reminder, for an appointment the caller can already see
+(`_calendar_scope_user_id`), rate-limited per user. A technician reminding their
+own customer about today's job is the field workflow, not an escape from it.
+Both the route and the probe test now carry that reasoning, so the next sweep
+argues with it rather than rediscovering it. If the payload ever widens to free
+text, the reasoning no longer holds.
+
+#### Left open, with reasons
+
+31 routes. Broadly: the jobs surface (`/jobs`, `calendar/mine`, time entries,
+visits, clock-in/out, installation and inventory plans, materials) is the field
+tier's actual work; `crews`, `technicians` and `business-locations` are the crew
+roster rather than customer data; `recurring-jobs` are schedule templates;
+`GET /workspaces/{id}` and `/set-default` are the caller's own workspace and own
+preference. `DELETE /workspaces/{id}` checks `role != "owner"` inline — correct,
+though it compares a raw string instead of using the matrix. Appointment CRUD
+and `invitations` read as ungated to a naive scan but are enforced by
+`_calendar_scope_user_id` and `verify_workspace_admin` respectively.
+
+A test pins the operational surfaces as reachable, so a later pass cannot gate
+the field tier's own work by reflex.
+
 ## What is left
 
 1. ~~Assistant tool surface (finding 1)~~ — **done 2026-08-27.**
@@ -231,13 +293,14 @@ time, so approval clears the approval gate only.
 5. ~~Time-entry ownership (finding 4)~~ — **done.**
 6. ~~`/pending-actions/approve`, `/lead-magnets`, `/jobs/{id}/neighbors`
    (finding 6)~~ — **done 2026-08-28.**
-7. Still open by choice, with reasons: `GET /jobs/{id}/materials` (operational
-   data, costs already redacted below `billing:read`) and `/referral-partners`
-   (not yet triaged).
-8. Re-run the ungated-route sweep. The original found ~40 candidates; this work
-   gated 10 routers, and the remainder were never triaged one by one. This is
-   the largest remaining piece of the original finding.
-9. Extend `tests/api/test_capability_route_matrix.py` to fail on **any** new
+7. ~~Re-run the full ungated-route sweep (finding 7)~~ — **done 2026-08-28.**
+   17 routers now carry a capability gate.
+8. Extend `tests/api/test_capability_route_matrix.py` to fail on **any** new
    workspace route that ships without a capability marker, so coverage cannot
-   silently regress again. Router-level dependencies (the pattern used
-   throughout this pass) make that check cheap to satisfy.
+   silently regress again. The 31 justified-open routes above are the seed for
+   its allow-list. Router-level dependencies (the pattern used throughout) make
+   the check cheap to satisfy. **This is now the last open item.**
+9. Still unexamined, and larger than anything above: cross-**workspace**
+   isolation, and the non-HTTP surfaces (websockets, webhooks, the embeddable
+   widget, API-key auth). Every gate found by this audit lives at the API layer,
+   so a service-layer caller bypasses all of them.

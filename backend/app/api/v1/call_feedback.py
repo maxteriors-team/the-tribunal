@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_capability
+from app.core.permissions import Capability
 from app.models.call_feedback import CallFeedback
 from app.models.call_outcome import CallOutcome
 from app.models.conversation import Message
@@ -19,7 +20,11 @@ from app.schemas.call_feedback import (
     CallFeedbackSummary,
 )
 
-router = APIRouter()
+# Call feedback is operator commentary on a specific customer call — the
+# transcript-adjacent record of a conversation. ``crm:read`` is the floor, the
+# same gate ``/contacts`` and ``/conversations`` use. Declared on the router so
+# a new endpoint inherits it.
+router = APIRouter(dependencies=[Depends(require_capability(Capability.CRM_READ))])
 
 
 async def _get_message_for_workspace(

@@ -300,15 +300,35 @@ class JobCostingService:
         return JobExpenseResponse.model_validate(expense)
 
     async def delete_expense(
-        self, job_id: uuid.UUID, workspace_id: uuid.UUID, expense_id: uuid.UUID
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        expense_id: uuid.UUID,
+        *,
+        restrict_to_user_id: int | None = None,
     ) -> None:
+        """Delete an expense, optionally only if ``restrict_to_user_id`` recorded it.
+
+        A caller without ``billing:write`` may only delete their own (see
+        :func:`app.core.permissions.job_expense_owner_scope`). The restriction is
+        an extra filter on the lookup rather than a check after it, so another
+        member's expense reads as "not found" and its existence is not disclosed
+        — which matters here because the same tier cannot read the expense list
+        at all.
+        """
         await self._assert_job(job_id, workspace_id)
+        ownership = (
+            (JobExpense.created_by_id == restrict_to_user_id,)
+            if restrict_to_user_id is not None
+            else ()
+        )
         expense = await assert_workspace_owned(
             self.db,
             JobExpense,
             expense_id,
             workspace_id,
             JobExpense.job_id == job_id,
+            *ownership,
             detail="Expense not found",
         )
         await self.db.delete(expense)

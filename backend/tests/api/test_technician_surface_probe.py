@@ -37,6 +37,7 @@ from app.api.deps import (
 from app.core.permissions import (
     Capability,
     capabilities_for,
+    job_expense_owner_scope,
     role_can,
     time_entry_owner_scope,
 )
@@ -560,6 +561,190 @@ async def test_rejecting_a_queued_action_is_gated_with_approving() -> None:
                 assert await _status(client, "POST", suffix) == 403, role
     finally:
         app.dependency_overrides.clear()
+
+
+# ── Finding 7: the full ungated-route sweep ───────────────────────────────
+#
+# The earlier passes gated the routers a manual read flagged. This one walked
+# every mounted route's dependency tree and found 50 workspace-scoped routes
+# with no capability enforcement anywhere — in a marker, a role allow-list, a
+# custom dependency, or the handler body. 19 are gated below; the remaining 31
+# are deliberately open and justified in the audit doc.
+
+
+@pytest.mark.parametrize(
+    ("method", "suffix", "body"),
+    [
+        ("POST", "/scraping/search", {"query": "pressure washing austin"}),
+        ("POST", "/scraping/import", {"businesses": []}),
+    ],
+)
+async def test_technician_cannot_run_google_places_scraping(
+    technician_client: AsyncClient, method: str, suffix: str, body: Any
+) -> None:
+    """Billed Places calls plus a bulk contact import — lead sourcing, not ops."""
+    async with technician_client as client:
+        assert await _status(client, method, suffix, body) == 403
+
+
+async def test_scraping_stays_open_to_the_sales_tier() -> None:
+    """The gate must not cost the tier whose job is sourcing leads."""
+    assert role_can(WorkspaceRole.SALES_REP.value, Capability.OUTREACH_WRITE)
+    assert not role_can(TECHNICIAN, Capability.OUTREACH_WRITE)
+
+
+@pytest.mark.parametrize(
+    ("method", "suffix"),
+    [
+        ("GET", "/nudges"),
+        ("GET", "/nudges/stats"),
+        ("PUT", "/nudges/clear-all"),
+        ("PUT", f"/nudges/{OTHER_ID}/dismiss"),
+        ("PUT", f"/nudges/{OTHER_ID}/snooze"),
+        ("PUT", f"/nudges/{OTHER_ID}/act"),
+    ],
+)
+async def test_technician_cannot_reach_nudges(
+    technician_client: AsyncClient, method: str, suffix: str
+) -> None:
+    """Every nudge carries contact_name, contact_phone and contact_company."""
+    async with technician_client as client:
+        assert await _status(client, method, suffix) == 403
+
+
+@pytest.mark.parametrize(
+    ("method", "suffix"),
+    [
+        ("GET", f"/calls/{OTHER_ID}/feedback"),
+        ("GET", f"/calls/{OTHER_ID}/feedback/summary"),
+        ("POST", f"/calls/{OTHER_ID}/feedback"),
+        ("GET", f"/calls/{OTHER_ID}/outcome"),
+        ("PUT", f"/calls/{OTHER_ID}/outcome"),
+    ],
+)
+async def test_technician_cannot_reach_call_records(
+    technician_client: AsyncClient, method: str, suffix: str
+) -> None:
+    """Call feedback and outcomes annotate customer conversations."""
+    async with technician_client as client:
+        assert await _status(client, method, suffix) == 403
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "/referral-partners",
+        "/referral-partners/scoreboard",
+        f"/referral-partners/{OTHER_ID}",
+    ],
+)
+async def test_technician_cannot_read_referral_partners(
+    technician_client: AsyncClient, suffix: str
+) -> None:
+    """Partner records carry a name, email, phone and a link to a CRM contact."""
+    async with technician_client as client:
+        assert await _status(client, "GET", suffix) == 403
+
+
+async def test_appointment_reminder_stays_open_to_the_field_tier(
+    technician_client: AsyncClient,
+) -> None:
+    """Considered for a ``comms:send`` gate and deliberately left open.
+
+    The sweep flagged this as an unguarded send, and gating it broke
+    ``tests/api/test_calendar_scope_api.py``, which pins the opposite intent. The
+    payload is a *templated* reminder for an appointment the caller can already
+    see, rate-limited per user — a technician reminding their own customer about
+    today's job. That is the field workflow, not an escape from it.
+
+    This test exists so the decision is deliberate: if someone gates the route
+    later, they have to come here and argue with the reasoning rather than
+    discovering the regression from a support ticket.
+    """
+    async with technician_client as client:
+        suffix = f"/appointments/{OTHER_ID}/send-reminder"
+        assert await _status(client, "POST", suffix) != 403
+        # The schedule itself stays readable too.
+        assert await _status(client, "GET", "/appointments") != 403
+
+
+async def test_technician_cannot_probe_quo_contact_history(
+    technician_client: AsyncClient,
+) -> None:
+    """Passing contact_id reveals whether that contact has Quo history.
+
+    Every sibling route in the credentials module needs ``workspace:manage``;
+    this one was the only ungated route in it.
+    """
+    async with technician_client as client:
+        suffix = "/integrations/quo/active-line?contact_id=1"
+        assert await _status(client, "GET", suffix) == 403
+
+
+def test_job_expense_deletes_are_scoped_to_their_author() -> None:
+    """Reading a job's expenses needs billing:read, so deleting must not be open.
+
+    Recording an expense stays open to any member (a technician logs that a cost
+    happened), and undoing their own is part of that; deleting a colleague's is
+    not. Asserted on the helper because the correct answer for another member's
+    row is 404, which a stubbed database returns either way.
+    """
+    assert job_expense_owner_scope(TECHNICIAN, 7) == 7
+    assert job_expense_owner_scope(WorkspaceRole.SALES_REP.value, 7) == 7
+    assert job_expense_owner_scope(WorkspaceRole.MANAGER.value, 7) is None
+    assert job_expense_owner_scope(WorkspaceRole.OWNER.value, 7) is None
+    # Fail closed: an unrecognised role gets the restricted path.
+    assert job_expense_owner_scope("legacy_role_from_2019", 7) == 7
+
+
+async def test_delete_expense_applies_the_owner_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The route must pass the scope down, not merely compute it."""
+    from app.api.v1 import jobs
+
+    captured: dict[str, Any] = {}
+
+    class _Service:
+        def __init__(self, _db: Any) -> None:
+            pass
+
+        async def delete_expense(self, *_args: Any, **kwargs: Any) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setattr(jobs, "JobCostingService", _Service)
+    await jobs.delete_expense(
+        job_id=OTHER_ID,
+        expense_id=OTHER_ID,
+        workspace=types.SimpleNamespace(id=WORKSPACE_ID),  # type: ignore[arg-type]
+        membership=types.SimpleNamespace(role=TECHNICIAN),  # type: ignore[arg-type]
+        current_user=types.SimpleNamespace(id=7),  # type: ignore[arg-type]
+        db=AsyncMock(),
+    )
+
+    assert captured["restrict_to_user_id"] == 7
+
+
+async def test_technician_keeps_the_operational_surfaces(
+    technician_client: AsyncClient,
+) -> None:
+    """The sweep left 31 routes open on purpose. Pin the field tier's own work.
+
+    If a later pass gates one of these by reflex, this fails and forces the
+    tradeoff to be made deliberately rather than by accident.
+    """
+    async with technician_client as client:
+        for suffix in (
+            "/jobs",
+            "/jobs/calendar/mine",
+            f"/jobs/{OTHER_ID}/time-entries",
+            f"/jobs/{OTHER_ID}/visits",
+            "/recurring-jobs",
+            "/crews",
+            "/technicians",
+            "/business-locations",
+        ):
+            assert await _status(client, "GET", suffix) != 403, suffix
 
 
 # ── The matrix claim these tests exist to defend ──────────────────────────

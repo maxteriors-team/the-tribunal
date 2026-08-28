@@ -236,6 +236,11 @@ async def test_active_line_reports_contact_quo_history_when_selected_line_has_no
     ):
         result = await credentials_api.get_active_quo_line(
             MagicMock(id=workspace_id),
+            # The route now requires ``crm:read``: passing ``contact_id`` reveals
+            # whether that contact has Quo conversation history. Called directly
+            # here, so the membership is a stub — the gate itself is covered by
+            # tests/api/test_technician_surface_probe.py.
+            MagicMock(role="owner"),
             db,
             contact_id=42,
         )

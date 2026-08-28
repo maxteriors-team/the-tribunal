@@ -2,10 +2,11 @@
 
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_capability
+from app.core.permissions import Capability
 from app.models.contact import Contact
 from app.schemas.scraping import (
     BusinessResult,
@@ -23,7 +24,11 @@ from app.services.scraping.google_places import (
 from app.services.tags import TagService
 from app.utils.phone import normalize_phone_safe
 
-router = APIRouter()
+# ``/search`` spends billed Google Places calls and ``/import`` bulk-creates
+# contacts, so this is lead sourcing rather than an operational surface.
+# ``outreach:write`` is the floor, matching the prospecting, find-leads and
+# ad-library routers. Declared on the router so a new endpoint inherits it.
+router = APIRouter(dependencies=[Depends(require_capability(Capability.OUTREACH_WRITE))])
 
 
 @router.post("/search", response_model=BusinessSearchResponse)
