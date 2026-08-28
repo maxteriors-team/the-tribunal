@@ -624,7 +624,10 @@ test.describe("landscape lighting studio", () => {
       .poll(() => previews.at(-1))
       .toMatchObject({
         contact_id: 42,
-        lighting_project_id: null,
+        // The project is always linked, so its design render travels with the
+        // quote. This used to be withheld until an installation sheet was
+        // picked -- the dead end that made "Create draft quote" do nothing.
+        lighting_project_id: PROJECT_ID,
         title: "Hawthorne Residence",
         selected_tier: "best",
         quantities: expect.arrayContaining([
