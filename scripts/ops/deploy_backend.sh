@@ -215,6 +215,21 @@ cat >"$STAMP_PATH" <<JSON
 }
 JSON
 
+# The stamp alone is not enough. `railway up` builds its upload from git's view
+# of the tree, and the stamp is deliberately untracked (a committed stamp would
+# make /version report a stale SHA, which is worse than "unknown"), so it never
+# reaches the builder and every manual deploy reported "unknown" — the exact
+# blindness the stamp exists to prevent.
+#
+# `BUILD_COMMIT_SHA` is resolution step 2 in `app.core.build_info` and is read
+# from the environment at runtime, so it does not depend on the upload carrying
+# a file. `--skip-deploys` keeps this from shipping the *old* code with the new
+# SHA attached; the `railway up` below is what actually deploys.
+if ! railway variables --service "$SERVICE" --set "BUILD_COMMIT_SHA=${SHA}" --skip-deploys >/dev/null 2>&1; then
+    yellow "⚠  could not set BUILD_COMMIT_SHA — /version may report \"unknown\"."
+    yellow "   The deploy still proceeds; only build identification is affected."
+fi
+
 # Default to a detached deploy (the documented release flow). Any argument
 # given to this script replaces that default so callers can stream logs with
 # `--ci` instead of fighting a hardcoded `--detach`. The array is never empty,
