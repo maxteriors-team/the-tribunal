@@ -124,7 +124,9 @@ class TestSearchContactsReportsTruth:
         db.execute = AsyncMock(return_value=execute_result)
         db.scalar = AsyncMock(return_value=300)
 
-        tools = ContactAssistantTools(CRMToolContext(db=db, workspace_id=uuid.uuid4(), user_id=1, role="owner"))
+        tools = ContactAssistantTools(
+            CRMToolContext(db=db, workspace_id=uuid.uuid4(), user_id=1, role="owner")
+        )
         result = await tools.search_contacts({"query": "Smith", "limit": 10})
 
         assert result["returned"] == 10

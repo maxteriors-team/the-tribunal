@@ -6073,6 +6073,10 @@ export interface paths {
         /**
          * Get Job Neighbors
          * @description The generated neighbour list for a job, nearest first (404 until generated).
+         *
+         *     Carries neighbours' names and, for Jobber-imported sites, their addresses, so
+         *     this is customer data rather than an operational surface. Finding 4 of
+         *     docs/technician-role-audit.md.
          */
         get: operations["get_job_neighbors_api_v1_workspaces__workspace_id__jobs__job_id__neighbors_get"];
         put?: never;

@@ -18,6 +18,7 @@ from fastapi import APIRouter, Query
 from app.api.deps import (
     DB,
     CanReadBilling,
+    CanReadCRM,
     CanWriteBilling,
     CanWriteJobs,
     CanWriteOutreach,
@@ -584,19 +585,33 @@ async def job_profitability(
 # --------------------------------------------------------------------------- #
 # Neighbor outreach: turning a finished job into leads from the same street.
 #
-# Reads are open to any workspace member (a technician can see who else on the
-# street to leave a hanger with); everything that creates a list, changes an
-# entry, exports addresses, or touches the messaging path is dispatcher-gated —
-# the export payload is customer PII and enrollment spends the workspace's
-# sending reputation.
+# Reads need ``crm:read``; everything that creates a list, changes an entry,
+# exports addresses, or touches the messaging path is dispatcher-gated — the
+# export payload is customer PII and enrollment spends the workspace's sending
+# reputation.
+#
+# The read was previously open to any member, on the reasoning that a technician
+# could see who else on the street to leave a door hanger with, and that an
+# entry's ``label`` is "the site's own name, never the address". That second half
+# does not hold: ``app/services/jobber/mapping.py`` names an imported site after
+# its ``address_line1``, so for any workspace migrated from Jobber the label *is*
+# the street address. Together with ``customer_name`` the read returned
+# neighbours' names and addresses — the same data the field tier is 403 on at
+# ``/contacts`` and ``/service-locations``, reached through a different door.
 # --------------------------------------------------------------------------- #
 @router.get("/{job_id}/neighbors", response_model=NeighborOutreachBatchResponse)
 async def get_job_neighbors(
     job_id: uuid.UUID,
     workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
     db: DB,
 ) -> NeighborOutreachBatchResponse:
-    """The generated neighbour list for a job, nearest first (404 until generated)."""
+    """The generated neighbour list for a job, nearest first (404 until generated).
+
+    Carries neighbours' names and, for Jobber-imported sites, their addresses, so
+    this is customer data rather than an operational surface. Finding 4 of
+    docs/technician-role-audit.md.
+    """
     return await NeighborOutreachService(db).get_for_job(job_id, workspace.id)
 
 

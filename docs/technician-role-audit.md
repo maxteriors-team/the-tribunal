@@ -4,18 +4,17 @@
 capabilities `jobs:read` + `attendance:use`) actually confined to the jobs
 schedule, as `app/core/permissions.py` claims?
 
-**Answer: findings 1-4 are closed.** The capability matrix itself was already
+**Answer: findings 1-6 are closed.** The capability matrix itself was already
 sound; the gap was *coverage* — ~40 workspace surfaces carried no capability
 gate at all, so the matrix was not the enforcement point it claimed to be on
 those routes.
 
-**Status 2026-08-27:** findings 1-4 fixed, each with an assertion in
-`backend/tests/api/test_technician_surface_probe.py` (51 tests, no xfails).
-Finding 5 is documentation drift. Some surfaces named inside findings 2 and 4
-are explicitly **still open** and called out below; the remaining ungated routes
-from the sweep were not re-triaged in this pass. Anything found later should
-land in that file as a strict `xfail` carrying its finding number, so the gap
-stays visible and the test fails the moment the hole is closed.
+**Status 2026-08-28:** findings 1-6 fixed, each with an assertion in
+`backend/tests/api/test_technician_surface_probe.py` (55 tests, no xfails).
+Finding 5 is documentation drift. The remaining ungated routes from the original
+sweep have still not been re-triaged one by one — see "What is left". Anything
+found later should land in that file as a strict `xfail` carrying its finding
+number, so the gap stays visible and the test fails the moment it is closed.
 
 ## How this was checked
 
@@ -158,8 +157,10 @@ Because 404 is the correct answer, a status-code assertion would prove nothing
 against a stubbed database; the test asserts the scope helper's decisions and
 that the route actually passes the value down.
 
-Still open: `GET /jobs/{id}/materials` and `/jobs/{id}/neighbors` remain
-ungated. `/neighbors` is a lead-generation surface, not an operational one.
+`GET /jobs/{id}/neighbors` was also named here and is now closed — see finding
+6. `GET /jobs/{id}/materials` stays open deliberately: materials consumed on a
+job are operational data a technician needs, and the route already redacts unit
+costs below `billing:read` via `_can_see_costs()`.
 
 ### 5. Low — documentation drift
 
@@ -170,6 +171,45 @@ ungated. `/neighbors` is a lead-generation surface, not an operational one.
 - `appointment_owner_scope` correctly restricts `GET /appointments` to the
   caller's own rows, so that surface is **not** a leak — but the route itself is
   ungated, so the protection rests entirely on that one helper call.
+
+### 6. High — FIXED 2026-08-28 — the surfaces the first pass named but left open
+
+The first pass listed these as known-open and did not gate them. Each now
+carries a capability dependency, and each has a test asserting **both** halves:
+the field tier gets 403, and a role that legitimately holds the capability
+reaches the handler and gets a real 2xx.
+
+| Surface | Gate | Why |
+|---|---|---|
+| `lead_magnets.py` (router) | `outreach:write` | public-facing marketing collateral; two routes generate it with billed AI calls |
+| `pending_actions.py` (router) | `crm:read` | queued payloads carry contact details and draft message bodies |
+| `POST /pending-actions/{id}/approve` | `outreach:write` | deciding whether a queued AI action runs is outreach authority |
+| `POST /pending-actions/{id}/reject` | `outreach:write` | clearing another operator's queue is a quieter version of the same harm |
+| `GET /jobs/{id}/neighbors` | `crm:read` | see below |
+
+**The neighbour read was defended by a comment that is false.** The route was
+deliberately open to any member, reasoning that a technician should see who else
+on the street to leave a door hanger with, and that an entry's `label` is "the
+site's own name, never the address". The second half does not hold:
+`app/services/jobber/mapping.py` names an imported site after its
+`address_line1`, so for any workspace migrated from Jobber the label **is** the
+street address. Together with `customer_name`, the read returned neighbours'
+names and addresses — the same data the field tier is 403 on at `/contacts` and
+`/service-locations`, reached through a different door.
+
+That is a real cost to a real workflow: a technician can no longer pull the
+door-hanger list themselves. The alternative was redacting `label` and
+`customer_name` for callers below `crm:read`, which leaves entries carrying only
+a distance and a status — not enough to knock on a door. Restoring the workflow
+for the field tier needs a purpose-built payload, not an ungated read.
+
+This is the second time a comment asserting a surface was safe turned out to be
+wrong (the first was `/service-locations` in `test_rbac.py`). Both are now
+pinned by tests rather than prose.
+
+The approver's gate is **separate from the requester's**: the queued tool
+re-checks the role recorded in `PendingAction.context["role"]` at execution
+time, so approval clears the approval gate only.
 
 ## Not checked
 
@@ -189,12 +229,15 @@ ungated. `/neighbors` is a lead-generation surface, not an operational one.
 3. ~~Dashboard + spend routers (finding 2)~~ — **done.**
 4. ~~`/service-locations` (finding 3)~~ — **done.**
 5. ~~Time-entry ownership (finding 4)~~ — **done.**
-6. Named inside findings 2 and 4 but **not** fixed:
-   `POST /pending-actions/{id}/approve`, `/lead-magnets`, `/referral-partners`,
-   `GET /jobs/{id}/materials`, `GET /jobs/{id}/neighbors`.
-7. Re-run the ungated-route sweep. The original one found ~40 candidates and
-   this pass gated 7 routers; the remainder were never triaged one by one.
-8. Extend `tests/api/test_capability_route_matrix.py` to fail on **any** new
+6. ~~`/pending-actions/approve`, `/lead-magnets`, `/jobs/{id}/neighbors`
+   (finding 6)~~ — **done 2026-08-28.**
+7. Still open by choice, with reasons: `GET /jobs/{id}/materials` (operational
+   data, costs already redacted below `billing:read`) and `/referral-partners`
+   (not yet triaged).
+8. Re-run the ungated-route sweep. The original found ~40 candidates; this work
+   gated 10 routers, and the remainder were never triaged one by one. This is
+   the largest remaining piece of the original finding.
+9. Extend `tests/api/test_capability_route_matrix.py` to fail on **any** new
    workspace route that ships without a capability marker, so coverage cannot
    silently regress again. Router-level dependencies (the pattern used
    throughout this pass) make that check cheap to satisfy.

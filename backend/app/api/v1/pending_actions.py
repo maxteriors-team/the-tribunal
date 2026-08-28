@@ -6,7 +6,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 
-from app.api.deps import DB, CurrentUser, get_workspace
+from app.api.deps import DB, CurrentUser, get_workspace, require_capability
+from app.core.permissions import Capability
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
 from app.models.pending_action import PendingAction
@@ -20,7 +21,24 @@ from app.schemas.pending_action import (
 )
 from app.services.approval.approval_gate_service import approval_gate_service
 
-router = APIRouter()
+# The queue holds AI-proposed actions with their payloads — contact details and
+# draft message bodies — so ``crm:read`` is the floor for the whole router, the
+# same gate ``/contacts`` uses. Declared on the router so a new endpoint inherits
+# it rather than defaulting open. Approving and rejecting need more; see below.
+router = APIRouter(dependencies=[Depends(require_capability(Capability.CRM_READ))])
+
+# Approve/reject decide whether a queued AI action runs. That is outreach
+# authority, not a read: the queue is dominated by sends, campaign launches and
+# automation edits. Rejecting is gated with approving because clearing another
+# operator's queue is a quieter version of the same harm.
+#
+# This is the *approver's* gate. The **requester's** capability is re-checked
+# separately at execution time from the role recorded in
+# ``PendingAction.context["role"]`` (see
+# ``app.services.ai.crm_assistant._tool_metadata``), so approval clears the
+# approval gate only — an approver cannot execute a tool the requester was never
+# allowed to run.
+_decide_action = Depends(require_capability(Capability.OUTREACH_WRITE))
 
 
 @router.get("/stats")
@@ -107,7 +125,11 @@ async def get_action(
     return pending_action_response(action)
 
 
-@router.post("/{action_id}/approve", response_model=PendingActionResponse)
+@router.post(
+    "/{action_id}/approve",
+    response_model=PendingActionResponse,
+    dependencies=[_decide_action],
+)
 async def approve_action(
     workspace_id: uuid.UUID,
     action_id: uuid.UUID,
@@ -146,7 +168,11 @@ async def approve_action(
     return pending_action_response(updated)
 
 
-@router.post("/{action_id}/reject", response_model=PendingActionResponse)
+@router.post(
+    "/{action_id}/reject",
+    response_model=PendingActionResponse,
+    dependencies=[_decide_action],
+)
 async def reject_action(
     workspace_id: uuid.UUID,
     action_id: uuid.UUID,
