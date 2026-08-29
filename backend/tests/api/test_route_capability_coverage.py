@@ -140,6 +140,12 @@ def _enforces_authorization(route: APIRoute) -> bool:
                 if _ENFORCEMENT_SOURCE.search(inspect.getsource(call)):
                     found = True
             except (OSError, TypeError):
+                # Source is unavailable for C-implemented or dynamically
+                # constructed callables. Swallowed on purpose and it fails
+                # *closed*: without source we cannot see an enforcement check,
+                # so the route stays in the ungated set and the test still
+                # fails. The risk of a false negative is nil; the cost of not
+                # catching is a crash on the first builtin in a dependency tree.
                 pass
         for child in getattr(dependant, "dependencies", []):
             walk(child)
@@ -255,8 +261,7 @@ def test_the_gate_recognises_a_real_capability_dependency() -> None:
     gated = [
         r
         for r in app.routes
-        if isinstance(r, APIRoute)
-        and r.path == "/api/v1/workspaces/{workspace_id}/dashboard/stats"
+        if isinstance(r, APIRoute) and r.path == "/api/v1/workspaces/{workspace_id}/dashboard/stats"
     ]
     assert gated, "dashboard/stats route not mounted; update this test's anchor"
     assert _enforces_authorization(gated[0])
