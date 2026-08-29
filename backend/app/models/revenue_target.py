@@ -40,6 +40,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.workspace import Workspace
@@ -63,7 +64,7 @@ CK_CLOSE_RATE_PERCENT = "close_rate_percent_range"
 CK_SAT_RATE_PERCENT = "sat_rate_percent_range"
 
 
-class RevenueTarget(Base):
+class RevenueTarget(Base, WorkspaceScoped):
     """One workspace's revenue goal and funnel assumptions for one month."""
 
     __tablename__ = "revenue_targets"

@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -47,7 +48,7 @@ class MissionStatus(StrEnum):
     ARCHIVED = "archived"
 
 
-class OutboundMission(Base):
+class OutboundMission(Base, WorkspaceScoped):
     """Outbound mission: a discovery + enrichment + sequencing run."""
 
     __tablename__ = "outbound_missions"

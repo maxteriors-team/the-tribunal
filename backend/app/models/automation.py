@@ -9,13 +9,14 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.automation_execution import AutomationExecution
     from app.models.workspace import Workspace
 
 
-class Automation(Base):
+class Automation(Base, WorkspaceScoped):
     """Workflow automation configuration."""
 
     __tablename__ = "automations"

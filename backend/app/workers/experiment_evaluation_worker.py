@@ -12,7 +12,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.agent import Agent
 from app.models.prompt_version import PromptVersion
 from app.services.ai.bandit_statistics import ComparisonResult, compare_prompt_versions
@@ -38,7 +38,7 @@ class ExperimentEvaluationWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Find agents with active experiments and evaluate them."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("experiment_evaluation_worker sweeps every workspace") as db:
             # Subquery: agents with 2+ active versions
             subq = (
                 select(PromptVersion.agent_id)

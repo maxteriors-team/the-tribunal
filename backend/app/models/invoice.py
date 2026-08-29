@@ -32,6 +32,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -55,7 +56,7 @@ def generate_invoice_token() -> str:
     return secrets.token_urlsafe(24)
 
 
-class Invoice(Base):
+class Invoice(Base, WorkspaceScoped):
     """A customer invoice issued by a workspace."""
 
     __tablename__ = "invoices"

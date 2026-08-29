@@ -8,9 +8,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 
-class APIKey(Base):
+class APIKey(Base, WorkspaceScoped):
     """Long-lived API key for workspace-scoped CLI/agent access.
 
     A key is bound to exactly one workspace via ``workspace_id``. The auth layer

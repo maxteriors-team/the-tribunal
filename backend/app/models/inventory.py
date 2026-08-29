@@ -45,6 +45,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.catalog import CatalogItem
@@ -84,7 +85,7 @@ DEFAULT_VALUATION_METHOD = "weighted_average"
 INVENTORY_VALUATION_METHODS = ("weighted_average",)
 
 
-class InventoryLocation(Base):
+class InventoryLocation(Base, WorkspaceScoped):
     """A place stock sits: a warehouse, a crew truck, or anywhere else."""
 
     __tablename__ = "inventory_locations"
@@ -147,7 +148,7 @@ class InventoryLocation(Base):
         return f"<InventoryLocation(id={self.id}, name={self.name}, kind={self.kind})>"
 
 
-class InventoryItem(Base):
+class InventoryItem(Base, WorkspaceScoped):
     """A tracked SKU: the thing whose quantity and cost the ledger moves.
 
     Deliberately a separate table from :class:`app.models.catalog.CatalogItem`
@@ -249,7 +250,7 @@ class InventoryItem(Base):
         return f"<InventoryItem(id={self.id}, name={self.name}, sku={self.sku})>"
 
 
-class InventoryLedgerEntry(Base):
+class InventoryLedgerEntry(Base, WorkspaceScoped):
     """One immutable stock movement.
 
     Append-only: rows are never updated or deleted. Undoing a consumption posts
@@ -358,7 +359,7 @@ class InventoryLedgerEntry(Base):
         )
 
 
-class InventoryJobAllocation(Base):
+class InventoryJobAllocation(Base, WorkspaceScoped):
     """Reserved or fulfilled inventory attached to one field-service job."""
 
     __tablename__ = "inventory_job_allocations"
@@ -455,7 +456,7 @@ class InventoryJobAllocation(Base):
     )
 
 
-class InventoryStockLevel(Base):
+class InventoryStockLevel(Base, WorkspaceScoped):
     """Derived on-hand cache for one item at one location (the Bin/quant).
 
     Never written by anything except the posting engine, and always rebuildable

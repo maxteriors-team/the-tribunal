@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.human_nudge import HumanNudge
 from app.models.workspace import Workspace
 from app.services.nudges.nudge_delivery import NudgeDeliveryService
@@ -38,7 +38,7 @@ class NudgeWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Process all workspaces: generate then deliver nudges."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("nudge_worker sweeps every workspace") as db:
             await self._process_workspaces(db)
 
     async def _expire_snoozed_nudges(self, db: AsyncSession) -> int:

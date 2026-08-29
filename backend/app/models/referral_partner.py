@@ -43,6 +43,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -66,7 +67,7 @@ class ReferralPartnerType(StrEnum):
     OTHER = "other"
 
 
-class ReferralPartner(Base):
+class ReferralPartner(Base, WorkspaceScoped):
     """A named person or company that sends referral work to the workspace."""
 
     __tablename__ = "referral_partners"

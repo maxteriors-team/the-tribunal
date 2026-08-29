@@ -36,6 +36,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -76,7 +77,7 @@ def _difficulty_enum() -> SAEnum:
     )
 
 
-class ProspectPersona(Base):
+class ProspectPersona(Base, WorkspaceScoped):
     """A synthetic prospect an agent can rehearse against."""
 
     __tablename__ = "prospect_personas"
@@ -129,7 +130,7 @@ class ProspectPersona(Base):
         return f"<ProspectPersona(id={self.id}, slug={self.slug}, builtin={self.is_builtin})>"
 
 
-class RehearsalRun(Base):
+class RehearsalRun(Base, WorkspaceScoped):
     """One scored rehearsal of an agent (or human rep) vs a synthetic prospect."""
 
     __tablename__ = "rehearsal_runs"

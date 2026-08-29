@@ -30,6 +30,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.appointment import Appointment
@@ -60,7 +61,7 @@ class ReviewRequestChannel(StrEnum):
     SMS = "sms"
 
 
-class ReviewRequest(Base):
+class ReviewRequest(Base, WorkspaceScoped):
     """An outbound review-request ask tied to a completed appointment/contact."""
 
     __tablename__ = "review_requests"

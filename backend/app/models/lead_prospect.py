@@ -35,6 +35,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString, LookupHash
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -100,7 +101,7 @@ class EnrichmentResultStatus(StrEnum):
     SKIPPED = "skipped"
 
 
-class LeadProspect(Base):
+class LeadProspect(Base, WorkspaceScoped):
     """Partial-identity lead candidate produced by a discovery job."""
 
     __tablename__ = "lead_prospects"
@@ -332,7 +333,7 @@ class LeadProspect(Base):
         )
 
 
-class LeadEnrichmentResult(Base):
+class LeadEnrichmentResult(Base, WorkspaceScoped):
     """Append-only audit record for a single enrichment provider call."""
 
     __tablename__ = "lead_enrichment_results"

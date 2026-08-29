@@ -132,7 +132,7 @@ async def test_transcript_batch_is_claimed_before_paying_openai() -> None:
     session = _RecordingSession()
 
     with patch(
-        "app.workers.transcript_analysis_worker.AsyncSessionLocal",
+        "app.workers.transcript_analysis_worker.system_session",
         return_value=_session_ctx(session),
     ):
         await TranscriptAnalysisWorker()._process_batch()
@@ -145,7 +145,7 @@ async def test_reputation_numbers_are_claimed_before_advancing_warming() -> None
     session = _RecordingSession()
 
     with patch(
-        "app.workers.reputation_worker.AsyncSessionLocal",
+        "app.workers.reputation_worker.system_session",
         return_value=_session_ctx(session),
     ):
         await ReputationWorker()._process_items()

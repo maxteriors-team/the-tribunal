@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -26,7 +27,7 @@ def default_expires_at() -> datetime:
     return datetime.now(UTC) + timedelta(days=7)
 
 
-class WorkspaceInvitation(Base):
+class WorkspaceInvitation(Base, WorkspaceScoped):
     """Invitation to join a workspace."""
 
     __tablename__ = "workspace_invitations"

@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -72,7 +73,7 @@ class CampaignContactStatus(StrEnum):
     SMS_FALLBACK_SENT = "sms_fallback_sent"
 
 
-class Campaign(Base):
+class Campaign(Base, WorkspaceScoped):
     """Campaign for lead qualification via SMS or voice calls with SMS fallback."""
 
     __tablename__ = "campaigns"

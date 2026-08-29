@@ -60,6 +60,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -69,7 +70,7 @@ if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class BusinessLocation(Base):
+class BusinessLocation(Base, WorkspaceScoped):
     """A physical branch/business unit the workspace operates from.
 
     Distinct from :class:`ServiceLocation` (a customer's job site): a
@@ -142,7 +143,7 @@ class BusinessLocation(Base):
         return f"<BusinessLocation(id={self.id}, name={self.name})>"
 
 
-class ServiceLocation(Base):
+class ServiceLocation(Base, WorkspaceScoped):
     """A physical job site owned by a customer within a workspace."""
 
     __tablename__ = "service_locations"
@@ -234,7 +235,7 @@ class ServiceLocation(Base):
         return f"<ServiceLocation(id={self.id}, contact_id={self.contact_id}, name={self.name})>"
 
 
-class Crew(Base):
+class Crew(Base, WorkspaceScoped):
     """A named field team that appears as a dispatch lane on the schedule."""
 
     __tablename__ = "crews"
@@ -296,7 +297,7 @@ class Crew(Base):
         return f"<Crew(id={self.id}, name={self.name})>"
 
 
-class Technician(Base):
+class Technician(Base, WorkspaceScoped):
     """A field worker, optionally linked to a login and assigned to a crew."""
 
     __tablename__ = "technicians"
@@ -444,7 +445,7 @@ _JobStatusType = SAEnum(
 )
 
 
-class Job(Base):
+class Job(Base, WorkspaceScoped):
     """A unit of field work (work order) for a customer, shown on calendars."""
 
     __tablename__ = "field_service_jobs"

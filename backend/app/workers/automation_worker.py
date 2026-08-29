@@ -64,7 +64,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.automation import Automation
 from app.models.automation_event import (
     EVENT_STATUS_PENDING,
@@ -178,7 +178,7 @@ class AutomationWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Resume due workflows, drain queued events, evaluate polling triggers."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("automation_worker sweeps every workspace") as db:
             # 0) Workflows parked on a ``wait`` whose time has come. First so a
             #    customer mid-sequence is served before new work is taken on.
             await self._resume_scheduled_executions(db)

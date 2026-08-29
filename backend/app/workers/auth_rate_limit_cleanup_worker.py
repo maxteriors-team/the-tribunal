@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.auth_rate_limit import AuthRateLimit
 from app.workers.base import BaseWorker, WorkerRegistry
 
@@ -46,7 +46,7 @@ class AuthRateLimitCleanupWorker(BaseWorker):
 
     async def _process_items(self) -> None:
         cutoff = datetime.now(UTC) - timedelta(hours=RETENTION_HOURS)
-        async with AsyncSessionLocal() as db:
+        async with system_session("auth_rate_limit_cleanup_worker sweeps every workspace") as db:
             result = await db.execute(
                 delete(AuthRateLimit).where(AuthRateLimit.created_at < cutoff)
             )

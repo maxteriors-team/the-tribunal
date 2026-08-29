@@ -22,7 +22,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.webhook_signature import SeenWebhookSignature
 from app.services.webhook_replay import SIGNATURE_RETENTION_DAYS
 from app.workers.base import BaseWorker, WorkerRegistry
@@ -47,7 +47,7 @@ class WebhookSignatureCleanupWorker(BaseWorker):
 
     async def _process_items(self) -> None:
         cutoff = datetime.now(UTC) - timedelta(days=RETENTION_DAYS)
-        async with AsyncSessionLocal() as db:
+        async with system_session("webhook_signature_cleanup_worker sweeps every workspace") as db:
             result = await db.execute(
                 delete(SeenWebhookSignature).where(SeenWebhookSignature.created_at < cutoff)
             )

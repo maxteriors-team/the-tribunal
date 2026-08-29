@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy import and_, or_, select
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.invoice_payment_receipt_outbox import (
     RECEIPT_PENDING,
     RECEIPT_PROCESSING,
@@ -54,7 +54,7 @@ class InvoicePaymentReceiptWorker(BaseWorker):
     async def _claim_jobs(self) -> list[uuid.UUID]:
         now = datetime.now(UTC)
         stale_before = now - CLAIM_TTL
-        async with AsyncSessionLocal() as db:
+        async with system_session("invoice_payment_receipt_worker sweeps every workspace") as db:
             jobs = list(
                 (
                     await db.scalars(
@@ -112,7 +112,7 @@ class InvoicePaymentReceiptWorker(BaseWorker):
             return
 
         now = datetime.now(UTC)
-        async with AsyncSessionLocal() as db:
+        async with system_session("invoice_payment_receipt_worker sweeps every workspace") as db:
             job = await db.get(InvoicePaymentReceiptOutbox, job_id, with_for_update=True)
             if job is None or job.status != RECEIPT_PROCESSING:
                 await db.rollback()
@@ -124,7 +124,7 @@ class InvoicePaymentReceiptWorker(BaseWorker):
             await db.commit()
 
     async def _load_snapshot(self, job_id: uuid.UUID) -> dict[str, Any] | None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("invoice_payment_receipt_worker sweeps every workspace") as db:
             job = await db.get(InvoicePaymentReceiptOutbox, job_id)
             if job is None or job.status != RECEIPT_PROCESSING:
                 return None
@@ -148,7 +148,7 @@ class InvoicePaymentReceiptWorker(BaseWorker):
             }
 
     async def _mark_failure(self, job_id: uuid.UUID, exc: Exception) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("invoice_payment_receipt_worker sweeps every workspace") as db:
             job = await db.get(InvoicePaymentReceiptOutbox, job_id, with_for_update=True)
             if job is None or job.status != RECEIPT_PROCESSING:
                 await db.rollback()
@@ -171,7 +171,7 @@ class InvoicePaymentReceiptWorker(BaseWorker):
             await db.commit()
 
     async def _mark_terminal(self, job_id: uuid.UUID, error: str) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("invoice_payment_receipt_worker sweeps every workspace") as db:
             job = await db.get(InvoicePaymentReceiptOutbox, job_id, with_for_update=True)
             if job is None or job.status != RECEIPT_PROCESSING:
                 await db.rollback()

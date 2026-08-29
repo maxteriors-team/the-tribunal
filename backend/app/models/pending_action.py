@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class PendingAction(Base):
+class PendingAction(Base, WorkspaceScoped):
     """Queue of AI-proposed actions awaiting human approval.
 
     Stores actions proposed by AI agents that require human review

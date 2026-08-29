@@ -53,6 +53,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -112,7 +113,7 @@ _CHANNEL_TYPE = SAEnum(
 )
 
 
-class NeighborOutreachBatch(Base):
+class NeighborOutreachBatch(Base, WorkspaceScoped):
     """The neighbour list generated for one job, at one radius, at one moment."""
 
     __tablename__ = "neighbor_outreach_batches"
@@ -186,7 +187,7 @@ class NeighborOutreachBatch(Base):
         )
 
 
-class NeighborOutreachEntry(Base):
+class NeighborOutreachEntry(Base, WorkspaceScoped):
     """One neighbouring site inside a batch, with its worked/skipped status."""
 
     __tablename__ = "neighbor_outreach_entries"

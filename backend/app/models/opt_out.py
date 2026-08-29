@@ -10,12 +10,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString, LookupHash, hash_phone
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class GlobalOptOut(Base):
+class GlobalOptOut(Base, WorkspaceScoped):
     """Global opt-out list for phone numbers across all campaigns in a workspace."""
 
     __tablename__ = "global_opt_outs"

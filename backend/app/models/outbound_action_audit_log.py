@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class OutboundActionAuditLog(Base):
+class OutboundActionAuditLog(Base, WorkspaceScoped):
     """Append-only audit record for AI and campaign outbound actions."""
 
     __tablename__ = "outbound_action_audit_logs"

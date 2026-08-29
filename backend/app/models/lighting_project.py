@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 LIGHTING_PROJECT_STATUSES = ("active", "archived")
 
 
-class LightingProject(Base):
+class LightingProject(Base, WorkspaceScoped):
     """The current, versioned landscape design for one CRM customer project."""
 
     __tablename__ = "lighting_projects"

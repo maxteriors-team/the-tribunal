@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.lead_discovery_job import (
     DiscoveryJobStatus,
     DiscoverySourceType,
@@ -39,7 +39,7 @@ class WebPeopleDiscoveryWorker(BaseWorker):
     MAX_CONCURRENCY = 1
 
     async def _process_items(self) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("web_people_discovery_worker sweeps every workspace") as db:
             jobs = await self._claim_jobs(db)
             if not jobs:
                 return

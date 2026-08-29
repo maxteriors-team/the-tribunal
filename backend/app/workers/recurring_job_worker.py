@@ -13,7 +13,7 @@ the service already enforces.
 """
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal, transaction_boundary
+from app.db.session import system_session, transaction_boundary
 from app.services.recurring_jobs import RecurringJobService
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -37,7 +37,10 @@ class RecurringJobWorker(RetryableWorker, BaseWorker):
 
     async def _materialize(self) -> int:
         """Run one materialization pass in its own committed transaction."""
-        async with AsyncSessionLocal() as db, transaction_boundary(db):
+        async with (
+            system_session("recurring_job_worker sweeps every workspace") as db,
+            transaction_boundary(db),
+        ):
             created = await RecurringJobService(db).materialize_due()
         if created:
             self.logger.info("recurring_jobs_materialized", count=created)

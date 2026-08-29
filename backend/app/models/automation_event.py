@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -32,7 +33,7 @@ EVENT_STATUS_PROCESSED = "processed"
 EVENT_STATUS_FAILED = "failed"
 
 
-class AutomationEvent(Base):
+class AutomationEvent(Base, WorkspaceScoped):
     """A domain event awaiting (or having completed) automation evaluation."""
 
     __tablename__ = "automation_events"

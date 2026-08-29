@@ -32,6 +32,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -48,7 +49,7 @@ def generate_comparison_token() -> str:
     return secrets.token_urlsafe(24)
 
 
-class RooflineComparison(Base):
+class RooflineComparison(Base, WorkspaceScoped):
     """A shareable permanent-vs-temporary lighting comparison for one roofline."""
 
     __tablename__ = "roofline_comparisons"

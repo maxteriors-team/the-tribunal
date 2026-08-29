@@ -15,7 +15,7 @@ touching the Meta hourly budget.
 from __future__ import annotations
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.services.ad_intelligence.monitors import (
     create_discovery_job_for_monitor,
     due_monitor_missions,
@@ -34,7 +34,7 @@ class AdMonitorWorker(BaseWorker):
     MAX_CONCURRENCY = 1
 
     async def _process_items(self) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("ad_monitor_worker sweeps every workspace") as db:
             missions = await due_monitor_missions(db, limit=MAX_MONITORS_PER_TICK)
             if not missions:
                 return

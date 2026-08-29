@@ -29,6 +29,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -48,7 +49,7 @@ CATALOG_ITEM_KINDS = ("service", "product")
 DEFAULT_SERVICE_CATEGORIES = ("roof", "siding", "gutters", "windows", "trim", "other")
 
 
-class CatalogItem(Base):
+class CatalogItem(Base, WorkspaceScoped):
     """A reusable priced product or service in a workspace's price book."""
 
     __tablename__ = "catalog_items"

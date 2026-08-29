@@ -29,6 +29,7 @@ from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 from app.services.ai.embeddings import EMBEDDING_DIM
 
 if TYPE_CHECKING:
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class KnowledgeChunk(Base):
+class KnowledgeChunk(Base, WorkspaceScoped):
     """An embedded, keyword-indexed slice of a knowledge document."""
 
     __tablename__ = "knowledge_chunks"

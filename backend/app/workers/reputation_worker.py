@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.phone_number import PhoneNumber
 from app.services.rate_limiting.reputation_tracker import ReputationTracker
 from app.services.rate_limiting.warming_scheduler import WarmingScheduler
@@ -35,7 +35,7 @@ class ReputationWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Update reputation for all active phone numbers."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("reputation_worker sweeps every workspace") as db:
             # Claim the active numbers FOR UPDATE SKIP LOCKED. This cycle advances
             # warming stages and quarantines numbers, so a second replica running
             # the same pass would double-advance warming and burn deliverability

@@ -10,13 +10,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString, LookupHash, hash_phone, hash_value
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
     from app.models.workspace import Workspace
 
 
-class HumanProfile(Base):
+class HumanProfile(Base, WorkspaceScoped):
     """Human profile for HITL action approval.
 
     Stores preferences and policies for a human operator

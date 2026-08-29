@@ -8,7 +8,7 @@ import httpx
 from sqlalchemy import and_, or_, select
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.message_attachment import (
     MESSAGE_ATTACHMENT_FAILED,
     MESSAGE_ATTACHMENT_PENDING,
@@ -93,7 +93,7 @@ class MessageAttachmentWorker(BaseWorker):
     async def _claim_due_attachments(self) -> list[uuid.UUID]:
         now = datetime.now(UTC)
         stale_before = now - _STALE_PROCESSING_AFTER
-        async with AsyncSessionLocal() as db:
+        async with system_session("message_attachment_worker sweeps every workspace") as db:
             result = await db.execute(
                 select(MessageAttachment)
                 .where(
@@ -127,7 +127,7 @@ class MessageAttachmentWorker(BaseWorker):
             return [attachment.id for attachment in attachments]
 
     async def _process_attachment(self, attachment_id: uuid.UUID) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("message_attachment_worker sweeps every workspace") as db:
             attachment = await db.get(MessageAttachment, attachment_id)
             if attachment is None or attachment.status != MESSAGE_ATTACHMENT_PROCESSING:
                 return

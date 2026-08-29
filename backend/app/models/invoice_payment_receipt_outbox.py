@@ -23,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 RECEIPT_PENDING = "pending"
 RECEIPT_PROCESSING = "processing"
@@ -30,7 +31,7 @@ RECEIPT_SENT = "sent"
 RECEIPT_TERMINAL = "terminal"
 
 
-class InvoicePaymentReceiptOutbox(Base):
+class InvoicePaymentReceiptOutbox(Base, WorkspaceScoped):
     """Immutable receipt snapshot plus bounded delivery state."""
 
     __tablename__ = "invoice_payment_receipt_outbox"

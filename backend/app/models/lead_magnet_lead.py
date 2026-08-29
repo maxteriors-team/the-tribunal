@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString, LookupHash, hash_phone, hash_value
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class LeadMagnetLead(Base):
+class LeadMagnetLead(Base, WorkspaceScoped):
     """Track leads captured via lead magnets."""
 
     __tablename__ = "lead_magnet_leads"

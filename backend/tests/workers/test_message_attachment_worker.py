@@ -22,6 +22,8 @@ from app.workers.message_attachment_worker import MessageAttachmentWorker, _obje
 class _SessionContext:
     def __init__(self, db: MagicMock) -> None:
         self._db = db
+        # ``system_session`` labels the session it is given via ``.info``.
+        self.info: dict[str, object] = {}
 
     async def __aenter__(self) -> MagicMock:
         return self._db
@@ -69,7 +71,7 @@ async def test_worker_copies_provider_bytes_to_private_storage(
     db = MagicMock()
     db.get = AsyncMock(return_value=attachment)
     db.commit = AsyncMock()
-    monkeypatch.setattr(worker_module, "AsyncSessionLocal", lambda: _SessionContext(db))
+    monkeypatch.setattr(worker_module, "system_session", lambda _reason: _SessionContext(db))
 
     storage = MagicMock(spec=MMSMediaStorage)
     expected_key = _object_key(attachment, "image/jpeg")
@@ -108,7 +110,7 @@ async def test_worker_retries_transient_storage_failure(
     db = MagicMock()
     db.get = AsyncMock(return_value=attachment)
     db.commit = AsyncMock()
-    monkeypatch.setattr(worker_module, "AsyncSessionLocal", lambda: _SessionContext(db))
+    monkeypatch.setattr(worker_module, "system_session", lambda _reason: _SessionContext(db))
 
     storage = MagicMock(spec=MMSMediaStorage)
     storage.upload_bytes.side_effect = MMSStorageError("unavailable")
@@ -137,7 +139,7 @@ async def test_worker_marks_permanent_provider_failure(
     db = MagicMock()
     db.get = AsyncMock(return_value=attachment)
     db.commit = AsyncMock()
-    monkeypatch.setattr(worker_module, "AsyncSessionLocal", lambda: _SessionContext(db))
+    monkeypatch.setattr(worker_module, "system_session", lambda _reason: _SessionContext(db))
 
     storage = MagicMock(spec=MMSMediaStorage)
     client = await _http_client()

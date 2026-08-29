@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.conversation import Conversation
 from app.services.ai.openai_credentials import (
     OpenAICredentialError,
@@ -40,7 +40,7 @@ class FollowupWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Process all pending follow-ups."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("followup_worker sweeps every workspace") as db:
             now = datetime.now(UTC)
 
             # Query conversations that need follow-ups

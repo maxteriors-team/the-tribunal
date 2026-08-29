@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import QueryableAttribute, selectinload
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.campaign import (
     Campaign,
     CampaignContact,
@@ -71,7 +71,7 @@ class BaseCampaignWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Process all running campaigns of this worker's type."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("base_campaign_worker sweeps every workspace") as db:
             query = (
                 select(Campaign)
                 .options(*[selectinload(load) for load in self.eager_loads])

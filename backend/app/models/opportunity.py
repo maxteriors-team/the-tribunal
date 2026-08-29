@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -50,7 +51,7 @@ opportunity_contact_table = Table(
 )
 
 
-class Opportunity(Base):
+class Opportunity(Base, WorkspaceScoped):
     """Opportunity/Deal in a sales pipeline."""
 
     __tablename__ = "opportunities"

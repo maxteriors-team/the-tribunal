@@ -34,6 +34,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.ad_advertiser import AdAdvertiser
@@ -50,7 +51,7 @@ class AdMediaType(StrEnum):
     UNKNOWN = "unknown"
 
 
-class AdCreative(Base):
+class AdCreative(Base, WorkspaceScoped):
     """One ad/creative observed for an advertiser, tracked across scans."""
 
     __tablename__ = "ad_creatives"

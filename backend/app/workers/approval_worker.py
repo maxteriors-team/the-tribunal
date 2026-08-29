@@ -50,9 +50,9 @@ class ApprovalWorker(RetryableWorker, BaseWorker):
         Observed in dev at ~38k retries on a single month-old action, with each
         tick spending most of its 30s budget asleep in backoff.
         """
-        from app.db.session import AsyncSessionLocal
+        from app.db.session import system_session
 
-        async with AsyncSessionLocal() as db:
+        async with system_session("approval_worker sweeps every workspace") as db:
             for phase in (
                 self._send_pending_notifications,
                 self._execute_approved_actions,

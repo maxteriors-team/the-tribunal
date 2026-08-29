@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.conversation import Conversation, Message
@@ -26,7 +27,7 @@ class QuoSendAttemptState(StrEnum):
     UNKNOWN = "unknown"
 
 
-class QuoSendAttempt(Base):
+class QuoSendAttempt(Base, WorkspaceScoped):
     """One network-send claim per workspace and client request UUID."""
 
     __tablename__ = "quo_send_attempts"

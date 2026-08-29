@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.campaign import Campaign
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class Offer(Base):
+class Offer(Base, WorkspaceScoped):
     """Reusable offer/promotion for campaigns."""
 
     __tablename__ = "offers"

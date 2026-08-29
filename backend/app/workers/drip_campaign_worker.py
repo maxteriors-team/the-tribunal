@@ -3,7 +3,7 @@
 Delegates all logic to drip_runner.process_active_drip_campaigns().
 """
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.services.reactivation.drip_runner import process_active_drip_campaigns
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
@@ -21,7 +21,7 @@ class DripCampaignWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Process all active drip campaigns."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("drip_campaign_worker sweeps every workspace") as db:
             await self.execute_with_retry(
                 process_active_drip_campaigns,
                 db,

@@ -26,6 +26,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 ATTENDANCE_STATUS_OPEN = "open"
 ATTENDANCE_STATUS_COMPLETE = "complete"
@@ -72,7 +73,7 @@ _AttendanceSourceType = Enum(
 )
 
 
-class AttendanceEntry(Base):
+class AttendanceEntry(Base, WorkspaceScoped):
     """One employee work interval; rows are corrected or voided, never deleted."""
 
     __tablename__ = "attendance_entries"
@@ -266,7 +267,7 @@ class AttendancePause(Base):
     entry: Mapped[AttendanceEntry] = relationship(back_populates="pauses")
 
 
-class AttendanceEvent(Base):
+class AttendanceEvent(Base, WorkspaceScoped):
     """Append-only audit event for an attendance mutation."""
 
     __tablename__ = "attendance_events"
@@ -308,7 +309,7 @@ class AttendanceEvent(Base):
     )
 
 
-class AttendanceExport(Base):
+class AttendanceExport(Base, WorkspaceScoped):
     """Audit metadata for an exported CSV; the CSV itself is never persisted."""
 
     __tablename__ = "attendance_exports"

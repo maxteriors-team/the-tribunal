@@ -46,7 +46,7 @@ async def test_failed_drip_cycle_routes_to_dlq() -> None:
 
     with (
         patch(
-            "app.workers.drip_campaign_worker.AsyncSessionLocal",
+            "app.workers.drip_campaign_worker.system_session",
             MagicMock(return_value=db_ctx),
         ),
         patch(

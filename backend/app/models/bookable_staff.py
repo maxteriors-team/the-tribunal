@@ -31,13 +31,14 @@ from sqlalchemy.dialects.postgresql import TEXT as PG_TEXT
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
     from app.models.workspace import Workspace
 
 
-class BookableStaff(Base):
+class BookableStaff(Base, WorkspaceScoped):
     """A bookable staff member / resource within a workspace.
 
     Scoped to a workspace and (optionally) a specific agent's pool. When

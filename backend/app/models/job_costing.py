@@ -32,6 +32,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.field_service import Job, Technician
@@ -39,7 +40,7 @@ if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class TimeEntry(Base):
+class TimeEntry(Base, WorkspaceScoped):
     """A span of work logged by a technician against a job."""
 
     __tablename__ = "job_time_entries"
@@ -105,7 +106,7 @@ class TimeEntry(Base):
         )
 
 
-class JobExpense(Base):
+class JobExpense(Base, WorkspaceScoped):
     """A single cost incurred while delivering a job."""
 
     __tablename__ = "job_expenses"

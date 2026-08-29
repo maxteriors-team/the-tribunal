@@ -25,6 +25,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.core.encryption import EncryptedString, LookupHash, hash_phone
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -106,7 +107,7 @@ class ConversationStatus(StrEnum):
     BLOCKED = "blocked"
 
 
-class Conversation(Base):
+class Conversation(Base, WorkspaceScoped):
     """Unified conversation thread with a contact."""
 
     __tablename__ = "conversations"

@@ -16,6 +16,7 @@ from app.core.permissions import Capability, role_can
 from app.core.roles import WorkspaceRole
 from app.core.security import decode_access_token
 from app.db.session import get_db, transaction_boundary
+from app.db.tenancy import scope_session_to_workspace
 from app.models.api_key import APIKey
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
@@ -39,6 +40,25 @@ def _extract_jwt(request: Request, header_token: str | None) -> str | None:
     if cookie_token:
         return cookie_token
     return header_token
+
+
+def _scope_request_session(db: AsyncSession, workspace_id: uuid.UUID) -> None:
+    """Restrict this request's session to the workspace just authorised.
+
+    Called from each of the four workspace-resolving dependencies, at the exact
+    point membership has been verified — so the label can only ever be a
+    workspace the caller was proven to belong to. After this, an ORM read that
+    forgets its tenant predicate is filtered anyway (:mod:`app.db.tenancy`).
+
+    Deliberately *after* the membership lookup, not before: that query is what
+    decides the workspace, so scoping the session first would filter the very
+    row that determines the scope.
+
+    Idempotent within a request, since more than one of these dependencies can
+    run for the same route. Re-scoping to a *different* workspace raises, which
+    is the point — that would mean one request authorised two tenants.
+    """
+    scope_session_to_workspace(db, workspace_id)
 
 
 def _bind_identity_to_logs(
@@ -227,6 +247,7 @@ async def get_workspace(
         )
 
     _bind_identity_to_logs(workspace_id=workspace.id)
+    _scope_request_session(db, workspace.id)
     return workspace
 
 
@@ -269,6 +290,7 @@ async def get_workspace_admin(
         )
 
     _bind_identity_to_logs(workspace_id=workspace.id)
+    _scope_request_session(db, workspace.id)
     return workspace
 
 
@@ -296,6 +318,7 @@ async def get_membership(
         )
 
     _bind_identity_to_logs(workspace_id=workspace_id)
+    _scope_request_session(db, workspace_id)
     return membership
 
 
@@ -413,6 +436,7 @@ async def get_active_workspace_membership(
     # workspace B, exactly as on the ``/workspaces/{workspace_id}`` routes.
     _enforce_api_key_workspace(request, membership.workspace_id)
     _bind_identity_to_logs(workspace_id=membership.workspace_id)
+    _scope_request_session(db, membership.workspace_id)
     return membership
 
 
