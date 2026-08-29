@@ -186,14 +186,26 @@ export function ClientProposalView({
   const bistroExperienceName = bistroInstallationNames.length
     ? `${bistroInstallationNames.join(" + ")} Install`
     : `${bistroTierName} Install`;
-  const bistroEstimatePoints = bistroInstallationRows.flatMap((row) => [
-    `${Number.isInteger(row.feet) ? row.feet : row.feet.toFixed(1)} ft ${row.label} lights — ${fmt(row.lights_cost)}`,
-    ...(row.pole_count
-      ? [
-          `${row.pole_count} ${row.pole_count === 1 ? "support pole" : "support poles"} — ${fmt(row.poles_cost)}`,
-        ]
-      : []),
-  ]);
+  // Feet-free on purpose: how much we measured is ours, not the customer's. The
+  // bullets still itemise what each run costs, and `bistro.feet` still drives
+  // the price above — it is just never printed.
+  // The heading above already reads "<Temporary> Bistro Lighting", so repeating
+  // the label in each bullet produced "Temporary Bistro Lighting lights". Name
+  // the run only when there are two of them to tell apart.
+  const bistroNeedsRunLabel = bistroInstallationRows.length > 1;
+  const bistroEstimatePoints = bistroInstallationRows.flatMap((row) => {
+    const run = bistroNeedsRunLabel
+      ? `${row.label.replace(/\s*bistro\s*light(ing|s)?\s*/i, " ").trim()}: `
+      : "";
+    return [
+      `${run}String lights \u2014 ${fmt(row.lights_cost)}`,
+      ...(row.pole_count
+        ? [
+            `${run}${row.pole_count} ${row.pole_count === 1 ? "support pole" : "support poles"} \u2014 ${fmt(row.poles_cost)}`,
+          ]
+        : []),
+    ];
+  });
   if (bistro?.min_applied) {
     bistroEstimatePoints.push("One Bistro project minimum applies across every measured run");
   }
@@ -550,13 +562,18 @@ export function ClientProposalView({
                   {(bistroInstallationRows.length
                     ? [
                         ...bistroEstimatePoints,
-                        "Professionally installed, weather-ready Bistro lighting for your outdoor space",
+                        // Says something the itemised lines above do not: what
+                        // the customer gets beyond the measurement and price.
+                        bistro.product === "color"
+                          ? "Color-changing RGBW \u2014 set any scene from your phone"
+                          : "Warm-white vintage glow \u2014 remote-controlled and fully dimmable",
+                        "Commercial-grade hardware, hung and tuned by our crew",
                       ]
                     : [
                         bistro.product === "color"
                           ? "Color-changing RGBW — set any scene or color right from your phone"
                           : "Warm-white vintage glow — remote-controlled and fully dimmable",
-                        `${Math.round(bistro.ordered_ft)} ft of professionally hung, weatherproof string lighting`,
+                        "Professionally hung, weatherproof string lighting",
                         "Commercial-grade hardware, controller & install — built to last season after season",
                       ]
                   ).map((point, i) => (
@@ -576,7 +593,7 @@ export function ClientProposalView({
                   {bistroExperienceName}
                 </div>
                 <div className="pcare-savings-unit">
-                  {Math.round(bistro.feet)} linear ft &middot; patio &amp; pergola
+                  Patio &amp; pergola
                 </div>
                 <div className="pcare-savings-basis">
                   Magazine-cover evenings &#8212; dinners, parties, and quiet nights, all under a

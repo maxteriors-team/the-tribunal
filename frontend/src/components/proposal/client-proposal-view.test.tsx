@@ -248,11 +248,15 @@ describe("ClientProposalView — measured Bistro pricing", () => {
     });
 
     expect(screen.getAllByText(/Temporary \+ Permanent/)).toHaveLength(2);
-    expect(screen.getByText(/100 ft Temporary Bistro Lighting lights — \$1,124/i)).toBeVisible();
-    expect(screen.getByText(/3 support poles — \$449/i)).toBeVisible();
-    expect(screen.getByText(/50 ft Permanent Bistro Lighting lights — \$1,124/i)).toBeVisible();
-    expect(screen.getByText(/2 support poles — \$337/i)).toBeVisible();
+    // Two runs, so each is named to tell them apart, and each carries its own
+    // price -- but never the footage we measured.
+    expect(screen.getByText(/Temporary: String lights — \$1,124/i)).toBeVisible();
+    expect(screen.getByText(/Temporary: 3 support poles — \$449/i)).toBeVisible();
+    expect(screen.getByText(/Permanent: String lights — \$1,124/i)).toBeVisible();
+    expect(screen.getByText(/Permanent: 2 support poles — \$337/i)).toBeVisible();
     expect(screen.queryByText(/Classic Bistro|Color Changing Bistro/i)).not.toBeInTheDocument();
+    // The whole patio section is feet-free: no bullet, no headline, no subtitle.
+    expect(screen.queryByText(/\d\s*(ft|feet|linear)/i)).not.toBeInTheDocument();
   });
 
   it("lets the customer accept a Bistro-only estimate without fake package choices", async () => {
