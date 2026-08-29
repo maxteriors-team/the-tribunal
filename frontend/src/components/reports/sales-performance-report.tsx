@@ -44,6 +44,7 @@ import { ReportDateRangePicker } from "./report-date-range-picker";
 import {
   SalesPerformanceBreakdownTable,
   type BreakdownMetric,
+  type SalesPerformanceBreakdownTableProps,
 } from "./sales-performance-breakdown-table";
 import {
   BOOKED_SAMPLE,
@@ -150,7 +151,7 @@ function HeadlineCard({
 interface BreakdownCardProps {
   title: string;
   description: string;
-  rows: SalesPerformanceReportData["by_closer"];
+  rows: SalesPerformanceBreakdownTableProps["rows"];
   currency: string;
   groupLabel: string;
   metrics: BreakdownMetric[];
@@ -358,7 +359,7 @@ function SalesPerformanceBody({
       <div className="grid gap-6 xl:grid-cols-2">
         <BreakdownCard
           title="By closer"
-          description="Who is winning the work, and at what size. Ranked by approved revenue."
+          description="Who is winning the work, and at what size. Expand a rep to see their rate per service. Ranked by approved revenue."
           rows={data.by_closer}
           currency={currency}
           groupLabel="Closer"
