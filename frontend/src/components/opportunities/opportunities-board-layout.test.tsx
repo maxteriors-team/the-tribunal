@@ -1,13 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OpportunitiesBoard } from "@/components/opportunities/opportunities-board";
 import type { Opportunity, Pipeline } from "@/types";
 
-const { listMock, listPipelinesMock } = vi.hoisted(() => ({
+const { listMock, listPipelinesMock, getActiveTeamMembersMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
   listPipelinesMock: vi.fn(),
+  getActiveTeamMembersMock: vi.fn(),
 }));
 
 vi.mock("@/hooks/useWorkspaceId", () => ({ useWorkspaceId: () => "workspace-1" }));
@@ -32,6 +34,9 @@ vi.mock("@/lib/api/opportunities", () => ({
     removeFromPipeline: vi.fn(),
     update: vi.fn(),
   },
+}));
+vi.mock("@/lib/api/settings", () => ({
+  settingsApi: { getActiveTeamMembers: getActiveTeamMembersMock },
 }));
 vi.mock("@/components/ui/contact-combobox", () => ({ ContactPicker: () => <div /> }));
 vi.mock("@/components/calls/outbound-call-dialog", () => ({ OutboundCallDialog: () => null }));
@@ -103,6 +108,9 @@ describe("OpportunitiesBoard scrolling", () => {
   beforeEach(() => {
     listPipelinesMock.mockResolvedValue([pipeline]);
     listMock.mockResolvedValue({ items: [opportunity], total: 1, page: 1, page_size: 200, pages: 1 });
+    getActiveTeamMembersMock.mockResolvedValue([
+      { id: 7, full_name: "Dana Rep", email: "dana@example.com", role: "sales_rep" },
+    ]);
   });
 
   it("keeps horizontal stages and every vertical card list independently accessible", async () => {
@@ -130,5 +138,32 @@ describe("OpportunitiesBoard scrolling", () => {
     expect(cardLists).toHaveLength(2);
     for (const list of cardLists) expect(list).toHaveClass("min-h-0", "overflow-y-auto");
     expect(screen.getByText("Roof replacement")).toBeInTheDocument();
+  });
+
+  it("asks the server for one rep's deals once a rep is picked", async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OpportunitiesBoard />
+      </QueryClientProvider>,
+    );
+
+    // Unfiltered board must not narrow the query to anyone.
+    await screen.findByTestId("opportunity-rep-filter");
+    expect(listMock).toHaveBeenCalledWith(
+      "workspace-1",
+      expect.objectContaining({ owner_id: undefined }),
+    );
+
+    await user.click(screen.getByTestId("opportunity-rep-filter"));
+    await user.click(await screen.findByRole("option", { name: "Dana Rep" }));
+
+    await waitFor(() =>
+      expect(listMock).toHaveBeenCalledWith("workspace-1", expect.objectContaining({ owner_id: 7 })),
+    );
   });
 });

@@ -33,10 +33,18 @@ import { ContactPicker } from "@/components/ui/contact-combobox";
 import { HorizontalScroll } from "@/components/ui/horizontal-scroll";
 import { Label } from "@/components/ui/label";
 import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useContact } from "@/hooks/useContacts";
 import { useOutboundCall } from "@/hooks/useOutboundCall";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { opportunitiesApi } from "@/lib/api/opportunities";
+import { settingsApi } from "@/lib/api/settings";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -49,6 +57,9 @@ import { OpportunityCreateSheet } from "./opportunity-create-sheet";
 import { OpportunityDetailSheet } from "./opportunity-detail-sheet";
 
 const BOARD_PAGE_SIZE = 200;
+
+/** Sentinel for "no rep filter"; Radix Select cannot hold an empty-string value. */
+const ALL_REPS_VALUE = "all";
 
 /**
  * The board renders a lead's name, phone, and lifecycle status straight from
@@ -124,6 +135,16 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
     id: string;
     contact: Contact | null;
   }>({ id: "", contact: null });
+  const [repFilter, setRepFilter] = useState<string>(ALL_REPS_VALUE);
+
+  // A sales rep only ever sees their own deals, so a rep filter would be a
+  // single-option no-op for them. Reuses the picker's key, so the team list is
+  // fetched once and shared with the owner picker in the detail sheet.
+  const repsQuery = useQuery({
+    queryKey: queryKeys.settings.activeTeam(workspaceId),
+    queryFn: () => settingsApi.getActiveTeamMembers(workspaceId),
+    enabled: Boolean(workspaceId) && canAssignOwners,
+  });
 
   const {
     callTarget,
@@ -152,8 +173,9 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
     () => ({
       pipeline_id: pipeline.id,
       contact_id: customerFilter.id ? Number(customerFilter.id) : undefined,
+      owner_id: repFilter === ALL_REPS_VALUE ? undefined : Number(repFilter),
     }),
-    [pipeline.id, customerFilter.id],
+    [pipeline.id, customerFilter.id, repFilter],
   );
   const listKey = queryKeys.opportunities.list(workspaceId, listParams);
 
@@ -312,19 +334,50 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
           </div>
         </div>
 
-        <div className="w-full max-w-sm shrink-0 space-y-1.5">
-          <Label htmlFor="opportunity-customer-filter" className="text-xs">
-            Filter by customer
-          </Label>
-          <ContactPicker
-            id="opportunity-customer-filter"
-            workspaceId={workspaceId}
-            value={customerFilter.id}
-            initialContact={customerFilter.contact}
-            onChange={(id, contact) => setCustomerFilter({ id, contact })}
-            placeholder="Filter by customer…"
-            data-testid="opportunity-customer-filter"
-          />
+        <div className="flex w-full shrink-0 flex-col gap-3 sm:flex-row">
+          <div className="w-full max-w-sm space-y-1.5">
+            <Label htmlFor="opportunity-customer-filter" className="text-xs">
+              Filter by customer
+            </Label>
+            <ContactPicker
+              id="opportunity-customer-filter"
+              workspaceId={workspaceId}
+              value={customerFilter.id}
+              initialContact={customerFilter.contact}
+              onChange={(id, contact) => setCustomerFilter({ id, contact })}
+              placeholder="Filter by customer…"
+              data-testid="opportunity-customer-filter"
+            />
+          </div>
+
+          {canAssignOwners ? (
+            <div className="w-full max-w-xs space-y-1.5">
+              <Label htmlFor="opportunity-rep-filter" className="text-xs">
+                Filter by rep
+              </Label>
+              <Select
+                value={repFilter}
+                onValueChange={setRepFilter}
+                disabled={repsQuery.isLoading || repsQuery.isError}
+              >
+                <SelectTrigger
+                  id="opportunity-rep-filter"
+                  className="w-full"
+                  data-testid="opportunity-rep-filter"
+                >
+                  <SelectValue placeholder={repsQuery.isLoading ? "Loading team…" : "All reps"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_REPS_VALUE}>All reps</SelectItem>
+                  {repsQuery.data?.map((member) => (
+                    <SelectItem key={member.id} value={String(member.id)}>
+                      {member.full_name || member.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
         </div>
 
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
