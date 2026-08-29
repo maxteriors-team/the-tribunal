@@ -27,6 +27,7 @@ import {
   type CustomLineDraft,
   type CustomLineSide,
 } from "@/lib/estimator/custom-lines";
+import { COVERAGE_OPTIONS, formatFeet, type CoverageKey } from "@/lib/estimator/design";
 import { packageName, resolveSelectedPackage, seasonalTotal } from "@/lib/estimator/packages";
 import { formatCurrency } from "@/lib/utils/number";
 import type { ChristmasPackagePricing, LinearFeetEstimateResult } from "@/types/estimate";
@@ -49,6 +50,14 @@ interface EstimatePanelProps {
   customLines: CustomLineDraft[];
   onChangeCustomLines: (lines: CustomLineDraft[]) => void;
   sides: EstimateSides;
+  /**
+   * How much of the house is being quoted. Undefined hides the control, for
+   * designs with no permanent side to scope.
+   */
+  coverage?: CoverageKey;
+  onSelectCoverage?: (coverage: CoverageKey) => void;
+  /** Measured permanent feet each coverage level would price. */
+  coverageFeet?: Record<CoverageKey, number>;
 }
 
 export function EstimatePanel({
@@ -62,6 +71,9 @@ export function EstimatePanel({
   customLines,
   onChangeCustomLines,
   sides,
+  coverage,
+  onSelectCoverage,
+  coverageFeet,
 }: EstimatePanelProps) {
   const permanent = estimate?.permanent;
   const christmas = estimate?.christmas;
@@ -109,6 +121,35 @@ export function EstimatePanel({
                 <span className="est-internal-badge">Internal only</span>
               </span>
               <span className="ep-metric-label">Measured roofline</span>
+            </div>
+          ) : null}
+
+          {coverage && onSelectCoverage ? (
+            <div className="ep-packages">
+              <div className="ep-lines-head">Coverage</div>
+              <p className="ep-pkg-hint">
+                How much of the house this quote covers. Tag each drawn line front, side, or back to
+                change what each level includes.
+              </p>
+              <div className="ep-pkgs" role="group" aria-label="Coverage">
+                {COVERAGE_OPTIONS.map((option) => {
+                  const isSelected = coverage === option.key;
+                  return (
+                    <button
+                      type="button"
+                      key={option.key}
+                      className={`ep-pkg${isSelected ? " selected" : ""}`}
+                      aria-pressed={isSelected}
+                      onClick={() => onSelectCoverage(option.key)}
+                    >
+                      <span className="ep-pkg-name">{option.label}</span>
+                      <span className="ep-pkg-per">
+                        {formatFeet(coverageFeet?.[option.key] ?? 0)} of permanent lighting
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
 

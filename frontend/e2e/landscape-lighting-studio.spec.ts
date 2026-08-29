@@ -387,6 +387,8 @@ async function installStudioApi(
   const previews: Array<Record<string, unknown>> = [];
   const quotes: Array<Record<string, unknown>> = [];
   const deliveries: unknown[] = [];
+  // What the designer asks the server to price, which is where coverage lands.
+  const estimates: Array<Record<string, unknown>> = [];
 
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -465,6 +467,7 @@ async function installStudioApi(
       return;
     }
     if (method === "POST" && pathname.endsWith("/quotes/estimate")) {
+      estimates.push(parseRequestBody(route.request()));
       await route.fulfill(
         json(
           projectType === "permanent"
@@ -542,7 +545,7 @@ async function installStudioApi(
     await route.fulfill(json({ detail: `Unexpected ${method} ${pathname}` }, 404));
   });
 
-  return { updates, previews, quotes, deliveries };
+  return { updates, previews, quotes, deliveries, estimates };
 }
 
 test.describe("landscape lighting studio", () => {
@@ -638,6 +641,69 @@ test.describe("landscape lighting studio", () => {
     await expect(page.getByLabel("Project name")).toHaveValue("Hawthorne Residence");
     await canvas.click({ position: { x: box.width * 0.5, y: box.height * 0.39 } });
     await expect(page.getByLabel("Selected permanent run elevation")).toHaveValue("side");
+  });
+
+  test("prices only the elevations the chosen coverage level includes", async ({ page }) => {
+    const { estimates } = await installStudioApi(page, { projectType: "permanent" });
+    await page.goto(PERMANENT_PROJECT_URL);
+    await expect(page.getByLabel("Project name")).toHaveValue("Hawthorne Residence");
+
+    const canvas = page.getByLabel("Property photo lighting design canvas");
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error("Permanent lighting canvas did not render");
+    const drawRun = async (y: number, elevation: string) => {
+      await page.getByRole("button", { name: /Permanent LED Roofline/i }).click();
+      await canvas.click({ position: { x: box.width * 0.25, y: box.height * y } });
+      await canvas.click({ position: { x: box.width * 0.75, y: box.height * y } });
+      await canvas.focus();
+      await page.keyboard.press("Enter");
+      await page.getByLabel("Selected permanent run elevation").selectOption(elevation);
+    };
+
+    await drawRun(0.3, "front");
+    await drawRun(0.45, "side");
+    await drawRun(0.6, "back");
+
+    // What the rep sees priced. Asserting only the network call would be flaky
+    // by design: React Query caches per footage, so re-selecting a level already
+    // fetched while drawing is served from cache with no new request.
+    const measuredFeet = async () => {
+      const metric = await page.locator(".ep-metric").innerText();
+      return Number(/([\d.]+) ft/i.exec(metric)?.[1] ?? NaN);
+    };
+    const requestedFeet = () => estimates.map((entry) => entry.feet as number);
+    const coverage = page.getByRole("group", { name: "Coverage" });
+    const advertisedFeet = async (name: RegExp) => {
+      const label = await coverage.getByRole("button", { name }).innerText();
+      // The card's footage is CSS-uppercased, so innerText reads "219 FT".
+      const feet = /([\d.]+) ft/i.exec(label)?.[1];
+      if (!feet) throw new Error(`Coverage card ${name} showed no footage: ${label}`);
+      return Number(feet);
+    };
+
+    const select = async (name: RegExp) => {
+      const expected = await advertisedFeet(name);
+      await coverage.getByRole("button", { name }).click();
+      await expect(coverage.getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
+      await expect.poll(measuredFeet).toBeCloseTo(expected, 0);
+      // ...and the server was asked to price exactly that subset.
+      expect(requestedFeet()).toContain(expected);
+      return expected;
+    };
+
+    // Equal-length runs, so each face adds the same footage.
+    const wholeHome = await select(/Whole home/);
+    const frontAndSides = await select(/Front and sides/);
+    const frontOnly = await select(/Front only/);
+    expect(frontAndSides).toBeCloseTo((wholeHome * 2) / 3, 0);
+    expect(frontOnly).toBeCloseTo(wholeHome / 3, 0);
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/permanent-coverage-toggle.png",
+    });
+
+    // Whole home restores every elevation, so the toggle is non-destructive.
+    await select(/Whole home/);
+    await expect.poll(measuredFeet).toBeCloseTo(wholeHome, 0);
   });
 
   test("opens the quote builder at its package choices every time Proposal & payment is used", async ({
