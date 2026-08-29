@@ -7,7 +7,7 @@ suggestions for agents with auto_suggest or auto_activate enabled.
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.agent import Agent
 from app.models.improvement_suggestion import ImprovementSuggestion
 from app.models.prompt_version import PromptVersion
@@ -34,7 +34,7 @@ class PromptImprovementWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Process agents with auto-improvement enabled."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("prompt_improvement_worker sweeps every workspace") as db:
             # Find agents with auto_suggest or auto_activate enabled
             result = await db.execute(
                 select(Agent).where(

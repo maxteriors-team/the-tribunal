@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.constants.text_response_timing import TEXT_RESPONSE_DEFAULT_DELAY_MS
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 
 def generate_public_id() -> str:
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class Agent(Base):
+class Agent(Base, WorkspaceScoped):
     """AI agent for voice and text conversations."""
 
     __tablename__ = "agents"

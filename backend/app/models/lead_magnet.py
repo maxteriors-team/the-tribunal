@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.offer_lead_magnet import OfferLeadMagnet
@@ -55,7 +56,7 @@ class DeliveryMethod(StrEnum):
     SMS = "sms"
 
 
-class LeadMagnet(Base):
+class LeadMagnet(Base, WorkspaceScoped):
     """Lead magnet/freebie that can be attached to offers as bonuses."""
 
     __tablename__ = "lead_magnets"

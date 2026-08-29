@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import InvalidToken, decrypt_json, encrypt_json
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 logger = structlog.get_logger()
 
@@ -147,7 +148,7 @@ class Workspace(Base):
         return f"<Workspace(id={self.id}, slug={self.slug})>"
 
 
-class WorkspaceMembership(Base):
+class WorkspaceMembership(Base, WorkspaceScoped):
     """User membership in a workspace."""
 
     __tablename__ = "workspace_memberships"
@@ -194,7 +195,7 @@ class WorkspaceMembership(Base):
         )
 
 
-class WorkspaceIntegration(Base):
+class WorkspaceIntegration(Base, WorkspaceScoped):
     """Integration credentials for a workspace."""
 
     __tablename__ = "workspace_integrations"

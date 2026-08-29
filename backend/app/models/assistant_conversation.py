@@ -9,9 +9,10 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 
-class AssistantConversation(Base):
+class AssistantConversation(Base, WorkspaceScoped):
     """Conversation thread between an operator and the CRM assistant."""
 
     __tablename__ = "assistant_conversations"

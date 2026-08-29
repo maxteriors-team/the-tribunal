@@ -19,6 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.conversation import Message
@@ -36,7 +37,7 @@ MESSAGE_ATTACHMENT_STATUSES = (
 )
 
 
-class MessageAttachment(Base):
+class MessageAttachment(Base, WorkspaceScoped):
     """A provider media item queued for private object-storage ingestion."""
 
     __tablename__ = "message_attachments"

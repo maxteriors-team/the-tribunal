@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 
 class EmailEventType(StrEnum):
@@ -25,7 +26,7 @@ class EmailEventType(StrEnum):
     UNSUBSCRIBED = "unsubscribed"
 
 
-class EmailEvent(Base):
+class EmailEvent(Base, WorkspaceScoped):
     """Inbound email event from the Resend webhook."""
 
     __tablename__ = "email_events"

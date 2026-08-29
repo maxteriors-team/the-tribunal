@@ -30,6 +30,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.conversation import Conversation, Message
@@ -82,7 +83,7 @@ class SequenceStepAttemptStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class OutboundSequence(Base):
+class OutboundSequence(Base, WorkspaceScoped):
     """Reusable multi-channel outbound sequence template."""
 
     __tablename__ = "outbound_sequences"
@@ -172,7 +173,7 @@ class OutboundSequence(Base):
         return f"<OutboundSequence(id={self.id}, name={self.name}, status={self.status})>"
 
 
-class OutboundSequenceEnrollment(Base):
+class OutboundSequenceEnrollment(Base, WorkspaceScoped):
     """A single prospect's enrollment in an :class:`OutboundSequence`."""
 
     __tablename__ = "outbound_sequence_enrollments"
@@ -290,7 +291,7 @@ class OutboundSequenceEnrollment(Base):
         )
 
 
-class OutboundSequenceStepAttempt(Base):
+class OutboundSequenceStepAttempt(Base, WorkspaceScoped):
     """Per-step execution record for an :class:`OutboundSequenceEnrollment`."""
 
     __tablename__ = "outbound_sequence_step_attempts"

@@ -9,12 +9,13 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class MessageTemplate(Base):
+class MessageTemplate(Base, WorkspaceScoped):
     """Saved message template for reuse across experiments."""
 
     __tablename__ = "message_templates"

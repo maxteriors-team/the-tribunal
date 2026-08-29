@@ -27,6 +27,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.conversation import Message
@@ -42,7 +43,7 @@ class CallPaymentStatus(StrEnum):
     EXPIRED = "expired"
 
 
-class CallPayment(Base):
+class CallPayment(Base, WorkspaceScoped):
     """A payment / deposit collected (or attempted) during a voice call."""
 
     __tablename__ = "call_payments"

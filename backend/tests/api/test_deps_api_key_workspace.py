@@ -56,6 +56,20 @@ def _scalar_one_or_none_result(value: object) -> MagicMock:
     return result
 
 
+def _fake_session(*results: MagicMock) -> MagicMock:
+    """A stand-in session whose ``.info`` behaves like a real one's.
+
+    A bare ``MagicMock`` returns a truthy mock for *any* attribute, so
+    ``session.info.get(...)`` reads as "already labelled" and the tenancy
+    scoping in ``get_workspace`` refuses to run. A real ``AsyncSession`` starts
+    with an empty ``info`` dict, so the fake does too.
+    """
+    db = MagicMock()
+    db.info = {}
+    db.execute = AsyncMock(side_effect=list(results))
+    return db
+
+
 @pytest.fixture
 def workspace_a_id() -> uuid.UUID:
     return uuid.uuid4()
@@ -221,12 +235,9 @@ class TestWorkspaceDepsHonorBinding:
         workspace = MagicMock(spec=Workspace)
         workspace.is_active = True
 
-        db = MagicMock()
-        db.execute = AsyncMock(
-            side_effect=[
-                _scalar_one_or_none_result(membership),
-                _scalar_one_or_none_result(workspace),
-            ]
+        db = _fake_session(
+            _scalar_one_or_none_result(membership),
+            _scalar_one_or_none_result(workspace),
         )
 
         result = await get_workspace(
@@ -297,12 +308,9 @@ class TestWorkspaceDepsHonorBinding:
         workspace = MagicMock(spec=Workspace)
         workspace.is_active = True
 
-        db = MagicMock()
-        db.execute = AsyncMock(
-            side_effect=[
-                _scalar_one_or_none_result(membership),
-                _scalar_one_or_none_result(workspace),
-            ]
+        db = _fake_session(
+            _scalar_one_or_none_result(membership),
+            _scalar_one_or_none_result(workspace),
         )
 
         result = await get_workspace(

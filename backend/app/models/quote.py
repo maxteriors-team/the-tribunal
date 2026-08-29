@@ -34,6 +34,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -73,7 +74,7 @@ def generate_quote_token() -> str:
     return secrets.token_urlsafe(24)
 
 
-class Quote(Base):
+class Quote(Base, WorkspaceScoped):
     """A customer quote/estimate issued by a workspace."""
 
     __tablename__ = "quotes"

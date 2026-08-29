@@ -51,6 +51,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.campaign import Campaign
@@ -105,7 +106,7 @@ OCCUPYING_RESERVATION_STATUSES = frozenset(
 DEFAULT_HOLD_HOURS = 72
 
 
-class PreBookingCampaignConfig(Base):
+class PreBookingCampaignConfig(Base, WorkspaceScoped):
     """Pre-booking offer terms attached to exactly one campaign."""
 
     __tablename__ = "prebooking_campaign_configs"
@@ -208,7 +209,7 @@ class PreBookingCampaignConfig(Base):
         )
 
 
-class PreBookingReservation(Base):
+class PreBookingReservation(Base, WorkspaceScoped):
     """One contact's claim on a season slot, from quote through paid deposit."""
 
     __tablename__ = "prebooking_reservations"

@@ -26,7 +26,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.campaign import CampaignContact
 from app.models.contact import Contact
 from app.models.human_nudge import HumanNudge
@@ -56,7 +56,7 @@ class OutboundAutoDraftWorker(BaseWorker):
     MAX_CONCURRENCY = 1
 
     async def _process_items(self) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("outbound_auto_draft_worker sweeps every workspace") as db:
             # Snapshot scalar values up front: mid-loop commits/rollbacks may
             # expire or detach ORM instances.
             result = await db.execute(

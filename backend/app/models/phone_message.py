@@ -19,6 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.conversation import Message
@@ -40,7 +41,7 @@ class PhoneMessageStatus(StrEnum):
     RESOLVED = "resolved"
 
 
-class PhoneMessage(Base):
+class PhoneMessage(Base, WorkspaceScoped):
     """A structured message captured for an operator during a voice call."""
 
     __tablename__ = "phone_messages"

@@ -25,6 +25,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 
 def generate_lead_source_key() -> str:
@@ -62,7 +63,7 @@ class LeadSourceType(StrEnum):
     OTHER = "other"
 
 
-class LeadSource(Base):
+class LeadSource(Base, WorkspaceScoped):
     """Configurable lead source for public lead ingestion and attribution."""
 
     __tablename__ = "lead_sources"
@@ -130,7 +131,7 @@ class LeadSource(Base):
         )
 
 
-class LeadSourceCampaign(Base):
+class LeadSourceCampaign(Base, WorkspaceScoped):
     """Attribution campaign nested under a lead source."""
 
     __tablename__ = "lead_source_campaigns"
@@ -195,7 +196,7 @@ class LeadSourceCampaign(Base):
         )
 
 
-class LeadSourceSpendEntry(Base):
+class LeadSourceSpendEntry(Base, WorkspaceScoped):
     """Manual ad/source spend entered for a source and optional campaign."""
 
     __tablename__ = "lead_source_spend_entries"

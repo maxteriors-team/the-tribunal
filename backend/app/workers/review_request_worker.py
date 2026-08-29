@@ -7,7 +7,7 @@ review a sensible interval after the job (configurable per workspace) rather tha
 the instant the meeting ends.
 """
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.services.idempotency import derive_worker_retry_key
 from app.services.reviews import ReviewService
 from app.workers.base import BaseWorker, WorkerRegistry
@@ -27,7 +27,7 @@ class ReviewRequestWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Find and dispatch review requests whose delay window has elapsed."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("review_request_worker sweeps every workspace") as db:
             service = ReviewService(db)
             due = await service.find_due_pending_requests(limit=MAX_REQUESTS_PER_TICK)
 

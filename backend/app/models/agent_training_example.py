@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class AgentTrainingExample(Base):
+class AgentTrainingExample(Base, WorkspaceScoped):
     """An operator-approved correction scoped to one workspace and agent."""
 
     __tablename__ = "agent_training_examples"

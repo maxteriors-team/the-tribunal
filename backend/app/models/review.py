@@ -35,6 +35,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -68,7 +69,7 @@ class ReviewStatus(StrEnum):
     DISMISSED = "dismissed"
 
 
-class Review(Base):
+class Review(Base, WorkspaceScoped):
     """A collected review or private feedback item for a workspace."""
 
     __tablename__ = "reviews"

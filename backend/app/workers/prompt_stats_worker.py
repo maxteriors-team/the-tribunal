@@ -10,7 +10,7 @@ from sqlalchemy import Date, Numeric, and_, cast, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.call_outcome import CallOutcome, OutcomeType
 from app.models.prompt_version_stats import PromptVersionStats
 from app.workers.base import BaseWorker, WorkerRegistry
@@ -33,7 +33,7 @@ class PromptStatsWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Process daily aggregation for all prompt versions."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("prompt_stats_worker sweeps every workspace") as db:
             # Aggregate yesterday's data by default
             yesterday = date.today() - timedelta(days=1)
             await self.execute_with_retry(
@@ -235,7 +235,7 @@ class PromptStatsWorker(RetryableWorker, BaseWorker):
         total_processed = 0
         current_date = start_date
 
-        async with AsyncSessionLocal() as db:
+        async with system_session("prompt_stats_worker sweeps every workspace") as db:
             while current_date <= end_date:
                 processed = await self._aggregate_for_date(db, current_date)
                 total_processed += processed

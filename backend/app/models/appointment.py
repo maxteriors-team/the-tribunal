@@ -23,6 +23,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -43,7 +44,7 @@ class AppointmentStatus(StrEnum):
     NO_SHOW = "no_show"
 
 
-class Appointment(Base):
+class Appointment(Base, WorkspaceScoped):
     """CRM appointment optionally mirrored to an assigned Google Calendar."""
 
     __tablename__ = "appointments"

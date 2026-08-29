@@ -50,6 +50,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -88,7 +89,7 @@ class ServicePlanType(StrEnum):
     MAINTENANCE = "maintenance"
 
 
-class RecurringJobTemplate(Base):
+class RecurringJobTemplate(Base, WorkspaceScoped):
     """A service plan: what a client signed up for, and how it materializes."""
 
     __tablename__ = "recurring_job_templates"

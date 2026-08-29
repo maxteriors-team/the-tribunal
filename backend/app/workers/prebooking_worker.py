@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.campaign import Campaign, CampaignStatus
 from app.models.prebooking import PreBookingCampaignConfig
 from app.services.campaigns.campaign_lifecycle import (
@@ -52,7 +52,7 @@ class PreBookingWorker(BaseWorker):
     MAX_CONCURRENCY = 1
 
     async def _process_items(self) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("prebooking_worker sweeps every workspace") as db:
             launched = await self._launch_due_campaigns(db)
             released = await PreBookingReservationService(db).release_expired_holds()
 

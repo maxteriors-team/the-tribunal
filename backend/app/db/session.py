@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
+from app.db.tenancy import mark_session_as_system
 
 # Engine configuration is tuned for an async (asyncpg) Postgres workload that
 # may sit idle behind a load balancer / PgBouncer and that needs to survive
@@ -98,6 +99,28 @@ async def transaction_boundary(session: AsyncSession) -> AsyncIterator[AsyncSess
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency that provides a database session without owning commit/rollback."""
     async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
+@asynccontextmanager
+async def system_session(reason: str) -> AsyncGenerator[AsyncSession, None]:
+    """A session allowed to read across every workspace.
+
+    The escape hatch from :mod:`app.db.tenancy`. Background workers sweep all
+    tenants by design — the reminder worker has to find every appointment due
+    tomorrow, not one workspace's — so they are exempt from the tenant filter.
+
+    ``reason`` states the justification at the call site and makes
+    ``grep -rn system_session`` a complete inventory of everything in the
+    codebase that can read across tenants. Anything acting on behalf of a user
+    should use :func:`get_db` with the request dependencies instead, which scope
+    the session to the caller's workspace automatically.
+    """
+    async with AsyncSessionLocal() as session:
+        mark_session_as_system(session, reason=reason)
         try:
             yield session
         finally:

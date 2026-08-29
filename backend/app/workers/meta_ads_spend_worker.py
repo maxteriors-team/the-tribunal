@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.workspace import WorkspaceIntegration
 from app.services.dashboard.dashboard_service import invalidate_dashboard_cache
 from app.services.lead_sources.meta_lead_ads_service import (
@@ -24,7 +24,7 @@ class MetaAdsSpendWorker(BaseWorker):
     MAX_CONCURRENCY = 1
 
     async def _process_items(self) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("meta_ads_spend_worker sweeps every workspace") as db:
             integration_ids = (
                 (
                     await db.execute(
@@ -41,7 +41,7 @@ class MetaAdsSpendWorker(BaseWorker):
             )
 
         for integration_id in integration_ids:
-            async with AsyncSessionLocal() as db:
+            async with system_session("meta_ads_spend_worker sweeps every workspace") as db:
                 integration = await db.get(WorkspaceIntegration, integration_id)
                 if integration is None or not integration.is_active:
                     continue

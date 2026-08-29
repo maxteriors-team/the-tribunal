@@ -29,6 +29,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
@@ -44,7 +45,7 @@ class FactSupersessionState(StrEnum):
     INVALIDATED = "invalidated"
 
 
-class ContactAIMemory(Base):
+class ContactAIMemory(Base, WorkspaceScoped):
     """One current aggregate memory per workspace-scoped contact."""
 
     __tablename__ = "contact_ai_memories"
@@ -115,7 +116,7 @@ class ContactAIMemory(Base):
         return f"<ContactAIMemory(id={self.id}, contact_id={self.contact_id})>"
 
 
-class ContactAIMemoryFact(Base):
+class ContactAIMemoryFact(Base, WorkspaceScoped):
     """A provenance-bearing historical claim retained for a contact."""
 
     __tablename__ = "contact_ai_memory_facts"

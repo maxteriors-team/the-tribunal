@@ -27,6 +27,10 @@ class _CapturingSession:
         self._rows = rows or []
         self.rollback = AsyncMock()
         self.commit = AsyncMock()
+        # Real ``Session``s carry ``.info``; ``system_session`` writes the
+        # tenancy label there. A stand-in without it is not a faithful fake.
+        self.info: dict[str, object] = {}
+        self.close = AsyncMock()
 
     async def __aenter__(self) -> _CapturingSession:
         return self

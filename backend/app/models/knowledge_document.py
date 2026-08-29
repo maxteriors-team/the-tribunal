@@ -9,13 +9,14 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
     from app.models.workspace import Workspace
 
 
-class KnowledgeDocument(Base):
+class KnowledgeDocument(Base, WorkspaceScoped):
     """Knowledge document for CAG context injection into AI agents.
 
     Stores raw text documents that are injected into agent context

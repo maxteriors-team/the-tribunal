@@ -9,9 +9,10 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 
-class CampaignReport(Base):
+class CampaignReport(Base, WorkspaceScoped):
     """AI-generated intelligence report for a completed campaign."""
 
     __tablename__ = "campaign_reports"

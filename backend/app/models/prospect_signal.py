@@ -33,6 +33,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.lead_prospect import LeadProspect
@@ -60,7 +61,7 @@ class ProspectSignalStatus(StrEnum):
     DISMISSED = "dismissed"
 
 
-class ProspectSignal(Base):
+class ProspectSignal(Base, WorkspaceScoped):
     """One typed, queryable buying signal attached to a prospect."""
 
     __tablename__ = "prospect_signals"

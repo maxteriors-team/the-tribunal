@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.encryption import EncryptedString
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 
 class BookingDraftCallType(StrEnum):
@@ -20,7 +21,7 @@ class BookingDraftCallType(StrEnum):
     VIDEO_CALL = "video_call"
 
 
-class ConversationBookingDraft(Base):
+class ConversationBookingDraft(Base, WorkspaceScoped):
     """One complete, validated booking summary waiting for customer approval."""
 
     __tablename__ = "conversation_booking_drafts"

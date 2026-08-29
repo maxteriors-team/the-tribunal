@@ -40,6 +40,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.ad_creative import AdCreative
@@ -55,7 +56,7 @@ class AdPlatform(StrEnum):
     GOOGLE = "google"
 
 
-class AdAdvertiser(Base):
+class AdAdvertiser(Base, WorkspaceScoped):
     """One advertiser tracked across an ad library, with computed ad signals."""
 
     __tablename__ = "ad_advertisers"

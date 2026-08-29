@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.lead_prospect import LeadProspect, ProspectStatus
 from app.services.outbound.promotion import ProspectPromotionService
 from app.workers.base import BaseWorker, WorkerRegistry
@@ -36,7 +36,7 @@ class ProspectPromotionWorker(BaseWorker):
     MAX_CONCURRENCY = 1
 
     async def _process_items(self) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("prospect_promotion_worker sweeps every workspace") as db:
             prospects = await self._claim_prospects(db)
             if not prospects:
                 return

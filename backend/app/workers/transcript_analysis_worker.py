@@ -10,7 +10,7 @@ import asyncio
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.call_outcome import CallOutcome
 from app.models.conversation import Message
 from app.services.ai.contact_ai_memory_service import (
@@ -39,7 +39,7 @@ class TranscriptAnalysisWorker(RetryableWorker, BaseWorker):
         await self.execute_with_retry(self._process_batch, item_key="transcript_batch")
 
     async def _process_batch(self) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("transcript_analysis_worker sweeps every workspace") as db:
             # Claim the ``CallOutcome`` rows this batch will write back to,
             # ``SKIP LOCKED`` so a second replica takes a different batch instead
             # of paying OpenAI twice to analyze the same transcripts. ``of=`` keeps

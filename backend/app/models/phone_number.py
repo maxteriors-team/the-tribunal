@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -57,7 +58,7 @@ def is_mms_capable(*, provider: str, sms_enabled: bool, mms_enabled: bool) -> bo
     return mms_enabled or (provider == PhoneNumberProvider.TELNYX and sms_enabled)
 
 
-class PhoneNumber(Base):
+class PhoneNumber(Base, WorkspaceScoped):
     """Phone number or sender identity assigned to a workspace."""
 
     __tablename__ = "phone_numbers"

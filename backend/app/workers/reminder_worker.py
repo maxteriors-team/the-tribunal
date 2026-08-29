@@ -31,7 +31,7 @@ from sqlalchemy.orm import joinedload
 
 from app.core.config import settings
 from app.core.encryption import hash_phone
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.agent import Agent
 from app.models.appointment import Appointment
 from app.models.contact import Contact
@@ -120,7 +120,7 @@ class ReminderWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Find and send due appointment reminders."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("reminder_worker sweeps every workspace") as db:
             now = datetime.now(UTC)
 
             # Use a fixed 25-hour lookahead window — covers the largest

@@ -8,9 +8,10 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 
-class ShortLink(Base):
+class ShortLink(Base, WorkspaceScoped):
     """A shortened URL sent via SMS, used for click tracking."""
 
     __tablename__ = "short_links"

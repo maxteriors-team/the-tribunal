@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
@@ -54,7 +55,7 @@ class TestContactStatus(StrEnum):
     FAILED = "failed"
 
 
-class MessageTest(Base):
+class MessageTest(Base, WorkspaceScoped):
     """Message test for A/B testing different outreach messages."""
 
     __tablename__ = "message_tests"

@@ -17,7 +17,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.contact import Contact
 from app.services.scraping.enrichment_service import enrich_contact_data
 from app.workers.base import BaseWorker, WorkerRegistry
@@ -51,7 +51,7 @@ class EnrichmentWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Process all pending contacts for enrichment."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("enrichment_worker sweeps every workspace") as db:
             # Find contacts with pending enrichment that have a website
             result = await db.execute(
                 select(Contact)

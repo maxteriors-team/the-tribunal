@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 # ``offset_days`` is measured from ``Quote.sent_at`` for the first-14-days
 # cadence and from the quote's issue date for long-range revival.
@@ -20,7 +21,7 @@ SEQUENCE_POST_ESTIMATE = "post_estimate"
 SEQUENCE_UNSOLD_REVIVAL = "unsold_revival"
 
 
-class QuoteFollowupTouch(Base):
+class QuoteFollowupTouch(Base, WorkspaceScoped):
     """One processed cadence offset for a quote, for one named sequence.
 
     The unique ``(quote_id, sequence_key, offset_days)`` key and channel-level

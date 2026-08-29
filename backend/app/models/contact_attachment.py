@@ -16,13 +16,14 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
     from app.models.workspace import Workspace
 
 
-class ContactAttachment(Base):
+class ContactAttachment(Base, WorkspaceScoped):
     """A file or media item attached to a contact record."""
 
     __tablename__ = "contact_attachments"

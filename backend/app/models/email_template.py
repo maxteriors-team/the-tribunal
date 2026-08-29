@@ -20,12 +20,13 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.workspace import Workspace
 
 
-class EmailTemplate(Base):
+class EmailTemplate(Base, WorkspaceScoped):
     """A saved, brand-rendered email an automation or operator can send."""
 
     __tablename__ = "email_templates"

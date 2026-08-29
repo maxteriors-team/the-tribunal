@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.contact import Contact
 from app.models.message_test import (
     MessageTest,
@@ -59,7 +59,7 @@ class MessageTestWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Process all running message tests."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("message_test_worker sweeps every workspace") as db:
             result = await db.execute(
                 select(MessageTest)
                 .options(

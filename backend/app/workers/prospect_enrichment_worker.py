@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.encryption import hash_phone, hash_value
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.lead_prospect import (
     EnrichmentProvider,
     EnrichmentResultStatus,
@@ -61,7 +61,7 @@ class ProspectEnrichmentWorker(BaseWorker):
     MAX_CONCURRENCY = 3
 
     async def _process_items(self) -> None:
-        async with AsyncSessionLocal() as db:
+        async with system_session("prospect_enrichment_worker sweeps every workspace") as db:
             prospects = await self._claim_prospects(db)
             if not prospects:
                 return

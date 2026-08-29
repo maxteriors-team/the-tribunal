@@ -9,9 +9,10 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 
-class Segment(Base):
+class Segment(Base, WorkspaceScoped):
     """Saved contact filter segment."""
 
     __tablename__ = "segments"

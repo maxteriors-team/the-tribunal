@@ -197,6 +197,10 @@ class _DbCtx:
 
     def __init__(self, pending: list[object], approved: list[object]) -> None:
         self._queue = [pending, approved]
+        # A real AsyncSession carries both; ``system_session`` writes the
+        # tenancy label to ``.info`` and closes the session on exit.
+        self.info: dict[str, object] = {}
+        self.close = AsyncMock()
 
     async def __aenter__(self) -> _DbCtx:
         return self

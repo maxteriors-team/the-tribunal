@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 
 from app.core.encryption import InvalidToken, hash_phone
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message, MessageDirection, MessageStatus
@@ -197,7 +197,7 @@ class UnsoldQuoteWorker(RetryableWorker, BaseWorker):
         processed = 0
         cursor: tuple[date, uuid.UUID] | None = None
 
-        async with AsyncSessionLocal() as db:
+        async with system_session("unsold_quote_worker sweeps every workspace") as db:
             while processed < MAX_QUOTES_PER_TICK:
                 # Only the workspace is eager-loaded. Contact columns are
                 # encrypted, and a single row written under a retired key raises

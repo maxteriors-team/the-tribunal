@@ -90,7 +90,7 @@ async def test_process_items_deletes_old_rows_and_commits() -> None:
 
     with (
         patch(
-            "app.workers.auth_rate_limit_cleanup_worker.AsyncSessionLocal",
+            "app.workers.auth_rate_limit_cleanup_worker.system_session",
             return_value=db,
         ),
         patch(
@@ -131,7 +131,7 @@ async def test_process_items_no_rows_no_items_recorded() -> None:
     db.execute = AsyncMock(return_value=result)
 
     with patch(
-        "app.workers.auth_rate_limit_cleanup_worker.AsyncSessionLocal",
+        "app.workers.auth_rate_limit_cleanup_worker.system_session",
         return_value=db,
     ):
         await worker._process_items()

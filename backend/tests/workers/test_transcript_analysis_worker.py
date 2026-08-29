@@ -52,7 +52,7 @@ async def test_worker_analyzes_unanalyzed_messages() -> None:
     fake_sessionmaker = MagicMock(return_value=session.__ctx__)
 
     with (
-        patch.object(worker_module, "AsyncSessionLocal", fake_sessionmaker),
+        patch.object(worker_module, "system_session", fake_sessionmaker),
         patch.object(
             worker_module,
             "analyze_transcript",
@@ -94,7 +94,7 @@ async def test_worker_marks_errors_without_infinite_retry() -> None:
     fake_sessionmaker = MagicMock(return_value=session.__ctx__)
 
     with (
-        patch.object(worker_module, "AsyncSessionLocal", fake_sessionmaker),
+        patch.object(worker_module, "system_session", fake_sessionmaker),
         patch.object(
             worker_module,
             "analyze_transcript",
@@ -126,7 +126,7 @@ async def test_worker_noop_on_empty_queue() -> None:
     fake_sessionmaker = MagicMock(return_value=session.__ctx__)
 
     with (
-        patch.object(worker_module, "AsyncSessionLocal", fake_sessionmaker),
+        patch.object(worker_module, "system_session", fake_sessionmaker),
         patch.object(worker_module, "analyze_transcript", AsyncMock()) as mocked_analyze,
     ):
         worker = worker_module.TranscriptAnalysisWorker()

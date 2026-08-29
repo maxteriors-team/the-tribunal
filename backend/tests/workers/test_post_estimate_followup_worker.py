@@ -370,7 +370,7 @@ async def test_tick_pages_past_the_first_batch_to_reach_the_newest_quotes() -> N
     worker.execute_with_retry = straight_through  # type: ignore[method-assign]
 
     with patch(
-        "app.workers.post_estimate_followup_worker.AsyncSessionLocal",
+        "app.workers.post_estimate_followup_worker.system_session",
         return_value=db,
     ):
         await worker._process_items()
@@ -387,7 +387,7 @@ async def test_tick_stops_on_a_short_page() -> None:
     worker.execute_with_retry = AsyncMock()  # type: ignore[method-assign]
 
     with patch(
-        "app.workers.post_estimate_followup_worker.AsyncSessionLocal",
+        "app.workers.post_estimate_followup_worker.system_session",
         return_value=db,
     ):
         await worker._process_items()
@@ -405,7 +405,7 @@ async def test_fetch_excludes_workspaces_with_the_cadence_disabled() -> None:
     worker = PostEstimateFollowupWorker()
 
     with patch(
-        "app.workers.post_estimate_followup_worker.AsyncSessionLocal",
+        "app.workers.post_estimate_followup_worker.system_session",
         return_value=db,
     ):
         await worker._process_items()

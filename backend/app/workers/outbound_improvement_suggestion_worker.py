@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.services.ai.outbound_improvement_suggestion_service import (
     OutboundImprovementSuggestionService,
     PeriodName,
@@ -31,7 +31,9 @@ class OutboundImprovementSuggestionWorker(RetryableWorker, BaseWorker):
     async def _process_items(self) -> None:
         """Process daily suggestions and weekly suggestions on Monday UTC."""
         today = self._today_utc()
-        async with AsyncSessionLocal() as db:
+        async with system_session(
+            "outbound_improvement_suggestion_worker sweeps every workspace"
+        ) as db:
             await self._process_period(db, "daily", today)
             if self._should_process_weekly(today):
                 await self._process_period(db, "weekly", today)

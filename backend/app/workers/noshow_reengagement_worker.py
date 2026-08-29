@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation
@@ -63,7 +63,7 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Process all pending no-show re-engagement messages."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("noshow_reengagement_worker sweeps every workspace") as db:
             # Fetch all agents with re-engagement enabled
             agent_result = await db.execute(
                 select(Agent).where(Agent.noshow_reengagement_enabled.is_(True))

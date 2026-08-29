@@ -27,6 +27,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.outbound_mission import OutboundMission
@@ -59,7 +60,7 @@ class DiscoveryJobStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class LeadDiscoveryJob(Base):
+class LeadDiscoveryJob(Base, WorkspaceScoped):
     """A single discovery run that emits lead prospect rows."""
 
     __tablename__ = "lead_discovery_jobs"

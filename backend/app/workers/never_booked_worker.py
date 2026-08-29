@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import system_session
 from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
@@ -60,7 +60,7 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
 
     async def _process_items(self) -> None:
         """Process all agents with never-booked re-engagement enabled."""
-        async with AsyncSessionLocal() as db:
+        async with system_session("never_booked_worker sweeps every workspace") as db:
             agent_result = await db.execute(
                 select(Agent).where(Agent.never_booked_reengagement_enabled.is_(True))
             )
