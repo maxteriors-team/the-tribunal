@@ -19,6 +19,10 @@ from app.models.drip_campaign import DripCampaign
 from app.models.pipeline import Pipeline, PipelineStage
 from app.models.tag import Tag
 from app.schemas.automation import AutomationCreate, AutomationUpdate
+from app.services.ai.crm_assistant._automation_policy import (
+    CRM_ASSISTANT_AUTOMATION_ACTION_TYPES,
+    CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES,
+)
 from app.services.ai.crm_assistant._pagination import count_matching, listing
 from app.services.ai.crm_assistant._tool_context import (
     CRMToolContext,
@@ -33,10 +37,6 @@ from app.services.ai.crm_assistant._tool_errors import (
     invalid_id,
     not_found,
     validation_failed,
-)
-from app.services.ai.crm_assistant._tools import (
-    CRM_ASSISTANT_AUTOMATION_ACTION_TYPES,
-    CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES,
 )
 from app.services.automations.runner import GOTO_END, MAX_WAIT
 from app.services.contacts.contact_filter_validation import validate_contact_filter_rules
