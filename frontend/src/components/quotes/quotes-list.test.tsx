@@ -90,6 +90,11 @@ vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => useWorkspaceIdMock(),
 }));
 
+// These list tests exercise full-access quote behavior; billing denial is covered by the dialog suite.
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => ({ can: () => true }),
+}));
+
 function quote(overrides: Partial<Quote> = {}): Quote {
   return {
     id: "quote-1",

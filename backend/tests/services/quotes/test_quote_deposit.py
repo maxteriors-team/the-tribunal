@@ -370,6 +370,42 @@ async def test_manual_deposit_is_workspace_scoped_and_single_transition() -> Non
             )
 
 
+async def test_manual_deposit_is_scoped_to_the_sales_representatives_quote() -> None:
+    async with AsyncSessionLocal() as db:
+        workspace = await _make_workspace(db)
+        contact = await _make_contact(db, workspace.id)
+        owner = await _make_user(db)
+        other_sales_rep = await _make_user(db)
+        _, quote_id = await _sent_quote_with_deposit(QuoteService(db), workspace.id, contact.id)
+        quote = await db.get(Quote, quote_id)
+        assert quote is not None
+        quote.assigned_user_id = owner.id
+        await db.flush()
+
+        with pytest.raises(NotFoundError, match="Quote not found"):
+            await deposit.record_manual_deposit(
+                db,
+                workspace.id,
+                quote.id,
+                payment_method="cash",
+                recorded_by_id=other_sales_rep.id,
+                owner_user_id=other_sales_rep.id,
+            )
+
+        assert quote.deposit_paid_at is None
+        await deposit.record_manual_deposit(
+            db,
+            workspace.id,
+            quote.id,
+            payment_method="cash",
+            recorded_by_id=owner.id,
+            owner_user_id=owner.id,
+        )
+        assert quote.deposit_paid_at is not None
+
+        await db.rollback()
+
+
 async def test_checkout_rejects_bad_states(monkeypatch) -> None:
     monkeypatch.setattr(deposit.call_payment_service, "is_payment_configured", lambda: True)
 

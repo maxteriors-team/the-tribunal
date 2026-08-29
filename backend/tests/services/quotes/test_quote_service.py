@@ -54,7 +54,12 @@ from app.schemas.quote import (
     QuoteLineItemUpdate,
     QuoteUpdate,
 )
-from app.services.exceptions import ConflictError, NotFoundError, ValidationError
+from app.services.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from app.services.quotes import QuoteService
 from app.services.quotes.attach_rules_config import SETTINGS_KEY as ATTACH_RULES_KEY
 
@@ -1014,6 +1019,62 @@ async def test_convert_schedules_job_when_window_supplied() -> None:
         assert job.scheduled_start == start
         assert job.scheduled_end == end
         assert job.status == "scheduled"
+
+
+async def test_convert_is_scoped_to_the_sales_representatives_quote() -> None:
+    async with AsyncSessionLocal() as db:
+        workspace = await _make_workspace(db)
+        contact = await _make_contact(db, workspace.id)
+        owner = await _make_member(db, workspace.id, name="Quote Owner")
+        other_sales_rep = await _make_member(db, workspace.id, name="Other Sales Rep")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            workspace.id,
+            QuoteCreate(
+                contact_id=contact.id,
+                title="Owned approved quote",
+                line_items=[QuoteLineItemCreate(name="Labor", unit_price=500.0)],
+            ),
+            created_by_id=owner.id,
+            assigned_user_id=owner.id,
+        )
+        await service.approve_quote(workspace.id, quote.id)
+        start = datetime(2026, 12, 8, 15, 0, tzinfo=UTC)
+        end = start + timedelta(hours=3)
+
+        with pytest.raises(NotFoundError, match="Quote not found"):
+            await service.convert_quote(
+                workspace.id,
+                quote.id,
+                create_invoice=False,
+                scheduled_start=start,
+                scheduled_end=end,
+                owner_user_id=other_sales_rep.id,
+            )
+
+        with pytest.raises(PermissionDeniedError, match="Billing access"):
+            await service.convert_quote(
+                workspace.id,
+                quote.id,
+                create_job=False,
+                create_invoice=True,
+                allow_invoice_creation=False,
+                owner_user_id=owner.id,
+            )
+
+        stored_quote = await db.get(Quote, quote.id)
+        assert stored_quote is not None
+        assert stored_quote.converted_job_id is None
+        assert stored_quote.converted_invoice_id is None
+        result = await service.convert_quote(
+            workspace.id,
+            quote.id,
+            create_invoice=False,
+            scheduled_start=start,
+            scheduled_end=end,
+            owner_user_id=owner.id,
+        )
+        assert result.job_id is not None
 
 
 async def test_convert_requires_approved_status() -> None:

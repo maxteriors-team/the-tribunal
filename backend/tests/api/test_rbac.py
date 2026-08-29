@@ -350,12 +350,10 @@ async def test_sales_can_author_quotes_without_billing_access() -> None:
         _clear_overrides()
 
 
-async def test_sensitive_quote_operations_stay_billing_gated() -> None:
+async def test_quote_assignment_and_paid_comparison_delivery_stay_billing_gated() -> None:
     quote_id = uuid.uuid4()
     operations = (
         ("PUT", f"/quotes/{quote_id}/assignment"),
-        ("POST", f"/quotes/{quote_id}/record-deposit"),
-        ("POST", f"/quotes/{quote_id}/convert"),
         ("POST", "/quotes/estimate/comparison/test-token/send"),
     )
     try:
@@ -367,6 +365,54 @@ async def test_sensitive_quote_operations_stay_billing_gated() -> None:
             for method, suffix in operations:
                 response = await client.request(method, _url(suffix), json={})
                 assert response.status_code != 403, suffix
+    finally:
+        _clear_overrides()
+
+
+async def test_sales_can_record_deposits_and_schedule_jobs_without_billing_access() -> None:
+    quote_id = uuid.uuid4()
+    schedule = {
+        "create_job": True,
+        "create_invoice": False,
+        "scheduled_start": "2026-12-01T15:00:00Z",
+        "scheduled_end": "2026-12-01T18:00:00Z",
+        "technician_ids": [],
+    }
+    try:
+        async with _client_as("sales_rep") as client:
+            deposit = await client.post(
+                _url(f"/quotes/{quote_id}/record-deposit"),
+                json={"payment_method": "cash"},
+            )
+            assert deposit.status_code != 403
+            conversion = await client.post(_url(f"/quotes/{quote_id}/convert"), json=schedule)
+            assert conversion.status_code != 403
+    finally:
+        _clear_overrides()
+
+
+async def test_sales_cannot_create_an_invoice_during_job_conversion() -> None:
+    from app.api.v1.quotes import _scoped_quote
+    from app.main import app
+
+    async def _quote_without_invoice() -> types.SimpleNamespace:
+        return types.SimpleNamespace(converted_invoice_id=None)
+
+    try:
+        async with _client_as("sales_rep") as client:
+            app.dependency_overrides[_scoped_quote] = _quote_without_invoice
+            response = await client.post(
+                _url(f"/quotes/{uuid.uuid4()}/convert"),
+                json={
+                    "create_job": True,
+                    "create_invoice": True,
+                    "scheduled_start": "2026-12-01T15:00:00Z",
+                    "scheduled_end": "2026-12-01T18:00:00Z",
+                    "technician_ids": [],
+                },
+            )
+            assert response.status_code == 403
+            assert response.json()["message"] == "Billing access is required to create an invoice."
     finally:
         _clear_overrides()
 
