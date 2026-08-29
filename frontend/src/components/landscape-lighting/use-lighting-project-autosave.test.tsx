@@ -247,6 +247,42 @@ describe("useLightingProjectAutosave", () => {
     expect(saved?.version).toBe(2);
     expect(saved?.document.activeShotId).toBe("installation-sheet");
   });
+
+  it("saveNow retries a failed drawing sync instead of blocking the proposal", async () => {
+    const { result } = await renderAutosave();
+    const changedDraft = makeDraft("retried-sync");
+    apiMocks.update
+      .mockRejectedValueOnce({ isAxiosError: true, message: "Network Error" })
+      .mockResolvedValueOnce(makeProject(2, changedDraft));
+
+    act(() => result.current.onDraftChange(changedDraft, { immediate: true }));
+    await waitFor(() => expect(result.current.status).toBe("error"));
+
+    let saved: LightingProjectDetail | undefined;
+    await act(async () => {
+      saved = await result.current.saveNow();
+    });
+
+    expect(apiMocks.update).toHaveBeenCalledTimes(2);
+    expect(saved?.version).toBe(2);
+    expect(saved?.document.activeShotId).toBe("retried-sync");
+  });
+
+  it("saveNow reports why the drawing sync failed when the retry fails too", async () => {
+    const { result } = await renderAutosave();
+    apiMocks.update.mockRejectedValue({
+      isAxiosError: true,
+      response: { status: 422, data: { message: "Drawing rejected by Tribunal." } },
+    });
+
+    act(() => result.current.onDraftChange(makeDraft("rejected-sync"), { immediate: true }));
+    await waitFor(() => expect(result.current.status).toBe("error"));
+
+    await act(async () => {
+      await expect(result.current.saveNow()).rejects.toThrow("Drawing rejected by Tribunal.");
+    });
+    expect(apiMocks.update).toHaveBeenCalledTimes(2);
+  });
   it("flushes a newly placed fixture without waiting for the drawing debounce", async () => {
     const { result } = await renderAutosave();
     vi.useFakeTimers();

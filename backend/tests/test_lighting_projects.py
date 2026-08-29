@@ -61,6 +61,8 @@ def _document(
                             "id": "run-1",
                             "productId": "c9-roofline",
                             "points": [{"x": 10, "y": 20}, {"x": 50, "y": 20}],
+                            "scaleSlot": 2,
+                            "permanentComplexity": "complex",
                             "spacingIn": 12,
                             "colors": ["#f8d46b"],
                             "bulbScale": 1,
@@ -82,6 +84,7 @@ def _document(
                             "circuitId": "run-1",
                             "bistroRunId": "run-1",
                             "markerColor": "#F2C94C",
+                            "catalogItemOverride": True,
                         },
                         {
                             "id": "transformer-1",
@@ -152,6 +155,11 @@ class TestLandscapeDraftSchema:
         assert populated.active_shot_id == "shot-1"
         assert populated.shots[0].design.plan_images[0].name == "Pool equipment detail.png"
         assert populated.shots[0].design.runs[0].wire_gauge == 12
+        # Rep-set drawing state the designer stores on every save. Rejecting any of
+        # these 422s the autosave, which then blocks the proposal outright.
+        assert populated.shots[0].design.runs[0].scale_slot == 2
+        assert populated.shots[0].design.runs[0].permanent_complexity == "complex"
+        assert populated.shots[0].design.items[0].catalog_item_override is True
         assert populated.shots[0].design.items[0].circuit_id == "run-1"
         assert populated.shots[0].design.items[0].bistro_run_id == "run-1"
         assert populated.shots[0].design.items[0].marker_color == "#F2C94C"
@@ -169,6 +177,9 @@ class TestLandscapeDraftSchema:
         serialized = populated.model_dump(mode="json", by_alias=True)
         assert serialized["activeShotId"] == "shot-1"
         assert serialized["bomLineItems"][0]["sku"] == "STAKE-CU"
+        run = serialized["shots"][0]["design"]["runs"][0]
+        assert run["permanentComplexity"] == "complex"
+        assert run["scaleSlot"] == 2
 
     @pytest.mark.parametrize(
         "mutate",
