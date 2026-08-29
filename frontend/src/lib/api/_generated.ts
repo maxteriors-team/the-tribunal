@@ -4681,6 +4681,30 @@ export interface paths {
         patch: operations["update_conversation_note_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__patch"];
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/notes/{note_id}/reminder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Conversation Note Reminder
+         * @description Set or move the follow-up reminder on a note you wrote.
+         */
+        put: operations["set_conversation_note_reminder_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__reminder_put"];
+        post?: never;
+        /**
+         * Clear Conversation Note Reminder
+         * @description Cancel the reminder on a note you wrote, keeping the note itself.
+         */
+        delete: operations["clear_conversation_note_reminder_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__reminder_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/read": {
         parameters: {
             query?: never;
@@ -16797,6 +16821,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Reminder At */
+            reminder_at?: string | null;
+            /** Reminder Status */
+            reminder_status?: string | null;
             /** Source */
             source: string;
             /**
@@ -23098,6 +23126,17 @@ export interface components {
             timing: string;
             /** Title */
             title: string;
+        };
+        /**
+         * NoteReminderCreate
+         * @description A follow-up reminder a rep is setting from a note.
+         */
+        NoteReminderCreate: {
+            /**
+             * Due At
+             * Format: date-time
+             */
+            due_at: string;
         };
         /**
          * NotificationSettings
@@ -42824,6 +42863,76 @@ export interface operations {
                 "application/json": components["schemas"]["ConversationNoteUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationNoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_conversation_note_reminder_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__reminder_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+                note_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteReminderCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationNoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_conversation_note_reminder_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__reminder_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+                note_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

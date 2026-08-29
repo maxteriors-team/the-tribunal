@@ -29,6 +29,7 @@ const NUDGE_TYPE_EMOJI: Record<string, string> = {
   custom: "📅",
   follow_up: "📋",
   deal_milestone: "🎯",
+  note_followup: "📝",
   // Workspace-level operator nudges
   outbound_batch_ready: "📦",
   approvals_waiting: "⏳",

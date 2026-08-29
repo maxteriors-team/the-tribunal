@@ -324,6 +324,8 @@ export const queryKeys = {
       }),
     messages: (workspaceId: string, conversationId: string) =>
       [...conversations.detail(workspaceId, conversationId), "messages"] as const,
+    notes: (workspaceId: string, conversationId: string) =>
+      [...conversations.detail(workspaceId, conversationId), "notes"] as const,
     followupSettings: (workspaceId: string, conversationId: string) =>
       [...conversations.detail(workspaceId, conversationId), "followup-settings"] as const,
     unreadSummary: (workspaceId: string) =>
