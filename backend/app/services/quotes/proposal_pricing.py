@@ -620,8 +620,12 @@ def price_permanent(
     # Preserve field identity exactly: operators may intentionally price an Easy
     # run above a Complex run. Reordering configured values silently applies one
     # named tier's multiplier to another tier.
+    #
+    # Gable pitch is deliberately absent here. A steep rake is longer, not more
+    # marked up, so the designer applies the Pythagorean correction to measured
+    # feet before pricing. A former "aerial" tier hardcoded 1.5 in this map,
+    # which *replaced* the 3.0 standard markup and halved every gable quote.
     markups = {
-        "aerial": 1.5,
         "easy": p.easy_markup,
         "standard": p.standard_markup,
         "complex": p.complex_markup,

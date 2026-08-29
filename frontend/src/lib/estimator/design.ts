@@ -26,6 +26,35 @@ import type { Design, Product, Run, ScaleSlot } from "./types";
 /** When no scale is set we assume the photo spans this many feet across. */
 export const ASSUMED_PHOTO_WIDTH_FT = 60;
 
+/**
+ * Gable rake correction (Pythagorean).
+ *
+ * A top-down aerial only ever shows a gable's horizontal *run*; the strand is
+ * installed along the sloped *rake*, which is the hypotenuse. For a pitch of
+ * `rise/12` the true length is `measured * sqrt(1 + (rise/12)^2)`.
+ *
+ * Two operator-facing buckets, each pinned to a representative pitch. Eaves and
+ * fascia are horizontal, so an unset pitch is the correct 1.0 (no correction) —
+ * this only ever grows footage when a rep explicitly marks a run as a gable.
+ */
+export const ROOF_PITCH_FACTORS = {
+  /** 6/12 — typical residential gable. */
+  normal: Math.sqrt(1 + (6 / 12) ** 2),
+  /** 12/12 — steep gable. */
+  steep: Math.sqrt(1 + (12 / 12) ** 2),
+} as const satisfies Record<string, number>;
+
+export type RoofPitch = keyof typeof ROOF_PITCH_FACTORS;
+
+/**
+ * The measured-to-installed multiplier for one run. Unset (an eave, or a design
+ * drawn before pitch existed) means no correction, so saved work never silently
+ * reprices.
+ */
+export function roofPitchFactor(run: Pick<Run, "roofPitch">): number {
+  return run.roofPitch ? ROOF_PITCH_FACTORS[run.roofPitch] : 1;
+}
+
 export interface DesignScale {
   /** feet per image pixel (0 when the photo width is unknown) */
   ftPerPx: number;
@@ -97,7 +126,9 @@ export function designToEstimateInputs(
     const ft = polylineLength(run.points) * runScale(design, run, photoWidth).ftPerPx;
     if (ft <= 0) continue;
     if (product.target.field === "roofline") {
-      rooflineFt += ft;
+      // Only the roofline is pitch-corrected: bistro spans and christmas decor
+      // are not installed along a roof rake.
+      rooflineFt += ft * roofPitchFactor(run);
     } else if (product.target.field === "bistro") {
       bistroFt += ft;
     } else if (product.target.field === "christmas") {

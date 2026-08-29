@@ -235,7 +235,12 @@ export interface Run {
   /** Per-run bulb-size multiplier (visual only); falls back to the product's. */
   bulbScale?: number;
   /** Internal run type used to weight permanent-lighting markup. */
-  permanentComplexity?: "aerial" | "easy" | "standard" | "complex";
+  permanentComplexity?: "easy" | "standard" | "complex";
+  /**
+   * Gable pitch for a roofline run. Unset means a horizontal eave, which needs
+   * no correction; a value scales the measured run to its true sloped length.
+   */
+  roofPitch?: "normal" | "steep";
   /** Plan-only electrical metadata for a landscape wire circuit. */
   circuitLabel?: string;
   transformerId?: string;
