@@ -592,11 +592,17 @@ async def get_call(
             detail="Call not found",
         )
 
-    # Verify workspace access
+    # Verify workspace access.
+    #
+    # 404, not 403: a 403 here confirms that this call id exists in *some* other
+    # workspace, letting any authenticated tenant enumerate ids and learn which
+    # ones are real. ``assert_workspace_owned`` in ``app/db/scope.py`` states the
+    # rule — cross-workspace rows look identical to missing ones — and the detail
+    # string matches the not-found branch above so the two are indistinguishable.
     if message.conversation.workspace_id != workspace_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Call not found",
         )
 
     return _build_call_response(
@@ -662,10 +668,12 @@ async def hangup_call(
         )
     )
 
+    # 404 for the same reason as ``get_call`` above: telling a caller "this call
+    # is real, just not yours" is an existence oracle over another tenant's data.
     if not conv_result.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Call not found",
         )
 
     # Hangup via Telnyx
