@@ -53,6 +53,7 @@ class FollowupWorker(RetryableWorker, BaseWorker):
                         Conversation.next_followup_at <= now,
                         Conversation.followup_count_sent < Conversation.followup_max_count,
                         Conversation.ai_enabled.is_(True),
+                        Conversation.ai_paused.is_(False),
                         Conversation.source_provider.is_distinct_from("quo"),
                         # Only follow up if last message was outbound (no reply)
                         Conversation.last_message_direction == "outbound",

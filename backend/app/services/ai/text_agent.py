@@ -35,6 +35,7 @@ from app.services.ai.opt_out_detector import (
     classify_opt_out_intent,
     has_potential_opt_out_keywords,
 )
+from app.services.ai.sms_conversation_intercepts import intercept_sms_conversation
 from app.services.ai.text_response_generator import generate_text_response
 from app.services.ai.text_response_timing import calculate_text_response_delay_ms
 from app.services.notifications import notify_workspace_event
@@ -118,6 +119,29 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         log.info("agent_not_active")
         return
 
+    # Read the latest inbound before resolving an LLM credential. High-confidence
+    # callback, disengagement, and frustration intents are deterministic and must
+    # bypass both the language model and all appointment/calendar tools.
+    last_msg_result = await db.execute(
+        select(Message)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.direction == "inbound",
+        )
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    last_inbound = last_msg_result.scalar_one_or_none()
+    if last_inbound is not None and await _handle_sms_conversation_intercept(
+        db=db,
+        conversation=conversation,
+        agent=agent,
+        inbound_message=last_inbound,
+        response_started_at=response_started_at,
+        log=log,
+    ):
+        return
+
     # Resolve the workspace's own OpenAI credential (workspace integration first,
     # then global env fallback), matching the voice path. Using the global token
     # here would ignore a tenant's configured key and misattribute their usage.
@@ -146,18 +170,6 @@ async def process_inbound_with_ai(  # noqa: PLR0911
     openai_key = credential.bearer_token
 
     # === AI-POWERED OPT-OUT DETECTION ===
-    # Get last inbound message to check for opt-out intent
-    last_msg_result = await db.execute(
-        select(Message)
-        .where(
-            Message.conversation_id == conversation_id,
-            Message.direction == "inbound",
-        )
-        .order_by(Message.created_at.desc())
-        .limit(1)
-    )
-    last_inbound = last_msg_result.scalar_one_or_none()
-
     if last_inbound and has_potential_opt_out_keywords(last_inbound.body):
         log.info("potential_opt_out_detected", message_id=str(last_inbound.id))
 
@@ -234,6 +246,65 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         )
         return
 
+    await _deliver_ai_response(
+        db=db,
+        conversation=conversation,
+        agent=agent,
+        response_text=response_text,
+        response_started_at=response_started_at,
+        log=log,
+    )
+
+
+async def _handle_sms_conversation_intercept(
+    *,
+    db: AsyncSession,
+    conversation: Conversation,
+    agent: Agent,
+    inbound_message: Message,
+    response_started_at: float,
+    log: Any,
+) -> bool:
+    """Bypass LLM/calendar handling for callback, stop, and handoff intents."""
+
+    intercept = await intercept_sms_conversation(
+        db,
+        conversation=conversation,
+        inbound_message=inbound_message,
+    )
+    if intercept is None:
+        return False
+
+    log.info("sms_conversation_intercepted", intent=intercept.intent)
+    await _deliver_ai_response(
+        db=db,
+        conversation=conversation,
+        agent=agent,
+        response_text=intercept.response_text,
+        response_started_at=response_started_at,
+        log=log,
+    )
+    if intercept.pause_ai_after_reply:
+        conversation.ai_paused = True
+        conversation.ai_paused_until = None
+    if intercept.disable_followups_after_reply:
+        conversation.followup_enabled = False
+        conversation.next_followup_at = None
+    await db.commit()
+    return True
+
+
+async def _deliver_ai_response(
+    *,
+    db: AsyncSession,
+    conversation: Conversation,
+    agent: Agent,
+    response_text: str,
+    response_started_at: float,
+    log: Any,
+) -> None:
+    """Apply the normal SMS delay/SLA policy and deliver one prepared response."""
+
     response_delay_ms = calculate_text_response_delay_ms(
         response_text=response_text,
         minimum_delay_ms=agent.text_response_delay_ms,
@@ -254,13 +325,11 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         )
         send_wait_ms = sla_cap_ms
 
-    agent_id = agent.id
-
     await _send_ai_text_response_after_delay(
         db=db,
-        conversation_id=conversation_id,
-        workspace_id=workspace_id,
-        agent_id=agent_id,
+        conversation_id=conversation.id,
+        workspace_id=conversation.workspace_id,
+        agent_id=agent.id,
         response_text=response_text,
         target_delay_ms=response_delay_ms,
         elapsed_ms=elapsed_ms,
