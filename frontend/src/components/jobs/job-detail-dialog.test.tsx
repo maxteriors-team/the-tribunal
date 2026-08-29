@@ -18,10 +18,11 @@ import type { Job } from "@/lib/api/jobs";
  * no way to find the job. It renders for both roles, and never shows money.
  */
 
-const { mutation, installationPlanQuery, inventoryPlanMock, canvasContext } = vi.hoisted(() => ({
+const { mutation, installationPlanQuery, inventoryPlanMock, handoffImagesMock, canvasContext } = vi.hoisted(() => ({
   mutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   installationPlanQuery: vi.fn(),
   inventoryPlanMock: vi.fn(),
+  handoffImagesMock: vi.fn(),
   canvasContext: {
     clearRect: vi.fn(),
     drawImage: vi.fn(),
@@ -50,6 +51,13 @@ vi.mock("@/lib/api/jobs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/jobs")>();
   return { ...actual, jobsApi: { ...actual.jobsApi, inventoryPlan: inventoryPlanMock } };
 });
+
+vi.mock("@/components/jobs/handoff-images", () => ({
+  HandoffImages: (props: Record<string, string>) => {
+    handoffImagesMock(props);
+    return <section aria-label="Field handoff images" />;
+  },
+}));
 
 vi.mock("@/components/jobs/job-inventory-completion-dialog", () => ({
   JobInventoryCompletionDialog: () => <div>Confirm Bistro inventory</div>,
@@ -181,6 +189,17 @@ describe("JobDetailDialog", () => {
     expect(screen.getByRole("button", { name: /Delete job/i })).toBeInTheDocument();
     expect(screen.getByLabelText("Status")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Dispatch" })).toBeInTheDocument();
+  });
+
+  it.each([true, false])("renders job handoff images (readOnly=%s)", (readOnly) => {
+    renderDialog(readOnly);
+
+    expect(screen.getByRole("region", { name: "Field handoff images" })).toBeInTheDocument();
+    expect(handoffImagesMock).toHaveBeenLastCalledWith({
+      mode: "job",
+      workspaceId: "ws-1",
+      jobId: "job-1",
+    });
   });
 
   it("opens inventory confirmation instead of patching completed directly", async () => {

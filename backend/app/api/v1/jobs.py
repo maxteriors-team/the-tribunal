@@ -13,12 +13,15 @@ cleanly.
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, Response, status
+from sqlalchemy import select
+from sqlalchemy.orm import load_only
 
 from app.api.deps import (
     DB,
     CanReadBilling,
     CanReadCRM,
+    CanReadJobs,
     CanWriteBilling,
     CanWriteJobs,
     CanWriteOutreach,
@@ -29,6 +32,7 @@ from app.api.deps import (
     WorkspaceDispatcher,
 )
 from app.api.service_errors import ServiceErrorRoute
+from app.api.v1.contact_attachments import content_disposition
 from app.core.permissions import (
     Capability,
     job_expense_owner_scope,
@@ -36,7 +40,13 @@ from app.core.permissions import (
     time_entry_owner_scope,
 )
 from app.models.field_service import JobStatus
+from app.models.quote_handoff_image import (
+    MAX_HANDOFF_IMAGE_BYTES,
+    MAX_HANDOFF_IMAGES_PER_QUOTE,
+    QuoteHandoffImage,
+)
 from app.models.workspace import WorkspaceMembership
+from app.schemas.handoff_image import HandoffImageListResponse, HandoffImageResponse
 from app.schemas.inventory import (
     CompleteJobInventoryRequest,
     InventoryJobAllocationResponse,
@@ -81,6 +91,14 @@ from app.services.inventory import JobAllocationService
 from app.services.jobs import JobCostingService, JobMaterialsService, JobService
 
 router = APIRouter(route_class=ServiceErrorRoute)
+
+_HANDOFF_IMAGE_METADATA_COLUMNS = (
+    QuoteHandoffImage.id,
+    QuoteHandoffImage.filename,
+    QuoteHandoffImage.content_type,
+    QuoteHandoffImage.size_bytes,
+    QuoteHandoffImage.created_at,
+)
 
 
 def _can_see_costs(membership: WorkspaceMembership) -> bool:
@@ -207,6 +225,86 @@ async def get_job(
         job_id,
         workspace.id,
         visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
+
+
+@router.get("/{job_id}/handoff-images", response_model=HandoffImageListResponse)
+async def list_job_handoff_images(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    membership: CanReadJobs,
+    current_user: CurrentUser,
+    db: DB,
+) -> HandoffImageListResponse:
+    """List source-quote images after applying normal job visibility rules."""
+    job = await JobService(db).get(
+        job_id,
+        workspace.id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
+    rows: list[QuoteHandoffImage] = []
+    if job.source_quote_id is not None:
+        rows = list(
+            (
+                await db.execute(
+                    select(QuoteHandoffImage)
+                    .options(load_only(*_HANDOFF_IMAGE_METADATA_COLUMNS))
+                    .where(
+                        QuoteHandoffImage.workspace_id == workspace.id,
+                        QuoteHandoffImage.quote_id == job.source_quote_id,
+                    )
+                    .order_by(QuoteHandoffImage.created_at.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return HandoffImageListResponse(
+        images=[HandoffImageResponse.model_validate(row) for row in rows],
+        max_images=MAX_HANDOFF_IMAGES_PER_QUOTE,
+        max_image_bytes=MAX_HANDOFF_IMAGE_BYTES,
+    )
+
+
+@router.get("/{job_id}/handoff-images/{image_id}/download")
+async def download_job_handoff_image(
+    job_id: uuid.UUID,
+    image_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    membership: CanReadJobs,
+    current_user: CurrentUser,
+    db: DB,
+) -> Response:
+    """Serve a source-quote image only to callers allowed to read this job."""
+    job = await JobService(db).get(
+        job_id,
+        workspace.id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
+    image = None
+    if job.source_quote_id is not None:
+        image = (
+            await db.execute(
+                select(QuoteHandoffImage).where(
+                    QuoteHandoffImage.id == image_id,
+                    QuoteHandoffImage.workspace_id == workspace.id,
+                    QuoteHandoffImage.quote_id == job.source_quote_id,
+                )
+            )
+        ).scalar_one_or_none()
+    if image is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Handoff image not found",
+        )
+    return Response(
+        content=image.data,
+        media_type=image.content_type,
+        headers={
+            "Content-Disposition": content_disposition(image.filename, image.content_type),
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=3600",
+        },
     )
 
 

@@ -3,10 +3,9 @@
 Thin transport layer over :class:`app.services.quotes.QuoteService`; all domain
 rules (number allocation, total computation, lifecycle guards, expiry, and
 conversion to job/invoice) live in the service. Ordinary quote access uses the
-dedicated ``quotes:read/write`` capabilities; money movement, reassignment, job
-conversion, and paid rendering remain ``billing:write`` operations. Sales-tier
-quote access is owner-scoped at the database boundary. Line-item mutations
-return the full quote detail because they recompute the parent totals.
+dedicated ``quotes:read/write`` capabilities. Reassignment, invoice creation,
+and paid rendering remain ``billing:write`` operations; sales reps may record
+offline deposits and schedule jobs only from their own quotes.
 """
 
 import uuid
@@ -14,8 +13,9 @@ from datetime import UTC
 from typing import Annotated, Literal
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
+from sqlalchemy import func, select
+from sqlalchemy.orm import load_only
 
 from app.api.deps import (
     DB,
@@ -25,8 +25,14 @@ from app.api.deps import (
     CurrentUser,
 )
 from app.api.service_errors import ServiceErrorRoute
-from app.core.permissions import quote_owner_scope
+from app.api.v1.contact_attachments import content_disposition, sanitize_filename
+from app.core.permissions import Capability, quote_owner_scope, role_can
 from app.models.quote import Quote
+from app.models.quote_handoff_image import (
+    MAX_HANDOFF_IMAGE_BYTES,
+    MAX_HANDOFF_IMAGES_PER_QUOTE,
+    QuoteHandoffImage,
+)
 from app.schemas.estimate import (
     ComparisonDeliverRequest,
     ComparisonDeliverResult,
@@ -39,6 +45,7 @@ from app.schemas.estimate import (
     LinearFeetEstimateResult,
     PublicComparison,
 )
+from app.schemas.handoff_image import HandoffImageListResponse, HandoffImageResponse
 from app.schemas.inventory import QuoteInventoryAvailabilityResponse
 from app.schemas.proposal import (
     PublicProposal,
@@ -75,6 +82,7 @@ from app.services.jobs import JobService
 from app.services.notifications import notify_workspace_event
 from app.services.payments.quote_deposit_service import record_manual_deposit
 from app.services.quotes import QuoteService
+from app.services.quotes.ownership import quote_owner_predicate
 from app.services.quotes.proposal_pricing import BistroPricingConfigurationError
 
 logger = structlog.get_logger(__name__)
@@ -96,16 +104,12 @@ async def _scoped_quote(
     db: DB,
 ) -> Quote:
     """Load a quote only when the caller may access its owner scope."""
+    owner_user_id = quote_owner_scope(membership.role, current_user.id)
     query = select(Quote).where(
         Quote.id == quote_id,
         Quote.workspace_id == workspace_id,
+        quote_owner_predicate(owner_user_id),
     )
-    owner_user_id = quote_owner_scope(membership.role, current_user.id)
-    if owner_user_id is not None:
-        query = query.where(
-            (Quote.assigned_user_id == owner_user_id)
-            | (Quote.assigned_user_id.is_(None) & (Quote.created_by_id == owner_user_id))
-        )
     quote = (await db.execute(query)).scalar_one_or_none()
     if quote is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found")
@@ -113,6 +117,25 @@ async def _scoped_quote(
 
 
 ScopedQuote = Annotated[Quote, Depends(_scoped_quote)]
+
+_HANDOFF_IMAGE_METADATA_COLUMNS = (
+    QuoteHandoffImage.id,
+    QuoteHandoffImage.filename,
+    QuoteHandoffImage.content_type,
+    QuoteHandoffImage.size_bytes,
+    QuoteHandoffImage.created_at,
+)
+
+
+def _detect_handoff_image_type(data: bytes) -> str | None:
+    """Return the canonical MIME type for supported image signatures."""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 
 @router.get("", response_model=PaginatedQuotes)
@@ -170,6 +193,195 @@ async def get_quote(
     """Get a specific quote with its line items."""
     service = QuoteService(db)
     return await service.get_quote(workspace_id, quote_id)
+
+
+@router.get("/{quote_id}/handoff-images", response_model=HandoffImageListResponse)
+async def list_quote_handoff_images(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    _quote: ScopedQuote,
+    db: DB,
+) -> HandoffImageListResponse:
+    """List field-team image metadata without loading the stored bytes."""
+    rows = (
+        (
+            await db.execute(
+                select(QuoteHandoffImage)
+                .options(load_only(*_HANDOFF_IMAGE_METADATA_COLUMNS))
+                .where(
+                    QuoteHandoffImage.workspace_id == _quote.workspace_id,
+                    QuoteHandoffImage.quote_id == _quote.id,
+                )
+                .order_by(QuoteHandoffImage.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return HandoffImageListResponse(
+        images=[HandoffImageResponse.model_validate(row) for row in rows],
+        max_images=MAX_HANDOFF_IMAGES_PER_QUOTE,
+        max_image_bytes=MAX_HANDOFF_IMAGE_BYTES,
+    )
+
+
+@router.post(
+    "/{quote_id}/handoff-images",
+    response_model=HandoffImageResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_quote_handoff_image(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    file: UploadFile,
+    _quote: ScopedQuote,
+    current_user: CurrentUser,
+    db: DB,
+    _gate: CanWriteQuotes,
+) -> HandoffImageResponse:
+    """Store one validated handoff image for the authorized quote."""
+    data = await file.read(MAX_HANDOFF_IMAGE_BYTES + 1)
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Uploaded image is empty",
+        )
+    if len(data) > MAX_HANDOFF_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=f"Image exceeds the {MAX_HANDOFF_IMAGE_BYTES // (1024 * 1024)} MB limit",
+        )
+
+    detected_type = _detect_handoff_image_type(data)
+    if detected_type is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Use a JPEG, PNG, or WebP image",
+        )
+    if (file.content_type or "").lower() != detected_type:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Declared image type does not match file contents",
+        )
+
+    locked_quote_id = (
+        await db.execute(
+            select(Quote.id)
+            .where(
+                Quote.id == _quote.id,
+                Quote.workspace_id == _quote.workspace_id,
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if locked_quote_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found")
+
+    image_count = await db.scalar(
+        select(func.count(QuoteHandoffImage.id)).where(
+            QuoteHandoffImage.workspace_id == _quote.workspace_id,
+            QuoteHandoffImage.quote_id == _quote.id,
+        )
+    )
+    if (image_count or 0) >= MAX_HANDOFF_IMAGES_PER_QUOTE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A quote can have at most {MAX_HANDOFF_IMAGES_PER_QUOTE} handoff images",
+        )
+
+    image = QuoteHandoffImage(
+        workspace_id=_quote.workspace_id,
+        quote_id=_quote.id,
+        filename=sanitize_filename(file.filename),
+        content_type=detected_type,
+        size_bytes=len(data),
+        data=data,
+        uploaded_by_user_id=current_user.id,
+    )
+    db.add(image)
+    await db.commit()
+    await db.refresh(image)
+    logger.info(
+        "quote_handoff_image_uploaded",
+        workspace_id=str(_quote.workspace_id),
+        quote_id=str(_quote.id),
+        image_id=str(image.id),
+        size_bytes=image.size_bytes,
+    )
+    return HandoffImageResponse.model_validate(image)
+
+
+@router.get("/{quote_id}/handoff-images/{image_id}/download")
+async def download_quote_handoff_image(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    image_id: uuid.UUID,
+    _quote: ScopedQuote,
+    db: DB,
+) -> Response:
+    """Serve one authorized image inline using its detected content type."""
+    image = (
+        await db.execute(
+            select(QuoteHandoffImage).where(
+                QuoteHandoffImage.id == image_id,
+                QuoteHandoffImage.workspace_id == _quote.workspace_id,
+                QuoteHandoffImage.quote_id == _quote.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if image is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Handoff image not found",
+        )
+    return Response(
+        content=image.data,
+        media_type=image.content_type,
+        headers={
+            "Content-Disposition": content_disposition(image.filename, image.content_type),
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
+
+
+@router.delete(
+    "/{quote_id}/handoff-images/{image_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_quote_handoff_image(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    image_id: uuid.UUID,
+    _quote: ScopedQuote,
+    db: DB,
+    _gate: CanWriteQuotes,
+) -> None:
+    """Delete one image only from its authorized workspace and quote."""
+    image = (
+        await db.execute(
+            select(QuoteHandoffImage)
+            .options(load_only(QuoteHandoffImage.id))
+            .where(
+                QuoteHandoffImage.id == image_id,
+                QuoteHandoffImage.workspace_id == _quote.workspace_id,
+                QuoteHandoffImage.quote_id == _quote.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if image is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Handoff image not found",
+        )
+    await db.delete(image)
+    await db.commit()
+    logger.info(
+        "quote_handoff_image_deleted",
+        workspace_id=str(_quote.workspace_id),
+        quote_id=str(_quote.id),
+        image_id=str(image_id),
+    )
 
 
 @router.put("/{quote_id}", response_model=QuoteDetailResponse)
@@ -289,16 +501,18 @@ async def record_quote_deposit(
     payload: QuoteDepositRecordRequest,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
     _quote: ScopedQuote,
 ) -> QuoteDetailResponse:
     """Attest that an offline cash, check, or other deposit was received."""
+    owner_user_id = quote_owner_scope(membership.role, current_user.id)
     await record_manual_deposit(
         db,
         workspace_id,
         quote_id,
         payment_method=payload.payment_method,
         recorded_by_id=current_user.id,
+        owner_user_id=owner_user_id,
     )
     return await QuoteService(db).get_quote(workspace_id, quote_id)
 
@@ -310,10 +524,17 @@ async def convert_quote(
     payload: QuoteConvertRequest,
     current_user: CurrentUser,
     db: DB,
-    membership: CanWriteBilling,
+    membership: CanWriteQuotes,
     _quote: ScopedQuote,
 ) -> QuoteConvertResponse:
     """Convert an approved quote into a scheduled job and/or an invoice."""
+    can_create_invoice = role_can(membership.role, Capability.BILLING_WRITE)
+    if payload.create_invoice and not can_create_invoice and _quote.converted_invoice_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Billing access is required to create an invoice.",
+        )
+
     service = QuoteService(db)
     result = await service.convert_quote(
         workspace_id,
@@ -325,6 +546,8 @@ async def convert_quote(
         crew_id=payload.crew_id,
         technician_ids=payload.technician_ids,
         confirm_unpaid_deposit=payload.confirm_unpaid_deposit,
+        allow_invoice_creation=can_create_invoice,
+        owner_user_id=quote_owner_scope(membership.role, current_user.id),
     )
     if result.job_id is None or payload.scheduled_start is None:
         return result
