@@ -1,4 +1,4 @@
-"""Workspace-wide operator email dispatch uses the role-scoped recipient gate."""
+"""Operator emails use role scoping unless payment alerts have a dedicated inbox."""
 
 import json
 import uuid
@@ -134,6 +134,43 @@ async def test_call_payment_email_uses_scoped_admin_recipients(
 
 
 @pytest.mark.asyncio
+async def test_call_payment_deduplicates_dedicated_recipient_on_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    scoped_recipients: AsyncMock,
+) -> None:
+    send = AsyncMock(return_value=True)
+    push = AsyncMock()
+    monkeypatch.setattr("app.services.email.send_payment_received_notification", send)
+    monkeypatch.setattr(
+        "app.services.push_notifications.push_notification_service.send_to_workspace_members",
+        push,
+    )
+    db = AsyncMock()
+    db.get.return_value = SimpleNamespace(
+        name="Acme",
+        settings={"payment_alerts": {"recipient_email": "maxterior@gmail.com"}},
+    )
+    payment = SimpleNamespace(
+        id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        message_id=None,
+        amount=Decimal("125.00"),
+        currency="usd",
+        description="Deposit",
+        operators_notified_at=None,
+    )
+
+    await notify_payment_operators(db, payment)
+    await notify_payment_operators(db, payment)
+
+    scoped_recipients.assert_not_awaited()
+    send.assert_awaited_once()
+    assert send.await_args.kwargs["to_email"] == "maxterior@gmail.com"
+    push.assert_awaited_once()
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_customer_payment_email_uses_scoped_admin_recipients(
     monkeypatch: pytest.MonkeyPatch,
     admin_user: SimpleNamespace,
@@ -162,6 +199,49 @@ async def test_customer_payment_email_uses_scoped_admin_recipients(
     scoped_recipients.assert_awaited_once()
     send.assert_awaited_once()
     assert send.await_args.kwargs["to_email"] == admin_user.email
+
+
+@pytest.mark.asyncio
+async def test_customer_payment_retry_delivers_once_per_attempt_with_stable_deduplication_key(
+    monkeypatch: pytest.MonkeyPatch,
+    scoped_recipients: AsyncMock,
+) -> None:
+    send = AsyncMock(return_value=True)
+    monkeypatch.setattr("app.services.email.send_payment_received_notification", send)
+    monkeypatch.setattr(
+        "app.services.push_notifications.push_notification_service.send_to_workspace_members",
+        AsyncMock(),
+    )
+    db = AsyncMock()
+    db.get.return_value = SimpleNamespace(
+        name="Acme",
+        settings={"payment_alerts": {"recipient_email": "maxterior@gmail.com"}},
+    )
+    payment_id = uuid.uuid4()
+    workspace_id = uuid.uuid4()
+    sent_counts = []
+
+    for _ in range(2):
+        sent_counts.append(
+            await notify_customer_payment(
+                db,
+                workspace_id=workspace_id,
+                amount=Decimal("125.00"),
+                currency="usd",
+                description="Invoice payment",
+                idempotency_scope="invoice_payment",
+                idempotency_id=payment_id,
+            )
+        )
+
+    scoped_recipients.assert_not_awaited()
+    assert sent_counts == [1, 1]
+    assert [call.kwargs["to_email"] for call in send.await_args_list] == [
+        "maxterior@gmail.com",
+        "maxterior@gmail.com",
+    ]
+    keys = [call.kwargs["idempotency_key"] for call in send.await_args_list]
+    assert keys[0] == keys[1]
 
 
 @pytest.mark.asyncio
