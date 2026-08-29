@@ -1,7 +1,7 @@
 """Schemas for conversation notes."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -32,6 +32,27 @@ class ConversationNoteUpdate(BaseModel):
     _strip_body = field_validator("body")(_require_content)
 
 
+class NoteReminderCreate(BaseModel):
+    """A follow-up reminder a rep is setting from a note."""
+
+    due_at: datetime
+
+    @field_validator("due_at")
+    @classmethod
+    def _must_be_future(cls, value: datetime) -> datetime:
+        """Reject past due dates.
+
+        The delivery worker claims any pending nudge whose ``due_date`` has
+        passed, so a reminder set in the past fires on the very next poll — it
+        looks like the reminder feature is spamming rather than like a typo.
+        """
+        if value.tzinfo is None:
+            raise ValueError("due_at must include a timezone offset")
+        if value <= datetime.now(UTC):
+            raise ValueError("due_at must be in the future")
+        return value
+
+
 class ConversationNoteResponse(BaseModel):
     """A note as rendered in the conversation's notes rail."""
 
@@ -47,3 +68,9 @@ class ConversationNoteResponse(BaseModel):
     author_name: str | None = None
     created_at: datetime
     updated_at: datetime
+    # Populated from the linked nudge, so the rail can show "reminder set for
+    # Tuesday" without a second round trip. Null when no reminder is set.
+    reminder_at: datetime | None = None
+    # pending / sent / acted / dismissed / snoozed — lets the UI distinguish a
+    # reminder still waiting from one that already fired.
+    reminder_status: str | None = None

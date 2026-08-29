@@ -48,6 +48,19 @@ export function formatRelative(date: DateInput): string {
   return formatDistanceToNow(toDate(date), { addSuffix: true });
 }
 
+/**
+ * ISO 8601 instant carrying the browser's UTC offset, e.g.
+ * "2026-09-01T09:00:00-05:00".
+ *
+ * For APIs that reject a naive timestamp. `xxx` (not `XXX`) is deliberate: it
+ * always emits a numeric offset instead of collapsing UTC to "Z", so the value
+ * parses the same everywhere and the operator's wall clock stays visible in the
+ * payload.
+ */
+export function toIsoWithOffset(date: DateInput): string {
+  return format(toDate(date), "yyyy-MM-dd'T'HH:mm:ssxxx");
+}
+
 /** Day + month only, e.g. "Jan 5". Useful for compact lists. */
 export function formatDayMonth(date: DateInput): string {
   return format(toDate(date), "MMM d");

@@ -38,7 +38,12 @@ export type NudgeType =
   | "outbound_batch_ready"
   | "approvals_waiting"
   | "monitor_idle"
-  | "inventory_low_stock";
+  | "inventory_low_stock"
+  // Set by a rep from a conversation note rather than invented by a strategy.
+  // Deliberately absent from the nudge-settings toggles: those govern which
+  // nudges the *generator* creates, and a reminder someone asked for explicitly
+  // should not be switched off by a workspace-wide preference.
+  | "note_followup";
 export type NudgeStatus = "pending" | "sent" | "acted" | "dismissed" | "snoozed";
 export type NudgePriority = "low" | "medium" | "high";
 export type SuggestedAction = "send_card" | "call" | "text" | "email";

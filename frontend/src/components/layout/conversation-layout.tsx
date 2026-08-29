@@ -7,6 +7,7 @@ import { useState } from "react";
 import { ActionsPanel } from "@/components/actions/actions-panel";
 import { ContactSidebar } from "@/components/contacts/contact-sidebar";
 import { ConversationFeed } from "@/components/conversation/conversation-feed";
+import { ConversationNotesRail } from "@/components/conversations/conversation-notes";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -56,11 +57,17 @@ export function ConversationLayout({ className }: ConversationLayoutProps) {
                 <SheetHeader className="sr-only">
                   <SheetTitle>Conversation actions</SheetTitle>
                   <SheetDescription>
-                    AI agent assignment, follow-up settings and quick actions
-                    for this conversation.
+                    AI agent assignment, follow-up settings, quick actions and
+                    notes for this conversation.
                   </SheetDescription>
                 </SheetHeader>
-                <ActionsPanel onClose={() => setShowActionsPanel(false)} />
+                <div className="flex h-full min-h-0 flex-col">
+                  <ActionsPanel
+                    className="min-h-0 flex-[3]"
+                    onClose={() => setShowActionsPanel(false)}
+                  />
+                  <ConversationNotesRail className="min-h-0 flex-[2] border-t" />
+                </div>
               </SheetContent>
             </Sheet>
           </div>
@@ -105,9 +112,13 @@ export function ConversationLayout({ className }: ConversationLayoutProps) {
         className,
       )}
     >
-      {/* Left rail: per-conversation automation controls */}
+      {/* Left rail: per-conversation automation controls, with the notes rail
+          stacked beneath them. Notes are conversation-scoped like the rest of
+          this column, and a fourth grid column would leave the message column
+          unreadable at the 1280px console breakpoint. */}
       <div className="flex h-full min-w-0 flex-col overflow-hidden border-r">
-        <ActionsPanel className="h-full" />
+        <ActionsPanel className="min-h-0 flex-[3]" />
+        <ConversationNotesRail className="min-h-0 flex-[2] border-t" />
       </div>
 
       {/* Center: the conversation itself */}

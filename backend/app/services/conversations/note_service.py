@@ -1,9 +1,10 @@
 """Conversation notes: rep-authored observations plus synced Quo summaries."""
 
 import uuid
+from datetime import datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,7 @@ from app.models.conversation_note import (
     NOTE_SOURCE_QUO_SUMMARY,
     ConversationNote,
 )
+from app.models.human_nudge import HumanNudge
 from app.models.user import User
 from app.schemas.conversation_note import ConversationNoteResponse
 from app.services.conversations.conversation_service import ConversationService
@@ -19,6 +21,25 @@ from app.services.conversations.conversation_service import ConversationService
 # Newest notes matter most mid-call, but a rail that reorders while a rep is
 # reading it is worse than a long one, so this is a plain cap on history.
 MAX_NOTES_RETURNED = 200
+
+# Reminders set from a note are ordinary nudges, so they inherit the existing
+# delivery worker, snooze, dismiss and list endpoints rather than growing a
+# second reminder system beside them.
+NOTE_REMINDER_NUDGE_TYPE = "note_followup"
+
+# A nudge's title is what the rep sees in a push notification, so it carries the
+# note's opening words rather than a generic "Reminder".
+_REMINDER_TITLE_CHARS = 60
+
+
+def _reminder_dedup_key(note_id: uuid.UUID) -> str:
+    """Key one reminder to one note.
+
+    ``HumanNudge.dedup_key`` is globally unique, so this both links the two rows
+    without a schema change and makes re-setting a reminder an update rather
+    than a second notification for the same note.
+    """
+    return f"{NOTE_REMINDER_NUDGE_TYPE}:{note_id}"
 
 
 class ConversationNoteService:
@@ -42,7 +63,11 @@ class ConversationNoteService:
         )
 
     @staticmethod
-    def _to_response(note: ConversationNote, author_name: str | None) -> ConversationNoteResponse:
+    def _to_response(
+        note: ConversationNote,
+        author_name: str | None,
+        reminder: HumanNudge | None = None,
+    ) -> ConversationNoteResponse:
         return ConversationNoteResponse(
             id=note.id,
             conversation_id=note.conversation_id,
@@ -52,7 +77,25 @@ class ConversationNoteService:
             author_name=author_name,
             created_at=note.created_at,
             updated_at=note.updated_at,
+            reminder_at=reminder.due_date if reminder else None,
+            reminder_status=reminder.status if reminder else None,
         )
+
+    async def _reminders_for(self, note_ids: list[uuid.UUID]) -> dict[uuid.UUID, HumanNudge]:
+        """Load every note's reminder in one query.
+
+        Keyed off the nudge's globally unique ``dedup_key``, so a note can only
+        ever own one reminder. Batched deliberately: the rail renders up to
+        MAX_NOTES_RETURNED notes, and a per-note lookup would be that many round
+        trips on the conversation's hot path.
+        """
+        if not note_ids:
+            return {}
+        by_key = {_reminder_dedup_key(note_id): note_id for note_id in note_ids}
+        result = await self.db.execute(
+            select(HumanNudge).where(HumanNudge.dedup_key.in_(list(by_key)))
+        )
+        return {by_key[nudge.dedup_key]: nudge for nudge in result.scalars() if nudge.dedup_key}
 
     async def list_notes(
         self,
@@ -74,7 +117,12 @@ class ConversationNoteService:
             .order_by(ConversationNote.created_at.asc())
             .limit(MAX_NOTES_RETURNED)
         )
-        return [self._to_response(note, author_name) for note, author_name in result.all()]
+        rows = result.all()
+        reminders = await self._reminders_for([note.id for note, _ in rows])
+        return [
+            self._to_response(note, author_name, reminders.get(note.id))
+            for note, author_name in rows
+        ]
 
     async def create_note(
         self,
@@ -194,3 +242,88 @@ class ConversationNoteService:
                 set_={"body": statement.excluded.body},
             )
         )
+
+    async def set_reminder(
+        self,
+        note_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        actor_user_id: int,
+        due_at: datetime,
+    ) -> ConversationNoteResponse:
+        """Set (or move) the follow-up reminder on a note the caller wrote.
+
+        Deliberately a ``HumanNudge`` rather than a column on the note: the
+        delivery worker already claims any pending nudge whose due date has
+        passed, and the nudge endpoints already implement snooze, dismiss, act
+        and list. Reusing it means a note reminder is delivered and managed by
+        machinery that is already in production.
+        """
+        await self._assert_conversation_visible(conversation_id, workspace_id)
+        note = await self._get_owned_note(note_id, conversation_id, workspace_id, actor_user_id)
+        conversation = await self._conversations._get_conversation(
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+        )
+
+        summary = " ".join(note.body.split())
+        if len(summary) > _REMINDER_TITLE_CHARS:
+            summary = f"{summary[:_REMINDER_TITLE_CHARS].rstrip()}…"
+
+        values = {
+            "workspace_id": workspace_id,
+            "contact_id": conversation.contact_id,
+            "nudge_type": NOTE_REMINDER_NUDGE_TYPE,
+            "title": f"Follow up: {summary}",
+            "message": note.body,
+            "due_date": due_at,
+            # The rep who wrote the note is the one who wanted reminding; without
+            # this the nudge falls back to broadcasting at every CRM writer.
+            "assigned_to_user_id": actor_user_id,
+            "dedup_key": _reminder_dedup_key(note_id),
+        }
+        statement = pg_insert(HumanNudge).values(id=uuid.uuid4(), **values)
+        await self.db.execute(
+            statement.on_conflict_do_update(
+                index_elements=[HumanNudge.dedup_key],
+                set_={
+                    "due_date": statement.excluded.due_date,
+                    "title": statement.excluded.title,
+                    "message": statement.excluded.message,
+                    "assigned_to_user_id": statement.excluded.assigned_to_user_id,
+                    # Moving the date revives an already-fired or dismissed
+                    # reminder; otherwise the worker would skip it forever.
+                    "status": "pending",
+                    "snoozed_until": None,
+                },
+            )
+        )
+        await self.db.commit()
+
+        author = await self.db.get(User, actor_user_id)
+        reminders = await self._reminders_for([note_id])
+        return self._to_response(note, author.full_name if author else None, reminders.get(note_id))
+
+    async def clear_reminder(
+        self,
+        note_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        actor_user_id: int,
+    ) -> ConversationNoteResponse:
+        """Cancel the reminder on a note the caller wrote, keeping the note."""
+        await self._assert_conversation_visible(conversation_id, workspace_id)
+        note = await self._get_owned_note(note_id, conversation_id, workspace_id, actor_user_id)
+
+        # Scoped by workspace as well as key: dedup_key is globally unique, so
+        # this refuses to delete another tenant's row even if a key ever collided.
+        await self.db.execute(
+            delete(HumanNudge).where(
+                HumanNudge.workspace_id == workspace_id,
+                HumanNudge.dedup_key == _reminder_dedup_key(note_id),
+            )
+        )
+        await self.db.commit()
+
+        author = await self.db.get(User, actor_user_id)
+        return self._to_response(note, author.full_name if author else None, None)

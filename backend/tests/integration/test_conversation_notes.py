@@ -6,6 +6,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import FastAPI
@@ -19,6 +20,7 @@ from app.core.encryption import EncryptedString
 from app.db.session import AsyncSessionLocal, engine
 from app.models.conversation import Conversation
 from app.models.conversation_note import MAX_NOTE_BODY_CHARS, ConversationNote
+from app.models.human_nudge import HumanNudge
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.conversations.note_service import ConversationNoteService
@@ -317,3 +319,158 @@ async def test_a_reps_note_and_a_quo_summary_coexist_on_one_conversation() -> No
 
         assert {note["source"] for note in notes} == {"human", "quo_summary"}
         assert len(notes) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_reminder_is_a_real_nudge_the_delivery_worker_will_claim() -> None:
+    """The point of reusing HumanNudge is that delivery already works.
+
+    Asserting the row shape is not enough: this checks the reminder satisfies
+    the delivery worker's own claim query (pending, due, assigned), so the
+    reminder actually fires instead of sitting in a table nobody polls.
+    """
+    async with _scenario() as scenario:
+        url = _notes_url(scenario.workspace_id, scenario.conversation_id)
+        due = datetime.now(UTC) + timedelta(days=2)
+
+        async with await _client(_make_app(scenario)) as client:
+            note_id = (await client.post(url, json={"body": "Call back re gutters"})).json()["id"]
+            response = await client.put(
+                f"{url}/{note_id}/reminder", json={"due_at": due.isoformat()}
+            )
+            assert response.status_code == 200
+            assert response.json()["reminder_status"] == "pending"
+
+        async with AsyncSessionLocal() as db:
+            nudge = (
+                await db.execute(
+                    select(HumanNudge).where(HumanNudge.dedup_key == f"note_followup:{note_id}")
+                )
+            ).scalar_one()
+            assert nudge.assigned_to_user_id == scenario.author.id
+            assert nudge.workspace_id == scenario.workspace_id
+
+            # The delivery worker's own predicate, with the clock moved past the
+            # due date rather than the row hand-crafted to match.
+            claimable = (
+                (
+                    await db.execute(
+                        select(HumanNudge).where(
+                            HumanNudge.workspace_id == scenario.workspace_id,
+                            HumanNudge.status == "pending",
+                            HumanNudge.due_date <= due + timedelta(minutes=1),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert nudge.id in {claimed.id for claimed in claimable}
+
+
+@pytest.mark.asyncio
+async def test_resetting_a_reminder_moves_it_instead_of_adding_a_second() -> None:
+    """Re-setting must not leave the rep with two notifications for one note."""
+    async with _scenario() as scenario:
+        url = _notes_url(scenario.workspace_id, scenario.conversation_id)
+        first = datetime.now(UTC) + timedelta(days=1)
+        second = datetime.now(UTC) + timedelta(days=5)
+
+        async with await _client(_make_app(scenario)) as client:
+            note_id = (await client.post(url, json={"body": "Send the quote"})).json()["id"]
+            await client.put(f"{url}/{note_id}/reminder", json={"due_at": first.isoformat()})
+            moved = await client.put(
+                f"{url}/{note_id}/reminder", json={"due_at": second.isoformat()}
+            )
+            assert moved.status_code == 200
+
+        async with AsyncSessionLocal() as db:
+            nudges = (
+                (
+                    await db.execute(
+                        select(HumanNudge).where(HumanNudge.dedup_key == f"note_followup:{note_id}")
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert len(nudges) == 1
+            assert nudges[0].due_date.replace(microsecond=0) == second.replace(microsecond=0)
+
+
+@pytest.mark.asyncio
+async def test_a_past_due_reminder_is_rejected() -> None:
+    """A past due date fires on the next poll, which reads as spam not a typo."""
+    async with _scenario() as scenario:
+        url = _notes_url(scenario.workspace_id, scenario.conversation_id)
+        async with await _client(_make_app(scenario)) as client:
+            note_id = (await client.post(url, json={"body": "Past due"})).json()["id"]
+            response = await client.put(
+                f"{url}/{note_id}/reminder",
+                json={"due_at": (datetime.now(UTC) - timedelta(hours=1)).isoformat()},
+            )
+            assert response.status_code == 422
+
+        async with AsyncSessionLocal() as db:
+            assert (
+                await db.execute(
+                    select(HumanNudge).where(HumanNudge.dedup_key == f"note_followup:{note_id}")
+                )
+            ).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_only_the_author_can_set_or_clear_a_reminder() -> None:
+    """A reminder is the author's own follow-up, not a colleague's to reassign."""
+    async with _scenario() as scenario:
+        url = _notes_url(scenario.workspace_id, scenario.conversation_id)
+        due = datetime.now(UTC) + timedelta(days=3)
+
+        async with await _client(_make_app(scenario)) as client:
+            note_id = (await client.post(url, json={"body": "Owned note"})).json()["id"]
+            await client.put(f"{url}/{note_id}/reminder", json={"due_at": due.isoformat()})
+
+        async with await _client(_make_app(scenario, as_colleague=True)) as colleague:
+            hijacked = await colleague.put(
+                f"{url}/{note_id}/reminder",
+                json={"due_at": (due + timedelta(days=9)).isoformat()},
+            )
+            assert hijacked.status_code == 404
+            cancelled = await colleague.delete(f"{url}/{note_id}/reminder")
+            assert cancelled.status_code == 404
+
+        async with AsyncSessionLocal() as db:
+            nudge = (
+                await db.execute(
+                    select(HumanNudge).where(HumanNudge.dedup_key == f"note_followup:{note_id}")
+                )
+            ).scalar_one()
+            assert nudge.assigned_to_user_id == scenario.author.id
+            assert nudge.due_date.replace(microsecond=0) == due.replace(microsecond=0)
+
+
+@pytest.mark.asyncio
+async def test_clearing_a_reminder_keeps_the_note() -> None:
+    """Cancelling a follow-up must not discard what the rep observed."""
+    async with _scenario() as scenario:
+        url = _notes_url(scenario.workspace_id, scenario.conversation_id)
+        async with await _client(_make_app(scenario)) as client:
+            note_id = (await client.post(url, json={"body": "Keep me"})).json()["id"]
+            await client.put(
+                f"{url}/{note_id}/reminder",
+                json={"due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat()},
+            )
+            cleared = await client.delete(f"{url}/{note_id}/reminder")
+            assert cleared.status_code == 200
+            assert cleared.json()["reminder_at"] is None
+            assert cleared.json()["body"] == "Keep me"
+
+            listed = await client.get(url)
+            assert [note["body"] for note in listed.json()] == ["Keep me"]
+
+        async with AsyncSessionLocal() as db:
+            assert (
+                await db.execute(
+                    select(HumanNudge).where(HumanNudge.dedup_key == f"note_followup:{note_id}")
+                )
+            ).scalar_one_or_none() is None
