@@ -258,19 +258,54 @@ export function permanentRunFeet(
  */
 export type CoverageKey = "whole" | "front-sides" | "front";
 
+/**
+ * Ordered cheapest → fullest, because these render as the customer's three
+ * cards and a ladder only reads as a ladder climbing. Each level is the one
+ * below it plus another face of the house, so the prices are monotonic by
+ * construction rather than by an operator remembering to keep them so.
+ */
 export const COVERAGE_OPTIONS = [
-  { key: "whole", label: "Whole home", elevations: ["front", "side", "back"] },
-  { key: "front-sides", label: "Front and sides", elevations: ["front", "side"] },
-  { key: "front", label: "Front only", elevations: ["front"] },
+  {
+    key: "front",
+    label: "Front only",
+    marker: "\u25cf", // ●
+    elevations: ["front"],
+    blurb:
+      "The face of the house. A clean, finished front elevation \u2014 the view from the street, lit every night.",
+  },
+  {
+    key: "front-sides",
+    label: "Front and sides",
+    marker: "\u25c6", // ◆
+    elevations: ["front", "side"],
+    popular: true,
+    blurb:
+      "The full approach. Front plus both sides, so the house is lit from every angle you see driving up.",
+  },
+  {
+    key: "whole",
+    label: "Whole home",
+    marker: "\u2605", // ★
+    elevations: ["front", "side", "back"],
+    blurb:
+      "Every elevation, front to back. Nothing left dark \u2014 including the patio and the backyard.",
+  },
 ] as const satisfies readonly {
   key: CoverageKey;
   label: string;
+  marker: string;
   elevations: readonly RunElevation[];
+  popular?: boolean;
+  blurb: string;
 }[];
 
+const ALL_ELEVATIONS: readonly RunElevation[] = ["front", "side", "back"];
+
 function coverageElevations(coverage: CoverageKey): readonly RunElevation[] {
-  return (COVERAGE_OPTIONS.find((option) => option.key === coverage) ?? COVERAGE_OPTIONS[0])
-    .elevations;
+  // Unknown key falls back to every elevation, never a narrower one: showing
+  // work that was drawn is recoverable, silently dropping it from the price is
+  // not.
+  return COVERAGE_OPTIONS.find((option) => option.key === coverage)?.elevations ?? ALL_ELEVATIONS;
 }
 
 /**
