@@ -494,6 +494,20 @@ async def decline_quote(
     return await service.decline_quote(workspace_id, quote_id, reason=payload.reason)
 
 
+@router.post("/{quote_id}/reopen", response_model=QuoteDetailResponse)
+async def reopen_quote(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    _quote: ScopedQuote,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteQuotes,
+) -> QuoteDetailResponse:
+    """Put a lapsed quote back in front of the customer on a fresh window."""
+    service = QuoteService(db)
+    return await service.reopen_quote(workspace_id, quote_id)
+
+
 @router.post("/{quote_id}/record-deposit", response_model=QuoteDetailResponse)
 async def record_quote_deposit(
     workspace_id: uuid.UUID,

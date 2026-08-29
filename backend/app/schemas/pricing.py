@@ -992,6 +992,12 @@ class PricingSettings(BaseModel):
     # the customer with the full window. An operator-set ``expiry_date`` always
     # wins; this only fills the blank.
     quote_validity_days: int = Field(default=30, ge=1, le=365)
+    # Whether quotes lapse at all. Off means a send leaves ``expiry_date`` blank,
+    # and a blank expiry never lapses. A separate flag rather than a sentinel in
+    # ``quote_validity_days``: ``None`` already means "leave unchanged" in the
+    # update schema below, so it cannot also mean "never expires". Defaults to
+    # on, so existing workspaces keep the behaviour they have today.
+    quote_expiry_enabled: bool = True
 
 
 # --------------------------------------------------------------------------- #
@@ -1338,3 +1344,4 @@ class PricingSettingsUpdate(BaseModel):
     comparison_years: int | None = Field(default=None, ge=1, le=30)
     roofline_comparison_enabled: bool | None = None
     quote_validity_days: int | None = Field(default=None, ge=1, le=365)
+    quote_expiry_enabled: bool | None = None
