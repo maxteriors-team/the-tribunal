@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SalesPerformanceReport } from "@/components/reports/sales-performance-report";
@@ -428,6 +429,74 @@ describe("SalesPerformanceReport", () => {
       .closest("[data-slot=card]") as HTMLElement;
     expect(within(closerCard).getByText("100%")).toBeInTheDocument();
     expect(within(closerCard).getByText("2 quotes · low sample")).toBeInTheDocument();
+  });
+
+  it("hides a rep's per-service rates until their row is expanded", async () => {
+    const user = userEvent.setup();
+    respondWith(
+      report({
+        by_closer: [
+          {
+            ...row({ label: "Dana Reyes", close_rate: 0.4 }),
+            by_service: [
+              row({
+                key: "gutter_cleaning",
+                label: "Gutter Cleaning",
+                quotes_issued: 12,
+                close_rate: 0.75,
+              }),
+              row({
+                key: "holiday_lighting",
+                label: "Holiday Lighting",
+                quotes_issued: 8,
+                close_rate: 0.12,
+              }),
+            ],
+          },
+        ],
+      }),
+    );
+
+    renderReport();
+
+    const closerCard = (await screen.findByText("By closer")).closest(
+      "[data-slot=card]",
+    ) as HTMLElement;
+    const toggle = within(closerCard).getByRole("button", {
+      name: /Dana Reyes/,
+    });
+
+    // Collapsed: the rep's overall rate is visible, the split is not.
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      within(closerCard).queryByText("Gutter Cleaning"),
+    ).not.toBeInTheDocument();
+
+    await user.click(toggle);
+
+    // Expanded: the averaged 40% resolves into the two rates that produced it.
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(closerCard).getByText("Gutter Cleaning")).toBeInTheDocument();
+    expect(within(closerCard).getByText("75%")).toBeInTheDocument();
+    expect(within(closerCard).getByText("12%")).toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(
+      within(closerCard).queryByText("Gutter Cleaning"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("leaves a breakdown without a drill-down unexpandable", async () => {
+    respondWith(report());
+
+    renderReport();
+
+    // Lead source carries no nested split, so its rows must not offer a control
+    // that reveals nothing.
+    const sourceCard = (await screen.findByText("By lead source")).closest(
+      "[data-slot=card]",
+    ) as HTMLElement;
+    expect(within(sourceCard).queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("shows the sample size beside every rate", async () => {

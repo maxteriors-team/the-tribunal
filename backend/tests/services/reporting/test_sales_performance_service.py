@@ -287,6 +287,65 @@ def test_breakdown_by_closer_groups_and_ranks_by_approved_revenue() -> None:
     assert unassigned.revenue_approved == 500.0
 
 
+def test_each_closer_carries_a_per_service_drill_down() -> None:
+    report = _report(
+        _fact("approved", 8_000, closer_id=1, closer_name="Ada Closer", primary_service="gutters"),
+        _fact("declined", 1_000, closer_id=1, closer_name="Ada Closer", primary_service="gutters"),
+        _fact("declined", 4_000, closer_id=1, closer_name="Ada Closer", primary_service="lighting"),
+        _fact("approved", 2_000, closer_id=2, closer_name="Bo Rep", primary_service="lighting"),
+    )
+
+    ada = report.by_closer[0]
+    assert ada.label == "Ada Closer"
+    # The rep's overall rate is one win out of three decided quotes, and the
+    # drill-down shows the split it hides: gutters carry them, lighting does not.
+    assert ada.close_rate == 0.3333
+    assert [(row.label, row.close_rate) for row in ada.by_service] == [
+        ("gutters", 0.5),
+        ("lighting", 0.0),
+    ]
+
+    bo = report.by_closer[1]
+    assert [row.label for row in bo.by_service] == ["lighting"]
+    # Each drill-down is scoped to its own rep: Bo closes lighting, Ada does not.
+    assert bo.by_service[0].close_rate == 1.0
+
+
+def test_a_closers_service_rows_account_for_all_of_their_quoted_volume() -> None:
+    report = _report(
+        _fact("approved", 5_000, closer_id=1, closer_name="Ada Closer", primary_service="gutters"),
+        _fact("sent", 3_000, closer_id=1, closer_name="Ada Closer", primary_service="lighting"),
+        # No service on the quote: must still appear, or the rep's rows silently
+        # drop volume and the drill-down disagrees with the row above it.
+        _fact("declined", 2_000, closer_id=1, closer_name="Ada Closer"),
+        _fact("draft", 9_999, closer_id=1, closer_name="Ada Closer", primary_service="gutters"),
+    )
+
+    ada = report.by_closer[0]
+    assert {row.label for row in ada.by_service} == {
+        "gutters",
+        "lighting",
+        UNCATEGORIZED_SERVICE_LABEL,
+    }
+    assert sum(row.quotes_issued for row in ada.by_service) == ada.quotes_issued
+    assert sum(row.quotes_approved for row in ada.by_service) == ada.quotes_approved
+    assert sum(row.revenue_approved for row in ada.by_service) == ada.revenue_approved
+    # The draft is excluded from the parent, so it must not reappear in a child.
+    assert ada.quotes_issued == 3
+
+
+def test_the_flat_service_breakdown_still_reports_the_whole_workspace() -> None:
+    report = _report(
+        _fact("approved", 8_000, closer_id=1, closer_name="Ada Closer", primary_service="gutters"),
+        _fact("approved", 2_000, closer_id=2, closer_name="Bo Rep", primary_service="gutters"),
+    )
+
+    # Nesting must not turn the top-level service view into a per-rep one.
+    assert [(row.label, row.revenue_approved) for row in report.by_primary_service] == [
+        ("gutters", 10_000.0)
+    ]
+
+
 def test_breakdown_by_closer_falls_back_to_the_id_when_the_user_has_no_name() -> None:
     report = _report(_fact("approved", 100, closer_id=7))
 
