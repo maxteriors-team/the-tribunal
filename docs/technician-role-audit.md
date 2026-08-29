@@ -369,6 +369,53 @@ Proven to bind, in three directions: an injected ungated route fails it; the
 same route with a `require_capability` dependency passes; and adding an entry
 for the already-gated `/contacts` trips the stale-entry branch.
 
+### 10. AUDITED 2026-08-28 — the non-HTTP surfaces
+
+Every gate in findings 1-9 lives on an authenticated API route. These surfaces
+never touch those dependencies, so none of that work protects them. Audited
+against one rule: **the workspace must come from the authenticated principal or
+a verified secret, never from a caller-supplied id.**
+
+**No leak found.** Each surface already derives tenancy correctly:
+
+| Surface | How the tenant is decided | Verdict |
+|---|---|---|
+| `voice/supervise/{workspace_id}/{call_id}` | JWT ticket → `WorkspaceMembership` row for *that* workspace, checked **before** `accept()`; then the live call is fetched with `workspace_id=` so a foreign call returns `None` | correct |
+| Telnyx `sms`/`voice` | signature verified **before** the body is parsed; workspace read from the `phone_numbers` row the message arrived on | correct |
+| Mac relay | bearer token resolves to exactly one phone-number row; an unresolvable token raises 401 and can never fall through to a body-derived id | correct |
+| Quo `{workspace_integration_id}` | the path id only selects *which signing key verifies the request* — a forged id yields a key the caller cannot sign for | correct |
+| Meta / Resend / Stripe | signature verified before dispatch | correct |
+| Public routes (40+) | keyed on an unguessable token, slug, or public id | correct |
+| API keys | `request.state.api_key_workspace_id` is set at authentication and enforced by **all four** workspace-resolving dependencies | correct |
+
+Two things worth knowing rather than fixing:
+
+- **The Mac relay has a legacy escape hatch.** With
+  `mac_relay_allow_legacy_global_token` enabled, a shared global token yields an
+  *un-scoped* credential and the old body-derived tenancy path runs. It is off
+  by default and logs a `security_event` warning when used. Fine as a migration
+  aid; it should not outlive the migration.
+- **The supervisor socket streams live customer audio**, which makes it the
+  highest-consequence surface here even though it is currently correct.
+
+Tests added in `backend/tests/api/test_non_http_surface_isolation.py`. The
+existing socket tests covered a missing token and a non-existent call — neither
+reaches the tenancy branch. The new one stubs authentication to *succeed* and
+asks for another tenant's live call, which is the case that actually matters.
+Each assertion was falsified against a deliberately broken copy: dropping the
+`workspace_id=` argument, removing the API-key enforcement from one dependency,
+and moving signature verification after body parsing each fail exactly one test.
+
+#### Not covered
+
+- The embeddable widget's own token lifetime and rate limits (only its tenancy
+  derivation was checked).
+- Whether each provider's signature *implementation* is correct; this checked
+  that verification happens, and happens first.
+- The service layer beneath these surfaces. A shared service reached from both
+  a socket and an HTTP route still enforces nothing of its own — that remains
+  the standing structural gap below.
+
 ## What is left
 
 
@@ -391,7 +438,14 @@ for the already-gated `/contacts` trips the stale-entry branch.
 9. ~~Cross-**workspace** isolation (finding 8)~~ — **audited 2026-08-28.** The
    boundary holds; one existence oracle found and fixed. Not exhaustive — see
    the caveats under that finding.
-10. Still unexamined, and now the largest gap: the non-HTTP surfaces
-    (websockets, webhooks, the embeddable widget, API-key auth). Every gate this
-    audit found lives at the API layer, so a service-layer caller bypasses all
-    of them.
+10. ~~The non-HTTP surfaces (finding 10)~~ — **audited 2026-08-28.** Websockets,
+    webhooks, public routes and API-key auth all derive tenancy from the
+    principal or a verified secret. No leak found; tests added.
+11. **The standing structural gap.** Every control this audit found lives at the
+    API layer, so a service-layer caller bypasses all of them. Moving tenancy
+    into the data layer — row-level security, or a session-scoped query filter
+    — is the only thing that closes it by construction rather than by review.
+    Large, and worth planning rather than attempting piecemeal.
+12. Retire `mac_relay_allow_legacy_global_token` once every relay host has a
+    per-workspace token. It is off by default and warns loudly, but while it is
+    on, one shared token means body-derived tenancy.
