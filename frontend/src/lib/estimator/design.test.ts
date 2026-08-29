@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import { buildCatalog, indexProducts } from "./catalog";
 import {
   ASSUMED_PHOTO_WIDTH_FT,
+  coverageFeet,
   designScale,
   designToEstimateInputs,
   hasDesign,
   permanentRunFeet,
+  shotsForCoverage,
   sumEstimateInputs,
 } from "./design";
 import type { Design, PlacedItem, Product, Run } from "./types";
@@ -558,5 +560,50 @@ describe("permanentRunFeet", () => {
     expect(totals.elevation.back).toBeCloseTo(40);
     expect(totals.complexity.complex).toBeCloseTo(40);
     expect(totals.complexity.standard).toBe(0);
+  });
+});
+
+describe("shotsForCoverage", () => {
+  const shot = (runs: Run[]) => ({
+    design: { calibration: cal, runs, items: [] as PlacedItem[] },
+    photo: { width: PHOTO_W },
+  });
+  const tagged = (id: string, elevation?: Run["elevation"]): Run => ({
+    id,
+    productId: "roofline-permanent",
+    points: [
+      { x: 0, y: 0 },
+      { x: 400, y: 0 },
+    ],
+    ...(elevation ? { elevation } : {}),
+  });
+  const ids = (shots: ReturnType<typeof shot>[]) => shots[0].design.runs.map((run) => run.id);
+  const all = [shot([tagged("f", "front"), tagged("s", "side"), tagged("b", "back")])];
+
+  it("prices every face on whole home, drops the back on front and sides", () => {
+    expect(ids(shotsForCoverage(all, "whole"))).toEqual(["f", "s", "b"]);
+    expect(ids(shotsForCoverage(all, "front-sides"))).toEqual(["f", "s"]);
+    expect(ids(shotsForCoverage(all, "front"))).toEqual(["f"]);
+  });
+
+  it("keeps an untagged run at every level, so old drawings price unchanged", () => {
+    const legacy = [shot([tagged("untagged"), tagged("b", "back")])];
+
+    expect(ids(shotsForCoverage(legacy, "front"))).toEqual(["untagged"]);
+    expect(ids(shotsForCoverage(legacy, "whole"))).toEqual(["untagged", "b"]);
+  });
+
+  it("leaves the caller's shots untouched so the full drawing stays measurable", () => {
+    shotsForCoverage(all, "front");
+
+    expect(ids(all)).toEqual(["f", "s", "b"]);
+  });
+
+  it("totals the feet each coverage level would price", () => {
+    expect(coverageFeet({ front: 40, side: 25, back: 10 })).toEqual({
+      whole: 75,
+      "front-sides": 65,
+      front: 40,
+    });
   });
 });

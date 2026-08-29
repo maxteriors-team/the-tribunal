@@ -99,12 +99,15 @@ import {
 } from "@/lib/estimator/catalog";
 import { toEstimateCustomLines, type CustomLineDraft } from "@/lib/estimator/custom-lines";
 import {
+  type CoverageKey,
+  coverageFeet,
   designScale,
   designToEstimateInputs,
   formatFeet,
   hasDesign,
   permanentRunFeet,
   runScale,
+  shotsForCoverage,
   sumEstimateInputs,
 } from "@/lib/estimator/design";
 import {
@@ -3128,6 +3131,9 @@ export function LightDesigner({
     serverBacked,
   ]);
 
+  // Not persisted, like every other rep-side estimate choice here (takedown,
+  // storage, package, discount): a sent proposal keeps its own priced totals.
+  const [coverage, setCoverage] = useState<CoverageKey>("whole");
   const [takedown, setTakedown] = useState(false);
   const [storage, setStorage] = useState(false);
   // The rep's chosen Good/Better/Best seasonal package (a ChristmasPackage key).
@@ -3286,13 +3292,19 @@ export function LightDesigner({
   // Totalled across every photo: front elevation plus back patio is one job and
   // one price. Each run measures on its assigned calibration before it's summed,
   // so photo planes and shots taken from different distances add up correctly.
+  // Coverage scopes the drawing before anything is measured, so the packages,
+  // the permanent price and the complexity weighting all price the same set of
+  // runs. Untagged runs count as front and survive every level.
+  const coveredShots = shotsForCoverage(liveShots, coverage);
   const inputs = sumEstimateInputs(
-    liveShots.map((shot) => designToEstimateInputs(shot.design, productById, shot.photo.width)),
+    coveredShots.map((shot) => designToEstimateInputs(shot.design, productById, shot.photo.width)),
   );
   const feet = inputs.feet;
-  const permanentFeet = permanentRunFeet(liveShots, productById);
-  const permanentComplexityFeet = permanentFeet.complexity;
-  const permanentElevationFeet = permanentFeet.elevation;
+  const permanentComplexityFeet = permanentRunFeet(coveredShots, productById).complexity;
+  // Measured off the whole drawing, not the covered subset: these totals are what
+  // each coverage option would price, so they cannot depend on the current one.
+  const permanentElevationFeet = permanentRunFeet(liveShots, productById).elevation;
+  const permanentCoverageFeet = coverageFeet(permanentElevationFeet);
   const selectedPermanentRun =
     state.selection?.kind === "run"
       ? (design.runs.find((run) => {
@@ -4885,6 +4897,9 @@ export function LightDesigner({
                         customLines={customLines}
                         onChangeCustomLines={setCustomLines}
                         sides={sides}
+                        coverage={sides.permanent ? coverage : undefined}
+                        onSelectCoverage={setCoverage}
+                        coverageFeet={permanentCoverageFeet}
                       />
                     ) : null}
 
