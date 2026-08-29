@@ -9,8 +9,11 @@ from typing import Any
 
 from app.core.permissions import role_can
 from app.models.campaign import CampaignContactStatus, CampaignStatus, CampaignType
-from app.schemas.automation import AUTOMATION_ACTION_TYPES, AUTOMATION_TRIGGER_TYPES
 from app.schemas.offer import DiscountType, GuaranteeType, UrgencyType
+from app.services.ai.crm_assistant._automation_policy import (
+    CRM_ASSISTANT_AUTOMATION_ACTION_TYPES,
+    CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES,
+)
 from app.services.ai.crm_assistant._tool_metadata import tool_capability
 from app.services.campaigns.audience_service import MAX_CAMPAIGN_AUDIENCE_SIZE
 from app.services.contacts.contact_filter_validation import (
@@ -34,14 +37,6 @@ GUARANTEE_TYPES = [guarantee.value for guarantee in GuaranteeType]
 URGENCY_TYPES = [urgency.value for urgency in UrgencyType]
 CONTACT_STATUSES = ["new", "contacted", "qualified", "converted", "lost"]
 CONTACT_TAG_MATCH_MODES = ["any", "all", "none"]
-CRM_ASSISTANT_AUTOMATION_TRIGGER_TYPES = tuple(
-    trigger
-    for trigger in AUTOMATION_TRIGGER_TYPES
-    if trigger not in {"event", "generic_event", "schedule", "condition"}
-)
-CRM_ASSISTANT_AUTOMATION_ACTION_TYPES = tuple(
-    action for action in AUTOMATION_ACTION_TYPES if action not in {"add_tag", "delay"}
-)
 
 
 def _filter_rule_variant(
