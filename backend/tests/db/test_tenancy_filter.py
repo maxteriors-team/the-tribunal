@@ -325,6 +325,66 @@ async def test_request_dependencies_scope_the_session_to_the_caller() -> None:
     assert db.info[WORKSPACE_KEY] == WS_A
 
 
+def test_an_unlabelled_session_warns_and_still_returns_rows(session: Session) -> None:
+    """Observe mode: log the call site, do not break it.
+
+    This path had no test in the first draft and shipped broken — the warning
+    passed ``event=`` to structlog, which already binds the first positional
+    argument to ``event``, so every unlabelled query raised ``TypeError``
+    instead of logging. It was caught by integration tests that only run in the
+    migrations workflow, because the required backend job has no Postgres.
+
+    Phase 1's entire purpose is to observe without breaking anything, so the
+    observing itself has to work.
+    """
+    from structlog.testing import capture_logs
+
+    assert session_workspace_id(session) is None
+    assert session_system_reason(session) is None
+
+    # Not via ``_compile``: that suppresses exceptions so it can read the
+    # rewritten statement without a connection, which would have swallowed the
+    # very TypeError this test exists for. Assert on the emitted log instead.
+    with capture_logs() as logs, contextlib.suppress(Exception):
+        session.execute(select(Contact))
+
+    warnings = [entry for entry in logs if entry["event"] == "unlabelled_tenancy_query"]
+    assert warnings, f"no warning emitted for an unlabelled query; got {logs}"
+    assert warnings[0]["security_event"] is True
+    assert "Contact" in warnings[0]["entities"]
+
+    # And phase 1 does not change behaviour: still unfiltered.
+    assert "WHERE" not in _compile(Session(), select(Contact))
+
+
+def test_enforcing_mode_raises_and_names_the_entities(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2: the same call site fails closed, naming what to label."""
+    import app.db.tenancy as tenancy_module
+
+    monkeypatch.setattr(tenancy_module, "ENFORCE_LABELLING", True)
+
+    with pytest.raises(UnlabelledTenancyError) as exc:
+        session.execute(select(Contact))
+
+    assert "Contact" in str(exc.value)
+
+
+def test_enforcing_mode_leaves_global_models_alone(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2 must not break login: ``users`` has no tenant to label."""
+    import app.db.tenancy as tenancy_module
+
+    monkeypatch.setattr(tenancy_module, "ENFORCE_LABELLING", True)
+
+    # Reaches the database layer and fails there, not in the tenancy listener.
+    with pytest.raises(Exception) as exc:  # noqa: B017 - no connection available
+        session.execute(select(User))
+    assert not isinstance(exc.value, UnlabelledTenancyError)
+
+
 def test_session_workspace_id_reads_back_what_was_set(session: Session) -> None:
     assert session_workspace_id(session) is None
     scope_session_to_workspace(session, WS_A)
