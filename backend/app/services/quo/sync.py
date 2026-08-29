@@ -22,6 +22,7 @@ from app.models.conversation import (
     MessageDirection,
     MessageStatus,
 )
+from app.services.conversations.note_service import ConversationNoteService
 from app.services.quo.client import QUO_HISTORICAL_API_VERSION, QuoApiError, QuoClient
 from app.services.quo.reconciliation import (
     QuoMessageSnapshot,
@@ -314,6 +315,21 @@ class QuoSyncService:
             direction=direction,
         )
         await self.db.flush()
+
+        # Quo's AI recap is worth more to a rep as a note than as one more line
+        # in the message thread, where it scrolls away between calls. The
+        # message row above is left exactly as it was, so nothing that already
+        # reads the thread changes; this only adds the note copy. Keyed on the
+        # call id, so a redelivered or refined summary updates in place.
+        if event.event_type == "call.summary.completed":
+            summary_body = _summary_body(resource)
+            if summary_body:
+                await ConversationNoteService(self.db).record_quo_summary(
+                    conversation_id=conversation.id,
+                    workspace_id=self.workspace_id,
+                    call_id=call_id,
+                    body=summary_body,
+                )
 
         occurred_at = message.created_at
         self._update_conversation(
