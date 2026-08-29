@@ -29,6 +29,7 @@ from app.schemas.conversation_note import (
     ConversationNoteCreate,
     ConversationNoteResponse,
     ConversationNoteUpdate,
+    NoteReminderCreate,
 )
 from app.services.ai.teach_ai import save_training_example
 from app.services.conversations import ConversationService
@@ -457,6 +458,52 @@ async def delete_conversation_note(
     """Delete a note you wrote."""
     svc = ConversationNoteService(db)
     await svc.delete_note(
+        note_id=note_id,
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+        actor_user_id=current_user.id,
+    )
+
+
+@router.put(
+    "/{conversation_id}/notes/{note_id}/reminder",
+    response_model=ConversationNoteResponse,
+)
+async def set_conversation_note_reminder(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    note_id: uuid.UUID,
+    request: NoteReminderCreate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> ConversationNoteResponse:
+    """Set or move the follow-up reminder on a note you wrote."""
+    svc = ConversationNoteService(db)
+    return await svc.set_reminder(
+        note_id=note_id,
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+        actor_user_id=current_user.id,
+        due_at=request.due_at,
+    )
+
+
+@router.delete(
+    "/{conversation_id}/notes/{note_id}/reminder",
+    response_model=ConversationNoteResponse,
+)
+async def clear_conversation_note_reminder(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    note_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> ConversationNoteResponse:
+    """Cancel the reminder on a note you wrote, keeping the note itself."""
+    svc = ConversationNoteService(db)
+    return await svc.clear_reminder(
         note_id=note_id,
         conversation_id=conversation_id,
         workspace_id=workspace_id,

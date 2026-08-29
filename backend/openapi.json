@@ -14763,6 +14763,29 @@
             "title": "Id",
             "type": "string"
           },
+          "reminder_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder At"
+          },
+          "reminder_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Status"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -30423,6 +30446,21 @@
           "timing"
         ],
         "title": "NextBestAction",
+        "type": "object"
+      },
+      "NoteReminderCreate": {
+        "description": "A follow-up reminder a rep is setting from a note.",
+        "properties": {
+          "due_at": {
+            "format": "date-time",
+            "title": "Due At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "due_at"
+        ],
+        "title": "NoteReminderCreate",
         "type": "object"
       },
       "NotificationSettings": {
@@ -74594,6 +74632,152 @@
           }
         ],
         "summary": "Update Conversation Note",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/notes/{note_id}/reminder": {
+      "delete": {
+        "description": "Cancel the reminder on a note you wrote, keeping the note itself.",
+        "operationId": "clear_conversation_note_reminder_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__reminder_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Note Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationNoteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Clear Conversation Note Reminder",
+        "tags": [
+          "Conversations"
+        ]
+      },
+      "put": {
+        "description": "Set or move the follow-up reminder on a note you wrote.",
+        "operationId": "set_conversation_note_reminder_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__reminder_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Note Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteReminderCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationNoteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Set Conversation Note Reminder",
         "tags": [
           "Conversations"
         ]
