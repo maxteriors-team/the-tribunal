@@ -299,7 +299,7 @@ async def handle_checkout_session_completed(
 
 
 async def notify_payment_operators(db: AsyncSession, payment: CallPayment) -> None:
-    """Notify workspace operators of a successful in-call payment (push + email).
+    """Notify the workspace of a successful in-call payment (push + email).
 
     Guarded by ``operators_notified_at`` so the webhook and an in-call status
     poll racing to confirm the same payment never double-notify.
@@ -307,7 +307,9 @@ async def notify_payment_operators(db: AsyncSession, payment: CallPayment) -> No
     from app.models.workspace import Workspace
     from app.services.email import send_payment_received_notification
     from app.services.idempotency import derive_outbound_key
-    from app.services.notification_recipients import workspace_notification_email_users
+    from app.services.payments.payment_alert_recipients import (
+        payment_alert_email_recipients,
+    )
     from app.services.push_notifications import push_notification_service
 
     if payment.operators_notified_at is not None:
@@ -340,14 +342,14 @@ async def notify_payment_operators(db: AsyncSession, payment: CallPayment) -> No
         logger.exception("call_payment_push_failed", error=str(exc))
 
     try:
-        members = await workspace_notification_email_users(db, payment.workspace_id)
+        recipients = await payment_alert_email_recipients(
+            db, workspace_id=payment.workspace_id, workspace=workspace
+        )
         sent = 0
-        for user in members:
-            if not user.notification_email or not user.email:
-                continue
-            idem = derive_outbound_key("call_payment_email", payment.id, user.id)
+        for recipient in recipients:
+            idem = derive_outbound_key("call_payment_email", payment.id, recipient.dedupe_identity)
             ok = await send_payment_received_notification(
-                to_email=user.email,
+                to_email=recipient.email,
                 workspace_name=workspace_name,
                 amount=float(payment.amount),
                 currency=payment.currency,

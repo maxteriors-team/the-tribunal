@@ -39,9 +39,9 @@ async def notify_customer_payment(
     client_phone: str | None = None,
     quote_number: str | None = None,
 ) -> int:
-    """Push every member and email global operators when a customer payment lands.
+    """Push every member and email the configured payment-alert recipient.
 
-    ``idempotency_scope``/``idempotency_id`` are folded into the per-user
+    ``idempotency_scope``/``idempotency_id`` are folded into the per-recipient
     outbound key, so a Stripe webhook retry that re-confirms the same payment
     cannot send a second email. Callers are additionally expected to be
     idempotent themselves (``record_payment`` dedupes on the payment-intent id;
@@ -53,7 +53,9 @@ async def notify_customer_payment(
     from app.models.workspace import Workspace
     from app.services.email import send_payment_received_notification
     from app.services.idempotency import derive_outbound_key
-    from app.services.notification_recipients import workspace_notification_email_users
+    from app.services.payments.payment_alert_recipients import (
+        payment_alert_email_recipients,
+    )
     from app.services.push_notifications import push_notification_service
 
     workspace = await db.get(Workspace, workspace_id)
@@ -86,13 +88,12 @@ async def notify_customer_payment(
 
     sent = 0
     try:
-        members = await workspace_notification_email_users(db, workspace_id)
-        for user in members:
-            # Respect the per-user notification opt-out, same as in-call payments.
-            if not user.notification_email or not user.email:
-                continue
+        recipients = await payment_alert_email_recipients(
+            db, workspace_id=workspace_id, workspace=workspace
+        )
+        for recipient in recipients:
             ok = await send_payment_received_notification(
-                to_email=user.email,
+                to_email=recipient.email,
                 workspace_name=workspace_name,
                 amount=amount_value,
                 currency=currency,
@@ -101,7 +102,9 @@ async def notify_customer_payment(
                 client_email=client_email,
                 client_phone=client_phone,
                 quote_number=quote_number,
-                idempotency_key=derive_outbound_key(idempotency_scope, idempotency_id, user.id),
+                idempotency_key=derive_outbound_key(
+                    idempotency_scope, idempotency_id, recipient.dedupe_identity
+                ),
             )
             sent += 1 if ok else 0
     except Exception as exc:  # pragma: no cover - best-effort email
