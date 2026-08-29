@@ -55,7 +55,7 @@ class RooflineComparison(Base, WorkspaceScoped):
     __tablename__ = "roofline_comparisons"
     __table_args__ = (
         CheckConstraint(
-            "permanent_complexity IN ('aerial', 'easy', 'standard', 'complex')",
+            "permanent_complexity IN ('easy', 'standard', 'complex')",
             name="ck_roofline_comparisons_permanent_complexity",
         ),
         CheckConstraint(
@@ -86,11 +86,11 @@ class RooflineComparison(Base, WorkspaceScoped):
     channels: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # The scalar remains a fallback for legacy/no-map requests. Existing rows
     # migrate to Standard; new mixed-complexity designs retain their measured map.
-    permanent_complexity: Mapped[Literal["aerial", "easy", "standard", "complex"]] = mapped_column(
+    permanent_complexity: Mapped[Literal["easy", "standard", "complex"]] = mapped_column(
         String(20), nullable=False, default="standard", server_default="standard"
     )
     permanent_complexity_feet: Mapped[
-        dict[Literal["aerial", "easy", "standard", "complex"], float] | None
+        dict[Literal["easy", "standard", "complex"], float] | None
     ] = mapped_column(JSONB, nullable=True)
     takedown: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     storage: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

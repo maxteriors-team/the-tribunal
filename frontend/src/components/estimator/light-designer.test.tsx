@@ -8,6 +8,7 @@ import {
   LightDesigner,
   type LandscapeProjectPersistenceAdapter,
   PERMANENT_COMPLEXITY_OPTIONS,
+  ROOF_PITCH_OPTIONS,
 } from "@/components/estimator/light-designer";
 import { estimatorApi } from "@/lib/api/estimator";
 import { quotesApi } from "@/lib/api/quotes";
@@ -37,6 +38,11 @@ vi.mock("@/lib/api/quotes", () => ({
     get: vi.fn(),
     deliver: vi.fn(),
   },
+}));
+
+// Estimator scenarios assume full-access quote closeout; billing denial has its own dialog test.
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => ({ can: () => true }),
 }));
 
 // The workspace price book + pricing config drive the landscape fixture types.
@@ -829,32 +835,29 @@ describe("LightDesigner", () => {
     expect(estimatorApi.createQuote).not.toHaveBeenCalled();
   });
 
-  it("offers Aerial Pics as the fixed 1.5× Light Designer run option", () => {
-    expect(PERMANENT_COMPLEXITY_OPTIONS).toContainEqual({
-      value: "aerial",
-      label: "Aerial Pics · 1.5×",
-    });
+  it("keeps complexity to labor tiers only, with no footage multiplier hidden in it", () => {
+    // "aerial" used to live here with a hardcoded 1.5, which *replaced* the 3.0
+    // standard COGS markup and halved every gable quote. Gable length is now a
+    // measurement correction (roofPitch), so no option may imply a multiplier.
+    expect(PERMANENT_COMPLEXITY_OPTIONS.map((option) => option.value)).toEqual([
+      "easy",
+      "standard",
+      "complex",
+    ]);
+    for (const option of PERMANENT_COMPLEXITY_OPTIONS) {
+      expect(option.label).not.toMatch(/×/);
+    }
+  });
+
+  it("offers exactly two gable pitches, plus an unmodified flat run", () => {
+    expect(ROOF_PITCH_OPTIONS.map((option) => option.value)).toEqual(["", "normal", "steep"]);
   });
 
   it("uses the hardest measured run as the scalar complexity fallback", () => {
-    expect(dominantPermanentComplexity({ aerial: 100, easy: 0, standard: 0, complex: 0 })).toBe(
-      "aerial",
-    );
-    expect(dominantPermanentComplexity({ aerial: 0, easy: 100, standard: 0, complex: 0 })).toBe(
-      "easy",
-    );
-    expect(dominantPermanentComplexity({ aerial: 0, easy: 0, standard: 0, complex: 100 })).toBe(
-      "complex",
-    );
-    expect(dominantPermanentComplexity({ aerial: 50, easy: 50, standard: 0, complex: 0 })).toBe(
-      "easy",
-    );
-    expect(dominantPermanentComplexity({ aerial: 0, easy: 50, standard: 0, complex: 50 })).toBe(
-      "complex",
-    );
-    expect(dominantPermanentComplexity({ aerial: 0, easy: 0, standard: 0, complex: 0 })).toBe(
-      "standard",
-    );
+    expect(dominantPermanentComplexity({ easy: 100, standard: 0, complex: 0 })).toBe("easy");
+    expect(dominantPermanentComplexity({ easy: 0, standard: 0, complex: 100 })).toBe("complex");
+    expect(dominantPermanentComplexity({ easy: 50, standard: 0, complex: 50 })).toBe("complex");
+    expect(dominantPermanentComplexity({ easy: 0, standard: 0, complex: 0 })).toBe("standard");
   });
 
   it("hides the previous total while a pricing change is being recomputed", async () => {

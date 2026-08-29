@@ -102,8 +102,10 @@ import {
   designScale,
   designToEstimateInputs,
   hasDesign,
+  roofPitchFactor,
   runScale,
   sumEstimateInputs,
+  type RoofPitch,
 } from "@/lib/estimator/design";
 import {
   calculateLandscapeCircuits,
@@ -264,11 +266,21 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 
 type PermanentComplexity = LinearFeetEstimateRequest["permanent_complexity"];
 export const PERMANENT_COMPLEXITY_OPTIONS = [
-  { value: "aerial", label: "Aerial Pics · 1.5×" },
   { value: "easy", label: "Easy" },
   { value: "standard", label: "Standard" },
   { value: "complex", label: "Complex" },
 ] as const satisfies readonly { value: PermanentComplexity; label: string }[];
+
+/**
+ * Gable pitch is a *measurement* correction, not a labor tier: it scales the
+ * run's footage, while complexity above still sets the COGS markup. The two are
+ * independent, so a steep gable can still be an Easy run.
+ */
+export const ROOF_PITCH_OPTIONS = [
+  { value: "", label: "Eave / flat run · 1.00×" },
+  { value: "normal", label: "Gable, normal pitch (6/12) · 1.12×" },
+  { value: "steep", label: "Gable, steep pitch (12/12) · 1.41×" },
+] as const satisfies readonly { value: "" | RoofPitch; label: string }[];
 const PERMANENT_COMPLEXITIES: readonly PermanentComplexity[] = PERMANENT_COMPLEXITY_OPTIONS.map(
   ({ value }) => value,
 );
@@ -3280,13 +3292,18 @@ export function LightDesigner({
   );
   const feet = inputs.feet;
   const permanentComplexityFeet = (() => {
-    const totals = { aerial: 0, easy: 0, standard: 0, complex: 0 };
+    const totals = { easy: 0, standard: 0, complex: 0 };
     for (const shot of liveShots) {
       for (const run of shot.design.runs) {
         const product = productById.get(run.productId);
         if (product?.category !== "permanent") continue;
+        // Pitch-correct here too, so this map stays a true breakdown of the same
+        // footage the top-level `feet` reports. A mismatch would silently skew
+        // the measured-feet-weighted markup.
         totals[run.permanentComplexity ?? "standard"] +=
-          polylineLength(run.points) * runScale(shot.design, run, shot.photo.width).ftPerPx;
+          polylineLength(run.points) *
+          runScale(shot.design, run, shot.photo.width).ftPerPx *
+          roofPitchFactor(run);
       }
     }
     return totals;
@@ -4941,6 +4958,35 @@ export function LightDesigner({
                                 Select a permanent-lighting run to set its install complexity.
                               </p>
                             )
+                          ) : null}
+                          {sides.permanent && selectedPermanentRun ? (
+                            <label className="est-opt-rate">
+                              <span>Selected run roof pitch</span>
+                              <select
+                                className="est-input"
+                                value={selectedPermanentRun.roofPitch ?? ""}
+                                onChange={(event) =>
+                                  dispatch({
+                                    type: "UPDATE_RUN",
+                                    id: selectedPermanentRun.id,
+                                    patch: {
+                                      // "" clears the correction back to a flat eave.
+                                      roofPitch: (event.target.value || undefined) as
+                                        | RoofPitch
+                                        | undefined,
+                                    },
+                                  })
+                                }
+                                aria-label="Selected permanent run roof pitch"
+                              >
+                                {ROOF_PITCH_OPTIONS.map(({ value, label }) => (
+                                  <option key={value || "flat"} value={value}>
+                                    {label}
+                                  </option>
+                                ))}
+                              </select>
+                              <span className="est-internal-badge">Internal</span>
+                            </label>
                           ) : null}
                           {sides.seasonal ? (
                             <label className="est-opt-rate">

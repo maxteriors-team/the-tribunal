@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Design, PlanImage } from "@/lib/estimator/types";
+import type { Design, PlanImage, Run } from "@/lib/estimator/types";
 
 import { editorReducer, initialEditorState } from "./editor-store";
 
@@ -68,6 +68,54 @@ describe("editorReducer plan images", () => {
 
     expect(deleted.design.planImages).toEqual([]);
     expect(deleted.selection).toBeNull();
+  });
+});
+
+describe("editorReducer gable pitch", () => {
+  const ROOFLINE_RUN: Run = {
+    id: "roofline-1",
+    productId: "permanent-roofline",
+    points: [
+      { x: 0, y: 0 },
+      { x: 400, y: 0 },
+    ],
+  };
+
+  it("marks a run as a gable and clears it back to a flat eave", () => {
+    const added = editorReducer(initialEditorState(), { type: "ADD_RUN", run: ROOFLINE_RUN });
+    const steep = editorReducer(added, {
+      type: "UPDATE_RUN",
+      id: ROOFLINE_RUN.id,
+      patch: { roofPitch: "steep" },
+    });
+    // The picker's "Eave / flat run" option sends undefined; a stuck pitch would
+    // keep silently inflating the run's billed footage.
+    const cleared = editorReducer(steep, {
+      type: "UPDATE_RUN",
+      id: ROOFLINE_RUN.id,
+      patch: { roofPitch: undefined },
+    });
+
+    expect(added.design.runs[0].roofPitch).toBeUndefined();
+    expect(steep.design.runs[0].roofPitch).toBe("steep");
+    expect(cleared.design.runs[0].roofPitch).toBeUndefined();
+  });
+
+  it("keeps pitch and complexity independent, so a steep gable can still be Easy", () => {
+    const added = editorReducer(initialEditorState(), { type: "ADD_RUN", run: ROOFLINE_RUN });
+    const pitched = editorReducer(added, {
+      type: "UPDATE_RUN",
+      id: ROOFLINE_RUN.id,
+      patch: { roofPitch: "steep" },
+    });
+    const tiered = editorReducer(pitched, {
+      type: "UPDATE_RUN",
+      id: ROOFLINE_RUN.id,
+      patch: { permanentComplexity: "easy" },
+    });
+
+    expect(tiered.design.runs[0].roofPitch).toBe("steep");
+    expect(tiered.design.runs[0].permanentComplexity).toBe("easy");
   });
 });
 

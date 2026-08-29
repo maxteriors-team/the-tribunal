@@ -106,9 +106,11 @@ class LinearFeetEstimateRequest(BaseModel):
     storage: bool = False  # christmas off-season storage
     proposal_side: Literal["permanent", "seasonal", "comparison"] = "comparison"
     discount_amount: float = Field(default=0, ge=0, le=1_000_000)
-    permanent_complexity: Literal["aerial", "easy", "standard", "complex"] = "standard"
-    permanent_complexity_feet: dict[Literal["aerial", "easy", "standard", "complex"], float] = (
-        Field(default_factory=dict)
+    # Gable pitch is corrected into ``feet`` upstream (a sloped rake is simply
+    # longer), so complexity here is purely the labor/COGS markup tier.
+    permanent_complexity: Literal["easy", "standard", "complex"] = "standard"
+    permanent_complexity_feet: dict[Literal["easy", "standard", "complex"], float] = Field(
+        default_factory=dict
     )
     per_ft_override: float | None = Field(default=None, ge=0)  # deprecated, ignored
     christmas_per_ft_override: float | None = Field(default=None, ge=0)  # INTERNAL seasonal rate

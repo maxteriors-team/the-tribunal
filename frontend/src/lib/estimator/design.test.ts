@@ -106,6 +106,65 @@ describe("designToEstimateInputs", () => {
     expect(out.christmas_items).toEqual({});
   });
 
+  describe("gable pitch (Pythagorean rake correction)", () => {
+    const gable = (roofPitch?: "normal" | "steep"): Design => ({
+      calibration: cal,
+      runs: [
+        {
+          ...run("r1", roofline.id, [
+            { x: 0, y: 0 },
+            { x: 400, y: 0 },
+          ]),
+          ...(roofPitch ? { roofPitch } : {}),
+        },
+      ],
+      items: [],
+    });
+    const feetOf = (design: Design) => designToEstimateInputs(design, productById, PHOTO_W).feet;
+
+    it("leaves an unmarked run at its measured length", () => {
+      // A horizontal eave is already true length; saved designs predate pitch.
+      expect(feetOf(gable())).toBe(40);
+    });
+
+    it("scales a normal 6/12 gable by sqrt(1 + (6/12)^2)", () => {
+      expect(feetOf(gable("normal"))).toBe(Math.round(40 * Math.sqrt(1.25))); // 45
+    });
+
+    it("scales a steep 12/12 gable by sqrt(2)", () => {
+      expect(feetOf(gable("steep"))).toBe(Math.round(40 * Math.SQRT2)); // 57
+    });
+
+    it("orders flat < normal < steep and never shrinks a run", () => {
+      const [flat, normal, steep] = [
+        feetOf(gable()),
+        feetOf(gable("normal")),
+        feetOf(gable("steep")),
+      ];
+      expect(flat).toBeLessThan(normal);
+      expect(normal).toBeLessThan(steep);
+    });
+
+    it("corrects only the roofline, leaving other linear products measured flat", () => {
+      const design: Design = {
+        calibration: cal,
+        runs: [
+          {
+            ...run("c1", mini.id, [
+              { x: 0, y: 0 },
+              { x: 400, y: 0 },
+            ]),
+            roofPitch: "steep",
+          },
+        ],
+        items: [],
+      };
+      const out = designToEstimateInputs(design, productById, PHOTO_W);
+      expect(out.feet).toBe(0);
+      expect(out.christmas_items.mini_lights?.standard).toBe(40);
+    });
+  });
+
   it("sums equal-pixel runs using their assigned scales while old runs stay on Scale 1", () => {
     const design: Design = {
       calibration: cal,

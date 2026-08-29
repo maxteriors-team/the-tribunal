@@ -8,9 +8,14 @@ and feet-privacy contract are all locked down without touching Postgres.
 
 from __future__ import annotations
 
+import math
 import uuid
 
 import pytest
+
+# Aliased: this module already binds ``ValidationError`` to the service-layer
+# exception below, and the boundary rejection under test is Pydantic's.
+from pydantic import ValidationError as PydanticValidationError
 
 from app.schemas.estimate import (
     EstimateCustomLine,
@@ -119,15 +124,37 @@ def test_run_complexity_uses_its_configured_markup_in_live_comparison(
     assert easy_result.permanent.total == expected_easy * 1000
 
 
-def test_aerial_pics_run_uses_fixed_multiplier_in_live_comparison() -> None:
-    result = _estimate(
-        _complexity_config((2, 3, 4)),
-        100,
-        permanent_complexity_feet={"aerial": 100},
+def test_retired_aerial_tier_is_rejected_rather_than_silently_repriced() -> None:
+    """The retired tier must fail loudly at the boundary.
+
+    'aerial' used to force a 1.5 markup here, undercutting the configured 3.0
+    standard and halving live gable comparisons. Rejecting it at validation is
+    what forces stale persisted rows through the migration instead of letting
+    them quietly fall back to a different price.
+    """
+    with pytest.raises(PydanticValidationError):
+        _estimate(
+            _complexity_config((2, 3, 4)),
+            100,
+            permanent_complexity_feet={"aerial": 100},
+        )
+
+    with pytest.raises(PydanticValidationError):
+        _estimate(_complexity_config((2, 3, 4)), 100, permanent_complexity="aerial")
+
+
+def test_gable_pitch_reaches_pricing_as_feet_at_an_unchanged_markup() -> None:
+    """A steep rake costs more because it is longer, not because it is marked up."""
+    config = _complexity_config((2, 3, 4))
+    flat = _estimate(config, 100, permanent_complexity_feet={"standard": 100})
+    steep = _estimate(
+        config,
+        100 * math.sqrt(2),
+        permanent_complexity_feet={"standard": 100 * math.sqrt(2)},
     )
 
-    assert result.permanent.markup == 1.5
-    assert result.permanent.total == 1500
+    assert steep.permanent.markup == flat.permanent.markup
+    assert steep.permanent.total > flat.permanent.total
 
 
 def test_flat_discount_applies_only_to_selected_proposal_side() -> None:
@@ -687,18 +714,34 @@ def test_convert_all_complex_run_uses_configured_markup(
     assert _lines_sum(lines) == expected_complex * 1000
 
 
-def test_convert_aerial_pics_run_uses_fixed_multiplier() -> None:
+def test_convert_gable_run_bills_the_longer_rake_at_the_standard_markup() -> None:
+    """Design -> quote must carry pitch-corrected feet, not a discounted markup.
+
+    The designer sends the already-corrected rake length, so conversion sees a
+    plain Standard run that is simply longer. The retired 'aerial' tier used to
+    force a 1.5 markup here and halve the converted quote.
+    """
+    config = _complexity_config((2, 3, 4))
+    rake_feet = 100 * math.sqrt(2)  # 100ft measured across a 12/12 gable
     _title, pricing, lines = _convert(
-        _complexity_config((2, 3, 4)),
+        config,
         "permanent",
-        100,
-        permanent_complexity="aerial",
-        permanent_complexity_feet={"aerial": 100},
+        rake_feet,
+        permanent_complexity="standard",
+        permanent_complexity_feet={"standard": rake_feet},
     )
 
-    assert pricing.markup == 1.5
-    assert pricing.total == 1500
-    assert _lines_sum(lines) == 1500
+    _flat_title, flat_pricing, _flat_lines = _convert(
+        config,
+        "permanent",
+        100,
+        permanent_complexity="standard",
+        permanent_complexity_feet={"standard": 100},
+    )
+
+    assert pricing.markup == flat_pricing.markup == 3
+    assert pricing.total > flat_pricing.total
+    assert _lines_sum(lines) == pricing.total
 
 
 def test_convert_seasonal_a_la_carte_itemizes_roofline_and_decor() -> None:

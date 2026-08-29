@@ -8,6 +8,7 @@ monthly, Care Plan price/savings, bistro strand fill, and tax.
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 
 import pytest
@@ -467,31 +468,54 @@ def test_permanent_rounds_165_feet_up_to_200_foot_kit():
 def test_permanent_complexity_selects_configured_multiplier():
     config = _permanent_config()
 
-    aerial = pp.price_permanent(config, feet=100, complexity="aerial")
     easy = pp.price_permanent(config, feet=100, complexity="easy")
     standard = pp.price_permanent(config, feet=100, complexity="standard")
     complex_job = pp.price_permanent(config, feet=100, complexity="complex")
 
-    assert (aerial.markup, easy.markup, standard.markup, complex_job.markup) == (1.5, 2.5, 3, 3.5)
-    assert (aerial.raw_total, easy.raw_total, standard.raw_total, complex_job.raw_total) == (
-        2105,
-        3508,
-        4210,
-        4912,
-    )
+    assert (easy.markup, standard.markup, complex_job.markup) == (2.5, 3, 3.5)
+    assert (easy.raw_total, standard.raw_total, complex_job.raw_total) == (3508, 4210, 4912)
 
 
 def test_permanent_complexity_preserves_configured_multiplier_identity():
     config = _permanent_config(easy_markup=3.5, standard_markup=3, complex_markup=2.5)
 
-    aerial = pp.price_permanent(config, feet=100, complexity="aerial")
     easy = pp.price_permanent(config, feet=100, complexity="easy")
+    standard = pp.price_permanent(config, feet=100, complexity="standard")
     complex_job = pp.price_permanent(config, feet=100, complexity="complex")
 
-    assert aerial.markup == 1.5
     assert easy.markup == 3.5
+    assert standard.markup == 3
     assert complex_job.markup == 2.5
-    assert aerial.total < complex_job.total < easy.total
+    assert complex_job.total < standard.total < easy.total
+
+
+def test_no_complexity_tier_undercuts_the_configured_standard_markup():
+    """Guard the half-price gable bug.
+
+    A retired "aerial" tier hardcoded a 1.5 markup in this map, which *replaced*
+    the configured 3.0 standard markup and quoted every gable at roughly half
+    price. Gable length is a measurement concern (the rake is longer), never a
+    discount, so no tier may price below the operator's configured floor and an
+    unknown tier must fall back to standard rather than invent a multiplier.
+    """
+    config = _permanent_config()
+    standard = pp.price_permanent(config, feet=100, complexity="standard")
+
+    assert pp.price_permanent(config, feet=100, complexity="aerial").markup == standard.markup
+    assert min(
+        pp.price_permanent(config, feet=100, complexity=tier).markup
+        for tier in ("easy", "standard", "complex")
+    ) == pytest.approx(config.permanent.easy_markup)
+
+
+def test_gable_pitch_scales_feet_rather_than_discounting_markup():
+    """The Pythagorean correction reaches pricing as feet, at an unchanged markup."""
+    config = _permanent_config()
+    flat = pp.price_permanent(config, feet=100, complexity="standard")
+    steep = pp.price_permanent(config, feet=100 * math.sqrt(2), complexity="standard")
+
+    assert steep.markup == flat.markup
+    assert steep.total > flat.total
 
 
 def test_permanent_weights_markup_by_measured_run_footage():
