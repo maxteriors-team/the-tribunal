@@ -20,7 +20,7 @@ standard markup. That is the point of the fix, but any already-shared link
 showing the old halved number will change.
 
 Revision ID: 20260828_gable_pitch
-Revises: 20260828_handoff_images
+Revises: 20260826_msg_sender
 Create Date: 2026-08-28
 """
 
@@ -29,7 +29,7 @@ from collections.abc import Sequence
 from alembic import op
 
 revision: str = "20260828_gable_pitch"
-down_revision: str | None = "20260828_handoff_images"
+down_revision: str | None = "20260826_msg_sender"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
