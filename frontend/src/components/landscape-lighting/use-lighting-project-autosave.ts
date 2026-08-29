@@ -101,6 +101,12 @@ function retryableRequestError(error: unknown): boolean {
   return error.response === undefined || error.response.status >= 500;
 }
 
+/** What the rep sees when a proposal is blocked because the drawing never synced. */
+function syncFailureMessage(detail: string | null): string {
+  const reason = detail ?? "Tribunal could not sync this draft.";
+  return `The drawing did not sync, so the proposal was not created. ${reason}`;
+}
+
 function requestErrorMessage(error: unknown): string {
   if (!isAxiosError(error)) return "Tribunal could not sync this draft.";
   const body = error.response?.data as
@@ -134,6 +140,7 @@ export function useLightingProjectAutosave({
   const queuedDraftRef = useRef<LandscapeDraft | null>(null);
   const inFlightRef = useRef(false);
   const draftSyncFailedRef = useRef(false);
+  const syncErrorRef = useRef<string | null>(null);
   const conflictRef = useRef<LightingProjectConflict | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -303,9 +310,10 @@ export function useLightingProjectAutosave({
         });
       } else {
         draftSyncFailedRef.current = true;
+        syncErrorRef.current = requestErrorMessage(error);
         if (mountedRef.current) {
           setStatus("error");
-          setErrorMessage(requestErrorMessage(error));
+          setErrorMessage(syncErrorRef.current);
         }
         if (retryableRequestError(error)) scheduleAutomaticRetry();
       }
@@ -360,13 +368,22 @@ export function useLightingProjectAutosave({
 
   const saveNow = useCallback(async (): Promise<LightingProjectDetail> => {
     clearDebounceTimer();
+    // A sync that already failed is retried here instead of dead-ending the rep:
+    // the earlier failure is usually a blip, and telling someone to "retry the
+    // sync" from a proposal button they just pressed is not an action they can
+    // take. One retry, then the real failure reason is what they see.
+    let retriedFailedSync = false;
     const deadline = Date.now() + 30_000;
     while (inFlightRef.current || queuedDraftRef.current) {
       if (conflictRef.current) {
         throw new Error("Resolve the drawing conflict before creating the proposal.");
       }
       if (draftSyncFailedRef.current) {
-        throw new Error("Retry the pending drawing sync before creating the proposal.");
+        if (retriedFailedSync) throw new Error(syncFailureMessage(syncErrorRef.current));
+        retriedFailedSync = true;
+        clearRetryTimer();
+        retryAttemptRef.current = 0;
+        draftSyncFailedRef.current = false;
       }
       await flushRef.current();
       if (Date.now() >= deadline) {
@@ -377,11 +394,12 @@ export function useLightingProjectAutosave({
       }
     }
     await storageChainRef.current;
-    if (conflictRef.current || draftSyncFailedRef.current) {
-      throw new Error("The drawing must finish syncing before creating the proposal.");
+    if (conflictRef.current) {
+      throw new Error("Resolve the drawing conflict before creating the proposal.");
     }
+    if (draftSyncFailedRef.current) throw new Error(syncFailureMessage(syncErrorRef.current));
     return projectRef.current;
-  }, [clearDebounceTimer]);
+  }, [clearDebounceTimer, clearRetryTimer]);
 
   const loadTribunalVersion = useCallback(async () => {
     if (!conflictRef.current) return;

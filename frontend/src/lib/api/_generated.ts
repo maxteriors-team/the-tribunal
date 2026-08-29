@@ -25775,6 +25775,8 @@ export interface components {
             bistroRunId?: string | null;
             /** Catalogitemid */
             catalogItemId?: string | null;
+            /** Catalogitemoverride */
+            catalogItemOverride?: boolean | null;
             /** Catalogsku */
             catalogSku?: string | null;
             /** Circuitid */
@@ -30369,10 +30371,14 @@ export interface components {
             colors?: string[] | null;
             /** Id */
             id: string;
+            /** Permanentcomplexity */
+            permanentComplexity?: ("aerial" | "easy" | "standard" | "complex") | null;
             /** Points */
             points: components["schemas"]["PointSchema"][];
             /** Productid */
             productId: string;
+            /** Scaleslot */
+            scaleSlot?: (1 | 2) | null;
             /** Sourcevoltage */
             sourceVoltage?: number | null;
             /** Spacingin */

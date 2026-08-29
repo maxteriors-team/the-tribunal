@@ -37819,6 +37819,17 @@
             ],
             "title": "Catalogitemid"
           },
+          "catalogItemOverride": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalogitemoverride"
+          },
           "catalogSku": {
             "anyOf": [
               {
@@ -49898,6 +49909,23 @@
             "title": "Id",
             "type": "string"
           },
+          "permanentComplexity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "aerial",
+                  "easy",
+                  "standard",
+                  "complex"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permanentcomplexity"
+          },
           "points": {
             "items": {
               "$ref": "#/components/schemas/PointSchema"
@@ -49910,6 +49938,21 @@
             "maxLength": 250,
             "title": "Productid",
             "type": "string"
+          },
+          "scaleSlot": {
+            "anyOf": [
+              {
+                "enum": [
+                  1,
+                  2
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scaleslot"
           },
           "sourceVoltage": {
             "anyOf": [
