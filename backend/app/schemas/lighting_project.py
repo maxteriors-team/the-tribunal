@@ -59,6 +59,15 @@ class RunSchema(DocumentSchema):
     id: ShortText
     product_id: ShortText = Field(validation_alias=AliasChoices("productId", "product_id"))
     points: Annotated[list[PointSchema], Field(max_length=5000)]
+    # Which of the drawing's two scales measured this run. Missing means scale 1.
+    scale_slot: Literal[1, 2] | None = Field(
+        default=None, validation_alias=AliasChoices("scaleSlot", "scale_slot")
+    )
+    # Per-run install difficulty; weights permanent-lighting markup at quote time.
+    permanent_complexity: Literal["aerial", "easy", "standard", "complex"] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("permanentComplexity", "permanent_complexity"),
+    )
     spacing_in: Annotated[float, Field(gt=0, le=1200)] | None = Field(
         default=None, validation_alias=AliasChoices("spacingIn", "spacing_in")
     )
@@ -112,6 +121,12 @@ class PlacedItemSchema(DocumentSchema):
     )
     catalog_item_id: CatalogKey | None = Field(
         default=None, validation_alias=AliasChoices("catalogItemId", "catalog_item_id")
+    )
+    # True when the rep pinned this exact catalog product instead of letting the
+    # package default substitute one.
+    catalog_item_override: bool | None = Field(
+        default=None,
+        validation_alias=AliasChoices("catalogItemOverride", "catalog_item_override"),
     )
     catalog_sku: CatalogKey | None = Field(
         default=None, validation_alias=AliasChoices("catalogSku", "catalog_sku")
