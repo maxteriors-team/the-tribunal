@@ -15845,7 +15845,7 @@ export interface components {
              * @default standard
              * @enum {string}
              */
-            permanent_complexity: "aerial" | "easy" | "standard" | "complex";
+            permanent_complexity: "easy" | "standard" | "complex";
             /** Permanent Complexity Feet */
             permanent_complexity_feet?: {
                 [key: string]: number;
@@ -17957,7 +17957,7 @@ export interface components {
              * @default standard
              * @enum {string}
              */
-            permanent_complexity: "aerial" | "easy" | "standard" | "complex";
+            permanent_complexity: "easy" | "standard" | "complex";
             /** Permanent Complexity Feet */
             permanent_complexity_feet?: {
                 [key: string]: number;
@@ -21939,7 +21939,7 @@ export interface components {
              * @default standard
              * @enum {string}
              */
-            permanent_complexity: "aerial" | "easy" | "standard" | "complex";
+            permanent_complexity: "easy" | "standard" | "complex";
             /** Permanent Complexity Feet */
             permanent_complexity_feet?: {
                 [key: string]: number;
