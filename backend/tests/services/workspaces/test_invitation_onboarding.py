@@ -22,6 +22,7 @@ from sqlalchemy import select
 from app.core.encryption import hash_value
 from app.core.security import get_password_hash
 from app.db.session import AsyncSessionLocal, engine
+from app.models.field_service import Technician
 from app.models.invitation import WorkspaceInvitation
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
@@ -118,6 +119,28 @@ async def test_invited_signup_joins_the_inviting_workspace_not_a_personal_one() 
         await db.rollback()
 
 
+async def test_technician_invitation_provisions_an_assignable_roster_entry() -> None:
+    async with AsyncSessionLocal() as db:
+        email = f"technician-{uuid.uuid4().hex[:8]}@example.com"
+        workspace = await _make_workspace(db)
+        await _invite(db, workspace, email, role="technician")
+        user = await _make_user(db, email)
+
+        await onboard_user_workspace(db, user)
+
+        roster_entry = await db.scalar(
+            select(Technician).where(
+                Technician.workspace_id == workspace.id,
+                Technician.user_id == user.id,
+            )
+        )
+        assert roster_entry is not None
+        assert roster_entry.name == user.full_name
+        assert roster_entry.is_active is True
+
+        await db.rollback()
+
+
 async def test_invitation_email_casing_does_not_strand_the_invitee() -> None:
     """Invitations stored with the casing an admin typed must still match."""
     async with AsyncSessionLocal() as db:
@@ -176,9 +199,7 @@ async def test_existing_member_is_never_silently_added_to_a_new_workspace() -> N
         user = await _make_user(db, email)
         own = await _make_workspace(db)
         db.add(
-            WorkspaceMembership(
-                user_id=user.id, workspace_id=own.id, role="owner", is_default=True
-            )
+            WorkspaceMembership(user_id=user.id, workspace_id=own.id, role="owner", is_default=True)
         )
         await db.flush()
 
