@@ -251,6 +251,62 @@ export function permanentRunFeet(
   return totals;
 }
 
+/**
+ * How much of the house this quote covers. The rep picks one; it selects which
+ * tagged runs are priced, so the same drawing yields a whole-home, a
+ * front-and-sides, and a front-only number without redrawing anything.
+ */
+export type CoverageKey = "whole" | "front-sides" | "front";
+
+export const COVERAGE_OPTIONS = [
+  { key: "whole", label: "Whole home", elevations: ["front", "side", "back"] },
+  { key: "front-sides", label: "Front and sides", elevations: ["front", "side"] },
+  { key: "front", label: "Front only", elevations: ["front"] },
+] as const satisfies readonly {
+  key: CoverageKey;
+  label: string;
+  elevations: readonly RunElevation[];
+}[];
+
+function coverageElevations(coverage: CoverageKey): readonly RunElevation[] {
+  return (COVERAGE_OPTIONS.find((option) => option.key === coverage) ?? COVERAGE_OPTIONS[0])
+    .elevations;
+}
+
+/**
+ * The same shots with the runs this coverage level excludes removed, so every
+ * downstream measurement — priced feet, decor, complexity — reflects the choice
+ * from one filter instead of each caller re-deriving it.
+ *
+ * An untagged run survives every coverage level: it is treated as front, and
+ * front is in all three. That keeps drawings made before elevation tagging (and
+ * seasonal runs, which are never tagged) priced exactly as they are today.
+ */
+export function shotsForCoverage<T extends PermanentMeasureShot>(
+  shots: readonly T[],
+  coverage: CoverageKey,
+): T[] {
+  const included = coverageElevations(coverage);
+  return shots.map((shot) => ({
+    ...shot,
+    design: {
+      ...shot.design,
+      runs: shot.design.runs.filter((run) => included.includes(run.elevation ?? "front")),
+    },
+  }));
+}
+
+/** Measured permanent feet each coverage level would price, for the rep's toggle. */
+export function coverageFeet(
+  elevationFeet: Readonly<Record<RunElevation, number>>,
+): Record<CoverageKey, number> {
+  return {
+    whole: elevationFeet.front + elevationFeet.side + elevationFeet.back,
+    "front-sides": elevationFeet.front + elevationFeet.side,
+    front: elevationFeet.front,
+  };
+}
+
 /** True when the design has anything drawn or placed. */
 export function hasDesign(design: Design): boolean {
   return design.runs.length > 0 || design.items.length > 0;
