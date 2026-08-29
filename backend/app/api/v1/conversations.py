@@ -25,8 +25,14 @@ from app.schemas.conversation import (
     TeachAIResponse,
     UnreadSummary,
 )
+from app.schemas.conversation_note import (
+    ConversationNoteCreate,
+    ConversationNoteResponse,
+    ConversationNoteUpdate,
+)
 from app.services.ai.teach_ai import save_training_example
 from app.services.conversations import ConversationService
+from app.services.conversations.note_service import ConversationNoteService
 
 router = APIRouter()
 
@@ -359,4 +365,100 @@ async def reset_followup_counter(
     return await svc.reset_followup_counter(
         conversation_id=conversation_id,
         workspace_id=workspace_id,
+    )
+
+
+# ── Notes ────────────────────────────────────────────────────────────────────
+# All four ride on CRM read: `crm:write` is deliberately the *destructive*
+# contact tier (delete/bulk-delete/import, manager and above), so gating notes
+# behind it would lock out the sales reps and techs who actually take them
+# mid-call. Annotating a conversation you can already open is not a destructive
+# contact power, and `mark_conversation_read` above sets the same precedent.
+#
+# The blast radius stays small because the service restricts edits and deletes
+# to the note's author, so no one can rewrite a colleague's record of a call.
+
+
+@router.get("/{conversation_id}/notes", response_model=list[ConversationNoteResponse])
+async def list_conversation_notes(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> list[ConversationNoteResponse]:
+    """List the notes on a conversation, oldest first."""
+    svc = ConversationNoteService(db)
+    return await svc.list_notes(
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+    )
+
+
+@router.post(
+    "/{conversation_id}/notes",
+    response_model=ConversationNoteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_conversation_note(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    request: ConversationNoteCreate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> ConversationNoteResponse:
+    """Add a note to a conversation."""
+    svc = ConversationNoteService(db)
+    return await svc.create_note(
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+        author_user_id=current_user.id,
+        body=request.body,
+    )
+
+
+@router.patch(
+    "/{conversation_id}/notes/{note_id}",
+    response_model=ConversationNoteResponse,
+)
+async def update_conversation_note(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    note_id: uuid.UUID,
+    request: ConversationNoteUpdate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> ConversationNoteResponse:
+    """Edit a note you wrote."""
+    svc = ConversationNoteService(db)
+    return await svc.update_note(
+        note_id=note_id,
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+        actor_user_id=current_user.id,
+        body=request.body,
+    )
+
+
+@router.delete(
+    "/{conversation_id}/notes/{note_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_conversation_note(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    note_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> None:
+    """Delete a note you wrote."""
+    svc = ConversationNoteService(db)
+    await svc.delete_note(
+        note_id=note_id,
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+        actor_user_id=current_user.id,
     )

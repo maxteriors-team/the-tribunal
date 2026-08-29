@@ -147,6 +147,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
     from app.models.contact_ai_memory import ContactAIMemory, ContactAIMemoryFact
     from app.models.conversation import Conversation, Message
     from app.models.conversation_booking_draft import ConversationBookingDraft
+    from app.models.conversation_note import ConversationNote
     from app.models.demo_request import DemoRequest
     from app.models.field_service import ServiceLocation
     from app.models.google_calendar_connection import GoogleCalendarConnection
@@ -219,6 +220,10 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
             },
         ),
         RotationTarget(ConversationBookingDraft, ("email", "confirmation_text")),
+        # Rep-authored notes and synced Quo call summaries describe customers by
+        # name, property and situation, so they rotate with the rest of the
+        # conversation payloads.
+        RotationTarget(ConversationNote, ("body",)),
         RotationTarget(
             Message,
             (

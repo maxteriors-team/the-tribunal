@@ -4633,6 +4633,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Conversation Notes
+         * @description List the notes on a conversation, oldest first.
+         */
+        get: operations["list_conversation_notes_api_v1_workspaces__workspace_id__conversations__conversation_id__notes_get"];
+        put?: never;
+        /**
+         * Create Conversation Note
+         * @description Add a note to a conversation.
+         */
+        post: operations["create_conversation_note_api_v1_workspaces__workspace_id__conversations__conversation_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/notes/{note_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Conversation Note
+         * @description Delete a note you wrote.
+         */
+        delete: operations["delete_conversation_note_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Conversation Note
+         * @description Edit a note you wrote.
+         */
+        patch: operations["update_conversation_note_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__patch"];
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/read": {
         parameters: {
             query?: never;
@@ -16714,6 +16762,56 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * ConversationNoteCreate
+         * @description A note a rep is adding to a conversation.
+         */
+        ConversationNoteCreate: {
+            /** Body */
+            body: string;
+        };
+        /**
+         * ConversationNoteResponse
+         * @description A note as rendered in the conversation's notes rail.
+         */
+        ConversationNoteResponse: {
+            /** Author Name */
+            author_name?: string | null;
+            /** Author User Id */
+            author_user_id?: number | null;
+            /** Body */
+            body: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Source */
+            source: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ConversationNoteUpdate
+         * @description An edit to a note the caller authored.
+         */
+        ConversationNoteUpdate: {
+            /** Body */
+            body: string;
         };
         /**
          * ConversationResponse
@@ -42599,6 +42697,142 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_conversation_notes_api_v1_workspaces__workspace_id__conversations__conversation_id__notes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationNoteResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_conversation_note_api_v1_workspaces__workspace_id__conversations__conversation_id__notes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationNoteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationNoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_conversation_note_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+                note_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_conversation_note_api_v1_workspaces__workspace_id__conversations__conversation_id__notes__note_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+                note_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationNoteUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationNoteResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
