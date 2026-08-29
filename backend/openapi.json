@@ -38635,6 +38635,11 @@
           "permanent": {
             "$ref": "#/components/schemas/PermanentConfig"
           },
+          "quote_expiry_enabled": {
+            "default": true,
+            "title": "Quote Expiry Enabled",
+            "type": "boolean"
+          },
           "quote_validity_days": {
             "default": 30,
             "maximum": 365.0,
@@ -38786,6 +38791,17 @@
                 "type": "null"
               }
             ]
+          },
+          "quote_expiry_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Expiry Enabled"
           },
           "quote_validity_days": {
             "anyOf": [
@@ -91444,6 +91460,65 @@
           }
         ],
         "summary": "Record Quote Deposit",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/reopen": {
+      "post": {
+        "description": "Put a lapsed quote back in front of the customer on a fresh window.",
+        "operationId": "reopen_quote_api_v1_workspaces__workspace_id__quotes__quote_id__reopen_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Reopen Quote",
         "tags": [
           "Quotes"
         ]

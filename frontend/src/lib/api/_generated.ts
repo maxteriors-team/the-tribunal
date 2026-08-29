@@ -8814,6 +8814,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen Quote
+         * @description Put a lapsed quote back in front of the customer on a fresh window.
+         */
+        post: operations["reopen_quote_api_v1_workspaces__workspace_id__quotes__quote_id__reopen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/revisions": {
         parameters: {
             query?: never;
@@ -25901,6 +25921,11 @@ export interface components {
             landscape?: components["schemas"]["LandscapeConfig"];
             permanent?: components["schemas"]["PermanentConfig"];
             /**
+             * Quote Expiry Enabled
+             * @default true
+             */
+            quote_expiry_enabled: boolean;
+            /**
              * Quote Validity Days
              * @default 30
              */
@@ -25940,6 +25965,8 @@ export interface components {
             financing?: components["schemas"]["FinancingConfig"] | null;
             landscape?: components["schemas"]["LandscapeConfig"] | null;
             permanent?: components["schemas"]["PermanentConfig"] | null;
+            /** Quote Expiry Enabled */
+            quote_expiry_enabled?: boolean | null;
             /** Quote Validity Days */
             quote_validity_days?: number | null;
             /** Roofline Comparison Enabled */
@@ -51224,6 +51251,38 @@ export interface operations {
                 "application/json": components["schemas"]["QuoteDepositRecordRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_quote_api_v1_workspaces__workspace_id__quotes__quote_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

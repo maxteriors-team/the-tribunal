@@ -12,6 +12,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   Pencil,
+  RotateCcw,
   Trash2,
   UserRound,
   Wrench,
@@ -162,6 +163,19 @@ export function QuotesList() {
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to decline quote")),
   });
 
+  const reopenMutation = useMutation({
+    mutationFn: (id: string) => quotesApi.reopen(workspaceId ?? "", id),
+    onSuccess: (q) => {
+      toast.success(
+        q.expiry_date
+          ? `Quote ${q.number} reopened until ${formatDate(q.expiry_date)}`
+          : `Quote ${q.number} reopened`,
+      );
+      invalidate();
+    },
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to reopen quote")),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (quote: Quote) => quotesApi.delete(workspaceId ?? "", quote.id),
     onSuccess: (_result, quote) => {
@@ -214,7 +228,8 @@ export function QuotesList() {
     sendMutation.isPending ||
     deliverMutation.isPending ||
     approveMutation.isPending ||
-    declineMutation.isPending;
+    declineMutation.isPending ||
+    reopenMutation.isPending;
 
   const clientProposalUrl = (quote: Quote): string | null =>
     quote.public_token ? `${window.location.origin}/p/quotes/${quote.public_token}` : null;
@@ -358,6 +373,7 @@ export function QuotesList() {
                     onDeliver={(channel) => deliverMutation.mutate({ id: quote.id, channel })}
                     onApprove={() => approveMutation.mutate(quote.id)}
                     onDecline={() => declineMutation.mutate(quote.id)}
+                    onReopen={() => reopenMutation.mutate(quote.id)}
                     onRecordDeposit={() => setRecordDepositQuote(quote)}
                     onConvert={() => setConvertQuote(quote)}
                     onAddServices={() => setServicesQuote(quote)}
@@ -512,6 +528,7 @@ interface RowActionsProps {
   onDeliver: (channel: QuoteDeliverChannel) => void;
   onApprove: () => void;
   onDecline: () => void;
+  onReopen: () => void;
   onRecordDeposit: () => void;
   onConvert: () => void;
   onAddServices: () => void;
@@ -535,6 +552,7 @@ function RowActions({
   onDeliver,
   onApprove,
   onDecline,
+  onReopen,
   onRecordDeposit,
   onConvert,
   onAddServices,
@@ -543,6 +561,9 @@ function RowActions({
   onDelete,
 }: RowActionsProps) {
   const isOpen = quote.status === "draft" || quote.status === "sent";
+  // Expiry is the one terminal status the customer never chose — the clock ran
+  // out — so unlike approved/declined it is offered back as a reversible action.
+  const canReopen = quote.status === "expired";
   const canChangeTerms = canEditQuote(quote);
   const isApproved = quote.status === "approved";
   const alreadyConverted = Boolean(quote.converted_job_id && quote.converted_invoice_id);
@@ -613,6 +634,12 @@ function RowActions({
               Decline
             </DropdownMenuItem>
           </>
+        )}
+        {canReopen && (
+          <DropdownMenuItem onClick={onReopen}>
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Reopen quote
+          </DropdownMenuItem>
         )}
         {hasClientLink && (
           <>

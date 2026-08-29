@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { QuoteExpirySettingsCard } from "@/components/settings/quote-expiry-settings-card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -181,6 +182,7 @@ function QuoteRevivalForm({ workspaceId, initialSettings, templates }: QuoteRevi
 
   return (
     <div className="space-y-6">
+      <QuoteExpirySettingsCard />
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
