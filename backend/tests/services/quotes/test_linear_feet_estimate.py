@@ -8,6 +8,7 @@ and feet-privacy contract are all locked down without touching Postgres.
 
 from __future__ import annotations
 
+import re
 import uuid
 
 import pytest
@@ -658,7 +659,15 @@ def test_convert_permanent_lines_sum_to_permanent_total() -> None:
     assert [kit.model_dump() for kit in pricing.selected_kits] == [{"feet": 100, "quantity": 1}]
     assert title == "Permanent Holiday Lighting"
     names = [li.name for li in lines]
-    assert "Permanent lighting package — covers 100 ft" in names
+    assert "Permanent lighting package" in names
+    # These names and descriptions are what the homeowner reads on the proposal,
+    # so none of them may spell out the measurement we took.
+    assert not [
+        text
+        for li in lines
+        for text in (li.name, li.description)
+        if text and re.search(r"\d\s*(ft|feet|linear)", text, re.IGNORECASE)
+    ]
     # The summed quote total equals the estimate exactly (no per-unit drift).
     assert _lines_sum(lines) == 3300
 
@@ -712,7 +721,7 @@ def test_convert_seasonal_a_la_carte_itemizes_roofline_and_decor() -> None:
     assert pricing.total == 1520
     assert title == "Christmas Lighting"
     names = [li.name for li in lines]
-    assert "100 ft roofline" in names
+    assert "Roofline" in names
     assert any("Garland" in n for n in names)
     assert _lines_sum(lines) == 1520
 

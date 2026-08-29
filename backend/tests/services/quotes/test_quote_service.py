@@ -9,6 +9,7 @@ they are marked ``integration`` and deselected by default. Run with
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, date, datetime, timedelta
@@ -1081,7 +1082,7 @@ async def test_create_quote_from_estimate_persists_priced_lines_and_contact() ->
             {"feet": 100, "quantity": 1}
         ]
         names = [li.name for li in quote.line_items]
-        assert "Permanent lighting package — covers 100 ft" in names
+        assert "Permanent lighting package" in names
         # The persisted line items sum back to the quote total.
         assert round(sum(li.total for li in quote.line_items), 2) == quote.total
 
@@ -1171,6 +1172,18 @@ async def test_create_quote_from_estimate_snapshots_preview_and_installation_sho
         public = await svc.get_public_proposal(sent.public_token)
         assert public.proposal_document is not None
         assert public.proposal_document["mockups"] == quote.proposal_document["mockups"]
+
+        # The homeowner never sees how many feet we measured. This asserts the
+        # payload their browser actually fetches, not just the label helper, so a
+        # measurement reintroduced anywhere upstream fails here.
+        assert public.line_items
+        leaked = [
+            text
+            for li in public.line_items
+            for text in (li.name, li.description)
+            if text and re.search(r"\d\s*(ft|feet|linear)", text, re.IGNORECASE)
+        ]
+        assert leaked == []
 
 
 async def test_create_quote_from_estimate_rejects_preview_for_missing_project_shot() -> None:
@@ -1352,7 +1365,7 @@ async def test_create_quote_from_estimate_seasonal_itemizes_decor() -> None:
         assert quote.contact_id is None  # no client details supplied -> unlinked
         assert quote.selected_permanent_kits == []
         names = [li.name for li in quote.line_items]
-        assert "100 ft roofline" in names
+        assert "Roofline" in names
 
 
 async def test_create_quote_from_estimate_empty_design_is_rejected() -> None:

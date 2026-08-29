@@ -137,7 +137,7 @@ def test_frozen_full_seasonal_quote_display_lines_are_unchanged():
     )
 
     assert [(line.label, line.line_total) for line in priced.lines] == [
-        ("160 ft roofline", 1079),
+        ("Roofline", 1079),
         ("Medium tree (8–15 ft)", 584),
         ("Small bush / shrub", 157),
         ("Wreath (36 in)", 96),
@@ -181,7 +181,7 @@ def test_frozen_install_only_quote_is_unchanged():
     assert priced.storage_cost == 0
     assert priced.raw_total == 2096
     assert [line.label for line in priced.lines] == [
-        "160 ft roofline",
+        "Roofline",
         "Medium tree (8–15 ft)",
         "Small bush / shrub",
         "Wreath (36 in)",

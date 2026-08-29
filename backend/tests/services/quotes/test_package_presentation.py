@@ -168,7 +168,7 @@ def test_christmas_package_pricing_breakdown_is_frozen() -> None:
         "min_applied": False,
         "lines": [
             {
-                "label": "100 ft roofline",
+                "label": "Roofline",
                 "detail": "Seasonal C9/mini install",
                 "quantity": 100.0,
                 "unit_price": 6.0,

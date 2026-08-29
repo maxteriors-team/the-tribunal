@@ -683,18 +683,11 @@ def price_permanent(
         PermanentKitSelection(feet=size, quantity=count)
         for size, count in sorted(counts.items(), reverse=True)
     ]
-    package_detail = " + ".join(
-        f"{kit.quantity} × {kit.feet}-ft kit" if kit.quantity > 1 else f"{kit.feet}-ft kit"
-        for kit in selected_kits
-    )
-    lines = [
-        _category_line(
-            f"Permanent lighting package — covers {package_feet} ft",
-            1,
-            raw_total,
-            detail=f"{ft:g} ft measured; {package_detail}",
-        )
-    ]
+    # Feet-free on purpose: this label and detail become the quote line item the
+    # homeowner reads on their proposal, and the measurement is ours. It is not
+    # lost -- ``feet``, ``package_feet`` and ``selected_kits`` below carry it
+    # structurally for the rep, behind auth.
+    lines = [_category_line("Permanent lighting package", 1, raw_total)]
 
     return PermanentPricing(
         feet=ft,
@@ -741,6 +734,8 @@ def _price_seasonal_item(
         line_total = gross_up_price(line_net, config)
         gross += line_total
         # per-ft categories read as "80 ft Garland"; each categories as the option name.
+        # That footage is material the customer receives, not the measurement we
+        # took of their house -- the roofline line is the one that had to lose it.
         label = f"{v:g} ft {option.name}" if item.unit == "per_ft" else option.name
         lines.append(_category_line(label, v, line_total))
     return net, gross, lines
@@ -773,7 +768,7 @@ def price_christmas(
     if roofline_cost > 0:
         lines.append(
             _category_line(
-                f"{ft:g} ft roofline",
+                "Roofline",  # feet-free: customer-facing label
                 ft,
                 roofline_cost,
                 detail="Seasonal C9/mini install",
