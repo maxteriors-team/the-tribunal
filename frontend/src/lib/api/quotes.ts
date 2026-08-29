@@ -85,6 +85,11 @@ export const quotesApi = {
     });
   },
 
+  /** Put a lapsed quote back in front of the customer on a fresh window. */
+  reopen: async (workspaceId: string, quoteId: string): Promise<Quote> => {
+    return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/reopen`);
+  },
+
   recordDeposit: async (
     workspaceId: string,
     quoteId: string,

@@ -19,6 +19,7 @@ const {
   getMock,
   deleteMock,
   assignMock,
+  reopenMock,
   lightingProjectGetMock,
   routerPushMock,
   useWorkspaceIdMock,
@@ -31,6 +32,7 @@ const {
   getMock: vi.fn(),
   deleteMock: vi.fn(),
   assignMock: vi.fn(),
+  reopenMock: vi.fn(),
   lightingProjectGetMock: vi.fn(),
   routerPushMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
@@ -57,6 +59,7 @@ vi.mock("@/lib/api/quotes", () => ({
     recordDeposit: recordDepositMock,
     approve: vi.fn(),
     decline: vi.fn(),
+    reopen: reopenMock,
   },
 }));
 
@@ -528,5 +531,40 @@ describe("QuotesList editing and deleting", () => {
 
     expect(screen.queryByText("Edit basic details")).not.toBeInTheDocument();
     expect(screen.queryByText("Delete quote")).not.toBeInTheDocument();
+  });
+});
+
+describe("QuotesList reopening a lapsed quote", () => {
+  it("offers Reopen on an expired quote and reports the new deadline", async () => {
+    const user = userEvent.setup();
+    listMock.mockResolvedValue({
+      items: [quote({ status: "expired", expiry_date: "2026-08-28" })],
+      total: 1,
+    });
+    reopenMock.mockResolvedValue(quote({ status: "sent", expiry_date: "2026-09-28" }));
+
+    renderList();
+
+    await user.click(await screen.findByRole("button", { name: "Actions" }));
+    await user.click(await screen.findByText("Reopen quote"));
+
+    await waitFor(() => expect(reopenMock).toHaveBeenCalledWith("ws-1", "quote-1"));
+    // The date is the whole point: reopening without a fresh window would be
+    // undone by the next expiry sweep, so the operator is told the new one.
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining("reopened until")),
+    );
+  });
+
+  it("does not offer Reopen on a quote the customer actually decided", async () => {
+    const user = userEvent.setup();
+    listMock.mockResolvedValue({ items: [quote({ status: "declined" })], total: 1 });
+
+    renderList();
+
+    await user.click(await screen.findByRole("button", { name: "Actions" }));
+    await screen.findByText("Assign owner");
+    // Approved and declined are customer decisions; only the clock is reversible.
+    expect(screen.queryByText("Reopen quote")).not.toBeInTheDocument();
   });
 });

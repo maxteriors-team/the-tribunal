@@ -52,6 +52,7 @@ function pricing(fin: FinancingConfig): PricingSettings {
     comparison_years: 5,
     roofline_comparison_enabled: false,
     quote_validity_days: 30,
+  quote_expiry_enabled: true,
     financing: fin,
   };
 }

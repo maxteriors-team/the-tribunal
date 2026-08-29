@@ -1502,3 +1502,110 @@ async def test_resending_never_extends_a_deadline_already_shown() -> None:
         await svc._ensure_sent_state(quote)
 
         assert quote.expiry_date == first_expiry
+
+
+async def test_expiry_can_be_switched_off_for_a_workspace() -> None:
+    """A workspace that never wants quotes to lapse leaves the date blank."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        ws.settings = {"pricing": {"quote_expiry_enabled": False}}
+        await db.flush()
+        svc = QuoteService(db)
+        created = await svc.create_quote(ws.id, QuoteCreate(line_items=[]), created_by_id=None)
+
+        quote = await _orm_quote(db, created.id)
+        await svc._ensure_sent_state(quote)
+
+        assert quote.sent_at is not None
+        # No deadline at all, rather than a very distant one: a blank expiry is
+        # what ``overdue_sent_predicate`` treats as never lapsing.
+        assert quote.expiry_date is None
+
+        await svc._expire_overdue(ws.id)
+        await db.refresh(quote)
+        assert quote.status == "sent"
+
+
+async def test_reopening_a_lapsed_quote_survives_the_expiry_sweep() -> None:
+    """The whole point: it must not be re-expired by the next read."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        created = await svc.create_quote(ws.id, QuoteCreate(line_items=[]), created_by_id=None)
+        quote = await _orm_quote(db, created.id)
+        await svc._ensure_sent_state(quote)
+        # Lapse it the way real time would.
+        quote.expiry_date = date.today() - timedelta(days=1)
+        await db.flush()
+        await svc._expire_overdue(ws.id)
+        await db.refresh(quote)
+        assert quote.status == "expired"
+
+        reopened = await svc.reopen_quote(ws.id, created.id)
+
+        assert reopened.status == "sent"
+        # A fresh window, not the stale date: leaving the past date in place
+        # would let the very next sweep re-expire it.
+        assert reopened.expiry_date == date.today() + timedelta(days=30)
+
+        await svc._expire_overdue(ws.id)
+        await db.refresh(quote)
+        assert quote.status == "sent"
+
+
+async def test_reopening_with_expiry_switched_off_clears_the_deadline() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        created = await svc.create_quote(ws.id, QuoteCreate(line_items=[]), created_by_id=None)
+        quote = await _orm_quote(db, created.id)
+        await svc._ensure_sent_state(quote)
+        quote.expiry_date = date.today() - timedelta(days=1)
+        await db.flush()
+        await svc._expire_overdue(ws.id)
+        await db.refresh(quote)
+        assert quote.status == "expired"
+
+        ws.settings = {"pricing": {"quote_expiry_enabled": False}}
+        await db.flush()
+        reopened = await svc.reopen_quote(ws.id, created.id)
+
+        assert reopened.status == "sent"
+        assert reopened.expiry_date is None
+
+
+@pytest.mark.parametrize("status", ["draft", "sent", "approved", "declined"])
+async def test_only_an_expired_quote_can_be_reopened(status: str) -> None:
+    """Approved and declined are customer decisions; reopen must not undo them."""
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+        created = await svc.create_quote(ws.id, QuoteCreate(line_items=[]), created_by_id=None)
+        quote = await _orm_quote(db, created.id)
+        quote.status = status
+        await db.flush()
+
+        with pytest.raises(ConflictError):
+            await svc.reopen_quote(ws.id, created.id)
+
+        await db.refresh(quote)
+        assert quote.status == status
+
+
+async def test_reopen_cannot_reach_another_workspaces_quote() -> None:
+    async with AsyncSessionLocal() as db:
+        owner = await _make_workspace(db)
+        intruder = await _make_workspace(db)
+        svc = QuoteService(db)
+        created = await svc.create_quote(owner.id, QuoteCreate(line_items=[]), created_by_id=None)
+        quote = await _orm_quote(db, created.id)
+        quote.status = "expired"
+        quote.expiry_date = date.today() - timedelta(days=1)
+        await db.flush()
+
+        with pytest.raises(HTTPException) as excinfo:
+            await svc.reopen_quote(intruder.id, created.id)
+        assert excinfo.value.status_code == 404
+
+        await db.refresh(quote)
+        assert quote.status == "expired"

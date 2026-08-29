@@ -1395,8 +1395,13 @@ class QuoteService:
             quote.sent_at = datetime.now(UTC)
         if quote.expiry_date is None:
             workspace = await get_or_404(self.db, Workspace, quote.workspace_id)
-            validity = get_pricing_config(workspace).quote_validity_days
-            quote.expiry_date = quote.sent_at.date() + timedelta(days=validity)
+            pricing = get_pricing_config(workspace)
+            # A workspace that has turned expiry off leaves the date blank, and a
+            # blank expiry never lapses — see ``overdue_sent_predicate``.
+            if pricing.quote_expiry_enabled:
+                quote.expiry_date = quote.sent_at.date() + timedelta(
+                    days=pricing.quote_validity_days
+                )
         if quote.public_token is None:
             quote.public_token = generate_quote_token()
         already_sent = quote.status == "sent"
@@ -1682,6 +1687,58 @@ class QuoteService:
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         self.log.info("quote_declined", quote_id=str(quote.id), workspace_id=str(workspace_id))
+        return await self._detail_response(quote)
+
+    async def reopen_quote(
+        self,
+        workspace_id: uuid.UUID,
+        quote_id: uuid.UUID,
+    ) -> QuoteDetailResponse:
+        """Put a lapsed quote back in front of the customer.
+
+        ``expired`` is the one terminal status the customer never chose — it is
+        the clock running out, not a decision — so unlike ``approved`` and
+        ``declined`` it has to be reversible.
+
+        The expiry date is always rewritten, never merely cleared of its status:
+        :meth:`_expire_overdue` runs on nearly every quote read, so a quote
+        restored to ``sent`` while still holding a past ``expiry_date`` would be
+        re-expired within the same request and the button would look broken. A
+        workspace with expiry switched off gets a blank date (never lapses);
+        otherwise the full validity window starts again from today, because the
+        customer is being given a fresh chance to accept, not the remains of a
+        deadline that already passed.
+        """
+        quote = await get_or_404(
+            self.db,
+            Quote,
+            quote_id,
+            workspace_id=workspace_id,
+            options=[selectinload(Quote.line_items)],
+        )
+        # Deliberately *not* preceded by ``_expire_overdue``: this is the one
+        # operation whose whole purpose is to undo that sweep.
+        if quote.status != EXPIRED_STATUS:
+            raise ConflictError(
+                f"Only an expired quote can be reopened; this one is {quote.status}"
+            )
+
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        pricing = get_pricing_config(workspace)
+        quote.status = "sent"
+        quote.expiry_date = (
+            date.today() + timedelta(days=pricing.quote_validity_days)
+            if pricing.quote_expiry_enabled
+            else None
+        )
+        await self.db.commit()
+        await self.db.refresh(quote, ["line_items"])
+        self.log.info(
+            "quote_reopened",
+            quote_id=str(quote.id),
+            workspace_id=str(workspace_id),
+            expiry_date=str(quote.expiry_date),
+        )
         return await self._detail_response(quote)
 
     async def _email_quote(
