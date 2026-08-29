@@ -8,13 +8,14 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.db.tenancy import WorkspaceScoped
 
 HANDOFF_IMAGE_CONTENT_TYPES = ("image/jpeg", "image/png", "image/webp")
 MAX_HANDOFF_IMAGE_BYTES = 10 * 1024 * 1024
 MAX_HANDOFF_IMAGES_PER_QUOTE = 10
 
 
-class QuoteHandoffImage(Base):
+class QuoteHandoffImage(Base, WorkspaceScoped):
     """A bounded image stored for the field team handling a converted quote."""
 
     __tablename__ = "quote_handoff_images"
