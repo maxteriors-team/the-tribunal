@@ -28,7 +28,7 @@
  * Layout: tool/product palette (left), photo design stage (center), itemized
  * estimate + customer/share (right).
  */
-import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowUp,
@@ -99,6 +99,7 @@ import {
 } from "@/lib/estimator/catalog";
 import { toEstimateCustomLines, type CustomLineDraft } from "@/lib/estimator/custom-lines";
 import {
+  COVERAGE_OPTIONS,
   type CoverageKey,
   coverageFeet,
   designScale,
@@ -3306,12 +3307,18 @@ export function LightDesigner({
   // Coverage scopes the drawing before anything is measured, so the packages,
   // the permanent price and the complexity weighting all price the same set of
   // runs. Untagged runs count as front and survive every level.
-  const coveredShots = shotsForCoverage(liveShots, coverage);
-  const inputs = sumEstimateInputs(
-    coveredShots.map((shot) => designToEstimateInputs(shot.design, productById, shot.photo.width)),
-  );
+  const measureCoverage = (key: CoverageKey) => {
+    const shots = shotsForCoverage(liveShots, key);
+    return {
+      inputs: sumEstimateInputs(
+        shots.map((shot) => designToEstimateInputs(shot.design, productById, shot.photo.width)),
+      ),
+      complexityFeet: permanentRunFeet(shots, productById).complexity,
+    };
+  };
+  const measured = measureCoverage(coverage);
+  const inputs = measured.inputs;
   const feet = inputs.feet;
-  const permanentComplexityFeet = permanentRunFeet(coveredShots, productById).complexity;
   // Measured off the whole drawing, not the covered subset: these totals are what
   // each coverage option would price, so they cannot depend on the current one.
   const permanentElevationFeet = permanentRunFeet(liveShots, productById).elevation;
@@ -3712,21 +3719,25 @@ export function LightDesigner({
       ? "seasonal"
       : "comparison";
 
-  const estimateParams: LinearFeetEstimateRequest = {
-    feet,
-    channels: 0,
-    takedown,
-    storage,
-    permanent_complexity: dominantPermanentComplexity(permanentComplexityFeet),
-    permanent_complexity_feet: permanentComplexityFeet,
-    proposal_side: proposalSide,
-    discount_amount: discountAmount ?? 0,
-    per_ft_override: null,
-    christmas_per_ft_override: christmasPerFtOverride,
-    christmas_items: inputs.christmas_items,
-    selected_package: selectedPackage,
-    custom_lines: customLineInputs,
+  const paramsForCoverage = (key: CoverageKey): LinearFeetEstimateRequest => {
+    const scoped = key === coverage ? measured : measureCoverage(key);
+    return {
+      feet: scoped.inputs.feet,
+      channels: 0,
+      takedown,
+      storage,
+      permanent_complexity: dominantPermanentComplexity(scoped.complexityFeet),
+      permanent_complexity_feet: scoped.complexityFeet,
+      proposal_side: proposalSide,
+      discount_amount: discountAmount ?? 0,
+      per_ft_override: null,
+      christmas_per_ft_override: christmasPerFtOverride,
+      christmas_items: scoped.inputs.christmas_items,
+      selected_package: selectedPackage,
+      custom_lines: customLineInputs,
+    };
   };
+  const estimateParams = paramsForCoverage(coverage);
   const estimateSignature = JSON.stringify(estimateParams);
   const [shareEstimateSignature, setShareEstimateSignature] = useState(estimateSignature);
   if (shareEstimateSignature !== estimateSignature) {
@@ -3764,6 +3775,35 @@ export function LightDesigner({
     permanent: Boolean((estimate ?? catalog)?.permanent.enabled),
     seasonal: Boolean((estimate ?? catalog)?.christmas.enabled),
   };
+
+  // Each coverage card shows what that layer actually costs, so the rep sells the
+  // ladder instead of guessing. Priced by the same endpoint as the headline, so
+  // the cards and the quote always settle on the same numbers.
+  //
+  // Deduped by query key: levels coincide constantly — an untagged drawing puts
+  // every run in all three — and React Query rejects duplicate keys in one
+  // useQueries call. Deduping also means the common case costs one request, not
+  // three.
+  const coverageParams = COVERAGE_OPTIONS.map((option) => paramsForCoverage(option.key));
+  const coverageKeys = coverageParams.map((params) =>
+    JSON.stringify(queryKeys.estimator.compute(workspaceId, params)),
+  );
+  const uniqueCoverageKeys = [...new Set(coverageKeys)];
+  const coverageResults = useQueries({
+    queries: uniqueCoverageKeys.map((key) => {
+      const params = coverageParams[coverageKeys.indexOf(key)];
+      return {
+        queryKey: queryKeys.estimator.compute(workspaceId, params),
+        queryFn: () => estimatorApi.estimate(workspaceId, params),
+        enabled: Boolean(photo) && hasHolidayDesign && sides.permanent,
+        placeholderData: keepPreviousData,
+        staleTime: 60_000,
+      };
+    }),
+  });
+  const coveragePricing = coverageKeys.map(
+    (key) => coverageResults[uniqueCoverageKeys.indexOf(key)],
+  );
   // Customer-facing totals follow the selected service tabs, not every service
   // the workspace happens to support.
   const proposalSides = {
@@ -3798,7 +3838,7 @@ export function LightDesigner({
   // ``resolveSelectedPackage`` mirroring the backend's recommended-package rule).
   // Roofline against roofline from the à la carte costs — never a package's,
   // which is $0 for a package that excludes the roofline.
-  const rooflineView = useMemo(() => {
+  const rooflineView = (() => {
     if (!pricing?.roofline_comparison_enabled || !estimate) return null;
     if (!proposalSides.permanent || !proposalSides.seasonal) return null;
     const seasonal = estimate.christmas.roofline_cost;
@@ -3809,12 +3849,7 @@ export function LightDesigner({
       seasonal_multi_year: multiYear,
       savings: round2(multiYear - estimate.permanent.roofline_cost),
     };
-  }, [
-    pricing?.roofline_comparison_enabled,
-    estimate,
-    proposalSides.permanent,
-    proposalSides.seasonal,
-  ]);
+  })();
 
   const resetShare = () => {
     setShareUrl(null);
@@ -4911,6 +4946,10 @@ export function LightDesigner({
                         coverage={sides.permanent ? coverage : undefined}
                         onSelectCoverage={setCoverage}
                         coverageFeet={permanentCoverageFeet}
+                        coveragePrices={COVERAGE_OPTIONS.map(
+                          (option, index) =>
+                            coveragePricing[index]?.data?.permanent.total ?? null,
+                        )}
                       />
                     ) : null}
 

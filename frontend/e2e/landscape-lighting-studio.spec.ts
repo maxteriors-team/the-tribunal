@@ -467,7 +467,13 @@ async function installStudioApi(
       return;
     }
     if (method === "POST" && pathname.endsWith("/quotes/estimate")) {
-      estimates.push(parseRequestBody(route.request()));
+      const body = parseRequestBody(route.request()) as { feet?: number };
+      estimates.push(body);
+      // Priced from the requested footage, like the real endpoint. A flat total
+      // would make every coverage card show the same number and hide whether
+      // each one is actually priced on its own scope.
+      const pricedFeet = typeof body.feet === "number" ? body.feet : 100;
+      const total = Math.round(pricedFeet * 33);
       await route.fulfill(
         json(
           projectType === "permanent"
@@ -475,13 +481,13 @@ async function installStudioApi(
                 ...estimate,
                 permanent: {
                   enabled: true,
-                  total: 3300,
-                  subtotal: 3300,
+                  total,
+                  subtotal: total,
                   per_ft: 33,
-                  package_feet: 100,
+                  package_feet: Math.max(100, Math.ceil(pricedFeet / 50) * 50),
                   package_cogs: 1250,
                   markup: 2.64,
-                  roofline_cost: 3300,
+                  roofline_cost: total,
                   custom_total: 0,
                 },
               }
@@ -672,7 +678,7 @@ test.describe("landscape lighting studio", () => {
       return Number(/([\d.]+) ft/i.exec(metric)?.[1] ?? NaN);
     };
     const requestedFeet = () => estimates.map((entry) => entry.feet as number);
-    const coverage = page.getByRole("group", { name: "Coverage" });
+    const coverage = page.getByRole("group", { name: "Permanent lighting coverage" });
     const advertisedFeet = async (name: RegExp) => {
       const label = await coverage.getByRole("button", { name }).innerText();
       // The card's footage is CSS-uppercased, so innerText reads "219 FT".
@@ -697,6 +703,23 @@ test.describe("landscape lighting studio", () => {
     const frontOnly = await select(/Front only/);
     expect(frontAndSides).toBeCloseTo((wholeHome * 2) / 3, 0);
     expect(frontOnly).toBeCloseTo(wholeHome / 3, 0);
+
+    // The ladder the customer compares: cheapest layer first, each card priced on
+    // its own footage, every price climbing as another face of the house is added.
+    const cardPrice = async (name: RegExp) => {
+      const label = await coverage.getByRole("button", { name }).innerText();
+      const amount = /\$([\d,]+(?:\.\d\d)?)/.exec(label)?.[1];
+      return amount ? Number(amount.replace(/,/g, "")) : null;
+    };
+    await expect.poll(async () => await cardPrice(/Front only/)).not.toBeNull();
+    const prices = [
+      await cardPrice(/Front only/),
+      await cardPrice(/Front and sides/),
+      await cardPrice(/Whole home/),
+    ];
+    expect(prices).toEqual([...prices].sort((a, b) => Number(a) - Number(b)));
+    expect(new Set(prices).size).toBe(3);
+    expect(await coverage.getByRole("button").first().innerText()).toContain("Front only");
     await page.screenshot({
       path: "../.ezcoder/screenshots/permanent-coverage-toggle.png",
     });

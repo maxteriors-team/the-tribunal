@@ -63,7 +63,7 @@ describe("EstimatePanel", () => {
     expect(screen.queryByText("$1,200.00")).not.toBeInTheDocument();
   });
 
-  it("offers the three coverage levels with the feet each one prices", async () => {
+  it("sells the three coverage levels as priced cards, cheapest first", async () => {
     const onSelectCoverage = vi.fn();
     render(
       <EstimatePanel
@@ -80,19 +80,60 @@ describe("EstimatePanel", () => {
         coverage="whole"
         onSelectCoverage={onSelectCoverage}
         coverageFeet={{ whole: 100, "front-sides": 75, front: 40 }}
+        coveragePrices={[4000, 7500, 10000]}
       />,
     );
 
-    const coverage = screen.getByRole("group", { name: "Coverage" });
-    const wholeHome = within(coverage).getByRole("button", { name: /Whole home/ });
-    expect(wholeHome).toHaveAttribute("aria-pressed", "true");
-    expect(within(coverage).getByText(/75 ft of permanent lighting/)).toBeInTheDocument();
+    const coverage = screen.getByRole("group", { name: "Permanent lighting coverage" });
+    const cards = within(coverage).getAllByRole("button");
+    // A ladder has to climb, so the cheapest layer is the first card.
+    expect(cards.map((card) => card.textContent)).toEqual([
+      expect.stringContaining("Front only"),
+      expect.stringContaining("Front and sides"),
+      expect.stringContaining("Whole home"),
+    ]);
 
-    const frontOnly = within(coverage).getByRole("button", { name: /Front only/ });
-    expect(frontOnly).toHaveAttribute("aria-pressed", "false");
-    await userEvent.click(frontOnly);
+    // Each card carries the price of its own layer, not the selected one's.
+    expect(within(cards[0]).getByText("$4,000.00")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("$7,500.00")).toBeInTheDocument();
+    expect(within(cards[2]).getByText("$10,000.00")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("Most Popular")).toBeInTheDocument();
+
+    expect(cards[2]).toHaveAttribute("aria-pressed", "true");
+    expect(cards[0]).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(cards[0]);
 
     expect(onSelectCoverage).toHaveBeenCalledWith("front");
+  });
+
+  it("shows no price on a coverage card that has not priced yet", () => {
+    render(
+      <EstimatePanel
+        estimate={ESTIMATE}
+        isFetching={false}
+        feet={100}
+        calibrated
+        hasDesign
+        selectedPackage={null}
+        onSelectPackage={vi.fn()}
+        customLines={[]}
+        onChangeCustomLines={vi.fn()}
+        sides={{ permanent: true, seasonal: true }}
+        coverage="front"
+        onSelectCoverage={vi.fn()}
+        coverageFeet={{ whole: 100, "front-sides": 75, front: 40 }}
+        coveragePrices={[4000, null, null]}
+      />,
+    );
+
+    // A stale or borrowed number here would misquote a job, so a card with no
+    // price of its own shows none.
+    const cards = within(
+      screen.getByRole("group", { name: "Permanent lighting coverage" }),
+    ).getAllByRole("button");
+    expect(within(cards[0]).getByText("$4,000.00")).toBeInTheDocument();
+    expect(within(cards[1]).queryByText(/\$/)).not.toBeInTheDocument();
+    expect(within(cards[2]).queryByText(/\$/)).not.toBeInTheDocument();
   });
 
   it("hides coverage when the design has no permanent side to scope", () => {

@@ -58,6 +58,11 @@ interface EstimatePanelProps {
   onSelectCoverage?: (coverage: CoverageKey) => void;
   /** Measured permanent feet each coverage level would price. */
   coverageFeet?: Record<CoverageKey, number>;
+  /**
+   * Priced permanent total per coverage level, in `COVERAGE_OPTIONS` order.
+   * `null` for a level still loading, so a card never shows a stale price.
+   */
+  coveragePrices?: (number | null)[];
 }
 
 export function EstimatePanel({
@@ -74,6 +79,7 @@ export function EstimatePanel({
   coverage,
   onSelectCoverage,
   coverageFeet,
+  coveragePrices,
 }: EstimatePanelProps) {
   const permanent = estimate?.permanent;
   const christmas = estimate?.christmas;
@@ -126,26 +132,37 @@ export function EstimatePanel({
 
           {coverage && onSelectCoverage ? (
             <div className="ep-packages">
-              <div className="ep-lines-head">Coverage</div>
+              <div className="ep-lines-head">Permanent lighting coverage</div>
               <p className="ep-pkg-hint">
-                How much of the house this quote covers. Tag each drawn line front, side, or back to
-                change what each level includes.
+                The client sees all three. Each one adds a face of the house — tag every drawn line
+                front, side, or back to change what a level includes.
               </p>
-              <div className="ep-pkgs" role="group" aria-label="Coverage">
-                {COVERAGE_OPTIONS.map((option) => {
+              <div className="ep-pkgs" role="group" aria-label="Permanent lighting coverage">
+                {COVERAGE_OPTIONS.map((option, index) => {
                   const isSelected = coverage === option.key;
+                  const price = coveragePrices?.[index] ?? null;
                   return (
                     <button
                       type="button"
                       key={option.key}
-                      className={`ep-pkg${isSelected ? " selected" : ""}`}
+                      className={`ep-pkg${isSelected ? " selected" : ""}${
+                        "popular" in option && option.popular ? " popular" : ""
+                      }`}
                       aria-pressed={isSelected}
                       onClick={() => onSelectCoverage(option.key)}
                     >
+                      {"popular" in option && option.popular ? (
+                        <span className="ep-pkg-pop">Most Popular</span>
+                      ) : null}
+                      <span className="ep-pkg-marker">{option.marker}</span>
                       <span className="ep-pkg-name">{option.label}</span>
+                      {price === null ? null : (
+                        <span className="ep-pkg-total">{formatCurrency(price)}</span>
+                      )}
                       <span className="ep-pkg-per">
-                        {formatFeet(coverageFeet?.[option.key] ?? 0)} of permanent lighting
+                        One-time · {formatFeet(coverageFeet?.[option.key] ?? 0)}
                       </span>
+                      <span className="ep-pkg-blurb">{option.blurb}</span>
                     </button>
                   );
                 })}
