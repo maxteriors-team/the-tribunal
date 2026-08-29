@@ -6,14 +6,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConvertQuoteDialog } from "@/components/quotes/convert-quote-dialog";
 import type { Quote } from "@/types";
 
-const { convertMock, rosterMock, crewsMock, toastMock } = vi.hoisted(() => ({
-  convertMock: vi.fn(),
-  rosterMock: vi.fn(),
-  crewsMock: vi.fn(),
-  toastMock: { success: vi.fn(), error: vi.fn() },
-}));
+const { canMock, convertMock, crewsMock, listQuoteImagesMock, rosterMock, toastMock } = vi.hoisted(
+  () => ({
+    canMock: vi.fn(),
+    convertMock: vi.fn(),
+    crewsMock: vi.fn(),
+    listQuoteImagesMock: vi.fn(),
+    rosterMock: vi.fn(),
+    toastMock: { success: vi.fn(), error: vi.fn() },
+  }),
+);
 
 vi.mock("@/lib/api/quotes", () => ({ quotesApi: { convert: convertMock } }));
+vi.mock("@/lib/api/handoff-images", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/handoff-images")>();
+  return { ...actual, listQuoteHandoffImages: listQuoteImagesMock };
+});
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => ({ can: canMock }),
+}));
 vi.mock("@/hooks/useJobs", () => ({
   useWorkspaceTechnicians: () => rosterMock(),
   useWorkspaceCrews: () => crewsMock(),
@@ -59,11 +70,17 @@ async function setWindow() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  canMock.mockReturnValue(true);
   rosterMock.mockReturnValue({
     data: { items: [{ id: "tech-1", name: "Alex Field", color: "#0ea5e9", user_id: 11 }] },
   });
   crewsMock.mockReturnValue({
     data: { items: [{ id: "crew-1", name: "Install Crew", is_active: true }] },
+  });
+  listQuoteImagesMock.mockResolvedValue({
+    images: [],
+    max_images: 10,
+    max_image_bytes: 10 * 1024 * 1024,
   });
   convertMock.mockResolvedValue({
     quote: baseQuote,
@@ -87,6 +104,35 @@ describe("ConvertQuoteDialog guided closeout", () => {
 
     await setWindow();
     expect(screen.getByRole("button", { name: "Schedule installation" })).toBeEnabled();
+  });
+
+  it("shows editable handoff images before crew routing", async () => {
+    renderDialog();
+
+    const handoff = await screen.findByRole("heading", { name: "Field handoff images" });
+    const crew = screen.getByRole("heading", { name: "Crew and members" });
+    expect(handoff.compareDocumentPosition(crew) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add images" })).toBeEnabled());
+    expect(listQuoteImagesMock).toHaveBeenCalledWith("ws-1", "quote-1");
+  });
+
+  it("schedules without an invoice when billing access is unavailable", async () => {
+    canMock.mockReturnValue(false);
+    renderDialog();
+
+    expect(screen.queryByLabelText("Create an invoice")).not.toBeInTheDocument();
+    expect(screen.getByText(/Billing access is required to create an invoice/)).toBeVisible();
+
+    await setWindow();
+    await userEvent.click(screen.getByRole("button", { name: "Schedule installation" }));
+
+    await waitFor(() =>
+      expect(convertMock).toHaveBeenCalledWith(
+        "ws-1",
+        "quote-1",
+        expect.objectContaining({ create_job: true, create_invoice: false }),
+      ),
+    );
   });
 
   it("blocks unpaid required deposit until explicit confirmation", async () => {
@@ -194,6 +240,7 @@ describe("ConvertQuoteDialog guided closeout", () => {
   });
 
   it("keeps an existing invoice linked when adding the missing job", async () => {
+    canMock.mockReturnValue(false);
     renderDialog({ ...baseQuote, converted_invoice_id: "invoice-1" }, "copy-to-job");
 
     expect(screen.getByText("The existing invoice will stay linked to this job.")).toBeVisible();

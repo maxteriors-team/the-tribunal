@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { HandoffImages } from "@/components/jobs/handoff-images";
 import { TechnicianSelect } from "@/components/jobs/technician-select";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceCrews, useWorkspaceTechnicians } from "@/hooks/useJobs";
 import { quotesApi } from "@/lib/api/quotes";
 import { jobWindowError, localToIso } from "@/lib/jobs/job-derivations";
@@ -48,6 +50,8 @@ export function ConvertQuoteDialog({
 }: ConvertQuoteDialogProps) {
   const copyToJob = mode === "copy-to-job";
   const queryClient = useQueryClient();
+  const { can } = useCapabilities();
+  const canCreateInvoice = can("billing:write");
   const [createJob, setCreateJob] = useState(true);
   const [createInvoice, setCreateInvoice] = useState(!copyToJob);
   const [start, setStart] = useState("");
@@ -81,6 +85,7 @@ export function ConvertQuoteDialog({
   const depositAmount = quote?.deposit_amount ?? null;
   const paidMethod = depositPaymentMethodLabel(quote?.deposit_payment_method);
   const hasExistingInvoice = Boolean(quote?.converted_invoice_id);
+  const shouldCreateInvoice = hasExistingInvoice || (canCreateInvoice && createInvoice);
   const windowError = createJob
     ? !start || !end
       ? "Set both start and end."
@@ -94,7 +99,7 @@ export function ConvertQuoteDialog({
       return quotesApi.convert(workspaceId, quote.id, {
         create_job: createJob,
         // Conversion flags describe the desired final handoff; retain an invoice already linked.
-        create_invoice: createInvoice || hasExistingInvoice,
+        create_invoice: shouldCreateInvoice,
         scheduled_start: createJob ? localToIso(start) : null,
         scheduled_end: createJob ? localToIso(end) : null,
         crew_id: createJob && crewId ? crewId : null,
@@ -121,7 +126,7 @@ export function ConvertQuoteDialog({
 
   const canSubmit =
     Boolean(quote) &&
-    (createJob || createInvoice || hasExistingInvoice) &&
+    (createJob || shouldCreateInvoice) &&
     !windowError &&
     !unpaidBlocked &&
     !convertMutation.isPending;
@@ -294,7 +299,7 @@ export function ConvertQuoteDialog({
                 <p className="mt-3 text-sm text-muted-foreground">
                   The existing invoice will stay linked to this job.
                 </p>
-              ) : (
+              ) : canCreateInvoice ? (
                 <label className="mt-3 flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -303,9 +308,18 @@ export function ConvertQuoteDialog({
                   />{" "}
                   {copyToJob ? "Also create an invoice" : "Create an invoice"}
                 </label>
+              ) : (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Billing access is required to create an invoice. This will schedule the job
+                  without one.
+                </p>
               )}
               {windowError ? <p className="mt-2 text-sm text-destructive">{windowError}</p> : null}
             </section>
+
+            {createJob && quote ? (
+              <HandoffImages mode="quote" workspaceId={workspaceId} quoteId={quote.id} />
+            ) : null}
 
             {createJob ? (
               <section className="rounded-lg border p-4" aria-labelledby="team-step">

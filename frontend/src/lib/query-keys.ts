@@ -382,6 +382,8 @@ export const queryKeys = {
     crews: (workspaceId: string) => [...jobs.all(workspaceId), "crews"] as const,
     installationPlan: (workspaceId: string, jobId: string) =>
       [...jobs.detail(workspaceId, jobId), "installation-plan"] as const,
+    handoffImages: (workspaceId: string, jobId: string) =>
+      [...jobs.detail(workspaceId, jobId), "handoff-images"] as const,
     inventoryPlan: (workspaceId: string, jobId: string) =>
       [...jobs.detail(workspaceId, jobId), "inventory-plan"] as const,
     visits: (workspaceId: string, jobId: string) =>
@@ -480,6 +482,8 @@ export const queryKeys = {
     ...quotes,
     byContact: (workspaceId: string, contactId: number | string | undefined) =>
       quotes.list(workspaceId, { contact_id: contactId }),
+    handoffImages: (workspaceId: string, quoteId: string) =>
+      [...quotes.detail(workspaceId, quoteId), "handoff-images"] as const,
   },
   proposalTemplate: {
     settings: (workspaceId: string) => ["proposal-template", workspaceId] as const,

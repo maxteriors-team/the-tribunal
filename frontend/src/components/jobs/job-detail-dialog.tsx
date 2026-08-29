@@ -4,6 +4,7 @@ import { CalendarClock, Loader2, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { HandoffImages } from "@/components/jobs/handoff-images";
 import { InstallationPlanPanel } from "@/components/jobs/installation-plan-panel";
 import { JobBrief } from "@/components/jobs/job-brief";
 import { JobCostingPanel } from "@/components/jobs/job-costing-panel";
@@ -252,6 +253,7 @@ export function JobDetailDialog({
             {/* Site, customer, access notes and scope: the technician's "what am I
               doing and where", and useful to dispatch too. */}
             <JobBrief job={job} />
+            <HandoffImages mode="job" workspaceId={workspaceId} jobId={job.id} />
 
             {readOnly ? (
               <div className="space-y-1.5">
