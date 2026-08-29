@@ -221,9 +221,12 @@ def _report_unlabelled(state: ORMExecuteState) -> None:
     if ENFORCE_LABELLING:
         raise UnlabelledTenancyError(entities)
 
+    # The event name is the first positional argument — structlog binds that to
+    # ``event`` itself, so passing ``event=`` as a keyword raises TypeError.
+    # Follows the ``security_event=True`` convention used in app/api/webhooks/.
     log.warning(
-        "security_event",
-        event="unlabelled_tenancy_query",
+        "unlabelled_tenancy_query",
+        security_event=True,
         entities=entities,
         detail=(
             "ORM query on workspace-scoped entities from a session with no "
