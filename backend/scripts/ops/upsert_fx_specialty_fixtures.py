@@ -52,7 +52,10 @@ def specialty_catalog_payload(sku: str) -> dict[str, Any]:
         "unit_price": fixture["price"],
         "taxable": True,
         "is_active": True,
-        "service_category": "landscape",
+        # Must match the spelling onboarding seeds in ``default_sales_setup``:
+        # the field is free-form text and every report groups on the exact
+        # string, so a second spelling here splits one service across two rows.
+        "service_category": "Landscape Lighting",
         "attributes": attributes,
         "components": components,
     }
