@@ -68,6 +68,10 @@ class RunSchema(DocumentSchema):
         default=None,
         validation_alias=AliasChoices("permanentComplexity", "permanent_complexity"),
     )
+    # House face this run covers, selecting which coverage package includes it.
+    # Missing means front: front is in every coverage level, so an untagged
+    # legacy run stays in the cheapest package instead of inflating it.
+    elevation: Literal["front", "side", "back"] | None = None
     spacing_in: Annotated[float, Field(gt=0, le=1200)] | None = Field(
         default=None, validation_alias=AliasChoices("spacingIn", "spacing_in")
     )

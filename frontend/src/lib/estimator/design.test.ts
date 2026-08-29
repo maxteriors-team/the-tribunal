@@ -6,6 +6,7 @@ import {
   designScale,
   designToEstimateInputs,
   hasDesign,
+  permanentRunFeet,
   sumEstimateInputs,
 } from "./design";
 import type { Design, PlacedItem, Product, Run } from "./types";
@@ -541,5 +542,80 @@ describe("designToEstimateInputs — landscape", () => {
     const out = designToEstimateInputs({ calibration: cal, runs, items: [] }, productById, PHOTO_W);
     expect(out.bistro_feet).toBe(40);
     expect(out.feet).toBe(0);
+  });
+});
+
+describe("permanentRunFeet", () => {
+  const permanent: Product = {
+    id: "roofline-permanent",
+    name: "Permanent LED Roofline",
+    category: "permanent",
+    kind: "linear",
+    price: 30,
+    style: "permanent",
+    colors: ["#ffd98a"],
+    spacingIn: 12,
+    sizeFt: 0,
+    target: { field: "roofline" },
+  };
+  // Seasonal footage is priced on its own path; counting it here would inflate
+  // the permanent quote.
+  const permanentProducts = indexProducts([permanent, roofline]);
+
+  // 10 px/ft from the shared calibration, so each 400px span is 40 ft.
+  function permanentRun(id: string, y: number, extra: Partial<Run> = {}): Run {
+    return {
+      id,
+      productId: permanent.id,
+      points: [
+        { x: 0, y },
+        { x: 400, y },
+      ],
+      ...extra,
+    };
+  }
+
+  function measure(runs: Run[]) {
+    return permanentRunFeet(
+      [{ design: { calibration: cal, runs, items: [] }, photo: { width: PHOTO_W } }],
+      permanentProducts,
+    );
+  }
+
+  it("buckets measured footage by the elevation tagged on each run", () => {
+    const totals = measure([
+      permanentRun("front-1", 0, { elevation: "front" }),
+      permanentRun("side-1", 20, { elevation: "side" }),
+      permanentRun("side-2", 40, { elevation: "side" }),
+      permanentRun("back-1", 60, { elevation: "back" }),
+    ]);
+
+    expect(totals.elevation.front).toBeCloseTo(40);
+    expect(totals.elevation.side).toBeCloseTo(80);
+    expect(totals.elevation.back).toBeCloseTo(40);
+  });
+
+  it("counts an untagged run as front so older drawings price unchanged", () => {
+    const totals = measure([permanentRun("legacy", 0)]);
+
+    expect(totals.elevation).toEqual({ front: 40, side: 0, back: 0 });
+    expect(totals.complexity.standard).toBeCloseTo(40);
+  });
+
+  it("keeps elevation and complexity independent, and ignores seasonal runs", () => {
+    const totals = measure([
+      permanentRun("back-complex", 0, { elevation: "back", permanentComplexity: "complex" }),
+      {
+        ...run("seasonal", roofline.id, [
+          { x: 0, y: 20 },
+          { x: 400, y: 20 },
+        ]),
+        elevation: "back",
+      },
+    ]);
+
+    expect(totals.elevation.back).toBeCloseTo(40);
+    expect(totals.complexity.complex).toBeCloseTo(40);
+    expect(totals.complexity.standard).toBe(0);
   });
 });
