@@ -5,7 +5,7 @@ messages keep null disclosure fields. No customer communication data is read or
 rewritten during the upgrade.
 
 Revision ID: 20260829_inbound_ai_calls
-Revises: 20260828_gable_pitch
+Revises: 20260829_conversation_notes
 Create Date: 2026-08-29
 """
 
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260829_inbound_ai_calls"
-down_revision: str | None = "20260828_gable_pitch"
+down_revision: str | None = "20260829_conversation_notes"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
