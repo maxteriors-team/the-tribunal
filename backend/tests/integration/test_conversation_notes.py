@@ -201,9 +201,14 @@ async def test_only_the_author_can_edit_or_delete_a_note() -> None:
             edited = await client.patch(f"{url}/{note_id}", json={"body": "Corrected observation"})
             assert edited.status_code == 200
             assert edited.json()["body"] == "Corrected observation"
-            assert (await client.delete(f"{url}/{note_id}")).status_code == 204
-            assert await client.get(url) is not None
-            assert (await client.get(url)).json() == []
+            # Hoisted out of the assert: `python -O` strips assert statements,
+            # so a request made inside one would silently never run.
+            removed = await client.delete(f"{url}/{note_id}")
+            assert removed.status_code == 204
+
+            remaining = await client.get(url)
+            assert remaining.status_code == 200
+            assert remaining.json() == []
 
 
 @pytest.mark.asyncio
