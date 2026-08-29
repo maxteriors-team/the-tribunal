@@ -94,9 +94,13 @@ class VoiceSessionFactory:
         provider: str,
         agent: Agent | None = None,
         timezone: str = "America/New_York",
+        *,
+        require_workspace_credentials: bool = False,
     ) -> tuple[VoiceSessionType | None, str | None]:
         """Create a voice session using workspace-aware credentials when possible."""
         provider_lower = provider.lower()
+        if require_workspace_credentials and provider_lower != "openai":
+            return None, "Inbound voice requires an OpenAI workspace integration"
         if provider_lower != "openai":
             return self.create_session(provider, agent, timezone)
 
@@ -104,6 +108,8 @@ class VoiceSessionFactory:
             credential_context = await resolve_openai_credentials(db, workspace_id)
         except OpenAICredentialError:
             return None, "OpenAI credential not configured"
+        if require_workspace_credentials and not credential_context.source.startswith("workspace_"):
+            return None, "OpenAI workspace integration not configured"
         return VoiceAgentSession(
             credential_context.bearer_token,
             agent,
@@ -306,6 +312,8 @@ async def create_workspace_voice_session(
     voice_provider: str,
     agent: Any,
     timezone: str = "America/New_York",
+    *,
+    require_workspace_credentials: bool = False,
 ) -> tuple[VoiceSessionType | None, str | None]:
     """Create a voice session with workspace-scoped OpenAI credentials."""
     from app.core.config import settings
@@ -317,6 +325,7 @@ async def create_workspace_voice_session(
         voice_provider,
         agent,
         timezone,
+        require_workspace_credentials=require_workspace_credentials,
     )
 
 

@@ -4,13 +4,15 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.api.webhooks.telnyx_parser import extract_phone_numbers
 from app.core.config import settings
 from app.core.encryption import hash_phone
 from app.core.metrics import (
+    observe_inbound_call_summary,
+    observe_inbound_disclosure,
     observe_voice_call_completed,
     observe_voice_call_started,
 )
@@ -18,7 +20,24 @@ from app.db.session import AsyncSessionLocal
 from app.models.phone_number import PhoneNumber
 from app.services.lead_sources.attribution_service import apply_tracking_number_attribution
 from app.services.push_notifications import push_notification_service
+from app.services.rate_limiting.softphone_limiter import (
+    InboundCallerRateLimitError,
+    SoftphoneRateLimitError,
+    SoftphoneRateLimitUnavailableError,
+    enforce_inbound_call_limits,
+    release_inbound_call_capacity,
+    reserve_inbound_call_capacity,
+)
 from app.services.telephony.call_outcome_classifier import CallOutcomeClassifier
+from app.services.telephony.inbound_call_policy import (
+    DISCLOSURE_VERSION,
+    decode_inbound_disclosure_state,
+    decode_inbound_terminal_state,
+    encode_inbound_disclosure_state,
+)
+from app.services.telephony.inbound_call_readiness import (
+    evaluate_inbound_call_readiness,
+)
 from app.services.telephony.inbound_routing import classify_inbound_reason
 from app.services.telephony.inbound_screening import InboundCallScreener
 from app.services.telephony.voice_agent_resolver import VoiceAgentResolver
@@ -34,18 +53,28 @@ _inbound_screener = InboundCallScreener()
 _TERMINAL_HANGUP_STATUSES = frozenset({"completed", "failed", "no_answer"})
 
 
+async def _route_challenged_inbound_call(
+    phone_record: PhoneNumber, call_control_id: str, log: Any
+) -> None:
+    """Keep legacy voicemail recording outside the no-recording AI pilot."""
+    if phone_record.inbound_ai_enabled:
+        await _transfer_inbound_to_fallback(
+            call_control_id,
+            phone_record.inbound_fallback_number,
+            log,
+            reason="screening_challenge",
+        )
+    else:
+        await take_inbound_voicemail(call_control_id, log)
+
+
 async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # noqa: PLR0915
     """Handle incoming call."""
     call_control_id = payload.get("call_control_id", "")
     call_state = payload.get("state", "")
     from_number, to_number = extract_phone_numbers(payload)
 
-    log = log.bind(
-        call_control_id=call_control_id,
-        from_number=from_number,
-        to_number=to_number,
-        call_state=call_state,
-    )
+    log = log.bind(call_control_id=call_control_id, call_state=call_state)
     log.info("processing_call_initiated")
 
     if not all([call_control_id, from_number, to_number]):
@@ -58,7 +87,7 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
         phone_record = result.scalar_one_or_none()
 
         if not phone_record:
-            log.warning("phone_number_not_found", to_number=to_number)
+            log.warning("phone_number_not_found_for_inbound_call")
             return
 
         workspace_id = phone_record.workspace_id
@@ -120,7 +149,7 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
                 workspace_phone=to_number,
                 contact_phone=from_number,
                 channel="voice",
-                ai_enabled=True,
+                ai_enabled=phone_record.inbound_ai_enabled,
             )
             db.add(conversation)
             await db.flush()
@@ -135,6 +164,10 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
             channel="voice",
             body="",
             status="ringing",
+            voice_disclosure_status=("failed" if phone_record.inbound_ai_enabled else None),
+            voice_disclosure_version=(
+                DISCLOSURE_VERSION if phone_record.inbound_ai_enabled else None
+            ),
         )
         db.add(message)
 
@@ -199,24 +232,23 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
                 data={
                     "type": "call",
                     "messageId": str(message.id),
-                    "screen": f"/call/{message.id}",
+                    "screen": "/calls",
                 },
                 notification_type="call",
                 channel_id="calls",
             )
         except Exception as e:
-            log.exception("push_notification_failed", error=str(e))
+            log.error("push_notification_failed", error_type=type(e).__name__)
 
-        # Screen-with-a-challenge: route suspicious callers to voicemail/identity
-        # capture instead of engaging the AI agent. A human can review the
-        # recording before any callback.
+        # Legacy screening records voicemail. The no-recording AI pilot instead
+        # sends challenged callers to its staffed emergency fallback.
         if screening.needs_challenge:
             log.info(
                 "inbound_call_challenged",
                 screening_reason=screening.reason,
                 call_control_id=call_control_id,
             )
-            await take_inbound_voicemail(call_control_id, log)
+            await _route_challenged_inbound_call(phone_record, call_control_id, log)
             return
 
         # Auto-answer calls if phone number has an assigned active agent. The
@@ -228,7 +260,143 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
             conversation=conversation,
             log=log,
             reason=message.routing_reason,
+            caller_phone=from_number,
         )
+
+
+async def _speak_inbound_disclosure(
+    db: Any,
+    message: Any,
+    call_control_id: str,
+    log: Any,
+) -> None:
+    """Claim and speak the versioned notice before caller audio can stream."""
+    from app.models.conversation import Message
+    from app.models.workspace import Workspace
+    from app.services.telephony.inbound_call_policy import build_inbound_disclosure
+    from app.services.telephony.telnyx_voice import TelnyxVoiceService
+
+    conversation = message.conversation
+    if conversation is None or message.voice_disclosure_status not in {"pending", "speaking"}:
+        return
+
+    phone_result = await db.execute(
+        select(PhoneNumber).where(
+            PhoneNumber.workspace_id == conversation.workspace_id,
+            PhoneNumber.phone_number == conversation.workspace_phone,
+        )
+    )
+    phone_record = phone_result.scalar_one_or_none()
+    fallback_number = phone_record.inbound_fallback_number if phone_record else None
+    readiness = None
+    if phone_record is not None and phone_record.inbound_ai_enabled:
+        readiness = await evaluate_inbound_call_readiness(
+            db,
+            workspace_id=conversation.workspace_id,
+            phone_number=phone_record,
+            assigned_agent_id=message.agent_id,
+            fallback_number=fallback_number,
+            transfer_destination_number=None,
+        )
+
+    if readiness is None or not readiness.ready or readiness.agent is None:
+        await db.execute(
+            update(Message)
+            .where(
+                Message.id == message.id,
+                Message.voice_disclosure_status.in_(("pending", "speaking")),
+            )
+            .values(voice_disclosure_status="failed")
+        )
+        await db.commit()
+        observe_inbound_disclosure(conversation.workspace_id, "failed")
+        log.warning(
+            "inbound_disclosure_prerequisite_failed",
+            blocked_checks=(
+                [check.code for check in readiness.checks if not check.ready]
+                if readiness is not None
+                else ["call_state"]
+            ),
+        )
+        await _transfer_inbound_to_fallback(
+            call_control_id,
+            fallback_number,
+            log,
+            reason="disclosure_prerequisite_failed",
+        )
+        return
+
+    business_name = await db.scalar(
+        select(Workspace.name).where(Workspace.id == conversation.workspace_id)
+    )
+    claim = await db.execute(
+        update(Message)
+        .where(
+            Message.id == message.id,
+            Message.voice_disclosure_status == "pending",
+        )
+        .values(
+            voice_disclosure_status="speaking",
+            voice_disclosure_version=DISCLOSURE_VERSION,
+        )
+        .returning(Message.id)
+    )
+    claimed = claim.scalar_one_or_none() is not None
+    await db.commit()
+    if not claimed:
+        current_status = await db.scalar(
+            select(Message.voice_disclosure_status).where(Message.id == message.id)
+        )
+        if current_status != "speaking":
+            return
+
+    voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+    try:
+        spoken = await voice_service.speak_text(
+            call_control_id=call_control_id,
+            text=build_inbound_disclosure(business_name),
+            client_state=encode_inbound_disclosure_state(message.id),
+            command_id=str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"inbound-disclosure:{message.id}",
+                )
+            ),
+        )
+    except Exception as exc:
+        log.error(
+            "inbound_disclosure_speak_error",
+            error_type=type(exc).__name__,
+        )
+        spoken = False
+    finally:
+        await voice_service.close()
+
+    if spoken:
+        if claimed:
+            observe_inbound_disclosure(conversation.workspace_id, "started")
+        log.info(
+            "inbound_disclosure_started",
+            disclosure_version=DISCLOSURE_VERSION,
+        )
+        return
+
+    await db.execute(
+        update(Message)
+        .where(
+            Message.id == message.id,
+            Message.voice_disclosure_status == "speaking",
+        )
+        .values(voice_disclosure_status="failed")
+    )
+    await db.commit()
+    observe_inbound_disclosure(conversation.workspace_id, "failed")
+    await _transfer_inbound_to_fallback(
+        call_control_id,
+        fallback_number,
+        log,
+        reason="disclosure_failed",
+    )
 
 
 async def handle_call_answered(payload: dict[Any, Any], log: Any) -> None:  # noqa: PLR0912, PLR0915
@@ -285,6 +453,25 @@ async def handle_call_answered(payload: dict[Any, Any], log: Any) -> None:  # no
             )
 
         await db.commit()
+
+        if message.direction == "inbound":
+            try:
+                await _speak_inbound_disclosure(db, message, call_control_id, log)
+            except Exception as exc:
+                from app.services.telephony.inbound_fallback import (
+                    route_inbound_to_configured_fallback,
+                )
+
+                log.error(
+                    "inbound_disclosure_handler_failed",
+                    error_type=type(exc).__name__,
+                )
+                await route_inbound_to_configured_fallback(
+                    call_control_id=call_control_id,
+                    log=log,
+                    reason="disclosure_handler_failed",
+                )
+            return
 
         # Determine agent_id: prefer message.agent_id, fall back to conversation's assigned_agent_id
         agent_id = message.agent_id
@@ -427,6 +614,11 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
         message = result.scalar_one_or_none()
 
         if message:
+            if message.direction == "inbound" and message.conversation is not None:
+                await release_inbound_call_capacity(
+                    workspace_id=str(message.conversation.workspace_id),
+                    call_control_id=call_control_id,
+                )
             # Capture status BEFORE any mutation so we can detect whether
             # this is the first hangup transition or a Telnyx retry. Retries
             # must not double-count engagement / campaign stats.
@@ -452,11 +644,13 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
             else:
                 message.duration_seconds = duration_secs
 
-            # Get recording URL if available
+            # The AI-first pilot never retains raw provider recordings.
             recordings = payload.get("recordings", [])
-            if recordings:
+            if recordings and message.voice_disclosure_status is None:
                 message.recording_url = recordings[0].get("public_url")
-                log.info("recording_available", recording_url=message.recording_url)
+                log.info("recording_available")
+            elif recordings:
+                log.warning("unexpected_inbound_ai_recording_ignored")
 
             # Classify the call outcome
             classification = _call_classifier.classify(
@@ -496,6 +690,17 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                     outcome=str(message.status),
                     duration_seconds=message.duration_seconds or duration_secs,
                 )
+                if message.voice_disclosure_status is not None:
+                    pilot_duration = message.duration_seconds or duration_secs
+                    observe_inbound_call_summary(
+                        workspace_id=workspace_id,
+                        duration_seconds=pilot_duration,
+                        estimated_cost_usd=(
+                            max(float(pilot_duration), 0)
+                            / 60
+                            * settings.inbound_voice_estimated_cost_per_minute_usd
+                        ),
+                    )
 
             contact_id = message.conversation.contact_id if message.conversation else None
             duration = message.duration_seconds or 0
@@ -506,7 +711,7 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                     await record_engagement(db, contact_id)
                     await db.commit()
                 except Exception as e:
-                    log.warning("engagement_update_failed", error=str(e))
+                    log.warning("engagement_update_failed", error_type=type(e).__name__)
             elif already_finalized:
                 log.info("engagement_update_skipped_retry")
 
@@ -532,7 +737,7 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                             channel_id="calls",
                         )
                 except Exception as e:
-                    log.exception("push_notification_failed", error=str(e))
+                    log.error("push_notification_failed", error_type=type(e).__name__)
 
             # Create CallOutcome record for attribution and analysis
             try:
@@ -547,7 +752,7 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                 )
                 log.info("call_outcome_created", message_id=str(message.id))
             except Exception as e:
-                log.exception("call_outcome_creation_failed", error=str(e))
+                log.error("call_outcome_creation_failed", error_type=type(e).__name__)
 
             # Update campaign stats for ALL calls (successful and failed),
             # but only on the first hangup transition. Telnyx retries arrive
@@ -569,7 +774,7 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                         booking_outcome=message.booking_outcome,
                     )
                 except Exception as e:
-                    log.exception("campaign_call_stats_update_failed", error=str(e))
+                    log.error("campaign_call_stats_update_failed", error_type=type(e).__name__)
             else:
                 log.info("campaign_call_stats_skipped_retry")
 
@@ -585,7 +790,7 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                         log=log,
                     )
                 except Exception as e:
-                    log.exception("sms_fallback_trigger_failed", error=str(e))
+                    log.error("sms_fallback_trigger_failed", error_type=type(e).__name__)
 
             # Automatic missed-call text-back: for unanswered INBOUND calls,
             # invite the caller to book via SMS. The service is idempotent on
@@ -603,7 +808,7 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                         log=log,
                     )
                 except Exception as e:
-                    log.exception("missed_call_textback_failed", error=str(e))
+                    log.error("missed_call_textback_failed", error_type=type(e).__name__)
 
 
 async def _handle_transfer_leg_answered(call_control_id: str, log: Any) -> bool:
@@ -642,7 +847,7 @@ async def _handle_transfer_leg_answered(call_control_id: str, log: Any) -> bool:
                 other_call_control_id=pending.caller_call_control_id,
             )
     except Exception as e:
-        log.exception("transfer_leg_answered_error", error=str(e))
+        log.error("transfer_leg_answered_error", error_type=type(e).__name__)
     finally:
         await voice_service.close()
     return True
@@ -676,7 +881,7 @@ async def _teardown_user_call_peer_leg(call_control_id: str, log: Any) -> None:
         try:
             await voice_service.hangup_call(peer)
         except Exception as e:  # pragma: no cover - teardown is best-effort
-            log.warning("user_call_peer_hangup_failed", error=str(e))
+            log.warning("user_call_peer_hangup_failed", error_type=type(e).__name__)
         finally:
             await voice_service.close()
 
@@ -748,7 +953,7 @@ async def _handle_user_call_leg_answered(
         elif call_control_id == pending.contact_call_control_id:
             await _bridge_user_call_legs(voice_service, pending, log)
     except Exception as e:
-        log.exception("user_call_leg_answered_error", error=str(e))
+        log.error("user_call_leg_answered_error", error_type=type(e).__name__)
         await pop_pending_user_call(call_control_id)
     finally:
         await voice_service.close()
@@ -855,13 +1060,126 @@ async def _bridge_user_call_legs(voice_service: Any, pending: Any, log: Any) -> 
             log.warning("user_call_recording_failed", message_id=pending.message_id)
 
 
-async def handle_speak_ended(payload: dict[Any, Any], log: Any) -> None:
-    """Bridge the caller into the closer leg after the warm-transfer briefing.
+async def _complete_inbound_disclosure(
+    call_control_id: str,
+    message_id: uuid.UUID,
+    log: Any,
+) -> bool:
+    """Start OpenAI media only for the bound message after its notice finished."""
+    from app.models.conversation import Message
+    from app.services.telephony.telnyx_voice import TelnyxVoiceService
 
-    Fires on ``call.speak.ended``. For warm transfers, the closer leg has just
-    finished hearing the briefing, so we bridge it to the original caller leg
-    to complete the handoff. Non-transfer speak events are ignored.
-    """
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Message)
+            .options(selectinload(Message.conversation))
+            .where(
+                Message.id == message_id,
+                Message.provider_message_id == call_control_id,
+                Message.direction == "inbound",
+            )
+        )
+        message = result.scalar_one_or_none()
+        if message is None or message.conversation is None:
+            return False
+
+        conversation = message.conversation
+        phone_result = await db.execute(
+            select(PhoneNumber).where(
+                PhoneNumber.workspace_id == conversation.workspace_id,
+                PhoneNumber.phone_number == conversation.workspace_phone,
+            )
+        )
+        phone_record = phone_result.scalar_one_or_none()
+        fallback_number = phone_record.inbound_fallback_number if phone_record else None
+        readiness = None
+        if phone_record is not None and phone_record.inbound_ai_enabled:
+            readiness = await evaluate_inbound_call_readiness(
+                db,
+                workspace_id=conversation.workspace_id,
+                phone_number=phone_record,
+                assigned_agent_id=message.agent_id,
+                fallback_number=fallback_number,
+                transfer_destination_number=None,
+            )
+
+        locked_result = await db.execute(
+            select(Message)
+            .where(
+                Message.id == message_id,
+                Message.provider_message_id == call_control_id,
+            )
+            .with_for_update()
+        )
+        message = locked_result.scalar_one_or_none()
+        if message is None:
+            return False
+        if message.voice_disclosure_status == "completed":
+            log.info("inbound_disclosure_duplicate_skipped")
+            return True
+        if message.voice_disclosure_status != "speaking":
+            return message.voice_disclosure_status == "failed"
+
+        if readiness is None or not readiness.ready or readiness.agent is None:
+            message.voice_disclosure_status = "failed"
+            await db.commit()
+            observe_inbound_disclosure(conversation.workspace_id, "failed")
+            log.warning(
+                "inbound_streaming_prerequisite_failed",
+                blocked_checks=(
+                    [check.code for check in readiness.checks if not check.ready]
+                    if readiness is not None
+                    else ["call_state"]
+                ),
+            )
+            await _transfer_inbound_to_fallback(
+                call_control_id,
+                fallback_number,
+                log,
+                reason="streaming_prerequisite_failed",
+            )
+            return True
+
+        voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+        try:
+            streaming_started = await voice_service.start_audio_streaming(
+                call_control_id=call_control_id,
+                api_base_url=settings.api_base_url,
+                is_outbound=False,
+            )
+        except Exception as exc:
+            log.error(
+                "inbound_streaming_start_error",
+                error_type=type(exc).__name__,
+            )
+            streaming_started = False
+        finally:
+            await voice_service.close()
+
+        if streaming_started:
+            message.voice_disclosure_status = "completed"
+            message.voice_disclosed_at = datetime.now(UTC)
+            await db.commit()
+            observe_inbound_disclosure(conversation.workspace_id, "completed")
+            log.info(
+                "inbound_disclosure_completed_streaming_started",
+                disclosure_version=message.voice_disclosure_version,
+            )
+        else:
+            message.voice_disclosure_status = "failed"
+            await db.commit()
+            observe_inbound_disclosure(conversation.workspace_id, "failed")
+            await _transfer_inbound_to_fallback(
+                call_control_id,
+                fallback_number,
+                log,
+                reason="streaming_start_failed",
+            )
+        return True
+
+
+async def handle_speak_ended(payload: dict[Any, Any], log: Any) -> None:
+    """Finish warm-transfer, terminal-notice, or disclosure speech commands."""
     from app.services.telephony.call_transfer import pop_pending_transfer
     from app.services.telephony.telnyx_voice import TelnyxVoiceService
 
@@ -870,7 +1188,19 @@ async def handle_speak_ended(payload: dict[Any, Any], log: Any) -> None:
 
     pending = await pop_pending_transfer(call_control_id)
     if pending is None:
-        # Not a warm-transfer closer leg (e.g. an ordinary speak). Nothing to do.
+        notice = decode_inbound_terminal_state(payload.get("client_state"))
+        if notice is not None:
+            if settings.telnyx_api_key:
+                voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+                try:
+                    await voice_service.hangup_call(call_control_id)
+                finally:
+                    await voice_service.close()
+            return
+
+        message_id = decode_inbound_disclosure_state(payload.get("client_state"))
+        if message_id is not None:
+            await _complete_inbound_disclosure(call_control_id, message_id, log)
         return
 
     log.info(
@@ -892,7 +1222,7 @@ async def handle_speak_ended(payload: dict[Any, Any], log: Any) -> None:
         else:
             log.error("warm_transfer_bridge_failed")
     except Exception as e:
-        log.exception("transfer_bridge_error", error=str(e))
+        log.error("transfer_bridge_error", error_type=type(e).__name__)
     finally:
         await voice_service.close()
 
@@ -939,7 +1269,7 @@ async def handle_machine_detection(payload: dict[Any, Any], log: Any) -> None:
                     channel_id="calls",
                 )
     except Exception as e:
-        log.exception("push_notification_failed", error=str(e))
+        log.error("push_notification_failed", error_type=type(e).__name__)
 
     # Hang up the call
     from app.services.telephony.telnyx_voice import TelnyxVoiceService
@@ -950,7 +1280,7 @@ async def handle_machine_detection(payload: dict[Any, Any], log: Any) -> None:
             await voice_service.hangup_call(call_control_id)
             log.info("call_hung_up_on_voicemail")
         except Exception as e:
-            log.exception("hangup_failed", error=str(e))
+            log.error("hangup_failed", error_type=type(e).__name__)
         finally:
             await voice_service.close()
 
@@ -964,7 +1294,7 @@ async def handle_machine_detection(payload: dict[Any, Any], log: Any) -> None:
                 log=log,
             )
         except Exception as e:
-            log.exception("sms_fallback_trigger_failed", error=str(e))
+            log.error("sms_fallback_trigger_failed", error_type=type(e).__name__)
 
         # Automatic missed-call text-back for voicemail-detected calls. The
         # service self-guards on inbound direction and is idempotent on
@@ -981,7 +1311,7 @@ async def handle_machine_detection(payload: dict[Any, Any], log: Any) -> None:
                 log=log,
             )
         except Exception as e:
-            log.exception("missed_call_textback_failed", error=str(e))
+            log.error("missed_call_textback_failed", error_type=type(e).__name__)
 
 
 async def handle_recording_saved(payload: dict[Any, Any], log: Any) -> None:
@@ -1075,7 +1405,7 @@ async def take_inbound_voicemail(
         else:
             log.warning("voicemail_recording_failed", call_control_id=call_control_id)
     except Exception as e:
-        log.exception("take_inbound_voicemail_error", error=str(e))
+        log.error("take_inbound_voicemail_error", error_type=type(e).__name__)
     finally:
         await voice_service.close()
 
@@ -1093,9 +1423,127 @@ async def _reject_inbound_call(call_control_id: str, log: Any) -> None:
         await voice_service.hangup_call(call_control_id)
         log.info("inbound_spam_call_hung_up", call_control_id=call_control_id)
     except Exception as e:
-        log.exception("inbound_spam_call_hangup_failed", error=str(e))
+        log.error("inbound_spam_call_hangup_failed", error_type=type(e).__name__)
     finally:
         await voice_service.close()
+
+
+async def _transfer_inbound_to_fallback(
+    call_control_id: str,
+    fallback_number: str | None,
+    log: Any,
+    *,
+    reason: str,
+) -> None:
+    """Transfer through the shared fallback service or play an unavailable notice."""
+    from app.services.telephony.inbound_fallback import route_inbound_to_fallback
+
+    await route_inbound_to_fallback(
+        call_control_id=call_control_id,
+        fallback_number=fallback_number,
+        log=log,
+        reason=reason,
+    )
+
+
+async def _resolve_ready_inbound_agent(
+    call_control_id: str,
+    phone_record: PhoneNumber,
+    conversation: Any,
+    log: Any,
+    *,
+    reason: str | None,
+    caller_phone: str,
+) -> Any | None:
+    """Reserve spend/capacity, then resolve and validate the actual routed agent."""
+    from app.services.telephony.inbound_fallback import end_inbound_call_with_notice
+
+    try:
+        await enforce_inbound_call_limits(
+            workspace_id=str(phone_record.workspace_id),
+            caller_phone=caller_phone,
+        )
+        await reserve_inbound_call_capacity(
+            workspace_id=str(phone_record.workspace_id),
+            call_control_id=call_control_id,
+        )
+    except InboundCallerRateLimitError:
+        await end_inbound_call_with_notice(
+            call_control_id=call_control_id,
+            notice="busy",
+            log=log,
+            reason="caller_limit_reached",
+        )
+        return None
+    except (SoftphoneRateLimitError, SoftphoneRateLimitUnavailableError):
+        await _transfer_inbound_to_fallback(
+            call_control_id,
+            phone_record.inbound_fallback_number,
+            log,
+            reason="workspace_protection_blocked",
+        )
+        return None
+
+    try:
+        async with AsyncSessionLocal() as db:
+            resolved = await _voice_agent_resolver.resolve(
+                db, conversation, phone_record, log, reason=reason
+            )
+            if resolved is None:
+                readiness = None
+            else:
+                readiness = await evaluate_inbound_call_readiness(
+                    db,
+                    workspace_id=phone_record.workspace_id,
+                    phone_number=phone_record,
+                    assigned_agent_id=resolved.agent.id,
+                    fallback_number=phone_record.inbound_fallback_number,
+                    transfer_destination_number=None,
+                )
+    except Exception as exc:
+        log.error(
+            "inbound_ai_readiness_error",
+            error_type=type(exc).__name__,
+        )
+        await _transfer_inbound_to_fallback(
+            call_control_id,
+            phone_record.inbound_fallback_number,
+            log,
+            reason="readiness_error",
+        )
+        return None
+
+    if resolved is None or readiness is None or not readiness.ready:
+        blocked_checks = (
+            [check.code for check in readiness.checks if not check.ready]
+            if readiness is not None
+            else ["agent"]
+        )
+        log.warning("inbound_ai_readiness_failed", blocked_checks=blocked_checks)
+        await _transfer_inbound_to_fallback(
+            call_control_id,
+            phone_record.inbound_fallback_number,
+            log,
+            reason="agent_resolution_failed" if resolved is None else "ai_not_ready",
+        )
+        return None
+    return resolved
+
+
+async def _mark_inbound_disclosure_failed(message_id: uuid.UUID, workspace_id: uuid.UUID) -> None:
+    from app.models.conversation import Message
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            update(Message)
+            .where(
+                Message.id == message_id,
+                Message.voice_disclosure_status.in_(("pending", "speaking")),
+            )
+            .values(voice_disclosure_status="failed")
+        )
+        await db.commit()
+    observe_inbound_disclosure(workspace_id, "failed")
 
 
 async def auto_answer_call_if_agent_assigned(
@@ -1104,92 +1552,93 @@ async def auto_answer_call_if_agent_assigned(
     conversation: Any,
     log: Any,
     reason: str | None = None,
+    caller_phone: str = "",
 ) -> None:
-    """Auto-answer incoming call if an active agent is assigned."""
-    from app.models.conversation import Conversation
+    """Route an allowlisted inbound call to disclosed AI or human fallback."""
+    from app.models.conversation import Conversation, Message
     from app.services.telephony.telnyx_voice import TelnyxVoiceService
 
-    log.info(
-        "========== AUTO ANSWER CHECK ==========",
-        call_control_id=call_control_id,
-        phone_number=phone_record.phone_number,
-        phone_assigned_agent_id=str(phone_record.assigned_agent_id)
-        if phone_record.assigned_agent_id
-        else None,
-        conversation_id=str(conversation.id) if conversation else None,
-    )
+    if not phone_record.inbound_ai_enabled:
+        await _transfer_inbound_to_fallback(
+            call_control_id,
+            phone_record.inbound_fallback_number,
+            log,
+            reason="ai_not_enabled",
+        )
+        return
 
-    if not settings.telnyx_api_key:
-        log.warning("no_telnyx_api_key_for_auto_answer")
+    resolved = await _resolve_ready_inbound_agent(
+        call_control_id,
+        phone_record,
+        conversation,
+        log,
+        reason=reason,
+        caller_phone=caller_phone,
+    )
+    if resolved is None:
         return
 
     async with AsyncSessionLocal() as db:
-        resolved = await _voice_agent_resolver.resolve(
-            db, conversation, phone_record, log, reason=reason
-        )
-
-        if not resolved:
-            log.info(
-                "no_valid_voice_agent_found",
-                phone_number=phone_record.phone_number,
-                hint="Assign a voice-capable agent to the phone number or campaign",
-            )
-            # No agent available to take the call — answer it ourselves and
-            # record a voicemail so the caller can still leave a message. The
-            # recording webhook then runs the AI voicemail pipeline.
-            await take_inbound_voicemail(call_control_id, log)
-            return
-
-        log.info(
-            "auto_answering_call_with_agent",
-            agent_id=str(resolved.agent.id),
-            agent_name=resolved.agent.name,
-            agent_source=resolved.source,
-            routing_reason=resolved.reason,
-            call_control_id=call_control_id,
-        )
-
-        # Update conversation with assigned agent
         conv_result = await db.execute(
-            select(Conversation).where(Conversation.id == conversation.id)
+            select(Conversation).where(
+                Conversation.id == conversation.id,
+                Conversation.workspace_id == phone_record.workspace_id,
+            )
         )
         conv = conv_result.scalar_one_or_none()
-        if conv:
-            conv.assigned_agent_id = resolved.agent.id
-            conv.ai_enabled = True
-            await db.commit()
-
-        # Answer the call via Telnyx
-        voice_service = TelnyxVoiceService(settings.telnyx_api_key)
-        try:
-            answered = await voice_service.answer_call(call_control_id)
-
-            if not answered:
-                log.error("failed_to_answer_call", call_control_id=call_control_id)
-                return
-
-            log.info("call_answered_successfully", call_control_id=call_control_id)
-
-            # Start audio streaming
-            api_base = settings.api_base_url or "https://example.com"
-            streaming_started = await voice_service.start_audio_streaming(
-                call_control_id=call_control_id,
-                api_base_url=api_base,
-                is_outbound=False,
+        message_result = await db.execute(
+            select(Message).where(
+                Message.provider_message_id == call_control_id,
+                Message.conversation_id == conversation.id,
+                Message.direction == "inbound",
             )
+        )
+        message = message_result.scalar_one_or_none()
+        if conv is None or message is None:
+            log.error("inbound_call_state_not_found")
+            await _transfer_inbound_to_fallback(
+                call_control_id,
+                phone_record.inbound_fallback_number,
+                log,
+                reason="call_state_missing",
+            )
+            return
 
-            if streaming_started:
-                log.info("audio_streaming_started", call_control_id=call_control_id)
-            else:
-                log.error("failed_to_start_audio_streaming", call_control_id=call_control_id)
+        conv.assigned_agent_id = resolved.agent.id
+        conv.ai_enabled = True
+        message_id = message.id
+        message.agent_id = resolved.agent.id
+        message.voice_disclosure_status = "pending"
+        message.voice_disclosure_version = DISCLOSURE_VERSION
+        await db.commit()
 
-            # Start recording if agent has it enabled
-            if resolved.agent.enable_recording:
-                recorded = await voice_service.start_recording(call_control_id)
-                if recorded:
-                    log.info("call_recording_started", call_control_id=call_control_id)
-                else:
-                    log.warning("call_recording_failed", call_control_id=call_control_id)
+    if not settings.telnyx_api_key:
+        await _mark_inbound_disclosure_failed(message_id, phone_record.workspace_id)
+        await _transfer_inbound_to_fallback(
+            call_control_id,
+            phone_record.inbound_fallback_number,
+            log,
+            reason="telnyx_unavailable",
+        )
+        return
 
-        finally:
-            await voice_service.close()
+    voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+    try:
+        answered = await voice_service.answer_call(call_control_id)
+        if answered:
+            log.info(
+                "inbound_ai_call_answered_waiting_for_disclosure",
+                agent_id=str(resolved.agent.id),
+            )
+            return
+        log.error("failed_to_answer_inbound_ai_call")
+    finally:
+        await voice_service.close()
+
+    await _mark_inbound_disclosure_failed(message_id, phone_record.workspace_id)
+    await _transfer_inbound_to_fallback(
+        call_control_id,
+        phone_record.inbound_fallback_number,
+        log,
+        reason="answer_failed",
+    )

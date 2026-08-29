@@ -20,6 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.encryption import EncryptedString
 from app.db.base import Base
 from app.db.tenancy import WorkspaceScoped
 
@@ -128,6 +129,13 @@ class PhoneNumber(Base, WorkspaceScoped):
         nullable=True,
         index=True,
     )
+
+    # Inbound AI routing is explicitly opt-in. Agent assignment alone must never
+    # make a purchased number answer callers or incur OpenAI spend.
+    inbound_ai_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    inbound_fallback_number: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
 
     # Call-tracking attribution. Dedicated numbers provide direct evidence for
     # offline channels that cannot carry UTM parameters.

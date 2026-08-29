@@ -13,21 +13,30 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1 import phone_numbers as phone_numbers_module
 from app.api.v1.phone_numbers import (
+    configure_inbound_calling,
     get_phone_number,
     list_phone_numbers,
     update_phone_number,
 )
 from app.db.session import AsyncSessionLocal, engine
+from app.models.agent import Agent
 from app.models.lead_source import LeadSource, LeadSourceCampaign, LeadSourceType
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace
-from app.schemas.phone_number import PhoneNumberResponse, PhoneNumberUpdate
+from app.schemas.phone_number import (
+    InboundCallConfigRequest,
+    PhoneNumberResponse,
+    PhoneNumberUpdate,
+)
+from app.services.telephony.inbound_call_readiness import InboundCallReadiness
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
@@ -165,3 +174,111 @@ async def test_update_sets_and_serializes_tracking_mapping() -> None:
         assert response.lead_source.name == "Northside Yard Signs"
         assert response.lead_source_campaign is not None
         assert response.lead_source_campaign.name == "Spring Cleanup"
+
+
+async def test_agent_assignment_change_disables_ai_until_reactivated() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        agent = Agent(
+            workspace_id=ws.id,
+            name="Replacement Agent",
+            system_prompt="Help inbound callers.",
+            channel_mode="voice",
+            voice_provider="openai",
+            voice_id="alloy",
+        )
+        db.add(agent)
+        phone = await _make_number(db, ws.id)
+        phone.inbound_ai_enabled = True
+        await db.commit()
+
+        updated = await update_phone_number(
+            ws.id,
+            phone.id,
+            PhoneNumberUpdate(assigned_agent_id=agent.id),
+            _ANY,
+            db,
+            _ANY,
+        )
+
+        assert updated.assigned_agent_id == agent.id
+        assert updated.inbound_ai_enabled is False
+
+
+async def test_failed_provider_activation_leaves_database_kill_switch_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        agent = Agent(
+            workspace_id=ws.id,
+            name="Pilot Agent",
+            system_prompt="Help inbound callers.",
+            channel_mode="voice",
+            voice_provider="openai",
+            voice_id="alloy",
+        )
+        db.add(agent)
+        phone = await _make_number(db, ws.id)
+        phone.telnyx_phone_number_id = "provider-number-id"
+        await db.commit()
+
+        monkeypatch.setattr(
+            phone_numbers_module,
+            "evaluate_inbound_call_readiness",
+            AsyncMock(return_value=InboundCallReadiness(checks=(), agent=agent)),
+        )
+        provider = MagicMock(
+            configure_phone_number=AsyncMock(return_value=False),
+            close=AsyncMock(),
+        )
+        monkeypatch.setattr(
+            phone_numbers_module,
+            "TelnyxSMSService",
+            MagicMock(return_value=provider),
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await configure_inbound_calling(
+                ws.id,
+                phone.id,
+                InboundCallConfigRequest(
+                    enabled=True,
+                    assigned_agent_id=agent.id,
+                    fallback_number="+12025550123",
+                    transfer_destination_number="+12025550124",
+                ),
+                _ANY,
+                db,
+                _ANY,
+            )
+
+        assert exc.value.status_code == 502
+        await db.refresh(phone)
+        assert phone.inbound_ai_enabled is False
+
+
+async def test_deactivation_commits_kill_switch_before_optional_config_validation() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        phone = await _make_number(db, ws.id)
+        phone.inbound_ai_enabled = True
+        await db.commit()
+
+        with pytest.raises(HTTPException) as exc:
+            await configure_inbound_calling(
+                ws.id,
+                phone.id,
+                InboundCallConfigRequest(
+                    enabled=False,
+                    transfer_destination_number="+12025550124",
+                ),
+                _ANY,
+                db,
+                _ANY,
+            )
+
+        assert exc.value.status_code == 422
+        await db.rollback()
+        await db.refresh(phone)
+        assert phone.inbound_ai_enabled is False

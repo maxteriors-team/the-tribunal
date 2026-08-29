@@ -8419,6 +8419,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/phone-numbers/{phone_number_id}/inbound-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Configure Inbound Calling
+         * @description Configure and explicitly activate or deactivate AI-first inbound routing.
+         */
+        put: operations["configure_inbound_calling_api_v1_workspaces__workspace_id__phone_numbers__phone_number_id__inbound_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/phone-numbers/{phone_number_id}/inbound-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Inbound Readiness
+         * @description Return non-sensitive prerequisites for AI-first inbound activation.
+         */
+        get: operations["get_inbound_readiness_api_v1_workspaces__workspace_id__phone_numbers__phone_number_id__inbound_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/pre-booking/audience": {
         parameters: {
             query?: never;
@@ -19145,6 +19185,55 @@ export interface components {
             suggested_prompt: string;
         };
         /**
+         * InboundCallConfigRequest
+         * @description Workspace-managed AI-first routing configuration.
+         */
+        InboundCallConfigRequest: {
+            /** Assigned Agent Id */
+            assigned_agent_id?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Fallback Number */
+            fallback_number?: string | null;
+            /** Transfer Destination Number */
+            transfer_destination_number?: string | null;
+        };
+        /**
+         * InboundCallReadinessResponse
+         * @description Inbound AI routing state and bounded readiness details.
+         */
+        InboundCallReadinessResponse: {
+            /** Assigned Agent Id */
+            assigned_agent_id?: string | null;
+            /** Checks */
+            checks: components["schemas"]["InboundReadinessCheck"][];
+            /** Enabled */
+            enabled: boolean;
+            /** Fallback Configured */
+            fallback_configured: boolean;
+            /**
+             * Phone Number Id
+             * Format: uuid
+             */
+            phone_number_id: string;
+            /** Ready */
+            ready: boolean;
+            /** Transfer Destination Configured */
+            transfer_destination_configured: boolean;
+        };
+        /**
+         * InboundReadinessCheck
+         * @description One non-sensitive activation prerequisite.
+         */
+        InboundReadinessCheck: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Ready */
+            ready: boolean;
+        };
+        /**
          * InstallationPlanFixture
          * @description Price-free fixture schedule row for the selected installation sheet.
          */
@@ -25572,6 +25661,11 @@ export interface components {
             id: string;
             /** Imessage Enabled */
             imessage_enabled: boolean;
+            /**
+             * Inbound Ai Enabled
+             * @default false
+             */
+            inbound_ai_enabled: boolean;
             /** Is Active */
             is_active: boolean;
             lead_source: components["schemas"]["PhoneNumberLeadSourceResponse"] | null;
@@ -50906,6 +51000,74 @@ export interface operations {
                     "application/json": {
                         [key: string]: boolean;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configure_inbound_calling_api_v1_workspaces__workspace_id__phone_numbers__phone_number_id__inbound_config_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                phone_number_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InboundCallConfigRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundCallReadinessResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_inbound_readiness_api_v1_workspaces__workspace_id__phone_numbers__phone_number_id__inbound_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                phone_number_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundCallReadinessResponse"];
                 };
             };
             /** @description Validation Error */

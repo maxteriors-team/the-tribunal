@@ -55,12 +55,44 @@ from app.websockets.connection_limits import (
 router = APIRouter()
 logger = structlog.get_logger()
 
-_SENSITIVE_HEADERS = {"authorization", "cookie", "x-api-key", "proxy-authorization"}
+_MAX_TELNYX_MEDIA_PAYLOAD_CHARS = 64 * 1024
+_MAX_PROVIDER_AUDIO_CHUNK_BYTES = 64 * 1024
 
 
 def _safe_headers(headers: dict[str, str]) -> dict[str, str]:
-    """Redact sensitive header values to prevent leaking secrets in logs."""
-    return {k: "***" if k.lower() in _SENSITIVE_HEADERS else v for k, v in headers.items()}
+    """Keep header names for diagnostics without exposing external values."""
+    return dict.fromkeys(headers, "***")
+
+
+def _trusted_call_direction(full_context: Any, requested_is_outbound: bool, log: Any) -> bool:
+    """Ignore query-string direction and trust only the persisted call message."""
+    persisted_is_outbound = full_context.is_outbound is True
+    if requested_is_outbound != persisted_is_outbound:
+        log.warning(
+            "voice_bridge_direction_query_ignored",
+            persisted_is_outbound=persisted_is_outbound,
+        )
+    return persisted_is_outbound
+
+
+async def _route_inbound_after_bridge_failure(call_id: str, log: Any, *, reason: str) -> None:
+    """Best-effort fallback without letting lookup failures suppress WebSocket closure."""
+    from app.services.telephony.inbound_fallback import (
+        route_inbound_to_configured_fallback,
+    )
+
+    try:
+        await route_inbound_to_configured_fallback(
+            call_control_id=call_id,
+            log=log,
+            reason=reason,
+        )
+    except Exception as exc:
+        log.error(
+            "inbound_bridge_fallback_failed",
+            reason=reason,
+            error_type=type(exc).__name__,
+        )
 
 
 async def _lookup_call_context_wrapper(
@@ -121,8 +153,12 @@ async def _stamp_prompt_version_on_message(call_id: str, prompt_version_id: str,
                 prompt_version_id=prompt_version_id,
                 rows_updated=result.rowcount,  # type: ignore[attr-defined]
             )
-    except Exception as e:
-        log.exception("failed_to_stamp_prompt_version", error=str(e), call_id=call_id)
+    except Exception as exc:
+        log.error(
+            "failed_to_stamp_prompt_version",
+            error_type=type(exc).__name__,
+            call_id=call_id,
+        )
 
 
 async def _setup_voice_session(
@@ -205,7 +241,6 @@ async def _setup_voice_session(
                 )
                 log.info(
                     "ivr_detection_enabled_for_outbound",
-                    navigation_goal=navigation_goal,
                     loop_threshold=loop_threshold,
                     ivr_config=ivr_config,
                 )
@@ -383,6 +418,8 @@ async def voice_stream_bridge(  # noqa: PLR0912, PLR0915
         # provider — we also need workspace_id for the per-tenant cap below.
         log.info("looking_up_call_context", call_id=call_id)
         full_context = await lookup_call_context(call_id, log)
+        is_outbound = _trusted_call_direction(full_context, is_outbound, log)
+        log = log.bind(is_outbound=is_outbound, direction_source="database")
         agent = full_context.agent
         contact_info = full_context.contact_info
         offer_info = full_context.offer_info
@@ -458,9 +495,6 @@ async def _voice_stream_bridge_body(  # noqa: PLR0912, PLR0915
     if prompt_version_id:
         await _stamp_prompt_version_on_message(call_id, prompt_version_id, log)
 
-    greeting_preview = None
-    if agent and agent.initial_greeting:
-        greeting_preview = agent.initial_greeting[:50]
     log.info(
         "call_context_lookup_result",
         agent_found=agent is not None,
@@ -468,9 +502,7 @@ async def _voice_stream_bridge_body(  # noqa: PLR0912, PLR0915
         agent_name=agent.name if agent else None,
         agent_voice_provider=agent.voice_provider if agent else None,
         agent_voice_id=agent.voice_id if agent else None,
-        agent_initial_greeting=greeting_preview,
         contact_found=contact_info is not None,
-        contact_name=contact_info.get("name") if contact_info else None,
         offer_found=offer_info is not None,
         timezone=timezone,
         prompt_version_id=prompt_version_id,
@@ -575,28 +607,50 @@ async def _voice_stream_bridge_body(  # noqa: PLR0912, PLR0915
         log.error(
             "voice_session_creation_failed",
             provider=voice_provider,
-            error="Workspace not found",
+            reason="workspace_not_found",
         )
+        if not is_outbound:
+            await _route_inbound_after_bridge_failure(call_id, log, reason="workspace_not_found")
         await websocket.send_json({"error": "Workspace not found"})
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    async with AsyncSessionLocal() as db:
-        voice_session, error = await create_workspace_voice_session(
-            db,
-            uuid.UUID(workspace_id),
-            voice_provider,
-            agent,
-            timezone,
+    try:
+        async with AsyncSessionLocal() as db:
+            voice_session, error = await create_workspace_voice_session(
+                db,
+                uuid.UUID(workspace_id),
+                voice_provider,
+                agent,
+                timezone,
+                require_workspace_credentials=not is_outbound,
+            )
+    except Exception as exc:
+        log.error(
+            "voice_session_creation_error",
+            provider=voice_provider,
+            error_type=type(exc).__name__,
         )
+        if not is_outbound:
+            await _route_inbound_after_bridge_failure(
+                call_id, log, reason="voice_session_creation_error"
+            )
+        await websocket.send_json({"error": "Voice provider unavailable"})
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        return
+
     if voice_session is None:
         log.error(
             "voice_session_creation_failed",
             provider=voice_provider,
-            error=error,
-            hint="Check API keys in environment variables",
+            reason="factory_rejected",
         )
-        await websocket.send_json({"error": error})
+        if not is_outbound:
+            await _route_inbound_after_bridge_failure(
+                call_id, log, reason="voice_session_creation_failed"
+            )
+        client_error = error if is_outbound else "Voice provider unavailable"
+        await websocket.send_json({"error": client_error or "Voice provider unavailable"})
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
@@ -627,6 +681,10 @@ async def _voice_stream_bridge_body(  # noqa: PLR0912, PLR0915
                 elapsed_secs=round(connect_elapsed, 2),
                 hint="Check API key validity and network connectivity",
             )
+            if not is_outbound:
+                await _route_inbound_after_bridge_failure(
+                    call_id, log, reason="voice_provider_connection_failed"
+                )
             await websocket.send_json(
                 {"error": f"Failed to connect to {voice_provider} Realtime API"}
             )
@@ -724,13 +782,16 @@ async def _voice_stream_bridge_body(  # noqa: PLR0912, PLR0915
         )
     except asyncio.CancelledError:
         log.info("voice_bridge_cancelled")
-    except Exception as e:
+        raise
+    except Exception as exc:
         elapsed = time.time() - connection_start
-        log.exception(
+        log.error(
             "voice_bridge_error",
-            error=str(e),
+            error_type=type(exc).__name__,
             total_connection_secs=round(elapsed, 1),
         )
+        if not is_outbound:
+            await _route_inbound_after_bridge_failure(call_id, log, reason="voice_bridge_error")
     finally:
         # Clean up relay task
         if relay_task and not relay_task.done():
@@ -762,19 +823,34 @@ async def _voice_stream_bridge_body(  # noqa: PLR0912, PLR0915
                                 transcript_json=transcript_json,
                                 log=log,
                             )
-                        except Exception as e:
-                            log.warning("caller_memory_store_failed", error=str(e))
-                except Exception as e:
-                    log.exception("failed_to_save_transcript", error=str(e))
+                        except Exception as exc:
+                            log.warning(
+                                "caller_memory_store_failed",
+                                error_type=type(exc).__name__,
+                            )
+                except Exception as exc:
+                    log.error(
+                        "failed_to_save_transcript",
+                        error_type=type(exc).__name__,
+                    )
 
             # Save streaming duration so hangup handler has accurate duration
             try:
                 await _save_call_duration(call_id, round(elapsed), log)
-            except Exception as e:
-                log.exception("failed_to_save_duration", error=str(e))
+            except Exception as exc:
+                log.error(
+                    "failed_to_save_duration",
+                    error_type=type(exc).__name__,
+                )
 
         log.info("disconnecting_from_voice_provider")
-        await voice_session.disconnect()
+        try:
+            await voice_session.disconnect()
+        except Exception as exc:
+            log.error(
+                "voice_provider_disconnect_failed",
+                error_type=type(exc).__name__,
+            )
 
         with contextlib.suppress(Exception):
             await websocket.close()
@@ -880,25 +956,28 @@ async def _relay_audio(
             with contextlib.suppress(asyncio.CancelledError):
                 await task
 
-        # Check for exceptions in completed tasks
+        # Propagate relay failures so inbound calls reach emergency fallback.
         for task in done:
             exc = task.exception()
             if exc:
+                task_name = "telnyx_receive" if task == send_task else "provider_receive"
                 log.error(
                     "relay_task_failed",
-                    task="telnyx_receive" if task == send_task else "provider_receive",
-                    error=str(exc),
+                    task=task_name,
+                    error_type=type(exc).__name__,
                 )
+                raise exc
 
     except asyncio.CancelledError:
         log.info("relay_cancelled")
-        # Cancel both tasks
         send_task.cancel()
         recv_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await asyncio.gather(send_task, recv_task)
-    except Exception as e:
-        log.exception("relay_error", error=str(e))
+        raise
+    except Exception as exc:
+        log.error("relay_error", error_type=type(exc).__name__)
+        raise
 
 
 async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
@@ -943,8 +1022,11 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
             await voice_session.trigger_initial_response(is_outbound=is_outbound)
             greeting_triggered.set()
             log.info("greeting_triggered_after_phase1_gate")
-        except Exception as e:
-            log.exception("trigger_initial_response_failed_phase2", error=str(e))
+        except Exception as exc:
+            log.error(
+                "trigger_initial_response_failed_phase2",
+                error_type=type(exc).__name__,
+            )
             raise
 
     # Heartbeat watchdog (idle-timeout only — no pings on this socket): stashed
@@ -961,9 +1043,14 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
 
             try:
                 data = json.loads(raw_data)
+                if not isinstance(data, dict):
+                    raise ValueError("Telnyx media frame must be an object")
                 event = data.get("event", "")
 
                 if event == "start":
+                    if stream_started:
+                        log.warning("duplicate_telnyx_stream_start_ignored")
+                        continue
                     # Stream has started - Telnyx is ready to send/receive audio
                     stream_id = data.get("stream_id", "")
                     start_info = data.get("start", {})
@@ -981,7 +1068,6 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
                         encoding=media_format.get("encoding", "unknown"),
                         sample_rate=media_format.get("sample_rate", "unknown"),
                         channels=media_format.get("channels", "unknown"),
-                        full_start_info=start_info,
                         stream_id_stored=True,
                     )
 
@@ -1010,24 +1096,27 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
                             stream_id=stream_id,
                             is_outbound=is_outbound,
                         )
-                    except Exception as e:
-                        log.exception(
+                    except Exception as exc:
+                        log.error(
                             "trigger_initial_response_failed",
-                            error=str(e),
-                            error_type=type(e).__name__,
+                            error_type=type(exc).__name__,
                         )
                         raise
 
                 elif event == "media" and stream_started:
                     # Audio data received from caller
                     media = data.get("media", {})
+                    if not isinstance(media, dict):
+                        raise ValueError("Telnyx media payload must be an object")
                     payload = media.get("payload", "")
-                    timestamp = media.get("timestamp", "")
-                    chunk_num = media.get("chunk", "")
 
                     if payload:
-                        # Decode base64 μ-law audio (8kHz)
-                        audio_mulaw = base64.b64decode(payload)
+                        if (
+                            not isinstance(payload, str)
+                            or len(payload) > _MAX_TELNYX_MEDIA_PAYLOAD_CHARS
+                        ):
+                            raise ValueError("Telnyx media payload is invalid")
+                        audio_mulaw = base64.b64decode(payload, validate=True)
                         audio_chunks_received += 1
                         total_audio_bytes += len(audio_mulaw)
 
@@ -1056,8 +1145,6 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
                                 chunks=audio_chunks_received,
                                 total_bytes=total_audio_bytes,
                                 elapsed_secs=round(elapsed, 1),
-                                timestamp=timestamp,
-                                chunk=chunk_num,
                                 no_conversion=is_openai_ulaw,
                             )
 
@@ -1072,25 +1159,19 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
                     break
 
                 elif event == "error":
-                    error_msg = data.get("error", {}).get("message", "unknown")
-                    log.error("telnyx_stream_error", error=error_msg)
-                    break
+                    log.error("telnyx_stream_error")
+                    raise RuntimeError("Telnyx media stream reported an error")
 
                 else:
-                    log.debug("telnyx_unknown_event", telnyx_event=event)
+                    log.debug("telnyx_unknown_event")
 
-            except json.JSONDecodeError as e:
+            except json.JSONDecodeError as exc:
                 log.warning(
                     "telnyx_invalid_json",
-                    error=str(e),
-                    raw_data_preview=raw_data[:100] if raw_data else "empty",
+                    error_type=type(exc).__name__,
                 )
-            except Exception as e:
-                log.exception(
-                    "telnyx_audio_processing_error",
-                    error=str(e),
-                    event=data.get("event", "unknown") if "data" in dir() else "unknown",
-                )
+            except Exception:
+                raise
 
     except WebSocketDisconnect:
         elapsed = time.time() - start_time
@@ -1102,8 +1183,12 @@ async def _receive_from_telnyx_and_send_to_provider(  # noqa: PLR0912, PLR0915
     except asyncio.CancelledError:
         log.info("telnyx_receive_cancelled")
         raise
-    except Exception as e:
-        log.exception("receive_from_telnyx_error", error=str(e))
+    except Exception as exc:
+        log.error(
+            "receive_from_telnyx_error",
+            error_type=type(exc).__name__,
+        )
+        raise
 
 
 async def _receive_from_provider_and_send_to_telnyx(  # noqa: PLR0912, PLR0915
@@ -1170,13 +1255,11 @@ async def _receive_from_provider_and_send_to_telnyx(  # noqa: PLR0912, PLR0915
         audio_chunks_sent += 1
         total_audio_bytes += len(audio_data)
 
-        # Log first few chunks for debugging
         if audio_chunks_sent <= 3:
             log.info(
                 "sent_audio_to_telnyx",
                 chunk_num=audio_chunks_sent,
                 bytes_sent=len(audio_data),
-                first_bytes_hex=audio_data[:10].hex() if audio_data else "empty",
             )
 
     def _check_ws_connected() -> str:
@@ -1211,6 +1294,11 @@ async def _receive_from_provider_and_send_to_telnyx(  # noqa: PLR0912, PLR0915
         is_openai_ulaw = isinstance(voice_session, VoiceAgentSession)
 
         async for audio_chunk in voice_session.receive_audio_stream():
+            if (
+                not isinstance(audio_chunk, bytes)
+                or len(audio_chunk) > _MAX_PROVIDER_AUDIO_CHUNK_BYTES
+            ):
+                raise ValueError("Voice provider audio chunk is invalid")
             if first_audio_time is None:
                 first_audio_time = time.time()
                 latency = first_audio_time - start_time
@@ -1220,7 +1308,6 @@ async def _receive_from_provider_and_send_to_telnyx(  # noqa: PLR0912, PLR0915
                     audio_bytes=len(audio_chunk),
                     is_elevenlabs=is_elevenlabs,
                     is_openai_ulaw=is_openai_ulaw,
-                    chunk_preview_hex=audio_chunk[:20].hex() if audio_chunk else "empty",
                 )
 
             try:
@@ -1272,12 +1359,15 @@ async def _receive_from_provider_and_send_to_telnyx(  # noqa: PLR0912, PLR0915
                         elapsed_secs=round(elapsed, 1),
                     )
 
-            except Exception as e:
-                log.exception(
-                    "provider_audio_conversion_error",
-                    error=str(e),
+            except WebSocketDisconnect:
+                raise
+            except Exception as exc:
+                log.error(
+                    "provider_audio_processing_error",
+                    error_type=type(exc).__name__,
                     audio_bytes=len(audio_chunk),
                 )
+                raise
 
         # Flush any remaining audio in the buffer
         if audio_buffer:
@@ -1286,6 +1376,7 @@ async def _receive_from_provider_and_send_to_telnyx(  # noqa: PLR0912, PLR0915
 
     except TimeoutError:
         log.error("greeting_trigger_timeout", timeout_secs=10)
+        raise
     except WebSocketDisconnect:
         elapsed = time.time() - start_time
         log.info(
@@ -1296,9 +1387,10 @@ async def _receive_from_provider_and_send_to_telnyx(  # noqa: PLR0912, PLR0915
     except asyncio.CancelledError:
         log.info("provider_receive_cancelled")
         raise
-    except Exception as e:
-        log.exception(
+    except Exception as exc:
+        log.error(
             "receive_from_provider_error",
-            error=str(e),
+            error_type=type(exc).__name__,
             chunks_sent=audio_chunks_sent,
         )
+        raise

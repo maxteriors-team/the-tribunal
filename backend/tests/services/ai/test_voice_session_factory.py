@@ -11,6 +11,7 @@ import httpx
 from app.core.config import settings
 from app.core.encryption import encrypt_json
 from app.models.workspace import WorkspaceIntegration
+from app.services.ai.openai_credentials import OpenAICredentialContext
 from app.services.ai.voice_agent import OPENAI_REALTIME_CLIENT_SECRETS_URL, VoiceAgentSession
 from app.services.ai.voice_session_factory import VoiceSessionFactory
 
@@ -156,3 +157,26 @@ async def test_workspace_api_key_voice_session_uses_direct_realtime_auth() -> No
     assert session.auth_mode == "api_key"
     assert session.credential_source == "workspace_api_key"
     assert session.additional_headers == {}
+
+
+async def test_inbound_session_rejects_global_openai_fallback() -> None:
+    db = _AsyncDB(None)
+    env_context = OpenAICredentialContext(
+        bearer_token="env-key",
+        source="env_api_key",
+        is_oauth=False,
+    )
+
+    with patch(
+        "app.services.ai.voice_session_factory.resolve_openai_credentials",
+        new=AsyncMock(return_value=env_context),
+    ):
+        session, error = await VoiceSessionFactory(settings).create_session_for_workspace(
+            db,
+            uuid.uuid4(),
+            "openai",
+            require_workspace_credentials=True,
+        )
+
+    assert session is None
+    assert error == "OpenAI workspace integration not configured"

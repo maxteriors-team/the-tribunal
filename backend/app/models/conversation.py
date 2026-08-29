@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -322,6 +323,11 @@ class Message(Base):
             "conversation_id",
             "created_at",
         ),
+        CheckConstraint(
+            "voice_disclosure_status IS NULL OR "
+            "voice_disclosure_status IN ('pending', 'speaking', 'completed', 'failed')",
+            name="ck_messages_voice_disclosure_status",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -457,6 +463,11 @@ class Message(Base):
     recording_url: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
     transcript: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
     booking_outcome: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    voice_disclosure_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    voice_disclosure_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    voice_disclosed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # === Inbound spam screening & reason-based routing ===
     # Populated for inbound calls by the call.initiated handler.

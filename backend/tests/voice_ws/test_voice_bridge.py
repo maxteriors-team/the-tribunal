@@ -27,6 +27,7 @@ import contextlib
 import json
 import uuid
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -152,12 +153,22 @@ class TestSafeHeaders:
         assert safe["Cookie"] == "***"
         assert safe["X-API-Key"] == "***"
         assert safe["Proxy-Authorization"] == "***"
-        assert safe["Content-Type"] == "application/json"
+        assert safe["Content-Type"] == "***"
 
-    def test_passes_through_when_no_sensitive(self) -> None:
-        assert vb._safe_headers({"X-Other": "v"}) == {"X-Other": "v"}
+    def test_redacts_unknown_headers_by_default(self) -> None:
+        assert vb._safe_headers({"X-Other": "secret"}) == {"X-Other": "***"}
 
 
+def test_voice_bridge_ignores_query_direction_in_favor_of_persisted_message() -> None:
+    log = MagicMock()
+
+    assert vb._trusted_call_direction(SimpleNamespace(is_outbound=False), True, log) is False
+    log.warning.assert_called_once_with(
+        "voice_bridge_direction_query_ignored", persisted_is_outbound=False
+    )
+
+
+# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # Codec round-trip — the bridge's audio hot path
 # ---------------------------------------------------------------------------
@@ -232,7 +243,11 @@ class TestDatabaseWrappers:
         # Bad UUID — function should log but not raise (call must continue).
         log = MagicMock()
         await vb._stamp_prompt_version_on_message("call-1", "not-a-uuid", log)
-        log.exception.assert_called_once()
+        log.error.assert_called_once_with(
+            "failed_to_stamp_prompt_version",
+            error_type="ValueError",
+            call_id="call-1",
+        )
 
     async def test_save_call_transcript_wrapper_delegates(self) -> None:
         log = MagicMock()
@@ -548,6 +563,31 @@ class TestReceiveFromTelnyx:
         # Logged but didn't crash.
         log.warning.assert_called()
 
+    async def test_oversized_media_payload_is_rejected(self) -> None:
+        session = _make_voice_session(VoiceAgentSession)
+        ws = _make_websocket()
+        log = MagicMock()
+        greeting = asyncio.Event()
+
+        ws.receive_text.side_effect = [
+            json.dumps(
+                {
+                    "event": "start",
+                    "stream_id": "s",
+                    "start": {"call_control_id": "c"},
+                }
+            ),
+            json.dumps(
+                {
+                    "event": "media",
+                    "media": {"payload": "A" * (vb._MAX_TELNYX_MEDIA_PAYLOAD_CHARS + 1)},
+                }
+            ),
+        ]
+
+        with pytest.raises(ValueError, match="media payload is invalid"):
+            await vb._receive_from_telnyx_and_send_to_provider(ws, session, log, greeting, {})
+
     async def test_websocket_disconnect_handled_cleanly(self) -> None:
         session = _make_voice_session(VoiceAgentSession)
         ws = _make_websocket()
@@ -592,7 +632,7 @@ class TestReceiveFromTelnyx:
         session.trigger_initial_response.assert_awaited_once_with(is_outbound=True)
         assert greeting.is_set()
 
-    async def test_error_event_breaks_loop(self) -> None:
+    async def test_error_event_propagates_without_logging_provider_message(self) -> None:
         session = _make_voice_session(VoiceAgentSession)
         ws = _make_websocket()
         log = MagicMock()
@@ -600,12 +640,13 @@ class TestReceiveFromTelnyx:
         holder: dict[str, str] = {}
 
         ws.receive_text.side_effect = [
-            json.dumps({"event": "error", "error": {"message": "stream broke"}}),
+            json.dumps({"event": "error", "error": {"message": "provider-secret"}}),
         ]
 
-        await vb._receive_from_telnyx_and_send_to_provider(ws, session, log, greeting, holder)
+        with pytest.raises(RuntimeError, match="Telnyx media stream"):
+            await vb._receive_from_telnyx_and_send_to_provider(ws, session, log, greeting, holder)
 
-        log.error.assert_called()
+        assert "provider-secret" not in str(log.mock_calls)
 
 
 # ---------------------------------------------------------------------------
@@ -679,6 +720,19 @@ class TestReceiveFromProvider:
         # The interruption flag is cleared after the first hit.
         assert ws.send_text.await_count == 1
 
+    async def test_oversized_provider_chunk_is_rejected(self) -> None:
+        session = _make_voice_session(
+            VoiceAgentSession,
+            audio_chunks=[b"x" * (vb._MAX_PROVIDER_AUDIO_CHUNK_BYTES + 1)],
+        )
+        ws = _make_websocket()
+        log = MagicMock()
+        greeting = asyncio.Event()
+        greeting.set()
+
+        with pytest.raises(ValueError, match="provider audio chunk is invalid"):
+            await vb._receive_from_provider_and_send_to_telnyx(ws, session, log, greeting, {})
+
     async def test_greeting_timeout_does_not_send(self) -> None:
         session = _make_voice_session(VoiceAgentSession, audio_chunks=[])
         ws = _make_websocket()
@@ -691,17 +745,18 @@ class TestReceiveFromProvider:
         async def fast_wait_for(coro: Any, timeout: float) -> Any:
             return await original_wait_for(coro, 0.05)
 
-        with patch("asyncio.wait_for", new=fast_wait_for):
+        with (
+            patch("asyncio.wait_for", new=fast_wait_for),
+            pytest.raises(TimeoutError),
+        ):
             await vb._receive_from_provider_and_send_to_telnyx(ws, session, log, greeting, {})
 
         log.error.assert_called_with("greeting_trigger_timeout", timeout_secs=10)
         ws.send_text.assert_not_called()
 
-    async def test_disconnect_during_send_is_swallowed(self) -> None:
-        # The receive_audio_stream emits one chunk then send raises.
-        # The inner per-chunk try/except catches the disconnect as a
-        # provider_audio_conversion_error rather than the outer disconnect
-        # handler, so the function returns cleanly without bubbling.
+    async def test_disconnect_during_send_is_handled_without_sensitive_error_log(
+        self,
+    ) -> None:
         chunks = [b"\xaa" * 160]
         session = _make_voice_session(ElevenLabsVoiceAgentSession, audio_chunks=chunks)
         ws = _make_websocket()
@@ -710,14 +765,16 @@ class TestReceiveFromProvider:
         greeting = asyncio.Event()
         greeting.set()
 
-        # Must not raise.
         await vb._receive_from_provider_and_send_to_telnyx(
             ws, session, log, greeting, {"stream_id": "s1"}
         )
 
-        # The inner per-chunk handler logged the error and the iterator drained.
-        log.exception.assert_called()
-        assert log.exception.call_args.args[0] == "provider_audio_conversion_error"
+        log.exception.assert_not_called()
+        log.info.assert_any_call(
+            "telnyx_websocket_disconnected_while_sending",
+            total_chunks=0,
+            duration_secs=pytest.approx(0.0, abs=0.5),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -764,12 +821,16 @@ class TestRelayAudio:
 @contextlib.contextmanager
 def _patch_bridge_db() -> Any:
     """Patch every DB-touching helper so the body runs without a database."""
+    fallback = AsyncMock()
+    session_patch, _ = _patch_async_session()
     with (
+        session_patch,
         patch.object(vb, "_stamp_prompt_version_on_message", new=AsyncMock()),
         patch.object(vb, "_save_call_duration", new=AsyncMock()),
         patch.object(vb, "_save_call_transcript_wrapper", new=AsyncMock()),
+        patch.object(vb, "_route_inbound_after_bridge_failure", new=fallback),
     ):
-        yield
+        yield fallback
 
 
 class TestVoiceStreamBridgeBody:
@@ -780,7 +841,7 @@ class TestVoiceStreamBridgeBody:
         log = MagicMock()
 
         with (
-            _patch_bridge_db(),
+            _patch_bridge_db() as fallback,
             patch.object(
                 vb,
                 "create_workspace_voice_session",
@@ -800,7 +861,8 @@ class TestVoiceStreamBridgeBody:
                 prompt_version_id=None,
                 workspace_id=str(uuid.uuid4()),
             )
-        ws.send_json.assert_awaited_with({"error": "no api key"})
+        fallback.assert_awaited_once_with("c1", log, reason="voice_session_creation_failed")
+        ws.send_json.assert_awaited_with({"error": "Voice provider unavailable"})
         ws.close.assert_awaited()
         # First close is the policy violation.
         codes = [c.kwargs.get("code") for c in ws.close.await_args_list]
@@ -860,6 +922,39 @@ class TestVoiceStreamBridgeBody:
         codes = [c.kwargs.get("code") for c in ws.close.await_args_list]
         assert status.WS_1011_INTERNAL_ERROR in codes
 
+    async def test_relay_failure_routes_inbound_fallback_without_logging_details(
+        self,
+    ) -> None:
+        ws = _make_websocket()
+        log = MagicMock()
+        session = _make_voice_session(VoiceAgentSession)
+
+        with (
+            _patch_bridge_db() as fallback,
+            patch.object(vb, "create_workspace_voice_session", return_value=(session, None)),
+            patch.object(
+                vb,
+                "_relay_audio",
+                new=AsyncMock(side_effect=RuntimeError("provider-secret")),
+            ),
+        ):
+            await vb._voice_stream_bridge_body(
+                websocket=ws,
+                call_id="c1",
+                is_outbound=False,
+                connection_start=0.0,
+                log=log,
+                agent=_make_agent(voice_provider="openai"),
+                contact_info=None,
+                offer_info=None,
+                timezone="UTC",
+                prompt_version_id=None,
+                workspace_id=str(uuid.uuid4()),
+            )
+
+        fallback.assert_awaited_once_with("c1", log, reason="voice_bridge_error")
+        assert "provider-secret" not in str(log.mock_calls)
+
     async def test_normal_disconnect_saves_transcript_and_duration(self) -> None:
         ws = _make_websocket()
         log = MagicMock()
@@ -885,6 +980,7 @@ class TestVoiceStreamBridgeBody:
         save_duration = AsyncMock()
 
         with (
+            _patch_bridge_db(),
             patch.object(vb, "_stamp_prompt_version_on_message", new=AsyncMock()),
             patch.object(vb, "_save_call_duration", new=save_duration),
             patch.object(vb, "_save_call_transcript_wrapper", new=save_transcript),
@@ -919,6 +1015,7 @@ class TestVoiceStreamBridgeBody:
         save_duration = AsyncMock()
 
         with (
+            _patch_bridge_db(),
             patch.object(vb, "_stamp_prompt_version_on_message", new=AsyncMock()),
             patch.object(vb, "_save_call_duration", new=save_duration),
             patch.object(vb, "_save_call_transcript_wrapper", new=AsyncMock()),
@@ -948,6 +1045,7 @@ class TestVoiceStreamBridgeBody:
         stamp = AsyncMock()
 
         with (
+            _patch_bridge_db(),
             patch.object(vb, "_stamp_prompt_version_on_message", new=stamp),
             patch.object(vb, "_save_call_duration", new=AsyncMock()),
             patch.object(vb, "_save_call_transcript_wrapper", new=AsyncMock()),

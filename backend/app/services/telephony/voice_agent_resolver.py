@@ -79,14 +79,20 @@ class VoiceAgentResolver:
 
         # Priority 1 & 2: Check if conversation is part of a campaign
         if conversation:
-            result = await self._resolve_from_campaign(db, conversation, log)
+            result = await self._resolve_from_campaign(
+                db, conversation, phone_record.workspace_id, log
+            )
             if result:
                 return result
 
         # Priority 3: Conversation's assigned agent (from test call or manual assignment)
         if conversation and conversation.assigned_agent_id:
             result = await self._check_agent(
-                db, conversation.assigned_agent_id, "conversation_agent", log
+                db,
+                conversation.assigned_agent_id,
+                phone_record.workspace_id,
+                "conversation_agent",
+                log,
             )
             if result:
                 return result
@@ -94,7 +100,11 @@ class VoiceAgentResolver:
         # Priority 4: Phone number's assigned agent
         if phone_record.assigned_agent_id:
             result = await self._check_agent(
-                db, phone_record.assigned_agent_id, "phone_number_agent", log
+                db,
+                phone_record.assigned_agent_id,
+                phone_record.workspace_id,
+                "phone_number_agent",
+                log,
             )
             if result:
                 return result
@@ -136,7 +146,13 @@ class VoiceAgentResolver:
             log.debug("no_reason_route_configured", reason=reason)
             return None
 
-        result = await self._check_agent(db, agent_id, f"reason_routing:{reason}", log)
+        result = await self._check_agent(
+            db,
+            agent_id,
+            phone_record.workspace_id,
+            f"reason_routing:{reason}",
+            log,
+        )
         if result is None:
             log.info("reason_route_agent_invalid", reason=reason, agent_id=str(agent_id))
             return None
@@ -149,6 +165,7 @@ class VoiceAgentResolver:
         self,
         db: AsyncSession,
         conversation: Any,
+        workspace_id: uuid.UUID,
         log: Any,
     ) -> ResolvedAgent | None:
         """Try to resolve agent from campaign configuration.
@@ -186,14 +203,24 @@ class VoiceAgentResolver:
         # Priority 1: Voice campaign's voice agent
         if campaign.voice_agent_id:
             result = await self._check_agent(
-                db, campaign.voice_agent_id, "campaign_voice_agent", log
+                db,
+                campaign.voice_agent_id,
+                workspace_id,
+                "campaign_voice_agent",
+                log,
             )
             if result:
                 return result
 
         # Priority 2: Campaign's general agent (if it supports voice)
         if campaign.agent_id:
-            result = await self._check_agent(db, campaign.agent_id, "campaign_agent", log)
+            result = await self._check_agent(
+                db,
+                campaign.agent_id,
+                workspace_id,
+                "campaign_agent",
+                log,
+            )
             if result:
                 return result
 
@@ -203,6 +230,7 @@ class VoiceAgentResolver:
         self,
         db: AsyncSession,
         agent_id: uuid.UUID,
+        workspace_id: uuid.UUID,
         source: str,
         log: Any,
     ) -> ResolvedAgent | None:
@@ -211,13 +239,19 @@ class VoiceAgentResolver:
         Args:
             db: Database session
             agent_id: Agent ID to check
+            workspace_id: Workspace the agent must belong to
             source: Source description for logging
             log: Logger instance
 
         Returns:
             ResolvedAgent if agent is active and voice-capable, None otherwise
         """
-        result = await db.execute(select(Agent).where(Agent.id == agent_id))
+        result = await db.execute(
+            select(Agent).where(
+                Agent.id == agent_id,
+                Agent.workspace_id == workspace_id,
+            )
+        )
         agent = result.scalar_one_or_none()
 
         if not agent:

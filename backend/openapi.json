@@ -20151,6 +20151,135 @@
         "title": "ImprovementSuggestionResponse",
         "type": "object"
       },
+      "InboundCallConfigRequest": {
+        "description": "Workspace-managed AI-first routing configuration.",
+        "properties": {
+          "assigned_agent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Agent Id"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "fallback_number": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Number"
+          },
+          "transfer_destination_number": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transfer Destination Number"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "InboundCallConfigRequest",
+        "type": "object"
+      },
+      "InboundCallReadinessResponse": {
+        "description": "Inbound AI routing state and bounded readiness details.",
+        "properties": {
+          "assigned_agent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Agent Id"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/InboundReadinessCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "fallback_configured": {
+            "title": "Fallback Configured",
+            "type": "boolean"
+          },
+          "phone_number_id": {
+            "format": "uuid",
+            "title": "Phone Number Id",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "transfer_destination_configured": {
+            "title": "Transfer Destination Configured",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "phone_number_id",
+          "ready",
+          "enabled",
+          "fallback_configured",
+          "transfer_destination_configured",
+          "checks"
+        ],
+        "title": "InboundCallReadinessResponse",
+        "type": "object"
+      },
+      "InboundReadinessCheck": {
+        "description": "One non-sensitive activation prerequisite.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "ready",
+          "message"
+        ],
+        "title": "InboundReadinessCheck",
+        "type": "object"
+      },
       "InstallationPlanFixture": {
         "description": "Price-free fixture schedule row for the selected installation sheet.",
         "properties": {
@@ -37218,6 +37347,11 @@
           },
           "imessage_enabled": {
             "title": "Imessage Enabled",
+            "type": "boolean"
+          },
+          "inbound_ai_enabled": {
+            "default": false,
+            "title": "Inbound Ai Enabled",
             "type": "boolean"
           },
           "is_active": {
@@ -90512,6 +90646,134 @@
           }
         ],
         "summary": "Update Phone Number",
+        "tags": [
+          "Phone Numbers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/phone-numbers/{phone_number_id}/inbound-config": {
+      "put": {
+        "description": "Configure and explicitly activate or deactivate AI-first inbound routing.",
+        "operationId": "configure_inbound_calling_api_v1_workspaces__workspace_id__phone_numbers__phone_number_id__inbound_config_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "phone_number_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Phone Number Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboundCallConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundCallReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Configure Inbound Calling",
+        "tags": [
+          "Phone Numbers"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/phone-numbers/{phone_number_id}/inbound-readiness": {
+      "get": {
+        "description": "Return non-sensitive prerequisites for AI-first inbound activation.",
+        "operationId": "get_inbound_readiness_api_v1_workspaces__workspace_id__phone_numbers__phone_number_id__inbound_readiness_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "phone_number_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Phone Number Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundCallReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Inbound Readiness",
         "tags": [
           "Phone Numbers"
         ]

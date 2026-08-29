@@ -11,16 +11,24 @@ from app.api.deps import DB, CanManageComms, CanReadCRM, CurrentUser
 from app.core.config import settings
 from app.db.pagination import paginate
 from app.db.scope import apply_workspace_scope
+from app.models.agent import Agent
 from app.models.lead_source import LeadSource, LeadSourceCampaign
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import WorkspaceIntegration
 from app.schemas.phone_number import (
+    InboundCallConfigRequest,
+    InboundCallReadinessResponse,
+    InboundReadinessCheck,
     PaginatedPhoneNumbers,
     PhoneNumberInfoResponse,
     PhoneNumberResponse,
     PhoneNumberUpdate,
     PurchasePhoneNumberRequest,
     SearchPhoneNumbersRequest,
+)
+from app.services.telephony.inbound_call_readiness import (
+    InboundCallReadiness,
+    evaluate_inbound_call_readiness,
 )
 from app.services.telephony.telnyx import TelnyxSMSService
 
@@ -96,6 +104,96 @@ async def _validate_tracking_mapping(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Campaign not found for this lead source",
         )
+
+
+async def _get_assignable_agent(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    agent_id: uuid.UUID,
+) -> Agent:
+    """Resolve only an active voice agent owned by the current workspace."""
+    result = await db.execute(
+        select(Agent).where(
+            Agent.id == agent_id,
+            Agent.workspace_id == workspace_id,
+            Agent.is_active.is_(True),
+            Agent.channel_mode.in_(("voice", "both")),
+        )
+    )
+    agent = result.scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Voice agent not found",
+        )
+    return agent
+
+
+def _readiness_response(
+    phone_number: PhoneNumber,
+    readiness: InboundCallReadiness,
+) -> InboundCallReadinessResponse:
+    """Serialize bounded readiness details without provider or credential data."""
+    return InboundCallReadinessResponse(
+        phone_number_id=phone_number.id,
+        ready=readiness.ready,
+        enabled=phone_number.inbound_ai_enabled,
+        assigned_agent_id=phone_number.assigned_agent_id,
+        fallback_configured=bool(phone_number.inbound_fallback_number),
+        transfer_destination_configured=bool(
+            readiness.agent and readiness.agent.transfer_destination_number
+        ),
+        checks=[
+            InboundReadinessCheck(
+                code=check.code,
+                ready=check.ready,
+                message=check.message,
+            )
+            for check in readiness.checks
+        ],
+    )
+
+
+async def _deactivate_inbound_calling(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    phone_number: PhoneNumber,
+    request_data: InboundCallConfigRequest,
+) -> InboundCallReadinessResponse:
+    """Persist the kill switch before applying optional inactive configuration."""
+    phone_number.inbound_ai_enabled = False
+    await db.commit()
+
+    agent = None
+    if "assigned_agent_id" in request_data.model_fields_set:
+        phone_number.assigned_agent_id = request_data.assigned_agent_id
+        if request_data.assigned_agent_id is not None:
+            agent = await _get_assignable_agent(db, workspace_id, request_data.assigned_agent_id)
+    elif phone_number.assigned_agent_id is not None:
+        agent = await _get_assignable_agent(db, workspace_id, phone_number.assigned_agent_id)
+
+    if "fallback_number" in request_data.model_fields_set:
+        phone_number.inbound_fallback_number = request_data.fallback_number
+    if "transfer_destination_number" in request_data.model_fields_set:
+        if agent is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Choose a voice agent before configuring human transfer.",
+            )
+        agent.transfer_destination_number = request_data.transfer_destination_number
+    await db.commit()
+
+    readiness = await evaluate_inbound_call_readiness(
+        db,
+        workspace_id=workspace_id,
+        phone_number=phone_number,
+        assigned_agent_id=phone_number.assigned_agent_id,
+        fallback_number=phone_number.inbound_fallback_number,
+        transfer_destination_number=(
+            agent.transfer_destination_number if agent is not None else None
+        ),
+    )
+    return _readiness_response(phone_number, readiness)
 
 
 @router.get("", response_model=PaginatedPhoneNumbers)
@@ -190,6 +288,13 @@ async def update_phone_number(
         )
 
     update_data = phone_number_in.model_dump(exclude_unset=True)
+    if "assigned_agent_id" in update_data:
+        assigned_agent_id = update_data["assigned_agent_id"]
+        # Any assignment change must pass the explicit readiness/activation flow again.
+        update_data["inbound_ai_enabled"] = False
+        if assigned_agent_id is not None:
+            await _get_assignable_agent(db, workspace_id, assigned_agent_id)
+
     source_supplied = "lead_source_id" in update_data
     campaign_supplied = "lead_source_campaign_id" in update_data
 
@@ -221,6 +326,138 @@ async def update_phone_number(
     await db.refresh(phone_number, attribute_names=["lead_source", "lead_source_campaign"])
 
     return phone_number
+
+
+@router.get(
+    "/{phone_number_id}/inbound-readiness",
+    response_model=InboundCallReadinessResponse,
+)
+async def get_inbound_readiness(
+    workspace_id: uuid.UUID,
+    phone_number_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanManageComms,
+) -> InboundCallReadinessResponse:
+    """Return non-sensitive prerequisites for AI-first inbound activation."""
+    result = await db.execute(
+        select(PhoneNumber).where(
+            PhoneNumber.id == phone_number_id,
+            PhoneNumber.workspace_id == workspace_id,
+        )
+    )
+    phone_number = result.scalar_one_or_none()
+    if phone_number is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Phone number not found",
+        )
+
+    readiness = await evaluate_inbound_call_readiness(
+        db,
+        workspace_id=workspace_id,
+        phone_number=phone_number,
+        assigned_agent_id=phone_number.assigned_agent_id,
+        fallback_number=phone_number.inbound_fallback_number,
+        transfer_destination_number=None,
+    )
+    return _readiness_response(phone_number, readiness)
+
+
+@router.put(
+    "/{phone_number_id}/inbound-config",
+    response_model=InboundCallReadinessResponse,
+)
+async def configure_inbound_calling(
+    workspace_id: uuid.UUID,
+    phone_number_id: uuid.UUID,
+    request_data: InboundCallConfigRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanManageComms,
+) -> InboundCallReadinessResponse:
+    """Configure and explicitly activate or deactivate AI-first inbound routing."""
+    result = await db.execute(
+        select(PhoneNumber).where(
+            PhoneNumber.id == phone_number_id,
+            PhoneNumber.workspace_id == workspace_id,
+        )
+    )
+    phone_number = result.scalar_one_or_none()
+    if phone_number is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Phone number not found",
+        )
+
+    if not request_data.enabled:
+        return await _deactivate_inbound_calling(db, workspace_id, phone_number, request_data)
+
+    # Keep activation off until every local and provider-side prerequisite succeeds.
+    phone_number.inbound_ai_enabled = False
+    await db.commit()
+    effective_fallback_number = (
+        request_data.fallback_number
+        if "fallback_number" in request_data.model_fields_set
+        else phone_number.inbound_fallback_number
+    )
+    readiness = await evaluate_inbound_call_readiness(
+        db,
+        workspace_id=workspace_id,
+        phone_number=phone_number,
+        assigned_agent_id=request_data.assigned_agent_id,
+        fallback_number=effective_fallback_number,
+        transfer_destination_number=request_data.transfer_destination_number,
+    )
+    if not readiness.ready:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "inbound_calling_not_ready",
+                "message": "Complete every inbound calling prerequisite.",
+                "checks": [
+                    {"code": check.code, "ready": check.ready, "message": check.message}
+                    for check in readiness.checks
+                ],
+            },
+        )
+
+    provider_number_id = phone_number.telnyx_phone_number_id
+    if provider_number_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Phone number is not linked to Telnyx",
+        )
+    telnyx = TelnyxSMSService(settings.telnyx_api_key)
+    try:
+        configured = await telnyx.configure_phone_number(
+            provider_number_id,
+            connection_id=settings.telnyx_connection_id,
+        )
+    finally:
+        await telnyx.close()
+    if not configured:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "code": "telnyx_voice_activation_failed",
+                "message": "Telnyx could not activate inbound voice routing.",
+            },
+        )
+
+    if readiness.agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Voice agent not found",
+        )
+    phone_number.assigned_agent_id = readiness.agent.id
+    if "fallback_number" in request_data.model_fields_set:
+        phone_number.inbound_fallback_number = request_data.fallback_number
+    if "transfer_destination_number" in request_data.model_fields_set:
+        readiness.agent.transfer_destination_number = request_data.transfer_destination_number
+    phone_number.inbound_ai_enabled = True
+    await db.commit()
+    return _readiness_response(phone_number, readiness)
 
 
 @router.post("/search", response_model=list[PhoneNumberInfoResponse])

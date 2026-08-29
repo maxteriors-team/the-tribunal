@@ -26,6 +26,7 @@ export interface PhoneNumber {
   mac_relay_sender_id?: string | null;
   mac_relay_service?: "imessage" | "sms" | "auto" | string;
   assigned_agent_id?: string | null;
+  inbound_ai_enabled?: boolean;
   lead_source_id: string | null;
   lead_source_campaign_id: string | null;
   tracking_label: string | null;

@@ -1,4 +1,4 @@
-import { apiDelete, apiPost, apiPut } from "@/lib/api";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { createApiClient } from "@/lib/api/create-api-client";
 import type { PhoneNumber } from "@/types";
 
@@ -46,6 +46,29 @@ export interface PhoneNumberUpdateRequest {
   lead_source_id?: string | null;
   lead_source_campaign_id?: string | null;
   tracking_label?: string | null;
+}
+
+export interface InboundReadinessCheck {
+  code: string;
+  ready: boolean;
+  message: string;
+}
+
+export interface InboundCallReadiness {
+  phone_number_id: string;
+  ready: boolean;
+  enabled: boolean;
+  assigned_agent_id: string | null;
+  fallback_configured: boolean;
+  transfer_destination_configured: boolean;
+  checks: InboundReadinessCheck[];
+}
+
+export interface InboundCallConfigRequest {
+  enabled: boolean;
+  assigned_agent_id?: string | null;
+  fallback_number?: string | null;
+  transfer_destination_number?: string | null;
 }
 
 // Create base API client with standard methods (list, get only - no create/update)
@@ -100,5 +123,25 @@ export const phoneNumbersApi = {
 
   sync: async (workspaceId: string): Promise<{ synced: number }> => {
     return apiPost<{ synced: number }>(`/api/v1/workspaces/${workspaceId}/phone-numbers/sync`, {});
+  },
+
+  inboundReadiness: async (
+    workspaceId: string,
+    phoneNumberId: string,
+  ): Promise<InboundCallReadiness> => {
+    return apiGet<InboundCallReadiness>(
+      `/api/v1/workspaces/${workspaceId}/phone-numbers/${phoneNumberId}/inbound-readiness`,
+    );
+  },
+
+  configureInbound: async (
+    workspaceId: string,
+    phoneNumberId: string,
+    data: InboundCallConfigRequest,
+  ): Promise<InboundCallReadiness> => {
+    return apiPut<InboundCallReadiness>(
+      `/api/v1/workspaces/${workspaceId}/phone-numbers/${phoneNumberId}/inbound-config`,
+      data,
+    );
   },
 };

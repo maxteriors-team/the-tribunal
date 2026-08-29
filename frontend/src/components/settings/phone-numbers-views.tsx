@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Bot,
   Check,
   Loader2,
   MessageSquare,
@@ -19,6 +20,7 @@ import {
   LeadSourcePicker,
   sourceTypeLabel,
 } from "@/components/lead-sources/source-pickers";
+import { InboundCallingDialog } from "@/components/settings/inbound-calling-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -411,6 +413,7 @@ export function OwnedNumbersContent({
                   </p>
                 )}
                 <TrackingAttributionSummary number={number} />
+                {number.inbound_ai_enabled && <Badge className="md:hidden">AI answers</Badge>}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -434,6 +437,19 @@ export function OwnedNumbersContent({
                   </Badge>
                 )}
               </div>
+              <InboundCallingDialog
+                workspaceId={workspaceId}
+                number={number}
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Configure AI inbound answering for ${formatPhoneNumber(number.phone_number)}`}
+                  >
+                    <Bot className="size-4" />
+                  </Button>
+                }
+              />
               <TrackingAttributionDialog
                 workspaceId={workspaceId}
                 number={number}
@@ -520,14 +536,29 @@ export function OwnedNumbersContent({
               </div>
             </TableCell>
             <TableCell>
-              {number.is_active ? (
-                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Active</Badge>
-              ) : (
-                <Badge variant="secondary">Inactive</Badge>
-              )}
+              <div className="flex flex-wrap gap-1.5">
+                {number.is_active ? (
+                  <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                    Active
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">Inactive</Badge>
+                )}
+                {number.inbound_ai_enabled && <Badge>AI answers</Badge>}
+              </div>
             </TableCell>
             <TableCell className="text-right">
               <div className="flex justify-end gap-1">
+                <InboundCallingDialog
+                  workspaceId={workspaceId}
+                  number={number}
+                  trigger={
+                    <Button variant="ghost" size="sm">
+                      <Bot className="mr-2 size-4" />
+                      AI calls
+                    </Button>
+                  }
+                />
                 <TrackingAttributionDialog
                   workspaceId={workspaceId}
                   number={number}

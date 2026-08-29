@@ -161,6 +161,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
     from app.models.message_attachment import MessageAttachment
     from app.models.opt_out import GlobalOptOut
     from app.models.phone_message import PhoneMessage
+    from app.models.phone_number import PhoneNumber
     from app.models.referral_partner import ReferralPartner
     from app.models.user import User
 
@@ -250,6 +251,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
             PhoneMessage,
             ("caller_name", "callback_number", "reason", "message_body"),
         ),
+        RotationTarget(PhoneNumber, ("inbound_fallback_number",)),
         RotationTarget(ReferralPartner, ("email", "phone")),
         RotationTarget(
             LeadProspect,
@@ -312,7 +314,9 @@ def validate_targets(targets: Sequence[RotationTarget]) -> list[str]:
             )
 
         if not target.columns:
-            problems.append(f"{model_name}: declared as a rotation target with no columns")
+            problems.append(
+                f"{model_name}: declared as a rotation target with no columns"
+            )
 
         for name in target.columns:
             column = mapper.columns.get(name)
@@ -387,12 +391,16 @@ def undeclared_encrypted_columns(targets: Sequence[RotationTarget]) -> list[str]
 
     missing: list[str] = []
     for mapper in Base.registry.mappers:
-        table = mapper.local_table.name if isinstance(mapper.local_table, sa.Table) else ""
+        table = (
+            mapper.local_table.name if isinstance(mapper.local_table, sa.Table) else ""
+        )
         for column in mapper.columns:
             if not isinstance(column.type, EncryptedString):
                 continue
             if (table, column.name) not in declared:
-                missing.append(f"{mapper.class_.__name__}.{column.key} ({table}.{column.name})")
+                missing.append(
+                    f"{mapper.class_.__name__}.{column.key} ({table}.{column.name})"
+                )
     return sorted(set(missing))
 
 
@@ -411,7 +419,9 @@ def ensure_full_coverage(targets: Sequence[RotationTarget]) -> None:
         return
 
     listed = "\n".join(f"   ✗ {column}" for column in undeclared)
-    print(f"\n{_RULE}\n RESULT: FAIL — rotation aborted before any data was touched\n{_RULE}")
+    print(
+        f"\n{_RULE}\n RESULT: FAIL — rotation aborted before any data was touched\n{_RULE}"
+    )
     raise ScriptAbortError(
         f"REFUSING TO ROTATE — {len(undeclared)} encrypted column(s) are not "
         f"declared for rotation:\n{listed}\n"
@@ -442,7 +452,9 @@ def ensure_targets_valid(targets: Sequence[RotationTarget]) -> None:
         "   Migrate the model to EncryptedString() + LookupHash() (see contact.py) and\n"
         "   re-run. Nothing was read or written."
     )
-    print(f"\n{_RULE}\n RESULT: FAIL — rotation aborted before any data was touched\n{_RULE}")
+    print(
+        f"\n{_RULE}\n RESULT: FAIL — rotation aborted before any data was touched\n{_RULE}"
+    )
     print(message)
     print(f"{_RULE}\n")
     raise ScriptAbortError(message, exit_code=EXIT_FAILURE)
@@ -567,7 +579,9 @@ class RotationReport:
         )
 
         if self.passed:
-            verdict = " RESULT: PASS — every table re-encrypted cleanly under the new key"
+            verdict = (
+                " RESULT: PASS — every table re-encrypted cleanly under the new key"
+            )
             if self.dry_run:
                 verdict += "\n         (dry run: rolled back, re-run without --dry-run to commit)"
             lines.append(verdict)
@@ -693,7 +707,12 @@ async def _rotate_string_columns(
         if updates:
             await session.execute(
                 sa.update(table)
-                .where(*(col == val for col, val in zip(pk_columns, pk_values, strict=True)))
+                .where(
+                    *(
+                        col == val
+                        for col, val in zip(pk_columns, pk_values, strict=True)
+                    )
+                )
                 .values(updates)
             )
             rotated += 1
@@ -730,7 +749,9 @@ async def _rotate_workspace_credentials(
             plaintext_dict = json.loads(raw)
         except (InvalidToken, json.JSONDecodeError):
             invalid += 1
-            logger.warning("skip workspace.id=%s: credentials invalid under both keys", ws.id)
+            logger.warning(
+                "skip workspace.id=%s: credentials invalid under both keys", ws.id
+            )
             continue
         ws.encrypted_credentials = encrypt_json(plaintext_dict)
         rotated += 1
@@ -752,7 +773,9 @@ async def _existing_tables(session: AsyncSession) -> set[str]:
     every table rotated before it.
     """
     rows = await session.execute(
-        sa.text("select table_name from information_schema.tables where table_schema = 'public'")
+        sa.text(
+            "select table_name from information_schema.tables where table_schema = 'public'"
+        )
     )
     return set(rows.scalars().all())
 
@@ -795,7 +818,9 @@ def _log_table(stats: RotationStats) -> None:
     """Emit one structured record per rotated table."""
     log_event(
         logger,
-        logging.WARNING if stats.failed or stats.degraded or stats.absent else logging.INFO,
+        logging.WARNING
+        if stats.failed or stats.degraded or stats.absent
+        else logging.INFO,
         "rotated table",
         table=stats.table,
         scanned=stats.scanned,
@@ -878,7 +903,8 @@ async def _run(ctx: ExecutionContext) -> int:
 def main() -> int:
     """Parse arguments and run the re-encryption pass."""
     ctx, _ = bootstrap(
-        description=__doc__ or "Re-encrypt Fernet columns after ENCRYPTION_KEY rotation.",
+        description=__doc__
+        or "Re-encrypt Fernet columns after ENCRYPTION_KEY rotation.",
         writes=True,
         logger_name="rotate",
     )
