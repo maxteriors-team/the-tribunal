@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.invitation import WorkspaceInvitation
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
+from app.services.field_service.roster import ensure_member_on_roster
 
 from .provisioning import ensure_personal_workspace, resolve_existing_workspace
 
@@ -85,6 +86,12 @@ async def claim_pending_invitations(db: AsyncSession, user: User) -> Workspace |
                     # opens the inviting workspace instead of a personal one.
                     is_default=landing_workspace_id is None,
                 )
+            )
+            await ensure_member_on_roster(
+                db,
+                workspace_id=invitation.workspace_id,
+                user=user,
+                role=invitation.role,
             )
             claimed_workspace_ids.add(invitation.workspace_id)
 
