@@ -64,6 +64,7 @@ def _document(
                             "scaleSlot": 2,
                             "permanentComplexity": "complex",
                             "elevation": "side",
+                            "roofPitch": "steep",
                             "spacingIn": 12,
                             "colors": ["#f8d46b"],
                             "bulbScale": 1,
@@ -160,6 +161,7 @@ class TestLandscapeDraftSchema:
         # these 422s the autosave, which then blocks the proposal outright.
         assert populated.shots[0].design.runs[0].scale_slot == 2
         assert populated.shots[0].design.runs[0].permanent_complexity == "complex"
+        assert populated.shots[0].design.runs[0].roof_pitch == "steep"
         assert populated.shots[0].design.items[0].catalog_item_override is True
         assert populated.shots[0].design.items[0].circuit_id == "run-1"
         assert populated.shots[0].design.items[0].bistro_run_id == "run-1"
@@ -182,6 +184,16 @@ class TestLandscapeDraftSchema:
         assert run["permanentComplexity"] == "complex"
         assert run["scaleSlot"] == 2
         assert run["elevation"] == "side"
+        assert run["roofPitch"] == "steep"
+
+    def test_normalizes_retired_aerial_complexity_without_losing_the_run(self) -> None:
+        document = _document()
+        document["shots"][0]["design"]["runs"][0]["permanentComplexity"] = "aerial"
+        populated = LandscapeDraftDocument.model_validate(document)
+
+        run = populated.shots[0].design.runs[0]
+        assert run.permanent_complexity == "standard"
+        assert run.model_dump(mode="json", by_alias=True)["permanentComplexity"] == "standard"
 
     @pytest.mark.parametrize(
         "mutate",
@@ -209,6 +221,10 @@ class TestLandscapeDraftSchema:
             lambda document: document["shots"][0]["design"]["items"][0].update(iconScale=3),
             lambda document: document["procurement"]["fixture:catalog-1"].update(neededQuantity=-1),
             lambda document: document["shots"][0]["design"]["runs"][0].update(elevation="left"),
+            lambda document: document["shots"][0]["design"]["runs"][0].update(roofPitch="vertical"),
+            lambda document: document["shots"][0]["design"]["runs"][0].update(
+                permanentComplexity="unknown"
+            ),
             lambda document: document.update(version=1),
             lambda document: document.update(version=3),
         ],
