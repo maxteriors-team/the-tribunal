@@ -25,6 +25,7 @@ from app.services.exceptions import (
     ValidationError,
 )
 from app.services.payments import call_payment_service
+from app.services.quotes.ownership import quote_owner_predicate
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -305,6 +306,7 @@ async def record_manual_deposit(
     *,
     payment_method: str,
     recorded_by_id: int,
+    owner_user_id: int | None = None,
 ) -> Quote:
     """Record an offline deposit received by an authenticated operator.
 
@@ -324,7 +326,11 @@ async def record_manual_deposit(
 
     result = await db.execute(
         select(Quote)
-        .where(Quote.id == quote_id, Quote.workspace_id == workspace_id)
+        .where(
+            Quote.id == quote_id,
+            Quote.workspace_id == workspace_id,
+            quote_owner_predicate(owner_user_id),
+        )
         .with_for_update()
     )
     quote = result.scalar_one_or_none()

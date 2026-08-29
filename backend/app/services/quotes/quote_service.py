@@ -110,7 +110,12 @@ from app.services.automations.events import (
     emit_automation_event,
 )
 from app.services.email import send_quote_acceptance_receipt
-from app.services.exceptions import ConflictError, NotFoundError, ValidationError
+from app.services.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from app.services.idempotency import derive_outbound_key
 from app.services.inventory.quote_availability import QuoteInventoryAvailabilityService
 from app.services.notifications import notify_workspace_event
@@ -122,6 +127,7 @@ from app.services.opportunities.quote_opportunity import (
 from app.services.quotes.attach_metrics import compute_attach_metrics
 from app.services.quotes.attach_rules import evaluate_attach_rules
 from app.services.quotes.attach_rules_config import get_attach_rules_config
+from app.services.quotes.ownership import quote_owner_predicate
 from app.services.quotes.pricing_config import get_pricing_config
 from app.services.quotes.proposal_builder import (
     CatalogEntry,
@@ -3684,6 +3690,8 @@ class QuoteService:
         crew_id: uuid.UUID | None = None,
         technician_ids: Sequence[uuid.UUID] = (),
         confirm_unpaid_deposit: bool = False,
+        allow_invoice_creation: bool = True,
+        owner_user_id: int | None = None,
     ) -> QuoteConvertResponse:
         """Atomically convert one approved quote, with exact-retry semantics."""
         from app.services.inventory import JobAllocationService
@@ -3704,7 +3712,11 @@ class QuoteService:
 
         quote_result = await self.db.execute(
             select(Quote)
-            .where(Quote.id == quote_id, Quote.workspace_id == workspace_id)
+            .where(
+                Quote.id == quote_id,
+                Quote.workspace_id == workspace_id,
+                quote_owner_predicate(owner_user_id),
+            )
             .options(selectinload(Quote.line_items))
             .with_for_update()
         )
@@ -3784,6 +3796,8 @@ class QuoteService:
         idempotent_replay = existing_job is not None or quote.converted_invoice_id is not None
         job_id = existing_job.id if existing_job is not None else quote.converted_job_id
         invoice_id = quote.converted_invoice_id
+        if create_invoice and invoice_id is None and not allow_invoice_creation:
+            raise PermissionDeniedError("Billing access is required to create an invoice.")
         created_something = False
         try:
             if create_invoice and invoice_id is None:
