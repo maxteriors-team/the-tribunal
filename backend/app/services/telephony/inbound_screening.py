@@ -164,16 +164,16 @@ class InboundCallScreener:
         Returns:
             A :class:`ScreeningOutcome`. Fail-open: any error yields ``allow``.
         """
-        log = (log or self.logger).bind(from_number=from_number)
+        log = (log or self.logger).bind(caller_hash=hash_phone(from_number))
 
         try:
             return await self._screen(db, workspace_id, from_number, log)
         except Exception as exc:  # fail-open — never drop a call on a screen bug
-            log.warning("inbound_screening_failed_open", error=str(exc))
+            log.warning("inbound_screening_failed_open", error_type=type(exc).__name__)
             return ScreeningOutcome(
                 decision=SpamDecision.ALLOW,
                 reason="screening_error",
-                details={"error": str(exc)},
+                details={"error": "screening_unavailable"},
             )
 
     async def _screen(  # noqa: PLR0911

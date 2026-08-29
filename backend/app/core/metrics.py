@@ -31,7 +31,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 # --------------------------------------------------------------------------- #
 # Voice calls
@@ -55,6 +55,34 @@ voice_call_duration_seconds = Histogram(
     # Telephony durations span sub-second (immediate hangup / rejection) to
     # multi-minute conversations. Buckets aimed at the 5s–10m operating range.
     buckets=(1, 5, 10, 30, 60, 120, 300, 600, 1800),
+)
+
+inbound_voice_disclosure_total = Counter(
+    "inbound_voice_disclosure_total",
+    "AI/transcription disclosure transitions for inbound pilot calls.",
+    labelnames=("workspace_id", "outcome"),
+)
+inbound_voice_fallback_total = Counter(
+    "inbound_voice_fallback_total",
+    "Emergency inbound fallback attempts and outcomes.",
+    labelnames=("outcome",),
+)
+inbound_voice_active_calls = Gauge(
+    "inbound_voice_active_calls",
+    "Current reserved AI-first inbound call slots per workspace.",
+    labelnames=("workspace_id",),
+)
+inbound_voice_duration_seconds = Histogram(
+    "inbound_voice_duration_seconds",
+    "Duration of completed AI-first inbound calls.",
+    labelnames=("workspace_id",),
+    buckets=(1, 5, 10, 30, 60, 120, 300, 600, 1800),
+)
+inbound_voice_estimated_cost_usd = Histogram(
+    "inbound_voice_estimated_cost_usd",
+    "Estimated blended provider cost per AI-first inbound call.",
+    labelnames=("workspace_id",),
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
 )
 
 
@@ -200,6 +228,39 @@ def observe_voice_call_completed(
     ).inc()
     if duration_seconds is not None and duration_seconds > 0:
         voice_call_duration_seconds.observe(float(duration_seconds))
+
+
+def observe_inbound_disclosure(workspace_id: uuid.UUID | str | None, outcome: str) -> None:
+    """Record a bounded disclosure transition."""
+    inbound_voice_disclosure_total.labels(
+        workspace_id=_ws_label(workspace_id), outcome=outcome
+    ).inc()
+
+
+def observe_inbound_fallback(outcome: str) -> None:
+    """Record a bounded emergency-routing outcome without destination data."""
+    inbound_voice_fallback_total.labels(outcome=outcome).inc()
+
+
+def set_inbound_active_calls(workspace_id: uuid.UUID | str | None, count: int) -> None:
+    """Set the Redis-derived active slot count; never expose call identifiers."""
+    inbound_voice_active_calls.labels(workspace_id=_ws_label(workspace_id)).set(max(count, 0))
+
+
+def observe_inbound_call_summary(
+    workspace_id: uuid.UUID | str | None,
+    duration_seconds: float | int,
+    estimated_cost_usd: float,
+) -> None:
+    """Record duration and a configured blended provider-cost estimate."""
+    if duration_seconds > 0:
+        inbound_voice_duration_seconds.labels(workspace_id=_ws_label(workspace_id)).observe(
+            float(duration_seconds)
+        )
+    if estimated_cost_usd > 0:
+        inbound_voice_estimated_cost_usd.labels(workspace_id=_ws_label(workspace_id)).observe(
+            estimated_cost_usd
+        )
 
 
 def observe_sms_sent(

@@ -470,6 +470,8 @@ export const queryKeys = {
       phoneNumbers.list(workspaceId, { active_only: true, text_capable: true }),
     activeOnlyFalse: (workspaceId: string) =>
       phoneNumbers.list(workspaceId, { active_only: false }),
+    inboundReadiness: (workspaceId: string, phoneNumberId: string) =>
+      [...phoneNumbers.detail(workspaceId, phoneNumberId), "inbound-readiness"] as const,
   },
   promptVersions: createResourceQueryKeys("prompt-versions"),
   revenueTargets: {

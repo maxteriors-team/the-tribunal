@@ -432,7 +432,6 @@ class TelnyxVoiceService:
                 "answer_call_response",
                 call_control_id=call_control_id,
                 status_code=response.status_code,
-                response_text=response.text[:500] if response.text else "empty",
             )
 
             response.raise_for_status()
@@ -446,7 +445,6 @@ class TelnyxVoiceService:
                 "answer_call_http_error",
                 call_control_id=call_control_id,
                 status_code=e.response.status_code,
-                response_text=e.response.text[:500] if e.response.text else "empty",
                 error=str(e),
             )
             return False
@@ -511,7 +509,6 @@ class TelnyxVoiceService:
         self.logger.info(
             "========== STARTING AUDIO STREAM ==========",
             call_control_id=call_control_id,
-            stream_url=stream_url,
             stream_track=stream_track,
         )
 
@@ -528,7 +525,7 @@ class TelnyxVoiceService:
             self.logger.info(
                 "sending_streaming_start_request",
                 call_control_id=call_control_id,
-                payload=payload,
+                stream_track=stream_track,
                 endpoint=f"/calls/{call_control_id}/actions/streaming_start",
             )
 
@@ -541,14 +538,12 @@ class TelnyxVoiceService:
                 "streaming_start_response",
                 call_control_id=call_control_id,
                 status_code=response.status_code,
-                response_text=response.text[:500] if response.text else "empty",
             )
 
             response.raise_for_status()
             self.logger.info(
                 "streaming_started_successfully",
                 call_control_id=call_control_id,
-                stream_url=stream_url,
                 bidirectional=True,
             )
             return True
@@ -557,7 +552,6 @@ class TelnyxVoiceService:
                 "start_streaming_http_error",
                 call_control_id=call_control_id,
                 status_code=e.response.status_code,
-                response_text=e.response.text[:500] if e.response.text else "empty",
                 error=str(e),
             )
             return False
@@ -666,7 +660,6 @@ class TelnyxVoiceService:
                 "start_recording_http_error",
                 call_control_id=call_control_id,
                 status_code=e.response.status_code,
-                response_text=e.response.text[:500] if e.response.text else "empty",
                 error=str(e),
             )
             return False
@@ -764,7 +757,6 @@ class TelnyxVoiceService:
                 call_control_id=call_control_id,
                 digits=digits,
                 status_code=e.response.status_code,
-                response_text=e.response.text[:500] if e.response.text else "empty",
                 error=str(e),
             )
             return False
@@ -806,11 +798,7 @@ class TelnyxVoiceService:
         Returns:
             True if Telnyx accepted the transfer command, False otherwise.
         """
-        self.logger.info(
-            "transferring_call",
-            call_control_id=call_control_id,
-            to=self._normalize_e164(to_number),
-        )
+        self.logger.info("transferring_call", call_control_id=call_control_id)
         payload: dict[str, Any] = {
             "to": self._normalize_e164(to_number),
             "timeout_secs": max(5, min(600, timeout_secs)),
@@ -835,7 +823,6 @@ class TelnyxVoiceService:
                 "transfer_call_http_error",
                 call_control_id=call_control_id,
                 status_code=e.response.status_code,
-                response_text=e.response.text[:500] if e.response.text else "empty",
             )
             return False
         except Exception as e:
@@ -897,14 +884,12 @@ class TelnyxVoiceService:
             self.logger.info(
                 "transfer_leg_dialed",
                 new_call_control_id=new_ccid,
-                to=self._normalize_e164(to_number),
             )
             return str(new_ccid) if new_ccid else None
         except httpx.HTTPStatusError as e:
             self.logger.error(
                 "dial_transfer_leg_http_error",
                 status_code=e.response.status_code,
-                response_text=e.response.text[:500] if e.response.text else "empty",
             )
             return None
         except Exception as e:
@@ -1014,7 +999,6 @@ class TelnyxVoiceService:
                 "speak_text_http_error",
                 call_control_id=call_control_id,
                 status_code=e.response.status_code,
-                response_text=e.response.text[:500] if e.response.text else "empty",
             )
             return False
         except Exception as e:
@@ -1068,7 +1052,6 @@ class TelnyxVoiceService:
                 "bridge_calls_http_error",
                 call_control_id=call_control_id,
                 status_code=e.response.status_code,
-                response_text=e.response.text[:500] if e.response.text else "empty",
             )
             return False
         except Exception as e:
@@ -1257,7 +1240,6 @@ class TelnyxVoiceService:
         self.logger.info(
             "starting_audio_streaming",
             call_control_id=call_control_id,
-            stream_url=stream_url,
             is_outbound=is_outbound,
         )
 

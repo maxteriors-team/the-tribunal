@@ -161,3 +161,22 @@ async def test_no_reason_skips_routing() -> None:
 )
 def test_classify_reason_from_text(text: str | None, expected: str | None) -> None:
     assert classify_reason_from_text(text) == expected
+
+
+async def test_agent_lookup_is_scoped_to_the_phone_workspace() -> None:
+    workspace_id = uuid.uuid4()
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_Result(scalar=None))
+
+    resolved = await VoiceAgentResolver()._check_agent(
+        db,
+        uuid.uuid4(),
+        workspace_id,
+        "phone_number",
+        _make_log(),
+    )
+
+    assert resolved is None
+    statement = db.execute.await_args.args[0]
+    assert "agents.workspace_id" in str(statement)
+    assert workspace_id in statement.compile().params.values()

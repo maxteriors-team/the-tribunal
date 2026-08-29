@@ -28,6 +28,10 @@ import pytest
 from app.api.webhooks import telnyx_call_handlers as handlers
 from app.core.config import settings as app_settings
 from app.models.conversation import MessageStatus
+from app.services.telephony.inbound_call_policy import (
+    encode_inbound_disclosure_state,
+    encode_inbound_terminal_state,
+)
 from tests.fixtures.webhooks import load_telnyx_payload
 
 # --------------------------------------------------------------------------- #
@@ -204,10 +208,8 @@ async def test_call_initiated_returns_when_phone_number_unknown(
 
     await handlers.handle_call_initiated(call_initiated, log)
 
-    log.warning.assert_any_call(
-        "phone_number_not_found",
-        to_number="+12125550100",
-    )
+    log.warning.assert_any_call("phone_number_not_found_for_inbound_call")
+    assert "+12125550100" not in str(log.method_calls)
     db.add.assert_not_called()
     db.commit.assert_not_awaited()
 
@@ -218,7 +220,7 @@ async def test_call_initiated_creates_message_and_conversation(
     _stub_metrics_and_push: dict[str, MagicMock],
 ) -> None:
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock(lead_source_id=None)
+    phone_record = MagicMock(lead_source_id=None, inbound_ai_enabled=False)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None
@@ -260,7 +262,7 @@ async def test_call_initiated_links_known_caller_by_phone_hash(
     # matches an equality compare), so a known caller's conversation is linked
     # to their existing contact instead of looking like a brand-new lead.
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock(lead_source_id=None)
+    phone_record = MagicMock(lead_source_id=None, inbound_ai_enabled=False)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None
@@ -296,7 +298,7 @@ async def test_call_initiated_applies_mapped_tracking_number(
 ) -> None:
     workspace_id = uuid.uuid4()
     source_id = uuid.uuid4()
-    phone_record = MagicMock(lead_source_id=source_id)
+    phone_record = MagicMock(lead_source_id=source_id, inbound_ai_enabled=False)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None
@@ -331,7 +333,7 @@ async def test_call_initiated_is_idempotent_on_retry(
     second ringing Message or re-fire the push / auto-answer.
     """
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock(lead_source_id=None)
+    phone_record = MagicMock(lead_source_id=None, inbound_ai_enabled=False)
     phone_record.workspace_id = workspace_id
 
     # Message dedupe SELECT hits → bail out.
@@ -379,7 +381,7 @@ async def test_call_initiated_rejects_spam_caller(
     )
 
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock(lead_source_id=None)
+    phone_record = MagicMock(lead_source_id=None, inbound_ai_enabled=False)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None
@@ -425,7 +427,7 @@ async def test_call_initiated_challenge_routes_to_voicemail(
     )
 
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock(lead_source_id=None)
+    phone_record = MagicMock(lead_source_id=None, inbound_ai_enabled=False)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None
@@ -451,6 +453,40 @@ async def test_call_initiated_challenge_routes_to_voicemail(
     _stub_metrics_and_push["push"].send_to_workspace_members.assert_awaited_once()
 
 
+async def test_ai_first_challenge_uses_fallback_without_recording_voicemail(
+    monkeypatch: pytest.MonkeyPatch,
+    call_initiated: dict[str, Any],
+    _stub_metrics_and_push: dict[str, MagicMock],
+) -> None:
+    from app.services.telephony.inbound_screening import ScreeningOutcome, SpamDecision
+
+    _stub_metrics_and_push["screener"].screen = AsyncMock(
+        return_value=ScreeningOutcome(decision=SpamDecision.CHALLENGE, reason="reputation_suspect")
+    )
+    fallback = AsyncMock()
+    monkeypatch.setattr(handlers, "_transfer_inbound_to_fallback", fallback)
+    workspace_id = uuid.uuid4()
+    phone_record = MagicMock(lead_source_id=None, inbound_ai_enabled=True)
+    phone_record.workspace_id = workspace_id
+    phone_record.phone_number = "+12125550100"
+    phone_record.inbound_fallback_number = "+12025550123"
+    db = _make_db(
+        execute_returns=[
+            _Result(scalar=phone_record),
+            _Result(scalar=None),
+            _Result(scalar=None),
+            _Result(scalar=None),
+        ]
+    )
+    _patch_session_local(monkeypatch, db)
+
+    await handlers.handle_call_initiated(call_initiated, _make_log())
+
+    fallback.assert_awaited_once()
+    _stub_metrics_and_push["take_inbound_voicemail"].assert_not_awaited()
+    _stub_metrics_and_push["auto_answer"].assert_not_awaited()
+
+
 async def test_call_initiated_passes_routing_reason_to_auto_answer(
     monkeypatch: pytest.MonkeyPatch,
     call_initiated: dict[str, Any],
@@ -464,7 +500,7 @@ async def test_call_initiated_passes_routing_reason_to_auto_answer(
     )
 
     workspace_id = uuid.uuid4()
-    phone_record = MagicMock(lead_source_id=None)
+    phone_record = MagicMock(lead_source_id=None, inbound_ai_enabled=False)
     phone_record.workspace_id = workspace_id
     phone_record.phone_number = "+12125550100"
     phone_record.assigned_agent_id = None
@@ -630,6 +666,10 @@ def _stub_hangup_side_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, Magi
     monkeypatch.setattr(engagement_score, "record_engagement", record_engagement)
     stubs["record_engagement"] = record_engagement
 
+    release_capacity = AsyncMock(return_value=None)
+    monkeypatch.setattr(handlers, "release_inbound_call_capacity", release_capacity)
+    stubs["release_inbound_call_capacity"] = release_capacity
+
     return stubs
 
 
@@ -650,6 +690,7 @@ def _make_hangup_message(
     message.error_code = None
     message.error_message = None
     message.recording_url = None
+    message.voice_disclosure_status = None
     message.agent_id = uuid.uuid4()
     message.conversation = MagicMock()
     message.conversation.workspace_id = uuid.uuid4()
@@ -771,6 +812,30 @@ async def test_call_hangup_captures_recording_url(
     assert message.status == MessageStatus.COMPLETED
 
 
+async def test_ai_first_hangup_ignores_unexpected_raw_recording(
+    monkeypatch: pytest.MonkeyPatch,
+    hangup_with_recording: dict[str, Any],
+    _stub_hangup_side_effects: dict[str, MagicMock],
+) -> None:
+    message = _make_hangup_message()
+    message.voice_disclosure_status = "completed"
+    db = _make_db(
+        execute_returns=[
+            _Result(scalar=message),
+            _Result(scalar=None),
+            _Result(scalar=None),
+        ]
+    )
+    _patch_session_local(monkeypatch, db)
+    log = _make_log()
+
+    await handlers.handle_call_hangup(hangup_with_recording, log)
+
+    assert message.recording_url is None
+    log.warning.assert_any_call("unexpected_inbound_ai_recording_ignored")
+    assert "https://recordings" not in str(log.method_calls)
+
+
 async def test_call_hangup_retry_skips_engagement_and_campaign_stats(
     monkeypatch: pytest.MonkeyPatch,
     hangup_normal: dict[str, Any],
@@ -873,12 +938,19 @@ async def test_machine_detection_machine_hangs_up_and_triggers_fallback(
     )
 
     from app.services.campaigns import sms_fallback
+    from app.services.telephony import missed_call_textback
 
     trigger_fallback = AsyncMock(return_value=None)
     monkeypatch.setattr(
         sms_fallback,
         "trigger_sms_fallback_for_call",
         trigger_fallback,
+    )
+    trigger_textback = AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        missed_call_textback,
+        "send_missed_call_textback",
+        trigger_textback,
     )
 
     await handlers.handle_machine_detection(machine_detection, _make_log())
@@ -887,6 +959,7 @@ async def test_machine_detection_machine_hangs_up_and_triggers_fallback(
         "v3:call-control-id-machine-001",
     )
     trigger_fallback.assert_awaited_once()
+    trigger_textback.assert_awaited_once()
 
 
 # --------------------------------------------------------------------------- #
@@ -1025,6 +1098,53 @@ async def test_speak_ended_ignores_non_transfer_speak(
     await handlers.handle_speak_ended({"call_control_id": "some-leg"}, _make_log())
 
     voice_service.bridge_calls.assert_not_awaited()
+
+
+async def test_speak_ended_starts_stream_only_for_bound_disclosure_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.telephony import call_transfer as ct_module
+
+    message_id = uuid.uuid4()
+    complete = AsyncMock(return_value=True)
+    monkeypatch.setattr(ct_module, "pop_pending_transfer", AsyncMock(return_value=None))
+    monkeypatch.setattr(handlers, "_complete_inbound_disclosure", complete)
+
+    await handlers.handle_speak_ended(
+        {
+            "call_control_id": "provider-call-id",
+            "client_state": encode_inbound_disclosure_state(message_id),
+        },
+        _make_log(),
+    )
+
+    complete.assert_awaited_once_with("provider-call-id", message_id, complete.await_args.args[2])
+
+
+async def test_terminal_notice_completion_hangs_up_without_starting_ai(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.telephony import call_transfer as ct_module
+    from app.services.telephony import telnyx_voice as voice_module
+
+    monkeypatch.setattr(ct_module, "pop_pending_transfer", AsyncMock(return_value=None))
+    monkeypatch.setattr(app_settings, "telnyx_api_key", "test-key")
+    voice_service = MagicMock(
+        hangup_call=AsyncMock(return_value=True),
+        close=AsyncMock(),
+    )
+    monkeypatch.setattr(voice_module, "TelnyxVoiceService", lambda *_: voice_service)
+
+    await handlers.handle_speak_ended(
+        {
+            "call_control_id": "provider-call-id",
+            "client_state": encode_inbound_terminal_state("unavailable"),
+        },
+        _make_log(),
+    )
+
+    voice_service.hangup_call.assert_awaited_once_with("provider-call-id")
+    voice_service.close.assert_awaited_once()
 
 
 # --------------------------------------------------------------------------- #

@@ -139,12 +139,11 @@ async def telnyx_voice_webhook(request: Request) -> dict[str, str]:
             # and handle_call_answered/handle_machine_detection look up the
             # Message row by provider_message_id. Returning 200 here would
             # mask mid-write failures and leave permanent partial state.
-            log.exception(
+            log.error(
                 "telnyx_voice_handler_failed",
                 event_type=event_type,
                 call_control_id=event_payload.get("call_control_id"),
                 error_type=type(exc).__name__,
-                error=str(exc),
             )
             raise HTTPException(
                 status_code=500,

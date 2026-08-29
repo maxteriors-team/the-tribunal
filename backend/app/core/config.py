@@ -1,5 +1,6 @@
 """Application configuration."""
 
+import uuid
 from functools import lru_cache
 from typing import Literal, Self
 from urllib.parse import urlsplit
@@ -456,6 +457,15 @@ class Settings(BaseSettings):
     # Per-workspace cap on concurrent voice sessions (any endpoint). Tracked in
     # Redis so the limit holds across multiple backend replicas.
     voice_workspace_max_sessions: int = 10
+    # AI-first inbound calling is pilot-only until paid entitlements replace this
+    # allowlist. An empty set fails closed and prevents accidental provider spend.
+    inbound_voice_pilot_workspace_ids: set[uuid.UUID] = Field(default_factory=set)
+    inbound_voice_caller_hour_limit: int = Field(default=6, ge=1, le=100)
+    inbound_voice_workspace_hour_limit: int = Field(default=60, ge=1, le=10_000)
+    inbound_voice_workspace_day_limit: int = Field(default=100, ge=1, le=10_000)
+    inbound_voice_workspace_max_concurrent: int = Field(default=2, ge=1, le=100)
+    # Configurable blended OpenAI + Telnyx + transcription estimate for pilot telemetry.
+    inbound_voice_estimated_cost_per_minute_usd: float = Field(default=0.12, ge=0, le=10)
     # Heartbeat — send {"type":"ping"} every N seconds, close the socket if no
     # pong is received within ``voice_pong_timeout_seconds``.
     voice_heartbeat_interval_seconds: int = 20
