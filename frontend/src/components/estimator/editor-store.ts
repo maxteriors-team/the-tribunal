@@ -72,6 +72,7 @@ export type EditorAction =
           | "colors"
           | "bulbScale"
           | "permanentComplexity"
+          | "elevation"
           | "circuitLabel"
           | "transformerId"
           | "wireGauge"

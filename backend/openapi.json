@@ -49693,6 +49693,22 @@
             ],
             "title": "Colors"
           },
+          "elevation": {
+            "anyOf": [
+              {
+                "enum": [
+                  "front",
+                  "side",
+                  "back"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elevation"
+          },
           "id": {
             "maxLength": 250,
             "title": "Id",

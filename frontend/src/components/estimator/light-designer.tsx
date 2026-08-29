@@ -101,7 +101,9 @@ import { toEstimateCustomLines, type CustomLineDraft } from "@/lib/estimator/cus
 import {
   designScale,
   designToEstimateInputs,
+  formatFeet,
   hasDesign,
+  permanentRunFeet,
   runScale,
   sumEstimateInputs,
 } from "@/lib/estimator/design";
@@ -182,6 +184,7 @@ import {
   type LandscapeProposalSettings,
   type PhotoInfo,
   type Product,
+  type RunElevation,
 } from "@/lib/estimator/types";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
@@ -272,6 +275,14 @@ export const PERMANENT_COMPLEXITY_OPTIONS = [
 const PERMANENT_COMPLEXITIES: readonly PermanentComplexity[] = PERMANENT_COMPLEXITY_OPTIONS.map(
   ({ value }) => value,
 );
+
+// Which face of the house a run covers. Feeds the coverage packages; a run left
+// untagged prices as front, matching every drawing saved before this existed.
+export const RUN_ELEVATION_OPTIONS = [
+  { value: "front", label: "Front" },
+  { value: "side", label: "Side" },
+  { value: "back", label: "Back" },
+] as const satisfies readonly { value: RunElevation; label: string }[];
 
 /**
  * Preserve a truthful scalar for servers/rows that cannot consume the measured
@@ -3279,18 +3290,9 @@ export function LightDesigner({
     liveShots.map((shot) => designToEstimateInputs(shot.design, productById, shot.photo.width)),
   );
   const feet = inputs.feet;
-  const permanentComplexityFeet = (() => {
-    const totals = { aerial: 0, easy: 0, standard: 0, complex: 0 };
-    for (const shot of liveShots) {
-      for (const run of shot.design.runs) {
-        const product = productById.get(run.productId);
-        if (product?.category !== "permanent") continue;
-        totals[run.permanentComplexity ?? "standard"] +=
-          polylineLength(run.points) * runScale(shot.design, run, shot.photo.width).ftPerPx;
-      }
-    }
-    return totals;
-  })();
+  const permanentFeet = permanentRunFeet(liveShots, productById);
+  const permanentComplexityFeet = permanentFeet.complexity;
+  const permanentElevationFeet = permanentFeet.elevation;
   const selectedPermanentRun =
     state.selection?.kind === "run"
       ? (design.runs.find((run) => {
@@ -4911,34 +4913,66 @@ export function LightDesigner({
                           ) : null}
                           {sides.permanent ? (
                             selectedPermanentRun ? (
-                              <label className="est-opt-rate">
-                                <span>Selected run complexity</span>
-                                <select
-                                  className="est-input"
-                                  value={selectedPermanentRun.permanentComplexity ?? "standard"}
-                                  onChange={(event) =>
-                                    dispatch({
-                                      type: "UPDATE_RUN",
-                                      id: selectedPermanentRun.id,
-                                      patch: {
-                                        permanentComplexity: event.target
-                                          .value as PermanentComplexity,
-                                      },
-                                    })
-                                  }
-                                  aria-label="Selected permanent run complexity"
-                                >
-                                  {PERMANENT_COMPLEXITY_OPTIONS.map(({ value, label }) => (
-                                    <option key={value} value={value}>
-                                      {label}
-                                    </option>
-                                  ))}
-                                </select>
-                                <span className="est-internal-badge">Internal</span>
-                              </label>
+                              <>
+                                <label className="est-opt-rate">
+                                  <span>Selected run complexity</span>
+                                  <select
+                                    className="est-input"
+                                    value={selectedPermanentRun.permanentComplexity ?? "standard"}
+                                    onChange={(event) =>
+                                      dispatch({
+                                        type: "UPDATE_RUN",
+                                        id: selectedPermanentRun.id,
+                                        patch: {
+                                          permanentComplexity: event.target
+                                            .value as PermanentComplexity,
+                                        },
+                                      })
+                                    }
+                                    aria-label="Selected permanent run complexity"
+                                  >
+                                    {PERMANENT_COMPLEXITY_OPTIONS.map(({ value, label }) => (
+                                      <option key={value} value={value}>
+                                        {label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <span className="est-internal-badge">Internal</span>
+                                </label>
+                                <label className="est-opt-rate">
+                                  <span>Selected run elevation</span>
+                                  <select
+                                    className="est-input"
+                                    value={selectedPermanentRun.elevation ?? "front"}
+                                    onChange={(event) =>
+                                      dispatch({
+                                        type: "UPDATE_RUN",
+                                        id: selectedPermanentRun.id,
+                                        patch: {
+                                          elevation: event.target.value as RunElevation,
+                                        },
+                                      })
+                                    }
+                                    aria-label="Selected permanent run elevation"
+                                  >
+                                    {RUN_ELEVATION_OPTIONS.map(({ value, label }) => (
+                                      <option key={value} value={value}>
+                                        {label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <span className="est-internal-badge">Internal</span>
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                  Front {formatFeet(permanentElevationFeet.front)} · Side{" "}
+                                  {formatFeet(permanentElevationFeet.side)} · Back{" "}
+                                  {formatFeet(permanentElevationFeet.back)}
+                                </p>
+                              </>
                             ) : (
                               <p className="text-xs text-muted-foreground">
-                                Select a permanent-lighting run to set its install complexity.
+                                Select a permanent-lighting run to set its install complexity and
+                                which elevation it covers.
                               </p>
                             )
                           ) : null}

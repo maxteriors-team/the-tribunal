@@ -21,7 +21,9 @@
 import type { ChristmasItemsSelection } from "@/types/estimate";
 
 import { distance, polylineLength } from "./geometry";
-import type { Design, Product, Run, ScaleSlot } from "./types";
+import type { Design, Product, Run, RunElevation, ScaleSlot } from "./types";
+
+type PermanentComplexity = NonNullable<Run["permanentComplexity"]>;
 
 /** When no scale is set we assume the photo spans this many feet across. */
 export const ASSUMED_PHOTO_WIDTH_FT = 60;
@@ -166,6 +168,50 @@ export function sumEstimateInputs(parts: DesignEstimateInputs[]): DesignEstimate
     }
   }
   return total;
+}
+
+/** One permanent-lighting shot as measured: its runs plus the photo they were drawn on. */
+export interface PermanentMeasureShot {
+  design: Design;
+  photo: { width: number };
+}
+
+/**
+ * Measured permanent footage split by install difficulty and by house face.
+ * Both are billing inputs: difficulty weights the markup, elevation selects
+ * which runs a coverage package includes.
+ */
+export interface PermanentRunFeet {
+  complexity: Record<PermanentComplexity, number>;
+  elevation: Record<RunElevation, number>;
+}
+
+/**
+ * Total permanent footage per difficulty and per elevation in a single pass.
+ *
+ * Non-permanent runs are skipped: seasonal and landscape footage is priced by
+ * its own path, and counting it here would inflate the permanent quote. An
+ * untagged run falls back to Standard difficulty and the Front elevation, which
+ * is what every drawing saved before those fields existed contains.
+ */
+export function permanentRunFeet(
+  shots: readonly PermanentMeasureShot[],
+  productById: ReadonlyMap<string, Product>,
+): PermanentRunFeet {
+  const totals: PermanentRunFeet = {
+    complexity: { aerial: 0, easy: 0, standard: 0, complex: 0 },
+    elevation: { front: 0, side: 0, back: 0 },
+  };
+  for (const shot of shots) {
+    for (const run of shot.design.runs) {
+      if (productById.get(run.productId)?.category !== "permanent") continue;
+      const feet =
+        polylineLength(run.points) * runScale(shot.design, run, shot.photo.width).ftPerPx;
+      totals.complexity[run.permanentComplexity ?? "standard"] += feet;
+      totals.elevation[run.elevation ?? "front"] += feet;
+    }
+  }
+  return totals;
 }
 
 /** True when the design has anything drawn or placed. */

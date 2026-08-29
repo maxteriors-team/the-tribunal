@@ -63,6 +63,7 @@ def _document(
                             "points": [{"x": 10, "y": 20}, {"x": 50, "y": 20}],
                             "scaleSlot": 2,
                             "permanentComplexity": "complex",
+                            "elevation": "side",
                             "spacingIn": 12,
                             "colors": ["#f8d46b"],
                             "bulbScale": 1,
@@ -180,6 +181,7 @@ class TestLandscapeDraftSchema:
         run = serialized["shots"][0]["design"]["runs"][0]
         assert run["permanentComplexity"] == "complex"
         assert run["scaleSlot"] == 2
+        assert run["elevation"] == "side"
 
     @pytest.mark.parametrize(
         "mutate",
@@ -206,6 +208,7 @@ class TestLandscapeDraftSchema:
             lambda document: document["bomLineItems"][0].update(quantity=-1),
             lambda document: document["shots"][0]["design"]["items"][0].update(iconScale=3),
             lambda document: document["procurement"]["fixture:catalog-1"].update(neededQuantity=-1),
+            lambda document: document["shots"][0]["design"]["runs"][0].update(elevation="left"),
             lambda document: document.update(version=1),
             lambda document: document.update(version=3),
         ],
