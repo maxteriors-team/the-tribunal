@@ -595,6 +595,51 @@ test.describe("landscape lighting studio", () => {
     });
   });
 
+  test("tags a drawn permanent run with the house face it covers", async ({ page }) => {
+    const { updates } = await installStudioApi(page, { projectType: "permanent" });
+    await page.goto(PERMANENT_PROJECT_URL);
+    await expect(page.getByLabel("Project name")).toHaveValue("Hawthorne Residence");
+
+    const canvas = page.getByLabel("Property photo lighting design canvas");
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error("Permanent lighting canvas did not render");
+    await page.getByRole("button", { name: /Permanent LED Roofline/i }).click();
+    await canvas.click({ position: { x: box.width * 0.25, y: box.height * 0.35 } });
+    await canvas.click({ position: { x: box.width * 0.75, y: box.height * 0.43 } });
+    await canvas.focus();
+    await page.keyboard.press("Enter");
+
+    // Drawing selects the new run, so both per-run controls are live.
+    const elevation = page.getByLabel("Selected permanent run elevation");
+    await expect(elevation).toHaveValue("front");
+    await expect(page.getByLabel("Selected permanent run complexity")).toHaveValue("standard");
+    await elevation.selectOption("side");
+
+    // The tag has to reach the saved document, not just the dropdown: the
+    // coverage packages price from what the server stores.
+    const savedElevations = () =>
+      ((updates.at(-1) as { document?: typeof projectDocument } | undefined)?.document?.shots ?? [])
+        .flatMap((shot) => shot.design.runs)
+        .filter((run) => run.productId === "roofline-permanent")
+        .map((run) => (run as { elevation?: string }).elevation ?? null);
+
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText("Saved to Tribunal")).toBeVisible();
+    await expect.poll(savedElevations).toEqual(["side"]);
+
+    // Measured footage moves with the tag instead of staying on the front.
+    await expect(page.getByText(/Front 0\.0 ft · Side [1-9][\d.]* ft · Back 0\.0 ft/)).toBeVisible();
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/permanent-run-elevation-tag.png",
+    });
+
+    // Reopening keeps the tag: an untagged legacy run would read "front".
+    await page.reload();
+    await expect(page.getByLabel("Project name")).toHaveValue("Hawthorne Residence");
+    await canvas.click({ position: { x: box.width * 0.5, y: box.height * 0.39 } });
+    await expect(page.getByLabel("Selected permanent run elevation")).toHaveValue("side");
+  });
+
   test("opens the quote builder at its package choices every time Proposal & payment is used", async ({
     page,
   }) => {

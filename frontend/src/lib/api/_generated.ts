@@ -30369,6 +30369,8 @@ export interface components {
             circuitLabel?: string | null;
             /** Colors */
             colors?: string[] | null;
+            /** Elevation */
+            elevation?: ("front" | "side" | "back") | null;
             /** Id */
             id: string;
             /** Permanentcomplexity */

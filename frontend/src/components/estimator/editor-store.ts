@@ -73,6 +73,7 @@ export type EditorAction =
           | "bulbScale"
           | "permanentComplexity"
           | "roofPitch"
+          | "elevation"
           | "circuitLabel"
           | "transformerId"
           | "wireGauge"

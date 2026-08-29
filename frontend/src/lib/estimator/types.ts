@@ -223,6 +223,15 @@ export interface Product {
 
 export type ScaleSlot = 1 | 2;
 
+/**
+ * Which face of the house a permanent run covers. Drives the coverage packages
+ * (whole home / front and sides / front only), so it is billing-relevant.
+ * Absent means front: front is the one face every coverage level includes, so an
+ * untagged legacy run stays in the cheapest package instead of silently
+ * inflating it.
+ */
+export type RunElevation = "front" | "side" | "back";
+
 export interface Run {
   id: string;
   productId: string;
@@ -241,6 +250,8 @@ export interface Run {
    * no correction; a value scales the measured run to its true sloped length.
    */
   roofPitch?: "normal" | "steep";
+  /** House face this run covers; missing means front. */
+  elevation?: RunElevation;
   /** Plan-only electrical metadata for a landscape wire circuit. */
   circuitLabel?: string;
   transformerId?: string;
