@@ -217,10 +217,10 @@ time, so approval clears the approval gate only.
   a control and was out of scope for this pass.
 - WebSocket / realtime bridges (`app/websockets/`), public webhook routes, the
   embeddable widget, and API-key (non-session) authentication paths.
-- Whether cross-**workspace** isolation holds; this audit only varied the role
-  within one workspace.
 - Data-layer (row-level) enforcement — every check found here is at the API
   layer, so a future service-layer caller bypasses all of it.
+
+Cross-**workspace** isolation was on this list until 2026-08-28; see finding 8.
 
 ### 7. High — FIXED 2026-08-28 — the full ungated-route sweep
 
@@ -284,7 +284,57 @@ and `invitations` read as ungated to a naive scan but are enforced by
 A test pins the operational surfaces as reachable, so a later pass cannot gate
 the field tier's own work by reflex.
 
+### 8. Medium — FIXED 2026-08-28 — cross-workspace existence oracle on calls
+
+Every prior pass varied the caller's **role** inside one workspace. This one
+varied the **tenant**: a full member of workspace A asking for a row owned by
+workspace B.
+
+**The tenant boundary itself holds.** `get_workspace` (`app/api/deps.py`)
+verifies membership before anything else and answers 404 rather than 403 for a
+workspace the caller does not belong to. `app/db/scope.py` centralises the
+row-level predicate, and its `assert_workspace_owned` states the rule the whole
+codebase is meant to follow:
+
+> Cross-workspace rows intentionally look identical to missing rows at API
+> boundaries to avoid leaking object existence across tenants.
+
+**Two routes broke that rule.** `GET /calls/{call_id}` and
+`POST /calls/{call_id}/hangup` answered **403 "Access denied"** for a call
+belonging to another workspace. No data crossed — the row was never serialised,
+and the hangup's conversation lookup is properly workspace-scoped, so a foreign
+call was never actually terminated. What leaked was **existence**: 403 versus
+404 tells an authenticated caller that a given call id is real in somebody
+else's workspace, which turns id guessing into enumeration. Both now answer 404
+with the same detail string as a genuinely missing call.
+
+Ranked Medium rather than High precisely because no row content crossed the
+boundary. It is worth fixing anyway because the cost is two lines and the
+codebase already committed to the stricter rule everywhere else.
+
+#### What was checked, and what this does not prove
+
+- `CODE` — audited both shapes of the problem. Path-parameter routes:
+  `get_workspace` resolves membership from the URL's workspace and no handler
+  was found trusting a `workspace_id` from a request **body** over it. Nested
+  resource ids: scanned every `select(Model).where(Model.id == …)` that never
+  mentions `workspace_id` (66 candidates) plus every `db.get()` by primary key.
+- `CODE` — triaged the API-reachable subset. The rest resolve ids from an
+  already-scoped parent row, or run in workers and webhooks where the id comes
+  from a provider payload rather than a caller. `contacts.py` fetches a lead
+  source and a referral partner unscoped but checks `workspace_id` immediately
+  after, which is correct if less tidy than the shared helper.
+- `RUNTIME` — drove the real ASGI app as an **owner** of workspace A against a
+  call owned by workspace B, and asserted 404. Owner deliberately: if the
+  highest role cannot cross the boundary, no lesser role can, and the result
+  can never be mistaken for a capability gate firing.
+- **Not proven:** this is a static audit plus targeted probes, not an
+  exhaustive per-route tenant test. Every workspace-owned model and route was
+  not individually exercised with a foreign id. The scan is a heuristic and can
+  miss a query built dynamically or across a join.
+
 ## What is left
+
 
 1. ~~Assistant tool surface (finding 1)~~ — **done 2026-08-27.**
 2. ~~Fix the false `/service-locations` comment in `test_rbac.py`~~ — **done.**
@@ -300,7 +350,10 @@ the field tier's own work by reflex.
    silently regress again. The 31 justified-open routes above are the seed for
    its allow-list. Router-level dependencies (the pattern used throughout) make
    the check cheap to satisfy. **This is now the last open item.**
-9. Still unexamined, and larger than anything above: cross-**workspace**
-   isolation, and the non-HTTP surfaces (websockets, webhooks, the embeddable
-   widget, API-key auth). Every gate found by this audit lives at the API layer,
-   so a service-layer caller bypasses all of them.
+9. ~~Cross-**workspace** isolation (finding 8)~~ — **audited 2026-08-28.** The
+   boundary holds; one existence oracle found and fixed. Not exhaustive — see
+   the caveats under that finding.
+10. Still unexamined, and now the largest gap: the non-HTTP surfaces
+    (websockets, webhooks, the embeddable widget, API-key auth). Every gate this
+    audit found lives at the API layer, so a service-layer caller bypasses all
+    of them.
