@@ -30374,11 +30374,13 @@ export interface components {
             /** Id */
             id: string;
             /** Permanentcomplexity */
-            permanentComplexity?: ("aerial" | "easy" | "standard" | "complex") | null;
+            permanentComplexity?: ("easy" | "standard" | "complex") | null;
             /** Points */
             points: components["schemas"]["PointSchema"][];
             /** Productid */
             productId: string;
+            /** Roofpitch */
+            roofPitch?: ("normal" | "steep") | null;
             /** Scaleslot */
             scaleSlot?: (1 | 2) | null;
             /** Sourcevoltage */

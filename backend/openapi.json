@@ -49929,7 +49929,6 @@
             "anyOf": [
               {
                 "enum": [
-                  "aerial",
                   "easy",
                   "standard",
                   "complex"
@@ -49954,6 +49953,21 @@
             "maxLength": 250,
             "title": "Productid",
             "type": "string"
+          },
+          "roofPitch": {
+            "anyOf": [
+              {
+                "enum": [
+                  "normal",
+                  "steep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roofpitch"
           },
           "scaleSlot": {
             "anyOf": [

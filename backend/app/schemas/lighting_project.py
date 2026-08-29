@@ -64,7 +64,7 @@ class RunSchema(DocumentSchema):
         default=None, validation_alias=AliasChoices("scaleSlot", "scale_slot")
     )
     # Per-run install difficulty; weights permanent-lighting markup at quote time.
-    permanent_complexity: Literal["aerial", "easy", "standard", "complex"] | None = Field(
+    permanent_complexity: Literal["easy", "standard", "complex"] | None = Field(
         default=None,
         validation_alias=AliasChoices("permanentComplexity", "permanent_complexity"),
     )
@@ -72,6 +72,18 @@ class RunSchema(DocumentSchema):
     # Missing means front: front is in every coverage level, so an untagged
     # legacy run stays in the cheapest package instead of inflating it.
     elevation: Literal["front", "side", "back"] | None = None
+    # A gable's pitch correction; absent means a horizontal eave.
+    roof_pitch: Literal["normal", "steep"] | None = Field(
+        default=None, validation_alias=AliasChoices("roofPitch", "roof_pitch")
+    )
+
+    @field_validator("permanent_complexity", mode="before")
+    @classmethod
+    def normalize_retired_aerial_complexity(cls, value: object) -> object:
+        # Saved drafts can predate the aerial-tier retirement. Preserve their
+        # footage while moving them onto today's neutral labor tier.
+        return "standard" if value == "aerial" else value
+
     spacing_in: Annotated[float, Field(gt=0, le=1200)] | None = Field(
         default=None, validation_alias=AliasChoices("spacingIn", "spacing_in")
     )
