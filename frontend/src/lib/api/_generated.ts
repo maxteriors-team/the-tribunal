@@ -5969,6 +5969,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/handoff-images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Job Handoff Images
+         * @description List source-quote images after applying normal job visibility rules.
+         */
+        get: operations["list_job_handoff_images_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/handoff-images/{image_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Job Handoff Image
+         * @description Serve a source-quote image only to callers allowed to read this job.
+         */
+        get: operations["download_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images__image_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/installation-plan": {
         parameters: {
             query?: never;
@@ -8744,6 +8784,70 @@ export interface paths {
          *     explicit ``to`` override.
          */
         post: operations["deliver_quote_api_v1_workspaces__workspace_id__quotes__quote_id__deliver_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/handoff-images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Quote Handoff Images
+         * @description List field-team image metadata without loading the stored bytes.
+         */
+        get: operations["list_quote_handoff_images_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images_get"];
+        put?: never;
+        /**
+         * Upload Quote Handoff Image
+         * @description Store one validated handoff image for the authorized quote.
+         */
+        post: operations["upload_quote_handoff_image_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/handoff-images/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Quote Handoff Image
+         * @description Delete one image only from its authorized workspace and quote.
+         */
+        delete: operations["delete_quote_handoff_image_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images__image_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/handoff-images/{image_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Quote Handoff Image
+         * @description Serve one authorized image inline using its detected content type.
+         */
+        get: operations["download_quote_handoff_image_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images__image_id__download_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -13476,6 +13580,11 @@ export interface components {
         };
         /** Body_upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post */
         Body_upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_upload_quote_handoff_image_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images_post */
+        Body_upload_quote_handoff_image_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images_post: {
             /** File */
             file: string;
         };
@@ -18487,6 +18596,43 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HandoffImageListResponse
+         * @description Image metadata plus the server-enforced upload limits.
+         */
+        HandoffImageListResponse: {
+            /** Images */
+            images: components["schemas"]["HandoffImageResponse"][];
+            /** Max Image Bytes */
+            max_image_bytes: number;
+            /** Max Images */
+            max_images: number;
+        };
+        /**
+         * HandoffImageResponse
+         * @description Handoff image metadata; file bytes remain download-only.
+         */
+        HandoffImageResponse: {
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/webp";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Size Bytes */
+            size_bytes: number;
         };
         /** HighlightSchema */
         HighlightSchema: {
@@ -30124,6 +30270,64 @@ export interface components {
             revenue_approved: number;
         };
         /**
+         * SalesPerformanceCloserRow
+         * @description One rep's totals, plus the same metrics split across their service lines.
+         *
+         *     The drill-down is nested rather than returned as a second flat list keyed by
+         *     ``(closer, service)``: the pairing is what makes it readable ("Dana closes
+         *     gutters at 60% but lighting at 12%"), and a flat list forces every client to
+         *     re-group it. Sub-rows are ranked by approved revenue like every other
+         *     breakdown, and their ``quotes_issued`` sums to the parent's, so a rep's
+         *     services always account for all of their quoted volume.
+         */
+        SalesPerformanceCloserRow: {
+            /**
+             * Attach Rate
+             * @description Share (0..1) of approved quotes carrying at least one attached service, or null with no approvals
+             */
+            attach_rate?: number | null;
+            /**
+             * Avg Job Value
+             * @description Mean approved quote total, or null with no approvals
+             */
+            avg_job_value?: number | null;
+            /**
+             * By Service
+             * @description This rep's performance split by the dominant service line of each quote; the uncategorized bucket carries a null key
+             */
+            by_service?: components["schemas"]["SalesPerformanceBreakdownRow"][];
+            /**
+             * Close Rate
+             * @description approved / (approved + declined + expired) as a 0..1 ratio, or null when nothing in this group was decided
+             */
+            close_rate?: number | null;
+            /**
+             * Key
+             * @description Stable group identifier (user id, lead-source type, or service category); null for the unassigned/unattributed/uncategorized bucket
+             */
+            key?: string | null;
+            /**
+             * Label
+             * @description Human-readable group name
+             */
+            label: string;
+            /**
+             * Quotes Approved
+             * @description Quotes in this group the customer approved
+             */
+            quotes_approved: number;
+            /**
+             * Quotes Issued
+             * @description Quotes in this group that left draft
+             */
+            quotes_issued: number;
+            /**
+             * Revenue Approved
+             * @description Summed total of this group's approved quotes
+             */
+            revenue_approved: number;
+        };
+        /**
          * SalesPerformanceReport
          * @description Sales performance over a quote cohort.
          *
@@ -30184,9 +30388,9 @@ export interface components {
             booked_revenue: number;
             /**
              * By Closer
-             * @description Performance grouped by the user who created the quote
+             * @description Performance grouped by the user who created the quote, each row carrying its own per-service drill-down
              */
-            by_closer: components["schemas"]["SalesPerformanceBreakdownRow"][];
+            by_closer: components["schemas"]["SalesPerformanceCloserRow"][];
             /**
              * By Lead Source
              * @description Performance grouped by the acquisition channel attributed to the quote's opportunity
@@ -45167,6 +45371,71 @@ export interface operations {
             };
         };
     };
+    list_job_handoff_images_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandoffImageListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images__image_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                image_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_job_installation_plan_api_v1_workspaces__workspace_id__jobs__job_id__installation_plan_get: {
         parameters: {
             query?: never;
@@ -51090,6 +51359,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDeliverResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_quote_handoff_images_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandoffImageListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_quote_handoff_image_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_quote_handoff_image_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandoffImageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_quote_handoff_image_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images__image_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_quote_handoff_image_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images__image_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
