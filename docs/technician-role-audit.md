@@ -333,7 +333,44 @@ codebase already committed to the stricter rule everywhere else.
   not individually exercised with a foreign id. The scan is a heuristic and can
   miss a query built dynamically or across a join.
 
+### 9. The ratchet — ADDED 2026-08-28 — CI blocks the next ungated route
+
+Findings 1-8 were all point repairs. Nothing stopped the *next* route from
+landing ungated, which is exactly how the 50 routes in finding 7 accumulated in
+the first place.
+
+`backend/tests/api/test_route_capability_coverage.py` walks the routes FastAPI
+actually mounted and fails when a workspace-scoped route enforces nothing — no
+capability marker, no role allow-list, no owner-scope helper, no admin
+dependency, and no inline check. It runs in the default suite, so `make
+ci.backend` and the PR checks already enforce it; no new CI wiring was needed.
+
+**The assertion is an equality, so it fails in both directions:**
+
+* a **new ungated route** fails — the author gates it, or adds it to
+  `JUSTIFIED_UNGATED_ROUTES` with a comment saying why the field tier may reach
+  it;
+* a **stale allow-list entry** fails — once a listed route gains a gate, its
+  entry must go, so the list cannot rot into a list of things nobody has looked
+  at.
+
+The allow-list is seeded with the 30 routes triaged in finding 7, grouped by the
+reason each is safe: the caller's own workspace record, appointments (scoped by
+`_calendar_scope_user_id` rather than a gate), the field tier's actual work
+(jobs, visits, time entries, plans), and the crew roster. Customer *sites* are
+deliberately **not** in that last group — `/service-locations` needs `crm:read`.
+
+Detection is deliberately broad: it asks "did anyone make an authorization
+decision here?", not "is the decision correct?". Correctness is what
+`test_technician_surface_probe.py` and `test_capability_route_matrix.py` cover.
+A gate that is wrong will pass this check and fail those.
+
+Proven to bind, in three directions: an injected ungated route fails it; the
+same route with a `require_capability` dependency passes; and adding an entry
+for the already-gated `/contacts` trips the stale-entry branch.
+
 ## What is left
+
 
 
 1. ~~Assistant tool surface (finding 1)~~ — **done 2026-08-27.**
@@ -345,11 +382,12 @@ codebase already committed to the stricter rule everywhere else.
    (finding 6)~~ — **done 2026-08-28.**
 7. ~~Re-run the full ungated-route sweep (finding 7)~~ — **done 2026-08-28.**
    17 routers now carry a capability gate.
-8. Extend `tests/api/test_capability_route_matrix.py` to fail on **any** new
-   workspace route that ships without a capability marker, so coverage cannot
-   silently regress again. The 31 justified-open routes above are the seed for
-   its allow-list. Router-level dependencies (the pattern used throughout) make
-   the check cheap to satisfy. **This is now the last open item.**
+8. ~~Fail CI on **any** new workspace route that ships without a capability
+   decision (finding 9)~~ — **done 2026-08-28.** Landed as its own file,
+   `tests/api/test_route_capability_coverage.py`, rather than inside
+   `test_capability_route_matrix.py`: that file asserts specific policies are
+   *correct*, this one asserts a decision *exists*. They fail for different
+   reasons and read better apart.
 9. ~~Cross-**workspace** isolation (finding 8)~~ — **audited 2026-08-28.** The
    boundary holds; one existence oracle found and fixed. Not exhaustive — see
    the caveats under that finding.
