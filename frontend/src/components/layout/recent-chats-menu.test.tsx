@@ -7,6 +7,7 @@ import {
   RecentChatsMenu,
   formatUnreadBadge,
 } from "@/components/layout/recent-chats-menu";
+import { can as roleCan, roleTier, type Capability } from "@/lib/permissions";
 import type { Conversation } from "@/types";
 
 const {
@@ -16,6 +17,7 @@ const {
   unreadSummaryMock,
   pushMock,
   useWorkspaceIdMock,
+  capabilitiesMock,
   toastErrorMock,
   toastSuccessMock,
 } = vi.hoisted(() => ({
@@ -25,6 +27,7 @@ const {
   unreadSummaryMock: vi.fn(),
   pushMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
+  capabilitiesMock: vi.fn(),
   toastErrorMock: vi.fn(),
   toastSuccessMock: vi.fn(),
 }));
@@ -40,6 +43,12 @@ vi.mock("@/lib/api/conversations", () => ({
 
 vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => useWorkspaceIdMock(),
+}));
+
+// This menu is `crm:read`-gated; role behaviour lives in
+// `header-chat-role-gating.test.tsx`. Here every case is an office role.
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => capabilitiesMock(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -84,6 +93,10 @@ function renderMenu() {
 beforeEach(() => {
   vi.clearAllMocks();
   useWorkspaceIdMock.mockReturnValue("ws-1");
+  capabilitiesMock.mockReturnValue({
+    tier: roleTier("owner"),
+    can: (capability: Capability) => roleCan("owner", capability),
+  });
   unreadSummaryMock.mockResolvedValue({
     unread_conversations: 0,
     unread_messages: 0,

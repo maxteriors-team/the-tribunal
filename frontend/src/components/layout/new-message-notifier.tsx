@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
+import { useCapabilities } from "@/hooks/useCapabilities";
 import {
   useMarkConversationRead,
   useUnreadSummary,
@@ -91,7 +92,12 @@ export function NewMessageNotifier() {
   const workspaceId = useWorkspaceId();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: unread } = useUnreadSummary(workspaceId);
+  // Both endpoints behind this notifier — the unread rollup and the thread
+  // list — are `crm:read` on the backend. A field technician has no chat
+  // surface at all, so polling for them would only earn 403s on every page.
+  const { can } = useCapabilities();
+  const canReadChats = can("crm:read");
+  const { data: unread } = useUnreadSummary(canReadChats ? workspaceId : null);
   // `mutate` is referentially stable, so the toast callbacks can close over it
   // without re-running this effect on every render.
   const { mutate: markRead } = useMarkConversationRead(workspaceId ?? "");
@@ -114,7 +120,9 @@ export function NewMessageNotifier() {
   }, [workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || unreadTotal === null) return;
+    // `fetchQuery` below ignores a query's `enabled`, so the capability has to
+    // be re-checked here and not just at the poll.
+    if (!workspaceId || !canReadChats || unreadTotal === null) return;
 
     const previousTotal = lastTotalRef.current;
     lastTotalRef.current = unreadTotal;
@@ -174,7 +182,7 @@ export function NewMessageNotifier() {
     return () => {
       cancelled = true;
     };
-  }, [unreadTotal, workspaceId, router, queryClient, markRead]);
+  }, [unreadTotal, workspaceId, canReadChats, router, queryClient, markRead]);
 
   return null;
 }
