@@ -1,10 +1,16 @@
 """Deterministic evidence-gate tests for SMS generation."""
 
 import json
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 from app.services.ai.booking_confirmation import is_booking_confirmation_turn
 from app.services.ai.text_response_generator import (
     _evidence_fallback,
+    _failed_required_domain,
+    _first_domain_in_canonical_order,
     _safe_without_claim_evidence,
     _tool_choice_for_claims,
     _update_evidence_status,
@@ -157,3 +163,71 @@ def test_only_this_turns_tool_result_satisfies_claim_evidence() -> None:
     )
     assert _safe_without_claim_evidence("Which quote number are you asking about?") is True
     assert _safe_without_claim_evidence("Your quote is approved at $450. Does that work?") is False
+
+
+# A customer message that needs two independent domains proven before we may answer.
+_MULTI_DOMAIN_MESSAGE = "How much is it and when can you come out?"
+
+_HASH_SEED_PROBE = """
+import json
+
+from app.services.ai.text_response_generator import (
+    _evidence_fallback,
+    _failed_required_domain,
+    _first_domain_in_canonical_order,
+    required_claim_evidence_domains,
+)
+
+domains = required_claim_evidence_domains({message!r})
+assert len(domains) > 1, sorted(domains)
+failed = _failed_required_domain(domains, dict.fromkeys(domains, "absent"))
+print(
+    json.dumps(
+        {{
+            "round_limit": _first_domain_in_canonical_order(domains),
+            "failed": failed,
+            "text": _evidence_fallback(failed),
+        }}
+    )
+)
+"""
+
+
+def test_multi_domain_fallback_is_identical_under_every_hash_seed() -> None:
+    """The canned fallback must not depend on set iteration order.
+
+    ``required_domains`` is a ``frozenset`` and CPython randomises string hashing
+    per process, so picking with ``next(iter(...))`` answers the same customer
+    text with a different message depending on which worker replied.
+    """
+    results = {
+        seed: subprocess.run(
+            [sys.executable, "-c", _HASH_SEED_PROBE.format(message=_MULTI_DOMAIN_MESSAGE)],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=Path(__file__).resolve().parents[3],
+            env=os.environ | {"PYTHONHASHSEED": str(seed)},
+        ).stdout.strip()
+        # Seeds 0 and 1 already order {pricing, availability} differently, so a
+        # regression to `next(iter(...))` cannot slip through this range.
+        for seed in range(6)
+    }
+
+    assert len(set(results.values())) == 1, f"fallback varies by hash seed: {results}"
+
+
+def test_fallback_domain_follows_the_same_priority_as_the_outbound_gate() -> None:
+    """All three gates must name one domain, so the reply matches the warning log."""
+    domains = required_claim_evidence_domains(_MULTI_DOMAIN_MESSAGE)
+    assert domains == {"pricing", "availability"}
+
+    # `_EVIDENCE_TOOL_BY_DOMAIN` ranks pricing ahead of availability, and the
+    # outbound-claim gate already picks the missing domain in that order.
+    assert _first_domain_in_canonical_order(domains) == "pricing"
+    assert _failed_required_domain(domains, dict.fromkeys(domains, "absent")) == "pricing"
+    assert _failed_required_domain(domains, {"pricing": "found", "availability": "error"}) == (
+        "availability"
+    )
+    assert _failed_required_domain(domains, dict.fromkeys(domains, "found")) is None
+    assert _first_domain_in_canonical_order(frozenset()) is None
