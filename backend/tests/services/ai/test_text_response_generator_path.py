@@ -270,3 +270,118 @@ async def test_prepare_booking_returns_canonical_summary_without_second_model_tu
 
     assert response == confirmation
     assert client.chat.completions.create.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_tool_error_without_domains_hands_off_instead_of_repeating_forced_tool() -> None:
+    """An unlabeled evidence failure must end the turn, not re-force the same tool."""
+    workspace_id = uuid.uuid4()
+    agent = SimpleNamespace(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        text_max_context_messages=20,
+        enabled_tools=[],
+        system_prompt="Help the customer.",
+        language="en",
+        temperature=0.2,
+    )
+    conversation = SimpleNamespace(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        contact_id=42,
+        contact_phone="+15125550100",
+    )
+    contact_result = MagicMock()
+    contact_result.scalar_one_or_none.return_value = SimpleNamespace()
+    db = AsyncMock()
+    db.execute.return_value = contact_result
+
+    def _tool_call() -> SimpleNamespace:
+        return SimpleNamespace(
+            id="call-1",
+            function=SimpleNamespace(
+                name="lookup_contact_state",
+                arguments=json.dumps({"subject": "balance"}),
+            ),
+        )
+
+    def _completion() -> SimpleNamespace:
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(message=SimpleNamespace(content=None, tool_calls=[_tool_call()]))
+            ]
+        )
+
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(side_effect=[_completion() for _ in range(6)])
+    executor = MagicMock()
+    executor.handle_tool_calls = AsyncMock(
+        return_value=[
+            {
+                "tool_call_id": "call-1",
+                "role": "tool",
+                # Mirrors the real executor's invalid-subject and workspace-scope
+                # errors: a status with no ``evidence_domains`` to attach it to.
+                "content": json.dumps(
+                    {
+                        "success": False,
+                        "error": "subject must be quote, invoice, or appointment",
+                        "evidence_status": "error",
+                    }
+                ),
+            }
+        ]
+    )
+
+    with (
+        patch(
+            "app.services.ai.text_response_generator.get_workspace_timezone",
+            AsyncMock(return_value="America/New_York"),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.build_message_context",
+            AsyncMock(return_value=[{"role": "user", "content": "Is my quote still pending?"}]),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.get_offer_context",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.build_contact_generation_context",
+            AsyncMock(return_value=ContactGenerationContext(None, "Is my quote still pending?")),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.get_website_lead_qualification_policy",
+            return_value=None,
+        ),
+        patch(
+            "app.services.ai.text_response_generator.get_training_examples_prompt",
+            AsyncMock(return_value=""),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.knowledge_context_service.get_preamble_for_agent",
+            AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.knowledge_context_service.has_active_documents",
+            AsyncMock(return_value=False),
+        ),
+        patch(
+            "app.services.ai.text_response_generator.AsyncOpenAI",
+            return_value=client,
+        ),
+        patch(
+            "app.services.ai.text_response_generator.TextToolExecutor",
+            return_value=executor,
+        ),
+    ):
+        response = await generate_text_response(
+            agent,
+            conversation,
+            db,
+            openai_api_key="test-key",
+        )
+
+    assert response == "I can't verify that quote in the CRM, so I'll have the team follow up."
+    assert client.chat.completions.create.await_count == 1
+    assert executor.handle_tool_calls.await_count == 1

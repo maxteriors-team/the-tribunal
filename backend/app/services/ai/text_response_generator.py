@@ -349,6 +349,27 @@ def _update_evidence_status(
                     evidence_status[domain] = status
 
 
+def _mark_unresolved_evidence(
+    evidence_status: dict[ClaimEvidenceDomain, str],
+    *,
+    required_domains: frozenset[ClaimEvidenceDomain],
+    called_tools: frozenset[str],
+) -> None:
+    """Fail closed when a domain's evidence tool ran but returned no usable status.
+
+    Tool results only advance the gate when they carry both ``evidence_status`` and
+    a well-formed ``evidence_domains`` list. Blocked scope errors, invalid tool
+    arguments, and malformed payloads carry neither, so without this the domain
+    stays unresolved, ``_tool_choice_for_claims`` re-forces the same tool every
+    round, and the turn still ends in the canned fallback.
+    """
+    for domain in required_domains:
+        if domain in evidence_status:
+            continue
+        if _EVIDENCE_TOOL_BY_DOMAIN[domain] in called_tools:
+            evidence_status[domain] = "error"
+
+
 def _direct_tool_response(tool_results: list[dict[str, Any]]) -> str | None:
     """Return only server-authored, bounded responses that must bypass paraphrasing."""
     if len(tool_results) != 1:
@@ -756,6 +777,13 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
                 )
                 return direct_response
             _update_evidence_status(evidence_status, tool_results)
+            _mark_unresolved_evidence(
+                evidence_status,
+                required_domains=required_domains,
+                called_tools=frozenset(
+                    tool_call.function.name for tool_call in assistant_message.tool_calls
+                ),
+            )
             api_messages.append(_assistant_tool_message(assistant_message))
             api_messages.extend(tool_results)
 
