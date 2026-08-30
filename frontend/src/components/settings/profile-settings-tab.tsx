@@ -72,7 +72,11 @@ export function ProfileSettingsTab() {
     },
   });
 
+  // The browser blurs a control the moment it becomes `disabled`, so the save
+  // button stays enabled while in flight and guards duplicate submits here
+  // instead. Keyboard focus then survives both the success and failure render.
   const handleSaveProfile = () => {
+    if (profileMutation.isPending || profileLoading) return;
     profileMutation.mutate({
       full_name: profileForm.full_name || null,
       phone_number: profileForm.phone_number || null,
@@ -158,7 +162,10 @@ export function ProfileSettingsTab() {
         <CardFooter>
           <Button
             onClick={handleSaveProfile}
-            disabled={profileMutation.isPending || profileLoading}
+            disabled={profileLoading}
+            aria-disabled={profileMutation.isPending}
+            aria-busy={profileMutation.isPending}
+            className="aria-disabled:opacity-50"
           >
             {profileMutation.isPending ? (
               <>

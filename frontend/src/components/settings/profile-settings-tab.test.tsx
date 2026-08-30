@@ -45,6 +45,37 @@ describe("ProfileSettingsTab appearance preferences", () => {
     });
   });
 
+  it("keeps the save button focusable while in flight and blocks duplicate submits", async () => {
+    const user = userEvent.setup();
+    let resolveSave: (value: unknown) => void = () => {};
+    updateProfileMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    renderTab();
+
+    await screen.findByLabelText("Full Name");
+    const save = screen.getByRole("button", { name: "Save Changes" });
+    save.focus();
+    await user.click(save);
+
+    const saving = await screen.findByRole("button", { name: "Saving..." });
+    // A `disabled` button is blurred by the browser, so the in-flight state has
+    // to hold focus with `aria-disabled` instead.
+    expect(saving).not.toBeDisabled();
+    expect(saving).toHaveAttribute("aria-disabled", "true");
+    expect(saving).toHaveFocus();
+
+    await user.click(saving);
+    expect(updateProfileMock).toHaveBeenCalledTimes(1);
+
+    resolveSave({});
+    await screen.findByRole("button", { name: "Saved" });
+    expect(screen.getByRole("button", { name: "Saved" })).toHaveFocus();
+  });
+
   it("removes Compact Mode rather than showing an inert switch", async () => {
     const user = userEvent.setup();
     renderTab();
