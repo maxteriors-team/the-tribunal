@@ -6,7 +6,13 @@ async function createCustomer(
   page: Page,
   customer: { firstName: string; lastName: string; phone: string },
 ) {
-  await page.getByRole("button", { name: "Add Contact" }).click();
+  // Contacts renders two valid "Add Contact" CTAs (page header + empty state).
+  // Pin the header one by test id, but keep asserting it is still a button named
+  // "Add Contact" so the accessible name stays covered.
+  await page
+    .getByTestId("add-contact")
+    .and(page.getByRole("button", { name: "Add Contact" }))
+    .click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("First Name").fill(customer.firstName);
   await dialog.getByLabel("Last Name").fill(customer.lastName);
@@ -16,6 +22,7 @@ async function createCustomer(
 }
 
 async function selectCustomer(page: Page, picker: Locator, customerName: string) {
+  await picker.clear();
   await picker.fill(customerName);
   const option = page.getByRole("option").filter({ hasText: customerName }).first();
   await expect(option).toBeVisible();

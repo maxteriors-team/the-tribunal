@@ -1,6 +1,6 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
 
-import { hasParallelTestUser, loginViaUI } from "./helpers";
+import { hasParallelTestUser, loginViaUI, uniqueSuffix } from "./helpers";
 
 const hasAuthenticatedFixture = hasParallelTestUser();
 const MOBILE_VIEWPORT = { width: 390, height: 844 } as const;
@@ -48,10 +48,13 @@ const mobileRoutes: Array<{
     name: "knowledge-base",
     path: "/knowledge",
     heading: "Knowledge Base",
-    actions: (page) => [
-      page.getByRole("combobox").first(),
-      page.getByRole("button", { name: "Add Document" }),
-    ],
+    // The agent picker and Add Document only exist once the workspace owns an
+    // agent — a fresh workspace correctly renders "No agents yet" instead.
+    // Requiring them here failed the whole route audit, so the agent-dependent
+    // chrome is asserted by the dedicated knowledge-base test below, which
+    // seeds an agent. This entry still covers the route's layout in whichever
+    // state the fixture is in.
+    actions: () => [],
   },
   {
     name: "ai-suggestions",
@@ -132,6 +135,96 @@ async function expectInsideViewport(locator: Locator) {
   expect(box!.x + box!.width).toBeLessThanOrEqual(MOBILE_VIEWPORT.width + 1);
 }
 
+/** Fail if the current page overflows 390px or clips any interactive element. */
+async function expectMobileLayoutIsClean(page: Page) {
+  const layout = await page.evaluate(() => {
+    const shellMain = document.querySelector("main");
+    const isVisible = (element: Element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return (
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        rect.width > 0 &&
+        rect.height > 0
+      );
+    };
+    const clippedInteractives = [
+      ...document.querySelectorAll(
+        'button, a, input, select, textarea, [role="button"], [role="tab"]',
+      ),
+    ]
+      .filter(isVisible)
+      .filter((element) => !element.closest('[data-slot="horizontal-scroll"]'))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          label: (
+            element.getAttribute("aria-label") ||
+            element.textContent ||
+            element.getAttribute("placeholder") ||
+            "unnamed"
+          )
+            .trim()
+            .replace(/\s+/g, " ")
+            .slice(0, 80),
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+        };
+      })
+      .filter((rect) => rect.left < -1 || rect.right > window.innerWidth + 1);
+
+    return {
+      documentWidth: document.documentElement.scrollWidth,
+      bodyWidth: document.body.scrollWidth,
+      mainWidth: shellMain?.clientWidth ?? 0,
+      mainScrollWidth: shellMain?.scrollWidth ?? 0,
+      clippedInteractives,
+    };
+  });
+
+  expect(layout.documentWidth).toBeLessThanOrEqual(MOBILE_VIEWPORT.width);
+  expect(layout.bodyWidth).toBeLessThanOrEqual(MOBILE_VIEWPORT.width);
+  expect(layout.mainScrollWidth).toBeLessThanOrEqual(layout.mainWidth + 1);
+  expect(layout.clippedInteractives).toEqual([]);
+}
+
+async function attachMobileScreenshot(page: Page, testInfo: TestInfo, name: string) {
+  await testInfo.attach(name, {
+    body: await page.screenshot({ animations: "disabled" }),
+    contentType: "image/png",
+  });
+}
+
+/**
+ * Create an agent through the API so the knowledge base leaves its "No agents
+ * yet" state. Mirrors `seedTechnician` in time-attendance.spec.ts: `page.request`
+ * carries the browser's auth cookies, and `/api/v1` is proxied to the backend by
+ * the Next rewrite, so this follows PLAYWRIGHT_BASE_URL rather than pinning a port.
+ */
+async function seedAgent(page: Page) {
+  const workspacesResponse = await page.request.get("/api/v1/workspaces");
+  expect(workspacesResponse.ok(), await workspacesResponse.text()).toBeTruthy();
+  const memberships = (await workspacesResponse.json()) as Array<{
+    workspace: { id: string };
+    is_default: boolean;
+  }>;
+  // Same precedence as workspace-provider, so the agent lands in the workspace
+  // the dashboard actually renders. Seeding the wrong one fails loudly below:
+  // the picker never appears.
+  const workspaceId = (memberships.find((entry) => entry.is_default) ?? memberships[0])?.workspace
+    .id;
+  expect(workspaceId).toBeTruthy();
+
+  const createResponse = await page.request.post(`/api/v1/workspaces/${workspaceId}/agents`, {
+    data: {
+      name: `Mobile Audit Agent ${uniqueSuffix()}`,
+      system_prompt: "Answer home-service questions for the 390px responsive audit.",
+    },
+  });
+  expect(createResponse.status(), await createResponse.text()).toBe(201);
+}
+
 test.describe("390px responsive shell", () => {
   test.skip(
     !hasAuthenticatedFixture,
@@ -147,68 +240,45 @@ test.describe("390px responsive shell", () => {
       await test.step(route.name, async () => {
         await openMobileRoute(page, route.path, route.heading);
 
-        const layout = await page.evaluate(() => {
-          const shellMain = document.querySelector("main");
-          const isVisible = (element: Element) => {
-            const style = getComputedStyle(element);
-            const rect = element.getBoundingClientRect();
-            return (
-              style.display !== "none" &&
-              style.visibility !== "hidden" &&
-              rect.width > 0 &&
-              rect.height > 0
-            );
-          };
-          const clippedInteractives = [
-            ...document.querySelectorAll(
-              'button, a, input, select, textarea, [role="button"], [role="tab"]',
-            ),
-          ]
-            .filter(isVisible)
-            .filter((element) => !element.closest('[data-slot="horizontal-scroll"]'))
-            .map((element) => {
-              const rect = element.getBoundingClientRect();
-              return {
-                label: (
-                  element.getAttribute("aria-label") ||
-                  element.textContent ||
-                  element.getAttribute("placeholder") ||
-                  "unnamed"
-                )
-                  .trim()
-                  .replace(/\s+/g, " ")
-                  .slice(0, 80),
-                left: Math.round(rect.left),
-                right: Math.round(rect.right),
-              };
-            })
-            .filter((rect) => rect.left < -1 || rect.right > window.innerWidth + 1);
-
-          return {
-            documentWidth: document.documentElement.scrollWidth,
-            bodyWidth: document.body.scrollWidth,
-            mainWidth: shellMain?.clientWidth ?? 0,
-            mainScrollWidth: shellMain?.scrollWidth ?? 0,
-            clippedInteractives,
-          };
-        });
-
-        expect(layout.documentWidth).toBeLessThanOrEqual(MOBILE_VIEWPORT.width);
-        expect(layout.bodyWidth).toBeLessThanOrEqual(MOBILE_VIEWPORT.width);
-        expect(layout.mainScrollWidth).toBeLessThanOrEqual(layout.mainWidth + 1);
-        expect(layout.clippedInteractives).toEqual([]);
+        await expectMobileLayoutIsClean(page);
 
         for (const action of route.actions(page)) {
           await expectInsideViewport(action);
         }
 
-        const screenshot = await page.screenshot({ animations: "disabled" });
-        await testInfo.attach(`${route.name}-390`, {
-          body: screenshot,
-          contentType: "image/png",
-        });
+        await attachMobileScreenshot(page, testInfo, `${route.name}-390`);
       });
     }
+  });
+
+  test("knowledge base fits 390px empty and with an agent selected", async ({ page }, testInfo) => {
+    await openMobileRoute(page, "/knowledge", "Knowledge Base");
+
+    // A provisioned workspace starts with no agents; a reused fixture account
+    // may already own one. Pin whichever state this run opens in so the audit
+    // can never pass against a spinner or the error card — neither renders a
+    // heading or the picker. The generous timeout is for the agents query on a
+    // cold dev server, not a softer assertion: "Loading agents…" still fails.
+    const agentPicker = page.getByRole("combobox", { name: "Select an agent" });
+    await expect(page.getByRole("heading", { name: "No agents yet" }).or(agentPicker)).toBeVisible({
+      timeout: 30_000,
+    });
+    await expectMobileLayoutIsClean(page);
+    await attachMobileScreenshot(page, testInfo, "knowledge-base-initial-390");
+
+    await seedAgent(page);
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: "Knowledge Base" })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // The action state: both agent-dependent controls must be reachable, not
+    // just rendered off the right edge.
+    await expect(agentPicker).toBeVisible({ timeout: 30_000 });
+    await expectInsideViewport(agentPicker);
+    await expectInsideViewport(page.getByRole("button", { name: "Add Document" }));
+    await expectMobileLayoutIsClean(page);
+    await attachMobileScreenshot(page, testInfo, "knowledge-base-agent-390");
   });
 
   test("horizontal navigation exposes edge cues and scrolls by touch and keyboard", async ({
@@ -218,7 +288,7 @@ test.describe("390px responsive shell", () => {
     await openMobileRoute(page, "/reviews", "Reviews & Reputation");
 
     const scroller = page.getByTestId("reviews-tabs-scroll");
-    await scroller.scrollIntoViewIfNeeded();
+    await scroller.evaluate((element) => element.scrollIntoView({ block: "center" }));
     await expect(scroller).toHaveAttribute("data-scroll-right", "true");
     await expect(scroller.locator("xpath=..//*[@data-slot='horizontal-scroll-cue']")).toBeVisible();
 

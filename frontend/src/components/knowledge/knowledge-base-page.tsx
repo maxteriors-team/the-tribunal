@@ -39,7 +39,7 @@ export function KnowledgeBasePage() {
           </div>
           {agents.length > 0 && activeAgentId && (
             <Select value={activeAgentId} onValueChange={setSelectedAgentId}>
-              <SelectTrigger className="w-full sm:w-56">
+              <SelectTrigger aria-label="Select an agent" className="w-full sm:w-56">
                 <SelectValue placeholder="Select an agent" />
               </SelectTrigger>
               <SelectContent>

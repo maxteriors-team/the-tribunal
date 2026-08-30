@@ -83,15 +83,7 @@ async function submitLogin(page: Page, user: TestUser): Promise<void> {
   await expect(page).not.toHaveURL(/\/login(?:\?|$)/, { timeout: 15_000 });
 }
 
-async function provisionWorker(page: Page, user: TestUser): Promise<void> {
-  await page.goto("/register");
-  await expect(page.getByText(/create your account/i)).toBeVisible();
-  await page.getByLabel(/full name/i).fill(`Playwright ${user.email.split("@")[0]}`);
-  await page.getByLabel(/email/i).fill(user.email);
-  await page.getByLabel(/password/i).fill(user.password);
-  await page.getByRole("button", { name: /create account/i }).click();
-  await expect(page).not.toHaveURL(/\/register(?:\?|$)/, { timeout: 20_000 });
-
+async function skipOnboardingIfNeeded(page: Page): Promise<void> {
   // Trigger SetupGate from a protected route before skipping. Going straight
   // to /onboarding can leave its cached setup status stale and redirect the
   // test back into onboarding after its next navigation.
@@ -103,6 +95,16 @@ async function provisionWorker(page: Page, user: TestUser): Promise<void> {
     await skipOnboarding.click();
     await expect(page).not.toHaveURL(/\/onboarding(?:\?|$)/, { timeout: 15_000 });
   }
+}
+
+async function provisionWorker(page: Page, user: TestUser): Promise<void> {
+  await page.goto("/register");
+  await expect(page.getByText(/create your account/i)).toBeVisible();
+  await page.getByLabel(/full name/i).fill(`${user.email.split("@")[0]} Playwright`);
+  await page.getByLabel(/email/i).fill(user.email);
+  await page.getByLabel(/password/i).fill(user.password);
+  await page.getByRole("button", { name: /create account/i }).click();
+  await expect(page).not.toHaveURL(/\/register(?:\?|$)/, { timeout: 20_000 });
 }
 
 /**
@@ -125,8 +127,7 @@ export async function loginViaUI(page: Page, testInfo?: TestInfo): Promise<void>
   const cachedState = workerStorageStates.get(parallelIndex);
   if (cachedState) {
     await restoreStorageState(page, cachedState);
-    await page.goto("/");
-    await expect(page).not.toHaveURL(/\/login(?:\?|$)/);
+    await skipOnboardingIfNeeded(page);
     return;
   }
 
@@ -143,6 +144,7 @@ export async function loginViaUI(page: Page, testInfo?: TestInfo): Promise<void>
     );
   }
 
+  await skipOnboardingIfNeeded(page);
   workerStorageStates.set(parallelIndex, await page.context().storageState());
 }
 
