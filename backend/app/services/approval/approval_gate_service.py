@@ -163,6 +163,7 @@ class BookAppointmentActionHandler:
     async def execute(self, db: AsyncSession, action: PendingAction) -> dict[str, Any]:
         from app.services.appointments.booking_finalizer import finalize_booking, load_agent
         from app.services.calendar.booking import BookingService
+        from app.services.google_calendar import GoogleCalendarError
 
         payload = dict(action.action_payload)
         draft_or_error = await self._validated_text_booking_draft(db, action, payload)
@@ -220,21 +221,39 @@ class BookAppointmentActionHandler:
         if not booking_result.success:
             return {"error": "slot_unavailable", "detail": booking_result.error}
 
+        agent = await load_agent(db, action.agent_id)
+        try:
+            appointment = await finalize_booking(
+                db,
+                workspace_id=action.workspace_id,
+                contact=contact,
+                agent=agent,
+                scheduled_at=scheduled_at,
+                duration_minutes=duration_minutes,
+                notes=payload.get("notes"),
+                service_type=payload.get("call_type"),
+                verify_availability=agent is not None,
+            )
+        except GoogleCalendarError as exc:
+            # The rep's slot was taken (or their calendar is not connected).
+            # `BookingService` above only pre-validates against CRM rows, so a
+            # personal Google event is first seen here. That condition is
+            # permanent, not transient: letting it raise makes the worker retry
+            # with backoff and leaves the action stuck in "approved" with no
+            # appointment and no operator-visible reason. Mirror the
+            # pre-validation failure so the action terminates as "failed".
+            logger.warning(
+                "book_appointment action %s could not be placed on the calendar: %s",
+                action.id,
+                exc,
+            )
+            return {"error": "slot_unavailable", "detail": str(exc)}
+
+        # Retire the confirmed draft only once the appointment is durable. The
+        # caller commits this handler's result, so deleting beforehand would
+        # discard the customer's confirmed summary for a booking that failed.
         if draft is not None:
             await db.delete(draft)
-        agent = await load_agent(db, action.agent_id)
-        appointment = await finalize_booking(
-            db,
-            workspace_id=action.workspace_id,
-            contact=contact,
-            agent=agent,
-            scheduled_at=scheduled_at,
-            duration_minutes=duration_minutes,
-            notes=payload.get("notes"),
-            service_type=payload.get("call_type"),
-            verify_availability=agent is not None,
-        )
-        if draft is not None:
             await db.commit()
 
         logger.info(
