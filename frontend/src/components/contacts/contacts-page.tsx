@@ -301,7 +301,11 @@ export function ContactsPage() {
           </div>
           <div className="flex items-center gap-2">
             {!isSelectionMode && canWriteContacts && (
-              <Button className="gap-2" onClick={() => setIsCreateDialogOpen(true)}>
+              <Button
+                className="gap-2"
+                onClick={() => setIsCreateDialogOpen(true)}
+                data-testid="add-contact"
+              >
                 <Plus className="h-4 w-4" />
                 Add Contact
               </Button>

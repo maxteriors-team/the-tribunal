@@ -32,6 +32,16 @@ test.describe("Ad Library prospecting", () => {
   });
 
   test("search → results → monitors render", async ({ page }) => {
+    // The search mutation throws "No workspace" — and never issues the POST —
+    // until the workspace context resolves. This GET is workspace-scoped
+    // (`enabled: Boolean(workspaceId)`), so it is an exact readiness signal;
+    // the "N advertisers" toolbar is not, because it paints a `?? 0` fallback
+    // before the query settles. Arm it before navigating so it cannot be missed.
+    const workspaceReady = page.waitForResponse(
+      (response) =>
+        /\/ad-library\/advertisers/.test(response.url()) && response.request().method() === "GET",
+      { timeout: 30_000 },
+    );
     await page.goto("/find-leads/ad-library");
 
     await expect(page.getByRole("heading", { name: /ad library/i })).toBeVisible({
@@ -43,6 +53,8 @@ test.describe("Ad Library prospecting", () => {
     await expect(page.getByText(/no testing/i)).toBeVisible();
 
     // --- SEARCH -------------------------------------------------------------
+    await workspaceReady;
+
     await page
       .getByLabel(/keyword/i)
       .first()
@@ -61,11 +73,21 @@ test.describe("Ad Library prospecting", () => {
       await expect(searchResponse.json()).resolves.toMatchObject({
         code: "ad_library_provider_unavailable",
       });
-      await expect(page.getByText("Ad Library needs a provider token")).toBeVisible();
-      await expect(page.getByRole("link", { name: "Open Settings" })).toHaveAttribute(
-        "href",
-        "/settings?tab=integrations",
+      // Scope to the banner by role so the CTA is located by *where it lives*
+      // rather than by a label that has already churned once ("Open Settings" →
+      // "Set up ad-library access"). Title, guidance and destination stay exact:
+      // those are the contract, and a link pointing anywhere but the
+      // integrations tab is the regression worth failing on.
+      const providerBanner = page.getByRole("alert").filter({
+        hasText: "Ad Library needs a provider token",
+      });
+      await expect(providerBanner).toBeVisible();
+      await expect(providerBanner).toContainText(
+        "Connect a Meta or Google ad-library provider in Settings.",
       );
+      const setupCta = providerBanner.getByRole("link");
+      await expect(setupCta).toHaveAttribute("href", "/settings?tab=integrations");
+      await expect(setupCta).toHaveAccessibleName("Set up ad-library access");
       await expect(page.getByRole("heading", { name: "Ad Library", exact: true })).toBeVisible();
       await expect(page.getByText(/saved monitors/i)).toBeVisible();
       return;
