@@ -389,14 +389,32 @@ def _direct_tool_response(tool_results: list[dict[str, Any]]) -> str | None:
     return None
 
 
+def _first_domain_in_canonical_order(
+    domains: frozenset[ClaimEvidenceDomain],
+) -> ClaimEvidenceDomain | None:
+    """Pick one domain by fixed priority rather than by set iteration order.
+
+    ``required_domains`` is a ``frozenset`` and CPython randomises string hashing
+    per process, so ``next(iter(...))`` picks a different element in different
+    workers. When two domains are unproven that decides which canned fallback the
+    customer reads, so the same inbound text would get different replies. Ranking
+    by ``_EVIDENCE_TOOL_BY_DOMAIN`` also keeps this agreeing with the
+    outbound-claim gate, which already selects in that order.
+    """
+    return next((domain for domain in _EVIDENCE_TOOL_BY_DOMAIN if domain in domains), None)
+
+
 def _failed_required_domain(
     required_domains: frozenset[ClaimEvidenceDomain],
     evidence_status: dict[ClaimEvidenceDomain, str],
 ) -> ClaimEvidenceDomain | None:
-    for domain in required_domains:
-        if evidence_status.get(domain) in {"absent", "conflict", "mixed", "error"}:
-            return domain
-    return None
+    return _first_domain_in_canonical_order(
+        frozenset(
+            domain
+            for domain in required_domains
+            if evidence_status.get(domain) in {"absent", "conflict", "mixed", "error"}
+        )
+    )
 
 
 def _safe_without_claim_evidence(response_text: str) -> bool:
@@ -754,7 +772,7 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
                 return None
 
             if tool_round >= MAX_TEXT_TOOL_ROUNDS:
-                fallback_domain = next(iter(required_domains), None)
+                fallback_domain = _first_domain_in_canonical_order(required_domains)
                 if fallback_domain is not None:
                     return to_gsm7_safe(_evidence_fallback(fallback_domain))
                 log.warning("text_tool_round_limit_reached")
