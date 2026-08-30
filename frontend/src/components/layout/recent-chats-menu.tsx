@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import {
   useMarkAllConversationsRead,
   useMarkConversationRead,
@@ -46,14 +47,20 @@ export function RecentChatsMenu() {
   const router = useRouter();
   const workspaceId = useWorkspaceId();
   const [open, setOpen] = useState(false);
+  // The conversation list and the unread rollup are both `crm:read`. A field
+  // technician has no chat surface — every thread here links to a contact page
+  // they cannot open — so the menu is withheld rather than left to 403.
+  const { can } = useCapabilities();
+  const canReadChats = can("crm:read");
+  const chatWorkspaceId = canReadChats ? workspaceId : null;
 
   // Only fetch once the menu is opened, to avoid a load on every page. The
   // notifier writes this same cache entry when a message arrives, so a
   // just-toasted thread is already here.
-  const { data, isPending, isError } = useRecentChats(workspaceId, {
+  const { data, isPending, isError } = useRecentChats(chatWorkspaceId, {
     enabled: open,
   });
-  const { data: unread } = useUnreadSummary(workspaceId);
+  const { data: unread } = useUnreadSummary(chatWorkspaceId);
   const markRead = useMarkConversationRead(workspaceId ?? "");
   const markAllRead = useMarkAllConversationsRead(workspaceId ?? "");
 
@@ -99,6 +106,8 @@ export function RecentChatsMenu() {
       },
     });
   };
+
+  if (!canReadChats) return null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

@@ -77,11 +77,21 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookableStaffId, setBookableStaffId] = useState<string | null>(null);
 
-  const { data: agentsData, isPending: agentsLoading } = useAgents(
-    workspaceId ?? "",
+  // Everything this form reads — the agent list and the client roster behind
+  // the picker — is `crm:read` on the backend.
+  const canReadCrm = can("crm:read");
+  // `GET /agents` is `crm:read`, and the calendar keeps this dialog mounted
+  // while it is closed — so an unconditional fetch cost every operator a
+  // request per page load and earned a field technician a 403.
+  const agentsEnabled = open && canReadCrm && !!workspaceId;
+  const { data: agentsData, isPending } = useAgents(
+    agentsEnabled ? (workspaceId ?? "") : "",
     { active_only: true, page_size: 100 }
   );
   const agents = agentsData?.items ?? [];
+  // A disabled query stays `pending` forever; only call it loading when it can
+  // actually resolve, so the picker never sticks on "Loading agents...".
+  const agentsLoading = agentsEnabled && isPending;
 
   const form = useForm<NewAppointmentFormValues>({
     resolver: zodResolver(newAppointmentFormSchema),
@@ -142,11 +152,20 @@ export function NewAppointmentDialog({ open, onOpenChange }: NewAppointmentDialo
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Contact *</FormLabel>
+                  {/* Disabled without `crm:read`: the dialog autofocuses this
+                      field on open, and the picker searches the workspace
+                      contact list on focus — a 403 for a field technician.
+                      Disabling it blocks that focus, so no request is made. */}
                   <FormContactPicker
                     workspaceId={workspaceId}
                     value={field.value}
                     onChange={(contactId) => field.onChange(contactId)}
-                    placeholder="Search contacts by name, phone, or email…"
+                    disabled={!canReadCrm}
+                    placeholder={
+                      canReadCrm
+                        ? "Search contacts by name, phone, or email…"
+                        : "You do not have access to the client list"
+                    }
                   />
                   <FormMessage />
                 </FormItem>

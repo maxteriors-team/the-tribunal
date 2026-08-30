@@ -8,6 +8,7 @@ import {
   findNewInboundMessages,
   truncatePreview,
 } from "@/components/layout/new-message-notifier";
+import { can as roleCan, roleTier, type Capability } from "@/lib/permissions";
 import type { Conversation } from "@/types";
 
 const {
@@ -15,6 +16,7 @@ const {
   markReadMock,
   pushMock,
   useWorkspaceIdMock,
+  capabilitiesMock,
   useUnreadSummaryMock,
   toastMessageMock,
 } = vi.hoisted(() => ({
@@ -22,6 +24,7 @@ const {
   markReadMock: vi.fn(),
   pushMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
+  capabilitiesMock: vi.fn(),
   useUnreadSummaryMock: vi.fn(),
   toastMessageMock: vi.fn(),
 }));
@@ -32,6 +35,12 @@ vi.mock("@/lib/api/conversations", () => ({
 
 vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => useWorkspaceIdMock(),
+}));
+
+// This notifier is `crm:read`-gated; role behaviour lives in
+// `header-chat-role-gating.test.tsx`. Here every case is an office role.
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => capabilitiesMock(),
 }));
 
 // The unread rollup is driven through the hook boundary so polls are explicit;
@@ -77,6 +86,10 @@ function page(items: Conversation[]) {
 beforeEach(() => {
   vi.clearAllMocks();
   useWorkspaceIdMock.mockReturnValue("ws-1");
+  capabilitiesMock.mockReturnValue({
+    tier: roleTier("owner"),
+    can: (capability: Capability) => roleCan("owner", capability),
+  });
   useUnreadSummaryMock.mockReturnValue({ data: undefined });
   listMock.mockResolvedValue(page([]));
   markReadMock.mockResolvedValue(conversation({ unread_count: 0 }));
@@ -394,6 +407,23 @@ describe("NewMessageNotifier", () => {
 
     const { poll } = renderNotifier(0);
     await poll(3, [conversation({ unread_count: 3 })]);
+
+    expect(listMock).not.toHaveBeenCalled();
+    expect(toastMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("makes no requests for a field technician, even on a warm rollup", async () => {
+    // The rollup query is disabled for this role, but React Query still hands
+    // back whatever an earlier session cached under the same key — and the
+    // list fetch below is an imperative `fetchQuery` that ignores `enabled`.
+    // Without the capability check in the effect, that cache would buy a 403.
+    capabilitiesMock.mockReturnValue({
+      tier: roleTier("technician"),
+      can: (capability: Capability) => roleCan("technician", capability),
+    });
+
+    const { poll } = renderNotifier(3);
+    await poll(9, [conversation({ unread_count: 9 })]);
 
     expect(listMock).not.toHaveBeenCalled();
     expect(toastMessageMock).not.toHaveBeenCalled();
