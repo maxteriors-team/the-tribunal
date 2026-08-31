@@ -221,8 +221,7 @@ class ConversationService:
             # Inner join: a thread with no linked contact has no name to match,
             # so dropping it is the right answer rather than a lost row.
             query = query.join(Contact, Conversation.contact_id == Contact.id).where(
-                (Contact.first_name.ilike(f"%{search}%"))
-                | (Contact.last_name.ilike(f"%{search}%"))
+                (Contact.first_name.ilike(f"%{search}%")) | (Contact.last_name.ilike(f"%{search}%"))
             )
 
         query = query.order_by(Conversation.last_message_at.desc().nullslast())
@@ -333,9 +332,7 @@ class ConversationService:
         )
         result = await paginate(self.db, query, page=page, page_size=page_size)
         return PaginatedMessages(
-            items=[
-                MessageResponse.model_validate(m) for m in reversed(list(result.items))
-            ],
+            items=[MessageResponse.model_validate(m) for m in reversed(list(result.items))],
             total=result.total,
             page=result.page,
             page_size=result.page_size,
