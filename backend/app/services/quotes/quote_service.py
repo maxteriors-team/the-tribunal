@@ -57,6 +57,7 @@ from app.schemas.estimate import (
     PermanentEstimate,
     PublicChristmasComparison,
     PublicComparison,
+    PublicComparisonDeclineResult,
     PublicComparisonLine,
     PublicComparisonPackage,
     PublicPermanentComparison,
@@ -2517,6 +2518,38 @@ class QuoteService:
             message="Your response has been recorded. Thank you.",
         )
 
+    async def decline_public_comparison(
+        self, token: str, *, reason: str | None = None
+    ) -> PublicComparisonDeclineResult:
+        """Record that a client declined a shared estimate (idempotent).
+
+        Unlike a proposal there is no approve/expire ladder to guard: an estimate
+        is a price to consider, and this is the client saying they are out. The
+        first decline wins -- a repeat (double-tap, retried request, reopened
+        link) keeps the original timestamp and reason rather than overwriting
+        when interest actually died.
+        """
+        result = await self.db.execute(
+            select(RooflineComparison).where(RooflineComparison.public_token == token)
+        )
+        comparison = result.scalar_one_or_none()
+        if comparison is None:
+            raise NotFoundError("Comparison not found")
+
+        if comparison.declined_at is None:
+            comparison.declined_at = datetime.now(UTC)
+            # Trimmed to the column width: an over-long reason is a client
+            # typing freely, not an error worth failing their decline over.
+            cleaned = (reason or "").strip()
+            comparison.decline_reason = cleaned[:1000] or None
+            await self.db.commit()
+
+        return PublicComparisonDeclineResult(
+            token=token,
+            is_declined=True,
+            message="Thanks for letting us know.",
+        )
+
     # ------------------------------------------------------------------
     # Sales wizard (config-driven multi-tier proposal builder)
     # ------------------------------------------------------------------
@@ -2975,16 +3008,35 @@ class QuoteService:
         permanent_enabled: bool,
         seasonal_enabled: bool,
     ) -> float:
-        """Validate a flat proposal discount against every side it can price."""
-        amount = round(float(req.discount_amount), 2)
-        if amount <= 0:
-            return 0.0
+        """Resolve the proposal discount to dollars and validate it.
 
+        A discount is entered either as a flat dollar amount or as a percentage.
+        The percentage is turned into dollars *here*, so everything downstream --
+        the response, the stored estimate, the customer's page -- deals in one
+        concrete amount. Persisting a percentage instead would let a later price
+        change silently re-scale a discount the customer was already quoted.
+
+        The percentage is taken off the smallest side this proposal prices. With
+        one dollar figure applied to every priced side (which is how the flat
+        discount already works), any larger base could discount a cheaper side
+        past zero.
+        """
         totals: list[float] = []
         if req.proposal_side in {"permanent", "comparison"} and permanent_enabled:
             totals.append(permanent_total)
         if req.proposal_side in {"seasonal", "comparison"} and seasonal_enabled:
             totals.append(seasonal_total)
+
+        percent = float(req.discount_percent or 0)
+        if percent > 0:
+            if not totals:
+                raise ValidationError("The selected proposal has no enabled pricing to discount")
+            # Bounded by the field (0-100), so this can never exceed the base.
+            return round(min(totals) * percent / 100, 2)
+
+        amount = round(float(req.discount_amount), 2)
+        if amount <= 0:
+            return 0.0
         if not totals:
             raise ValidationError("The selected proposal has no enabled pricing to discount")
         if amount > min(totals):
@@ -3436,7 +3488,16 @@ class QuoteService:
         on every public view so a rate change is always reflected.
         """
         workspace = await get_or_404(self.db, Workspace, workspace_id)
-        self._compute_comparison(get_pricing_config(workspace), req)
+        # Also validates the request before anything is written.
+        computed = self._compute_comparison(get_pricing_config(workspace), req)
+        # Resolve a percentage into the dollars it comes to *now*. Only
+        # ``discount_amount`` is persisted, so without this a rep who typed a
+        # percentage would share a link carrying no discount at all, and the
+        # customer would see full price with nothing to show anything was lost.
+        # Storing the percentage instead is worse: prices are recomputed on every
+        # view, so a later rate change would silently re-scale a discount the
+        # customer had already been quoted.
+        discount_amount = Decimal(str(round(float(computed.discount_amount), 2)))
 
         # Save onto a CRM customer when the rep supplied contact details. Splits
         # the free-text client name into first/last for a new contact; resolve/
@@ -3474,7 +3535,7 @@ class QuoteService:
             # the client already has.
             custom_lines=[line.model_dump() for line in req.custom_lines] or None,
             proposal_side=req.proposal_side,
-            discount_amount=Decimal(str(round(float(req.discount_amount), 2))),
+            discount_amount=discount_amount,
             client_name=req.client_name,
             label=req.label,
             contact_id=contact_id,
@@ -3700,6 +3761,7 @@ class QuoteService:
             currency="USD",
             proposal_side=side,
             discount_amount=discount,
+            is_declined=comparison.declined_at is not None,
             permanent=PublicPermanentComparison(
                 enabled=permanent_visible,
                 total=permanent_total,

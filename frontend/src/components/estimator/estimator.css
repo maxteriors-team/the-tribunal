@@ -2024,6 +2024,28 @@
   margin-left: 0;
 }
 
+/* $ / % switch for the proposal discount. Reuses the tool palette's chip so the
+   two segmented controls in this tool read as one control. */
+.est-discount-unit {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.est-discount-unit .tp-spacing-chip {
+  flex: 0 0 auto;
+  min-width: 30px;
+  padding: 5px 8px;
+}
+
+/* The dollars a percentage resolved to -- the figure the customer will see. */
+.est-discount-resolved {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--t3);
+  text-align: right;
+}
+
 /* ---- Save to customer ---- */
 .est-customer {
   padding: 16px;
@@ -5666,4 +5688,97 @@
     padding: 2px;
     border: 0;
   }
+}
+
+/* ---- Client decline on a shared estimate ----
+   The estimate is a price to consider, so this is the one action on the page:
+   a quiet "no thanks" that saves the client a phone call and saves the rep
+   chasing a decision that was already made. Deliberately understated — it
+   should never compete with the prices above it. */
+.cmp-decline {
+  max-width: 560px;
+  margin: 8px auto 48px;
+  padding: 0 20px;
+  text-align: center;
+}
+
+.cmp-decline-link,
+.cmp-decline-cancel {
+  background: none;
+  border: none;
+  color: var(--t3);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  padding: 8px;
+}
+
+.cmp-decline-link:hover,
+.cmp-decline-cancel:hover {
+  color: var(--t1);
+}
+
+.cmp-decline-label {
+  display: block;
+  font-size: 13px;
+  color: var(--t2);
+  margin-bottom: 8px;
+}
+
+.cmp-decline-input {
+  width: 100%;
+  background: var(--s2);
+  border: 1px solid var(--bdr);
+  border-radius: 8px;
+  color: var(--t1);
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.cmp-decline-input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.cmp-decline-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.cmp-decline-confirm {
+  background: var(--s3);
+  border: 1px solid var(--bdr);
+  border-radius: 8px;
+  color: var(--t1);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 20px;
+  cursor: pointer;
+}
+
+.cmp-decline-confirm:hover:not(:disabled) {
+  border-color: var(--t3);
+}
+
+.cmp-decline-confirm:disabled,
+.cmp-decline-cancel:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.cmp-decline-done {
+  color: var(--t2);
+  font-size: 14px;
+}
+
+.cmp-decline-error {
+  margin: 10px 0 0;
+  color: #e5766a;
+  font-size: 13px;
 }
