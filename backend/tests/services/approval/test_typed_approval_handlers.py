@@ -252,7 +252,8 @@ def _patch_booking_service(monkeypatch: pytest.MonkeyPatch, *, success: bool = T
     error = None if success else "The 14:00 slot is no longer available."
 
     class _StubBookingService:
-        def __init__(self, **_kwargs: Any) -> None: ...
+        def __init__(self, **_kwargs: Any) -> None:
+            """Accept and discard the workspace_id/timezone the handler passes."""
 
         async def book_appointment(self, **_kwargs: Any) -> Any:
             return booking_module.BookingResult(success=success, error=error)
