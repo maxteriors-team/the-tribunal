@@ -477,6 +477,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/compare/{token}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline Public Comparison
+         * @description Client declines a shared estimate, with an optional reason (idempotent).
+         *
+         *     Without this the estimate link is a dead end: the client can read a price but
+         *     has no way to say no, so the rep keeps chasing a decision that was already
+         *     made. Repeat calls keep the first decline's timestamp. Unknown tokens 404.
+         */
+        post: operations["decline_public_comparison_api_v1_p_compare__token__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/demo/call": {
         parameters: {
             query?: never;
@@ -16111,6 +16135,8 @@ export interface components {
              * @default 0
              */
             discount_amount: number;
+            /** Discount Percent */
+            discount_percent?: number | null;
             /** Feet */
             feet: number;
             /** Label */
@@ -18279,6 +18305,8 @@ export interface components {
              * @default 0
              */
             discount_amount: number;
+            /** Discount Percent */
+            discount_percent?: number | null;
             /** Feet */
             feet: number;
             /** Label */
@@ -22351,6 +22379,8 @@ export interface components {
              * @default 0
              */
             discount_amount: number;
+            /** Discount Percent */
+            discount_percent?: number | null;
             /** Feet */
             feet: number;
             /** Per Ft Override */
@@ -27337,6 +27367,11 @@ export interface components {
              * @default 0
              */
             discount_amount: number;
+            /**
+             * Is Declined
+             * @default false
+             */
+            is_declined: boolean;
             /** Logo Url */
             logo_url?: string | null;
             /** Multi Year Savings */
@@ -27357,6 +27392,26 @@ export interface components {
             temporary_multi_year: number;
             /** Years */
             years: number;
+        };
+        /**
+         * PublicComparisonDecline
+         * @description Client's optional “why not” when declining a shared estimate.
+         */
+        PublicComparisonDecline: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * PublicComparisonDeclineResult
+         * @description Confirmation that a decline was recorded.
+         */
+        PublicComparisonDeclineResult: {
+            /** Is Declined */
+            is_declined: boolean;
+            /** Message */
+            message: string;
+            /** Token */
+            token: string;
         };
         /**
          * PublicComparisonLine
@@ -34453,6 +34508,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicComparison"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decline_public_comparison_api_v1_p_compare__token__decline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicComparisonDecline"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicComparisonDeclineResult"];
                 };
             };
             /** @description Validation Error */

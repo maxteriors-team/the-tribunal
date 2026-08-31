@@ -186,6 +186,42 @@ async def test_permanent_proposal_link_hides_seasonal_price_and_persists_discoun
         assert public.custom_lines == []
 
 
+async def test_percent_discount_survives_sharing_as_dollars() -> None:
+    """A percentage must be resolved before the link is stored.
+
+    Only ``discount_amount`` is persisted, so a rep who typed a percentage would
+    otherwise share a link carrying no discount at all -- the customer would see
+    full price with nothing to show that anything was lost.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        svc = QuoteService(db)
+
+        share = await svc.share_comparison(
+            ws.id,
+            ComparisonShareRequest(
+                feet=100,
+                proposal_side="permanent",
+                permanent_complexity="easy",
+                discount_percent=10,
+            ),
+        )
+
+        saved = await db.scalar(
+            select(RooflineComparison).where(RooflineComparison.public_token == share.token)
+        )
+        assert saved is not None
+        public = await svc.get_public_comparison(share.token)
+
+        # Stored as the dollars it came to, not as a rate: recomputing the
+        # percentage on each view would let a later price change silently
+        # re-scale a discount the customer was already quoted.
+        expected = round(public.permanent.subtotal * 0.10, 2)
+        assert float(saved.discount_amount) == pytest.approx(expected)
+        assert public.discount_amount == pytest.approx(expected)
+        assert public.permanent.total == pytest.approx(public.permanent.subtotal - expected)
+
+
 @pytest.mark.parametrize(
     ("scalar_complexity", "measured_complexity", "expected_total"),
     [

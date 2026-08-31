@@ -181,6 +181,46 @@ def test_flat_discount_applies_only_to_selected_proposal_side() -> None:
     assert seasonal.christmas.total == 500
 
 
+def test_percent_discount_resolves_to_dollars_off_the_selected_side() -> None:
+    """A percentage is a way of typing a dollar figure, not a stored rate."""
+    result = _estimate(
+        _complexity_config((2, 3, 4)),
+        100,
+        proposal_side="permanent",
+        discount_percent=10,
+        permanent_complexity_feet={"complex": 100},
+    )
+
+    # 10% of the 4000 subtotal, returned as dollars so everything downstream --
+    # the customer's page, the saved estimate -- deals in one concrete amount.
+    assert result.permanent.subtotal == 4000
+    assert result.discount_amount == 400
+    assert result.permanent.total == 3600
+
+
+def test_percent_discount_takes_precedence_over_a_flat_amount() -> None:
+    result = _estimate(
+        _complexity_config((2, 3, 4)),
+        100,
+        proposal_side="permanent",
+        discount_amount=25,
+        discount_percent=10,
+        permanent_complexity_feet={"complex": 100},
+    )
+
+    assert result.discount_amount == 400
+
+
+def test_percent_discount_never_prices_a_side_below_zero() -> None:
+    """In comparison mode one dollar figure hits both sides, so the smaller side
+    is the base -- any larger one would price the cheaper side past zero."""
+    result = _estimate(_config(), 100, proposal_side="comparison", discount_percent=100)
+
+    assert result.permanent.total >= 0
+    assert result.christmas.total >= 0
+    assert result.discount_amount == min(result.permanent.subtotal, result.christmas.subtotal)
+
+
 def test_flat_discount_cannot_exceed_selected_proposal_total() -> None:
     with pytest.raises(ValidationError, match="Discount cannot exceed"):
         _estimate(

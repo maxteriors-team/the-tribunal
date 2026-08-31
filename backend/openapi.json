@@ -11969,6 +11969,19 @@
             "title": "Discount Amount",
             "type": "number"
           },
+          "discount_percent": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Percent"
+          },
           "feet": {
             "minimum": 0.0,
             "title": "Feet",
@@ -17985,6 +17998,19 @@
             "minimum": 0.0,
             "title": "Discount Amount",
             "type": "number"
+          },
+          "discount_percent": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Percent"
           },
           "feet": {
             "minimum": 0.0,
@@ -28084,6 +28110,19 @@
             "minimum": 0.0,
             "title": "Discount Amount",
             "type": "number"
+          },
+          "discount_percent": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Discount Percent"
           },
           "feet": {
             "minimum": 0.0,
@@ -41926,6 +41965,11 @@
             "title": "Discount Amount",
             "type": "number"
           },
+          "is_declined": {
+            "default": false,
+            "title": "Is Declined",
+            "type": "boolean"
+          },
           "logo_url": {
             "anyOf": [
               {
@@ -41997,6 +42041,49 @@
           "multi_year_savings"
         ],
         "title": "PublicComparison",
+        "type": "object"
+      },
+      "PublicComparisonDecline": {
+        "description": "Client's optional “why not” when declining a shared estimate.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "PublicComparisonDecline",
+        "type": "object"
+      },
+      "PublicComparisonDeclineResult": {
+        "description": "Confirmation that a decline was recorded.",
+        "properties": {
+          "is_declined": {
+            "title": "Is Declined",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "is_declined",
+          "message"
+        ],
+        "title": "PublicComparisonDeclineResult",
         "type": "object"
       },
       "PublicComparisonLine": {
@@ -58906,6 +58993,59 @@
           }
         },
         "summary": "Get Public Comparison",
+        "tags": [
+          "Public Comparison"
+        ]
+      }
+    },
+    "/api/v1/p/compare/{token}/decline": {
+      "post": {
+        "description": "Client declines a shared estimate, with an optional reason (idempotent).\n\nWithout this the estimate link is a dead end: the client can read a price but\nhas no way to say no, so the rep keeps chasing a decision that was already\nmade. Repeat calls keep the first decline's timestamp. Unknown tokens 404.",
+        "operationId": "decline_public_comparison_api_v1_p_compare__token__decline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicComparisonDecline"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicComparisonDeclineResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decline Public Comparison",
         "tags": [
           "Public Comparison"
         ]

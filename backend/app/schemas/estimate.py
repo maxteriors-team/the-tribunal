@@ -106,6 +106,11 @@ class LinearFeetEstimateRequest(BaseModel):
     storage: bool = False  # christmas off-season storage
     proposal_side: Literal["permanent", "seasonal", "comparison"] = "comparison"
     discount_amount: float = Field(default=0, ge=0, le=1_000_000)
+    # Percentage alternative to ``discount_amount``. Resolved to dollars during
+    # pricing and returned as ``discount_amount``, so nothing downstream stores a
+    # percentage and a later price change cannot re-scale a quoted discount.
+    # Takes precedence when both are supplied.
+    discount_percent: float | None = Field(default=None, ge=0, le=100)
     # Gable pitch is corrected into ``feet`` upstream (a sloped rake is simply
     # longer), so complexity here is purely the labor/COGS markup tier.
     permanent_complexity: Literal["easy", "standard", "complex"] = "standard"
@@ -451,6 +456,10 @@ class PublicComparison(BaseModel):
     currency: str = "USD"
     proposal_side: Literal["permanent", "seasonal", "comparison"] = "comparison"
     discount_amount: float = Field(default=0, ge=0)
+    # True once the client has told us they are out, so the page can stop
+    # offering a decision it already has. The reason they gave is deliberately
+    # not echoed back: it is feedback for the rep, not copy for the client.
+    is_declined: bool = False
     permanent: PublicPermanentComparison
     christmas: PublicChristmasComparison
     difference: float
@@ -472,3 +481,19 @@ class PublicComparison(BaseModel):
     # totals above and itemized here so the client can see what they're paying
     # for. Empty for every estimate that has none — i.e. every existing link.
     custom_lines: list[PublicComparisonLine] = Field(default_factory=list)
+
+
+class PublicComparisonDecline(BaseModel):
+    """Client's optional “why not” when declining a shared estimate."""
+
+    # Bounded to the column width so an accidental paste is rejected at the
+    # boundary instead of being silently truncated deeper in.
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class PublicComparisonDeclineResult(BaseModel):
+    """Confirmation that a decline was recorded."""
+
+    token: str
+    is_declined: bool
+    message: str

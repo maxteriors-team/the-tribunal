@@ -902,6 +902,50 @@ describe("LightDesigner", () => {
     expect(container.querySelector(".ep-totals")).toHaveTextContent("$2,800");
   });
 
+  it("discounts by percentage and shows the rep the dollars it came to", async () => {
+    vi.mocked(estimatorApi.estimate).mockImplementation(async (_ws, request) => ({
+      ...ESTIMATE,
+      // The server resolves the percent; 10% of the 3300 subtotal.
+      discount_amount: request.discount_percent ? 330 : (request.discount_amount ?? 0),
+      permanent: { ...ESTIMATE.permanent, total: request.discount_percent ? 2970 : 3300 },
+    }));
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    await waitFor(() => expect(container.querySelector(".ep-totals")).not.toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "Percent discount" }));
+    fireEvent.change(screen.getByLabelText(/Overall proposal discount percent/i), {
+      target: { value: "10" },
+    });
+
+    // Sent as a percent, never as a pre-computed dollar figure: the subtotal it
+    // applies to is the server's, so only the server can resolve it correctly.
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ discount_percent: 10, discount_amount: 0 }),
+      ),
+    );
+    // The rep confirms the real dollars before the customer ever sees them.
+    expect(await screen.findByText(/10% off/)).toHaveTextContent("$330.00 off this proposal");
+    await waitFor(() =>
+      expect(container.querySelector(".ep-totals")).toHaveTextContent("$2,970"),
+    );
+  });
+
+  it("clamps a percentage to 100 so the price never blanks mid-typing", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    await waitFor(() => expect(container.querySelector(".ep-totals")).not.toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "Percent discount" }));
+    const input = screen.getByLabelText(/Overall proposal discount percent/i);
+    fireEvent.change(input, { target: { value: "150" } });
+
+    // Over 100 the API would 422 and the panel would drop its price mid-keystroke.
+    expect(input).toHaveValue(100);
+  });
+
   it("adds a deposit percentage to the permanent quote and shows the payment path", async () => {
     vi.mocked(estimatorApi.createQuote).mockResolvedValueOnce({
       id: "quote-1",
