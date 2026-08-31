@@ -52,6 +52,18 @@ A contact's conversation route is `/contacts/{contact_id}`.
 
 If sending is unavailable, verify that an SMS-capable number is configured under **Phone Numbers** at `/phone-numbers` and that the contact has not opted out.
 
+## Browse past conversations
+
+Route: `/messages`. Sidebar label: **Messages**.
+
+Every text and email conversation with your customers, newest first, going back as far as the workspace has history. Use this when you need an old thread and do not already know whose it is; the header chat menu only lists the most recent threads, and a contact's own route requires knowing the contact first.
+
+1. Open **Messages**.
+2. Search by contact name, or filter by channel (SMS or email) and status.
+3. Select **View** on a row to read that conversation, and load older messages to page further back.
+
+Search matches contact names only. Message text is encrypted at rest and cannot be searched, so an old thread is found by the person rather than by something they said. Reading a conversation here does not mark it as read.
+
 ## Place and review calls
 
 Route: `/calls`. Sidebar label: **Calls**.
