@@ -156,6 +156,14 @@ class RooflineComparison(Base, WorkspaceScoped):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
+    # The client's "no thanks" on a shared estimate. NULL means undecided: an
+    # estimate is a price to consider, so there is no pending/approved ladder
+    # here, only whether they told us they are out. A timestamp rather than a
+    # boolean so the rep knows *when* interest died, and it is set once -- a
+    # second decline keeps the first timestamp.
+    declined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decline_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
     # Relationships
     workspace: Mapped["Workspace"] = relationship("Workspace")
     created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])
