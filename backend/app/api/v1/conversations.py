@@ -21,6 +21,7 @@ from app.schemas.conversation import (
     MessageCreate,
     MessageResponse,
     PaginatedConversations,
+    PaginatedMessages,
     TeachAIRequest,
     TeachAIResponse,
     UnreadSummary,
@@ -49,8 +50,14 @@ async def list_conversations(
     status_filter: str | None = None,
     channel_filter: str | None = None,
     unread_only: bool = False,
+    search: str | None = Query(None, max_length=100),
 ) -> PaginatedConversations:
-    """List conversations in a workspace."""
+    """List conversations in a workspace.
+
+    Args:
+        search: Match the contact's name. Message bodies are encrypted at rest
+            and cannot be searched.
+    """
     svc = ConversationService(db)
     return await svc.list_conversations(
         workspace_id=workspace_id,
@@ -59,6 +66,7 @@ async def list_conversations(
         status_filter=status_filter,
         channel_filter=channel_filter,
         unread_only=unread_only,
+        search=search,
     )
 
 
@@ -104,6 +112,31 @@ async def get_conversation(
         conversation_id=conversation_id,
         workspace_id=workspace_id,
         limit=limit,
+    )
+
+
+@router.get("/{conversation_id}/messages", response_model=PaginatedMessages)
+async def list_conversation_messages(
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+) -> PaginatedMessages:
+    """Page back through one thread's history without marking it read.
+
+    `GET /{conversation_id}` returns only the newest slice and clears unread as
+    a side effect, so it cannot back an archive view: browsing old threads would
+    wipe badges nobody read, and history past that slice would be unreachable.
+    """
+    svc = ConversationService(db)
+    return await svc.list_messages(
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+        page=page,
+        page_size=page_size,
     )
 
 
