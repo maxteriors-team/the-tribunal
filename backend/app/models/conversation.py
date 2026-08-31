@@ -24,7 +24,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
-from app.core.encryption import EncryptedString, LookupHash, hash_phone
+from app.core.encryption import EncryptedString, LookupHash, hash_phone, hash_value
 from app.db.base import Base
 from app.db.tenancy import WorkspaceScoped
 
@@ -92,12 +92,27 @@ def advances_message_status(current: MessageStatus, candidate: MessageStatus) ->
 
 
 class MessageChannel(StrEnum):
-    """Message channel."""
+    """Message channel.
+
+    Both :attr:`Conversation.channel` (``String(20)``) and
+    :attr:`Message.channel` (``SAEnum(..., native_enum=False, length=20)``) are
+    VARCHAR-backed, so adding a member needs no DDL — but every value must stay
+    under 20 characters or the column silently truncates.
+    """
 
     SMS = "sms"
     IMESSAGE = "imessage"
     VOICE = "voice"
     VOICEMAIL = "voicemail"
+    MESSENGER = "messenger"
+    INSTAGRAM = "instagram"
+
+
+#: Channels whose threads are keyed on a Meta Page-Scoped ID instead of a phone
+#: number. Both ride the same Send API and the same 24h messaging window.
+MESSENGER_CHANNELS: frozenset[str] = frozenset(
+    {MessageChannel.MESSENGER.value, MessageChannel.INSTAGRAM.value}
+)
 
 
 class ConversationStatus(StrEnum):
@@ -117,11 +132,25 @@ class Conversation(Base, WorkspaceScoped):
         # columns: Fernet ciphertext differs on every write, so a constraint on
         # the plaintext columns would never collide and duplicate threads would
         # slip through.
-        UniqueConstraint(
+        #
+        # Partial rather than a plain UNIQUE constraint because Messenger/IG
+        # threads have no phone at all: in Postgres every NULL is distinct, so
+        # a full constraint would not actually reject anything for those rows,
+        # and the index would still carry them for nothing.
+        Index(
+            "uq_conversation_phones",
             "workspace_id",
             "workspace_phone_hash",
             "contact_phone_hash",
-            name="uq_conversation_phones",
+            unique=True,
+            postgresql_where=text("contact_phone_hash IS NOT NULL"),
+        ),
+        Index(
+            "uq_conversation_messenger_psid",
+            "workspace_id",
+            "messenger_psid_hash",
+            unique=True,
+            postgresql_where=text("messenger_psid_hash IS NOT NULL"),
         ),
         Index(
             "ix_conversations_workspace_last_message_at",
@@ -159,14 +188,42 @@ class Conversation(Base, WorkspaceScoped):
     # columns is useless and a ``WHERE`` equality test on them never matches. Every
     # equality lookup must go through the sibling ``*_hash`` column, which holds
     # the deterministic BLAKE2b-keyed hash, carries the index, and backs the
-    # ``uq_conversation_phones`` unique constraint. The hashes are maintained by
+    # ``uq_conversation_phones`` unique index. The hashes are maintained by
     # :meth:`Conversation._sync_phone_lookup_hash` so they cannot drift.
-    workspace_phone: Mapped[str] = mapped_column(
-        EncryptedString(), nullable=False
+    #
+    # Nullable because a Messenger/Instagram thread is keyed on a Page-Scoped ID
+    # and has no phone number until the person types one. Every phone-keyed
+    # channel still writes both columns together.
+    workspace_phone: Mapped[str | None] = mapped_column(
+        EncryptedString(), nullable=True
     )  # Our Telnyx number
-    workspace_phone_hash: Mapped[str] = mapped_column(LookupHash(), nullable=False, index=True)
-    contact_phone: Mapped[str] = mapped_column(EncryptedString(), nullable=False)  # Contact's phone
-    contact_phone_hash: Mapped[str] = mapped_column(LookupHash(), nullable=False, index=True)
+    workspace_phone_hash: Mapped[str | None] = mapped_column(
+        LookupHash(), nullable=True, index=True
+    )
+    contact_phone: Mapped[str | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )  # Contact's phone
+    contact_phone_hash: Mapped[str | None] = mapped_column(LookupHash(), nullable=True, index=True)
+
+    # Meta Page-Scoped ID (Messenger) or Instagram-Scoped ID of the person in
+    # this thread. Same encrypted-plus-lookup-hash split as the phone columns:
+    # a PSID identifies a real person to the Page that owns it, so it is PII at
+    # rest, and equality lookups must run on the deterministic hash.
+    messenger_psid: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    messenger_psid_hash: Mapped[str | None] = mapped_column(LookupHash(), nullable=True, index=True)
+
+    # Meta profile name of the person in this thread. A DM thread has no phone,
+    # so it cannot link to a ``Contact`` and has nothing else to show in the
+    # inbox until the person shares a number. Also PII, so also encrypted.
+    messenger_display_name: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+
+    # End of Meta's 24h standard messaging window, refreshed by each inbound
+    # user message. Stored rather than recomputed so an expired thread is a
+    # cheap SQL predicate for the AI scheduler instead of a per-send lookup of
+    # the last inbound message. NULL for every non-Messenger thread.
+    messenger_window_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Status
     status: Mapped[ConversationStatus] = mapped_column(
@@ -263,8 +320,19 @@ class Conversation(Base, WorkspaceScoped):
         "TestContact", back_populates="conversation"
     )
 
+    @validates("messenger_psid")
+    def _sync_messenger_lookup_hash(self, _key: str, value: str | None) -> str | None:
+        """Keep ``messenger_psid_hash`` in lockstep with the encrypted PSID.
+
+        Mirrors :meth:`_sync_phone_lookup_hash`: assignment-time, so transient
+        instances are already consistent for the lookup queries and it is
+        impossible to persist a PSID without the hash that finds it again.
+        """
+        self.messenger_psid_hash = hash_value(value) if value else None
+        return value
+
     @validates("workspace_phone", "contact_phone")
-    def _sync_phone_lookup_hash(self, key: str, value: str) -> str:
+    def _sync_phone_lookup_hash(self, key: str, value: str | None) -> str | None:
         """Keep each ``*_hash`` column in lockstep with its encrypted phone column.
 
         Runs on every attribute set — constructor kwargs included — so it is
@@ -273,7 +341,7 @@ class Conversation(Base, WorkspaceScoped):
         :mod:`app.models.contact`) also keeps transient, not-yet-flushed
         instances consistent, which is what the lookup queries rely on.
         """
-        phone_hash = hash_phone(value) if value else value
+        phone_hash = hash_phone(value) if value else None
         if key == "contact_phone":
             self.contact_phone_hash = phone_hash
         else:

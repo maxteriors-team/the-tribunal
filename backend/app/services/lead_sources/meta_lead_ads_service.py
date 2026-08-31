@@ -66,6 +66,22 @@ class MetaLeadAdsValidationError(ValueError):
     """A permanent lead-shape problem that a webhook retry cannot fix."""
 
 
+class MetaMessagingWindowClosedError(MetaLeadAdsError):
+    """Meta refused a DM because the 24h standard messaging window has closed.
+
+    Distinct from :class:`MetaLeadAdsError` because it is not retryable: the
+    window only reopens when the person messages the business again.
+    """
+
+
+#: Graph subresources this client is allowed to address. Kept as a closed set so
+#: a caller cannot append an arbitrary path segment onto a Graph object URL.
+GraphEndpoint = Literal["subscribed_apps", "insights", "messages"]
+
+#: Meta's "This message is sent outside of allowed window." error code.
+_OUTSIDE_WINDOW_ERROR_CODE = 10
+
+
 @dataclass(frozen=True, slots=True)
 class MetaPageIdentity:
     page_id: str
@@ -97,7 +113,7 @@ class MetaLeadAdsClient:
     def _url(
         self,
         object_id: str,
-        endpoint: Literal["subscribed_apps", "insights"] | None = None,
+        endpoint: GraphEndpoint | None = None,
     ) -> str:
         prefix = ""
         identifier = object_id
@@ -108,13 +124,7 @@ class MetaLeadAdsClient:
             raise MetaLeadAdsValidationError("Invalid Meta Graph object identifier")
 
         safe_object_id = f"{prefix}{identifier}"
-        endpoint_path = (
-            "/subscribed_apps"
-            if endpoint == "subscribed_apps"
-            else "/insights"
-            if endpoint == "insights"
-            else ""
-        )
+        endpoint_path = f"/{endpoint}" if endpoint else ""
         base = settings.meta_lead_ads_base_url.rstrip("/")
         version = settings.meta_lead_ads_api_version.strip("/")
         return f"{base}/{version}/{safe_object_id}{endpoint_path}"
@@ -125,7 +135,8 @@ class MetaLeadAdsClient:
         object_id: str,
         *,
         params: dict[str, str],
-        endpoint: Literal["subscribed_apps", "insights"] | None = None,
+        endpoint: GraphEndpoint | None = None,
+        json_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         owns_client = self._client is None
         client = self._client or httpx.AsyncClient(
@@ -136,6 +147,7 @@ class MetaLeadAdsClient:
                 method,
                 self._url(object_id, endpoint),
                 params=params,
+                json=json_body,
             )
         except httpx.HTTPError as exc:
             raise MetaLeadAdsError("Meta Graph API request failed") from exc
@@ -153,10 +165,15 @@ class MetaLeadAdsClient:
             except ValueError:
                 # Meta can return HTML/plain text errors; the HTTP status is still actionable.
                 pass
-            raise MetaLeadAdsError(
-                f"Meta Graph API returned HTTP {response.status_code}"
-                + (f" (code {error_code})" if error_code is not None else "")
+            detail = f"Meta Graph API returned HTTP {response.status_code}" + (
+                f" (code {error_code})" if error_code is not None else ""
             )
+            # Code 10 is "message sent outside of allowed window". Retrying it
+            # never succeeds — only the person writing back reopens the window —
+            # so it must not surface as the retryable error type.
+            if error_code == _OUTSIDE_WINDOW_ERROR_CODE:
+                raise MetaMessagingWindowClosedError(detail)
+            raise MetaLeadAdsError(detail)
 
         try:
             payload = response.json()
@@ -209,6 +226,50 @@ class MetaLeadAdsClient:
             leadgen_id,
             params={"fields": _GRAPH_FIELDS, "access_token": access_token},
         )
+
+    async def fetch_sender_name(self, *, psid: str, access_token: str) -> str | None:
+        """Return the DM sender's profile name, or ``None`` when unavailable.
+
+        A DM thread has no phone and therefore no contact record, so this name
+        is the only thing the inbox can show. It is best-effort on purpose:
+        profile access depends on granted permissions, and a missing name must
+        never cost us the message itself.
+        """
+        payload = await self._request(
+            "GET",
+            psid,
+            params={"fields": "name", "access_token": access_token},
+        )
+        name = str(payload.get("name") or "").strip()
+        return name[:120] or None
+
+    async def send_message(
+        self,
+        *,
+        account_id: str,
+        psid: str,
+        text: str,
+        access_token: str,
+    ) -> str | None:
+        """Send one text DM as the Page and return Meta's message id.
+
+        ``messaging_type=RESPONSE`` declares this as a reply inside the standard
+        24h window. We deliberately never attach a message tag: the 7-day
+        ``HUMAN_AGENT`` tag does not cover bot-generated replies, so claiming it
+        for AI follow-up would be a policy violation rather than a workaround.
+        """
+        payload = await self._request(
+            "POST",
+            account_id,
+            params={"access_token": access_token},
+            endpoint="messages",
+            json_body={
+                "recipient": {"id": psid},
+                "message": {"text": text},
+                "messaging_type": "RESPONSE",
+            },
+        )
+        return str(payload.get("message_id") or "") or None
 
     async def fetch_campaign_spend(self, credentials: dict[str, Any]) -> list[MetaCampaignSpend]:
         """Fetch lifetime campaign spend when optional ``ads_read`` data is configured.
@@ -356,7 +417,7 @@ async def _integration_for_page(
     return matches[0]
 
 
-async def _lead_source(
+async def resolve_facebook_lead_source(
     db: AsyncSession,
     *,
     integration: WorkspaceIntegration,
@@ -484,7 +545,7 @@ async def sync_meta_campaign_spend(
         return 0
 
     first = spend_rows[0]
-    lead_source = await _lead_source(
+    lead_source = await resolve_facebook_lead_source(
         db,
         integration=integration,
         credentials=integration.credentials,
@@ -608,7 +669,7 @@ async def process_meta_lead(
     email = _first(fields, "email", "work_email")
     created_at = _created_at(payload.get("created_time"))
     campaign_external_id = str(payload.get("campaign_id") or "").strip() or None
-    source = await _lead_source(
+    source = await resolve_facebook_lead_source(
         db,
         integration=integration,
         credentials=credentials,

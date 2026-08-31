@@ -14873,8 +14873,15 @@
             "title": "Contact Name"
           },
           "contact_phone": {
-            "title": "Contact Phone",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
           },
           "created_at": {
             "format": "date-time",
@@ -14909,6 +14916,18 @@
             ],
             "title": "Last Message Preview"
           },
+          "messenger_window_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messenger Window Expires At"
+          },
           "source_provider": {
             "anyOf": [
               {
@@ -14934,8 +14953,15 @@
             "type": "string"
           },
           "workspace_phone": {
-            "title": "Workspace Phone",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Phone"
           }
         },
         "required": [
@@ -15007,8 +15033,15 @@
             "title": "Contact Name"
           },
           "contact_phone": {
-            "title": "Contact Phone",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
           },
           "created_at": {
             "format": "date-time",
@@ -15050,6 +15083,18 @@
             "title": "Messages",
             "type": "array"
           },
+          "messenger_window_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messenger Window Expires At"
+          },
           "source_provider": {
             "anyOf": [
               {
@@ -15075,8 +15120,15 @@
             "type": "string"
           },
           "workspace_phone": {
-            "title": "Workspace Phone",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Phone"
           }
         },
         "required": [
@@ -100268,6 +100320,117 @@
           }
         },
         "summary": "Ingest Meta Leadgen Webhook",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/webhooks/meta/messages": {
+      "get": {
+        "description": "Complete Meta's callback verification challenge for the DM subscription.",
+        "operationId": "verify_meta_messages_webhook_webhooks_meta_messages_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "hub.mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hub.Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hub.verify_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hub.Verify Token"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hub.challenge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hub.Challenge"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Meta Messages Webhook",
+        "tags": [
+          "webhooks"
+        ]
+      },
+      "post": {
+        "description": "Persist every verified inbound Messenger/Instagram DM in this delivery.",
+        "operationId": "ingest_meta_messages_webhook_webhooks_meta_messages_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Ingest Meta Messages Webhook Webhooks Meta Messages Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ingest Meta Messages Webhook",
         "tags": [
           "webhooks"
         ]

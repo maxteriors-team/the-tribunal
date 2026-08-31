@@ -582,6 +582,7 @@ async def generate_text_response(  # noqa: PLR0911, PLR0912, PLR0915
         knowledge_context=knowledge_context,
         lead_context=lead_context,
         training_examples=training_examples,
+        messaging_deadline=conversation.messenger_window_expires_at,
     )
 
     # Create OpenAI client. Prefer the resolved credential so OAuth-backed

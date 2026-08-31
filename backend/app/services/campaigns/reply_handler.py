@@ -345,13 +345,16 @@ async def _record_opt_out(
     conversation: Conversation | None,
     now: datetime,
 ) -> None:
-    if category != ResponseCategory.OPT_OUT or conversation is None:
+    # The global opt-out list is keyed on phone numbers, so a phone-less
+    # Messenger thread has nothing to record here.
+    contact_phone = conversation.contact_phone if conversation else None
+    if category != ResponseCategory.OPT_OUT or not contact_phone:
         return
 
     existing_result = await db.execute(
         select(GlobalOptOut)
         .where(GlobalOptOut.workspace_id == campaign_contact.campaign.workspace_id)
-        .where(GlobalOptOut.phone_hash == hash_phone(conversation.contact_phone))
+        .where(GlobalOptOut.phone_hash == hash_phone(contact_phone))
     )
     if existing_result.scalar_one_or_none() is not None:
         return
@@ -359,7 +362,7 @@ async def _record_opt_out(
     db.add(
         GlobalOptOut(
             workspace_id=campaign_contact.campaign.workspace_id,
-            phone_number=conversation.contact_phone,
+            phone_number=contact_phone,
             opted_out_at=now,
             opt_out_keyword=message.body[:50],
             source_campaign_id=campaign_contact.campaign_id,

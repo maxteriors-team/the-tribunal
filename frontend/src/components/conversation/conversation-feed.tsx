@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare } from "lucide-react";
 import { AnimatePresence } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
 import { PageEmptyState, PageErrorState } from "@/components/ui/page-state";
@@ -28,6 +28,7 @@ import { isSameDay } from "@/lib/utils/date";
 import { getApiErrorCode, getApiErrorMessage, getApiErrorStatus } from "@/lib/utils/errors";
 import { normalizePhoneForComparison } from "@/lib/utils/phone";
 import type { Conversation, TimelineItem } from "@/types";
+import { CHANNEL_LABELS } from "@/types/conversation";
 
 import { ChatHeader } from "./chat-header";
 import { DateSeparator } from "./date-separator";
@@ -37,6 +38,34 @@ import { TeachAIDialog } from "./teach-ai-dialog";
 
 interface ConversationFeedProps {
   className?: string;
+}
+
+/**
+ * Whether `deadline` is in the past, re-rendering exactly when it passes.
+ *
+ * Reading the clock during render is impure and would also leave the composer
+ * open on an already-closed thread until something else happened to re-render.
+ * The timer fires once, on the deadline itself.
+ */
+function useDeadlinePassed(deadline: string | null | undefined): boolean {
+  const at = deadline ? new Date(deadline).getTime() : null;
+  const valid = at !== null && !Number.isNaN(at);
+
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const remaining = valid ? at - Date.now() : -1;
+      if (!valid || remaining <= 0) return () => {};
+      // Clamped: setTimeout overflows past ~24.9 days and would fire at once.
+      const timer = setTimeout(onChange, Math.min(remaining, 2_147_483_647));
+      return () => clearTimeout(timer);
+    },
+    [at, valid],
+  );
+
+  const getSnapshot = useCallback(() => valid && at <= Date.now(), [at, valid]);
+
+  // Server render: nothing has expired yet, so the composer starts available.
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }
 
 function LoadingSkeleton() {
@@ -129,6 +158,11 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
     ? activeQuoConversation
     : contactConversations[0];
   const isQuoConversation = contactConversation?.source_provider === "quo";
+  // Meta only allows a reply for 24h after the person's last message, and the
+  // 7-day human-agent tag does not cover bot replies. Past the deadline every
+  // send is rejected, so say so rather than let an operator type into a box that
+  // silently fails.
+  const messengerWindowClosed = useDeadlinePassed(contactConversation?.messenger_window_expires_at);
   const shouldLoadTimeline = !quoMode || !!activeQuoConversation;
   const {
     data: timelineData,
@@ -148,7 +182,9 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
   );
   const isConversationPending = isActiveQuoLinePending || isConversationsPending;
   const activeFromNumber = isQuoConversation
-    ? (activeQuoLine?.phone_number ?? contactConversation.workspace_phone)
+    ? // A Quo line is always phone-backed; `?? undefined` only narrows the type
+      // now that Messenger threads made `workspace_phone` nullable.
+      (activeQuoLine?.phone_number ?? contactConversation.workspace_phone ?? undefined)
     : (selectedFromNumber ?? fallbackFromNumber);
 
   // Mutations for AI toggle, agent assignment, and clear history
@@ -481,6 +517,16 @@ export function ConversationFeed({ className }: ConversationFeedProps) {
           className="shrink-0 border-t px-4 py-3 text-center text-xs text-muted-foreground"
         >
           Loading reply controls…
+        </div>
+      ) : messengerWindowClosed ? (
+        <div
+          role="status"
+          className="shrink-0 border-t px-4 py-3 text-center text-xs text-muted-foreground"
+        >
+          Reply window closed.{" "}
+          {CHANNEL_LABELS[contactConversation?.channel ?? ""] ?? "This channel"} only allows replies
+          for 24 hours after their last message — they need to message again before you can respond
+          here.
         </div>
       ) : contactConversation ? (
         <MessageComposer
