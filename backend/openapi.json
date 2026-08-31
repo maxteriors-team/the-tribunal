@@ -35869,6 +35869,43 @@
         "title": "PaginatedMessageTests",
         "type": "object"
       },
+      "PaginatedMessages": {
+        "description": "One page of a single thread's messages, in reading order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/app__schemas__conversation__MessageResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "pages"
+        ],
+        "title": "PaginatedMessages",
+        "type": "object"
+      },
       "PaginatedOffers": {
         "description": "Paginated offers response.",
         "properties": {
@@ -73634,7 +73671,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/conversations": {
       "get": {
-        "description": "List conversations in a workspace.",
+        "description": "List conversations in a workspace.\n\nArgs:\n    search: Match the contact's name. Message bodies are encrypted at rest\n        and cannot be searched.",
         "operationId": "list_conversations_api_v1_workspaces__workspace_id__conversations_get",
         "parameters": [
           {
@@ -73710,6 +73747,23 @@
               "default": false,
               "title": "Unread Only",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
             }
           }
         ],
@@ -74571,6 +74625,86 @@
           }
         ],
         "summary": "Clear Conversation History",
+        "tags": [
+          "Conversations"
+        ]
+      },
+      "get": {
+        "description": "Page back through one thread's history without marking it read.\n\n`GET /{conversation_id}` returns only the newest slice and clears unread as\na side effect, so it cannot back an archive view: browsing old threads would\nwipe badges nobody read, and history past that slice would be unreachable.",
+        "operationId": "list_conversation_messages_api_v1_workspaces__workspace_id__conversations__conversation_id__messages_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedMessages"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Conversation Messages",
         "tags": [
           "Conversations"
         ]

@@ -4359,6 +4359,10 @@ export interface paths {
         /**
          * List Conversations
          * @description List conversations in a workspace.
+         *
+         *     Args:
+         *         search: Match the contact's name. Message bodies are encrypted at rest
+         *             and cannot be searched.
          */
         get: operations["list_conversations_api_v1_workspaces__workspace_id__conversations_get"];
         put?: never;
@@ -4616,7 +4620,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Conversation Messages
+         * @description Page back through one thread's history without marking it read.
+         *
+         *     `GET /{conversation_id}` returns only the newest slice and clears unread as
+         *     a side effect, so it cannot back an archive view: browsing old threads would
+         *     wipe badges nobody read, and history past that slice would be unreachable.
+         */
+        get: operations["list_conversation_messages_api_v1_workspaces__workspace_id__conversations__conversation_id__messages_get"];
         put?: never;
         /**
          * Send Message
@@ -25055,6 +25067,22 @@ export interface components {
             total: number;
         };
         /**
+         * PaginatedMessages
+         * @description One page of a single thread's messages, in reading order.
+         */
+        PaginatedMessages: {
+            /** Items */
+            items: components["schemas"]["app__schemas__conversation__MessageResponse"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Pages */
+            pages: number;
+            /** Total */
+            total: number;
+        };
+        /**
          * PaginatedOffers
          * @description Paginated offers response.
          */
@@ -42398,6 +42426,7 @@ export interface operations {
                 status_filter?: string | null;
                 channel_filter?: string | null;
                 unread_only?: boolean;
+                search?: string | null;
             };
             header?: never;
             path: {
@@ -42828,6 +42857,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FollowupSettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_conversation_messages_api_v1_workspaces__workspace_id__conversations__conversation_id__messages_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedMessages"];
                 };
             };
             /** @description Validation Error */

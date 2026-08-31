@@ -87,6 +87,16 @@ class PaginatedConversations(BaseModel):
     pages: int
 
 
+class PaginatedMessages(BaseModel):
+    """One page of a single thread's messages, in reading order."""
+
+    items: list[MessageResponse]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
 class UnreadSummary(BaseModel):
     """Workspace-wide unread rollup backing the header chat badge.
 

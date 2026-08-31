@@ -25,6 +25,7 @@ import {
   Magnet,
   MapPin,
   Megaphone,
+  MessagesSquare,
   Package,
   Phone,
   PhoneCall,
@@ -220,6 +221,17 @@ export const customerNavItems: AppNavItem[] = [
     icon: Users,
     sidebar: true,
     commandPalette: true,
+  },
+  {
+    // The header chat menu only surfaces the freshest dozen threads, and the
+    // contact page needs you to already know whose thread you want. This is the
+    // only way to reach a conversation from years back.
+    title: "Messages",
+    url: "/messages",
+    icon: MessagesSquare,
+    sidebar: true,
+    commandPalette: true,
+    requires: "crm:read",
   },
   {
     // Recipient selection already lives inline in the campaign builder
