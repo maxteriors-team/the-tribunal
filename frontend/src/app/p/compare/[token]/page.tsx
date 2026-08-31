@@ -64,6 +64,10 @@ export default function PublicComparisonPage({ params }: PublicComparisonPagePro
         </div>
       ) : null}
       <ComparisonCard
+        // Inside the card, under the prices: the estimate used to be read-only,
+        // which left the client no way to say no and the rep chasing a decision
+        // already made. Below the card it just floated in empty page background.
+        footer={<ComparisonDecline token={token} declined={data.is_declined} />}
         view={{
           currency: data.currency,
           clientName: data.client_name,
@@ -101,9 +105,6 @@ export default function PublicComparisonPage({ params }: PublicComparisonPagePro
           customLines: data.custom_lines,
         }}
       />
-      {/* The estimate used to be read-only, which left the client no way to say
-          no and the rep chasing a decision already made. */}
-      <ComparisonDecline token={token} declined={data.is_declined} />
     </div>
   );
 }

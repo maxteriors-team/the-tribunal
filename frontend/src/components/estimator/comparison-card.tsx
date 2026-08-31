@@ -9,6 +9,8 @@
  * deliberately the feet-free intersection of the estimate + public payloads so a
  * measurement value cannot be passed in by construction.
  */
+import type { ReactNode } from "react";
+
 import { formatCurrency } from "@/lib/utils/number";
 
 import { PackageGrid, type ComparisonPackageView, type PackageSectionCopy } from "./package-grid";
@@ -100,7 +102,19 @@ function Perks({ perks }: { perks?: string[] }) {
   );
 }
 
-export function ComparisonCard({ view }: { view: ComparisonView }) {
+export function ComparisonCard({
+  view,
+  footer,
+}: {
+  view: ComparisonView;
+  /**
+   * Rendered inside the card, under the prices. Anything the client is meant to
+   * act on belongs here rather than loose on the page beneath it: dropped into
+   * the page background it reads as leftover furniture instead of part of the
+   * offer they were sent.
+   */
+  footer?: ReactNode;
+}) {
   const currency = view.currency || "USD";
   const bothOffered = view.permanent.enabled && view.christmas.enabled;
   const permanentOnly = view.permanent.enabled && !view.christmas.enabled;
@@ -266,6 +280,8 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
       ) : null}
 
       <PackageGrid packages={packages} currency={currency} copy={view.packageSection} />
+
+      {footer}
     </div>
   );
 }
