@@ -32,6 +32,7 @@ from app.schemas.conversation import (
     MarkAllReadResponse,
     MessageResponse,
     PaginatedConversations,
+    PaginatedMessages,
     UnreadSummary,
 )
 from app.services.ai.openai_credentials import (
@@ -191,8 +192,15 @@ class ConversationService:
         status_filter: str | None = None,
         channel_filter: str | None = None,
         unread_only: bool = False,
+        search: str | None = None,
     ) -> PaginatedConversations:
-        """List conversations in a workspace with batch campaign sync."""
+        """List conversations in a workspace with batch campaign sync.
+
+        ``search`` matches the contact's name only. Message bodies and phone
+        numbers are encrypted at rest under a non-deterministic cipher, so
+        neither can be matched in SQL -- searching them would mean decrypting
+        every row in the workspace on every keystroke.
+        """
         visible_provider = await self._visible_provider_clause(workspace_id)
         query = (
             select(Conversation)
@@ -209,6 +217,13 @@ class ConversationService:
             query = query.where(Conversation.channel == channel_filter)
         if unread_only:
             query = query.where(Conversation.unread_count > 0)
+        if search:
+            # Inner join: a thread with no linked contact has no name to match,
+            # so dropping it is the right answer rather than a lost row.
+            query = query.join(Contact, Conversation.contact_id == Contact.id).where(
+                (Contact.first_name.ilike(f"%{search}%"))
+                | (Contact.last_name.ilike(f"%{search}%"))
+            )
 
         query = query.order_by(Conversation.last_message_at.desc().nullslast())
         result = await paginate(self.db, query, page=page, page_size=page_size)
@@ -287,6 +302,44 @@ class ConversationService:
         return ConversationWithMessages(
             **serialize_conversation(conversation).model_dump(),
             messages=[MessageResponse.model_validate(m) for m in messages],
+        )
+
+    async def list_messages(
+        self,
+        conversation_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> PaginatedMessages:
+        """Page back through one thread's messages, newest page first.
+
+        Separate from ``get_conversation`` on purpose. That method marks the
+        thread read and caps the thread at its newest ``limit`` messages, which
+        makes it wrong for an archive: browsing old threads would silently clear
+        unread badges the operator never looked at, and history older than the
+        cap would be unreachable.
+
+        Each page is ordered newest-first for paging, then reversed so callers
+        render it in reading order.
+        """
+        # Scope check first: raises 404 for another workspace's thread, so this
+        # never leaks messages across tenants.
+        await self._get_conversation(conversation_id, workspace_id)
+
+        query = (
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+        )
+        result = await paginate(self.db, query, page=page, page_size=page_size)
+        return PaginatedMessages(
+            items=[
+                MessageResponse.model_validate(m) for m in reversed(list(result.items))
+            ],
+            total=result.total,
+            page=result.page,
+            page_size=result.page_size,
+            pages=result.pages,
         )
 
     async def get_unread_summary(self, workspace_id: uuid.UUID) -> UnreadSummary:

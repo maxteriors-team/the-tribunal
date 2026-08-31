@@ -8,9 +8,25 @@ import type {
   Message,
 } from "@/types";
 
+export interface ConversationMessagesParams {
+  page?: number;
+  page_size?: number;
+  [key: string]: unknown;
+}
+
+export interface ConversationMessagesResponse {
+  items: Message[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}
+
 export interface ConversationsListParams {
   page?: number;
   page_size?: number;
+  /** Matches the contact's name. Message bodies are encrypted and unsearchable. */
+  search?: string;
   status?: "active" | "archived" | "blocked";
   channel?: string;
   unread_only?: boolean;
@@ -80,9 +96,21 @@ const baseConversationsApiWithGet = baseConversationsApi as {
 export const conversationsApi = {
   ...baseConversationsApiWithGet,
 
-  getMessages: async (workspaceId: string, conversationId: string): Promise<Message[]> => {
-    return apiGet<Message[]>(
+  /**
+   * One page of a thread's history, oldest-to-newest within the page.
+   *
+   * Page 1 is the newest slice; higher pages walk backwards in time. Unlike
+   * `get`, this does not mark the thread read, so browsing the archive leaves
+   * unread badges alone.
+   */
+  listMessages: async (
+    workspaceId: string,
+    conversationId: string,
+    params: ConversationMessagesParams = {},
+  ): Promise<ConversationMessagesResponse> => {
+    return apiGet<ConversationMessagesResponse>(
       `/api/v1/workspaces/${workspaceId}/conversations/${conversationId}/messages`,
+      { params },
     );
   },
 
