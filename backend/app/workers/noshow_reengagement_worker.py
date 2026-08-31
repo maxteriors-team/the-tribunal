@@ -66,7 +66,10 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
         async with system_session("noshow_reengagement_worker sweeps every workspace") as db:
             # Fetch all agents with re-engagement enabled
             agent_result = await db.execute(
-                select(Agent).where(Agent.noshow_reengagement_enabled.is_(True))
+                select(Agent).where(
+                    Agent.noshow_reengagement_enabled.is_(True),
+                    Agent.deleted_at.is_(None),
+                )
             )
             agents = agent_result.scalars().all()
 

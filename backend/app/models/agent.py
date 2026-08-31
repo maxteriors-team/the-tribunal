@@ -187,6 +187,11 @@ class Agent(Base, WorkspaceScoped):
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Soft delete: set on DELETE. Distinct from is_active, which means "paused".
+    # Rows are kept so calls/conversations/appointments still resolve their agent.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     # Embed settings
     public_id: Mapped[str | None] = mapped_column(
