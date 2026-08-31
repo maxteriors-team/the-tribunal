@@ -215,14 +215,16 @@ async def _page_credentials(db: AsyncSession, workspace_id: uuid.UUID) -> _PageC
     can only ever leave through the tenant's own Page.
     """
     from app.models.workspace import WorkspaceIntegration
-    from app.services.lead_sources.meta_lead_ads_service import validate_meta_credentials
-    from app.services.lead_sources.meta_messenger_service import META_MESSENGER_INTEGRATION
+    from app.services.lead_sources.meta_lead_ads_service import (
+        META_LEAD_ADS_INTEGRATION,
+        validate_meta_credentials,
+    )
 
     integration = (
         await db.execute(
             select(WorkspaceIntegration).where(
                 WorkspaceIntegration.workspace_id == workspace_id,
-                WorkspaceIntegration.integration_type == META_MESSENGER_INTEGRATION,
+                WorkspaceIntegration.integration_type == META_LEAD_ADS_INTEGRATION,
                 WorkspaceIntegration.is_active.is_(True),
             )
         )

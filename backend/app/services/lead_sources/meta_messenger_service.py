@@ -42,6 +42,7 @@ from app.services.lead_sources.attribution_service import (
     apply_web_attribution,
 )
 from app.services.lead_sources.meta_lead_ads_service import (
+    META_LEAD_ADS_INTEGRATION,
     MetaLeadAdsClient,
     MetaLeadAdsError,
     MetaLeadAdsValidationError,
@@ -58,7 +59,6 @@ from app.utils.phone import normalize_phone_safe, validate_phone_number
 
 logger = structlog.get_logger()
 
-META_MESSENGER_INTEGRATION = "meta_lead_ads"
 META_MESSENGER_EXTERNAL_SOURCE = "facebook_messenger"
 
 #: Meta's standard messaging window. Outside it the Send API returns error 10.
@@ -81,7 +81,6 @@ class SenderProfileClient(Protocol):
 
     async def fetch_sender_name(self, *, psid: str, access_token: str) -> str | None:
         """Return the DM sender's profile name, or ``None`` when unavailable."""
-        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +222,7 @@ async def _integration_for_account(
             (
                 await routing.execute(
                     select(WorkspaceIntegration).where(
-                        WorkspaceIntegration.integration_type == META_MESSENGER_INTEGRATION,
+                        WorkspaceIntegration.integration_type == META_LEAD_ADS_INTEGRATION,
                         WorkspaceIntegration.is_active.is_(True),
                     )
                 )
