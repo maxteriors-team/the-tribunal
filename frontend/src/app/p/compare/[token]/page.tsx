@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { use } from "react";
 
 import { ComparisonCard } from "@/components/estimator/comparison-card";
+import { ComparisonDecline } from "@/components/estimator/comparison-decline";
 import { DeadPublicLink } from "@/components/shared/dead-public-link";
 import { PageLoadingState } from "@/components/ui/page-state";
 import { publicComparisonsApi } from "@/lib/api/public-comparisons";
@@ -100,6 +101,9 @@ export default function PublicComparisonPage({ params }: PublicComparisonPagePro
           customLines: data.custom_lines,
         }}
       />
+      {/* The estimate used to be read-only, which left the client no way to say
+          no and the rep chasing a decision already made. */}
+      <ComparisonDecline token={token} declined={data.is_declined} />
     </div>
   );
 }

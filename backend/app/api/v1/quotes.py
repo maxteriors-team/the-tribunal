@@ -44,6 +44,8 @@ from app.schemas.estimate import (
     LinearFeetEstimateRequest,
     LinearFeetEstimateResult,
     PublicComparison,
+    PublicComparisonDecline,
+    PublicComparisonDeclineResult,
 )
 from app.schemas.handoff_image import HandoffImageListResponse, HandoffImageResponse
 from app.schemas.inventory import QuoteInventoryAvailabilityResponse
@@ -1053,3 +1055,18 @@ async def get_public_comparison(token: str, db: DB) -> PublicComparison:
     never includes the internal linear-feet measurement. Unknown tokens 404.
     """
     return await QuoteService(db).get_public_comparison(token)
+
+
+@comparison_public_router.post("/{token}/decline", response_model=PublicComparisonDeclineResult)
+async def decline_public_comparison(
+    token: str,
+    payload: PublicComparisonDecline,
+    db: DB,
+) -> PublicComparisonDeclineResult:
+    """Client declines a shared estimate, with an optional reason (idempotent).
+
+    Without this the estimate link is a dead end: the client can read a price but
+    has no way to say no, so the rep keeps chasing a decision that was already
+    made. Repeat calls keep the first decline's timestamp. Unknown tokens 404.
+    """
+    return await QuoteService(db).decline_public_comparison(token, reason=payload.reason)
