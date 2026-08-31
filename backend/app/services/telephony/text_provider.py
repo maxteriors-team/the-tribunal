@@ -6,7 +6,12 @@ from typing import Protocol
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.conversation import Conversation, Message
+from app.models.conversation import (
+    MESSENGER_CHANNELS,
+    Conversation,
+    Message,
+    MessageChannel,
+)
 from app.services.messaging.outbound_media import OutboundMedia
 from app.services.telephony.mac_relay import (
     MacRelayMessageService,
@@ -51,7 +56,34 @@ def provider_for_conversation(conversation: Conversation) -> str | None:
     """
     if conversation.channel == "imessage":
         return "mac_relay"
+    if conversation.channel in MESSENGER_CHANNELS:
+        return conversation.channel
     return None
+
+
+class UnreachableConversationError(ValueError):
+    """A thread has no address to reply to on its own transport."""
+
+
+def outbound_addresses(conversation: Conversation) -> tuple[str, str]:
+    """Return the ``(recipient, sender)`` addresses for replying into a thread.
+
+    Phone-keyed threads answer on their phone pair; Messenger and Instagram
+    threads answer to a Page-Scoped ID and have no workspace phone at all, so
+    the sender is resolved from the workspace's Meta integration at send time
+    and is empty here.
+
+    Raises :class:`UnreachableConversationError` instead of returning ``None``: every
+    caller here is about to send, and a silent ``None`` would surface as a
+    provider error long after the real cause.
+    """
+    if conversation.channel in MESSENGER_CHANNELS:
+        if not conversation.messenger_psid:
+            raise UnreachableConversationError("Messenger conversation has no recipient id")
+        return conversation.messenger_psid, ""
+    if not conversation.contact_phone or not conversation.workspace_phone:
+        raise UnreachableConversationError("Conversation has no phone numbers to reply on")
+    return conversation.contact_phone, conversation.workspace_phone
 
 
 def get_text_message_provider(
@@ -61,6 +93,10 @@ def get_text_message_provider(
 ) -> TextMessageProvider:
     """Return the configured text provider, defaulting safely to Telnyx."""
     provider = (preferred_provider or settings.text_message_provider).strip().lower()
+    if provider in MESSENGER_CHANNELS:
+        from app.services.telephony.messenger import MessengerMessageService
+
+        return MessengerMessageService(channel=MessageChannel(provider))
     if provider in {"mac_relay", "mac-relay", "imessage"} and _mac_relay_configured():
         return build_configured_mac_relay_service(mac_relay_service)
     return TelnyxSMSService(settings.telnyx_api_key)
@@ -75,6 +111,8 @@ __all__ = [
     "MacRelayMessageService",
     "TelnyxSMSService",
     "TextMessageProvider",
+    "UnreachableConversationError",
     "get_text_message_provider",
+    "outbound_addresses",
     "provider_for_conversation",
 ]

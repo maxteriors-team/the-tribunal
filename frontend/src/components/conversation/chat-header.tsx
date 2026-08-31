@@ -28,6 +28,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { formatPhoneNumber } from "@/lib/utils/phone";
 import type { Conversation } from "@/types";
 import type { Agent } from "@/types/agent";
+import { CHANNEL_LABELS } from "@/types/conversation";
 
 interface ChatHeaderProps {
   workspaceId: string;
@@ -79,6 +80,9 @@ export function ChatHeader({
 
   const unreadCount = conversation?.unread_count ?? 0;
   const isQuoConversation = manualMessagingOnly || conversation?.source_provider === "quo";
+  // SMS is the default and needs no badge; every other channel gets one, because
+  // the reply rules differ per channel.
+  const channelLabel = CHANNEL_LABELS[conversation?.channel ?? ""];
 
   const assignedAgentName = conversation?.assigned_agent_id
     ? (agents.find((a) => a.id === conversation.assigned_agent_id)?.name ?? "Agent")
@@ -102,6 +106,11 @@ export function ChatHeader({
           {quoPhoneNumber ? (
             <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
               via Quo · {formatPhoneNumber(quoPhoneNumber)}
+            </Badge>
+          ) : null}
+          {channelLabel ? (
+            <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
+              {channelLabel}
             </Badge>
           ) : null}
         </div>

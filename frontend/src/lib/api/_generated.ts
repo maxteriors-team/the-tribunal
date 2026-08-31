@@ -10926,6 +10926,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webhooks/meta/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verify Meta Messages Webhook
+         * @description Complete Meta's callback verification challenge for the DM subscription.
+         */
+        get: operations["verify_meta_messages_webhook_webhooks_meta_messages_get"];
+        put?: never;
+        /**
+         * Ingest Meta Messages Webhook
+         * @description Persist every verified inbound Messenger/Instagram DM in this delivery.
+         */
+        post: operations["ingest_meta_messages_webhook_webhooks_meta_messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/resend": {
         parameters: {
             query?: never;
@@ -16931,7 +16955,7 @@ export interface components {
             /** Contact Name */
             contact_name?: string | null;
             /** Contact Phone */
-            contact_phone: string;
+            contact_phone: string | null;
             /**
              * Created At
              * Format: date-time
@@ -16946,6 +16970,8 @@ export interface components {
             last_message_at: string | null;
             /** Last Message Preview */
             last_message_preview: string | null;
+            /** Messenger Window Expires At */
+            messenger_window_expires_at?: string | null;
             /** Source Provider */
             source_provider?: string | null;
             /** Status */
@@ -16958,7 +16984,7 @@ export interface components {
              */
             workspace_id: string;
             /** Workspace Phone */
-            workspace_phone: string;
+            workspace_phone: string | null;
         };
         /**
          * ConversationWithMessages
@@ -16978,7 +17004,7 @@ export interface components {
             /** Contact Name */
             contact_name?: string | null;
             /** Contact Phone */
-            contact_phone: string;
+            contact_phone: string | null;
             /**
              * Created At
              * Format: date-time
@@ -16995,6 +17021,8 @@ export interface components {
             last_message_preview: string | null;
             /** Messages */
             messages: components["schemas"]["app__schemas__conversation__MessageResponse"][];
+            /** Messenger Window Expires At */
+            messenger_window_expires_at?: string | null;
             /** Source Provider */
             source_provider?: string | null;
             /** Status */
@@ -17007,7 +17035,7 @@ export interface components {
              */
             workspace_id: string;
             /** Workspace Phone */
-            workspace_phone: string;
+            workspace_phone: string | null;
         };
         /**
          * ConvertToCampaignRequest
@@ -56099,6 +56127,61 @@ export interface operations {
         };
     };
     ingest_meta_leadgen_webhook_webhooks_meta_leadgen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number | boolean;
+                    };
+                };
+            };
+        };
+    };
+    verify_meta_messages_webhook_webhooks_meta_messages_get: {
+        parameters: {
+            query?: {
+                "hub.mode"?: string | null;
+                "hub.verify_token"?: string | null;
+                "hub.challenge"?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_meta_messages_webhook_webhooks_meta_messages_post: {
         parameters: {
             query?: never;
             header?: never;

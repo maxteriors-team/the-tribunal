@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.encryption import hash_phone
+from app.core.encryption import hash_phone, hash_value
 from app.core.metrics import observe_sms_sent
 from app.core.roles import WorkspaceRole
 from app.models.contact import Contact
@@ -115,6 +115,13 @@ class InboundTextEvent:
     response_channel: str = "sms"
     media_count: int = 0
     media_preview: str | None = None
+    # Meta Page-Scoped ID for Messenger/Instagram DMs. When set, ``from_number``
+    # and ``to_number`` hold Meta object IDs rather than phone numbers, and the
+    # thread is keyed on this PSID instead of a phone pair.
+    messenger_psid: str | None = None
+    messenger_display_name: str | None = None
+    #: End of Meta's 24h standard messaging window, refreshed by this message.
+    messenger_window_expires_at: datetime | None = None
 
 
 _conversation_syncer = CampaignConversationSyncer()
@@ -141,7 +148,14 @@ async def process_inbound_text_event(
 
     # Media-only events have no text to interpret as a command or operator
     # assistant prompt, but still need normal contact-message ingestion.
-    if event.body.strip():
+    #
+    # DMs are excluded from both privileged paths on purpose: a PSID is not a
+    # phone number, so approval-command and operator lookups would be hashing an
+    # unrelated identifier against user phone hashes. A numeric PSID that
+    # happened to collide with a staff member's digits would hand a stranger the
+    # CRM assistant, which is not a risk worth carrying for a lookup that can
+    # never legitimately match.
+    if event.body.strip() and event.messenger_psid is None:
         is_command = await command_processor.try_process_command(
             db=db,
             from_number=event.from_number,
@@ -246,8 +260,16 @@ async def persist_inbound_text_message(
     channel: MessageChannel,
     log: Any,
     conversation_channel: str | None = None,
+    messenger_psid: str | None = None,
+    messenger_display_name: str | None = None,
+    messenger_window_expires_at: datetime | None = None,
 ) -> InboundMessageIngestResult:
-    """Persist an inbound text and report whether this delivery created it."""
+    """Persist an inbound text and report whether this delivery created it.
+
+    When ``messenger_psid`` is set the thread is keyed on that Page-Scoped ID
+    instead of the phone pair, and ``from_number``/``to_number`` are Meta object
+    IDs kept only for logging.
+    """
     stored_channel = conversation_channel or channel.value
     if provider_message_id:
         existing_result = await db.execute(
@@ -263,14 +285,28 @@ async def persist_inbound_text_message(
             log.info("inbound_text_duplicate_ignored", message_id=str(existing_message.id))
             return InboundMessageIngestResult(existing_message, created=False)
 
-    conversation = await _get_or_create_text_conversation(
-        db=db,
-        workspace_phone=to_number,
-        contact_phone=from_number,
-        workspace_id=workspace_id,
-        channel=stored_channel,
-        log=log,
-    )
+    if messenger_psid:
+        conversation = await _get_or_create_messenger_conversation(
+            db=db,
+            messenger_psid=messenger_psid,
+            display_name=messenger_display_name,
+            workspace_id=workspace_id,
+            channel=stored_channel,
+            log=log,
+        )
+        # Refreshed on every inbound user message: Meta's window restarts from
+        # the person's last message, never from our replies.
+        if messenger_window_expires_at is not None:
+            conversation.messenger_window_expires_at = messenger_window_expires_at
+    else:
+        conversation = await _get_or_create_text_conversation(
+            db=db,
+            workspace_phone=to_number,
+            contact_phone=from_number,
+            workspace_id=workspace_id,
+            channel=stored_channel,
+            log=log,
+        )
 
     message = Message(
         conversation_id=conversation.id,
@@ -406,6 +442,66 @@ async def _get_or_create_text_conversation(
         contact_id=contact.id if contact else None,
     )
     return conversation
+
+
+async def _get_or_create_messenger_conversation(
+    *,
+    db: AsyncSession,
+    messenger_psid: str,
+    display_name: str | None,
+    workspace_id: uuid.UUID,
+    channel: str,
+    log: Any,
+) -> Conversation:
+    """Find or open the DM thread for one Page-Scoped ID.
+
+    ``contact_id`` stays NULL until a phone or email surfaces in the thread: a
+    PSID identifies someone only to the Page that received it, so there is
+    nothing to match an existing contact on and inventing a placeholder contact
+    would pollute the CRM with unreachable records.
+    """
+    psid_hash = hash_value(messenger_psid)
+    conversation = (
+        await db.execute(
+            select(Conversation).where(
+                Conversation.workspace_id == workspace_id,
+                Conversation.messenger_psid_hash == psid_hash,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if conversation is not None:
+        if display_name and conversation.messenger_display_name != display_name:
+            conversation.messenger_display_name = display_name
+        return conversation
+
+    conversation = Conversation(
+        workspace_id=workspace_id,
+        contact_id=None,
+        messenger_psid=messenger_psid,
+        messenger_display_name=display_name,
+        channel=channel,
+        assigned_agent_id=await _resolve_default_messenger_agent_id(db, workspace_id),
+        ai_enabled=True,
+        initiated_by="external",
+    )
+    db.add(conversation)
+    await db.flush()
+    log.info("messenger_conversation_created", conversation_id=str(conversation.id))
+    return conversation
+
+
+async def _resolve_default_messenger_agent_id(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+) -> uuid.UUID | None:
+    """Return the workspace's default agent for a DM thread.
+
+    There is no Page-to-agent mapping the way a phone number has one, so a DM
+    always lands on the workspace default.
+    """
+    default_agent = await ensure_default_agent(db, workspace_id)
+    return default_agent.id
 
 
 async def _find_contact_by_phone(

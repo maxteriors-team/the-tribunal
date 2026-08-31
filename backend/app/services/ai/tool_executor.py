@@ -554,7 +554,10 @@ class VoiceToolExecutor(BaseToolExecutor):
         from app.db.session import AsyncSessionLocal
         from app.models.conversation import Message as MessageModel
         from app.services.idempotency import derive_outbound_key
-        from app.services.telephony.text_provider import get_text_message_provider
+        from app.services.telephony.text_provider import (
+            get_text_message_provider,
+            outbound_addresses,
+        )
 
         if not self.call_control_id:
             return {"success": False, "error": "No active call found for this SMS send."}
@@ -579,11 +582,14 @@ class VoiceToolExecutor(BaseToolExecutor):
                 call_message.id,
                 PRESTYJ_APPLICATION_URL,
             )
+            # Reached from a live voice call, so the thread is always
+            # phone-keyed; the guard keeps that an explicit precondition.
+            to_address, from_address = outbound_addresses(conversation)
             provider = get_text_message_provider("telnyx")
             try:
                 sms_message = await provider.send_message(
-                    to_number=conversation.contact_phone,
-                    from_number=conversation.workspace_phone,
+                    to_number=to_address,
+                    from_number=from_address,
                     body=PRESTYJ_APPLICATION_SMS_BODY,
                     db=db,
                     workspace_id=workspace_id,
@@ -1342,7 +1348,14 @@ class VoiceToolExecutor(BaseToolExecutor):
             conversation = call_message.conversation
             workspace_id = self.workspace_id or conversation.workspace_id
 
+            # This tool only runs during a live phone call, so the thread is
+            # always phone-keyed; bail rather than key a contact off nothing.
             caller_phone = conversation.contact_phone
+            if not caller_phone:
+                return {
+                    "success": False,
+                    "error": "This conversation has no phone number to save lead info against.",
+                }
             contact: Contact | None = None
             if conversation.contact_id is not None:
                 contact_result = await db.execute(

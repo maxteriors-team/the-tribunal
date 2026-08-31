@@ -32,6 +32,7 @@ from app.models.quote import Quote
 from app.services.notifications import notify_workspace_event
 from app.services.telephony.text_provider import (
     get_text_message_provider,
+    outbound_addresses,
     provider_for_conversation,
 )
 
@@ -129,11 +130,12 @@ async def _send_acknowledgement(
         log.info("quo_manual_messaging_only")
         return
     body = build_acknowledgement(contact)
+    to_address, from_address = outbound_addresses(conversation)
     sms_service = get_text_message_provider(provider_for_conversation(conversation))
     try:
         await sms_service.send_message(
-            to_number=conversation.contact_phone,
-            from_number=conversation.workspace_phone,
+            to_number=to_address,
+            from_number=from_address,
             body=body,
             db=db,
             workspace_id=conversation.workspace_id,

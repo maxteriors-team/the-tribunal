@@ -29,6 +29,8 @@ async def test_quote_intent_forces_fresh_lookup_before_customer_claim() -> None:
         workspace_id=workspace_id,
         contact_id=42,
         contact_phone="+15125550100",
+        # Non-DM thread: Meta's reply window does not apply.
+        messenger_window_expires_at=None,
     )
     contact_result = MagicMock()
     contact_result.scalar_one_or_none.return_value = SimpleNamespace()
@@ -174,6 +176,8 @@ async def test_prepare_booking_returns_canonical_summary_without_second_model_tu
         workspace_id=workspace_id,
         contact_id=None,
         contact_phone="+15125550100",
+        # Non-DM thread: Meta's reply window does not apply.
+        messenger_window_expires_at=None,
     )
     latest_message = "Monday at 10, phone, use lead@example.com."
     confirmation = (
@@ -290,6 +294,8 @@ async def test_tool_error_without_domains_hands_off_instead_of_repeating_forced_
         workspace_id=workspace_id,
         contact_id=42,
         contact_phone="+15125550100",
+        # Non-DM thread: Meta's reply window does not apply.
+        messenger_window_expires_at=None,
     )
     contact_result = MagicMock()
     contact_result.scalar_one_or_none.return_value = SimpleNamespace()

@@ -214,10 +214,19 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
         # PII in the product (SMS bodies, call transcripts, recording URLs).
         RotationTarget(
             Conversation,
-            ("workspace_phone", "contact_phone", "last_message_preview"),
+            (
+                "workspace_phone",
+                "contact_phone",
+                "last_message_preview",
+                # A Page-Scoped ID identifies a real person to the Page that
+                # received it, and the display name is their profile name.
+                "messenger_psid",
+                "messenger_display_name",
+            ),
             {
                 "workspace_phone": "workspace_phone_hash",
                 "contact_phone": "contact_phone_hash",
+                "messenger_psid": "messenger_psid_hash",
             },
         ),
         RotationTarget(ConversationBookingDraft, ("email", "confirmation_text")),

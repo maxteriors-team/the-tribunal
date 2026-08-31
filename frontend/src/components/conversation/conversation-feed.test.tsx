@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   conversationPending: false,
   showConversations: true,
   sourceProvider: "quo" as string | undefined,
+  channel: "sms" as string,
+  messengerWindowExpiresAt: null as string | null,
   timelineArgs: [] as unknown[],
   timeline: [
     {
@@ -53,6 +55,8 @@ vi.mock("@tanstack/react-query", () => ({
                 contact_phone: "+14155552672",
                 workspace_phone: "+14155550199",
                 source_provider: state.sourceProvider,
+                channel: state.channel,
+                messenger_window_expires_at: state.messengerWindowExpiresAt,
                 ai_enabled: false,
               },
               {
@@ -61,6 +65,8 @@ vi.mock("@tanstack/react-query", () => ({
                 contact_phone: "+14155552672",
                 workspace_phone: "+14155552671",
                 source_provider: state.sourceProvider,
+                channel: state.channel,
+                messenger_window_expires_at: state.messengerWindowExpiresAt,
                 ai_enabled: false,
               },
             ]
@@ -164,6 +170,8 @@ describe("ConversationFeed Quo CRM sending", () => {
     state.conversationPending = false;
     state.showConversations = true;
     state.sourceProvider = "quo";
+    state.channel = "sms";
+    state.messengerWindowExpiresAt = null;
     state.timelineArgs = [];
     sendMessageMock.mockResolvedValue({ id: "message-out" });
     sendMessageToContactMock.mockResolvedValue({ id: "message-out" });
@@ -281,5 +289,68 @@ describe("ConversationFeed Quo CRM sending", () => {
 
     expect(state.timelineArgs[3]).toBeUndefined();
     expect(screen.getByTestId("composer")).toHaveAttribute("data-text-only", "false");
+  });
+});
+
+describe("ConversationFeed Messenger reply window", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    // Not a Quo thread, so the ordinary composer path is the one under test.
+    state.activeLine = {
+      active: true,
+      phone_number_id: "PN_selected",
+      phone_number: "+14155552671",
+      has_contact_history: false,
+    };
+    state.activeLinePending = false;
+    state.conversationPending = false;
+    state.showConversations = true;
+    state.sourceProvider = undefined;
+    state.channel = "messenger";
+    state.messengerWindowExpiresAt = null;
+  });
+
+  it("allows a reply while Meta's window is still open", () => {
+    state.messengerWindowExpiresAt = new Date(Date.now() + 60_000).toISOString();
+    render(<ConversationFeed />);
+
+    expect(screen.getByTestId("composer")).toBeInTheDocument();
+    expect(screen.queryByText(/Reply window closed/i)).not.toBeInTheDocument();
+  });
+
+  it("replaces the composer once the window has closed", () => {
+    // Past the deadline Meta rejects every send with a hard error 10, so
+    // typing must not look possible.
+    state.messengerWindowExpiresAt = new Date(Date.now() - 60_000).toISOString();
+    render(<ConversationFeed />);
+
+    expect(screen.queryByTestId("composer")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Reply window closed");
+    expect(screen.getByRole("status")).toHaveTextContent("Messenger");
+  });
+
+  it("closes the composer the moment the window expires, with no reload", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    state.messengerWindowExpiresAt = new Date(Date.now() + 5_000).toISOString();
+    render(<ConversationFeed />);
+
+    expect(screen.getByTestId("composer")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_001);
+    });
+
+    expect(screen.queryByTestId("composer")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Reply window closed");
+    vi.useRealTimers();
+  });
+
+  it("leaves an SMS thread alone; only Meta caps the reply window", () => {
+    state.channel = "sms";
+    state.messengerWindowExpiresAt = null;
+    render(<ConversationFeed />);
+
+    expect(screen.getByTestId("composer")).toBeInTheDocument();
   });
 });
