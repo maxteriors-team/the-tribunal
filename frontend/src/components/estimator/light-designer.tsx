@@ -3153,7 +3153,13 @@ export function LightDesigner({
   // package, matching the server so the preview and the shared page agree.
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
   const [christmasPerFtOverride, setChristmasPerFtOverride] = useState<number | null>(null);
-  const [discountAmount, setDiscountAmount] = useState<number | null>(null);
+  // Discount is entered as either dollars off or a percentage. Percent is
+  // resolved to dollars right here, against the pre-discount subtotal, and the
+  // resolved figure is shown to the rep: the API, the stored estimate and the
+  // customer's page all keep dealing in one honest dollar amount, so a later
+  // price change can never quietly re-scale a discount somebody already quoted.
+  const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
+  const [discountInput, setDiscountInput] = useState<number | null>(null);
   const [permanentDepositInput, setPermanentDepositInput] = useState("");
   // Standalone lines the rep typed for work the price book doesn't carry. Held
   // as raw drafts; only complete rows are priced (see `toEstimateCustomLines`).
@@ -3729,7 +3735,10 @@ export function LightDesigner({
       permanent_complexity: dominantPermanentComplexity(scoped.complexityFeet),
       permanent_complexity_feet: scoped.complexityFeet,
       proposal_side: proposalSide,
-      discount_amount: discountAmount ?? 0,
+      // Percent is resolved to dollars server-side, against the pre-discount
+      // subtotal, and comes back as `discount_amount` for the rep to confirm.
+      discount_amount: discountMode === "amount" ? (discountInput ?? 0) : 0,
+      discount_percent: discountMode === "percent" ? (discountInput ?? 0) : null,
       per_ft_override: null,
       christmas_per_ft_override: christmasPerFtOverride,
       christmas_items: scoped.inputs.christmas_items,
@@ -3946,7 +3955,8 @@ export function LightDesigner({
         setTakedown(false);
         setStorage(false);
         setChristmasPerFtOverride(null);
-        setDiscountAmount(null);
+        setDiscountInput(null);
+        setDiscountMode("amount");
         setSelectedPackage(null);
         setCustomLines([]);
       }
@@ -5090,28 +5100,73 @@ export function LightDesigner({
                             </label>
                           ) : null}
                           {sides.permanent || sides.seasonal ? (
-                            <label className="est-opt-rate">
-                              <span>Overall proposal discount</span>
-                              <input
-                                className="est-input"
-                                type="number"
-                                min={0}
-                                step={1}
-                                inputMode="decimal"
-                                value={discountAmount ?? ""}
-                                placeholder="0"
-                                onChange={(event) => {
-                                  const value = Number(event.target.value);
-                                  setDiscountAmount(
-                                    event.target.value === "" || Number.isNaN(value)
-                                      ? null
-                                      : Math.max(0, value),
-                                  );
-                                }}
-                                aria-label="Overall proposal discount"
-                              />
-                              <span className="est-internal-badge">USD</span>
-                            </label>
+                            <>
+                              <label className="est-opt-rate">
+                                <span>Overall proposal discount</span>
+                                <input
+                                  className="est-input"
+                                  type="number"
+                                  min={0}
+                                  max={discountMode === "percent" ? 100 : undefined}
+                                  step={1}
+                                  inputMode="decimal"
+                                  value={discountInput ?? ""}
+                                  placeholder="0"
+                                  onChange={(event) => {
+                                    const value = Number(event.target.value);
+                                    if (event.target.value === "" || Number.isNaN(value)) {
+                                      setDiscountInput(null);
+                                      return;
+                                    }
+                                    // A percent over 100 would be rejected by the
+                                    // API and blank the price mid-typing.
+                                    const ceiling = discountMode === "percent" ? 100 : value;
+                                    setDiscountInput(Math.min(Math.max(0, value), ceiling));
+                                  }}
+                                  aria-label={
+                                    discountMode === "percent"
+                                      ? "Overall proposal discount percent"
+                                      : "Overall proposal discount amount"
+                                  }
+                                />
+                                <div
+                                  className="est-discount-unit"
+                                  role="group"
+                                  aria-label="Discount unit"
+                                >
+                                  {(
+                                    [
+                                      ["amount", "$", "Dollar discount"],
+                                      ["percent", "%", "Percent discount"],
+                                    ] as const
+                                  ).map(([mode, symbol, label]) => (
+                                    <button
+                                      key={mode}
+                                      type="button"
+                                      className={`tp-spacing-chip ${
+                                        discountMode === mode ? "on" : ""
+                                      }`}
+                                      aria-pressed={discountMode === mode}
+                                      aria-label={label}
+                                      onClick={() => setDiscountMode(mode)}
+                                    >
+                                      {symbol}
+                                    </button>
+                                  ))}
+                                </div>
+                              </label>
+                              {/* The server resolves the percent against the
+                                  pre-discount subtotal, so echo the dollars back:
+                                  the rep confirms the real figure before it ever
+                                  reaches the customer. */}
+                              {discountMode === "percent" && (discountInput ?? 0) > 0 ? (
+                                <p className="est-discount-resolved">
+                                  {discountInput}% off &middot;{" "}
+                                  {formatCurrency(estimate?.discount_amount ?? 0)} off this
+                                  proposal
+                                </p>
+                              ) : null}
+                            </>
                           ) : null}
                           {estimateFailed ? (
                             <p className="est-send-error">
