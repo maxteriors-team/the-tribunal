@@ -62,7 +62,10 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
         """Process all agents with never-booked re-engagement enabled."""
         async with system_session("never_booked_worker sweeps every workspace") as db:
             agent_result = await db.execute(
-                select(Agent).where(Agent.never_booked_reengagement_enabled.is_(True))
+                select(Agent).where(
+                    Agent.never_booked_reengagement_enabled.is_(True),
+                    Agent.deleted_at.is_(None),
+                )
             )
             agents = agent_result.scalars().all()
 
