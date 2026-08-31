@@ -12,7 +12,7 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, engine
 from app.models.agent import Agent
 from app.models.workspace import Workspace
 from app.services.agents import (
@@ -26,6 +26,9 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
 async def test_ensure_default_agent_provisions_and_is_idempotent() -> None:
+    # Pooled connections belong to the previous test's event loop; drop them
+    # first (same pattern as tests/integration/test_attendance.py).
+    await engine.dispose()
     async with AsyncSessionLocal() as db:
         ws = Workspace(id=uuid.uuid4(), name="Agt", slug=f"agt-{uuid.uuid4().hex[:8]}")
         db.add(ws)
