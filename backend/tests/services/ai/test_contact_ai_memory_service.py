@@ -330,6 +330,9 @@ async def test_successful_ai_sms_reply_refreshes_contact_memory() -> None:
     conversation = SimpleNamespace(
         id=conversation_id,
         contact_phone="+15555550100",
+        channel="sms",
+        # Non-DM thread: Meta's reply window does not apply.
+        messenger_window_expires_at=None,
         workspace_phone="+15555550101",
     )
     db = MagicMock()

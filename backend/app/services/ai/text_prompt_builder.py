@@ -93,6 +93,7 @@ def build_text_instructions(
     knowledge_context: str | None = None,
     lead_context: str | None = None,
     training_examples: str | None = None,
+    messaging_deadline: datetime | None = None,
 ) -> str:
     """Build instructions for text agent.
 
@@ -112,6 +113,8 @@ def build_text_instructions(
         training_examples: Bounded, approved behavior examples. These are inserted
             after global safety/truthfulness rules and before current-conversation
             context, and their text remains untrusted quoted data.
+        messaging_deadline: When this channel's reply window closes (Messenger and
+            Instagram only). Set, it makes capturing a phone number the priority.
 
     Returns:
         Complete instructions string for text conversations
@@ -128,6 +131,25 @@ def build_text_instructions(
         current_datetime = datetime.now(UTC).strftime("%A, %B %d, %Y at %I:%M %p")
 
     phone_context = f"\nContact Phone: {contact_phone}" if contact_phone else ""
+
+    # Meta closes the standard messaging window 24 hours after the person's last
+    # message, and the 7-day human-agent tag explicitly does not cover bot
+    # replies. So a DM thread cannot be nurtured over days the way SMS can: the
+    # only way to keep the conversation alive is to move it to SMS before the
+    # window shuts. Framed as a goal rather than a countdown, because pressuring
+    # a customer with a deadline they cannot see reads as spam.
+    deadline_section = ""
+    if messaging_deadline is not None and not contact_phone:
+        deadline_section = (
+            "\n\n[CHANNEL LIMIT \u2014 SOCIAL DM]\n"
+            "This is a Facebook/Instagram DM, not SMS. The platform only lets you "
+            "reply for a short window after each of their messages, so this thread "
+            "goes silent if the conversation stalls.\n"
+            "Get their phone number early and naturally \u2014 ask for the best number "
+            "to text them the details, quote, or booking link \u2014 then continue "
+            "there. Ask at most once per exchange, never explain the platform's "
+            "limits to them, and never pressure them with a deadline."
+        )
     offer_section = f"\n\n[OFFER CONTEXT]\n{offer_context}" if offer_context else ""
 
     # Add booking instruction if URL is provided
@@ -168,7 +190,8 @@ def build_text_instructions(
         )
 
     context_sections = (
-        f"{phone_context}{lead_section}{offer_section}{booking_section}{knowledge_section}"
+        f"{phone_context}{lead_section}{offer_section}"
+        f"{booking_section}{knowledge_section}{deadline_section}"
     )
     examples_section = f"\n\n{training_examples}" if training_examples else ""
 

@@ -450,6 +450,13 @@ async def _trigger_ai_callback(*, call_control_id: str, log: Any) -> None:
         if message is None or message.conversation is None:
             return
         conversation = message.conversation
+        # A voicemail always belongs to a phone-keyed thread; a Messenger thread
+        # has no number to call back.
+        contact_phone = conversation.contact_phone
+        workspace_phone = conversation.workspace_phone
+        if not contact_phone or not workspace_phone:
+            log.info("voicemail_ai_callback_no_phone")
+            return
         agent_id = conversation.assigned_agent_id
         if agent_id is None:
             phone_result = await db.execute(
@@ -468,13 +475,13 @@ async def _trigger_ai_callback(*, call_control_id: str, log: Any) -> None:
         voice_service = TelnyxVoiceService(settings.telnyx_api_key)
         try:
             await voice_service.initiate_call(
-                to_number=conversation.contact_phone,
-                from_number=conversation.workspace_phone,
+                to_number=contact_phone,
+                from_number=workspace_phone,
                 connection_id=None,
                 webhook_url=webhook_url,
                 db=db,
                 workspace_id=conversation.workspace_id,
-                contact_phone=conversation.contact_phone,
+                contact_phone=contact_phone,
                 agent_id=agent_id,
                 idempotency_key=idem,
             )
@@ -532,7 +539,12 @@ async def process_voicemail_recording(  # noqa: PLR0911
         conversation = message.conversation
         workspace_id = conversation.workspace_id
         contact_id = conversation.contact_id
+        # A voicemail is always on a phone-keyed thread; the follow-up notice and
+        # opportunity are both titled by the caller's number.
         contact_phone = conversation.contact_phone
+        if not contact_phone:
+            log.info("voicemail_no_contact_phone")
+            return False
         message_id = message.id
 
         message.recording_url = recording_url

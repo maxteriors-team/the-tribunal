@@ -221,6 +221,11 @@ async def send_missed_call_textback(  # noqa: PLR0911, PLR0912
         workspace_id = conversation.workspace_id
         contact_phone = conversation.contact_phone
         workspace_phone = conversation.workspace_phone
+        # Textback answers a missed *call*, so both numbers always exist here.
+        # Messenger threads have neither and never reach a voice webhook.
+        if not contact_phone or not workspace_phone:
+            log.warning("missed_call_textback_no_phone")
+            return False
 
         workspace = await db.get(Workspace, workspace_id)
         if workspace is None:

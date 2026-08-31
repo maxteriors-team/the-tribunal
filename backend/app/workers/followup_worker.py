@@ -20,7 +20,11 @@ from app.services.ai.openai_credentials import (
 )
 from app.services.ai.text_response_generator import generate_followup_message
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
-from app.services.telephony.text_provider import get_text_message_provider
+from app.services.telephony.text_provider import (
+    get_text_message_provider,
+    outbound_addresses,
+    provider_for_conversation,
+)
 from app.workers.base import BaseWorker, WorkerRegistry
 from app.workers.retryable import RetryableWorker
 
@@ -119,8 +123,10 @@ class FollowupWorker(RetryableWorker, BaseWorker):
             await db.commit()
             return False
 
-        # Send the follow-up via SMS
-        sms_service = get_text_message_provider()
+        # Follow up on the thread's own transport. A Messenger thread whose 24h
+        # window has closed raises here rather than silently failing at Meta.
+        to_address, from_address = outbound_addresses(conversation)
+        sms_service = get_text_message_provider(provider_for_conversation(conversation))
         try:
             idempotency_key = derive_outbound_key(
                 "conversation_followup",
@@ -128,8 +134,8 @@ class FollowupWorker(RetryableWorker, BaseWorker):
                 conversation.followup_count_sent,
             )
             message = await sms_service.send_message(
-                to_number=conversation.contact_phone,
-                from_number=conversation.workspace_phone,
+                to_number=to_address,
+                from_number=from_address,
                 body=message_body,
                 db=db,
                 workspace_id=conversation.workspace_id,

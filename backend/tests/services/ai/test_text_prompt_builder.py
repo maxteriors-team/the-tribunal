@@ -1,5 +1,7 @@
 """Regression tests for customer-facing SMS prompt behavior."""
 
+from datetime import UTC, datetime
+
 from app.services.ai.text_prompt_builder import (
     MAX_CONTACT_CONTEXT_CHARS,
     build_booking_instructions,
@@ -60,3 +62,29 @@ def test_booking_prompt_prevents_scott_conversation_failures() -> None:
     assert "Send its direct_response verbatim" in prompt
     assert "customer_confirmed=true" in prompt
     assert "ambiguous reply is not confirmation" in prompt
+
+
+def test_dm_prompt_makes_capturing_a_phone_number_the_goal() -> None:
+    """Meta caps replies at 24h, so the only durable outcome is moving to SMS."""
+    prompt = build_text_instructions(
+        "Help the customer.",
+        messaging_deadline=datetime(2026, 8, 31, 12, 0, tzinfo=UTC),
+    )
+
+    assert "[CHANNEL LIMIT — SOCIAL DM]" in prompt
+    assert "phone number" in prompt
+    assert "never pressure them with a deadline" in prompt
+
+
+def test_dm_prompt_stops_asking_once_the_phone_is_known() -> None:
+    prompt = build_text_instructions(
+        "Help the customer.",
+        contact_phone="+14155550132",
+        messaging_deadline=datetime(2026, 8, 31, 12, 0, tzinfo=UTC),
+    )
+
+    assert "[CHANNEL LIMIT — SOCIAL DM]" not in prompt
+
+
+def test_sms_prompt_carries_no_dm_channel_limit() -> None:
+    assert "[CHANNEL LIMIT — SOCIAL DM]" not in build_text_instructions("Help the customer.")

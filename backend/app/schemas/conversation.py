@@ -50,8 +50,13 @@ class ConversationResponse(BaseModel):
     # Display name of the linked contact, resolved by the service layer. ``None``
     # when the thread has no contact yet, so clients fall back to the phone.
     contact_name: str | None = None
-    workspace_phone: str
-    contact_phone: str
+    # Null on Messenger/Instagram threads: a DM is keyed on a Page-Scoped ID and
+    # has no phone number until the person shares one.
+    workspace_phone: str | None
+    contact_phone: str | None
+    # When Meta's reply window closes. Null on every non-DM thread; in the past
+    # means only the person messaging again can reopen it.
+    messenger_window_expires_at: datetime | None = None
     status: str
     channel: str
     source_provider: str | None = None

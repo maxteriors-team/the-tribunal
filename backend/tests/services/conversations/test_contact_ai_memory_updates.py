@@ -19,6 +19,9 @@ async def test_successful_human_sms_reply_refreshes_contact_memory() -> None:
         id=conversation_id,
         workspace_id=workspace_id,
         contact_phone="+15555550100",
+        channel="sms",
+        # Non-DM thread: Meta's reply window does not apply.
+        messenger_window_expires_at=None,
         workspace_phone="+15555550101",
         source_provider=None,
     )
@@ -83,6 +86,8 @@ async def test_manual_followup_forwards_authenticated_sender_snapshot() -> None:
         id=conversation_id,
         workspace_id=workspace_id,
         contact_phone="+15555550100",
+        # Non-DM thread: Meta's reply window does not apply.
+        messenger_window_expires_at=None,
         workspace_phone="+15555550101",
         channel="sms",
         followup_count_sent=0,

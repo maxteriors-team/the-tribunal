@@ -4,7 +4,25 @@ import type { Contact } from "./contact";
 
 export type MessageDirection = "inbound" | "outbound";
 export type MessageStatus = "queued" | "sending" | "sent" | "delivered" | "failed" | "received";
-export type MessageChannel = "sms" | "email" | "imessage" | "voice" | "voicemail" | "note";
+export type MessageChannel =
+  | "sms"
+  | "email"
+  | "imessage"
+  | "voice"
+  | "voicemail"
+  | "note"
+  | "messenger"
+  | "instagram";
+
+/** Channels keyed on a Meta Page-Scoped ID, subject to the 24h reply window. */
+export const MESSENGER_CHANNELS = ["messenger", "instagram"] as const;
+
+/** Human labels for the channel badge on a conversation. */
+export const CHANNEL_LABELS: Partial<Record<string, string>> = {
+  imessage: "iMessage",
+  messenger: "Messenger",
+  instagram: "Instagram",
+};
 
 export interface Message {
   id: string;
@@ -40,9 +58,16 @@ export interface Conversation {
   contact?: Contact;
   /** Contact's display name; null when the thread isn't linked to a contact yet. */
   contact_name?: string | null;
-  workspace_phone: string;
-  contact_phone: string;
+  /** Null on Messenger/Instagram: a DM thread has no phone number. */
+  workspace_phone: string | null;
+  contact_phone: string | null;
   channel: string;
+  /**
+   * When Meta's reply window closes. Null on every non-DM thread. Once it is in
+   * the past, nothing we send can reach the person — only they can reopen the
+   * thread by messaging again.
+   */
+  messenger_window_expires_at?: string | null;
   status: "active" | "archived" | "blocked";
   unread_count: number;
   // Nullable on the wire: a thread with no messages yet serializes these as null.

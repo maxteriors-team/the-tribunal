@@ -454,13 +454,19 @@ async def _record_ai_confirmed_opt_out(
             contact.sms_consent_collected_at = datetime.now(UTC)
             contact.sms_consent_notes = f"Opted out via SMS reply: {inbound_message.body[:100]}"
 
-    opt_out = await _opt_out_manager.add_opt_out(
-        workspace_id=conversation.workspace_id,
-        phone_number=conversation.contact_phone,
-        db=db,
-        keyword=inbound_message.body[:50] if inbound_message.body else None,
-        source_message_id=inbound_message.id,
-    )
+    # The global opt-out list is keyed on phone numbers. A Messenger thread has
+    # none, so "stop" there can only silence this thread — which the
+    # ``ai_enabled = False`` above already did. Recording nothing is better than
+    # recording it under a PSID no SMS send would ever check.
+    opt_out = None
+    if conversation.contact_phone:
+        opt_out = await _opt_out_manager.add_opt_out(
+            workspace_id=conversation.workspace_id,
+            phone_number=conversation.contact_phone,
+            db=db,
+            keyword=inbound_message.body[:50] if inbound_message.body else None,
+            source_message_id=inbound_message.id,
+        )
     if opt_out is None:
         # Already on the opt-out list; add_opt_out skipped its own commit, so
         # persist the ai_enabled / consent changes here.
@@ -486,7 +492,10 @@ async def _send_ai_text_response_after_delay(
     log: Any,
 ) -> None:
     """Wait the remaining human-like delay, re-check state, then send."""
-    from app.services.telephony.text_provider import get_text_message_provider
+    from app.services.telephony.text_provider import (
+        get_text_message_provider,
+        outbound_addresses,
+    )
 
     if wait_ms > 0:
         log.info(
@@ -509,12 +518,13 @@ async def _send_ai_text_response_after_delay(
         return
 
     provider_name = provider_for_conversation(current_conversation)
+    to_address, from_address = outbound_addresses(current_conversation)
     sms_service = get_text_message_provider(provider_name)
     sent_message: Message | None = None
     try:
         sent_message = await sms_service.send_message(
-            to_number=current_conversation.contact_phone,
-            from_number=current_conversation.workspace_phone,
+            to_number=to_address,
+            from_number=from_address,
             body=response_text,
             db=db,
             workspace_id=workspace_id,
@@ -592,6 +602,13 @@ async def _load_sendable_conversation(
         or current_conversation.assigned_agent_id != agent_id
     ):
         log.info("ai_response_skipped_after_delay")
+        return None
+    # Meta's reply window can close during the human-like send delay. Sending
+    # anyway earns a hard error 10 that no retry fixes, logged as a generic send
+    # failure — indistinguishable from the AI ghosting the lead.
+    window_expires_at = current_conversation.messenger_window_expires_at
+    if window_expires_at is not None and window_expires_at <= datetime.now(UTC):
+        log.info("ai_response_skipped_messaging_window_closed")
         return None
     return current_conversation
 

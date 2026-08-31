@@ -59,6 +59,7 @@ from app.services.quo.outbound import (
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.text_provider import (
     get_text_message_provider,
+    outbound_addresses,
     provider_for_conversation,
 )
 
@@ -132,6 +133,10 @@ def serialize_conversation(conversation: Conversation) -> ConversationResponse:
     if "contact" not in inspect(conversation).unloaded:
         contact = conversation.contact
         response.contact_name = contact.full_name if contact else None
+    # A DM thread has no contact and no phone, so its Meta profile name is the
+    # only label the inbox can show.
+    if response.contact_name is None:
+        response.contact_name = conversation.messenger_display_name
     return response
 
 
@@ -423,11 +428,12 @@ class ConversationService:
                 client_request_id=client_request_id,
             )
         else:
+            to_address, from_address = outbound_addresses(conversation)
             sms_service = get_text_message_provider(provider_for_conversation(conversation))
             try:
                 message = await sms_service.send_message(
-                    to_number=conversation.contact_phone,
-                    from_number=conversation.workspace_phone,
+                    to_number=to_address,
+                    from_number=from_address,
                     body=body,
                     db=self.db,
                     workspace_id=workspace_id,
@@ -478,6 +484,14 @@ class ConversationService:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Quo manual messaging supports non-empty text only",
             )
+        # An SMS thread always has one, but Messenger threads do not, and Quo
+        # can only address a phone number.
+        contact_phone = conversation.contact_phone
+        if not contact_phone:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="This conversation has no phone number to message",
+            )
         if client_request_id is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -500,6 +514,7 @@ class ConversationService:
         await self._enforce_quo_consent(
             workspace_id=workspace_id,
             conversation=conversation,
+            contact_phone=contact_phone,
         )
         try:
             claim = await claim_quo_send_attempt(
@@ -531,7 +546,7 @@ class ConversationService:
                 sender=quo_sender,
                 content=body,
                 from_number=selected_phone,
-                to_number=conversation.contact_phone,
+                to_number=contact_phone,
             )
             return await reconcile_accepted_quo_send(
                 self.db,
@@ -541,7 +556,7 @@ class ConversationService:
                 accepted=accepted,
                 content=body,
                 from_number=selected_phone,
-                to_number=conversation.contact_phone,
+                to_number=contact_phone,
                 sender_user_id=sender_user_id,
                 sender_display_name=sender_display_name,
             )
@@ -591,6 +606,7 @@ class ConversationService:
         *,
         workspace_id: uuid.UUID,
         conversation: Conversation,
+        contact_phone: str,
     ) -> None:
         consent_status: str | None = None
         if conversation.contact_id is not None:
@@ -602,7 +618,7 @@ class ConversationService:
             )
         globally_opted_out = await OptOutManager().check_opt_out(
             workspace_id,
-            conversation.contact_phone,
+            contact_phone,
             self.db,
         )
         if consent_status == "opted_out" or globally_opted_out:
@@ -842,11 +858,12 @@ class ConversationService:
                     detail="Failed to generate follow-up message",
                 )
 
+        to_address, from_address = outbound_addresses(conversation)
         sms_service = get_text_message_provider(provider_for_conversation(conversation))
         try:
             sent_msg = await sms_service.send_message(
-                to_number=conversation.contact_phone,
-                from_number=conversation.workspace_phone,
+                to_number=to_address,
+                from_number=from_address,
                 body=message_body,
                 db=self.db,
                 workspace_id=workspace_id,
