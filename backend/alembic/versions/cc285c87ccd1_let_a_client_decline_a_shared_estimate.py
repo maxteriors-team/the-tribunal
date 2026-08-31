@@ -9,7 +9,7 @@ That is the only reversible option here (the data has nowhere else to live), so
 take a backup before downgrading if declines have been collected.
 
 Revision ID: cc285c87ccd1
-Revises: db8b02d940fc
+Revises: 0abbf756255f
 Create Date: 2026-08-31 15:44:36.572931
 
 """
@@ -21,7 +21,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "cc285c87ccd1"
-down_revision: str | None = "db8b02d940fc"
+down_revision: str | None = "0abbf756255f"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
