@@ -36,7 +36,8 @@ class WorkspaceFactory(Protocol):
 
     async def __call__(
         self, db: AsyncSession, *, page_id: str
-    ) -> tuple[Workspace, WorkspaceIntegration]: ...
+    ) -> tuple[Workspace, WorkspaceIntegration]:
+        """Create the workspace and return it with its Meta integration."""
 
 
 TOKEN_KEY = "access_" + "token"
