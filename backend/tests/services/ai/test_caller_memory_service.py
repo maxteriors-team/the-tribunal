@@ -330,7 +330,17 @@ class TestSummaryText:
                 )
             ],
         )
-        text = build_returning_caller_summary(info, timezone="America/New_York")
+        # `now` is pinned because the recap drops memories older than
+        # MAX_CALLER_MEMORY_AGE_DAYS (90). Against the real clock this test
+        # asserted "fresh memory is included" using a fixed 2026-06-01 date, so
+        # it silently became an assertion about a *stale* memory 90 days later
+        # and started failing on 2026-08-30. The staleness path is covered
+        # separately by test_stale_voice_summary_is_omitted_from_live_call_context.
+        text = build_returning_caller_summary(
+            info,
+            timezone="America/New_York",
+            now=datetime(2026, 6, 2, 15, 0, tzinfo=UTC),
+        )
         assert text is not None
         assert "Returning Caller" in text
         assert "Prior completed calls: 2" in text
