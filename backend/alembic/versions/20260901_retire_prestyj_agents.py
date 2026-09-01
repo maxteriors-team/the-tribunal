@@ -1,7 +1,7 @@
 """retire auto-seeded Prestyj cold-lead responder agents
 
 Revision ID: 20260901_retire_prestyj
-Revises: 0abbf756255f
+Revises: cc285c87ccd1
 Create Date: 2026-09-01
 
 Every workspace with no agent used to get a "Prestyj Cold-Lead Responder"
@@ -27,7 +27,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260901_retire_prestyj"
-down_revision: str | None = "0abbf756255f"
+down_revision: str | None = "cc285c87ccd1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
