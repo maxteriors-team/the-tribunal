@@ -80,6 +80,7 @@ from app.services.exceptions import (
 )
 from app.services.idempotency import derive_outbound_key
 from app.services.invoices.receipt_outbox_service import enqueue_invoice_payment_receipt
+from app.services.opportunities.invoice_lifecycle import transition_invoice_opportunity
 from app.services.payments import call_payment_service
 
 logger = structlog.get_logger()
@@ -357,7 +358,15 @@ class InvoiceService:
                 "total": float(invoice.total or 0),
                 "amount_paid": float(invoice.amount_paid or 0),
                 "currency": invoice.currency,
+                "opportunity_id": (
+                    str(invoice.opportunity_id) if invoice.opportunity_id is not None else None
+                ),
             },
+        )
+        await transition_invoice_opportunity(
+            self.db,
+            invoice,
+            transition="paid",
         )
         if queue_receipt:
             await enqueue_invoice_payment_receipt(
@@ -703,18 +712,21 @@ class InvoiceService:
     # ------------------------------------------------------------------
 
     async def _load_for_send(self, workspace_id: uuid.UUID, invoice_id: uuid.UUID) -> Invoice:
-        """Load an invoice with everything a delivery needs (items, contact, brand)."""
-        return await get_or_404(
-            self.db,
-            Invoice,
-            invoice_id,
-            workspace_id=workspace_id,
-            options=[
+        """Lock an invoice with everything a delivery needs."""
+        result = await self.db.execute(
+            select(Invoice)
+            .where(Invoice.id == invoice_id, Invoice.workspace_id == workspace_id)
+            .options(
                 selectinload(Invoice.line_items),
                 selectinload(Invoice.contact),
                 selectinload(Invoice.workspace),
-            ],
+            )
+            .with_for_update()
         )
+        invoice = result.scalar_one_or_none()
+        if invoice is None:
+            raise NotFoundError("Invoice not found")
+        return invoice
 
     async def _transition_to_sent(self, workspace_id: uuid.UUID, invoice: Invoice) -> None:
         """Move an invoice into ``sent`` and allocate its public token.
@@ -746,7 +758,15 @@ class InvoiceService:
                     "number": invoice.number,
                     "total": float(invoice.total or 0),
                     "currency": invoice.currency,
+                    "opportunity_id": (
+                        str(invoice.opportunity_id) if invoice.opportunity_id is not None else None
+                    ),
                 },
+            )
+            await transition_invoice_opportunity(
+                self.db,
+                invoice,
+                transition="sent",
             )
         await self.db.commit()
         await self.db.refresh(invoice, ["line_items"])
