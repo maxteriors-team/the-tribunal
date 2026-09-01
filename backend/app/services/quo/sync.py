@@ -526,13 +526,21 @@ class QuoSyncService:
             )
 
         if contact is None:
+            # Every ``contact_ids`` entry was already fetched and rejected by
+            # ``_fetch_matching_contact`` because its Quo phone list does not
+            # contain ``contact_phone``. ``context.contacts.ids`` is
+            # provider-controlled, so a disproved ID is not evidence that the
+            # Quo contact is this caller: stamping it here would make the next
+            # event for that Quo contact resolve to this row and pour a
+            # different person's name and email onto this phone number. Stay
+            # unlinked — ``external_source`` without ``external_id`` still lets
+            # a later phone-verified event link it via ``_link_quo_contact``.
             contact = Contact(
                 workspace_id=self.workspace_id,
                 first_name="",
                 phone_number=contact_phone,
                 source=QUO_PROVIDER,
                 external_source=QUO_PROVIDER,
-                external_id=contact_ids[0] if len(contact_ids) == 1 else None,
             )
             self.db.add(contact)
             await self.db.flush()

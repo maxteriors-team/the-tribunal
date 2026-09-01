@@ -20,6 +20,7 @@ import {
 import type { ContactSortBy } from "@/lib/api/contacts";
 import { contactStatusDotColors, contactStatusLabels } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
+import { contactDisplayName } from "@/lib/utils/contact-name";
 import {
   addDays,
   formatDate,
@@ -146,8 +147,7 @@ interface ContactRowProps {
 }
 
 function ContactRow({ contact, isSelectionMode, isSelected, onSelect }: ContactRowProps) {
-  const displayName =
-    [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unknown";
+  const displayName = contactDisplayName(contact);
   const address = formatContactAddress(contact);
   const lastActivity = formatLastActivity(contact);
   const hasUnread = (contact.unread_count ?? 0) > 0;

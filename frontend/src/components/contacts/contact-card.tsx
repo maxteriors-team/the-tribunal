@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { contactStatusColors, contactStatusLabels } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
+import { contactDisplayName } from "@/lib/utils/contact-name";
 import { getContactInitials } from "@/lib/utils/initials";
 import { formatPhoneNumber } from "@/lib/utils/phone";
 import type { Contact } from "@/types";
@@ -42,7 +43,7 @@ export interface ContactCardProps {
 }
 
 export function ContactCard({ contact, isSelected, onSelectChange, isSelectionMode }: ContactCardProps) {
-  const displayName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unknown";
+  const displayName = contactDisplayName(contact);
   const hasUnread = (contact.unread_count ?? 0) > 0;
 
   const handleCheckboxClick = (e: MouseEvent) => {
