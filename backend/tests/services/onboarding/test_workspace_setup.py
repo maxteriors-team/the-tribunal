@@ -16,7 +16,7 @@ from app.models.campaign import Campaign, CampaignContact, CampaignStatus
 from app.models.contact import Contact
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace, WorkspaceMembership
-from app.services.agents import ensure_default_agent
+from app.services.agents import get_default_agent
 from app.services.contacts import ImportResult
 from app.services.onboarding.exceptions import (
     OnboardingPermissionError,
@@ -260,23 +260,27 @@ async def test_complete_onboarding_creates_calendar_resource_and_purchases_phone
     assert workspace.onboarding_completed_at is not None
 
 
-async def test_seeded_default_agent_leaves_workspace_un_onboarded() -> None:
-    """Regression: setup state must never be inferred from seeded rows.
+async def test_default_agent_lookup_leaves_workspace_un_onboarded() -> None:
+    """Regression: setup state must never be inferred from agent rows.
 
-    ``POST /workspaces`` seeds a template agent at creation time, so a workspace
-    owns an agent seconds after birth while its operator has configured nothing.
-    Reading "has an agent" as "is onboarded" made the onboarding funnel
-    unreachable for every UI-created workspace, while registration-created ones
-    (no seeded agent) were prompted forever — the same question answered by
-    creation path rather than by operator action.
+    Reading "has an agent" as "is onboarded" once made the onboarding funnel
+    unreachable for every UI-created workspace, because ``POST /workspaces``
+    seeded a template agent at creation time -- so a workspace owned an agent
+    seconds after birth while its operator had configured nothing.
+
+    That seeding is gone (it planted another company's sales script into every
+    workspace), and this now also pins the replacement contract: resolving the
+    default agent is a *read*. It returns ``None`` for a fresh workspace and
+    writes nothing.
     """
     db = _db()
     _, workspace = _workspace()
     db.execute.side_effect = [_ExecuteResult(None)]
 
-    agent = await ensure_default_agent(db, workspace.id)
+    agent = await get_default_agent(db, workspace.id)
 
-    assert agent is not None
+    assert agent is None
+    db.add.assert_not_called()
     assert workspace.onboarding_completed_at is None
 
 

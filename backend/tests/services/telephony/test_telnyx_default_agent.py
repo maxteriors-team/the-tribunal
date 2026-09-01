@@ -1,13 +1,16 @@
 """Tests for inbound SMS default-agent resolution.
 
-``TelnyxSMSService._resolve_default_agent_id`` guarantees a brand-new (or
-legacy agent-less) inbound SMS conversation is owned by an agent so the AI
-responder does not log ``no_agent_assigned`` and stay silent:
+``TelnyxSMSService._resolve_default_agent_id`` decides which agent owns an
+inbound SMS conversation:
 
-- When the receiving ``PhoneNumber`` has an explicit ``assigned_agent_id`` it is
-  preferred and no default agent is provisioned.
-- Otherwise it falls back to ``ensure_default_agent`` (which auto-creates a
-  workspace default agent from a template when none exists).
+- An explicit ``PhoneNumber.assigned_agent_id`` wins, but only while it still
+  points at a live agent -- a stale pointer at a deleted agent falls through
+  instead of silently muting the AI.
+- Otherwise the workspace default, and ``None`` when there is no active agent.
+
+It no longer auto-creates an agent. It used to, from a hardcoded template
+belonging to a different company, which meant deleting that agent just brought
+it back on the next inbound text.
 """
 
 from __future__ import annotations
@@ -33,15 +36,13 @@ class TestResolveDefaultAgentId:
         db.execute = AsyncMock(return_value=result)
 
         with patch(
-            "app.services.telephony.telnyx.ensure_default_agent",
+            "app.services.telephony.telnyx.get_default_agent",
             new=AsyncMock(),
-        ) as ensure_mock:
-            resolved = await svc._resolve_default_agent_id(
-                db, workspace_id, "+12485930266"
-            )
+        ) as default_mock:
+            resolved = await svc._resolve_default_agent_id(db, workspace_id, "+12485930266")
 
         assert resolved == phone_agent_id
-        ensure_mock.assert_not_awaited()
+        default_mock.assert_not_awaited()
 
     async def test_falls_back_to_workspace_default_agent(self) -> None:
         svc = TelnyxSMSService(api_key="k")
@@ -55,15 +56,62 @@ class TestResolveDefaultAgentId:
 
         default_agent = MagicMock(id=default_agent_id)
         with patch(
-            "app.services.telephony.telnyx.ensure_default_agent",
+            "app.services.telephony.telnyx.get_default_agent",
             new=AsyncMock(return_value=default_agent),
-        ) as ensure_mock:
-            resolved = await svc._resolve_default_agent_id(
-                db, workspace_id, "+12485930266"
-            )
+        ) as default_mock:
+            resolved = await svc._resolve_default_agent_id(db, workspace_id, "+12485930266")
 
         assert resolved == default_agent_id
-        ensure_mock.assert_awaited_once_with(db, workspace_id)
+        default_mock.assert_awaited_once_with(db, workspace_id)
+
+    async def test_ignores_phone_pointer_to_a_dead_agent(self) -> None:
+        """A number pinned to a soft-deleted agent must not mute the AI.
+
+        ``PhoneNumber.assigned_agent_id`` is only cleared by its FK on a *hard*
+        delete, and agents are soft-deleted, so the stale pointer survives.
+        """
+        svc = TelnyxSMSService(api_key="k")
+        workspace_id = uuid.uuid4()
+        dead_agent_id = uuid.uuid4()
+        live_agent_id = uuid.uuid4()
+
+        db = MagicMock()
+        # 1st execute: the phone's pointer. 2nd: liveness check, finds nothing.
+        results = [MagicMock(), MagicMock()]
+        results[0].scalar_one_or_none = MagicMock(return_value=dead_agent_id)
+        results[1].scalar_one_or_none = MagicMock(return_value=None)
+        db.execute = AsyncMock(side_effect=results)
+
+        with patch(
+            "app.services.telephony.telnyx.get_default_agent",
+            new=AsyncMock(return_value=MagicMock(id=live_agent_id)),
+        ) as default_mock:
+            resolved = await svc._resolve_default_agent_id(db, workspace_id, "+12485930266")
+
+        assert resolved == live_agent_id
+        default_mock.assert_awaited_once_with(db, workspace_id)
+
+    async def test_returns_none_when_workspace_has_no_active_agent(self) -> None:
+        """No agent means no AI reply -- never a fabricated one.
+
+        The inbound message is still stored and visible in the inbox.
+        """
+        svc = TelnyxSMSService(api_key="k")
+        workspace_id = uuid.uuid4()
+
+        db = MagicMock()
+        result = MagicMock()
+        result.scalar_one_or_none = MagicMock(return_value=None)
+        db.execute = AsyncMock(return_value=result)
+
+        with patch(
+            "app.services.telephony.telnyx.get_default_agent",
+            new=AsyncMock(return_value=None),
+        ):
+            resolved = await svc._resolve_default_agent_id(db, workspace_id, "+12485930266")
+
+        assert resolved is None
+        db.add.assert_not_called()
 
 
 class TestConversationDefaultAgentAssignment:

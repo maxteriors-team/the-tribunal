@@ -40,7 +40,7 @@ async def test_deleted_agent_is_hidden_even_when_listing_inactive() -> None:
     # first (same pattern as tests/integration/test_attendance.py).
     await engine.dispose()
     async with AsyncSessionLocal() as db:
-        ws, deleted = await _seed(db, "Prestyj Cold-Lead Responder")
+        ws, deleted = await _seed(db, "Retired Responder")
         paused = Agent(workspace_id=ws.id, name="Paused", system_prompt="x", is_active=False)
         db.add(paused)
         await db.flush()

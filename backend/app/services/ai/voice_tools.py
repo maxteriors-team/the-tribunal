@@ -414,20 +414,6 @@ CHECK_PAYMENT_STATUS_TOOL: dict[str, Any] = {
     },
 }
 
-APPLICATION_LINK_SMS_TOOL: dict[str, Any] = {
-    "type": "function",
-    "name": "send_application_link",
-    "description": (
-        "Send the fixed Prestyj founding cohort application link by SMS to the current caller. "
-        "Use only after the person explicitly agrees to receive the link. The SMS body is fixed; "
-        "do not use this for general texting, custom follow-ups, or unrelated links."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {},
-    },
-}
-
 # Static booking tool definitions (without date context)
 # Use get_booking_tools() for tools with embedded date context
 VOICE_BOOKING_TOOLS: list[dict[str, Any]] = [
@@ -677,7 +663,6 @@ def build_tools_list(
     enable_web_search: bool = False,
     enable_x_search: bool = False,
     enable_dtmf: bool = False,
-    enable_application_link_sms: bool = False,
     enable_transfer: bool = False,
     enable_search_knowledge: bool = False,
     enable_lookup_caller_record: bool = False,
@@ -694,7 +679,6 @@ def build_tools_list(
         enable_web_search: Include Grok web search tool
         enable_x_search: Include Grok X/Twitter search tool
         enable_dtmf: Include DTMF tool for IVR navigation
-        enable_application_link_sms: Include fixed Prestyj application-link SMS tool
         enable_transfer: Include live human transfer/handoff tool
         enable_search_knowledge: Include the on-demand knowledge retrieval tool
         enable_lookup_caller_record: Include the read-only caller record lookup tool
@@ -744,10 +728,6 @@ def build_tools_list(
     # Live human transfer / handoff
     if enable_transfer:
         tools.append(TRANSFER_CALL_TOOL)
-
-    # Fixed Prestyj application-link SMS
-    if enable_application_link_sms:
-        tools.append(APPLICATION_LINK_SMS_TOOL)
 
     # Graceful hang-up once the conversation is over
     if enable_end_call:
@@ -816,19 +796,11 @@ def get_tools_from_agent_config(
         "call_control" in enabled_tools and "send_dtmf" in call_control_tools
     )
 
-    # This is intentionally opt-in. The function sends a fixed Prestyj link,
-    # so a generic "twilio_send_sms" setting must not expose it to every agent.
-    twilio_sms_tools = tool_settings.get("twilio-sms", []) or []
-    application_link_sms_enabled = "send_application_link" in enabled_tools or (
-        "twilio-sms" in enabled_tools and "send_application_link" in twilio_sms_tools
-    )
-
     return build_tools_list(
         enable_booking=enable_booking,
         enable_web_search="web_search" in enabled_tools,
         enable_x_search="x_search" in enabled_tools,
         enable_dtmf=dtmf_enabled,
-        enable_application_link_sms=application_link_sms_enabled,
         enable_transfer=is_transfer_enabled(agent),
         enable_search_knowledge=is_search_knowledge_enabled(agent),
         enable_lookup_caller_record=(

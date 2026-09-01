@@ -1,13 +1,19 @@
-"""Tests for default-agent provisioning.
+"""Tests for default-agent resolution.
 
-Covers the first-run promise: every new workspace must resolve to a working,
-active AI agent seeded from the Prestyj template without the operator authoring
-a prompt, and ``ensure_default_agent`` must be idempotent.
+The contract changed deliberately. This used to seed a canned "Prestyj
+Cold-Lead Responder" (a different company's script, pitching a $497 video-ad
+package) into any workspace that had no agent -- including from live inbound
+webhooks, which meant deleting it just made it come back on the next text.
+
+The rule now: resolve an agent the operator actually created, or none at all.
+Never fabricate one, because a fabricated agent speaks to real customers in the
+operator's name.
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
@@ -15,42 +21,66 @@ from sqlalchemy import select
 from app.db.session import AsyncSessionLocal, engine
 from app.models.agent import Agent
 from app.models.workspace import Workspace
-from app.services.agents import (
-    PRESTYJ_COLD_LEAD_RESPONDER_PROMPT,
-    ensure_default_agent,
-)
+from app.services.agents import get_default_agent
 
 # Hits the real database, so it is an integration test (deselected by default;
 # run with `-m integration`).
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
-async def test_ensure_default_agent_provisions_and_is_idempotent() -> None:
+async def _workspace(db) -> Workspace:
+    ws = Workspace(id=uuid.uuid4(), name="Agt", slug=f"agt-{uuid.uuid4().hex[:8]}")
+    db.add(ws)
+    await db.flush()
+    return ws
+
+
+async def test_workspace_with_no_agent_resolves_to_none_and_creates_nothing() -> None:
     # Pooled connections belong to the previous test's event loop; drop them
     # first (same pattern as tests/integration/test_attendance.py).
     await engine.dispose()
     async with AsyncSessionLocal() as db:
-        ws = Workspace(id=uuid.uuid4(), name="Agt", slug=f"agt-{uuid.uuid4().hex[:8]}")
-        db.add(ws)
-        await db.flush()
+        ws = await _workspace(db)
 
-        # First call seeds a working agent from the Prestyj template.
-        agent = await ensure_default_agent(db, ws.id)
-        await db.flush()
-        assert agent.workspace_id == ws.id
-        assert agent.is_active is True
-        # The seeded agent "just works": it carries a non-empty, usable prompt
-        # the operator never had to author.
-        assert agent.system_prompt == PRESTYJ_COLD_LEAD_RESPONDER_PROMPT
-        assert len(agent.system_prompt) >= 100
+        assert await get_default_agent(db, ws.id) is None
 
-        # Second call is idempotent: returns the same agent, creates no duplicate.
-        again = await ensure_default_agent(db, ws.id)
+        # The critical regression guard: resolving must never invent an agent.
+        # Previously this call seeded one, so an operator could never get rid
+        # of it -- deleting it simply re-created it on the next inbound message.
         await db.flush()
-        assert again.id == agent.id
-        all_agents = (
-            (await db.execute(select(Agent).where(Agent.workspace_id == ws.id)))
-            .scalars()
-            .all()
+        agents = (
+            (await db.execute(select(Agent).where(Agent.workspace_id == ws.id))).scalars().all()
         )
-        assert len(all_agents) == 1
+        assert agents == []
+
+
+async def test_resolves_earliest_active_agent_and_skips_deleted_or_paused() -> None:
+    await engine.dispose()
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+
+        deleted = Agent(
+            workspace_id=ws.id,
+            name="Deleted",
+            system_prompt="x",
+            is_active=False,
+            deleted_at=datetime.now(UTC),
+        )
+        paused = Agent(workspace_id=ws.id, name="Paused", system_prompt="x", is_active=False)
+        live = Agent(workspace_id=ws.id, name="Live", system_prompt="x", is_active=True)
+        db.add_all([deleted, paused, live])
+        await db.flush()
+
+        assert (await get_default_agent(db, ws.id)) is not None
+        assert (await get_default_agent(db, ws.id)).id == live.id
+
+
+async def test_does_not_leak_an_agent_across_workspaces() -> None:
+    await engine.dispose()
+    async with AsyncSessionLocal() as db:
+        owner = await _workspace(db)
+        stranger = await _workspace(db)
+        db.add(Agent(workspace_id=owner.id, name="Owned", system_prompt="x", is_active=True))
+        await db.flush()
+
+        assert await get_default_agent(db, stranger.id) is None

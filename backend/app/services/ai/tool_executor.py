@@ -5,7 +5,6 @@ standalone, testable service. Handles execution of:
 - check_availability: Query calendar availability for available slots
 - book_appointment: Create appointment on the assigned Google Calendar
 - send_dtmf: Send touch-tone digits for IVR navigation
-- send_application_link: Send the fixed Prestyj application URL by SMS
 
 Usage:
     executor = VoiceToolExecutor(agent, contact_info, timezone)
@@ -69,14 +68,6 @@ GATE_EXEMPT_TOOLS: frozenset[str] = frozenset(
 )
 
 _ALLOWED_MESSAGE_URGENCIES: frozenset[str] = frozenset({"low", "medium", "high"})
-
-
-PRESTYJ_APPLICATION_URL = "https://prestyj.com/founding-cohort"
-PRESTYJ_APPLICATION_SMS_BODY = (
-    "Here is the Prestyj founding cohort application: "
-    f"{PRESTYJ_APPLICATION_URL}\n\n"
-    "Fill it out when you have a minute and Nolan will review it."
-)
 
 
 def _format_time_12h(time_24h: str) -> str:
@@ -230,9 +221,6 @@ class VoiceToolExecutor(BaseToolExecutor):
 
         if function_name == "check_payment_status":
             return await self._execute_check_payment_status()
-
-        if function_name == "send_application_link":
-            return await self._execute_send_application_link()
 
         if function_name == "transfer_call":
             return await self._execute_transfer_call(
@@ -543,89 +531,6 @@ class VoiceToolExecutor(BaseToolExecutor):
                 ],
                 "message": "Appointment cancelled. Confirm the cancellation to the caller.",
             }
-
-    # ── Voice-only tools ────────────────────────────────────────────
-
-    async def _execute_send_application_link(self) -> dict[str, Any]:
-        """Send the fixed Prestyj founding-cohort application URL to the current caller."""
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
-        from app.db.session import AsyncSessionLocal
-        from app.models.conversation import Message as MessageModel
-        from app.services.idempotency import derive_outbound_key
-        from app.services.telephony.text_provider import (
-            get_text_message_provider,
-            outbound_addresses,
-        )
-
-        if not self.call_control_id:
-            return {"success": False, "error": "No active call found for this SMS send."}
-
-        async with AsyncSessionLocal() as db:
-            msg_result = await db.execute(
-                select(MessageModel)
-                .options(selectinload(MessageModel.conversation))
-                .where(MessageModel.provider_message_id == self.call_control_id)
-            )
-            call_message = msg_result.scalar_one_or_none()
-            if not call_message or not call_message.conversation:
-                self.log.warning(
-                    "application_link_sms_no_call_message", call_control_id=self.call_control_id
-                )
-                return {"success": False, "error": "Could not find the current call conversation."}
-
-            conversation = call_message.conversation
-            workspace_id = self.workspace_id or conversation.workspace_id
-            idempotency_key = derive_outbound_key(
-                "voice_application_link_sms",
-                call_message.id,
-                PRESTYJ_APPLICATION_URL,
-            )
-            # Reached from a live voice call, so the thread is always
-            # phone-keyed; the guard keeps that an explicit precondition.
-            to_address, from_address = outbound_addresses(conversation)
-            provider = get_text_message_provider("telnyx")
-            try:
-                sms_message = await provider.send_message(
-                    to_number=to_address,
-                    from_number=from_address,
-                    body=PRESTYJ_APPLICATION_SMS_BODY,
-                    db=db,
-                    workspace_id=workspace_id,
-                    agent_id=call_message.agent_id,
-                    campaign_id=call_message.campaign_id,
-                    idempotency_key=idempotency_key,
-                )
-            finally:
-                await provider.close()
-
-        status = str(sms_message.status)
-        if status == "failed":
-            self.log.warning(
-                "application_link_sms_failed",
-                call_control_id=self.call_control_id,
-                message_id=str(sms_message.id),
-                error=getattr(sms_message, "error_message", None),
-            )
-            return {
-                "success": False,
-                "application_url": PRESTYJ_APPLICATION_URL,
-                "error": getattr(sms_message, "error_message", None)
-                or "SMS provider failed to send.",
-            }
-
-        self.log.info(
-            "application_link_sms_sent",
-            call_control_id=self.call_control_id,
-            message_id=str(sms_message.id),
-            status=status,
-        )
-        return {
-            "success": True,
-            "application_url": PRESTYJ_APPLICATION_URL,
-            "message": "Application link sent by SMS.",
-        }
 
     @staticmethod
     def _validate_payment_amount(amount: Any) -> tuple[float | None, dict[str, Any] | None]:

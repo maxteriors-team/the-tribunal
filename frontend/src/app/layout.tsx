@@ -6,8 +6,6 @@ import { PRODUCT_BRAND } from "@/lib/brand";
 import { Providers } from "@/providers/providers";
 import "./globals.css";
 
-import EZPixelClient from "../../ez-pixel.client";
-
 // Golos Text is the Maxteriors brand face: maxteriorslighting.com loads it at
 // weights 400–900 and uses nothing else. One variable family now covers both
 // body and headings, so the app ships a single font instead of Inter + Manrope.
@@ -46,8 +44,6 @@ export default function RootLayout({
       <body
         className={`${golos.variable} font-sans antialiased relative min-h-screen`}
       >
-        <EZPixelClient />
-
         <Providers>
           <Spotlight className="fixed" />
           <div className="relative z-10">{children}</div>
