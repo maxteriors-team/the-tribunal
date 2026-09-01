@@ -160,8 +160,10 @@ export function fixtureIconScaleFor(override?: number | null): number {
  * - `christmas` → `christmas_items[category][option]`.
  * - `landscape` → a count of one light fixture type.
  * - `bistro` → linear feet of string lighting.
- * - `annotation` → plan-only equipment such as a transformer. It is persisted
- *   with the drawing but deliberately excluded from quote quantities.
+ * - `annotation` → plan-only equipment such as a transformer, or a permanent-
+ *   lighting diagram part (cosmetic outline, jumper wire, power supply,
+ *   controller). Persisted with the drawing and deliberately excluded from
+ *   quote quantities, so a diagram never moves the price.
  */
 export type BistroInstallationType = "temporary" | "permanent";
 
@@ -171,7 +173,19 @@ export type DrawTarget =
   | { field: "landscape"; fixtureType: string }
   | { field: "bistro"; installation?: BistroInstallationType }
   | { field: "bistroPole" }
-  | { field: "annotation"; annotationType: "transformer" | "wire" };
+  | {
+      field: "annotation";
+      annotationType:
+        | "transformer"
+        | "wire"
+        // Permanent-lighting diagram parts. `cosmetic` renders exactly like a
+        // real track run so the client sees the finished look, but is not
+        // measured -- it is what the house will look like, not what is billed.
+        | "cosmetic"
+        | "jumper"
+        | "power-supply"
+        | "controller";
+    };
 
 export interface Product {
   id: string;

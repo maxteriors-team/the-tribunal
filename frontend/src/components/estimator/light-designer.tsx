@@ -3255,8 +3255,11 @@ export function LightDesigner({
           ...(landscapeOnly ? [BISTRO_POLE_PRODUCT] : []),
         ]
       : [];
+    // Keyed on `category`, not `style`: the permanent diagram parts borrow the
+    // wire and transformer symbols, so a style check would file them under
+    // Christmas and hide them from the one mode that draws them.
     const holiday = buildCatalog(catalog).filter((product) =>
-      product.style === "permanent" ? sells("permanent") : sells("christmas"),
+      product.category === "permanent" ? sells("permanent") : sells("christmas"),
     );
     return [...landscape, ...holiday];
   }, [
