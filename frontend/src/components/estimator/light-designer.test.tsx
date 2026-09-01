@@ -962,13 +962,15 @@ describe("LightDesigner", () => {
   });
 
   it("never pairs a new percentage with the previous discount while pricing", async () => {
-    let release: (() => void) | null = null;
+    // Held in an object: TypeScript narrows a bare `let` to `null` because the
+    // only assignment happens inside a callback it cannot follow.
+    const gate: { release: (() => void) | null } = { release: null };
     vi.mocked(estimatorApi.estimate).mockImplementation(async (_ws, request) => {
       if (request.discount_percent) {
         // Hold the percent request open: the query keeps previous data during a
         // refetch, which is exactly when a stale figure would be shown.
         await new Promise<void>((resolve) => {
-          release = resolve;
+          gate.release = resolve;
         });
       }
       return {
@@ -1000,7 +1002,7 @@ describe("LightDesigner", () => {
     expect(echo).not.toHaveTextContent("$500.00");
     expect(echo).toHaveTextContent(/pricing/i);
 
-    release?.();
+    gate.release?.();
     await waitFor(() => expect(screen.getByText(/10% off/)).toHaveTextContent("$330.00"));
   });
 
