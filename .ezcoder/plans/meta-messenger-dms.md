@@ -140,3 +140,55 @@ Two credentials are needed only at the **release** step, from the user:
 15. Verify locally with `.ezcoder/eyes/http.sh` against `/webhooks/meta/messages` and check `.ezcoder/eyes/logs.sh` for tracebacks.
 16. Run `make ci.all` and `make ci.migrations` until both exit 0.
 17. **Release gate — hard stop, needs the prod `DATABASE_URL` from the user.** Before the migration ships to production, run `make db.backup.prod DATABASE_URL='<public *.proxy.rlwy.net url>'` and confirm the dump decrypts to `PGDMP` (`openssl enc -d ... | head -c 5`). `make db.backup.prod` hard-fails without `DATABASE_URL` and that credential is not in this checkout — if it is not supplied, **stop and ask**; do not deploy a `conversations` migration with no backup. Then follow the repo release process (PR → merge → `make deploy.backend` from merged `main` → `/version` check), and keep the dump until the release is proven.
+
+---
+
+## Shipped — 2026-08-31
+
+Live in production as `1b188f90` (PR #203, merged to `main`). All 17 steps done.
+
+**Verified in prod:** `/version` reports the deployed SHA and it is an ancestor
+of `main`; alembic head is `db8b02d940fc`; all four `messenger_*` columns and
+both partial unique indexes exist; the four phone columns are nullable; 143
+conversations and 1937 contacts intact; 6/6 backend smoke tests pass.
+
+**Pre-deploy backup:** `backend/backups/prod-20260831-083157.dump.enc`, verified
+to decrypt to `PGDMP` with 1440 objects including `conversations` and
+`contacts`. Decrypt needs the exact flags the Makefile uses — `-pbkdf2 -iter
+250000`; omitting `-iter` yields garbage that looks like a corrupt dump.
+
+### The feature is live but inert — two things gate real traffic
+
+Nothing can arrive until **both** are done:
+
+1. **Railway env vars are unset**: `META_LEAD_ADS_APP_SECRET` and
+   `META_LEAD_ADS_VERIFY_TOKEN`. Until then the webhook fails closed — verified
+   in prod: unsigned `POST /webhooks/meta/messages` returns 503, and the
+   `hub.verify_token` handshake returns 403 on a wrong token.
+2. **Meta App Review** for `pages_messaging` on the Page token. The same
+   `meta_lead_ads` integration row carries the Page credentials, so a Page must
+   be connected per workspace and its ID must match `page_id` (Messenger) or
+   `instagram_id` (Instagram Direct) in `WorkspaceIntegration.credentials`.
+
+Webhook URL to register with Meta:
+`https://the-tribunal-api-production.up.railway.app/webhooks/meta/messages`
+(subscribe the `messages` field; the GET on that path answers the challenge).
+
+### Constraints worth not re-litigating
+
+- **AI follow-up on a DM is capped at 24h** and cannot be extended. The 7-day
+  `HUMAN_AGENT` tag does not cover bot-generated replies, so claiming it would
+  be a policy violation, not a workaround. The agent's job is to capture a phone
+  number inside the window and continue on SMS — that is why
+  `messenger_window_expires_at` is stored rather than recomputed.
+- **A DM thread has no contact until a phone appears.** `contact_id` stays NULL
+  on purpose; a PSID identifies someone only to the Page that received it, so
+  there is nothing to match on and a placeholder contact would be unreachable.
+- **The downgrade refuses** while phone-less threads exist rather than
+  destroying them. `MESSENGER_DOWNGRADE_DELETE_DM_THREADS=1` overrides it. Both
+  paths were tested; it is destructive by design and never the default.
+
+### Out of scope, still
+
+DM campaigns/blasts, message tags, sponsored messages, comment-to-DM
+automation, WhatsApp, and attachments (the sender refuses media outright).
