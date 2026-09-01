@@ -2,7 +2,9 @@ import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from "@/lib/api";
 import type {
   Opportunity,
   OpportunityActivity,
-  OpportunityNoteKind,
+  OpportunityInstallationDateInput,
+  OpportunityInstallationSchedule,
+  OpportunityNoteInput,
   OpportunityTask,
   Pipeline,
   PipelineStage,
@@ -222,10 +224,21 @@ export const opportunitiesApi = {
   addNote: async (
     workspaceId: string,
     opportunityId: string,
-    data: { body: string; kind?: OpportunityNoteKind },
+    data: OpportunityNoteInput,
   ): Promise<OpportunityActivity> => {
     return apiPost<OpportunityActivity>(
       `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/notes`,
+      data,
+    );
+  },
+
+  setInstallationDate: async (
+    workspaceId: string,
+    opportunityId: string,
+    data: OpportunityInstallationDateInput,
+  ): Promise<OpportunityInstallationSchedule> => {
+    return apiPut<OpportunityInstallationSchedule>(
+      `/api/v1/workspaces/${workspaceId}/opportunities/${opportunityId}/installation-date`,
       data,
     );
   },

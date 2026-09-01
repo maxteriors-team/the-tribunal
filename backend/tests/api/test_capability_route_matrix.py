@@ -124,6 +124,8 @@ SETTINGS_POLICIES = {
     ("PUT", "post-estimate-followup"): Capability.OUTREACH_WRITE,
     ("GET", "unsold-quote-revival"): Capability.CRM_READ,
     ("PUT", "unsold-quote-revival"): Capability.OUTREACH_WRITE,
+    ("GET", "deal-lifecycle"): Capability.CRM_READ,
+    ("PUT", "deal-lifecycle"): Capability.PIPELINE_WRITE,
     ("GET", "lead-source-capture"): Capability.CRM_READ,
     ("PUT", "lead-source-capture"): Capability.CRM_WRITE,
     ("GET", "auto-pipeline"): Capability.CRM_READ,

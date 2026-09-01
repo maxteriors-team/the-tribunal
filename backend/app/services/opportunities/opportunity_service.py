@@ -1,17 +1,19 @@
 """Opportunity and pipeline business logic service."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.crud import get_nested_or_404, get_or_404
 from app.db.pagination import paginate
 from app.models.contact import Contact
+from app.models.field_service import Job, JobStatus
+from app.models.invoice import Invoice
 from app.models.opportunity import (
     Opportunity,
     OpportunityActivity,
@@ -19,9 +21,12 @@ from app.models.opportunity import (
     OpportunityTask,
 )
 from app.models.pipeline import Pipeline, PipelineStage
+from app.models.quote import Quote
 from app.schemas.opportunity import (
     OpportunityCreate,
     OpportunityDetailResponse,
+    OpportunityInstallationDateUpdate,
+    OpportunityInstallationScheduleResponse,
     OpportunityLineItemCreate,
     OpportunityLineItemUpdate,
     OpportunityNoteCreate,
@@ -42,11 +47,13 @@ from app.services.automations.events import (
     EVENT_OPPORTUNITY_CREATED,
     emit_automation_event,
 )
-from app.services.exceptions import NotFoundError
+from app.services.exceptions import NotFoundError, ValidationError
+from app.services.jobs import JobService
 from app.services.opportunities.default_pipeline import DEFAULT_PIPELINE_STAGES
 from app.services.opportunities.opportunity_filters import apply_opportunity_filters
 from app.services.opportunities.pipeline_removal import remove_from_pipeline
 from app.services.workspaces.membership import assert_active_workspace_member
+from app.utils.timezones import resolve_workspace_timezone
 
 logger = structlog.get_logger()
 
@@ -394,6 +401,7 @@ class OpportunityService:
         user_id: int | None = None,
         source: str = "automation",
         emit_event: bool = True,
+        description: str | None = None,
     ) -> Opportunity | None:
         """Move an opportunity to ``stage_id`` — the stage-change chokepoint.
 
@@ -435,9 +443,8 @@ class OpportunityService:
                 activity_type="stage_changed",
                 old_value=old_stage.name if old_stage else "None",
                 new_value=stage.name,
-                description=(
-                    f"Moved from {old_stage.name if old_stage else 'None'} to {stage.name}"
-                ),
+                description=description
+                or f"Moved from {old_stage.name if old_stage else 'None'} to {stage.name}",
             )
         )
 
@@ -728,12 +735,119 @@ class OpportunityService:
             opportunity_id=opportunity_id,
             user_id=user_id,
             activity_type=note_in.kind,
-            description=note_in.body.strip(),
+            description=note_in.body,
+            new_value=note_in.outcome.value if note_in.outcome is not None else None,
         )
         self.db.add(activity)
         await self.db.commit()
         await self.db.refresh(activity)
         return activity
+
+    async def set_installation_date(
+        self,
+        workspace_id: uuid.UUID,
+        opportunity_id: uuid.UUID,
+        update: OpportunityInstallationDateUpdate,
+        user_id: int | None = None,
+        restrict_to_user_id: int | None = None,
+    ) -> OpportunityInstallationScheduleResponse:
+        """Set a linked job's local installation date without duplicating deal state."""
+        opportunity = await get_or_404(
+            self.db,
+            Opportunity,
+            opportunity_id,
+            workspace_id=workspace_id,
+            options=[selectinload(Opportunity.workspace)],
+        )
+        self._enforce_owner(opportunity, restrict_to_user_id)
+
+        linked_by_quote = and_(
+            Quote.workspace_id == workspace_id,
+            Quote.opportunity_id == opportunity_id,
+        )
+        linked_by_invoice = and_(
+            Invoice.workspace_id == workspace_id,
+            Invoice.opportunity_id == opportunity_id,
+        )
+        statement = (
+            select(Job)
+            .outerjoin(Quote, Quote.id == Job.source_quote_id)
+            .outerjoin(Invoice, Invoice.id == Job.invoice_id)
+            .where(
+                Job.workspace_id == workspace_id,
+                Job.status.in_((JobStatus.UNSCHEDULED, JobStatus.SCHEDULED)),
+                or_(linked_by_quote, linked_by_invoice),
+            )
+            .order_by(Job.created_at.desc())
+            .limit(2)
+            .with_for_update(of=Job)
+        )
+        if update.job_id is not None:
+            statement = statement.where(Job.id == update.job_id)
+
+        jobs = list((await self.db.execute(statement)).scalars().all())
+        if not jobs:
+            raise ValidationError(
+                "No unscheduled or scheduled job is linked through this deal's quote or invoice"
+            )
+        if len(jobs) > 1:
+            raise ValidationError("Multiple linked jobs found; provide job_id")
+        job = jobs[0]
+
+        timezone = resolve_workspace_timezone(opportunity.workspace)
+        old_date = None
+        if job.scheduled_start is not None and job.scheduled_end is not None:
+            old_start_local = job.scheduled_start.astimezone(timezone)
+            old_end_local = job.scheduled_end.astimezone(timezone)
+            date_shift = update.installation_date - old_start_local.date()
+            scheduled_start = (old_start_local + date_shift).astimezone(UTC)
+            scheduled_end = (old_end_local + date_shift).astimezone(UTC)
+            old_date = old_start_local.date()
+            anytime: bool | None = None
+        else:
+            start_local = datetime.combine(update.installation_date, time.min, tzinfo=timezone)
+            end_local = datetime.combine(
+                update.installation_date + timedelta(days=1),
+                time.min,
+                tzinfo=timezone,
+            )
+            scheduled_start = start_local.astimezone(UTC)
+            scheduled_end = end_local.astimezone(UTC)
+            anytime = True
+
+        changed = (
+            job.scheduled_start != scheduled_start
+            or job.scheduled_end != scheduled_end
+            or job.status != JobStatus.SCHEDULED
+        )
+        if changed:
+            await JobService(self.db).schedule(
+                job.id,
+                workspace_id,
+                scheduled_start,
+                scheduled_end,
+                anytime=anytime,
+            )
+            self.db.add(
+                OpportunityActivity(
+                    opportunity_id=opportunity_id,
+                    user_id=user_id,
+                    activity_type="installation_scheduled",
+                    old_value=old_date.isoformat() if old_date is not None else None,
+                    new_value=update.installation_date.isoformat(),
+                    description=(
+                        f"Installation scheduled for {update.installation_date.isoformat()}"
+                    ),
+                )
+            )
+            await self.db.commit()
+
+        return OpportunityInstallationScheduleResponse(
+            job_id=job.id,
+            installation_date=update.installation_date,
+            scheduled_start=scheduled_start,
+            scheduled_end=scheduled_end,
+        )
 
     async def list_tasks(
         self,

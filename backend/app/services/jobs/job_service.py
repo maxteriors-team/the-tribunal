@@ -955,8 +955,10 @@ class JobService:
         workspace_id: uuid.UUID,
         start: datetime,
         end: datetime,
+        *,
+        anytime: bool | None = False,
     ) -> JobResponse:
-        """Set the time window; flip ``unscheduled`` -> ``scheduled``."""
+        """Set the time window and optionally mark its primary visit as all-day."""
         job = await self._load(job_id, workspace_id)
         prior_status = job.status
         primary_visit = await self.db.scalar(
@@ -969,10 +971,19 @@ class JobService:
             .limit(1)
         )
         if primary_visit is None:
-            self.db.add(JobVisit(job_id=job.id, starts_at=start, ends_at=end))
+            self.db.add(
+                JobVisit(
+                    job_id=job.id,
+                    starts_at=start,
+                    ends_at=end,
+                    anytime=bool(anytime),
+                )
+            )
         else:
             primary_visit.starts_at = start
             primary_visit.ends_at = end
+            if anytime is not None:
+                primary_visit.anytime = anytime
         job.scheduled_start = start
         job.scheduled_end = end
         if job.status == JobStatus.UNSCHEDULED:
