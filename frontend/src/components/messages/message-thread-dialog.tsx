@@ -1,40 +1,146 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Loader2, User } from "lucide-react";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
 
+import { MessageComposer } from "@/components/conversation/message-composer";
 import { Button } from "@/components/ui/button";
 import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useDeadlinePassed } from "@/hooks/useDeadlinePassed";
 import { conversationsApi } from "@/lib/api/conversations";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date";
-import type { Message } from "@/types";
+import { getApiErrorMessage } from "@/lib/utils/errors";
+import type { Conversation, Message } from "@/types";
+import { CHANNEL_LABELS, MESSENGER_CHANNELS } from "@/types/conversation";
 
 const PAGE_SIZE = 50;
 
 interface MessageThreadDialogProps {
   workspaceId: string;
-  conversationId: string;
+  conversation: Conversation;
   contactName: string;
 }
 
 /**
- * Read-only history for one thread.
+ * Why this thread cannot be answered here, or null when it can.
+ *
+ * A composer that accepts text the backend will refuse is worse than no
+ * composer: the operator believes the customer was answered.
+ */
+function replyBlockedReason(conversation: Conversation, windowClosed: boolean): string | null {
+  if (MESSENGER_CHANNELS.includes(conversation.channel as (typeof MESSENGER_CHANNELS)[number])) {
+    if (!windowClosed) return null;
+    return `Reply window closed. ${
+      CHANNEL_LABELS[conversation.channel] ?? "This channel"
+    } only allows replies for 24 hours after their last message.`;
+  }
+  // Replies here go out as a text on the thread's own phone pair, so an email
+  // thread has no answerable transport and a phoneless thread has no address.
+  if (conversation.channel === "email") {
+    return "Email threads can't be answered here yet — reply from your email inbox.";
+  }
+  if (!conversation.contact_phone || !conversation.workspace_phone) {
+    return "This thread has no phone number to reply to.";
+  }
+  return null;
+}
+
+/**
+ * One thread's history, plus a reply box.
  *
  * Backed by the paginated messages endpoint rather than the conversation
  * detail route: reading an archived thread must not clear its unread badge,
  * and history older than the newest slice has to stay reachable.
- *
- * Pages walk backwards in time, so they are rendered oldest-first with the
- * newest at the bottom -- the direction a conversation is actually read.
  */
 export function MessageThreadDialog({
   workspaceId,
-  conversationId,
+  conversation,
   contactName,
 }: MessageThreadDialogProps) {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  // Quo requires a client request id and dedupes on it, so a retry of the same
+  // draft must reuse the id rather than risk texting the customer twice.
+  const pendingRequestRef = useRef<{ id: string; body: string } | null>(null);
+
+  const windowClosed = useDeadlinePassed(conversation.messenger_window_expires_at);
+  const blockedReason = replyBlockedReason(conversation, windowClosed);
+
+  const handleSend = async () => {
+    const body = draft.trim();
+    if (!body || isSending) return;
+
+    const pending = pendingRequestRef.current;
+    const clientRequestId =
+      pending?.body === body ? pending.id : globalThis.crypto.randomUUID();
+    setDraft("");
+    setIsSending(true);
+    try {
+      await conversationsApi.sendMessage(workspaceId, conversation.id, body, clientRequestId);
+      pendingRequestRef.current = null;
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.messages(workspaceId, conversation.id),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all(workspaceId) });
+      toast.success("Message sent");
+    } catch (error) {
+      setDraft(body);
+      pendingRequestRef.current = { id: clientRequestId, body };
+      toast.error(getApiErrorMessage(error, "Failed to send message"));
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <ThreadHistory
+        workspaceId={workspaceId}
+        conversationId={conversation.id}
+        contactName={contactName}
+      />
+
+      {blockedReason ? (
+        <p role="status" className="border-t px-4 py-3 text-center text-xs text-muted-foreground">
+          {blockedReason}
+        </p>
+      ) : (
+        <MessageComposer
+          message={draft}
+          onMessageChange={setDraft}
+          onSend={handleSend}
+          isSending={isSending}
+          phoneNumbers={[]}
+          selectedFromNumber={conversation.workspace_phone ?? undefined}
+          onFromNumberChange={() => {}}
+          // The thread's own line is the only sender that keeps the reply in
+          // this conversation, and this endpoint takes no attachments.
+          textOnly
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Pages walk backwards in time, so they are rendered oldest-first with the
+ * newest at the bottom -- the direction a conversation is actually read.
+ */
+function ThreadHistory({
+  workspaceId,
+  conversationId,
+  contactName,
+}: {
+  workspaceId: string;
+  conversationId: string;
+  contactName: string;
+}) {
   const { data, isPending, error, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useInfiniteQuery({
       queryKey: queryKeys.conversations.messages(workspaceId, conversationId),
@@ -76,7 +182,7 @@ export function MessageThreadDialog({
   }
 
   return (
-    <div className="space-y-3">
+    <>
       <ScrollArea className="h-[60vh] pr-3">
         {hasNextPage ? (
           <div className="flex justify-center pb-3">
@@ -140,6 +246,6 @@ export function MessageThreadDialog({
       <p className="text-center text-xs text-muted-foreground">
         Showing {messages.length} of {total} messages
       </p>
-    </div>
+    </>
   );
 }

@@ -21,6 +21,7 @@ function thread(overrides: Partial<Conversation> = {}): Conversation {
     contact_id: 7,
     contact_name: "Marguerite Alvarez",
     contact_phone: "+15125550101",
+    workspace_phone: "+15125550199",
     status: "active",
     channel: "sms",
     assigned_agent_id: null,
@@ -134,6 +135,50 @@ describe("MessagesList", () => {
     // is exactly what the archive cannot show.
     await userEvent.click(within(dialog).getByRole("button", { name: "Load older messages" }));
     expect(await within(dialog).findByText("First ever text")).toBeInTheDocument();
+  });
+
+  it("texts back from the opened thread", async () => {
+    mockThreads([thread()]);
+    mockMessages([message()]);
+    const sent: { body?: unknown } = {};
+    server.use(
+      http.post(
+        `${ORIGIN}/api/v1/workspaces/:workspaceId/conversations/:conversationId/messages`,
+        async ({ request }) => {
+          sent.body = await request.json();
+          return HttpResponse.json(message({ id: "msg_out", direction: "outbound" }));
+        },
+      ),
+    );
+    renderList();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "View conversation with Marguerite Alvarez" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.type(
+      await within(dialog).findByPlaceholderText("Type a message..."),
+      "On my way",
+    );
+    await userEvent.click(within(dialog).getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(sent.body).toMatchObject({ body: "On my way" }));
+  });
+
+  it("offers no reply box on a thread it cannot text", async () => {
+    // Replies go out as a text on the thread's own phone pair, so an email
+    // thread would accept a draft that could never be delivered.
+    mockThreads([thread({ channel: "email", contact_phone: null })]);
+    mockMessages([message({ channel: "email" })]);
+    renderList();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "View conversation with Marguerite Alvarez" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+
+    expect(await within(dialog).findByText(/Email threads can't be answered/i)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Send message" })).not.toBeInTheDocument();
   });
 
   it("tells the operator when a search matched nobody", async () => {
