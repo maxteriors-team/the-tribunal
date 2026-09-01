@@ -48,10 +48,21 @@ async def generate_sms_fallback_message(
     if not api_key:
         raise ValueError("OpenAI credential required for AI fallback")
 
-    # Get the agent's system prompt if configured
+    # Get the agent's system prompt if configured.
+    #
+    # A campaign keeps pointing at its fallback agent after that agent is
+    # deleted -- the FK only clears on a hard delete, and agents are soft
+    # deleted. Without this filter a deleted agent's prompt keeps writing SMS
+    # to real customers. Falling through to `agent = None` is safe: the caller
+    # already handles it by using the default prompt.
     agent = None
     if campaign.sms_fallback_agent_id:
-        result = await db.execute(select(Agent).where(Agent.id == campaign.sms_fallback_agent_id))
+        result = await db.execute(
+            select(Agent).where(
+                Agent.id == campaign.sms_fallback_agent_id,
+                Agent.deleted_at.is_(None),
+            )
+        )
         agent = result.scalar_one_or_none()
 
     # Build context for AI

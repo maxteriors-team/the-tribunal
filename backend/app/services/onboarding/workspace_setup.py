@@ -449,10 +449,18 @@ async def import_onboarding_contacts(
 
 
 async def get_reactivation_agent(*, db: AsyncSession, workspace_id: uuid.UUID) -> Agent:
-    """Return the reactivation agent, falling back to the first text-channel agent."""
+    """Return the reactivation agent, falling back to the first text-channel agent.
+
+    Deleted agents are excluded from both lookups. This agent is used to text
+    past customers, so handing back one the operator deleted would resurrect it
+    on live outbound -- the same way the old auto-seeding did.
+    """
     agent_result = await db.execute(
         apply_workspace_scope(select(Agent), Agent, workspace_id)
-        .where(Agent.name.in_([REACTIVATION_AGENT_NAME, LEGACY_REACTIVATION_AGENT_NAME]))
+        .where(
+            Agent.name.in_([REACTIVATION_AGENT_NAME, LEGACY_REACTIVATION_AGENT_NAME]),
+            Agent.deleted_at.is_(None),
+        )
         .limit(1)
     )
     agent = agent_result.scalar_one_or_none()
@@ -460,7 +468,7 @@ async def get_reactivation_agent(*, db: AsyncSession, workspace_id: uuid.UUID) -
     if agent is None:
         fallback_result = await db.execute(
             apply_workspace_scope(select(Agent), Agent, workspace_id)
-            .where(Agent.channel_mode == "text")
+            .where(Agent.channel_mode == "text", Agent.deleted_at.is_(None))
             .order_by(Agent.created_at.asc())
             .limit(1)
         )

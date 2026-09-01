@@ -38,12 +38,16 @@ async def auto_create_drip_for_imports(
     either is missing, logs a warning and returns — matching the legacy
     behavior.
     """
-    # Find agent (accept the legacy realtor name for pre-rename workspaces)
+    # Find agent (accept the legacy realtor name for pre-rename workspaces).
+    # Deleted agents are excluded from both the name match and the fallback:
+    # this picks an agent to *text customers with*, so resurrecting one the
+    # operator deleted is exactly the bug soft delete exists to prevent.
     agent_result = await db.execute(
         select(Agent)
         .where(
             Agent.workspace_id == workspace_id,
             Agent.name.in_([REACTIVATION_AGENT_NAME, LEGACY_REACTIVATION_AGENT_NAME]),
+            Agent.deleted_at.is_(None),
         )
         .limit(1)
     )
@@ -51,7 +55,11 @@ async def auto_create_drip_for_imports(
     if agent is None:
         fallback_result = await db.execute(
             select(Agent)
-            .where(Agent.workspace_id == workspace_id, Agent.channel_mode == "text")
+            .where(
+                Agent.workspace_id == workspace_id,
+                Agent.channel_mode == "text",
+                Agent.deleted_at.is_(None),
+            )
             .order_by(Agent.created_at.asc())
             .limit(1)
         )
