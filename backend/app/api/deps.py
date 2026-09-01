@@ -536,6 +536,15 @@ CanManageComms = Annotated[
 ]
 CanReadJobs = Annotated[WorkspaceMembership, Depends(require_capability(Capability.JOBS_READ))]
 CanWriteJobs = Annotated[WorkspaceMembership, Depends(require_capability(Capability.JOBS_WRITE))]
+CanWriteDealInstallation = Annotated[
+    WorkspaceMembership,
+    Depends(
+        require_capability(
+            Capability.PIPELINE_WRITE_OWN,
+            Capability.JOBS_WRITE,
+        )
+    ),
+]
 CanUseAttendance = Annotated[
     WorkspaceMembership, Depends(require_capability(Capability.ATTENDANCE_USE))
 ]

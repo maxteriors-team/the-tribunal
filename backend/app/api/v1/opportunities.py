@@ -11,6 +11,7 @@ from app.api.deps import (
     DB,
     CanReadCRM,
     CanWriteCRM,
+    CanWriteDealInstallation,
     CanWritePipelineOwn,
     CurrentUser,
 )
@@ -26,6 +27,8 @@ from app.schemas.opportunity import (
     OpportunityActivityResponse,
     OpportunityCreate,
     OpportunityDetailResponse,
+    OpportunityInstallationDateUpdate,
+    OpportunityInstallationScheduleResponse,
     OpportunityLineItemCreate,
     OpportunityLineItemUpdate,
     OpportunityNoteCreate,
@@ -434,6 +437,28 @@ async def add_opportunity_note(
         workspace_id,
         opportunity_id,
         note_in,
+        user_id=current_user.id,
+        restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
+    )
+
+
+@router.put(
+    "/{opportunity_id}/installation-date",
+    response_model=OpportunityInstallationScheduleResponse,
+)
+async def set_opportunity_installation_date(
+    workspace_id: uuid.UUID,
+    opportunity_id: uuid.UUID,
+    update: OpportunityInstallationDateUpdate,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteDealInstallation,
+) -> OpportunityInstallationScheduleResponse:
+    """Set the workspace-local installation date on a job linked to this deal."""
+    return await OpportunityService(db).set_installation_date(
+        workspace_id,
+        opportunity_id,
+        update,
         user_id=current_user.id,
         restrict_to_user_id=pipeline_owner_scope(membership.role, current_user.id),
     )

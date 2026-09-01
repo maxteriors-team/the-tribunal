@@ -5,6 +5,23 @@ import type { components } from "@/lib/api/_generated";
 export type PipelineStageType = "active" | "won" | "lost";
 export type OpportunityStatus = "open" | "won" | "lost" | "abandoned";
 export type OpportunityAssignee = components["schemas"]["AssigneeSummary"];
+export type OpportunityCallOutcome = components["schemas"]["OutcomeType"];
+export type OpportunityInstallationDateInput =
+  components["schemas"]["OpportunityInstallationDateUpdate"];
+export type OpportunityInstallationSchedule =
+  components["schemas"]["OpportunityInstallationScheduleResponse"];
+export type OpportunityNoteKind = components["schemas"]["OpportunityNoteCreate"]["kind"];
+export type OpportunityNoteInput =
+  | {
+      body: string;
+      kind?: Exclude<OpportunityNoteKind, "call">;
+      outcome?: never;
+    }
+  | {
+      body: string;
+      kind: "call";
+      outcome: OpportunityCallOutcome;
+    };
 
 export interface PipelineStage {
   id: string;
@@ -110,6 +127,3 @@ export interface OpportunityTask {
   created_at: string;
   updated_at: string;
 }
-
-/** Operator commentary on the deal. "update" is a status post; "note" is a memo. */
-export type OpportunityNoteKind = "note" | "update";

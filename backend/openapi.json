@@ -15861,6 +15861,140 @@
         "title": "DealCoachStats",
         "type": "object"
       },
+      "DealLifecycleSettings": {
+        "additionalProperties": false,
+        "description": "Tenant-owned pipeline roles and operator timing for deal automation.",
+        "properties": {
+          "contacted_no_answer_stage_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contacted No Answer Stage Id"
+          },
+          "end_of_day_cutoff": {
+            "default": "17:00:00",
+            "format": "time",
+            "title": "End Of Day Cutoff",
+            "type": "string"
+          },
+          "follow_up_assignee_user_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Up Assignee User Id"
+          },
+          "job_completed_stage_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Completed Stage Id"
+          },
+          "new_lead_stage_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Lead Stage Id"
+          },
+          "pipeline_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Id"
+          },
+          "qualified_stage_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualified Stage Id"
+          },
+          "quote_follow_up_stage_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Follow Up Stage Id"
+          },
+          "unqualified_stage_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unqualified Stage Id"
+          },
+          "visit_demo_scheduled_stage_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visit Demo Scheduled Stage Id"
+          },
+          "won_stage_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Won Stage Id"
+          }
+        },
+        "title": "DealLifecycleSettings",
+        "type": "object"
+      },
       "DealSignals": {
         "description": "Deterministic per-deal signals aggregated from existing data.\n\nThese are computed (not invented by the LLM) and are surfaced so the\noperator can see the evidence behind the coaching.",
         "properties": {
@@ -33449,6 +33583,66 @@
         "title": "OpportunityDetailResponse",
         "type": "object"
       },
+      "OpportunityInstallationDateUpdate": {
+        "description": "Set a linked field-service job's workspace-local installation date.",
+        "properties": {
+          "installation_date": {
+            "format": "date",
+            "title": "Installation Date",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          }
+        },
+        "required": [
+          "installation_date"
+        ],
+        "title": "OpportunityInstallationDateUpdate",
+        "type": "object"
+      },
+      "OpportunityInstallationScheduleResponse": {
+        "description": "Canonical job window created from a deal's installation date.",
+        "properties": {
+          "installation_date": {
+            "format": "date",
+            "title": "Installation Date",
+            "type": "string"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "scheduled_end": {
+            "format": "date-time",
+            "title": "Scheduled End",
+            "type": "string"
+          },
+          "scheduled_start": {
+            "format": "date-time",
+            "title": "Scheduled Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "installation_date",
+          "scheduled_start",
+          "scheduled_end"
+        ],
+        "title": "OpportunityInstallationScheduleResponse",
+        "type": "object"
+      },
       "OpportunityLineItemCreate": {
         "description": "Create line item schema.",
         "properties": {
@@ -33621,7 +33815,7 @@
         "type": "object"
       },
       "OpportunityNoteCreate": {
-        "description": "A note or status update written against the deal.",
+        "description": "A note, status update, or structured call outcome on the deal.",
         "properties": {
           "body": {
             "maxLength": 5000,
@@ -33633,10 +33827,21 @@
             "default": "note",
             "enum": [
               "note",
-              "update"
+              "update",
+              "call"
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutcomeType"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -35256,6 +35461,21 @@
         ],
         "title": "OutboundSequenceEnrollmentResponse",
         "type": "object"
+      },
+      "OutcomeType": {
+        "description": "Call outcome types.",
+        "enum": [
+          "no_answer",
+          "busy",
+          "rejected",
+          "voicemail",
+          "completed",
+          "appointment_booked",
+          "lead_qualified",
+          "failed"
+        ],
+        "title": "OutcomeType",
+        "type": "string"
       },
       "PaceStage": {
         "description": "One funnel stage's actual-vs-required counts for the month.\n\n``required`` is backsolved from the revenue goal (see\n:func:`app.services.reporting.revenue_target_service.backsolve_funnel`) and\nis ``None`` whenever an assumption it depends on is missing, so a stage\nnever claims a requirement the owner never expressed.",
@@ -61407,6 +61627,112 @@
           }
         ],
         "summary": "Update Card Settings",
+        "tags": [
+          "Settings"
+        ]
+      }
+    },
+    "/api/v1/settings/workspaces/{workspace_id}/deal-lifecycle": {
+      "get": {
+        "description": "Get the workspace's pipeline roles and follow-up operator timing.",
+        "operationId": "get_deal_lifecycle_settings_api_v1_settings_workspaces__workspace_id__deal_lifecycle_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DealLifecycleSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Deal Lifecycle Settings",
+        "tags": [
+          "Settings"
+        ]
+      },
+      "put": {
+        "description": "Replace lifecycle settings after checking every referenced tenant resource.",
+        "operationId": "update_deal_lifecycle_settings_api_v1_settings_workspaces__workspace_id__deal_lifecycle_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DealLifecycleSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DealLifecycleSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Update Deal Lifecycle Settings",
         "tags": [
           "Settings"
         ]
@@ -87855,6 +88181,75 @@
           }
         ],
         "summary": "Draft Coach Action",
+        "tags": [
+          "Opportunities"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/installation-date": {
+      "put": {
+        "description": "Set the workspace-local installation date on a job linked to this deal.",
+        "operationId": "set_opportunity_installation_date_api_v1_workspaces__workspace_id__opportunities__opportunity_id__installation_date_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "opportunity_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Opportunity Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpportunityInstallationDateUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpportunityInstallationScheduleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Set Opportunity Installation Date",
         "tags": [
           "Opportunities"
         ]

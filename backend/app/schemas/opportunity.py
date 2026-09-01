@@ -4,8 +4,9 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.models.call_outcome import OutcomeType
 from app.schemas.lead_source import OpportunityLeadAttributionFields
 from app.schemas.user import AssigneeSummary
 
@@ -139,14 +140,49 @@ class OpportunityActivityResponse(BaseModel):
 
 # A note and a status update differ only in intent, so they share a table and a
 # route and are told apart by this discriminator in the timeline.
-OpportunityNoteKind = Literal["note", "update"]
+OpportunityNoteKind = Literal["note", "update", "call"]
 
 
 class OpportunityNoteCreate(BaseModel):
-    """A note or status update written against the deal."""
+    """A note, status update, or structured call outcome on the deal."""
 
     body: str = Field(min_length=1, max_length=5000)
     kind: OpportunityNoteKind = "note"
+    outcome: OutcomeType | None = None
+
+    @field_validator("body")
+    @classmethod
+    def strip_required_body(cls, value: str) -> str:
+        """Reject whitespace-only notes and persist operator text consistently."""
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("body must include a note")
+        return stripped
+
+    @model_validator(mode="after")
+    def require_call_outcome(self) -> "OpportunityNoteCreate":
+        """Keep call outcomes structured without attaching them to ordinary notes."""
+        if self.kind == "call" and self.outcome is None:
+            raise ValueError("outcome is required when kind is call")
+        if self.kind != "call" and self.outcome is not None:
+            raise ValueError("outcome is only allowed when kind is call")
+        return self
+
+
+class OpportunityInstallationDateUpdate(BaseModel):
+    """Set a linked field-service job's workspace-local installation date."""
+
+    installation_date: date
+    job_id: uuid.UUID | None = None
+
+
+class OpportunityInstallationScheduleResponse(BaseModel):
+    """Canonical job window created from a deal's installation date."""
+
+    job_id: uuid.UUID
+    installation_date: date
+    scheduled_start: datetime
+    scheduled_end: datetime
 
 
 class OpportunityTaskBase(BaseModel):
