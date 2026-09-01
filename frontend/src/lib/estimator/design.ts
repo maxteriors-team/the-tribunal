@@ -239,7 +239,14 @@ export function permanentRunFeet(
   };
   for (const shot of shots) {
     for (const run of shot.design.runs) {
-      if (productById.get(run.productId)?.category !== "permanent") continue;
+      const product = productById.get(run.productId);
+      // Annotations (cosmetic outlines, jumper wire) are drawn in permanent mode
+      // and therefore carry its category, but they are diagram, not product.
+      // Measuring them here would inflate the complexity and elevation splits
+      // even though `designToEstimateInputs` correctly leaves them out of the
+      // priced feet -- the two would silently disagree.
+      if (product?.category !== "permanent") continue;
+      if (product.target.field === "annotation") continue;
       const feet =
         polylineLength(run.points) *
         runScale(shot.design, run, shot.photo.width).ftPerPx *

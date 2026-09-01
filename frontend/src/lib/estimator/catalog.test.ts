@@ -138,6 +138,64 @@ describe("buildCatalog permanent roofline", () => {
     expect(perm?.target).toEqual({ field: "roofline" });
   });
 
+  it("offers the diagram parts, none of which can reach a quote quantity", () => {
+    const catalog = buildCatalog(
+      estimate({
+        permanent: {
+          enabled: true,
+          total: 4371.5,
+          subtotal: 4371.5,
+          per_ft: 0,
+          package_feet: 100,
+          package_cogs: 1249,
+          markup: 3.5,
+          roofline_cost: 4371.5,
+          custom_total: 0,
+        },
+      }),
+    );
+
+    // A permanent quote is sold off a picture of the finished install, so the
+    // rep can draw the look and the wiring without moving the price.
+    const parts = ["permanent-cosmetic", "permanent-jumper", "permanent-power-supply", "permanent-controller"]
+      .map((id) => catalog.find((p) => p.id === id));
+    expect(parts.every(Boolean)).toBe(true);
+    // `annotation` is the one target designToEstimateInputs has no branch for.
+    expect(parts.map((p) => p?.target.field)).toEqual([
+      "annotation",
+      "annotation",
+      "annotation",
+      "annotation",
+    ]);
+    expect(parts.map((p) => p?.price)).toEqual([0, 0, 0, 0]);
+    // The cosmetic line must look identical to real track, or it cannot show
+    // the client what the finished house looks like.
+    const cosmetic = parts[0];
+    const real = catalog.find((p) => p.id === "roofline-permanent");
+    expect(cosmetic?.style).toBe(real?.style);
+    expect(cosmetic?.spacingIn).toBe(real?.spacingIn);
+  });
+
+  it("offers no diagram parts when permanent lighting is disabled", () => {
+    const catalog = buildCatalog(
+      estimate({
+        permanent: {
+          enabled: false,
+          total: 0,
+          subtotal: 0,
+          per_ft: 0,
+          package_feet: 0,
+          package_cogs: 0,
+          markup: 3.5,
+          roofline_cost: 0,
+          custom_total: 0,
+        },
+      }),
+    );
+    expect(catalog.find((p) => p.id === "permanent-cosmetic")).toBeUndefined();
+    expect(catalog.find((p) => p.id === "permanent-controller")).toBeUndefined();
+  });
+
   it("never adds the permanent roofline for a null estimate", () => {
     expect(buildCatalog(null).find((p) => p.id === "roofline-permanent")).toBeUndefined();
   });

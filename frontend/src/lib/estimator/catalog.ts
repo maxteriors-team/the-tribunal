@@ -170,6 +170,74 @@ const DEFAULT_SPACING: Record<RenderStyle, number> = {
 
 const ROOFLINE_TARGET: DrawTarget = { field: "roofline" };
 
+/** Product id for the non-measuring outline, used by tests and the palette. */
+export const PERMANENT_COSMETIC_PRODUCT_ID = "permanent-cosmetic";
+
+/**
+ * Diagram parts for permanent lighting: what the install *looks* like and how
+ * it is wired, as opposed to what is billed.
+ *
+ * Every one targets `annotation`, which `designToEstimateInputs` has no branch
+ * for, so none of them can add a foot or a unit to a quote. That is the point:
+ * a rep drawing the client's whole roofline for symmetry, or running a jumper
+ * between two gables, must not change the price.
+ *
+ * `cosmetic` deliberately shares the real track's render style and spacing so
+ * the client sees one continuous, believable result; the difference is
+ * commercial, not visual, and lives in the target.
+ */
+const PERMANENT_DIAGRAM_PRODUCTS: Product[] = [
+  {
+    id: PERMANENT_COSMETIC_PRODUCT_ID,
+    name: "Cosmetic line (not measured)",
+    category: "permanent",
+    kind: "linear",
+    price: 0,
+    style: "permanent",
+    colors: COLOR_PRESETS["Warm White"],
+    spacingIn: DEFAULT_SPACING.permanent,
+    sizeFt: 0,
+    bulbScale: DEFAULT_BULB_SCALE,
+    target: { field: "annotation", annotationType: "cosmetic" },
+  },
+  {
+    id: "permanent-jumper",
+    name: "Jumper wire",
+    category: "permanent",
+    kind: "linear",
+    price: 0,
+    style: "wire",
+    colors: ["#35aee2"],
+    spacingIn: 0,
+    sizeFt: 0,
+    target: { field: "annotation", annotationType: "jumper" },
+  },
+  {
+    id: "permanent-power-supply",
+    name: "Power supply",
+    category: "permanent",
+    kind: "each",
+    price: 0,
+    style: "transformer",
+    colors: [],
+    spacingIn: 0,
+    sizeFt: 2,
+    target: { field: "annotation", annotationType: "power-supply" },
+  },
+  {
+    id: "permanent-controller",
+    name: "Controller",
+    category: "permanent",
+    kind: "each",
+    price: 0,
+    style: "transformer",
+    colors: [],
+    spacingIn: 0,
+    sizeFt: 1.5,
+    target: { field: "annotation", annotationType: "controller" },
+  },
+];
+
 /** Built-in C9 roofline products. `perFt` is the server display rate. */
 function rooflineProducts(perFt: number): Product[] {
   const base = {
@@ -254,6 +322,13 @@ export function buildCatalog(estimate: LinearFeetEstimateResult | null | undefin
       bulbScale: DEFAULT_BULB_SCALE,
       target: ROOFLINE_TARGET,
     });
+
+    // Diagram parts. A permanent quote is sold off a picture of the finished
+    // install, so the rep needs to show the run that will not be billed (a
+    // cosmetic outline for symmetry), the jumper wire between segments, and
+    // where the power supply and controller land. All target `annotation`, so
+    // they persist with the drawing and never reach a quote quantity.
+    products.push(...PERMANENT_DIAGRAM_PRODUCTS);
   }
 
   for (const cat of estimate?.christmas_catalog ?? []) {

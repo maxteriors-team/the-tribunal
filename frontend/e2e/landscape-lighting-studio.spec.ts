@@ -729,6 +729,42 @@ test.describe("landscape lighting studio", () => {
     await expect.poll(measuredFeet).toBeCloseTo(wholeHome, 0);
   });
 
+  test("draws a cosmetic line and jumper wire without moving the price", async ({ page }) => {
+    const { estimates } = await installStudioApi(page, { projectType: "permanent" });
+    await page.goto(PERMANENT_PROJECT_URL);
+    await expect(page.getByLabel("Project name")).toHaveValue("Hawthorne Residence");
+
+    const canvas = page.getByLabel("Property photo lighting design canvas");
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error("Permanent lighting canvas did not render");
+
+    // All four diagram parts are on offer: the sale is made off a picture of
+    // the finished install, not a bare measurement.
+    for (const part of [/Cosmetic line/i, /Jumper wire/i, /Power supply/i, /Controller/i]) {
+      await expect(page.getByRole("button", { name: part })).toBeVisible({ timeout: 30_000 });
+    }
+
+    const drawRun = async (name: RegExp, y: number) => {
+      await page.getByRole("button", { name }).click();
+      await canvas.click({ position: { x: box.width * 0.25, y: box.height * y } });
+      await canvas.click({ position: { x: box.width * 0.75, y: box.height * y } });
+      await canvas.focus();
+      await page.keyboard.press("Enter");
+    };
+
+    await drawRun(/Permanent LED Roofline/i, 0.3);
+    const pricedFeet = () => (estimates.at(-1)?.feet as number | undefined) ?? 0;
+    await expect.poll(pricedFeet).toBeGreaterThan(0);
+    const billed = pricedFeet();
+
+    // Same span again, twice, as diagram. The quote must not move.
+    await drawRun(/Cosmetic line/i, 0.45);
+    await drawRun(/Jumper wire/i, 0.6);
+
+    await page.screenshot({ path: "../.ezcoder/screenshots/diag-01-drawn.png" });
+    await expect.poll(pricedFeet).toBe(billed);
+  });
+
   test("opens the quote builder at its package choices every time Proposal & payment is used", async ({
     page,
   }) => {

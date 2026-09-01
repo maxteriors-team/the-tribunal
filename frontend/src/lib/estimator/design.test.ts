@@ -109,6 +109,40 @@ describe("designToEstimateInputs", () => {
     expect(out.christmas_items).toEqual({});
   });
 
+  it("bills the real run and ignores the cosmetic one drawn beside it", () => {
+    const cosmetic: Product = {
+      id: "permanent-cosmetic",
+      name: "Cosmetic line (not measured)",
+      category: "permanent",
+      kind: "linear",
+      price: 0,
+      style: "permanent",
+      colors: ["#ffd98a"],
+      spacingIn: 12,
+      sizeFt: 0,
+      target: { field: "annotation", annotationType: "cosmetic" },
+    };
+    const design: Design = {
+      calibration: cal,
+      runs: [
+        run("billed", roofline.id, [
+          { x: 0, y: 0 },
+          { x: 400, y: 0 },
+        ]),
+        run("look-only", cosmetic.id, [
+          { x: 0, y: 40 },
+          { x: 400, y: 40 },
+        ]),
+      ],
+      items: [],
+    };
+
+    const out = designToEstimateInputs(design, indexProducts([roofline, cosmetic]), PHOTO_W);
+
+    // Same length, drawn for symmetry, never billed: 40 rather than 80.
+    expect(out.feet).toBe(40);
+  });
+
   describe("gable pitch (Pythagorean rake correction)", () => {
     const gable = (roofPitch?: "normal" | "steep"): Design => ({
       calibration: cal,
@@ -560,9 +594,35 @@ describe("permanentRunFeet", () => {
     sizeFt: 0,
     target: { field: "roofline" },
   };
+  // Drawn in permanent mode and therefore carrying its category, but a diagram
+  // part: it must never reach a measurement.
+  const cosmetic: Product = {
+    id: "permanent-cosmetic",
+    name: "Cosmetic line (not measured)",
+    category: "permanent",
+    kind: "linear",
+    price: 0,
+    style: "permanent",
+    colors: ["#ffd98a"],
+    spacingIn: 12,
+    sizeFt: 0,
+    target: { field: "annotation", annotationType: "cosmetic" },
+  };
+  const jumper: Product = {
+    id: "permanent-jumper",
+    name: "Jumper wire",
+    category: "permanent",
+    kind: "linear",
+    price: 0,
+    style: "wire",
+    colors: ["#35aee2"],
+    spacingIn: 0,
+    sizeFt: 0,
+    target: { field: "annotation", annotationType: "jumper" },
+  };
   // Seasonal footage is priced on its own path; counting it here would inflate
   // the permanent quote.
-  const permanentProducts = indexProducts([permanent, roofline]);
+  const permanentProducts = indexProducts([permanent, roofline, cosmetic, jumper]);
 
   // 10 px/ft from the shared calibration, so each 400px span is 40 ft.
   function permanentRun(id: string, y: number, extra: Partial<Run> = {}): Run {
@@ -595,6 +655,21 @@ describe("permanentRunFeet", () => {
     expect(totals.elevation.front).toBeCloseTo(40);
     expect(totals.elevation.side).toBeCloseTo(80);
     expect(totals.elevation.back).toBeCloseTo(40);
+  });
+
+  it("leaves cosmetic lines and jumper wire out of every measured bucket", () => {
+    const totals = measure([
+      permanentRun("billed", 0, { elevation: "front" }),
+      { ...permanentRun("look", 20, { elevation: "front" }), productId: cosmetic.id },
+      { ...permanentRun("wire", 40, { elevation: "side" }), productId: jumper.id },
+    ]);
+
+    // Only the real run is billed. Counting the diagram here would disagree with
+    // the priced feet, which already exclude it -- and the rep would be quoting
+    // 120 ft of track for a 40 ft job.
+    expect(totals.elevation.front).toBeCloseTo(40);
+    expect(totals.elevation.side).toBe(0);
+    expect(totals.complexity.standard).toBeCloseTo(40);
   });
 
   it("counts an untagged run as front so older drawings price unchanged", () => {
