@@ -2,6 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { contactStatusDotColors } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
+import { contactDisplayName } from "@/lib/utils/contact-name";
 import { getContactInitials } from "@/lib/utils/initials";
 import type { Contact } from "@/types";
 
@@ -10,7 +11,7 @@ interface ContactHeaderProps {
 }
 
 export function ContactHeader({ contact }: ContactHeaderProps) {
-  const displayName = [contact.first_name, contact.last_name].filter(Boolean).join(" ");
+  const displayName = contactDisplayName(contact);
 
   return (
     <div className="flex flex-col items-center text-center space-y-3">
@@ -25,7 +26,7 @@ export function ContactHeader({ contact }: ContactHeaderProps) {
         </AvatarFallback>
       </Avatar>
       <div>
-        <h2 className="text-xl font-semibold">{displayName || "Unknown"}</h2>
+        <h2 className="text-xl font-semibold">{displayName}</h2>
         {contact.company_name && (
           <p className="text-sm text-muted-foreground">{contact.company_name}</p>
         )}
