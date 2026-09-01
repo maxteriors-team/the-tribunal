@@ -32,6 +32,7 @@ from app.schemas.attach_rules import (
     AttachRulesSettings,
     AttachRulesSettingsUpdate,
 )
+from app.schemas.deal_lifecycle import DealLifecycleSettings
 from app.schemas.lead_source import LeadSourceCaptureSettings
 from app.schemas.neighbor_outreach import (
     NeighborOutreachSettings,
@@ -75,6 +76,7 @@ from app.schemas.user import (
     UserProfileResponse,
     UserProfileUpdate,
 )
+from app.services.exceptions import ValidationError as ServiceValidationError
 from app.services.field_service.neighbor_outreach_config import (
     SETTINGS_KEY as NEIGHBOR_OUTREACH_KEY,
 )
@@ -89,6 +91,13 @@ from app.services.opportunities.lead_opportunity import (
     SETTINGS_KEY as AUTO_PIPELINE_KEY,
 )
 from app.services.opportunities.lead_opportunity import auto_pipeline_enabled
+from app.services.opportunities.lifecycle_config import (
+    SETTINGS_KEY as DEAL_LIFECYCLE_KEY,
+)
+from app.services.opportunities.lifecycle_config import (
+    get_deal_lifecycle_config,
+    validate_deal_lifecycle_references,
+)
 from app.services.opportunities.quote_opportunity import on_quote_sent_enabled
 from app.services.quotes.attach_rules_config import (
     SETTINGS_KEY as ATTACH_RULES_KEY,
@@ -770,6 +779,50 @@ async def update_lead_source_capture_policy(
     await db.commit()
     await db.refresh(workspace)
     return get_lead_source_capture_settings(workspace)
+
+
+@router.get(
+    "/workspaces/{workspace_id}/deal-lifecycle",
+    response_model=DealLifecycleSettings,
+)
+async def get_deal_lifecycle_settings(
+    workspace: WorkspaceAccess,
+    _gate: CanReadCRM,
+) -> DealLifecycleSettings:
+    """Get the workspace's pipeline roles and follow-up operator timing."""
+    return get_deal_lifecycle_config(workspace)
+
+
+@router.put(
+    "/workspaces/{workspace_id}/deal-lifecycle",
+    response_model=DealLifecycleSettings,
+)
+async def update_deal_lifecycle_settings(
+    update: DealLifecycleSettings,
+    workspace: WorkspaceAccess,
+    db: DB,
+    _gate: CanWritePipeline,
+) -> DealLifecycleSettings:
+    """Replace lifecycle settings after checking every referenced tenant resource."""
+    try:
+        await validate_deal_lifecycle_references(
+            db,
+            workspace_id=workspace.id,
+            config=update,
+        )
+    except ServiceValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=exc.message,
+        ) from exc
+
+    current_settings = dict(workspace.settings or {})
+    current_settings[DEAL_LIFECYCLE_KEY] = update.model_dump(mode="json")
+    workspace.settings = current_settings
+
+    await db.commit()
+    await db.refresh(workspace)
+    return get_deal_lifecycle_config(workspace)
 
 
 @router.get(

@@ -17,6 +17,8 @@ import { formatDate } from "@/lib/utils/date";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import type { OpportunityNoteKind, OpportunityTask } from "@/types";
 
+type BasicOpportunityNoteKind = Exclude<OpportunityNoteKind, "call">;
+
 interface OpportunityFollowupsProps {
   workspaceId: string;
   opportunityId: string;
@@ -38,7 +40,7 @@ export function OpportunityFollowups({
   const queryClient = useQueryClient();
 
   const [noteBody, setNoteBody] = useState("");
-  const [noteKind, setNoteKind] = useState<OpportunityNoteKind>("note");
+  const [noteKind, setNoteKind] = useState<BasicOpportunityNoteKind>("note");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDueAt, setTaskDueAt] = useState("");
   const [taskAssigneeId, setTaskAssigneeId] = useState<number | null>(null);
@@ -50,7 +52,7 @@ export function OpportunityFollowups({
   };
 
   const noteMutation = useMutation({
-    mutationFn: (input: { body: string; kind: OpportunityNoteKind }) =>
+    mutationFn: (input: { body: string; kind: BasicOpportunityNoteKind }) =>
       opportunitiesApi.addNote(workspaceId, opportunityId, input),
     onSuccess: (_data, input) => {
       setNoteBody("");

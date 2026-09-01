@@ -1298,6 +1298,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/workspaces/{workspace_id}/deal-lifecycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Deal Lifecycle Settings
+         * @description Get the workspace's pipeline roles and follow-up operator timing.
+         */
+        get: operations["get_deal_lifecycle_settings_api_v1_settings_workspaces__workspace_id__deal_lifecycle_get"];
+        /**
+         * Update Deal Lifecycle Settings
+         * @description Replace lifecycle settings after checking every referenced tenant resource.
+         */
+        put: operations["update_deal_lifecycle_settings_api_v1_settings_workspaces__workspace_id__deal_lifecycle_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/workspaces/{workspace_id}/integrations": {
         parameters: {
             query?: never;
@@ -7694,6 +7718,26 @@ export interface paths {
          * @description Queue the coach's drafted next-best action through the approval gate.
          */
         post: operations["draft_coach_action_api_v1_workspaces__workspace_id__opportunities__opportunity_id__coach_draft_action_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/opportunities/{opportunity_id}/installation-date": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Opportunity Installation Date
+         * @description Set the workspace-local installation date on a job linked to this deal.
+         */
+        put: operations["set_opportunity_installation_date_api_v1_workspaces__workspace_id__opportunities__opportunity_id__installation_date_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -17284,6 +17328,38 @@ export interface components {
             watch_count: number;
         };
         /**
+         * DealLifecycleSettings
+         * @description Tenant-owned pipeline roles and operator timing for deal automation.
+         */
+        DealLifecycleSettings: {
+            /** Contacted No Answer Stage Id */
+            contacted_no_answer_stage_id?: string | null;
+            /**
+             * End Of Day Cutoff
+             * Format: time
+             * @default 17:00:00
+             */
+            end_of_day_cutoff: string;
+            /** Follow Up Assignee User Id */
+            follow_up_assignee_user_id?: number | null;
+            /** Job Completed Stage Id */
+            job_completed_stage_id?: string | null;
+            /** New Lead Stage Id */
+            new_lead_stage_id?: string | null;
+            /** Pipeline Id */
+            pipeline_id?: string | null;
+            /** Qualified Stage Id */
+            qualified_stage_id?: string | null;
+            /** Quote Follow Up Stage Id */
+            quote_follow_up_stage_id?: string | null;
+            /** Unqualified Stage Id */
+            unqualified_stage_id?: string | null;
+            /** Visit Demo Scheduled Stage Id */
+            visit_demo_scheduled_stage_id?: string | null;
+            /** Won Stage Id */
+            won_stage_id?: string | null;
+        };
+        /**
          * DealSignals
          * @description Deterministic per-deal signals aggregated from existing data.
          *
@@ -24029,6 +24105,45 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * OpportunityInstallationDateUpdate
+         * @description Set a linked field-service job's workspace-local installation date.
+         */
+        OpportunityInstallationDateUpdate: {
+            /**
+             * Installation Date
+             * Format: date
+             */
+            installation_date: string;
+            /** Job Id */
+            job_id?: string | null;
+        };
+        /**
+         * OpportunityInstallationScheduleResponse
+         * @description Canonical job window created from a deal's installation date.
+         */
+        OpportunityInstallationScheduleResponse: {
+            /**
+             * Installation Date
+             * Format: date
+             */
+            installation_date: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * Scheduled End
+             * Format: date-time
+             */
+            scheduled_end: string;
+            /**
+             * Scheduled Start
+             * Format: date-time
+             */
+            scheduled_start: string;
+        };
+        /**
          * OpportunityLineItemCreate
          * @description Create line item schema.
          */
@@ -24112,7 +24227,7 @@ export interface components {
         };
         /**
          * OpportunityNoteCreate
-         * @description A note or status update written against the deal.
+         * @description A note, status update, or structured call outcome on the deal.
          */
         OpportunityNoteCreate: {
             /** Body */
@@ -24122,7 +24237,8 @@ export interface components {
              * @default note
              * @enum {string}
              */
-            kind: "note" | "update";
+            kind: "note" | "update" | "call";
+            outcome?: components["schemas"]["OutcomeType"] | null;
         };
         /**
          * OpportunityResponse
@@ -24638,6 +24754,12 @@ export interface components {
              */
             workspace_id: string;
         };
+        /**
+         * OutcomeType
+         * @description Call outcome types.
+         * @enum {string}
+         */
+        OutcomeType: "no_answer" | "busy" | "rejected" | "voicemail" | "completed" | "appointment_booked" | "lead_qualified" | "failed";
         /**
          * PaceStage
          * @description One funnel stage's actual-vs-required counts for the month.
@@ -35867,6 +35989,72 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_deal_lifecycle_settings_api_v1_settings_workspaces__workspace_id__deal_lifecycle_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealLifecycleSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_deal_lifecycle_settings_api_v1_settings_workspaces__workspace_id__deal_lifecycle_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DealLifecycleSettings"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealLifecycleSettings"];
                 };
             };
             /** @description Validation Error */
@@ -49430,6 +49618,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DraftActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_opportunity_installation_date_api_v1_workspaces__workspace_id__opportunities__opportunity_id__installation_date_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                opportunity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpportunityInstallationDateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityInstallationScheduleResponse"];
                 };
             };
             /** @description Validation Error */
