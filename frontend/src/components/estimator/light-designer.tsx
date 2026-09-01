@@ -5148,7 +5148,19 @@ export function LightDesigner({
                                       }`}
                                       aria-pressed={discountMode === mode}
                                       aria-label={label}
-                                      onClick={() => setDiscountMode(mode)}
+                                      onClick={() => {
+                                        setDiscountMode(mode);
+                                        // The figure carries across the switch, so
+                                        // $500 becomes "500%" — which the API
+                                        // rejects (max 100) and the panel answers by
+                                        // holding the stale price. Clamp on the way
+                                        // in, the same as typing does.
+                                        if (mode === "percent") {
+                                          setDiscountInput((current) =>
+                                            current === null ? null : Math.min(current, 100),
+                                          );
+                                        }
+                                      }}
                                     >
                                       {symbol}
                                     </button>
@@ -5158,12 +5170,25 @@ export function LightDesigner({
                               {/* The server resolves the percent against the
                                   pre-discount subtotal, so echo the dollars back:
                                   the rep confirms the real figure before it ever
-                                  reaches the customer. */}
+                                  reaches the customer.
+
+                                  Hidden while a new price is in flight. The query
+                                  keeps the previous data during a refetch, so the
+                                  echo would otherwise pair the new percentage with
+                                  the *old* discount — typing 10% right after $500
+                                  reads "10% off · $500.00", which is a misquoted
+                                  job, not a loading state. */}
                               {discountMode === "percent" && (discountInput ?? 0) > 0 ? (
                                 <p className="est-discount-resolved">
-                                  {discountInput}% off &middot;{" "}
-                                  {formatCurrency(estimate?.discount_amount ?? 0)} off this
-                                  proposal
+                                  {isFetching || !estimate ? (
+                                    `${discountInput}% off \u00b7 pricing\u2026`
+                                  ) : (
+                                    <>
+                                      {discountInput}% off &middot;{" "}
+                                      {formatCurrency(estimate.discount_amount ?? 0)} off this
+                                      proposal
+                                    </>
+                                  )}
                                 </p>
                               ) : null}
                             </>

@@ -946,6 +946,64 @@ describe("LightDesigner", () => {
     expect(input).toHaveValue(100);
   });
 
+  it("clamps a carried-over dollar figure when switching to percent", async () => {
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    await waitFor(() => expect(container.querySelector(".ep-totals")).not.toBeNull());
+
+    fireEvent.change(screen.getByLabelText(/Overall proposal discount amount/i), {
+      target: { value: "500" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Percent discount" }));
+
+    // $500 carried across the switch would be sent as 500%, which the API rejects
+    // and the panel answers by holding the previous price.
+    expect(screen.getByLabelText(/Overall proposal discount percent/i)).toHaveValue(100);
+  });
+
+  it("never pairs a new percentage with the previous discount while pricing", async () => {
+    let release: (() => void) | null = null;
+    vi.mocked(estimatorApi.estimate).mockImplementation(async (_ws, request) => {
+      if (request.discount_percent) {
+        // Hold the percent request open: the query keeps previous data during a
+        // refetch, which is exactly when a stale figure would be shown.
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      }
+      return {
+        ...ESTIMATE,
+        discount_amount: request.discount_percent ? 330 : (request.discount_amount ?? 0),
+      };
+    });
+    const { container } = renderEstimator();
+    await uploadPhoto(container);
+    await waitFor(() => expect(container.querySelector(".ep-totals")).not.toBeNull());
+
+    fireEvent.change(screen.getByLabelText(/Overall proposal discount amount/i), {
+      target: { value: "500" },
+    });
+    await waitFor(() =>
+      expect(estimatorApi.estimate).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ discount_amount: 500 }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Percent discount" }));
+    fireEvent.change(screen.getByLabelText(/Overall proposal discount percent/i), {
+      target: { value: "10" },
+    });
+
+    // "10% off - $500.00" is a misquoted job, not a loading state.
+    const echo = await screen.findByText(/10% off/);
+    expect(echo).not.toHaveTextContent("$500.00");
+    expect(echo).toHaveTextContent(/pricing/i);
+
+    release?.();
+    await waitFor(() => expect(screen.getByText(/10% off/)).toHaveTextContent("$330.00"));
+  });
+
   it("adds a deposit percentage to the permanent quote and shows the payment path", async () => {
     vi.mocked(estimatorApi.createQuote).mockResolvedValueOnce({
       id: "quote-1",
