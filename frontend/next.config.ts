@@ -43,7 +43,6 @@ const EMBED_FRAME_ANCESTORS =
     : "frame-ancestors https:";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["@prestyj/pixel"],
   turbopack: { root: __dirname },
   // Avatar image sources. Any host that may legitimately serve a user-supplied
   // avatar URL needs to be allow-listed for next/image. Add new hosts here

@@ -15,12 +15,13 @@ from app.core.config import settings
 from app.core.encryption import hash_phone, hash_value
 from app.core.metrics import observe_sms_sent
 from app.core.roles import WorkspaceRole
+from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message, MessageChannel
 from app.models.phone_number import PhoneNumber
 from app.models.user import User
 from app.models.workspace import WorkspaceMembership
-from app.services.agents import ensure_default_agent
+from app.services.agents import get_default_agent
 from app.services.ai.text_agent import schedule_ai_response
 from app.services.approval.command_processor_service import command_processor_service
 from app.services.campaigns.conversation_syncer import CampaignConversationSyncer
@@ -495,12 +496,16 @@ async def _resolve_default_messenger_agent_id(
     db: AsyncSession,
     workspace_id: uuid.UUID,
 ) -> uuid.UUID | None:
-    """Return the workspace's default agent for a DM thread.
+    """Return the workspace's default agent for a DM thread, if it has one.
 
     There is no Page-to-agent mapping the way a phone number has one, so a DM
-    always lands on the workspace default.
+    always lands on the workspace default. ``None`` when the workspace has no
+    active agent: the DM still lands in the inbox, it just gets no AI reply.
     """
-    default_agent = await ensure_default_agent(db, workspace_id)
+    default_agent = await get_default_agent(db, workspace_id)
+    if default_agent is None:
+        logger.warning("messenger_no_active_agent", workspace_id=str(workspace_id))
+        return None
     return default_agent.id
 
 
@@ -556,13 +561,15 @@ async def _resolve_default_agent_id(
 ) -> uuid.UUID | None:
     """Return the agent that should own an inbound conversation for this number.
 
-    Prefers an explicit :attr:`PhoneNumber.assigned_agent_id` when one is
-    configured. When the number has no assigned agent, falls back to the
-    workspace's default agent via :func:`ensure_default_agent` (auto-creating
-    one from a template if none exists) so brand-new leads texting/calling the
-    business number always get an AI responder instead of ``no_agent_assigned``.
-    ``ensure_default_agent`` flushes but does not commit; the caller owns the
-    transaction.
+    Prefers an explicit :attr:`PhoneNumber.assigned_agent_id`, but only while it
+    still points at a live agent -- a number left pointing at a deleted or
+    deactivated agent falls through to the workspace default rather than
+    silently muting the AI. Read-only: never creates an agent.
+
+    Returns ``None`` when the workspace has no active agent at all. The message
+    is still stored and shown in the inbox; it just gets no AI reply, which is
+    the honest outcome -- the alternative is inventing a script and sending it
+    to a real customer under the operator's name.
     """
     result = await db.execute(
         select(PhoneNumber.assigned_agent_id).where(
@@ -573,16 +580,43 @@ async def _resolve_default_agent_id(
         )
     )
     assigned_agent_id = result.scalar_one_or_none()
-    if assigned_agent_id is not None:
+    if assigned_agent_id is not None and await _agent_is_live(db, workspace_id, assigned_agent_id):
         return assigned_agent_id
 
-    default_agent = await ensure_default_agent(db, workspace_id)
+    default_agent = await get_default_agent(db, workspace_id)
+    if default_agent is None:
+        # Warning, not info: inbound texts are now landing with no AI reply and
+        # only a human will move them.
+        logger.warning(
+            "inbound_no_active_agent",
+            workspace_id=str(workspace_id),
+            workspace_phone=workspace_phone,
+        )
+        return None
+
     logger.info(
         "inbound_default_agent_fallback",
         workspace_id=str(workspace_id),
         agent_id=str(default_agent.id),
     )
     return default_agent.id
+
+
+async def _agent_is_live(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    agent_id: uuid.UUID,
+) -> bool:
+    """Return whether this agent still exists, is active, and is undeleted."""
+    result = await db.execute(
+        select(Agent.id).where(
+            Agent.id == agent_id,
+            Agent.workspace_id == workspace_id,
+            Agent.is_active.is_(True),
+            Agent.deleted_at.is_(None),
+        )
+    )
+    return result.scalar_one_or_none() is not None
 
 
 async def _operator_workspace_role(

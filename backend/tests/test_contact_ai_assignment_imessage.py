@@ -20,7 +20,7 @@ from app.services.telephony.inbound_text import (
 )
 from tests.factories import PhoneNumberFactory
 
-ensure_default_agent_original = inbound_text.ensure_default_agent
+get_default_agent_original = inbound_text.get_default_agent
 
 
 class _ScalarResult:
@@ -120,11 +120,11 @@ async def test_resolve_default_agent_prefers_explicit_phone_number_agent() -> No
 
     db.execute = AsyncMock(side_effect=execute)
     fallback = AsyncMock()
-    inbound_text.ensure_default_agent = fallback  # type: ignore[assignment]
+    inbound_text.get_default_agent = fallback  # type: ignore[assignment]
     try:
         result = await _resolve_default_agent_id(db, workspace_id, "+15550000001")
     finally:
-        inbound_text.ensure_default_agent = ensure_default_agent_original
+        inbound_text.get_default_agent = get_default_agent_original
 
     assert result == explicit_agent_id
     fallback.assert_not_awaited()
@@ -141,15 +141,68 @@ async def test_resolve_default_agent_falls_back_to_workspace_default() -> None:
     db.execute = AsyncMock(side_effect=execute)
     default_agent = Agent(id=default_agent_id, workspace_id=workspace_id)
     fallback = AsyncMock(return_value=default_agent)
-    inbound_text.ensure_default_agent = fallback  # type: ignore[assignment]
+    inbound_text.get_default_agent = fallback  # type: ignore[assignment]
     try:
         result = await _resolve_default_agent_id(db, workspace_id, "+15550000001")
     finally:
-        inbound_text.ensure_default_agent = ensure_default_agent_original
+        inbound_text.get_default_agent = get_default_agent_original
 
     assert result == default_agent_id
     assert result is not None
     fallback.assert_awaited_once_with(db, workspace_id)
+
+
+async def test_resolve_default_agent_ignores_phone_number_pointing_at_dead_agent() -> None:
+    """A number assigned to a deleted/deactivated agent must not mute the AI.
+
+    ``PhoneNumber.assigned_agent_id`` is only cleared by the FK on a *hard*
+    delete, and agents are soft-deleted, so the stale pointer survives. Trusting
+    it blindly handed inbound texts to an agent that can never reply.
+    """
+    workspace_id = uuid.uuid4()
+    dead_agent_id = uuid.uuid4()
+    live_agent_id = uuid.uuid4()
+    db = MagicMock()
+    calls: list[int] = []
+
+    async def execute(_statement: object) -> _ExecuteResult:
+        calls.append(1)
+        # 1st: the phone number's assignment. 2nd: the liveness check, which
+        # finds nothing because the agent is soft-deleted.
+        return _ExecuteResult([dead_agent_id] if len(calls) == 1 else [])
+
+    db.execute = AsyncMock(side_effect=execute)
+    fallback = AsyncMock(return_value=Agent(id=live_agent_id, workspace_id=workspace_id))
+    inbound_text.get_default_agent = fallback  # type: ignore[assignment]
+    try:
+        result = await _resolve_default_agent_id(db, workspace_id, "+15550000001")
+    finally:
+        inbound_text.get_default_agent = get_default_agent_original
+
+    assert result == live_agent_id
+    fallback.assert_awaited_once_with(db, workspace_id)
+
+
+async def test_resolve_default_agent_returns_none_when_workspace_has_no_agent() -> None:
+    """No agent means no AI reply -- never a fabricated one.
+
+    The message is still stored and visible in the inbox for a human.
+    """
+    workspace_id = uuid.uuid4()
+    db = MagicMock()
+
+    async def execute(_statement: object) -> _ExecuteResult:
+        return _ExecuteResult([])
+
+    db.execute = AsyncMock(side_effect=execute)
+    fallback = AsyncMock(return_value=None)
+    inbound_text.get_default_agent = fallback  # type: ignore[assignment]
+    try:
+        result = await _resolve_default_agent_id(db, workspace_id, "+15550000001")
+    finally:
+        inbound_text.get_default_agent = get_default_agent_original
+
+    assert result is None
 
 
 async def test_operator_lookup_uses_phone_hash_variants() -> None:

@@ -19,6 +19,7 @@ from app.core.metrics import (
     observe_sms_sent,
     telnyx_api_latency_ms,
 )
+from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.conversation import (
     Conversation,
@@ -29,7 +30,7 @@ from app.models.conversation import (
 )
 from app.models.message_attachment import MESSAGE_ATTACHMENT_READY, MessageAttachment
 from app.models.phone_number import PhoneNumber
-from app.services.agents import ensure_default_agent
+from app.services.agents import get_default_agent
 from app.services.idempotency import (
     find_message_by_idempotency_key,
     idempotency_headers,
@@ -672,11 +673,13 @@ class TelnyxSMSService:
         """Resolve the agent that should own an inbound SMS conversation.
 
         Prefers an explicit :attr:`PhoneNumber.assigned_agent_id` for the
-        receiving number; otherwise falls back to the workspace's default agent
-        via :func:`ensure_default_agent` (auto-creating one from a template if
-        none exists) so a brand-new lead always reaches an AI responder instead
-        of ``no_agent_assigned``. ``ensure_default_agent`` flushes but does not
-        commit; the caller owns the transaction.
+        receiving number, but only while it still points at a live agent -- a
+        number left pointing at a deleted or deactivated agent falls through to
+        the workspace default instead of silently muting the AI. Read-only:
+        never creates an agent.
+
+        Returns ``None`` when the workspace has no active agent. The message is
+        still stored and shown in the inbox; it just gets no AI reply.
         """
         result = await db.execute(
             select(PhoneNumber.assigned_agent_id).where(
@@ -686,16 +689,44 @@ class TelnyxSMSService:
             )
         )
         assigned_agent_id = result.scalar_one_or_none()
-        if assigned_agent_id is not None:
+        if assigned_agent_id is not None and await self._agent_is_live(
+            db, workspace_id, assigned_agent_id
+        ):
             return assigned_agent_id
 
-        default_agent = await ensure_default_agent(db, workspace_id)
+        default_agent = await get_default_agent(db, workspace_id)
+        if default_agent is None:
+            # Warning, not info: inbound texts now land with no AI reply.
+            self.logger.warning(
+                "inbound_no_active_agent",
+                workspace_id=str(workspace_id),
+                workspace_phone=workspace_phone,
+            )
+            return None
+
         self.logger.info(
             "inbound_default_agent_fallback",
             workspace_id=str(workspace_id),
             agent_id=str(default_agent.id),
         )
         return default_agent.id
+
+    async def _agent_is_live(
+        self,
+        db: AsyncSession,
+        workspace_id: uuid.UUID,
+        agent_id: uuid.UUID,
+    ) -> bool:
+        """Return whether this agent still exists, is active, and is undeleted."""
+        result = await db.execute(
+            select(Agent.id).where(
+                Agent.id == agent_id,
+                Agent.workspace_id == workspace_id,
+                Agent.is_active.is_(True),
+                Agent.deleted_at.is_(None),
+            )
+        )
+        return result.scalar_one_or_none() is not None
 
     async def _get_or_create_conversation(
         self,

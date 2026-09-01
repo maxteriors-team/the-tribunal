@@ -28,7 +28,6 @@ from app.schemas.workspace import (
     WorkspaceUpdate,
     WorkspaceWithMembership,
 )
-from app.services.agents import ensure_default_agent
 from app.services.field_service import ensure_member_on_roster, retire_member_from_roster
 from app.services.opportunities import ensure_default_pipeline
 from app.services.workspaces import bulk_create_members, set_default_membership
@@ -107,15 +106,10 @@ async def create_workspace(
     await ensure_default_pipeline(db, workspace.id)
     await ensure_default_sales_setup(db, workspace, created_by_id=current_user.id)
 
-    # Seed a working AI follow-up agent from an existing template so a brand-new
-    # workspace's /agents experience "just works" without authoring a prompt.
-    #
-    # This agent is seeded *for* the operator, so it says nothing about whether
-    # they configured anything: the workspace stays `onboarding_completed_at =
-    # NULL` until the wizard actually completes. Never treat "has an agent" as
-    # "is onboarded" — that inference made the onboarding funnel unreachable for
-    # every workspace created through this endpoint.
-    await ensure_default_agent(db, workspace.id)
+    # Deliberately no default agent. A seeded agent speaks to real customers in
+    # the operator's name, so the operator authors it in the /agents wizard --
+    # we do not guess a script for their business. (This used to seed another
+    # company's cold-lead template into every new workspace.)
 
     await db.commit()
     await db.refresh(workspace)
