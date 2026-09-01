@@ -344,7 +344,7 @@ export function MessagesList() {
               </DialogHeader>
               <MessageThreadDialog
                 workspaceId={workspaceId ?? ""}
-                conversationId={openThread.id}
+                conversation={openThread}
                 contactName={threadLabel(openThread)}
               />
             </>
