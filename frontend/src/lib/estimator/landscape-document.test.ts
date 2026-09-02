@@ -261,6 +261,26 @@ describe("landscape document v2", () => {
     expect(roundTrip?.bomLineItems).toEqual(liveState.bomLineItems);
   });
 
+  it("keeps a project whose images live in the bucket", () => {
+    // Migrated projects store a reference, not bytes. Dropping the shot here
+    // makes normalize return null, which the autosave hook turns into a thrown
+    // "invalid document" — i.e. the designer fails to open at all.
+    const stored = {
+      ...shot,
+      photo: { ...shot.photo, dataUrl: "lighting-image:workspaces/w/lighting-projects/p/a.png" },
+    };
+
+    const normalized = normalizeLandscapeDocument({
+      version: 2,
+      shots: [stored],
+      activeShotId: stored.id,
+    });
+
+    expect(normalized).not.toBeNull();
+    expect(normalized?.shots).toHaveLength(1);
+    expect(normalized?.shots[0]?.photo.dataUrl).toBe(stored.photo.dataUrl);
+  });
+
   it("rejects malformed image payloads and excessive sheets", () => {
     expect(
       normalizeLandscapeDocument({

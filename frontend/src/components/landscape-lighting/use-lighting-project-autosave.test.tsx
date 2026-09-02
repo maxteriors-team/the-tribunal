@@ -40,6 +40,7 @@ vi.mock("@/lib/estimator/landscape-draft", async (importOriginal) => {
 
 const WORKSPACE_ID = "c08cc985-944f-48f8-987c-7fc171afdfe2";
 const PROJECT_ID = "e83683ac-426a-4a18-b9ad-dffb76574d69";
+const STORED_REF = "lighting-image:workspaces/w/lighting-projects/p/a.png";
 
 function makeDraft(
   id = "shot-1",
@@ -466,5 +467,23 @@ describe("useLightingProjectAutosave", () => {
     );
     expect(onCopyCreated).toHaveBeenCalledWith(copy);
     expect(draftStorageMocks.deletePending).toHaveBeenCalledWith(PROJECT_ID);
+  });
+
+  it("opens a project whose images live in the bucket", async () => {
+    // Regression: a migrated document holds `lighting-image:{key}` instead of
+    // bytes. While the normalizer rejected that shape the shot was dropped, the
+    // document came back null, and this hook threw "invalid landscape project
+    // document" during render — the designer would not open at all.
+    const draft = makeDraft();
+    draft.shots[0].photo.dataUrl = STORED_REF;
+    draft.shots[0].photo.resolvedUrl = "https://bucket.example/signed-1";
+
+    const { result } = await renderAutosave(makeProject(1, draft));
+
+    expect(result.current.initialDraft.shots).toHaveLength(1);
+    expect(result.current.initialDraft.shots[0].photo.dataUrl).toBe(STORED_REF);
+    expect(result.current.initialDraft.shots[0].photo.resolvedUrl).toBe(
+      "https://bucket.example/signed-1",
+    );
   });
 });
