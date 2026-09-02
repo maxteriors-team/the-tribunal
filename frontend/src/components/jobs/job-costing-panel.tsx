@@ -45,6 +45,7 @@ export function JobCostingPanel({
 }: JobCostingPanelProps) {
   const { can } = useCapabilities();
   const canViewPnl = can("billing:read");
+  const canSetRate = can("billing:write");
   const canManageAttendance = can("attendance:manage");
   // The backend independently strips these values; match its permission here.
   const canSeeCosts = can("billing:read");
@@ -80,7 +81,7 @@ export function JobCostingPanel({
 
   const handleClockIn = () => {
     clockIn.mutate(
-      { rate: !canSeeCosts || rate === "" ? 0 : Number(rate) },
+      { rate: !canSetRate || rate === "" ? 0 : Number(rate) },
       {
         onSuccess: () => toast.success(timerPaused ? "Timer resumed" : "Job timer started"),
         onError: (err) => toast.error(getApiErrorMessage(err, "Failed to start timer")),
@@ -211,7 +212,7 @@ export function JobCostingPanel({
         </div>
 
         <div className="flex flex-wrap items-end gap-2">
-          {canSeeCosts && (
+          {canSetRate && (
             <div className="min-w-36 flex-1 space-y-1">
               <Label htmlFor="clock-rate" className="text-xs">
                 Hourly rate
