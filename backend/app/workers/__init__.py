@@ -27,6 +27,7 @@ from app.workers.auth_rate_limit_cleanup_worker import (
 from app.workers.automation_worker import _registry as automation_registry
 from app.workers.base import BaseWorker
 from app.workers.campaign_worker import _registry as campaign_registry
+from app.workers.deal_lifecycle_worker import _registry as deal_lifecycle_registry
 from app.workers.drip_campaign_worker import _registry as drip_campaign_registry
 from app.workers.email_campaign_worker import _registry as email_campaign_registry
 from app.workers.enrichment_worker import _registry as enrichment_registry
@@ -347,6 +348,11 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         name="invoice_payment_receipt_worker",
         registry=invoice_payment_receipt_registry,
         dependencies=("postgres", "resend"),
+    ),
+    WorkerSpec(
+        name="deal_lifecycle_worker",
+        registry=deal_lifecycle_registry,
+        dependencies=("postgres",),
     ),
 )
 

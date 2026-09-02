@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Literal
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.opportunity import Opportunity, OpportunityActivity
+from app.models.opportunity import Opportunity, OpportunityActivity, OpportunityTask
 from app.models.pipeline import Pipeline, PipelineStage
 from app.models.workspace import Workspace
 from app.schemas.deal_lifecycle import DealLifecycleSettings
@@ -23,6 +23,7 @@ logger = structlog.get_logger().bind(component="invoice_opportunity_lifecycle")
 
 InvoiceTransition = Literal["sent", "paid"]
 _TERMINAL_STATUSES = frozenset({"won", "lost", "abandoned"})
+FOLLOW_UP_DELAYS_HOURS = (24, 72)
 
 
 async def _configured_target(
@@ -112,6 +113,90 @@ async def _can_advance_sent_stage(
     return current_stage is not None and current_stage.order <= target_stage.order
 
 
+def _follow_up_title(invoice: Invoice, delay_hours: int) -> str:
+    return f"Call about invoice {invoice.number} ({delay_hours}h no response)"
+
+
+async def _create_follow_up_tasks(
+    db: AsyncSession,
+    invoice: Invoice,
+    opportunity: Opportunity,
+    config: DealLifecycleSettings,
+    *,
+    now: datetime,
+) -> bool:
+    titles = {_follow_up_title(invoice, delay) for delay in FOLLOW_UP_DELAYS_HOURS}
+    existing = set(
+        (
+            await db.scalars(
+                select(OpportunityTask.title).where(
+                    OpportunityTask.opportunity_id == opportunity.id,
+                    OpportunityTask.title.in_(titles),
+                )
+            )
+        ).all()
+    )
+    existing.update(
+        task.title
+        for task in db.new
+        if isinstance(task, OpportunityTask) and task.opportunity_id == opportunity.id
+    )
+    created = False
+    sent_at = invoice.sent_at or now
+    for delay_hours in FOLLOW_UP_DELAYS_HOURS:
+        title = _follow_up_title(invoice, delay_hours)
+        if title in existing:
+            continue
+        db.add(
+            OpportunityTask(
+                opportunity_id=opportunity.id,
+                title=title,
+                notes=f"No response to invoice {invoice.number}; call the customer.",
+                due_at=sent_at + timedelta(hours=delay_hours),
+                assigned_user_id=config.follow_up_assignee_user_id,
+                created_by_id=None,
+            )
+        )
+        created = True
+    return created
+
+
+async def complete_invoice_follow_up_tasks(
+    db: AsyncSession,
+    invoice: Invoice,
+    opportunity: Opportunity,
+    *,
+    completed_at: datetime,
+) -> bool:
+    titles = {_follow_up_title(invoice, delay) for delay in FOLLOW_UP_DELAYS_HOURS}
+    tasks = list(
+        (
+            await db.scalars(
+                select(OpportunityTask)
+                .where(
+                    OpportunityTask.opportunity_id == opportunity.id,
+                    OpportunityTask.title.in_(titles),
+                    OpportunityTask.completed_at.is_(None),
+                )
+                .with_for_update()
+            )
+        ).all()
+    )
+    tasks.extend(
+        task
+        for task in db.new
+        if (
+            isinstance(task, OpportunityTask)
+            and task.opportunity_id == opportunity.id
+            and task.title in titles
+            and task.completed_at is None
+        )
+    )
+    for task in tasks:
+        task.completed_at = completed_at
+    return bool(tasks)
+
+
 async def transition_invoice_opportunity(
     db: AsyncSession,
     invoice: Invoice,
@@ -137,8 +222,19 @@ async def transition_invoice_opportunity(
     ):
         return False
 
+    now = datetime.now(UTC)
+    tasks_changed = (
+        await _create_follow_up_tasks(db, invoice, opportunity, config, now=now)
+        if transition == "sent"
+        else await complete_invoice_follow_up_tasks(
+            db,
+            invoice,
+            opportunity,
+            completed_at=invoice.paid_at or now,
+        )
+    )
     status_changed = transition == "paid" and opportunity.status != "won"
-    if not stage_changed and not status_changed:
+    if not stage_changed and not status_changed and not tasks_changed:
         return False
 
     invoice_ref = f"{invoice.number} ({invoice.id})"

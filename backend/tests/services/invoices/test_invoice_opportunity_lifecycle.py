@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.models.opportunity import Opportunity, OpportunityActivity
+from app.models.opportunity import Opportunity, OpportunityActivity, OpportunityTask
 from app.models.workspace import Workspace
 from app.schemas.deal_lifecycle import DealLifecycleSettings
 from app.schemas.invoice import InvoiceManualPaymentCreate
@@ -27,6 +27,9 @@ def _db() -> MagicMock:
     db = MagicMock()
     db.get = AsyncMock()
     db.scalar = AsyncMock()
+    scalar_rows = MagicMock()
+    scalar_rows.all.return_value = []
+    db.scalars = AsyncMock(return_value=scalar_rows)
     db.execute = AsyncMock()
     db.commit = AsyncMock()
     db.refresh = AsyncMock()
@@ -165,6 +168,7 @@ async def test_sent_invoice_moves_deal_forward_with_invoice_audit() -> None:
     target = _stage(config.quote_follow_up_stage_id, "Quote Follow Up", order=5, probability=60)
     opportunity = _opportunity(workspace_id, pipeline_id, current.id)
     invoice = _invoice(workspace_id, opportunity.id)
+    invoice.sent_at = datetime(2026, 9, 1, 12, tzinfo=UTC)
     db = _db()
     _wire_db(
         db,
@@ -183,8 +187,14 @@ async def test_sent_invoice_moves_deal_forward_with_invoice_audit() -> None:
     assert changed is True
     assert opportunity.stage_id == target.id
     assert opportunity.probability == 60
-    activity = db.add.call_args.args[0]
-    assert isinstance(activity, OpportunityActivity)
+    additions = [call.args[0] for call in db.add.call_args_list]
+    tasks = [addition for addition in additions if isinstance(addition, OpportunityTask)]
+    assert [task.due_at for task in tasks] == [
+        datetime(2026, 9, 2, 12, tzinfo=UTC),
+        datetime(2026, 9, 4, 12, tzinfo=UTC),
+    ]
+    assert all(task.assigned_user_id == 42 for task in tasks)
+    activity = next(addition for addition in additions if isinstance(addition, OpportunityActivity))
     assert str(invoice.id) in activity.description
     assert "was sent" in activity.description
     assert stage_event.await_args.kwargs["payload"]["source"] == "invoice_sent"
