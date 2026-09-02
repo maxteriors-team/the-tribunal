@@ -19,7 +19,7 @@ Route: `/opportunities`. Sidebar label: **Opportunities**.
 
 1. Open **Opportunities** and choose the pipeline you want to view.
 2. Select **New Opportunity** to connect a contact, value, and pipeline stage.
-3. Move an opportunity through stages as work progresses, or open its detail dialog to edit it.
+3. Move an opportunity through stages as work progresses, or open `/opportunities/{opportunity_id}` to review and edit its details.
 4. Use **Configure Pipelines** for pipeline administration, or open **Settings → Pipeline** at `/settings?tab=pipeline`.
 
 A stage change updates the CRM record. It does not send a customer message unless an enabled automation separately handles that event.
