@@ -248,3 +248,56 @@ any database write, and 13–16 are the migration itself.
     returns 0.
 16. Record the final `pg_total_relation_size('lighting_projects')` and the
     Railway volume usage, confirming the volume no longer trends toward its cap.
+
+---
+
+## Outcome (2026-09-01)
+
+Shipped in PR #212, merged to `main` as `e45f54eb`, deployed and verified live.
+
+### Result
+
+| measure | before | after |
+|---|---|---|
+| `lighting_projects` total size | 111 MB | **2840 kB** |
+| whole database | 164 MB | **67 MB** |
+| rows containing `data:image` | 26 | **0** |
+| Railway volume | 341 MB / 500 MB (68%) | 1409 MB / 20000 MB (7%) |
+| projects | 32 | 32 (all parse) |
+
+Documents shrank ~99% per row (e.g. 2,468,703 → 10,188 bytes). 26 projects
+migrated in 6 batches with a `VACUUM` between each; **0 failed**.
+
+### Deviation from the plan
+
+Step 14 assumed a 68%-full 500 MB volume. **Partway through this work the
+volume filled and production Postgres crash-looped** (`No space left on device`
+writing WAL; `/readyz` 503). It was resized to 20 GB out-of-band, which removed
+the space pressure the batching was designed around. The batching was kept
+anyway — it is still the right shape for a rewrite that grows the table before
+it shrinks — and the table never grew across a batch boundary.
+
+### Canvas tainting: closed, with evidence
+
+The plan's highest-risk item. Verified in a real Chromium, from the production
+origin, against a live signed URL:
+
+```
+img.crossOrigin = "anonymous" → drawImage → toDataURL('image/jpeg', 0.9)
+RESULT EXPORT_OK bytes=563275 dims=1844x1144
+```
+
+An identical probe served from `localhost` returns `IMAGE_LOAD_FAILED`, which
+is the bucket **correctly** withholding `Access-Control-Allow-Origin` from an
+unlisted origin. Only origins in `CORS_ORIGINS` can read these objects from
+script; re-run `scripts/ops/set_bucket_cors.py --apply` after a domain change.
+
+### Follow-ups (deliberately out of scope)
+
+- Bucket objects are not deleted when a project is deleted, so deleting a
+  project now orphans its images. Tracked, not half-done here.
+- A save that loses the optimistic-concurrency check leaves unreferenced
+  objects behind (uploads happen before the row lock, to keep autosave from
+  serializing on bucket I/O). Bucket bytes, not database volume.
+- An idle designer session resumed after an hour holds expired URLs until the
+  next refetch; a retry-on-error refetch in the editor would close this.
