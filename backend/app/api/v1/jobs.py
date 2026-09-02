@@ -12,6 +12,7 @@ cleanly.
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import select
@@ -109,6 +110,16 @@ def _can_see_costs(membership: WorkspaceMembership) -> bool:
     (``jobs:read`` only) is below it.
     """
     return role_can(membership.role, Capability.BILLING_READ)
+
+
+def _time_entry_payload_updates(membership: WorkspaceMembership, user_id: int) -> dict[str, object]:
+    """Strip timer ownership and rate fields the caller cannot control."""
+    updates: dict[str, object] = {}
+    if time_entry_owner_scope(membership.role, user_id) is not None:
+        updates["technician_id"] = None
+    if not role_can(membership.role, Capability.BILLING_WRITE):
+        updates["rate"] = Decimal("0")
+    return updates
 
 
 def _calendar_scope_user_id(
@@ -567,8 +578,7 @@ async def clock_in(
     db: TransactionalDB,
 ) -> TimeEntryResponse:
     """Start or resume the signed-in user's timer on an assigned job."""
-    if time_entry_owner_scope(membership.role, current_user.id) is not None:
-        payload = payload.model_copy(update={"technician_id": None})
+    payload = payload.model_copy(update=_time_entry_payload_updates(membership, current_user.id))
     return await JobCostingService(db).clock_in(
         job_id,
         workspace.id,
@@ -643,8 +653,7 @@ async def add_time_entry(
     db: TransactionalDB,
 ) -> TimeEntryResponse:
     """Log a completed manual time entry on an assigned job."""
-    if time_entry_owner_scope(membership.role, current_user.id) is not None:
-        payload = payload.model_copy(update={"technician_id": None})
+    payload = payload.model_copy(update=_time_entry_payload_updates(membership, current_user.id))
     return await JobCostingService(db).add_time_entry(
         job_id,
         workspace.id,
