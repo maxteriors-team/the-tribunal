@@ -261,11 +261,32 @@ describe("landscape document v2", () => {
     expect(roundTrip?.bomLineItems).toEqual(liveState.bomLineItems);
   });
 
+  it.each([
+    ["signed", "https://bucket.example/signed"],
+    ["temporarily unsigned", null],
+  ])("preserves stored project photos when they are %s", (_state, resolvedUrl) => {
+    const dataUrl =
+      "lighting-image:workspaces/workspace-1/lighting-projects/project-1/photo.png";
+    const normalized = normalizeLandscapeDocument({
+      version: 1,
+      activeShotId: "shot-1",
+      shots: [{ ...shot, photo: { ...shot.photo, dataUrl, resolvedUrl } }],
+    });
+
+    expect(normalized?.shots[0]?.photo).toMatchObject({ dataUrl, resolvedUrl });
+  });
+
   it("rejects malformed image payloads and excessive sheets", () => {
     expect(
       normalizeLandscapeDocument({
         version: 1,
         shots: [{ ...shot, photo: { ...shot.photo, dataUrl: "https://example.com/x.png" } }],
+      }),
+    ).toBeNull();
+    expect(
+      normalizeLandscapeDocument({
+        version: 1,
+        shots: [{ ...shot, photo: { ...shot.photo, dataUrl: "lighting-image:../x.png" } }],
       }),
     ).toBeNull();
     expect(

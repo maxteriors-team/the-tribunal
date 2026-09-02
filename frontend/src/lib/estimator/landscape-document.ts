@@ -140,6 +140,20 @@ const normalizePlacedItem = (value: unknown): unknown => {
   return normalized;
 };
 
+const STORED_IMAGE_PREFIX = "lighting-image:";
+const STORAGE_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)*$/;
+
+const isSupportedPhotoSource = (value: string): boolean => {
+  if (value.startsWith("data:image/")) return true;
+  if (!value.startsWith(STORED_IMAGE_PREFIX)) return false;
+  const objectPath = value.substring(STORED_IMAGE_PREFIX.length);
+  return (
+    objectPath.length <= 250 &&
+    !objectPath.includes("..") &&
+    STORAGE_KEY_PATTERN.test(objectPath)
+  );
+};
+
 const normalizedShots = (value: unknown): DesignerShot[] => {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry, index) => {
@@ -151,7 +165,7 @@ const normalizedShots = (value: unknown): DesignerShot[] => {
       typeof shot.id !== "string" ||
       !photo ||
       typeof photo.dataUrl !== "string" ||
-      !photo.dataUrl.startsWith("data:image/") ||
+      !isSupportedPhotoSource(photo.dataUrl) ||
       typeof photo.width !== "number" ||
       photo.width <= 0 ||
       typeof photo.height !== "number" ||
