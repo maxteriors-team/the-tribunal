@@ -1,7 +1,7 @@
 "use client";
 
 import { Phone, MessageSquare, Mail, Voicemail, User, Calendar, FileText } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { type ReactNode } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -37,6 +37,7 @@ export function MessageItemShell({
   contactName,
   children,
 }: MessageItemShellProps) {
+  const shouldReduceMotion = useReducedMotion();
   const isCall = item.type === "call";
   const isAppointment = item.type === "appointment";
   const isQuoActivity = (item.type === "sms" || isCall) && item.source_provider === "quo";
@@ -48,9 +49,9 @@ export function MessageItemShell({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: shouldReduceMotion ? 0 : 0.2 }}
       className={cn(
         "flex gap-3 px-4 py-2 overflow-hidden",
         isOutbound ? "flex-row-reverse" : "flex-row",
@@ -73,7 +74,7 @@ export function MessageItemShell({
         {/* Sender info */}
         <div
           className={cn(
-            "mb-1 flex max-w-full flex-wrap items-center gap-2 text-xs text-muted-foreground",
+            "mb-1 flex max-w-full flex-wrap items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300",
             isOutbound ? "flex-row-reverse" : "flex-row",
           )}
         >
@@ -100,11 +101,11 @@ export function MessageItemShell({
         {/* Content bubble */}
         <div
           className={cn(
-            "rounded-2xl px-4 py-2.5",
+            "rounded-2xl px-4 py-2.5 text-zinc-700 dark:text-zinc-200",
             isCall || isAppointment
               ? "bg-muted/50 border"
               : isOutbound
-                ? "bg-primary text-primary-foreground"
+                ? "bg-primary text-zinc-950 dark:text-zinc-950"
                 : "bg-muted",
           )}
         >

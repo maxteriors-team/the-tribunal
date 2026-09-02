@@ -12,6 +12,7 @@ import {
 } from "@dnd-kit/core";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KanbanSquare, Plus, Settings2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -54,12 +55,15 @@ import type { Contact, Opportunity, Pipeline, PipelineStage } from "@/types";
 import { ManageStagesDialog } from "./manage-stages-dialog";
 import { OpportunityCard, OpportunityCardSummary } from "./opportunity-card";
 import { OpportunityCreateSheet } from "./opportunity-create-sheet";
-import { OpportunityDetailSheet } from "./opportunity-detail-sheet";
 
 const BOARD_PAGE_SIZE = 200;
 
 /** Sentinel for "no rep filter"; Radix Select cannot hold an empty-string value. */
 const ALL_REPS_VALUE = "all";
+
+function numericFilter(value: string | null): string {
+  return value && /^\d+$/.test(value) && Number(value) > 0 ? value : "";
+}
 
 /**
  * The board renders a lead's name, phone, and lifecycle status straight from
@@ -121,11 +125,11 @@ export function OpportunitiesBoard() {
 
 function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipeline: Pipeline }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentWorkspace } = useWorkspace();
   const canAssignOwners = currentWorkspace?.role !== "sales_rep";
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createStageId, setCreateStageId] = useState<string | undefined>(undefined);
   const [manageStagesOpen, setManageStagesOpen] = useState(false);
@@ -134,12 +138,14 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
   const [customerFilter, setCustomerFilter] = useState<{
     id: string;
     contact: Contact | null;
-  }>({ id: "", contact: null });
-  const [repFilter, setRepFilter] = useState<string>(ALL_REPS_VALUE);
+  }>(() => ({ id: numericFilter(searchParams.get("contact")), contact: null }));
+  const [repFilter, setRepFilter] = useState<string>(() =>
+    canAssignOwners ? numericFilter(searchParams.get("owner")) || ALL_REPS_VALUE : ALL_REPS_VALUE,
+  );
 
   // A sales rep only ever sees their own deals, so a rep filter would be a
   // single-option no-op for them. Reuses the picker's key, so the team list is
-  // fetched once and shared with the owner picker in the detail sheet.
+  // fetched once and shared with the owner picker in the deal workspace.
   const repsQuery = useQuery({
     queryKey: queryKeys.settings.activeTeam(workspaceId),
     queryFn: () => settingsApi.getActiveTeamMembers(workspaceId),
@@ -154,6 +160,9 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
     submitCall,
     initiateCallMutation,
   } = useOutboundCall(workspaceId);
+
+  const filterContactId = customerFilter.id ? Number(customerFilter.id) : undefined;
+  const filterContactQuery = useContact(workspaceId, filterContactId);
 
   // The board payload carries only a contact summary; the appointment dialog
   // needs the full record, so fetch it once the operator asks to book.
@@ -276,9 +285,23 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
     moveMutation.mutate({ opportunityId, stageId: targetStageId });
   }
 
-  function openDetail(opportunityId: string) {
-    setSelectedId(opportunityId);
-    setDetailOpen(true);
+  function filterQuery(contactId = customerFilter.id, owner = repFilter, tab?: "sms") {
+    const params = new URLSearchParams();
+    if (contactId) params.set("contact", contactId);
+    if (canAssignOwners && owner !== ALL_REPS_VALUE) params.set("owner", owner);
+    if (tab) params.set("tab", tab);
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  }
+
+  function replaceFilters(contactId = customerFilter.id, owner = repFilter) {
+    router.replace(`/opportunities${filterQuery(contactId, owner)}`, { scroll: false });
+  }
+
+  function openDetail(opportunityId: string, tab?: "sms") {
+    router.push(
+      `/opportunities/${encodeURIComponent(opportunityId)}${filterQuery(undefined, undefined, tab)}`,
+    );
   }
 
   function openCreate(stageId?: string) {
@@ -339,15 +362,27 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
             <Label htmlFor="opportunity-customer-filter" className="text-xs">
               Filter by customer
             </Label>
-            <ContactPicker
-              id="opportunity-customer-filter"
-              workspaceId={workspaceId}
-              value={customerFilter.id}
-              initialContact={customerFilter.contact}
-              onChange={(id, contact) => setCustomerFilter({ id, contact })}
-              placeholder="Filter by customer…"
-              data-testid="opportunity-customer-filter"
-            />
+            {customerFilter.id && filterContactQuery.isPending ? (
+              <div
+                className="flex h-9 items-center rounded-md border px-3 text-sm text-muted-foreground"
+                role="status"
+              >
+                Loading customer filter…
+              </div>
+            ) : (
+              <ContactPicker
+                id="opportunity-customer-filter"
+                workspaceId={workspaceId}
+                value={customerFilter.id}
+                initialContact={customerFilter.contact ?? filterContactQuery.data ?? undefined}
+                onChange={(id, contact) => {
+                  setCustomerFilter({ id, contact });
+                  replaceFilters(id, repFilter);
+                }}
+                placeholder="Filter by customer…"
+                data-testid="opportunity-customer-filter"
+              />
+            )}
           </div>
 
           {canAssignOwners ? (
@@ -357,7 +392,10 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
               </Label>
               <Select
                 value={repFilter}
-                onValueChange={setRepFilter}
+                onValueChange={(owner) => {
+                  setRepFilter(owner);
+                  replaceFilters(customerFilter.id, owner);
+                }}
                 disabled={repsQuery.isLoading || repsQuery.isError}
               >
                 <SelectTrigger
@@ -400,6 +438,7 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
                     moveMutation.mutate({ opportunityId, stageId })
                   }
                   onCall={callContact}
+                  onText={(opportunity) => openDetail(opportunity.id, "sms")}
                   onSchedule={scheduleContactFor}
                   onRemove={setPendingRemoval}
                 />
@@ -414,15 +453,6 @@ function PipelineBoard({ workspaceId, pipeline }: { workspaceId: string; pipelin
           </DragOverlay>
         </DndContext>
       </div>
-
-      <OpportunityDetailSheet
-        workspaceId={workspaceId}
-        opportunityId={selectedId}
-        stages={stages}
-        canAssignOwners={canAssignOwners}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-      />
 
       <OpportunityCreateSheet
         workspaceId={workspaceId}
@@ -504,6 +534,7 @@ function StageColumn({
   onAdd,
   onMove,
   onCall,
+  onText,
   onSchedule,
   onRemove,
 }: {
@@ -514,6 +545,7 @@ function StageColumn({
   onAdd: () => void;
   onMove: (opportunityId: string, stageId: string) => void;
   onCall: (opportunity: Opportunity) => void;
+  onText: (opportunity: Opportunity) => void;
   onSchedule: (opportunity: Opportunity) => void;
   onRemove: (opportunity: Opportunity) => void;
 }) {
@@ -570,6 +602,7 @@ function StageColumn({
               onOpen={onOpen}
               onMove={onMove}
               onCall={onCall}
+              onText={onText}
               onSchedule={onSchedule}
               onRemove={onRemove}
             />

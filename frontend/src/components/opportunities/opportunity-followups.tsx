@@ -8,6 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { TeamMemberPicker } from "@/components/workspaces/team-member-picker";
@@ -15,9 +22,12 @@ import { opportunitiesApi } from "@/lib/api/opportunities";
 import { queryKeys } from "@/lib/query-keys";
 import { formatDate } from "@/lib/utils/date";
 import { getApiErrorMessage } from "@/lib/utils/errors";
-import type { OpportunityNoteKind, OpportunityTask } from "@/types";
-
-type BasicOpportunityNoteKind = Exclude<OpportunityNoteKind, "call">;
+import type {
+  OpportunityCallOutcome,
+  OpportunityNoteInput,
+  OpportunityNoteKind,
+  OpportunityTask,
+} from "@/types";
 
 interface OpportunityFollowupsProps {
   workspaceId: string;
@@ -40,7 +50,8 @@ export function OpportunityFollowups({
   const queryClient = useQueryClient();
 
   const [noteBody, setNoteBody] = useState("");
-  const [noteKind, setNoteKind] = useState<BasicOpportunityNoteKind>("note");
+  const [noteKind, setNoteKind] = useState<OpportunityNoteKind>("note");
+  const [callOutcome, setCallOutcome] = useState<OpportunityCallOutcome | "">("");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDueAt, setTaskDueAt] = useState("");
   const [taskAssigneeId, setTaskAssigneeId] = useState<number | null>(null);
@@ -52,11 +63,18 @@ export function OpportunityFollowups({
   };
 
   const noteMutation = useMutation({
-    mutationFn: (input: { body: string; kind: BasicOpportunityNoteKind }) =>
+    mutationFn: (input: OpportunityNoteInput) =>
       opportunitiesApi.addNote(workspaceId, opportunityId, input),
     onSuccess: (_data, input) => {
       setNoteBody("");
-      toast.success(input.kind === "update" ? "Update posted" : "Note added");
+      if (input.kind === "call") setCallOutcome("");
+      toast.success(
+        input.kind === "call"
+          ? "Call logged"
+          : input.kind === "update"
+            ? "Update posted"
+            : "Note added",
+      );
       refresh();
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to save note")),
@@ -96,13 +114,17 @@ export function OpportunityFollowups({
       toast.success("Tagged user updated");
       refresh();
     },
-    onError: (err: unknown) =>
-      toast.error(getApiErrorMessage(err, "Failed to update tagged user")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to update tagged user")),
   });
 
   const submitNote = () => {
     const body = noteBody.trim();
     if (!body || noteMutation.isPending) return;
+    if (noteKind === "call") {
+      if (!callOutcome) return;
+      noteMutation.mutate({ body, kind: noteKind, outcome: callOutcome });
+      return;
+    }
     noteMutation.mutate({ body, kind: noteKind });
   };
 
@@ -131,39 +153,77 @@ export function OpportunityFollowups({
           <TabsTrigger value="task">Task</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="note" className="space-y-2 pt-2">
-          <Label htmlFor="opportunity-note-body" className="sr-only">
-            Note about this deal
-          </Label>
-          <Textarea
-            id="opportunity-note-body"
-            value={noteBody}
-            onChange={(event) => setNoteBody(event.target.value)}
-            placeholder="What happened on this deal?"
-            rows={3}
-          />
-          <div className="flex items-center justify-between gap-2">
+        <TabsContent value="note" className="space-y-3 pt-2">
+          <div
+            className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"
+            role="group"
+            aria-label="Activity type"
+          >
             <div className="flex gap-1">
-              {(["note", "update"] as const).map((kind) => (
+              {(["note", "update", "call"] as const).map((kind) => (
                 <Button
                   key={kind}
                   type="button"
                   size="sm"
                   variant={noteKind === kind ? "secondary" : "ghost"}
                   aria-pressed={noteKind === kind}
-                  onClick={() => setNoteKind(kind)}
+                  onClick={() => {
+                    setNoteKind(kind);
+                    if (kind !== "call") setCallOutcome("");
+                  }}
                 >
-                  {kind === "note" ? "Note" : "Update"}
+                  {kind === "note" ? "Note" : kind === "update" ? "Update" : "Call"}
                 </Button>
               ))}
             </div>
+            {noteKind === "call" ? (
+              <div className="space-y-1.5 sm:w-48">
+                <Label htmlFor="opportunity-call-outcome" className="text-xs">
+                  Call outcome
+                </Label>
+                <Select
+                  value={callOutcome}
+                  onValueChange={(value) => setCallOutcome(value as OpportunityCallOutcome)}
+                >
+                  <SelectTrigger id="opportunity-call-outcome" className="w-full">
+                    <SelectValue placeholder="Choose outcome" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="appointment_booked">Appointment booked</SelectItem>
+                    <SelectItem value="lead_qualified">Lead qualified</SelectItem>
+                    <SelectItem value="voicemail">Voicemail</SelectItem>
+                    <SelectItem value="no_answer">No answer</SelectItem>
+                    <SelectItem value="busy">Busy</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+          </div>
+          <Label htmlFor="opportunity-note-body" className="sr-only">
+            {noteKind === "call" ? "Call notes" : "Note about this deal"}
+          </Label>
+          <Textarea
+            id="opportunity-note-body"
+            value={noteBody}
+            onChange={(event) => setNoteBody(event.target.value)}
+            placeholder={
+              noteKind === "call" ? "What happened on the call?" : "What happened on this deal?"
+            }
+            rows={3}
+          />
+          <div className="flex justify-end">
             <Button
               type="button"
               size="sm"
               onClick={submitNote}
-              disabled={!noteBody.trim() || noteMutation.isPending}
+              disabled={
+                !noteBody.trim() || noteMutation.isPending || (noteKind === "call" && !callOutcome)
+              }
             >
-              {noteMutation.isPending ? "Saving..." : "Add"}
+              {noteMutation.isPending ? "Saving…" : noteKind === "call" ? "Log call" : "Add"}
             </Button>
           </div>
         </TabsContent>
@@ -223,9 +283,7 @@ export function OpportunityFollowups({
               assigning={
                 assignTaskMutation.isPending && assignTaskMutation.variables?.taskId === task.id
               }
-              onToggle={(completed) =>
-                toggleTaskMutation.mutate({ taskId: task.id, completed })
-              }
+              onToggle={(completed) => toggleTaskMutation.mutate({ taskId: task.id, completed })}
               onAssigneeChange={(assignedUserId) =>
                 assignTaskMutation.mutate({ taskId: task.id, assignedUserId })
               }

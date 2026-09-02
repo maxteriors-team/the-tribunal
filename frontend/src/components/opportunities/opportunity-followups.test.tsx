@@ -26,6 +26,31 @@ vi.mock("@/lib/api/opportunities", () => ({
   },
 }));
 
+vi.mock("@/components/ui/select", () => ({
+  Select: ({ value, onValueChange }: { value: string; onValueChange: (value: string) => void }) => (
+    <select
+      id="opportunity-call-outcome"
+      aria-label="Call outcome"
+      value={value}
+      onChange={(event) => onValueChange(event.target.value)}
+    >
+      <option value="">Choose outcome</option>
+      <option value="completed">Completed</option>
+      <option value="appointment_booked">Appointment booked</option>
+      <option value="lead_qualified">Lead qualified</option>
+      <option value="voicemail">Voicemail</option>
+      <option value="no_answer">No answer</option>
+      <option value="busy">Busy</option>
+      <option value="rejected">Rejected</option>
+      <option value="failed">Failed</option>
+    </select>
+  ),
+  SelectContent: () => null,
+  SelectItem: () => null,
+  SelectTrigger: () => null,
+  SelectValue: () => null,
+}));
+
 vi.mock("@/components/workspaces/team-member-picker", () => ({
   TeamMemberPicker: ({
     value,
@@ -39,9 +64,7 @@ vi.mock("@/components/workspaces/team-member-picker", () => ({
     <select
       aria-label={label ?? "Team member"}
       value={value ?? ""}
-      onChange={(event) =>
-        onValueChange(event.target.value ? Number(event.target.value) : null)
-      }
+      onChange={(event) => onValueChange(event.target.value ? Number(event.target.value) : null)}
     >
       <option value="">Unassigned</option>
       <option value="22">Jordan Lee</option>
@@ -126,6 +149,26 @@ describe("OpportunityFollowups notes", () => {
     await user.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => expect(box).toHaveValue(""));
+  });
+
+  it("requires and submits a structured call outcome", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "Call" }));
+    await user.type(screen.getByLabelText("Call notes"), "Customer asked for a revised quote");
+    expect(screen.getByRole("button", { name: "Log call" })).toBeDisabled();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Call outcome" }), "voicemail");
+    await user.click(screen.getByRole("button", { name: "Log call" }));
+
+    await waitFor(() =>
+      expect(addNoteMock).toHaveBeenCalledWith("ws-1", "opp-1", {
+        body: "Customer asked for a revised quote",
+        kind: "call",
+        outcome: "voicemail",
+      }),
+    );
   });
 });
 
