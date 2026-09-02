@@ -237,6 +237,32 @@ describe("LightingProjectEditor", () => {
     expect(apiMocks.get).toHaveBeenCalledTimes(2);
   });
 
+  it("re-fetches the document to refresh expiring image URLs, even at the same version", async () => {
+    // The revision poll alone is a cache hit when nobody else has edited, so a
+    // long session would keep the signed image URLs it was handed at mount
+    // until they expire -- breaking the canvas photo and the proposal export.
+    queryOptionMocks.pollProject = true;
+    apiMocks.get.mockResolvedValue(project());
+    apiMocks.getRevision.mockResolvedValue({ version: 1 });
+    const realNow = Date.now;
+    renderEditor();
+
+    expect(await screen.findByTestId("light-designer")).toHaveTextContent("shot-1");
+    await waitFor(() => expect(apiMocks.get).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(apiMocks.getRevision.mock.calls.length).toBeGreaterThanOrEqual(1));
+    // Same version, so nothing has changed for the poll to notice.
+    expect(apiMocks.get).toHaveBeenCalledTimes(1);
+
+    // Jump past the refresh window with the session still open.
+    vi.spyOn(Date, "now").mockImplementation(() => realNow() + 31 * 60 * 1000);
+    try {
+      await waitFor(() => expect(apiMocks.get).toHaveBeenCalledTimes(2), { timeout: 5000 });
+    } finally {
+      vi.mocked(Date.now).mockRestore();
+      queryOptionMocks.pollProject = false;
+    }
+  });
+
   it("saves, reopens by project ID from persistence, edits, and saves again", async () => {
     let persistedProject = project();
     apiMocks.get.mockImplementation(async () => persistedProject);
