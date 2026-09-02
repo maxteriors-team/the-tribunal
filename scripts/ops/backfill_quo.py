@@ -91,16 +91,16 @@ async def _run(args: argparse.Namespace) -> int:
             credentials = integration.safe_credentials()
             api_key, organization_id, phone_number_id, phone_number = _integration_credentials(
                 credentials
-)
+            )
 
             async with QuoClient(api_key) as client:
                 remote_organization_id = await client.validate_api_key()
                 if remote_organization_id is None or not hmac.compare_digest(
                     remote_organization_id, organization_id
-):
+                ):
                     raise QuoBackfillConfigError(
                         "stored Quo integration does not match the authenticated tenant"
-)
+                    )
                 counts = await QuoHistoricalBackfill(
                     db,
                     workspace_id=args.workspace_id,

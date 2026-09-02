@@ -303,7 +303,8 @@ def _config_from_args(args: argparse.Namespace) -> RelayConfig:
         or os.environ.get("MAC_RELAY_WEBHOOK_TOKEN", "")
         or os.environ.get("MAC_RELAY_TOKEN", ""),
         imsg_path=args.imsg_path or os.environ.get("IMSG_PATH", "imsg"),
-        default_service=args.default_service or os.environ.get("MAC_RELAY_DEFAULT_SERVICE", "imessage"),
+        default_service=args.default_service
+        or os.environ.get("MAC_RELAY_DEFAULT_SERVICE", "imessage"),
     )
 
 
@@ -354,8 +355,12 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(description="Mac iMessage relay around imsg")
     parser.add_argument("--token", default="", help="Bearer token for local relay API")
-    parser.add_argument("--backend-webhook-url", default="", help="Backend /webhooks/mac-relay/messages URL")
-    parser.add_argument("--backend-webhook-token", default="", help="Bearer token for backend webhook")
+    parser.add_argument(
+        "--backend-webhook-url", default="", help="Backend /webhooks/mac-relay/messages URL"
+    )
+    parser.add_argument(
+        "--backend-webhook-token", default="", help="Bearer token for backend webhook"
+    )
     parser.add_argument("--imsg-path", default="", help="Path to imsg binary")
     parser.add_argument(
         "--default-service",
