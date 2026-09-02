@@ -294,10 +294,25 @@ script; re-run `scripts/ops/set_bucket_cors.py --apply` after a domain change.
 
 ### Follow-ups (deliberately out of scope)
 
-- Bucket objects are not deleted when a project is deleted, so deleting a
-  project now orphans its images. Tracked, not half-done here.
+- ~~Bucket objects are not deleted when a project is deleted.~~ **Moot, checked
+  2026-09-01: there is no `DELETE` route for lighting projects at all** — the
+  API only archives them, and an archived project keeps its drawing. There is
+  nothing to orphan. Revisit only if a hard delete is ever added.
 - A save that loses the optimistic-concurrency check leaves unreferenced
   objects behind (uploads happen before the row lock, to keep autosave from
-  serializing on bucket I/O). Bucket bytes, not database volume.
-- An idle designer session resumed after an hour holds expired URLs until the
-  next refetch; a retry-on-error refetch in the editor would close this.
+  serializing on bucket I/O). Bucket bytes, not database volume, and only on a
+  genuine concurrent-edit collision.
+- **Signed-URL lifetime is the whole session budget, not a per-request one.**
+  Raised 1 h → 12 h so a design left open over lunch still renders and still
+  exports. Two things make the naive fix wrong, both verified in the code:
+  - The editor seeds its working draft from the document **once, at mount**.
+  - `use-lighting-project-autosave.ts` returns early when
+    `loadedProject.version <= serverVersionRef.current`, and a local save
+    advances that ref — so neither the 15 s poll nor the user's own editing
+    pushes freshly signed URLs into the drawing.
+
+  Forcing a document refetch therefore fetches fresh URLs that **never reach
+  the canvas**. Closing this properly means propagating refreshed image URLs
+  into the draft when the version is unchanged and no edits are pending, which
+  touches the autosave state machine — worth doing deliberately, not as a
+  drive-by.
