@@ -39,14 +39,26 @@ from app.services.messaging.outbound_media import (
 
 logger = logging.getLogger(__name__)
 
-# A designer session outlives a single request: the editor holds a project in
-# React Query cache and re-decodes a shot's photo whenever the canvas remounts.
-# The default 300s MMS presign would 403 mid-session, so lighting URLs get the
-# configured maximum (1 hour). Active editing refetches on every autosave
-# version bump, which re-mints them.
-# simplification: an idle session resumed after an hour reloads broken images
-# until the next refetch. Upgrade path is a retry-on-error refetch in the editor.
-LIGHTING_IMAGE_URL_TTL_SECONDS = 3600
+# This TTL is the whole budget for a designer session, not a per-request one.
+#
+# The editor seeds its working draft from the document once, at mount. The
+# refresh effect in use-lighting-project-autosave.ts returns early when
+# `loadedProject.version <= serverVersionRef.current`, and a local save advances
+# that ref -- so neither polling nor the user's own editing pushes newly signed
+# URLs into the drawing. The canvas keeps the URLs it was given at page load
+# until the page is reloaded or another user bumps the version.
+#
+# So when these expire, the shot photo stops rendering *and* design export
+# fails, because export.ts re-decodes the same URL. At the old 1 hour that was
+# reachable by leaving a design open over lunch. 12 hours covers a working day.
+#
+# simplification: a session open longer than this still breaks until reload.
+# The real fix is propagating refreshed image URLs into the draft even when the
+# version is unchanged -- that means touching the autosave state machine, so it
+# is deliberately not bundled with a TTL change. Raising this further is not the
+# answer: a signed URL is a bearer token for one object, and a longer life is a
+# longer window for a leaked link (browser history, a shared screenshot).
+LIGHTING_IMAGE_URL_TTL_SECONDS = 12 * 60 * 60
 
 # The frontend downscales to 1600px JPEG before upload (~250-500 KB), so this is
 # a defensive ceiling, not a target. Bounded well under the schema's 8 MB data

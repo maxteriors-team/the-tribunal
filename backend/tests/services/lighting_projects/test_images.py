@@ -126,6 +126,18 @@ def test_resolve_signs_only_keys_inside_the_callers_own_workspace() -> None:
     )
 
 
+def test_signed_urls_outlive_a_working_day() -> None:
+    """The editor seeds its draft once at mount and never re-mints these URLs.
+
+    So this TTL is the whole session budget: when it lapses the shot photo stops
+    rendering and design export fails with it. A design left open over lunch must
+    still export, which the previous one-hour lifetime did not survive.
+    """
+    assert LIGHTING_IMAGE_URL_TTL_SECONDS >= 8 * 60 * 60
+    # Still a bearer token for one object, so it must not creep toward forever.
+    assert LIGHTING_IMAGE_URL_TTL_SECONDS <= 24 * 60 * 60
+
+
 def test_resolve_leaves_inline_data_urls_alone() -> None:
     storage = _storage()
 
