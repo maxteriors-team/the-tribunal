@@ -16,6 +16,7 @@ import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { useContactStore } from "@/lib/contact-store";
 import { contactStatusColors } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
+import { contactDisplayName } from "@/lib/utils/contact-name";
 import { getContactInitials } from "@/lib/utils/initials";
 import { formatPhoneNumber } from "@/lib/utils/phone";
 import type { Contact } from "@/types";
@@ -45,8 +46,7 @@ interface ContactItemProps {
 }
 
 function ContactItem({ contact, isSelected, onClick }: ContactItemProps) {
-  const displayName =
-    [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unknown";
+  const displayName = contactDisplayName(contact);
 
   return (
     <motion.div

@@ -42,6 +42,7 @@ import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { leadSourcesApi } from "@/lib/api/lead-sources";
 import { contactStatusDotColors, contactStatusLabels } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
+import { contactDisplayName } from "@/lib/utils/contact-name";
 import { formatRelative } from "@/lib/utils/date";
 import { getContactInitials } from "@/lib/utils/initials";
 import type { Contact } from "@/types";
@@ -134,8 +135,7 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
     );
   }
 
-  const displayName =
-    [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Unknown";
+  const displayName = contactDisplayName(contact);
   const engagementScore = contact.engagement_score ?? 0;
 
   return (

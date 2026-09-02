@@ -1181,3 +1181,53 @@ async def test_voice_resolver_never_crosses_workspace_boundaries() -> None:
         await db.delete(workspace_a)
         await db.delete(workspace_b)
         await db.commit()
+
+
+async def test_unmatched_quo_contact_id_is_not_linked_to_new_contact() -> None:
+    """A Quo contact whose phone list excludes the caller must not be linked.
+
+    ``context.contactIds`` is provider-controlled. When ``get_contact`` returns a
+    contact that does not carry the conversation's phone number, adopting its ID
+    would make the next event for that Quo contact resolve to this row and
+    overwrite it with a different person's identity.
+    """
+    occurred_at = datetime(2026, 8, 31, 12, 0, tzinfo=UTC)
+    other_person = {
+        "id": "CT_other_person",
+        "firstName": "Someone",
+        "lastName": "Else",
+        "emails": ["someone.else@example.com"],
+        "phoneNumbers": ["+14155559999"],
+    }
+
+    async with AsyncSessionLocal() as db:
+        workspace = await _workspace(db, "Quo unverified contact id")
+        service = _service(db, workspace.id, fetched_contact=other_person)
+        await service.process(
+            _event(
+                "message.received",
+                _message_resource(
+                    f"AC_unverified_{uuid.uuid4().hex}",
+                    direction="incoming",
+                    created_at=occurred_at,
+                ),
+                contact_ids=["CT_other_person"],
+            ),
+            MagicMock(),
+        )
+        await db.commit()
+
+        contact = (
+            await db.execute(select(Contact).where(Contact.workspace_id == workspace.id))
+        ).scalar_one()
+        assert contact.phone_number == CONTACT_PHONE
+        # The rejected contact's identity must not leak onto this row.
+        assert contact.external_id is None
+        assert contact.first_name == ""
+        assert contact.last_name is None
+        assert contact.email is None
+        # Still marked as Quo-sourced so a later phone-verified event can link it.
+        assert contact.external_source == "quo"
+
+        await db.delete(workspace)
+        await db.commit()
