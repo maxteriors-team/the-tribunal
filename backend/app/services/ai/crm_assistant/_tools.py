@@ -786,8 +786,8 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "update_segment",
             "description": (
-                "Update a saved audience and recompute its current count. Use list_tags "
-                "for tag UUIDs."
+                "Update a saved audience and recompute its current count. Provide at least one "
+                "changed field; use list_tags for tag UUIDs."
             ),
             "parameters": {
                 "type": "object",
@@ -799,12 +799,6 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     "filter_rules": _contact_filter_rules_schema(),
                 },
                 "required": ["segment_id"],
-                "anyOf": [
-                    {"required": ["name"]},
-                    {"required": ["description"]},
-                    {"required": ["filter_logic"]},
-                    {"required": ["filter_rules"]},
-                ],
             },
         },
     },
@@ -936,9 +930,9 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "enroll_campaign_audience",
             "description": (
-                "Enroll one validated segment or explicit contact list into a draft campaign. "
-                "Existing enrollments are deduplicated, contacts missing the campaign channel "
-                "are counted and skipped, and no outreach is sent."
+                "Enroll exactly one validated segment or explicit contact list into a draft "
+                "campaign. Existing enrollments are deduplicated, contacts missing the campaign "
+                "channel are counted and skipped, and no outreach is sent."
             ),
             "parameters": {
                 "type": "object",
@@ -954,10 +948,6 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["campaign_id"],
-                "oneOf": [
-                    {"required": ["segment_id"]},
-                    {"required": ["contact_ids"]},
-                ],
             },
         },
     },
@@ -1149,8 +1139,9 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "update_automation",
             "description": (
-                "Edit an inactive automation draft. Disable active automations first. Replacing "
-                "actions requires the complete ordered list; activation remains separate."
+                "Edit at least one field on an inactive automation draft. Disable active "
+                "automations first. Replacing actions requires the complete ordered list; "
+                "activation remains separate."
             ),
             "parameters": {
                 "type": "object",
@@ -1166,13 +1157,6 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     "actions": _automation_actions_schema(),
                 },
                 "required": ["automation_id"],
-                "anyOf": [
-                    {"required": ["name"]},
-                    {"required": ["description"]},
-                    {"required": ["trigger_type"]},
-                    {"required": ["trigger_config"]},
-                    {"required": ["actions"]},
-                ],
             },
         },
     },
@@ -1558,8 +1542,8 @@ CRM_TOOLS: list[dict[str, Any]] = [
         "function": {
             "name": "update_opportunity",
             "description": (
-                "Update a visible opportunity without deleting it. Sales reps may only update "
-                "their own opportunities and remain self-assigned."
+                "Update at least one field on a visible opportunity without deleting it. Sales "
+                "reps may only update their own opportunities and remain self-assigned."
             ),
             "parameters": {
                 "type": "object",
@@ -1568,7 +1552,6 @@ CRM_TOOLS: list[dict[str, Any]] = [
                     **_opportunity_write_properties(),
                 },
                 "required": ["opportunity_id"],
-                "anyOf": [{"required": [field]} for field in _opportunity_write_properties()],
             },
         },
     },
