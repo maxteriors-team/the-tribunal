@@ -108,6 +108,24 @@ class TestContactContextSnapshot:
 
 
 class TestStrictSchemas:
+    def test_top_level_parameters_are_openai_compatible(self) -> None:
+        parameters = {
+            tool["function"]["name"]: tool["function"]["parameters"] for tool in get_crm_tools()
+        }
+        assert {
+            name: schema.get("type")
+            for name, schema in parameters.items()
+            if schema.get("type") != "object"
+        } == {}
+
+        forbidden = {"allOf", "anyOf", "oneOf", "enum", "const", "not"}
+        violations = {
+            name: sorted(forbidden.intersection(schema))
+            for name, schema in parameters.items()
+            if forbidden.intersection(schema)
+        }
+        assert violations == {}
+
     def test_closed_objects_forbid_unknown_keys(self) -> None:
         for tool in get_crm_tools():
             for path, schema in _walk_objects(
