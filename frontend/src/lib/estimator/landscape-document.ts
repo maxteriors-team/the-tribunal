@@ -1,3 +1,4 @@
+import { isSupportedImageSource } from "@/lib/estimator/photo";
 import type {
   DesignerShot,
   LandscapeBomLineItem,
@@ -151,7 +152,7 @@ const normalizedShots = (value: unknown): DesignerShot[] => {
       typeof shot.id !== "string" ||
       !photo ||
       typeof photo.dataUrl !== "string" ||
-      !photo.dataUrl.startsWith("data:image/") ||
+      !isSupportedImageSource(photo.dataUrl) ||
       typeof photo.width !== "number" ||
       photo.width <= 0 ||
       typeof photo.height !== "number" ||
