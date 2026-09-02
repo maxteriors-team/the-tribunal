@@ -146,6 +146,7 @@ async def _resolve_workspace(
         .where(
             User.email_hash == hash_value(member_email),
             User.is_active.is_(True),
+            Workspace.is_active.is_(True),
         )
     )
     if lock:
@@ -153,13 +154,11 @@ async def _resolve_workspace(
     matches = list((await db.execute(statement)).all())
     if len(matches) != 1:
         raise ScriptAbortError(
-            f"expected exactly one workspace containing active member {member_email}; "
+            f"expected exactly one active workspace containing active member {member_email}; "
             f"found {len(matches)}"
         )
 
     workspace, user_id = matches[0]
-    if not workspace.is_active:
-        raise ScriptAbortError(f"matched workspace {workspace.name!r} is inactive")
     return workspace, user_id
 
 

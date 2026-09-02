@@ -410,6 +410,33 @@ async def test_setup_aborts_when_workspace_match_is_missing(
         )
 
 
+async def test_setup_ignores_inactive_workspace_membership(
+    setup_script: Any,
+    seeded_lifecycle: SeededLifecycle,
+) -> None:
+    seeded = seeded_lifecycle
+    archived = Workspace(
+        name="Archived workspace",
+        slug=f"archived-lifecycle-{uuid.uuid4().hex}",
+        settings={},
+        is_active=False,
+    )
+    seeded.db.add(archived)
+    await seeded.db.flush()
+    seeded.db.add(
+        WorkspaceMembership(
+            workspace_id=archived.id,
+            user_id=seeded.user.id,
+            role="owner",
+        )
+    )
+    await seeded.db.commit()
+    seeded.cleanup_workspace_ids.append(archived.id)
+
+    plan = await setup_script.build_plan(seeded.db, member_email=seeded.email)
+    assert plan.workspace.id == seeded.workspace.id
+
+
 async def test_setup_aborts_when_workspace_match_is_ambiguous(
     setup_script: Any,
     seeded_lifecycle: SeededLifecycle,
