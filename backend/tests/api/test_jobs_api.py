@@ -429,7 +429,9 @@ def _profitability_response() -> dict[str, object]:
 
 
 @asynccontextmanager
-async def _costing_client(role: str) -> AsyncIterator[AsyncClient]:
+async def _costing_client(
+    role: str, *, costing_out: list[AsyncMock] | None = None
+) -> AsyncIterator[AsyncClient]:
     """Client whose membership carries ``role``, with JobCostingService mocked.
 
     The capability gate on ``/profitability`` resolves the caller's role via
@@ -452,6 +454,8 @@ async def _costing_client(role: str) -> AsyncIterator[AsyncClient]:
     _mount(app)
 
     costing = AsyncMock()
+    if costing_out is not None:
+        costing_out.append(costing)
     costing.get_profitability.return_value = _profitability_response()
     costing.list_time_entries.return_value = []
     costing.clock_in.return_value = _time_entry_response()
@@ -501,6 +505,33 @@ class TestJobCostingAccess:
         assert response.status_code == 200
         assert response.json()["stop_reason"] == stop_reason
         assert response.json()["is_mine"] is True
+
+    @pytest.mark.parametrize("role", ["technician", "sales_rep"])
+    async def test_non_billing_roles_cannot_persist_a_timer_rate(self, role: str) -> None:
+        services: list[AsyncMock] = []
+        async with _costing_client(role, costing_out=services) as ac:
+            response = await ac.post(
+                _base(f"/{JOB_ID}/time-entries/clock-in"),
+                json={"technician_id": str(TECH_ID), "rate": 125},
+            )
+
+        assert response.status_code == 201
+        forwarded = services[0].clock_in.await_args.args[2]
+        assert forwarded.technician_id is None
+        assert forwarded.rate == 0
+
+    async def test_billing_writer_can_set_a_timer_rate(self) -> None:
+        services: list[AsyncMock] = []
+        async with _costing_client("dispatcher", costing_out=services) as ac:
+            response = await ac.post(
+                _base(f"/{JOB_ID}/time-entries/clock-in"),
+                json={"technician_id": str(TECH_ID), "rate": 125},
+            )
+
+        assert response.status_code == 201
+        forwarded = services[0].clock_in.await_args.args[2]
+        assert forwarded.technician_id is None
+        assert forwarded.rate == 125
 
     async def test_dispatcher_can_read_profitability(self) -> None:
         # A billing-capable role (dispatcher → manager tier) still sees the P&L.
