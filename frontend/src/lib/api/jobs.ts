@@ -97,7 +97,6 @@ export const jobsApi = {
       path: { workspace_id: workspaceId, job_id: jobId },
     }),
 
-
   inventoryPlan: (workspaceId: string, jobId: string): Promise<JobInventoryPlan> =>
     apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/inventory-plan", {
       path: { workspace_id: workspaceId, job_id: jobId },
@@ -214,6 +213,17 @@ export const jobsApi = {
       body,
     }),
 
+  pauseTimer: (workspaceId: string, jobId: string): Promise<TimeEntry> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/pause", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  endTimer: (workspaceId: string, jobId: string): Promise<TimeEntry> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/end", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
+
+  /** Compatibility for older callers; clock-out now pauses the timer. */
   clockOut: (workspaceId: string, jobId: string): Promise<TimeEntry> =>
     apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/clock-out", {
       path: { workspace_id: workspaceId, job_id: jobId },

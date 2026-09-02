@@ -39,36 +39,42 @@ export function useJobProfitability(workspaceId: string, jobId: string, enabled 
 }
 
 /**
- * Invalidate every costing query for a job — time entries, expenses, and the
- * derived P&L all move together whenever any of them changes.
+ * Invalidate job details, costing, and the associated client's time summary.
  */
-function useCostingInvalidation(workspaceId: string, jobId: string) {
+function useCostingInvalidation(workspaceId: string, jobId: string, contactId?: number) {
   const queryClient = useQueryClient();
   return () => {
     void queryClient.invalidateQueries({
-      queryKey: queryKeys.jobs.timeEntries(workspaceId, jobId),
+      queryKey: queryKeys.jobs.all(workspaceId),
     });
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.jobs.expenses(workspaceId, jobId),
-    });
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.jobs.profitability(workspaceId, jobId),
-    });
+    if (contactId !== undefined) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.contacts.jobTime(workspaceId, contactId),
+      });
+    }
   };
 }
 
-export function useClockIn(workspaceId: string, jobId: string) {
-  const invalidate = useCostingInvalidation(workspaceId, jobId);
+export function useClockIn(workspaceId: string, jobId: string, contactId?: number) {
+  const invalidate = useCostingInvalidation(workspaceId, jobId, contactId);
   return useMutation({
     mutationFn: (body: ClockInRequest = { rate: 0 }) => jobsApi.clockIn(workspaceId, jobId, body),
     onSuccess: invalidate,
   });
 }
 
-export function useClockOut(workspaceId: string, jobId: string) {
-  const invalidate = useCostingInvalidation(workspaceId, jobId);
+export function usePauseJobTimer(workspaceId: string, jobId: string, contactId?: number) {
+  const invalidate = useCostingInvalidation(workspaceId, jobId, contactId);
   return useMutation({
-    mutationFn: () => jobsApi.clockOut(workspaceId, jobId),
+    mutationFn: () => jobsApi.pauseTimer(workspaceId, jobId),
+    onSuccess: invalidate,
+  });
+}
+
+export function useEndJobTimer(workspaceId: string, jobId: string, contactId?: number) {
+  const invalidate = useCostingInvalidation(workspaceId, jobId, contactId);
+  return useMutation({
+    mutationFn: () => jobsApi.endTimer(workspaceId, jobId),
     onSuccess: invalidate,
   });
 }
@@ -81,8 +87,8 @@ export function useAddTimeEntry(workspaceId: string, jobId: string) {
   });
 }
 
-export function useDeleteTimeEntry(workspaceId: string, jobId: string) {
-  const invalidate = useCostingInvalidation(workspaceId, jobId);
+export function useDeleteTimeEntry(workspaceId: string, jobId: string, contactId?: number) {
+  const invalidate = useCostingInvalidation(workspaceId, jobId, contactId);
   return useMutation({
     mutationFn: (entryId: string) => jobsApi.deleteTimeEntry(workspaceId, jobId, entryId),
     onSuccess: invalidate,

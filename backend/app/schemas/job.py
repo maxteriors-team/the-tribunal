@@ -156,6 +156,7 @@ class JobPricingResponse(BaseModel):
     tax_rate: Decimal
     items: list[JobPricedLineItemResponse]
     subtotal: Decimal
+    discount: Decimal = Decimal("0.00")
     tax: Decimal
     total: Decimal
 
@@ -223,12 +224,11 @@ class JobCustomerSummary(BaseModel):
 class JobLineItemSummary(BaseModel):
     """One unit of scope of work — deliberately price-free.
 
-    Projected from the linked invoice's line items. A separate schema from
-    :class:`app.schemas.invoice.InvoiceLineItemResponse` **on purpose**: that one
-    carries ``unit_price``, ``discount``, and ``total``, and a field technician
-    must never receive money on a job payload. Write-capable tiers still get the
-    priced view from the invoice/quote endpoints; this projection only governs
-    what rides on the job.
+    Projected from the job's priced scope, accepted quote, or linked invoice. A
+    separate schema from their priced responses **on purpose**: those carry
+    ``unit_price``, ``discount``, and ``total``, and a field technician must never
+    receive money on a job payload. This projection only governs what rides on
+    the job.
 
     Adding a money field here leaks it to every technician — don't.
     """

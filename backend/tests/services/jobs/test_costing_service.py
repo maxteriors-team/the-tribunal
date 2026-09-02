@@ -4,9 +4,8 @@ Hits the real database (marked ``integration``; deselected by default, run with
 ``-m integration``). Each test opens an ``AsyncSessionLocal`` and never commits,
 so the transaction rolls back on close and the dev database stays clean.
 
-Coverage: clock in/out (and the single-running-timer guard), manual time
-entries, expenses, profitability math (revenue from the linked invoice minus
-labor and expenses), and cross-workspace 404s.
+Coverage: per-user start/pause/resume/end timers, assignment scoping, client
+profile history, manual entries, expenses, profitability math, and tenant 404s.
 """
 
 from __future__ import annotations
@@ -20,8 +19,9 @@ from fastapi import HTTPException
 from app.core.encryption import hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
-from app.models.field_service import Job, JobStatus, Technician
+from app.models.field_service import Job, JobAssignment, JobStatus, Technician
 from app.models.invoice import Invoice
+from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.job_costing import (
     ClockInRequest,
@@ -90,34 +90,139 @@ async def _invoice(db, workspace_id: uuid.UUID, contact_id: int, total: float) -
     return invoice
 
 
-async def _technician(db, workspace_id: uuid.UUID) -> Technician:
-    tech = Technician(workspace_id=workspace_id, name=f"Tech {uuid.uuid4().hex[:6]}")
+async def _technician(db, workspace_id: uuid.UUID, *, user_id: int | None = None) -> Technician:
+    tech = Technician(
+        workspace_id=workspace_id,
+        name=f"Tech {uuid.uuid4().hex[:6]}",
+        user_id=user_id,
+    )
     db.add(tech)
     await db.flush()
     return tech
 
 
-async def test_clock_in_then_out_records_duration() -> None:
+async def _user(db) -> User:
+    user = User(
+        email=f"timer-{uuid.uuid4()}@example.com",
+        hashed_password="test-hash",
+        full_name="Timer Technician",
+        is_active=True,
+    )
+    db.add(user)
+    await db.flush()
+    return user
+
+
+async def test_start_pause_resume_and_end_timer() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
         contact = await _contact(db, ws.id)
         job = await _job(db, ws.id, contact.id)
+        user = await _user(db)
         svc = JobCostingService(db)
 
-        entry = await svc.clock_in(job.id, ws.id, ClockInRequest(rate=100.0))
+        entry = await svc.clock_in(job.id, ws.id, ClockInRequest(rate=100.0), created_by_id=user.id)
         assert entry.ended_at is None
-        assert entry.duration_hours == 0.0
+        assert entry.is_mine is True
 
-        # A second clock-in while one is running is rejected.
-        with pytest.raises(ConflictError):
-            await svc.clock_in(job.id, ws.id, ClockInRequest())
+        with pytest.raises(ConflictError, match="already running"):
+            await svc.clock_in(job.id, ws.id, ClockInRequest(), created_by_id=user.id)
 
-        closed = await svc.clock_out(job.id, ws.id)
-        assert closed.id == entry.id
-        assert closed.ended_at is not None
-        # Clock-out with no running timer is rejected.
-        with pytest.raises(ConflictError):
-            await svc.clock_out(job.id, ws.id)
+        paused = await svc.pause_timer(job.id, ws.id, created_by_id=user.id)
+        assert paused.id == entry.id
+        assert paused.ended_at is not None
+        assert paused.stop_reason == "paused"
+
+        resumed = await svc.clock_in(
+            job.id, ws.id, ClockInRequest(rate=100.0), created_by_id=user.id
+        )
+        assert resumed.id != entry.id
+        ended = await svc.end_timer(job.id, ws.id, created_by_id=user.id)
+        assert ended.stop_reason == "ended"
+
+        restarted = await svc.clock_in(job.id, ws.id, ClockInRequest(), created_by_id=user.id)
+        assert restarted.id != ended.id
+        assert restarted.ended_at is None
+
+
+async def test_each_technician_controls_only_their_own_timer() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        job = await _job(db, ws.id, contact.id)
+        first_user = await _user(db)
+        second_user = await _user(db)
+        svc = JobCostingService(db)
+
+        await svc.clock_in(job.id, ws.id, ClockInRequest(), created_by_id=first_user.id)
+        await svc.clock_in(job.id, ws.id, ClockInRequest(), created_by_id=second_user.id)
+        entries = await svc.list_time_entries(job.id, ws.id, viewer_user_id=first_user.id)
+        assert len([entry for entry in entries if entry.ended_at is None]) == 2
+        assert len([entry for entry in entries if entry.is_mine]) == 1
+
+        await svc.pause_timer(job.id, ws.id, created_by_id=first_user.id)
+        entries = await svc.list_time_entries(job.id, ws.id, viewer_user_id=second_user.id)
+        second_entry = next(entry for entry in entries if entry.is_mine)
+        assert second_entry.ended_at is None
+
+
+async def test_unassigned_technician_cannot_read_or_track_job_time() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        job = await _job(db, ws.id, contact.id)
+        user = await _user(db)
+        svc = JobCostingService(db)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await svc.list_time_entries(job.id, ws.id, visible_to_user_id=user.id)
+        assert exc_info.value.status_code == 404
+
+        technician = await _technician(db, ws.id, user_id=user.id)
+        db.add(JobAssignment(job_id=job.id, technician_id=technician.id))
+        await db.flush()
+        entry = await svc.clock_in(
+            job.id,
+            ws.id,
+            ClockInRequest(),
+            created_by_id=user.id,
+            visible_to_user_id=user.id,
+        )
+        assert entry.is_mine is True
+
+
+async def test_job_time_is_available_from_the_associated_client_profile() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        other_contact = await _contact(db, ws.id)
+        job = await _job(db, ws.id, contact.id)
+        other_job = await _job(db, ws.id, other_contact.id)
+        user = await _user(db)
+        svc = JobCostingService(db)
+        start = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
+
+        await svc.add_time_entry(
+            job.id,
+            ws.id,
+            TimeEntryCreate(started_at=start, ended_at=start + timedelta(hours=2)),
+            created_by_id=user.id,
+        )
+        await svc.add_time_entry(
+            other_job.id,
+            ws.id,
+            TimeEntryCreate(started_at=start, ended_at=start + timedelta(hours=5)),
+            created_by_id=user.id,
+        )
+
+        summary = await svc.get_contact_time_summary(contact.id, ws.id)
+        assert summary.entry_count == 1
+        assert summary.total_hours == 2.0
+        assert summary.entries[0].job_title == job.title
+        assert summary.entries[0].technician_name == user.full_name
+        entry_payload = summary.model_dump()["entries"][0]
+        assert "rate" not in entry_payload
+        assert "labor_cost" not in entry_payload
 
 
 async def test_manual_time_entry_computes_labor_cost() -> None:
@@ -225,7 +330,8 @@ async def test_open_timer_flag_while_running() -> None:
         job = await _job(db, ws.id, contact.id)
         svc = JobCostingService(db)
 
-        await svc.clock_in(job.id, ws.id, ClockInRequest(rate=50.0))
+        user = await _user(db)
+        await svc.clock_in(job.id, ws.id, ClockInRequest(rate=50.0), created_by_id=user.id)
         pnl = await svc.get_profitability(job.id, ws.id)
         assert pnl.open_timer is True
         # A running entry contributes no labor cost yet.
@@ -239,8 +345,9 @@ async def test_cross_workspace_job_is_404() -> None:
         contact = await _contact(db, ws_a.id)
         job = await _job(db, ws_a.id, contact.id)
         svc = JobCostingService(db)
+        user = await _user(db)
 
         with pytest.raises(HTTPException):
             await svc.get_profitability(job.id, ws_b.id)
         with pytest.raises(HTTPException):
-            await svc.clock_in(job.id, ws_b.id, ClockInRequest())
+            await svc.clock_in(job.id, ws_b.id, ClockInRequest(), created_by_id=user.id)

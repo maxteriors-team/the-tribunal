@@ -67,6 +67,7 @@ from app.schemas.contact import (
     SendMessageToContactRequest,
     TimelineItem,
 )
+from app.schemas.job_costing import ContactJobTimeSummaryResponse
 from app.schemas.lead_source import AssignLeadSourceRequest, LeadAttributionFields
 from app.services.ai.contact_ai_memory_service import ContactAIMemoryService
 from app.services.contacts import (
@@ -84,6 +85,7 @@ from app.services.contacts.exceptions import (
 )
 from app.services.dashboard.dashboard_service import invalidate_dashboard_cache
 from app.services.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
+from app.services.jobs.costing_service import JobCostingService
 from app.services.lead_sources.attribution_service import (
     MANUAL_ASSIGNMENT_CONFIDENCE,
     AttributionCleanupError,
@@ -821,6 +823,21 @@ async def get_contact_engagement_summary(
         contact=contact,
         workspace_id=workspace_id,
     )
+
+
+@router.get(
+    "/{contact_id}/job-time",
+    response_model=ContactJobTimeSummaryResponse,
+)
+async def get_contact_job_time(
+    workspace_id: uuid.UUID,
+    contact_id: int,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadCRM,
+) -> ContactJobTimeSummaryResponse:
+    """Return saved job time on the client profile without labor pricing."""
+    return await JobCostingService(db).get_contact_time_summary(contact_id, workspace_id)
 
 
 # ============================================================================

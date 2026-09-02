@@ -18,11 +18,19 @@ import type { Job } from "@/lib/api/jobs";
  * no way to find the job. It renders for both roles, and never shows money.
  */
 
-const { mutation, installationPlanQuery, inventoryPlanMock, handoffImagesMock, canvasContext } = vi.hoisted(() => ({
+const {
+  mutation,
+  installationPlanQuery,
+  inventoryPlanMock,
+  handoffImagesMock,
+  capabilitiesMock,
+  canvasContext,
+} = vi.hoisted(() => ({
   mutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   installationPlanQuery: vi.fn(),
   inventoryPlanMock: vi.fn(),
   handoffImagesMock: vi.fn(),
+  capabilitiesMock: vi.fn(),
   canvasContext: {
     clearRect: vi.fn(),
     drawImage: vi.fn(),
@@ -61,6 +69,10 @@ vi.mock("@/components/jobs/handoff-images", () => ({
 
 vi.mock("@/components/jobs/job-inventory-completion-dialog", () => ({
   JobInventoryCompletionDialog: () => <div>Confirm Bistro inventory</div>,
+}));
+
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => capabilitiesMock(),
 }));
 
 vi.mock("@/hooks/useJobs", () => ({
@@ -141,6 +153,12 @@ const fullJob = makeJob({
 });
 
 function renderDialog(readOnly: boolean, jobToRender: Job = fullJob) {
+  capabilitiesMock.mockReturnValue({
+    can: (capability: string) =>
+      readOnly
+        ? capability === "jobs:read"
+        : ["billing:read", "billing:write"].includes(capability),
+  });
   return render(
     <JobDetailDialog
       workspaceId="ws-1"
@@ -182,6 +200,8 @@ describe("JobDetailDialog", () => {
     // The assignment roster and time tracking remain available to the field member.
     expect(screen.getByText("Marco Reyes")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Details" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Visits" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /pricing/i })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Time tracking" })).toBeInTheDocument();
   });
 
@@ -193,6 +213,7 @@ describe("JobDetailDialog", () => {
     expect(screen.getByRole("button", { name: /Delete job/i })).toBeInTheDocument();
     expect(screen.getByLabelText("Status")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Dispatch" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Visits & pricing" })).toBeInTheDocument();
   });
 
   it.each([true, false])("renders job handoff images (readOnly=%s)", (readOnly) => {

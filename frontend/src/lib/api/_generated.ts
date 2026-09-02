@@ -4244,6 +4244,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/job-time": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Contact Job Time
+         * @description Return saved job time on the client profile without labor pricing.
+         */
+        get: operations["get_contact_job_time_api_v1_workspaces__workspace_id__contacts__contact_id__job_time_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/lead-source": {
         parameters: {
             query?: never;
@@ -6053,22 +6073,13 @@ export interface paths {
         };
         /**
          * List Expenses
-         * @description List a job's expenses, newest first.
-         *
-         *     Gated on ``billing:read``: every field on an expense is a cost the customer
-         *     never sees and a technician has no operational use for. A field technician
-         *     may still *record* one (POST below) — that only echoes back the amount they
-         *     submitted — but cannot read the job's costs back out.
+         * @description List costs only when billing and job visibility both allow it.
          */
         get: operations["list_expenses_api_v1_workspaces__workspace_id__jobs__job_id__expenses_get"];
         put?: never;
         /**
          * Add Expense
-         * @description Record a cost incurred on a job.
-         *
-         *     Open to any workspace member so a technician can still log that a cost
-         *     happened; the response only reflects the amount the caller just supplied, so
-         *     it discloses nothing they did not already know.
+         * @description Record a known cost on an assigned job without revealing other costs.
          */
         post: operations["add_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses_post"];
         delete?: never;
@@ -6089,11 +6100,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Expense
-         * @description Delete an expense the caller recorded (any expense with ``billing:write``).
-         *
-         *     Owner-scoped for the same reason time entries are, and for one more: reading
-         *     this job's expenses needs ``billing:read``, so a tier that cannot see a cost
-         *     must not be able to destroy it. Another member's expense reads as 404.
+         * @description Delete an owned cost, or any cost with billing write access.
          */
         delete: operations["delete_expense_api_v1_workspaces__workspace_id__jobs__job_id__expenses__expense_id__delete"];
         options?: never;
@@ -6354,7 +6361,7 @@ export interface paths {
         };
         /**
          * Get Job Pricing
-         * @description Return priced scope only to roles with billing visibility.
+         * @description Return priced scope only when both job visibility and billing access allow it.
          */
         get: operations["get_job_pricing_api_v1_workspaces__workspace_id__jobs__job_id__pricing_get"];
         /**
@@ -6378,11 +6385,7 @@ export interface paths {
         };
         /**
          * Job Profitability
-         * @description Compute the job's P&L (revenue from the linked invoice minus costs).
-         *
-         *     Gated on ``billing:read``: the P&L exposes customer revenue, profit, and
-         *     margin, so a field technician (``jobs:read`` only, no billing) must not see
-         *     it — even though they can still log their own time and expenses on the job.
+         * @description Compute P&L only when billing and job visibility both allow it.
          */
         get: operations["job_profitability_api_v1_workspaces__workspace_id__jobs__job_id__profitability_get"];
         put?: never;
@@ -6422,13 +6425,13 @@ export interface paths {
         };
         /**
          * List Time Entries
-         * @description List a job's time entries, newest first (money redacted below billing:read).
+         * @description List saved job time after applying assignment and pricing boundaries.
          */
         get: operations["list_time_entries_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_get"];
         put?: never;
         /**
          * Add Time Entry
-         * @description Log a completed time entry with an explicit start and end.
+         * @description Log a completed manual time entry on an assigned job.
          */
         post: operations["add_time_entry_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_post"];
         delete?: never;
@@ -6448,7 +6451,7 @@ export interface paths {
         put?: never;
         /**
          * Clock In
-         * @description Start the clock on a job (rejected if a timer is already running).
+         * @description Start or resume the signed-in user's timer on an assigned job.
          */
         post: operations["clock_in_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_clock_in_post"];
         delete?: never;
@@ -6468,9 +6471,49 @@ export interface paths {
         put?: never;
         /**
          * Clock Out
-         * @description Stop the job's running timer.
+         * @description Backward-compatible clock-out action; equivalent to pausing.
          */
         post: operations["clock_out_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_clock_out_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End Timer
+         * @description End the signed-in user's running or paused timer.
+         */
+        post: operations["end_timer_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_end_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/time-entries/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause Timer
+         * @description Pause the signed-in user's running timer.
+         */
+        post: operations["pause_timer_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_pause_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6489,11 +6532,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Time Entry
-         * @description Delete a time entry the caller logged (any entry with ``attendance:manage``).
-         *
-         *     Payroll input, so it is owner-scoped rather than merely workspace-scoped:
-         *     without the scope a technician could delete a colleague's hours. Finding 4
-         *     of docs/technician-role-audit.md.
+         * @description Delete an owned entry, or any entry with attendance management.
          */
         delete: operations["delete_time_entry_api_v1_workspaces__workspace_id__jobs__job_id__time_entries__entry_id__delete"];
         options?: never;
@@ -16553,6 +16592,49 @@ export interface components {
             total: number;
         };
         /**
+         * ContactJobTimeEntryResponse
+         * @description Price-free job time shown on the associated client's profile.
+         */
+        ContactJobTimeEntryResponse: {
+            /** Duration Hours */
+            duration_hours: number;
+            /** Ended At */
+            ended_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Job Title */
+            job_title: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Stop Reason */
+            stop_reason?: ("paused" | "ended" | "manual") | null;
+            /** Technician Name */
+            technician_name?: string | null;
+        };
+        /**
+         * ContactJobTimeSummaryResponse
+         * @description Saved job-time history for one client, with no labor pricing.
+         */
+        ContactJobTimeSummaryResponse: {
+            /** Entries */
+            entries: components["schemas"]["ContactJobTimeEntryResponse"][];
+            /** Entry Count */
+            entry_count: number;
+            /** Total Hours */
+            total_hours: number;
+        };
+        /**
          * ContactListResponse
          * @description Schema for paginated contact list.
          */
@@ -20868,12 +20950,11 @@ export interface components {
          * JobLineItemSummary
          * @description One unit of scope of work — deliberately price-free.
          *
-         *     Projected from the linked invoice's line items. A separate schema from
-         *     :class:`app.schemas.invoice.InvoiceLineItemResponse` **on purpose**: that one
-         *     carries ``unit_price``, ``discount``, and ``total``, and a field technician
-         *     must never receive money on a job payload. Write-capable tiers still get the
-         *     priced view from the invoice/quote endpoints; this projection only governs
-         *     what rides on the job.
+         *     Projected from the job's priced scope, accepted quote, or linked invoice. A
+         *     separate schema from their priced responses **on purpose**: those carry
+         *     ``unit_price``, ``discount``, and ``total``, and a field technician must never
+         *     receive money on a job payload. This projection only governs what rides on
+         *     the job.
          *
          *     Adding a money field here leaks it to every technician — don't.
          */
@@ -21039,6 +21120,11 @@ export interface components {
         };
         /** JobPricingResponse */
         JobPricingResponse: {
+            /**
+             * Discount
+             * @default 0.00
+             */
+            discount: string;
             /** Items */
             items: components["schemas"]["JobPricedLineItemResponse"][];
             /**
@@ -32320,6 +32406,11 @@ export interface components {
              */
             id: string;
             /**
+             * Is Mine
+             * @default false
+             */
+            is_mine: boolean;
+            /**
              * Job Id
              * Format: uuid
              */
@@ -32335,6 +32426,8 @@ export interface components {
              * Format: date-time
              */
             started_at: string;
+            /** Stop Reason */
+            stop_reason?: ("paused" | "ended" | "manual") | null;
             /** Technician Id */
             technician_id?: string | null;
             /**
@@ -42438,6 +42531,38 @@ export interface operations {
             };
         };
     };
+    get_contact_job_time_api_v1_workspaces__workspace_id__contacts__contact_id__job_time_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactJobTimeSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     assign_contact_lead_source_api_v1_workspaces__workspace_id__contacts__contact_id__lead_source_post: {
         parameters: {
             query?: never;
@@ -46898,6 +47023,70 @@ export interface operations {
         };
     };
     clock_out_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_clock_out_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    end_timer_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_end_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_timer_api_v1_workspaces__workspace_id__jobs__job_id__time_entries_pause_post: {
         parameters: {
             query?: never;
             header?: never;
