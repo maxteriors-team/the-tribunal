@@ -5,23 +5,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OpportunityCardSummary } from "@/components/opportunities/opportunity-card";
 import { OpportunityCreateSheet } from "@/components/opportunities/opportunity-create-sheet";
-import { OpportunityDetailSheet } from "@/components/opportunities/opportunity-detail-sheet";
 import type { Opportunity, PipelineStage } from "@/types";
 
-const { createMock, getMock, updateMock, moveMock, toastMock } = vi.hoisted(() => ({
+const { createMock, toastMock } = vi.hoisted(() => ({
   createMock: vi.fn(),
-  getMock: vi.fn(),
-  updateMock: vi.fn(),
-  moveMock: vi.fn(),
   toastMock: { success: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock("@/lib/api/opportunities", () => ({
   opportunitiesApi: {
     create: createMock,
-    get: getMock,
-    update: updateMock,
-    move: moveMock,
   },
 }));
 
@@ -93,12 +86,6 @@ describe("opportunity ownership", () => {
     });
     vi.clearAllMocks();
     createMock.mockResolvedValue(opportunity);
-    getMock.mockResolvedValue(opportunity);
-    updateMock.mockResolvedValue({
-      ...opportunity,
-      assigned_user_id: 7,
-      assignee: { id: 7, full_name: "Morgan Manager", email: "morgan@example.com" },
-    });
   });
 
   it("lets a manager select an owner while creating", async () => {
@@ -146,29 +133,6 @@ describe("opportunity ownership", () => {
     );
 
     expect(screen.queryByRole("combobox", { name: "Owner" })).not.toBeInTheDocument();
-  });
-
-  it("lets a manager reassign from the detail sheet", async () => {
-    render(
-      <OpportunityDetailSheet
-        workspaceId="ws-1"
-        opportunityId="opportunity-1"
-        stages={stages}
-        canAssignOwners
-        open
-        onOpenChange={vi.fn()}
-      />,
-      { wrapper: QueryWrapper },
-    );
-
-    await screen.findByText("Roof replacement");
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Owner" }), "7");
-
-    await waitFor(() =>
-      expect(updateMock).toHaveBeenCalledWith("ws-1", "opportunity-1", {
-        assigned_user_id: 7,
-      }),
-    );
   });
 
   it("shows historical ownership on the card", () => {

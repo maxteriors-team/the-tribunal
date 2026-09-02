@@ -6,12 +6,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OpportunitiesBoard } from "@/components/opportunities/opportunities-board";
 import type { Opportunity, Pipeline } from "@/types";
 
-const { listMock, listPipelinesMock, getActiveTeamMembersMock } = vi.hoisted(() => ({
-  listMock: vi.fn(),
-  listPipelinesMock: vi.fn(),
-  getActiveTeamMembersMock: vi.fn(),
-}));
+const { listMock, listPipelinesMock, getActiveTeamMembersMock, pushMock, replaceMock, navigation } =
+  vi.hoisted(() => ({
+    listMock: vi.fn(),
+    listPipelinesMock: vi.fn(),
+    getActiveTeamMembersMock: vi.fn(),
+    pushMock: vi.fn(),
+    replaceMock: vi.fn(),
+    navigation: { search: "" },
+  }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
+  useSearchParams: () => new URLSearchParams(navigation.search),
+}));
 vi.mock("@/hooks/useWorkspaceId", () => ({ useWorkspaceId: () => "workspace-1" }));
 vi.mock("@/providers/workspace-provider", () => ({
   useWorkspace: () => ({ currentWorkspace: { role: "owner" } }),
@@ -49,12 +57,24 @@ vi.mock("@/components/opportunities/manage-stages-dialog", () => ({
 vi.mock("@/components/opportunities/opportunity-create-sheet", () => ({
   OpportunityCreateSheet: () => null,
 }));
-vi.mock("@/components/opportunities/opportunity-detail-sheet", () => ({
-  OpportunityDetailSheet: () => null,
-}));
 vi.mock("@/components/opportunities/opportunity-card", () => ({
-  OpportunityCard: ({ opportunity }: { opportunity: Opportunity }) => (
-    <article>{opportunity.name}</article>
+  OpportunityCard: ({
+    opportunity,
+    onOpen,
+    onText,
+  }: {
+    opportunity: Opportunity;
+    onOpen: (id: string) => void;
+    onText: (opportunity: Opportunity) => void;
+  }) => (
+    <article>
+      <button type="button" onClick={() => onOpen(opportunity.id)}>
+        {opportunity.name}
+      </button>
+      <button type="button" onClick={() => onText(opportunity)}>
+        Text customer
+      </button>
+    </article>
   ),
   OpportunityCardSummary: () => null,
 }));
@@ -106,8 +126,16 @@ const opportunity: Opportunity = {
 
 describe("OpportunitiesBoard scrolling", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    navigation.search = "";
     listPipelinesMock.mockResolvedValue([pipeline]);
-    listMock.mockResolvedValue({ items: [opportunity], total: 1, page: 1, page_size: 200, pages: 1 });
+    listMock.mockResolvedValue({
+      items: [opportunity],
+      total: 1,
+      page: 1,
+      page_size: 200,
+      pages: 1,
+    });
     getActiveTeamMembersMock.mockResolvedValue([
       { id: 7, full_name: "Dana Rep", email: "dana@example.com", role: "sales_rep" },
     ]);
@@ -127,7 +155,10 @@ describe("OpportunitiesBoard scrolling", () => {
     const horizontalViewport = await screen.findByRole("region", {
       name: "Opportunity stages, scroll horizontally",
     });
-    const stageColumns = [screen.getByTestId("stage-column-stage-1"), screen.getByTestId("stage-column-stage-2")];
+    const stageColumns = [
+      screen.getByTestId("stage-column-stage-1"),
+      screen.getByTestId("stage-column-stage-2"),
+    ];
     const cardLists = document.querySelectorAll('[data-slot="opportunity-stage-scroll"]');
 
     expect(horizontalViewport).toHaveAttribute("tabindex", "0");
@@ -138,6 +169,28 @@ describe("OpportunitiesBoard scrolling", () => {
     expect(cardLists).toHaveLength(2);
     for (const list of cardLists) expect(list).toHaveClass("min-h-0", "overflow-y-auto");
     expect(screen.getByText("Roof replacement")).toBeInTheDocument();
+  });
+
+  it("routes card and text actions into the deal while preserving pipeline filters", async () => {
+    navigation.search = "contact=42&owner=7";
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OpportunitiesBoard />
+      </QueryClientProvider>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Roof replacement" }));
+    expect(pushMock).toHaveBeenCalledWith("/opportunities/opportunity-1?contact=42&owner=7");
+
+    await user.click(screen.getByRole("button", { name: "Text customer" }));
+    expect(pushMock).toHaveBeenLastCalledWith(
+      "/opportunities/opportunity-1?contact=42&owner=7&tab=sms",
+    );
   });
 
   it("asks the server for one rep's deals once a rep is picked", async () => {
@@ -163,7 +216,10 @@ describe("OpportunitiesBoard scrolling", () => {
     await user.click(await screen.findByRole("option", { name: "Dana Rep" }));
 
     await waitFor(() =>
-      expect(listMock).toHaveBeenCalledWith("workspace-1", expect.objectContaining({ owner_id: 7 })),
+      expect(listMock).toHaveBeenCalledWith(
+        "workspace-1",
+        expect.objectContaining({ owner_id: 7 }),
+      ),
     );
   });
 });

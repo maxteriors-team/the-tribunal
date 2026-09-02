@@ -960,3 +960,58 @@ Verification passed: TypeScript; targeted ESLint with no errors; **109/109 focus
 and **7/7 Chromium landscape-studio E2E tests**, including save persistence, Bistro schedule handoff,
 390 px captures, 320 px geometry, reduced motion, and forced colors. These are scoped regression
 checks, not a product-wide accessibility or legal-conformance claim.
+
+## Routed opportunity deal workspace (2026-09-01)
+
+### Design read and evidence
+
+- **Surface:** an authenticated, data-dense CRM workspace; the pipeline remains the master list and
+  the routed deal is the focused work surface.
+- **Audience:** owners, managers, and sales reps moving active home-service deals while calling,
+  texting, assigning, and scheduling under time pressure.
+- **Single job:** advance one deal and complete its next follow-up without losing pipeline context.
+- **Risk:** a wrong stage, customer, owner, call outcome, or installation date changes who acts next
+  and can create customer-facing errors. Writes therefore stay explicit and recoverable.
+- **Platform:** desktop is the density leader, while narrow touch and keyboard use retain every
+  control in one vertical flow.
+
+Local product evidence leads: the opportunity board supplies stage and filter context; the former
+detail sheet supplies customer, stage, owner, follow-up, and activity behavior; the contact
+conversation feed supplies the established SMS thread and composer. The contacts route is the
+aligned full-page reference, while the old transient sheet is the contrast. No external visual
+corpus was needed because these local surfaces settle the interaction and visual language.
+
+### Thesis, reuse, and responsive states
+
+The thesis is **pipeline context around a deal ledger**. The title, status, amount, and customer
+anchor the first glance; Notes and SMS own the main canvas; editable deal facts and installation
+date form a stable right rail. Existing cards, tabs, selects, typography, borders, muted surfaces,
+Lucide icons, focus rings, query keys, and loading/error states are reused. The memorable device is
+the uninterrupted deal ledger: structured follow-ups, call outcomes, installation changes, and the
+customer thread remain one route rather than scattered dialogs.
+
+- Wide screens use one shared content rail with a flexible work canvas and a 20 rem fact column.
+- Narrow screens stack the fact cards after Notes/SMS, keep the tabs full width, and give the SMS
+  feed a bounded viewport so the page and message list remain independently operable.
+- Pipeline customer/owner filters travel in validated query parameters. Both back links and card
+  text actions preserve them; invalid values are dropped instead of reflected.
+- The card face remains pointer-draggable and keyboard-openable. Call, SMS, booking, stage movement,
+  and removal remain separate controls; the move menu is the keyboard alternative to dragging.
+- Missing, loading, or failed customer records never mount the conversation. Operators get a clear
+  recovery path to link, retry, or open the customer record.
+
+### Production and verification boundary
+
+Semantic headings, landmarks, native date input, labeled controls, keyboard tabs, explicit pressed
+states, visible focus, loading announcements, retry actions, and non-color text labels are required.
+The final focused runs passed 48 component tests, TypeScript, and changed-file ESLint. A mocked routed
+deal produced light/dark desktop captures plus 768 px, 390 px, and 320 px responsive captures with
+no browser errors, unhandled API calls, or horizontal overflow. Scoped runtime axe scans of Notes
+and SMS returned no WCAG-tagged violations after the message contrast revision. The post-revision
+rubric is **22/24**: accessibility and visual distinctiveness score 1 because the full criterion
+audit and product-specific visual signature remain incomplete; all other criteria score 2. The
+revision removed the redundant SMS panel heading and kept the composer visible at phone sizes.
+
+Screen-reader output, physical touch drag, 200% text-only zoom, forced colors, and a complete WCAG
+2.2 criterion audit remain unverified; no accessibility or legal-conformance claim follows from
+automated checks or rendered fixtures alone.

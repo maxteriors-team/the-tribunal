@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 import { isSameDay } from "@/lib/utils/date";
 import { getApiErrorCode, getApiErrorMessage, getApiErrorStatus } from "@/lib/utils/errors";
 import { normalizePhoneForComparison } from "@/lib/utils/phone";
-import type { Conversation, TimelineItem } from "@/types";
+import type { Contact, Conversation, TimelineItem } from "@/types";
 
 import { ChatHeader } from "./chat-header";
 import { DateSeparator } from "./date-separator";
@@ -37,6 +37,7 @@ import { TeachAIDialog } from "./teach-ai-dialog";
 
 interface ConversationFeedProps {
   className?: string;
+  contact?: Contact | null;
 }
 
 function LoadingSkeleton() {
@@ -52,8 +53,9 @@ function LoadingSkeleton() {
   );
 }
 
-export function ConversationFeed({ className }: ConversationFeedProps) {
-  const { selectedContact } = useContactStore();
+export function ConversationFeed({ className, contact }: ConversationFeedProps) {
+  const { selectedContact: storedContact } = useContactStore();
+  const selectedContact = contact === undefined ? storedContact : contact;
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
 
