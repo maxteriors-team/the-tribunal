@@ -16,6 +16,10 @@ import type { PhotoInfo } from "./types";
  */
 export const LIGHTING_IMAGE_REF_PREFIX = "lighting-image:";
 
+/** Mirrors `_STORAGE_KEY_PATTERN` / `MAX_STORAGE_KEY_CHARS` in the backend schema. */
+const STORAGE_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)*$/;
+const MAX_STORAGE_KEY_CHARS = 250;
+
 /**
  * Is this a photo source the app is willing to load?
  *
@@ -24,9 +28,22 @@ export const LIGHTING_IMAGE_REF_PREFIX = "lighting-image:";
  * stored object. Anything else — notably a bare `https://` URL — stays
  * rejected: the document is attacker-influencable, and honouring an arbitrary
  * remote URL would let one workspace's drawing pull in someone else's image.
+ *
+ * A reference must also *look* like a key the backend would have minted. The
+ * server is the real authority (it refuses to sign anything outside the
+ * caller's own workspace prefix), but validating the shape here too means a
+ * malformed or traversal-flavoured value never reaches an `<img>` at all.
  */
 export function isSupportedImageSource(value: string): boolean {
-  return value.startsWith("data:image/") || value.startsWith(LIGHTING_IMAGE_REF_PREFIX);
+  if (value.startsWith("data:image/")) return true;
+  if (!value.startsWith(LIGHTING_IMAGE_REF_PREFIX)) return false;
+  const objectKey = value.slice(LIGHTING_IMAGE_REF_PREFIX.length);
+  return (
+    objectKey.length > 0 &&
+    objectKey.length <= MAX_STORAGE_KEY_CHARS &&
+    !objectKey.includes("..") &&
+    STORAGE_KEY_PATTERN.test(objectKey)
+  );
 }
 
 /**

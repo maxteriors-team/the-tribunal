@@ -281,6 +281,37 @@ describe("landscape document v2", () => {
     expect(normalized?.shots[0]?.photo.dataUrl).toBe(stored.photo.dataUrl);
   });
 
+  it.each([
+    ["signed", "https://bucket.example/signed"],
+    ["temporarily unsigned", null],
+  ])("preserves a stored photo and its resolved URL when %s", (_state, resolvedUrl) => {
+    const dataUrl = "lighting-image:workspaces/workspace-1/lighting-projects/project-1/photo.png";
+
+    const normalized = normalizeLandscapeDocument({
+      version: 1,
+      activeShotId: "shot-1",
+      shots: [{ ...shot, photo: { ...shot.photo, dataUrl, resolvedUrl } }],
+    });
+
+    expect(normalized?.shots[0]?.photo).toMatchObject({ dataUrl, resolvedUrl });
+  });
+
+  it.each([
+    ["traversal", "lighting-image:../x.png"],
+    ["absolute path", "lighting-image:/etc/passwd"],
+    ["query string", "lighting-image:workspaces/a/b.png?x=1"],
+    ["empty key", "lighting-image:"],
+  ])("rejects a stored reference with a %s", (_label, dataUrl) => {
+    // The server refuses to sign these too, but a malformed reference should
+    // never reach an <img> in the first place.
+    expect(
+      normalizeLandscapeDocument({
+        version: 1,
+        shots: [{ ...shot, photo: { ...shot.photo, dataUrl } }],
+      }),
+    ).toBeNull();
+  });
+
   it("rejects malformed image payloads and excessive sheets", () => {
     expect(
       normalizeLandscapeDocument({
