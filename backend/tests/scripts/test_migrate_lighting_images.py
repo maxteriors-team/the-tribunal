@@ -19,11 +19,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app.core.encryption import hash_phone
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.lighting_project import LightingProject
 from app.models.workspace import Workspace
-from app.core.encryption import hash_phone
 from app.services.messaging.media_storage import StoredMedia
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -138,9 +138,9 @@ async def test_apply_replaces_every_data_url_with_a_stored_key(
 ) -> None:
     script = load_script()
     monkeypatch.setattr(script.settings, "mms_storage_bucket", "test-bucket")
-    monkeypatch.setattr(
-        "app.services.lighting_projects.images._storage_or_none", lambda: _storage()
-    )
+    # One shared storage double, so the upload count below is meaningful.
+    storage = _storage()
+    monkeypatch.setattr("app.services.lighting_projects.images._storage_or_none", lambda: storage)
     project_id = await _seed()
     before = json.dumps(await _document_of(project_id))
 
@@ -151,6 +151,8 @@ async def test_apply_replaces_every_data_url_with_a_stored_key(
     assert "data:image" not in after
     assert "lighting-image:" in after
     assert "resolvedUrl" not in after, "expiring URLs must never reach the database"
+    # Both images in the seeded document were uploaded, not just the photo.
+    assert storage.upload_bytes.call_count == 2
     # The point of the migration: the base64 payload is gone from the column.
     assert script._inline_image_bytes(json.loads(before)) > 1000
     assert script._inline_image_bytes(json.loads(after)) == 0
