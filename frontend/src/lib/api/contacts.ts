@@ -42,6 +42,7 @@ export type ContactsListResponse = ContactListResponse;
 export type ContactStatsResponse = Schemas["ContactStatsResponse"];
 export type ContactIdsResponse = Schemas["ContactIdsResponse"];
 export type ContactEngagementSummary = Schemas["ContactEngagementSummary"];
+export type ContactJobTimeSummary = Schemas["ContactJobTimeSummaryResponse"];
 export type ContactAIKnowledgeResponse = Schemas["ContactAIKnowledgeResponse"];
 export type ContactAIKnowledgeStructuredFact = Schemas["ContactAIKnowledgeStructuredFact"];
 export type ContactAIKnowledgeNextAction = Schemas["ContactAIKnowledgeNextAction"];
@@ -317,6 +318,12 @@ export const contactsApi = {
         path: { workspace_id: workspaceId, contact_id: contactId },
       },
     );
+  },
+
+  getJobTime: async (workspaceId: string, contactId: number): Promise<ContactJobTimeSummary> => {
+    return apiClient.get("/api/v1/workspaces/{workspace_id}/contacts/{contact_id}/job-time", {
+      path: { workspace_id: workspaceId, contact_id: contactId },
+    });
   },
 
   getAIKnowledge: async (

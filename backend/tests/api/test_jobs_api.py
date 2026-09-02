@@ -393,6 +393,25 @@ class TestUpdateAndDelete:
         mock_service.delete.assert_awaited_once()
 
 
+def _time_entry_response(*, stop_reason: str | None = None) -> dict[str, object]:
+    now = datetime.now(UTC)
+    return {
+        "id": str(uuid.uuid4()),
+        "job_id": str(JOB_ID),
+        "technician_id": str(TECH_ID),
+        "started_at": now.isoformat(),
+        "ended_at": now.isoformat() if stop_reason else None,
+        "stop_reason": stop_reason,
+        "is_mine": True,
+        "rate": 0.0,
+        "note": None,
+        "duration_hours": 0.0,
+        "labor_cost": 0.0,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+
+
 def _profitability_response() -> dict[str, object]:
     """A serialized JobProfitability the mocked costing service returns."""
     return {
@@ -435,6 +454,10 @@ async def _costing_client(role: str) -> AsyncIterator[AsyncClient]:
     costing = AsyncMock()
     costing.get_profitability.return_value = _profitability_response()
     costing.list_time_entries.return_value = []
+    costing.clock_in.return_value = _time_entry_response()
+    costing.pause_timer.return_value = _time_entry_response(stop_reason="paused")
+    costing.end_timer.return_value = _time_entry_response(stop_reason="ended")
+    costing.clock_out.return_value = _time_entry_response(stop_reason="paused")
     with patch.object(jobs_module, "JobCostingService", return_value=costing):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://testserver"
@@ -451,11 +474,33 @@ class TestJobCostingAccess:
             response = await ac.get(_base(f"/{JOB_ID}/profitability"))
         assert response.status_code == 403
 
+    @pytest.mark.parametrize("role", ["technician", "sales_rep"])
+    async def test_roles_without_billing_permission_cannot_read_quoted_pricing(
+        self, role: str
+    ) -> None:
+        async with _costing_client(role) as ac:
+            response = await ac.get(_base(f"/{JOB_ID}/pricing"))
+        assert response.status_code == 403
+
     async def test_technician_can_read_time_entries(self) -> None:
-        # Time tracking stays open to the field tech even without billing:read.
+        # Time tracking stays open to the field tech, then data-layer assignment
+        # scoping inside JobCostingService decides whether this job is visible.
         async with _costing_client("technician") as ac:
             response = await ac.get(_base(f"/{JOB_ID}/time-entries"))
         assert response.status_code == 200
+
+    @pytest.mark.parametrize(
+        ("path", "stop_reason"),
+        [("pause", "paused"), ("end", "ended")],
+    )
+    async def test_technician_can_pause_and_end_own_timer(
+        self, path: str, stop_reason: str
+    ) -> None:
+        async with _costing_client("technician") as ac:
+            response = await ac.post(_base(f"/{JOB_ID}/time-entries/{path}"))
+        assert response.status_code == 200
+        assert response.json()["stop_reason"] == stop_reason
+        assert response.json()["is_mine"] is True
 
     async def test_dispatcher_can_read_profitability(self) -> None:
         # A billing-capable role (dispatcher → manager tier) still sees the P&L.

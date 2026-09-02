@@ -313,6 +313,8 @@ export const queryKeys = {
       [...contacts.detail(workspaceId, contactId), "tags"] as const,
     engagementSummary: (workspaceId: string, contactId: string) =>
       [...contacts.detail(workspaceId, contactId), "engagement-summary"] as const,
+    jobTime: (workspaceId: string, contactId: number | string) =>
+      [...contacts.detail(workspaceId, contactId), "job-time"] as const,
   },
   conversations: {
     ...conversations,

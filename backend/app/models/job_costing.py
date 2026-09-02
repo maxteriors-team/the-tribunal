@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     DATE,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -27,6 +28,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -46,8 +48,21 @@ class TimeEntry(Base, WorkspaceScoped):
     __tablename__ = "job_time_entries"
     __table_args__ = (
         Index("ix_job_time_entries_workspace_job", "workspace_id", "job_id"),
-        # Hot path for the "am I clocked in?" check and clock-out lookup.
+        # Hot path for the "am I clocked in?" check and timer lookup.
         Index("ix_job_time_entries_job_open", "job_id", "ended_at"),
+        Index(
+            "uq_job_time_entries_open_creator",
+            "workspace_id",
+            "job_id",
+            "created_by_id",
+            unique=True,
+            postgresql_where=text("ended_at IS NULL AND created_by_id IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "stop_reason IS NULL OR "
+            "(ended_at IS NOT NULL AND stop_reason IN ('paused', 'ended', 'manual'))",
+            name="stop_reason",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -72,8 +87,10 @@ class TimeEntry(Base, WorkspaceScoped):
     )
 
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    # Null while the clock is running; set on clock-out or for a manual entry.
+    # Null while the clock is running; set when paused, ended, or entered manually.
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Null for active and legacy entries. New completed entries record why they stopped.
+    stop_reason: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     # Hourly cost rate (major units). Labor cost = hours * rate.
     rate: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0)

@@ -7,6 +7,7 @@ are response-only and never accepted from clients.
 
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -56,6 +57,9 @@ class TimeEntryResponse(BaseModel):
     technician_id: uuid.UUID | None = None
     started_at: datetime
     ended_at: datetime | None = None
+    stop_reason: Literal["paused", "ended", "manual"] | None = None
+    # True only when the signed-in user created this entry; used for timer controls.
+    is_mine: bool = False
     # Redacted to 0 for callers without billing:read.
     rate: float
     note: str | None = None
@@ -69,6 +73,27 @@ class TimeEntryResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ContactJobTimeEntryResponse(BaseModel):
+    """Price-free job time shown on the associated client's profile."""
+
+    id: uuid.UUID
+    job_id: uuid.UUID
+    job_title: str
+    technician_name: str | None = None
+    started_at: datetime
+    ended_at: datetime | None = None
+    stop_reason: Literal["paused", "ended", "manual"] | None = None
+    duration_hours: float
+
+
+class ContactJobTimeSummaryResponse(BaseModel):
+    """Saved job-time history for one client, with no labor pricing."""
+
+    total_hours: float
+    entry_count: int
+    entries: list[ContactJobTimeEntryResponse]
 
 
 # --------------------------------------------------------------------------- #
