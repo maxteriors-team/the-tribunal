@@ -12,7 +12,9 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260901_job_timer_phases"
-down_revision: str | None = "20260829_conversation_notes"
+# Rebased onto the agent-retirement revision that reached main first, so this
+# branch keeps a single linear head instead of forking migration history.
+down_revision: str | None = "20260901_retire_prestyj"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
