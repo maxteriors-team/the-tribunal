@@ -49,6 +49,19 @@ class LightingProjectService:
             return None
         return user.full_name or user.email
 
+    def _raise_if_version_conflict(self, project: LightingProject, expected_version: int) -> None:
+        if project.version == expected_version:
+            return
+        raise ConflictError(
+            "Lighting project changed since this draft was loaded",
+            code="lighting_project_version_conflict",
+            details={
+                "current_version": project.version,
+                "updater_name": self._user_display_name(project.updated_by),
+                "updated_at": project.updated_at.isoformat(),
+            },
+        )
+
     @classmethod
     def _summary(cls, project: LightingProject) -> LightingProjectSummary:
         project_type: LightingProjectType = (
@@ -304,13 +317,24 @@ class LightingProjectService:
     ) -> LightingProjectDetail:
         """Lock, compare, and replace project state without silent overwrites."""
 
-        # Upload image bytes *before* taking the row lock. Autosave saves often,
-        # and holding FOR UPDATE across several megabytes of bucket I/O would
-        # serialize every concurrent save on this project. The cost is that a
-        # save losing the version check leaves unreferenced objects behind —
-        # bucket bytes, not database volume (orphan cleanup is a tracked follow-up).
         stored_document: LandscapeDraftDocument | None = None
         if "document" in payload.model_fields_set and payload.document is not None:
+            # Reject missing or already-stale projects before spending bucket I/O.
+            preflight = await self.db.scalar(
+                select(LightingProject)
+                .where(
+                    LightingProject.id == project_id,
+                    LightingProject.workspace_id == workspace_id,
+                )
+                .options(selectinload(LightingProject.updated_by))
+            )
+            if preflight is None:
+                raise NotFoundError("Lighting project not found")
+            self._raise_if_version_conflict(preflight, payload.expected_version)
+
+            # simplification: upload before locking keeps autosaves responsive,
+            # but a valid save that loses a later race can leave orphaned bucket
+            # objects; add staged-object leases and cleanup if that growth matters.
             stored_document = await self._offload_images(payload.document, workspace_id, project_id)
 
         result = await self.db.execute(
@@ -324,21 +348,13 @@ class LightingProjectService:
                 selectinload(LightingProject.updated_by),
             )
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         project = result.scalar_one_or_none()
         if project is None:
             raise NotFoundError("Lighting project not found")
 
-        if project.version != payload.expected_version:
-            raise ConflictError(
-                "Lighting project changed since this draft was loaded",
-                code="lighting_project_version_conflict",
-                details={
-                    "current_version": project.version,
-                    "updater_name": self._user_display_name(project.updated_by),
-                    "updated_at": project.updated_at.isoformat(),
-                },
-            )
+        self._raise_if_version_conflict(project, payload.expected_version)
 
         now = datetime.now(UTC)
         current_document = LandscapeDraftDocument.model_validate(project.document)

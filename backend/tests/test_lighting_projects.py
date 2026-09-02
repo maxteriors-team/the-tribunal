@@ -823,3 +823,12 @@ async def test_saved_images_leave_the_database_and_come_back_as_signed_urls(
         assert "data:image" not in resaved_raw
         assert storage.upload_bytes.call_count == 3
         assert resaved.version == 2
+
+        with pytest.raises(ConflictError):
+            await service.update_project(
+                workspace.id,
+                created.id,
+                LightingProjectUpdate(expected_version=1, document=replacement),
+                user_id=user.id,
+            )
+        assert storage.upload_bytes.call_count == 3, "stale saves must not spend bucket I/O"
