@@ -5,7 +5,7 @@ import { isAxiosError } from "axios";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Cloud, Loader2, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useId, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 
 import { LightDesigner } from "@/components/estimator/light-designer";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,14 @@ import { useLightingProjectAutosave } from "./use-lighting-project-autosave";
 interface LightingProjectEditorProps {
   projectId: string;
 }
+
+/**
+ * How often an open designer pulls a full document purely to refresh its signed
+ * image URLs. Comfortably inside the server's signing lifetime
+ * (`LIGHTING_IMAGE_URL_TTL_SECONDS`, 12h) so a URL never expires in a session,
+ * and rare enough that the 15s poll stays a cheap revision check.
+ */
+const IMAGE_URL_REFRESH_MS = 30 * 60 * 1000;
 
 const projectTimeFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -416,16 +424,30 @@ export function LightingProjectEditor({ projectId }: LightingProjectEditorProps)
   const queryClient = useQueryClient();
   const workspaceBrand = resolveWorkspaceBrand(currentWorkspace?.workspace);
   const detailQueryKey = queryKeys.lightingProjects.detail(currentWorkspaceId ?? "", projectId);
+  // Null until the first full fetch, so the clock is never read during render.
+  const lastFullFetchRef = useRef<number | null>(null);
   const projectQuery = useQuery({
     queryKey: detailQueryKey,
     queryFn: async () => {
       const cachedProject = queryClient.getQueryData<LightingProjectDetail>(detailQueryKey);
-      if (!cachedProject) return lightingProjectsApi.get(currentWorkspaceId!, projectId);
+      const fetchFullDocument = async () => {
+        const project = await lightingProjectsApi.get(currentWorkspaceId!, projectId);
+        lastFullFetchRef.current = Date.now();
+        return project;
+      };
+      if (!cachedProject || lastFullFetchRef.current === null) return fetchFullDocument();
 
       const revision = await lightingProjectsApi.getRevision(currentWorkspaceId!, projectId);
-      return revision.version > cachedProject.version
-        ? lightingProjectsApi.get(currentWorkspaceId!, projectId)
-        : cachedProject;
+      if (revision.version > cachedProject.version) return fetchFullDocument();
+      // The cheap revision poll above answers "has someone else edited this?",
+      // and a cache hit is enough for that. But image URLs are signed and
+      // expire, and only a full document carries freshly signed ones -- so in a
+      // long session the canvas and the proposal export would end up pointing at
+      // dead links. Re-fetch well inside the signing lifetime to keep them live.
+      if (Date.now() - lastFullFetchRef.current >= IMAGE_URL_REFRESH_MS) {
+        return fetchFullDocument();
+      }
+      return cachedProject;
     },
     enabled: Boolean(currentWorkspaceId),
     ...POLL_15S,

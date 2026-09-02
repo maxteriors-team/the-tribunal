@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LightingProjectDetail } from "@/lib/api/lighting-projects";
 import type { LandscapeDraft, PendingLandscapeProjectDraft } from "@/lib/estimator/landscape-draft";
+import { imageSrc, resetRefreshedImageUrls } from "@/lib/estimator/photo";
 
 import { useLightingProjectAutosave } from "./use-lighting-project-autosave";
 
@@ -117,6 +118,7 @@ async function renderAutosave(project = makeProject(), onCopyCreated = vi.fn()) 
 }
 
 beforeEach(() => {
+  resetRefreshedImageUrls();
   draftStorageMocks.loadPending.mockResolvedValue(null);
   draftStorageMocks.savePending.mockResolvedValue(undefined);
   draftStorageMocks.deletePending.mockResolvedValue(undefined);
@@ -485,5 +487,49 @@ describe("useLightingProjectAutosave", () => {
     expect(result.current.initialDraft.shots[0].photo.resolvedUrl).toBe(
       "https://bucket.example/signed-1",
     );
+  });
+
+  it("routes refreshed image URLs to the canvas without touching the draft", async () => {
+    // The failure this covers: signed URLs expire, but the draft that renders
+    // the canvas is seeded once at mount and is deliberately not reseeded while
+    // edits are unsaved (reseeding RESETs the designer and discards work). So a
+    // refetch carrying newly signed URLs must reach `imageSrc` some other way.
+    const draft = makeDraft();
+    draft.shots[0].photo.dataUrl = STORED_REF;
+    draft.shots[0].photo.resolvedUrl = "https://bucket.example/signed-at-mount";
+    const project = makeProject(3, draft);
+
+    const { result, rerender } = renderHook(
+      ({ p }: { p: LightingProjectDetail }) =>
+        useLightingProjectAutosave({
+          workspaceId: WORKSPACE_ID,
+          project: p,
+          onCopyCreated: vi.fn(),
+        }),
+      { wrapper: makeWrapper().wrapper, initialProps: { p: project } },
+    );
+    await waitFor(() => expect(result.current.isReady).toBe(true));
+
+    const seededDraft = result.current.initialDraft;
+    expect(imageSrc(seededDraft.shots[0].photo)).toBe("https://bucket.example/signed-at-mount");
+
+    // A poll re-fetches the SAME version, carrying a freshly signed URL.
+    const refreshedDoc = structuredClone(draft) as LandscapeDraft;
+    refreshedDoc.shots[0].photo.resolvedUrl = "https://bucket.example/signed-refreshed";
+    rerender({ p: { ...project, document: refreshedDoc } });
+
+    await waitFor(() =>
+      // Read through the ORIGINAL seeded photo object: this is what the canvas
+      // and the proposal export still hold. Before this change it kept
+      // resolving to the mount-time URL, which is dead once it expires.
+      expect(imageSrc(seededDraft.shots[0].photo)).toBe("https://bucket.example/signed-refreshed"),
+    );
+
+    // The draft itself must be untouched: no discarded edits, no version bump,
+    // and no expiring URL written into what gets saved.
+    expect(result.current.initialDraft).toBe(seededDraft);
+    expect(result.current.resetKey).toBe(0);
+    expect(result.current.project.version).toBe(3);
+    expect(seededDraft.shots[0].photo.resolvedUrl).toBe("https://bucket.example/signed-at-mount");
   });
 });

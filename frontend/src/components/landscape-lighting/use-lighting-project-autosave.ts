@@ -17,6 +17,7 @@ import {
   type LandscapeDraft,
   type PendingLandscapeProjectDraft,
 } from "@/lib/estimator/landscape-draft";
+import { publishRefreshedImageUrls } from "@/lib/estimator/photo";
 import { queryKeys } from "@/lib/query-keys";
 
 const SERVER_DEBOUNCE_MS = 800;
@@ -599,6 +600,16 @@ export function useLightingProjectAutosave({
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
   }, [retry]);
+
+  // Signed image URLs expire while the designer stays open, and the draft below
+  // is deliberately not reseeded when there are unsaved edits. So publish the
+  // refreshed URLs through the side channel `imageSrc` reads, on *every* server
+  // document — before the version gate, because a refresh carries new URLs for
+  // the same version. This never touches the draft, so it cannot discard canvas
+  // work, cannot persist an expiring URL, and cannot advance the version.
+  useEffect(() => {
+    publishRefreshedImageUrls(loadedProject.document);
+  }, [loadedProject]);
 
   useEffect(() => {
     if (
