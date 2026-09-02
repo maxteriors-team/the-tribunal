@@ -77,6 +77,7 @@ from app.services.automations.events import (
 from app.services.exceptions import ConflictError
 from app.services.field_service.neighbor_outreach import NeighborOutreachService
 from app.services.jobs.system_tags import completed_install_tags
+from app.services.lighting_projects.images import resolve_document_images
 from app.services.tags import TagService
 
 # Job lifecycle states that drive an automation event when first entered.
@@ -385,7 +386,10 @@ class JobService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Installation plan not found"
             )
         try:
-            document = LandscapeDraftDocument.model_validate(project.document)
+            document = resolve_document_images(
+                LandscapeDraftDocument.model_validate(project.document),
+                workspace_id=workspace_id,
+            )
         except ValueError as error:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Installation plan not found"

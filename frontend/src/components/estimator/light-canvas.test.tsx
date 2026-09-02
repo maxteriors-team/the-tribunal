@@ -35,7 +35,12 @@ vi.mock("@/lib/estimator/render", () => ({
   MAX_DUSK: 0.92,
 }));
 
-vi.mock("@/lib/estimator/photo", () => ({
+// Only the image *decoding* is stubbed (jsdom cannot decode, and these tests
+// rely on loadImage never resolving). `imageSrc` is kept REAL via
+// importOriginal so choosing the signed bucket URL over the inline data URL
+// stays under test here rather than being replaced by a copy that could drift.
+vi.mock("@/lib/estimator/photo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/estimator/photo")>()),
   loadImage: vi.fn(() => new Promise(() => undefined)),
   fileToPhoto: vi.fn().mockResolvedValue({
     dataUrl: "data:image/png;base64,PLAN",

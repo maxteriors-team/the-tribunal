@@ -1,5 +1,7 @@
 """Contracts and real-DB coverage for landscape lighting project persistence."""
 
+import base64
+import json
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -18,6 +20,7 @@ from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.field_service import ServiceLocation
+from app.models.lighting_project import LightingProject
 from app.models.opportunity import Opportunity
 from app.models.pipeline import Pipeline
 from app.models.user import User
@@ -29,11 +32,17 @@ from app.schemas.lighting_project import (
     LightingProjectUpdate,
 )
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
-from app.services.lighting_projects import LightingProjectService
+from app.services.lighting_projects.project_service import LightingProjectService
+from app.services.messaging.media_storage import StoredMedia
 
 WS_ID = uuid.uuid4()
 PROJECT_ID = uuid.uuid4()
 NOW = datetime.now(UTC)
+
+
+WORKSPACE_KEY_PREFIX = "workspaces/11111111-1111-1111-1111-111111111111/lighting-projects"
+_STORED_KEY = f"{WORKSPACE_KEY_PREFIX}/22222222-2222-2222-2222-222222222222/abc123.png"
+_STORED_REF = f"{lighting_schema.LIGHTING_IMAGE_REF_PREFIX}{_STORED_KEY}"
 
 
 def _photo() -> dict[str, object]:
@@ -232,6 +241,50 @@ class TestLandscapeDraftSchema:
     def test_rejects_invalid_references_dimensions_ids_and_versions(self, mutate: object) -> None:
         document = _document()
         mutate(document)  # type: ignore[operator]
+        with pytest.raises(PydanticValidationError):
+            LandscapeDraftDocument.model_validate(document)
+
+    def test_accepts_a_document_mixing_data_urls_and_stored_image_references(self) -> None:
+        """A half-migrated document must still validate; see the plan's Compatibility."""
+        document = _document()
+        shot = document["shots"][0]  # type: ignore[index]
+        shot["photo"]["dataUrl"] = _STORED_REF
+        shot["design"]["annotations"] = [
+            {
+                "id": "note-1",
+                "type": "photo",
+                "at": {"x": 5, "y": 5},
+                "imageDataUrl": _STORED_REF,
+            }
+        ]
+        # planImages deliberately left inline, so this document holds both shapes.
+        parsed = LandscapeDraftDocument.model_validate(document)
+        assert lighting_schema.lighting_image_key(parsed.shots[0].photo.data_url) == _STORED_KEY
+        assert parsed.shots[0].design.plan_images[0].data_url.startswith("data:image/")
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "lighting-image:",
+            "lighting-image:/absolute/key.png",
+            "lighting-image:workspaces/../../etc/passwd",
+            "lighting-image:workspaces/a//b.png",
+            "lighting-image:workspaces/a/b.png?x=1",
+            "lighting-image:" + "a" * 260,
+            "https://example.com/remote.png",
+            "file:///etc/passwd",
+            "",
+        ],
+    )
+    def test_rejects_unsafe_or_foreign_image_values(self, value: str) -> None:
+        document = _document()
+        document["shots"][0]["photo"]["dataUrl"] = value  # type: ignore[index]
+        with pytest.raises(PydanticValidationError):
+            LandscapeDraftDocument.model_validate(document)
+
+    def test_resolved_url_is_length_bounded_so_it_cannot_re_bloat_the_document(self) -> None:
+        document = _document()
+        document["shots"][0]["photo"]["resolvedUrl"] = "h" * 5000  # type: ignore[index]
         with pytest.raises(PydanticValidationError):
             LandscapeDraftDocument.model_validate(document)
 
@@ -696,3 +749,77 @@ async def test_workspace_isolation_covers_project_and_every_linked_crm_id(
             await service.get_project(foreign_workspace.id, created.id)
         with pytest.raises(NotFoundError):
             await service.get_project_revision(foreign_workspace.id, created.id)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_saved_images_leave_the_database_and_come_back_as_signed_urls(
+    fresh_engine_pool: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A data-URL save must persist a key, and a read must hand back a usable URL.
+
+    This is the whole point of the change: base64 image bytes in this JSONB
+    column are what filled the database volume.
+    """
+    storage = MagicMock()
+    storage.upload_bytes.return_value = StoredMedia(object_key="k", size_bytes=1, sha256="d")
+    storage.create_download_url.return_value = "https://bucket.example/signed"
+    monkeypatch.setattr("app.services.lighting_projects.images._storage_or_none", lambda: storage)
+
+    async with AsyncSessionLocal() as db:
+        workspace = await _make_workspace(db, "Lighting Co")
+        user = await _make_member(db, workspace.id, name="Morgan Manager")
+        contact = await _make_contact(db, workspace.id, name="Pat")
+        service = LightingProjectService(db)
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"pixels").decode()
+        document = _document()
+        document["shots"][0]["photo"]["dataUrl"] = f"data:image/png;base64,{png}"  # type: ignore[index]
+        document["shots"][0]["design"]["planImages"][0]["dataUrl"] = (  # type: ignore[index]
+            f"data:image/png;base64,{png}"
+        )
+
+        created = await service.create_project(
+            workspace.id,
+            LightingProjectCreate(
+                contact_id=contact.id,
+                name="Backyard",
+                document=LandscapeDraftDocument.model_validate(document),
+                installation_shot_id="shot-1",
+            ),
+            user_id=user.id,
+        )
+
+        stored_row = await db.get(LightingProject, created.id)
+        assert stored_row is not None
+        raw = json.dumps(stored_row.document)
+        assert "data:image" not in raw, "image bytes must not reach the database"
+        assert f"workspaces/{workspace.id}/lighting-projects/{created.id}/" in raw
+        # No expiring URL may be persisted either.
+        assert "https://bucket.example/signed" not in raw
+
+        fetched = await service.get_project(workspace.id, created.id)
+        assert fetched.document.shots[0].photo.resolved_url == "https://bucket.example/signed"
+        assert fetched.document.shots[0].design.plan_images[0].resolved_url == (
+            "https://bucket.example/signed"
+        )
+
+        # Update with a newly-added inline photo: it must be offloaded too, not
+        # merely uploaded while the original data URL is persisted in JSONB.
+        replacement = fetched.document.model_copy(deep=True)
+        replacement.shots[0].photo.data_url = f"data:image/png;base64,{png}"
+        replacement.shots[0].photo.resolved_url = None
+        resaved = await service.update_project(
+            workspace.id,
+            created.id,
+            LightingProjectUpdate(expected_version=1, document=replacement),
+            user_id=user.id,
+        )
+        resaved_row = await db.get(LightingProject, created.id)
+        assert resaved_row is not None
+        await db.refresh(resaved_row)
+        resaved_raw = json.dumps(resaved_row.document)
+        assert "https://bucket.example/signed" not in resaved_raw
+        assert "data:image" not in resaved_raw
+        assert storage.upload_bytes.call_count == 3
+        assert resaved.version == 2

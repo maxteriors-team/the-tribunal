@@ -1,9 +1,10 @@
 /**
  * Client-side image downscaling for saved lighting designs.
  *
- * Images are stored inline as data URLs (this deployment has no object storage),
- * so keeping them small matters: cap the longest edge and re-encode as JPEG
- * before they leave the browser. A 1600px q0.78 photo is typically 250–500 KB.
+ * Uploads leave the browser as data URLs; the server then moves the bytes into
+ * the private bucket and stores only a key (`lighting-image:{key}`) in the
+ * design document. Downscaling still matters — it bounds the request body and
+ * the stored object. A 1600px q0.78 photo is typically 250–500 KB.
  */
 
 const MAX_EDGE = 1600;

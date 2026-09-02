@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID
@@ -23,6 +24,52 @@ MAX_LANDSCAPE_DOCUMENT_BYTES = 20 * 1024 * 1024
 MAX_LANDSCAPE_SHOTS = 6
 MAX_PLAN_IMAGES_PER_SHOT = 12
 MAX_DATA_URL_CHARS = 8 * 1024 * 1024
+
+# Image bytes live in the private bucket, not in this JSONB column. A stored
+# image is referenced by ``lighting-image:{object_key}``; the signed URL the
+# browser actually loads is minted per response into a sibling ``resolved_*``
+# field, never persisted. Both shapes stay valid for the whole migration so a
+# half-migrated document still validates — see the plan's "Compatibility".
+LIGHTING_IMAGE_REF_PREFIX = "lighting-image:"
+# Deliberately narrow: this value arrives from the browser, so it must not be
+# able to describe a traversal, an absolute path, or another bucket's object.
+# The workspace half of the tenant check lives in the resolver, which refuses to
+# sign a key outside the caller's own workspace prefix.
+_STORAGE_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9._-]+)*$")
+MAX_STORAGE_KEY_CHARS = 250
+MAX_RESOLVED_URL_CHARS = 2000
+
+ResolvedImageUrl = Annotated[str, StringConstraints(max_length=MAX_RESOLVED_URL_CHARS)]
+
+
+def lighting_image_key(value: str | None) -> str | None:
+    """Return the object key behind a stored-image reference, else ``None``."""
+    if value is None or not value.startswith(LIGHTING_IMAGE_REF_PREFIX):
+        return None
+    return value[len(LIGHTING_IMAGE_REF_PREFIX) :]
+
+
+def validate_image_value(value: str, *, label: str) -> str:
+    """Accept an inline data URL or a stored-image reference; reject anything else.
+
+    Notably this still rejects a bare ``http(s)://`` URL. The write path only
+    ever mints references itself, so allowing client-supplied URLs would let a
+    caller persist an arbitrary remote image into another user's drawing.
+    """
+    key = lighting_image_key(value)
+    if key is not None:
+        if (
+            not key
+            or len(key) > MAX_STORAGE_KEY_CHARS
+            or ".." in key
+            or not _STORAGE_KEY_PATTERN.match(key)
+        ):
+            raise ValueError(f"{label} storage reference is not a valid object key")
+        return value
+    if not value.startswith("data:image/") or len(value) > MAX_DATA_URL_CHARS:
+        raise ValueError(f"{label} must be an embedded image data URL or a stored image")
+    return value
+
 
 DocumentText = Annotated[str, StringConstraints(max_length=2000)]
 ShortText = Annotated[str, StringConstraints(max_length=250)]
@@ -172,13 +219,16 @@ class PlanImageSchema(DocumentSchema):
     height_px: Annotated[float, Field(gt=0, le=100_000)] = Field(
         validation_alias=AliasChoices("heightPx", "height_px")
     )
+    # Server-minted signed URL for a stored image. Read-only: the write path
+    # clears it, so a client echoing it back can never persist an expiring URL.
+    resolved_url: ResolvedImageUrl | None = Field(
+        default=None, validation_alias=AliasChoices("resolvedUrl", "resolved_url")
+    )
 
     @field_validator("data_url")
     @classmethod
     def embedded_image_only(cls, value: str) -> str:
-        if not value.startswith("data:image/") or len(value) > MAX_DATA_URL_CHARS:
-            raise ValueError("plan image must be an embedded image data URL")
-        return value
+        return validate_image_value(value, label="plan image")
 
 
 class RevisionRowSchema(DocumentSchema):
@@ -204,15 +254,16 @@ class AnnotationSchema(DocumentSchema):
     image_data_url: str | None = Field(
         default=None, validation_alias=AliasChoices("imageDataUrl", "image_data_url")
     )
+    resolved_image_url: ResolvedImageUrl | None = Field(
+        default=None, validation_alias=AliasChoices("resolvedImageUrl", "resolved_image_url")
+    )
 
     @field_validator("image_data_url")
     @classmethod
     def valid_optional_image(cls, value: str | None) -> str | None:
-        if value is not None and (
-            not value.startswith("data:image/") or len(value) > MAX_DATA_URL_CHARS
-        ):
-            raise ValueError("annotation image must be an embedded image data URL")
-        return value
+        if value is None:
+            return None
+        return validate_image_value(value, label="annotation image")
 
 
 class MeasurementSchema(DocumentSchema):
@@ -300,13 +351,14 @@ class PhotoSchema(DocumentSchema):
     data_url: str = Field(validation_alias=AliasChoices("dataUrl", "data_url"))
     width: Annotated[int, Field(gt=0, le=100_000)]
     height: Annotated[int, Field(gt=0, le=100_000)]
+    resolved_url: ResolvedImageUrl | None = Field(
+        default=None, validation_alias=AliasChoices("resolvedUrl", "resolved_url")
+    )
 
     @field_validator("data_url")
     @classmethod
     def embedded_photo_only(cls, value: str) -> str:
-        if not value.startswith("data:image/") or len(value) > MAX_DATA_URL_CHARS:
-            raise ValueError("photo must be an embedded image data URL")
-        return value
+        return validate_image_value(value, label="photo")
 
 
 class LandscapeShotSchema(DocumentSchema):

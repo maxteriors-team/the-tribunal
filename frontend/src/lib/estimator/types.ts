@@ -298,7 +298,10 @@ export interface Calibration {
 /** A movable image inset placed over the editable construction plan. */
 export interface PlanImage {
   id: string;
+  /** Inline data URL, or a `lighting-image:{key}` reference to stored bytes. */
   dataUrl: string;
+  /** Server-minted signed URL for a stored image. Read-only; never sent back. */
+  resolvedUrl?: string | null;
   name: string;
   /** Image center in property-photo coordinates. */
   at: Point;
@@ -333,6 +336,8 @@ export interface LandscapeAnnotation {
   sizePx?: number;
   rotationDeg?: number;
   imageDataUrl?: string;
+  /** Server-minted signed URL for a stored image. Read-only; never sent back. */
+  resolvedImageUrl?: string | null;
 }
 
 export interface LandscapeMeasurementLine {
@@ -474,9 +479,12 @@ export type Tool =
 
 export type Selection = { kind: "run" | "item" | "planImage"; id: string } | null;
 
-/** A loaded house photo: its data URL plus intrinsic pixel dimensions. */
+/** A loaded house photo: its source plus intrinsic pixel dimensions. */
 export interface PhotoInfo {
+  /** Inline data URL, or a `lighting-image:{key}` reference to stored bytes. */
   dataUrl: string;
+  /** Server-minted signed URL for a stored image. Read-only; never sent back. */
+  resolvedUrl?: string | null;
   width: number;
   height: number;
 }

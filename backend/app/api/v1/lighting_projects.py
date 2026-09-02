@@ -16,7 +16,7 @@ from app.schemas.lighting_project import (
     LightingProjectUpdate,
     PaginatedLightingProjects,
 )
-from app.services.lighting_projects import LightingProjectService
+from app.services.lighting_projects.project_service import LightingProjectService
 
 router = APIRouter(route_class=ServiceErrorRoute)
 

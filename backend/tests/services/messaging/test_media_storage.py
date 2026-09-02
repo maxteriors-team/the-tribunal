@@ -207,6 +207,57 @@ def test_create_download_url_rejects_empty_provider_result() -> None:
         storage.create_download_url(object_key="workspaces/ws/messages/msg/photo.jpg")
 
 
+def test_create_download_url_accepts_a_longer_lighting_project_lifetime() -> None:
+    client = Mock()
+    client.generate_presigned_url.return_value = "https://bucket.example/signed"
+    storage, _ = _storage(client=client)
+
+    storage.create_download_url(
+        object_key="workspaces/ws/lighting-projects/project/photo.jpg", expires_in=3600
+    )
+
+    assert client.generate_presigned_url.call_args.kwargs["ExpiresIn"] == 3600
+
+
+def test_get_cors_rules_returns_empty_only_when_configuration_is_missing() -> None:
+    client = Mock()
+    client.get_bucket_cors.side_effect = ClientError(
+        error_response={"Error": {"Code": "NoSuchCORSConfiguration", "Message": "missing"}},
+        operation_name="GetBucketCors",
+    )
+    storage, _ = _storage(client=client)
+
+    assert storage.get_cors_rules() == []
+
+
+def test_get_cors_rules_surfaces_provider_failures() -> None:
+    client = Mock()
+    client.get_bucket_cors.side_effect = _client_error("GetBucketCors")
+    storage, _ = _storage(client=client)
+
+    with pytest.raises(MMSStorageError, match="CORS read failed"):
+        storage.get_cors_rules()
+
+
+def test_put_cors_rules_allows_get_from_only_the_named_origins() -> None:
+    storage, client = _storage()
+
+    storage.put_cors_rules(allowed_origins=["https://app.example.com"])
+
+    rule = client.put_bucket_cors.call_args.kwargs["CORSConfiguration"]["CORSRules"][0]
+    assert rule["AllowedOrigins"] == ["https://app.example.com"]
+    assert rule["AllowedMethods"] == ["GET"]
+
+
+def test_put_cors_rules_rejects_a_wildcard() -> None:
+    storage, client = _storage()
+
+    with pytest.raises(ValueError, match="non-wildcard"):
+        storage.put_cors_rules(allowed_origins=["*"])
+
+    client.put_bucket_cors.assert_not_called()
+
+
 def test_delete_uses_private_bucket_and_is_wrapped() -> None:
     client = Mock()
     storage, _ = _storage(client=client)

@@ -12371,6 +12371,8 @@ export interface components {
             id: string;
             /** Imagedataurl */
             imageDataUrl?: string | null;
+            /** Resolvedimageurl */
+            resolvedImageUrl?: string | null;
             /** Rotationdeg */
             rotationDeg?: number | null;
             /** Sizepx */
@@ -25748,6 +25750,8 @@ export interface components {
             dataUrl: string;
             /** Height */
             height: number;
+            /** Resolvedurl */
+            resolvedUrl?: string | null;
             /** Width */
             width: number;
         };
@@ -25929,6 +25933,8 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /** Resolvedurl */
+            resolvedUrl?: string | null;
             /** Widthpx */
             widthPx: number;
         };

@@ -106,14 +106,22 @@ class MMSMediaStorage:
             sha256=digest,
         )
 
-    def create_download_url(self, *, object_key: str) -> str:
-        """Create a short-lived GET URL for one private object."""
+    def create_download_url(self, *, object_key: str, expires_in: int | None = None) -> str:
+        """Create a short-lived GET URL for one private object.
+
+        ``expires_in`` overrides the configured TTL for callers whose URL has to
+        outlive a single request — a lighting design stays open in the browser
+        far longer than an MMS thumbnail is fetched for.
+        """
         self._validate_object_key(object_key)
+        ttl = self._presign_ttl_seconds if expires_in is None else expires_in
+        if ttl <= 0:
+            raise ValueError("Presigned URL lifetime must be positive")
         try:
             url = self._client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": self._bucket, "Key": object_key},
-                ExpiresIn=self._presign_ttl_seconds,
+                ExpiresIn=ttl,
             )
         except (BotoCoreError, ClientError) as exc:
             raise MMSStorageError("MMS media URL generation failed") from exc
@@ -128,6 +136,46 @@ class MMSMediaStorage:
             self._client.delete_object(Bucket=self._bucket, Key=object_key)
         except (BotoCoreError, ClientError) as exc:
             raise MMSStorageError("MMS media deletion failed") from exc
+
+    def get_cors_rules(self) -> list[dict[str, object]]:
+        """Return the bucket's browser CORS rules, or an empty list when unset."""
+        try:
+            response = self._client.get_bucket_cors(Bucket=self._bucket)
+        except ClientError as exc:
+            # A bucket with no rule configured answers NoSuchCORSConfiguration;
+            # authentication and provider failures must remain visible.
+            if exc.response.get("Error", {}).get("Code") == "NoSuchCORSConfiguration":
+                return []
+            raise MMSStorageError("Bucket CORS read failed") from exc
+        except BotoCoreError as exc:
+            raise MMSStorageError("Bucket CORS read failed") from exc
+        return [dict(rule) for rule in response.get("CORSRules", [])]
+
+    def put_cors_rules(self, *, allowed_origins: list[str]) -> None:
+        """Allow exactly these browser origins to read objects via GET.
+
+        Presigned URLs remain the authorization; CORS only decides whether a
+        browser hands the bytes to page script — and therefore whether a canvas
+        that drew the image stays untainted. Never allow ``*`` here.
+        """
+        if not allowed_origins or "*" in allowed_origins:
+            raise ValueError("Bucket CORS requires an explicit, non-wildcard origin list")
+        try:
+            self._client.put_bucket_cors(
+                Bucket=self._bucket,
+                CORSConfiguration={
+                    "CORSRules": [
+                        {
+                            "AllowedOrigins": allowed_origins,
+                            "AllowedMethods": ["GET"],
+                            "AllowedHeaders": ["*"],
+                            "MaxAgeSeconds": 3000,
+                        }
+                    ]
+                },
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise MMSStorageError("Bucket CORS write failed") from exc
 
     @staticmethod
     def _validate_object_key(object_key: str) -> None:
