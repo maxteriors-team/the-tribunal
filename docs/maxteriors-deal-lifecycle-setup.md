@@ -1,6 +1,6 @@
 # Maxteriors deal-lifecycle setup
 
-This command configures the workspace containing the single active member
+This command configures the single active workspace containing active member
 `admin@maxteriors.com`. It never accepts workspace, member, pipeline, or stage IDs.
 It aborts unless every required stage name resolves exactly once and all stages
 belong to one active pipeline.
