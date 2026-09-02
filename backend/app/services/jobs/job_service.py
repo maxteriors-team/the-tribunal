@@ -23,7 +23,7 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, cast
 
@@ -924,6 +924,16 @@ class JobService:
 
         installed_system_tags: tuple[str, ...] = ()
         if new_status == JobStatus.COMPLETED:
+            completed_at = datetime.now(UTC)
+            from app.services.opportunities.installation_lifecycle import (
+                transition_completed_job_opportunity,
+            )
+
+            await transition_completed_job_opportunity(
+                self.db,
+                job,
+                now=completed_at,
+            )
             await NeighborOutreachService(self.db).maybe_generate_on_completion(job)
             installed_system_tags = await self._tag_completed_system(job)
 
