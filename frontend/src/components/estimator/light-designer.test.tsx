@@ -84,7 +84,11 @@ vi.mock("@/lib/estimator/landscape-draft", () => ({
 
 // jsdom can't decode images or drive a real canvas, so mock the photo loader:
 // upload resolves a fixed PhotoInfo and the canvas gets a fake decoded image.
-vi.mock("@/lib/estimator/photo", () => ({
+// Only the image *decoding* is stubbed. `imageSrc` is kept REAL via
+// importOriginal so choosing the signed bucket URL over the inline data URL
+// stays under test here rather than being replaced by a copy that could drift.
+vi.mock("@/lib/estimator/photo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/estimator/photo")>()),
   fileToPhoto: vi.fn().mockResolvedValue({
     dataUrl: "data:image/png;base64,AAAA",
     width: 1200,

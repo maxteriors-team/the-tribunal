@@ -10,7 +10,7 @@ from app.schemas.lead_source import LeadAttributionFields
 from app.schemas.tag import TagResponse
 from app.services.messaging.outbound_media import (
     MAX_OUTBOUND_IMAGE_DATA_URL_CHARS,
-    decode_outbound_image_data_url,
+    decode_image_data_url,
 )
 
 _NOT_LOADED = object()
@@ -235,7 +235,7 @@ class SendMessageToContactRequest(BaseModel):
     @classmethod
     def validate_image_data_url(cls, value: str | None) -> str | None:
         if value is not None:
-            decode_outbound_image_data_url(value)
+            decode_image_data_url(value)
         return value
 
     @model_validator(mode="after")

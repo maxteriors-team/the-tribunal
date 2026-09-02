@@ -30,7 +30,7 @@ import { indexProducts } from "@/lib/estimator/catalog";
 import { designScale, formatFeet } from "@/lib/estimator/design";
 import { distance, distToPolyline, polylineLength, snapAngle } from "@/lib/estimator/geometry";
 import { fileToResizedDataUrl } from "@/lib/estimator/image-resize";
-import { fileToPhoto, loadImage } from "@/lib/estimator/photo";
+import { fileToPhoto, imageSrc, loadImage } from "@/lib/estimator/photo";
 import {
   MAX_DUSK,
   beamAngleAt,
@@ -164,8 +164,11 @@ export function LightCanvas({
   const dragRef = useRef<Drag | null>(null);
   const fittedRef = useRef(false);
 
-  const [loadedPhotoDataUrl, setLoadedPhotoDataUrl] = useState<string | null>(null);
-  const imgLoaded = loadedPhotoDataUrl === photo.dataUrl;
+  // The photo's real source: a signed bucket URL once the image is stored,
+  // otherwise the inline data URL. Everything below keys off this, not dataUrl.
+  const photoSrc = imageSrc(photo);
+  const [loadedPhotoSrc, setLoadedPhotoSrc] = useState<string | null>(null);
+  const imgLoaded = loadedPhotoSrc === photoSrc;
   const [planImageElements, setPlanImageElements] = useState<Map<string, HTMLImageElement>>(
     () => new Map(),
   );
@@ -210,34 +213,34 @@ export function LightCanvas({
   useEffect(() => {
     let cancelled = false;
     fittedRef.current = false;
-    void loadImage(photo.dataUrl).then((img) => {
+    void loadImage(photoSrc).then((img) => {
       if (cancelled) return;
       imgRef.current = img;
-      setLoadedPhotoDataUrl(photo.dataUrl);
+      setLoadedPhotoSrc(photoSrc);
     });
     return () => {
       cancelled = true;
     };
-  }, [photo.dataUrl]);
+  }, [photoSrc]);
 
   const planImageSourceKey = useMemo(
     () =>
       JSON.stringify(
-        (design.planImages ?? []).map((image) => ({ id: image.id, dataUrl: image.dataUrl })),
+        (design.planImages ?? []).map((image) => ({ id: image.id, src: imageSrc(image) })),
       ),
     [design.planImages],
   );
 
   useEffect(() => {
     let cancelled = false;
-    const images = JSON.parse(planImageSourceKey) as Array<{ id: string; dataUrl: string }>;
+    const images = JSON.parse(planImageSourceKey) as Array<{ id: string; src: string }>;
     if (images.length === 0) {
       return () => {
         cancelled = true;
       };
     }
     void Promise.all(
-      images.map(async (image) => [image.id, await loadImage(image.dataUrl)] as const),
+      images.map(async (image) => [image.id, await loadImage(image.src)] as const),
     ).then(
       (loaded) => {
         if (cancelled) return;

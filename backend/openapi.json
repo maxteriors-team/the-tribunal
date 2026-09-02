@@ -3312,6 +3312,18 @@
             ],
             "title": "Imagedataurl"
           },
+          "resolvedImageUrl": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolvedimageurl"
+          },
           "rotationDeg": {
             "anyOf": [
               {
@@ -37695,6 +37707,18 @@
             "title": "Height",
             "type": "integer"
           },
+          "resolvedUrl": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolvedurl"
+          },
           "width": {
             "exclusiveMinimum": 0.0,
             "maximum": 100000.0,
@@ -38216,6 +38240,18 @@
             "maxLength": 250,
             "title": "Name",
             "type": "string"
+          },
+          "resolvedUrl": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolvedurl"
           },
           "widthPx": {
             "exclusiveMinimum": 0.0,

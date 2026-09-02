@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useJobInstallationPlan } from "@/hooks/useJobs";
 import type { JobInstallationPlan } from "@/lib/api/jobs";
 import { designScale } from "@/lib/estimator/design";
-import { loadImage } from "@/lib/estimator/photo";
+import { imageSrc, loadImage } from "@/lib/estimator/photo";
 import { drawScene } from "@/lib/estimator/render";
 import type { Design, PhotoInfo, Product, RenderStyle } from "@/lib/estimator/types";
 
@@ -83,7 +83,7 @@ export function InstallationPlanPanel({ workspaceId, jobId }: InstallationPlanPa
     let cancelled = false;
     const photo = plan.photo as unknown as PhotoInfo;
     const design = plan.design as unknown as Design;
-    void loadImage(photo.dataUrl)
+    void loadImage(imageSrc(photo))
       .then((image) => {
         if (cancelled) return;
         canvas.width = photo.width;

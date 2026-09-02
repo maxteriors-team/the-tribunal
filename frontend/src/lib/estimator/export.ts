@@ -11,7 +11,7 @@
  * doesn't need full resolution and smaller payloads render faster and cheaper.
  */
 import { designScale } from "./design";
-import { loadImage } from "./photo";
+import { imageSrc, loadImage } from "./photo";
 import { DEFAULT_DUSK, drawScene } from "./render";
 import type { Design, PhotoInfo, Product } from "./types";
 
@@ -35,7 +35,7 @@ export async function exportDesignJpeg(
 ): Promise<string> {
   const { maxWidth = 1280, dusk = DEFAULT_DUSK, quality = 0.9 } = options;
 
-  const img = await loadImage(photo.dataUrl);
+  const img = await loadImage(imageSrc(photo));
   const nw = img.naturalWidth || photo.width;
   const nh = img.naturalHeight || photo.height;
 

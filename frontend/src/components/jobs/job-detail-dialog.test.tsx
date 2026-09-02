@@ -73,7 +73,11 @@ vi.mock("@/hooks/useJobs", () => ({
   useDeleteJob: mutation,
 }));
 
-vi.mock("@/lib/estimator/photo", () => ({
+// Only the image *decoding* is stubbed (jsdom cannot decode). `imageSrc` is
+// kept REAL via importOriginal so choosing the signed bucket URL over the
+// inline data URL stays under test rather than being stubbed away.
+vi.mock("@/lib/estimator/photo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/estimator/photo")>()),
   loadImage: vi.fn().mockResolvedValue({ naturalWidth: 1200, naturalHeight: 800 }),
 }));
 
