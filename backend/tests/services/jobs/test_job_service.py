@@ -14,6 +14,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -759,3 +760,44 @@ async def test_installation_plan_is_redacted_and_assignment_scoped() -> None:
             crew_user=crew_user,
             project_id=project.id,
         )
+
+
+async def test_installation_plan_resolves_stored_images_for_the_field_crew(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Installers read the same document; a migrated project must still show its photo."""
+    storage = MagicMock()
+    storage.create_download_url.return_value = "https://bucket.example/signed"
+    monkeypatch.setattr("app.services.lighting_projects.images._storage_or_none", lambda: storage)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        manager_user = await _user(db)
+        manager = await _member(db, ws.id, manager_user.id)
+        manager.role = "manager"
+        document = _landscape_document()
+        key = f"workspaces/{ws.id}/lighting-projects/{uuid.uuid4()}/photo.png"
+        document["shots"][0]["photo"]["dataUrl"] = f"lighting-image:{key}"
+        project = LightingProject(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            name="Front plan",
+            document=document,
+            version=4,
+            installation_shot_id="install-front",
+        )
+        db.add(project)
+        await db.flush()
+        job = await JobService(db).create(
+            ws.id,
+            {"contact_id": contact.id, "title": "Install", "lighting_project_id": project.id},
+        )
+
+        plan = await JobService(db).get_installation_plan(
+            job.id, ws.id, membership=manager, user_id=manager_user.id
+        )
+
+        assert plan.photo.data_url == f"lighting-image:{key}"
+        assert plan.photo.resolved_url == "https://bucket.example/signed"
+        assert storage.create_download_url.call_args.kwargs["object_key"] == key

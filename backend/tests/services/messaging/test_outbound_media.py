@@ -12,7 +12,7 @@ from app.services.messaging.media_storage import MMSStorageError, StoredMedia
 from app.services.messaging.outbound_media import (
     MAX_OUTBOUND_IMAGE_BYTES,
     OutboundImageValidationError,
-    decode_outbound_image_data_url,
+    decode_image_data_url,
     store_outbound_image,
 )
 
@@ -38,7 +38,7 @@ def test_send_message_request_requires_text_or_image() -> None:
 def test_decode_outbound_image_accepts_matching_jpeg() -> None:
     data = b"\xff\xd8\xff" + b"safe-image"
 
-    decoded, content_type = decode_outbound_image_data_url(_data_url("image/jpeg", data))
+    decoded, content_type = decode_image_data_url(_data_url("image/jpeg", data))
 
     assert decoded == data
     assert content_type == "image/jpeg"
@@ -46,14 +46,14 @@ def test_decode_outbound_image_accepts_matching_jpeg() -> None:
 
 def test_decode_outbound_image_rejects_spoofed_content_type() -> None:
     with pytest.raises(OutboundImageValidationError, match="contents do not match"):
-        decode_outbound_image_data_url(_data_url("image/jpeg", b"not-an-image"))
+        decode_image_data_url(_data_url("image/jpeg", b"not-an-image"))
 
 
 def test_decode_outbound_image_rejects_carrier_oversize_payload() -> None:
     oversized = b"\xff\xd8\xff" + b"x" * MAX_OUTBOUND_IMAGE_BYTES
 
     with pytest.raises(OutboundImageValidationError, match="exceeds 600 KB"):
-        decode_outbound_image_data_url(_data_url("image/jpeg", oversized))
+        decode_image_data_url(_data_url("image/jpeg", oversized))
 
 
 async def test_store_outbound_image_uses_workspace_scoped_private_object() -> None:

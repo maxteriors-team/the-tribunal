@@ -28,6 +28,12 @@ from app.schemas.lighting_project import (
     empty_landscape_document,
 )
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
+from app.services.lighting_projects.images import (
+    LightingImageError,
+    document_for_storage,
+    resolve_document_images,
+    store_document_images,
+)
 from app.services.workspaces.membership import assert_active_workspace_member
 
 
@@ -68,6 +74,24 @@ class LightingProjectService:
         )
 
     @staticmethod
+    async def _offload_images(
+        document: LandscapeDraftDocument,
+        workspace_id: uuid.UUID,
+        project_id: uuid.UUID,
+    ) -> LandscapeDraftDocument:
+        """Move inline image bytes into the bucket before they reach JSONB.
+
+        Base64 images in this column are what filled the database volume, so a
+        save must never persist them once storage is configured.
+        """
+        try:
+            return await store_document_images(
+                document, workspace_id=workspace_id, project_id=project_id
+            )
+        except LightingImageError as error:
+            raise ValidationError(str(error)) from error
+
+    @staticmethod
     def _validate_selected_shot(
         document: LandscapeDraftDocument, installation_shot_id: str | None
     ) -> None:
@@ -80,9 +104,15 @@ class LightingProjectService:
     @classmethod
     def _detail(cls, project: LightingProject) -> LightingProjectDetail:
         summary = cls._summary(project)
+        # Image bytes live in the bucket; hand the browser a signed URL beside the
+        # stored reference. Documents still holding data URLs pass through as-is.
+        document = resolve_document_images(
+            LandscapeDraftDocument.model_validate(project.document),
+            workspace_id=project.workspace_id,
+        )
         return LightingProjectDetail(
             **summary.model_dump(),
-            document=LandscapeDraftDocument.model_validate(project.document),
+            document=document,
             created_by_id=project.created_by_id,
         )
 
@@ -202,7 +232,12 @@ class LightingProjectService:
             payload.document or empty_landscape_document(now, payload.project_type)
         ).with_server_timestamp(now)
         self._validate_selected_shot(document, payload.installation_shot_id)
+        # Mint the id up front so uploaded images can be keyed by project before
+        # the row exists; a failed upload aborts before anything is inserted.
+        project_id = uuid.uuid4()
+        document = await self._offload_images(document, workspace_id, project_id)
         project = LightingProject(
+            id=project_id,
             workspace_id=workspace_id,
             contact_id=payload.contact_id,
             service_location_id=payload.service_location_id,
@@ -210,7 +245,7 @@ class LightingProjectService:
             assigned_user_id=payload.assigned_user_id,
             name=payload.name,
             status="active",
-            document=document.model_dump(mode="json", by_alias=True),
+            document=document_for_storage(document),
             version=1,
             installation_shot_id=payload.installation_shot_id,
             created_by_id=user_id,
@@ -269,6 +304,14 @@ class LightingProjectService:
     ) -> LightingProjectDetail:
         """Lock, compare, and replace project state without silent overwrites."""
 
+        # Upload image bytes *before* taking the row lock. Autosave saves often,
+        # and holding FOR UPDATE across several megabytes of bucket I/O would
+        # serialize every concurrent save on this project. The cost is that a
+        # save losing the version check leaves unreferenced objects behind —
+        # bucket bytes, not database volume (orphan cleanup is a tracked follow-up).
+        if "document" in payload.model_fields_set and payload.document is not None:
+            await self._offload_images(payload.document, workspace_id, project_id)
+
         result = await self.db.execute(
             select(LightingProject)
             .where(
@@ -317,7 +360,7 @@ class LightingProjectService:
         if "status" in payload.model_fields_set and payload.status is not None:
             project.status = payload.status
         if "document" in payload.model_fields_set and payload.document is not None:
-            project.document = next_document.model_dump(mode="json", by_alias=True)
+            project.document = document_for_storage(next_document)
         if "installation_shot_id" in payload.model_fields_set:
             project.installation_shot_id = payload.installation_shot_id
 

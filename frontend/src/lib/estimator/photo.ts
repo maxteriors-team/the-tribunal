@@ -9,12 +9,29 @@
  */
 import type { PhotoInfo } from "./types";
 
-export function loadImage(dataUrl: string): Promise<HTMLImageElement> {
+/**
+ * The value to hand an `<img>`: the server-signed bucket URL when the image
+ * lives in object storage, else the inline data URL. Images saved before the
+ * migration — and drafts still in the browser — only have `dataUrl`.
+ */
+export function imageSrc(image: {
+  dataUrl: string;
+  resolvedUrl?: string | null;
+}): string {
+  return image.resolvedUrl ?? image.dataUrl;
+}
+
+export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Could not load image"));
-    img.src = dataUrl;
+    // Bucket-hosted images are cross-origin, and drawing one onto a canvas
+    // without this taints it — `toDataURL()` in export.ts would then throw and
+    // silently break proposal export. Must be set before `src`. The bucket
+    // answers with Access-Control-Allow-Origin (scripts/ops/set_bucket_cors.py).
+    if (!src.startsWith("data:")) img.crossOrigin = "anonymous";
+    img.src = src;
   });
 }
 

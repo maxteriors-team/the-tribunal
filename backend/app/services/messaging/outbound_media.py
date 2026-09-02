@@ -16,7 +16,7 @@ from app.services.messaging.media_storage import MMSMediaStorage, MMSStorageErro
 MAX_OUTBOUND_IMAGE_BYTES = 600 * 1024
 MAX_OUTBOUND_IMAGE_DATA_URL_CHARS = (MAX_OUTBOUND_IMAGE_BYTES * 4) // 3 + 64
 
-_IMAGE_EXTENSIONS = {
+IMAGE_EXTENSIONS = {
     "image/gif": ".gif",
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -41,12 +41,22 @@ class OutboundMedia:
     filename: str
 
 
-def decode_outbound_image_data_url(data_url: str) -> tuple[bytes, str]:
-    """Decode one bounded image data URL after checking its real file signature."""
+def decode_image_data_url(
+    data_url: str, *, max_bytes: int = MAX_OUTBOUND_IMAGE_BYTES
+) -> tuple[bytes, str]:
+    """Decode one bounded image data URL after checking its real file signature.
+
+    Shared by every surface that accepts browser-supplied image bytes (outbound
+    MMS, lighting-project images), so the sniffing and size checks have exactly
+    one implementation. ``max_bytes`` is the caller's ceiling; the default is the
+    carrier-safe MMS limit.
+    """
+    max_chars = (max_bytes * 4) // 3 + 64
+    limit_label = f"{max_bytes // 1024} KB"
     if not isinstance(data_url, str) or not data_url:
         raise OutboundImageValidationError("Image attachment is empty")
-    if len(data_url) > MAX_OUTBOUND_IMAGE_DATA_URL_CHARS:
-        raise OutboundImageValidationError("Image attachment exceeds 600 KB")
+    if len(data_url) > max_chars:
+        raise OutboundImageValidationError(f"Image attachment exceeds {limit_label}")
 
     header, separator, encoded = data_url.partition(",")
     if not separator or not encoded or not header.startswith("data:"):
@@ -54,7 +64,7 @@ def decode_outbound_image_data_url(data_url: str) -> tuple[bytes, str]:
 
     media_type, *parameters = header[5:].split(";")
     content_type = media_type.strip().lower()
-    if parameters != ["base64"] or content_type not in _IMAGE_EXTENSIONS:
+    if parameters != ["base64"] or content_type not in IMAGE_EXTENSIONS:
         raise OutboundImageValidationError("Use a JPEG, PNG, GIF, or WebP image")
 
     try:
@@ -64,8 +74,8 @@ def decode_outbound_image_data_url(data_url: str) -> tuple[bytes, str]:
 
     if not data:
         raise OutboundImageValidationError("Image attachment is empty")
-    if len(data) > MAX_OUTBOUND_IMAGE_BYTES:
-        raise OutboundImageValidationError("Image attachment exceeds 600 KB")
+    if len(data) > max_bytes:
+        raise OutboundImageValidationError(f"Image attachment exceeds {limit_label}")
     if not _matches_image_signature(data, content_type):
         raise OutboundImageValidationError("Image contents do not match the selected file type")
 
@@ -79,9 +89,9 @@ async def store_outbound_image(
     storage: MMSMediaStorage | None = None,
 ) -> OutboundMedia:
     """Validate and store one image privately, returning its short-lived provider URL."""
-    data, content_type = decode_outbound_image_data_url(data_url)
+    data, content_type = decode_image_data_url(data_url)
     attachment_id = uuid.uuid4()
-    extension = _IMAGE_EXTENSIONS[content_type]
+    extension = IMAGE_EXTENSIONS[content_type]
     object_key = f"workspaces/{workspace_id}/outbound-attachments/{attachment_id}{extension}"
     media_storage = storage or MMSMediaStorage.from_settings()
 
