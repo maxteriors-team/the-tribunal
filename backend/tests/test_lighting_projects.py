@@ -818,3 +818,18 @@ async def test_saved_images_leave_the_database_and_come_back_as_signed_urls(
         assert "https://bucket.example/signed" not in resaved_raw
         assert "data:image" not in resaved_raw
         assert resaved.version == 2
+
+        # A save built on a superseded draft must be refused *before* it spends
+        # bucket I/O; otherwise every losing autosave uploads orphaned objects.
+        uploads_before_stale_save = storage.upload_bytes.call_count
+        stale_document = LandscapeDraftDocument.model_validate(_document())
+        with pytest.raises(ConflictError):
+            await service.update_project(
+                workspace.id,
+                created.id,
+                LightingProjectUpdate(expected_version=1, document=stale_document),
+                user_id=user.id,
+            )
+        assert storage.upload_bytes.call_count == uploads_before_stale_save, (
+            "a stale save must not upload anything"
+        )
