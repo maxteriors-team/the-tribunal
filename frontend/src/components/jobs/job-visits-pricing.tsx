@@ -24,6 +24,8 @@ interface JobVisitsPricingProps {
   workspaceId: string;
   jobId: string;
   readOnly?: boolean;
+  canViewPricing?: boolean;
+  canEditPricing?: boolean;
 }
 
 interface EditableLineItem {
@@ -48,9 +50,15 @@ function blankLineItem(): EditableLineItem {
   return { key: crypto.randomUUID(), name: "", quantity: "1", unitPrice: "0.00", taxable: true };
 }
 
-export function JobVisitsPricing({ workspaceId, jobId, readOnly = false }: JobVisitsPricingProps) {
+export function JobVisitsPricing({
+  workspaceId,
+  jobId,
+  readOnly = false,
+  canViewPricing = false,
+  canEditPricing = false,
+}: JobVisitsPricingProps) {
   const visitsQuery = useJobVisits(workspaceId, jobId);
-  const pricingQuery = useJobPricing(workspaceId, jobId, !readOnly);
+  const pricingQuery = useJobPricing(workspaceId, jobId, canViewPricing);
   const createVisit = useCreateJobVisit(workspaceId, jobId);
   const updateVisit = useUpdateJobVisit(workspaceId, jobId);
   const deleteVisit = useDeleteJobVisit(workspaceId, jobId);
@@ -73,16 +81,25 @@ export function JobVisitsPricing({ workspaceId, jobId, readOnly = false }: JobVi
     })) ?? [];
   const displayedLineItems = lineItems ?? savedLineItems;
   const displayedTaxRate = taxRate ?? String(pricingQuery.data?.tax_rate ?? "0.00");
-  const displayedSubtotal = displayedLineItems.reduce(
+  const pricingUnedited = lineItems === null && taxRate === null;
+  const calculatedSubtotal = displayedLineItems.reduce(
     (sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0),
     0,
   );
-  const displayedTaxableSubtotal = displayedLineItems.reduce(
+  const calculatedTaxableSubtotal = displayedLineItems.reduce(
     (sum, item) =>
       sum + (item.taxable ? Number(item.quantity || 0) * Number(item.unitPrice || 0) : 0),
     0,
   );
-  const displayedTax = displayedTaxableSubtotal * (Number(displayedTaxRate || 0) / 100);
+  const calculatedTax = calculatedTaxableSubtotal * (Number(displayedTaxRate || 0) / 100);
+  const displayedSubtotal = pricingUnedited
+    ? Number(pricingQuery.data?.subtotal ?? 0)
+    : calculatedSubtotal;
+  const displayedDiscount = pricingUnedited ? Number(pricingQuery.data?.discount ?? 0) : 0;
+  const displayedTax = pricingUnedited ? Number(pricingQuery.data?.tax ?? 0) : calculatedTax;
+  const displayedTotal = pricingUnedited
+    ? Number(pricingQuery.data?.total ?? 0)
+    : displayedSubtotal + displayedTax;
 
   const addVisit = () => {
     const startsAt = localToIso(visitStart);
@@ -287,7 +304,7 @@ export function JobVisitsPricing({ workspaceId, jobId, readOnly = false }: JobVi
         )}
       </section>
 
-      {!readOnly && (
+      {canViewPricing && (
         <section aria-labelledby="job-pricing-heading" className="space-y-3 border-t pt-5">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -296,7 +313,7 @@ export function JobVisitsPricing({ workspaceId, jobId, readOnly = false }: JobVi
               </h3>
               <p className="text-xs text-muted-foreground">Build the priced scope of work.</p>
             </div>
-            {!pricingQuery.isError && (
+            {canEditPricing && !pricingQuery.isError && (
               <Button
                 type="button"
                 size="sm"
@@ -340,6 +357,7 @@ export function JobVisitsPricing({ workspaceId, jobId, readOnly = false }: JobVi
                         }
                         placeholder="Product or service"
                         aria-label={`Line ${index + 1} name`}
+                        readOnly={!canEditPricing}
                       />
                       <Input
                         type="number"
@@ -356,6 +374,7 @@ export function JobVisitsPricing({ workspaceId, jobId, readOnly = false }: JobVi
                           )
                         }
                         aria-label={`Line ${index + 1} quantity`}
+                        readOnly={!canEditPricing}
                       />
                       <Input
                         type="number"
@@ -372,11 +391,13 @@ export function JobVisitsPricing({ workspaceId, jobId, readOnly = false }: JobVi
                           )
                         }
                         aria-label={`Line ${index + 1} unit price`}
+                        readOnly={!canEditPricing}
                       />
                       <Checkbox
                         checked={item.taxable}
                         aria-label={`Line ${index + 1} taxable`}
                         title="Taxable"
+                        disabled={!canEditPricing}
                         onCheckedChange={(checked) =>
                           setLineItems((items) =>
                             (items ?? savedLineItems).map((entry, itemIndex) =>
@@ -390,6 +411,9 @@ export function JobVisitsPricing({ workspaceId, jobId, readOnly = false }: JobVi
                         size="icon"
                         variant="ghost"
                         aria-label={`Remove line ${index + 1}`}
+                        className={canEditPricing ? undefined : "invisible"}
+                        tabIndex={canEditPricing ? 0 : -1}
+                        disabled={!canEditPricing}
                         onClick={() =>
                           setLineItems((items) =>
                             (items ?? savedLineItems).filter((_, itemIndex) => itemIndex !== index),
@@ -413,30 +437,37 @@ export function JobVisitsPricing({ workspaceId, jobId, readOnly = false }: JobVi
                     step="0.01"
                     value={displayedTaxRate}
                     onChange={(event) => setTaxRate(event.target.value)}
+                    readOnly={!canEditPricing}
                   />
                 </div>
                 <dl className="grid grid-cols-[auto_auto] gap-x-5 gap-y-1 text-sm text-right">
                   <dt className="text-muted-foreground">Subtotal</dt>
                   <dd>{currency.format(displayedSubtotal)}</dd>
+                  {displayedDiscount > 0 && (
+                    <>
+                      <dt className="text-muted-foreground">Discount</dt>
+                      <dd>−{currency.format(displayedDiscount)}</dd>
+                    </>
+                  )}
                   <dt className="text-muted-foreground">Tax</dt>
                   <dd>{currency.format(displayedTax)}</dd>
                   <dt className="font-semibold">Total</dt>
-                  <dd className="font-semibold">
-                    {currency.format(displayedSubtotal + displayedTax)}
-                  </dd>
+                  <dd className="font-semibold">{currency.format(displayedTotal)}</dd>
                 </dl>
               </div>
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={savePricing}
-                  disabled={replacePricing.isPending}
-                >
-                  {replacePricing.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}{" "}
-                  Save pricing
-                </Button>
-              </div>
+              {canEditPricing && (
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={savePricing}
+                    disabled={replacePricing.isPending}
+                  >
+                    {replacePricing.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}{" "}
+                    Save pricing
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </section>

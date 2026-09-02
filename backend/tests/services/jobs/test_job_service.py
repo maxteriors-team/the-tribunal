@@ -14,6 +14,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -23,7 +24,7 @@ from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.field_service import Crew, Job, JobAssignment, JobStatus, Technician
 from app.models.lighting_project import LightingProject
-from app.models.quote import Quote
+from app.models.quote import Quote, QuoteLineItem
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.services.jobs import JobService
@@ -340,6 +341,57 @@ async def test_visits_and_pricing_are_persisted_and_totaled() -> None:
         assert pricing.total == Decimal("265.00")
         loaded = await service.get_pricing(job.id, ws.id)
         assert loaded.total == Decimal("265.00")
+
+
+async def test_accepted_quote_scope_is_price_free_on_job_and_priced_when_allowed() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        quote = Quote(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            number=f"QUO-{uuid.uuid4().hex[:8]}",
+            title="Permanent lighting quote",
+            status="approved",
+            subtotal=Decimal("1200.00"),
+            discount_amount=Decimal("100.00"),
+            tax_amount=Decimal("88.00"),
+            total=Decimal("1188.00"),
+        )
+        db.add(quote)
+        await db.flush()
+        db.add(
+            QuoteLineItem(
+                quote_id=quote.id,
+                name="Roofline lighting",
+                description="Install warm-white C9 bulbs and clips",
+                quantity=Decimal("120.00"),
+                unit_price=Decimal("10.00"),
+                total=Decimal("1200.00"),
+            )
+        )
+        job = Job(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            title="Quoted installation",
+            status=JobStatus.SCHEDULED,
+            source_quote_id=quote.id,
+        )
+        db.add(job)
+        await db.flush()
+        service = JobService(db)
+
+        field_job = await service.get(job.id, ws.id)
+        assert len(field_job.line_items) == 1
+        assert field_job.line_items[0].description == "Install warm-white C9 bulbs and clips"
+        field_item = field_job.line_items[0].model_dump()
+        assert "unit_price" not in field_item
+        assert "total" not in field_item
+
+        pricing = await service.get_pricing(job.id, ws.id)
+        assert pricing.discount == Decimal("100.00")
+        assert pricing.total == Decimal("1188.00")
+        assert pricing.items[0].unit_price == Decimal("10.00")
 
 
 async def test_create_with_technicians_tags_them() -> None:
@@ -759,3 +811,44 @@ async def test_installation_plan_is_redacted_and_assignment_scoped() -> None:
             crew_user=crew_user,
             project_id=project.id,
         )
+
+
+async def test_installation_plan_resolves_stored_images_for_the_field_crew(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Installers read the same document; a migrated project must still show its photo."""
+    storage = MagicMock()
+    storage.create_download_url.return_value = "https://bucket.example/signed"
+    monkeypatch.setattr("app.services.lighting_projects.images._storage_or_none", lambda: storage)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        manager_user = await _user(db)
+        manager = await _member(db, ws.id, manager_user.id)
+        manager.role = "manager"
+        document = _landscape_document()
+        key = f"workspaces/{ws.id}/lighting-projects/{uuid.uuid4()}/photo.png"
+        document["shots"][0]["photo"]["dataUrl"] = f"lighting-image:{key}"
+        project = LightingProject(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            name="Front plan",
+            document=document,
+            version=4,
+            installation_shot_id="install-front",
+        )
+        db.add(project)
+        await db.flush()
+        job = await JobService(db).create(
+            ws.id,
+            {"contact_id": contact.id, "title": "Install", "lighting_project_id": project.id},
+        )
+
+        plan = await JobService(db).get_installation_plan(
+            job.id, ws.id, membership=manager, user_id=manager_user.id
+        )
+
+        assert plan.photo.data_url == f"lighting-image:{key}"
+        assert plan.photo.resolved_url == "https://bucket.example/signed"
+        assert storage.create_download_url.call_args.kwargs["object_key"] == key

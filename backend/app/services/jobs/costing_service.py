@@ -19,17 +19,23 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Literal, cast
 
 import structlog
-from sqlalchemy import select
+from fastapi import HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.scope import assert_workspace_owned, select_workspace_owned
-from app.models.field_service import Job, Technician
+from app.models.contact import Contact
+from app.models.field_service import Job, JobStatus, Technician
 from app.models.invoice import Invoice
 from app.models.job_costing import JobExpense, TimeEntry
+from app.models.user import User
 from app.schemas.job_costing import (
     ClockInRequest,
+    ContactJobTimeEntryResponse,
+    ContactJobTimeSummaryResponse,
     JobExpenseCreate,
     JobExpenseResponse,
     JobProfitability,
@@ -59,37 +65,70 @@ class JobCostingService:
     # ------------------------------------------------------------------ #
     # Reference validation (tenant-safe)
     # ------------------------------------------------------------------ #
-    async def _assert_job(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> Job:
-        return await assert_workspace_owned(
-            self.db, Job, job_id, workspace_id, detail="Job not found"
-        )
+    async def _assert_job(
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        visible_to_user_id: int | None = None,
+        for_update: bool = False,
+    ) -> Job:
+        filters = [Job.id == job_id, Job.workspace_id == workspace_id]
+        if visible_to_user_id is not None:
+            # Local import avoids the package-level JobService/JobCostingService cycle.
+            from app.services.jobs.job_service import JobService
+
+            filters.append(
+                await JobService(self.db).assigned_job_predicate(workspace_id, visible_to_user_id)
+            )
+        statement = select(Job).where(*filters)
+        if for_update:
+            # Timer transitions lock one job row. This serializes starts for the
+            # same job and lets the partial unique index remain the final guard.
+            statement = statement.with_for_update()
+        job = (await self.db.execute(statement)).scalar_one_or_none()
+        if job is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        return job
 
     async def _assert_technician(self, technician_id: uuid.UUID, workspace_id: uuid.UUID) -> None:
         await assert_workspace_owned(
             self.db, Technician, technician_id, workspace_id, detail="Technician not found"
         )
 
+    async def _technician_for_user(self, workspace_id: uuid.UUID, user_id: int) -> uuid.UUID | None:
+        return (
+            (
+                await self.db.execute(
+                    select(Technician.id)
+                    .where(
+                        Technician.workspace_id == workspace_id,
+                        Technician.user_id == user_id,
+                        Technician.is_active.is_(True),
+                    )
+                    .order_by(Technician.id)
+                )
+            )
+            .scalars()
+            .first()
+        )
+
     @staticmethod
     def _rate_for(requested: float, *, include_costs: bool) -> float:
-        """The rate to persist: a caller who cannot read money cannot set it.
-
-        Without ``billing:read`` the submitted rate is dropped rather than
-        rejected, so a technician's clock-in still succeeds as a plain start/stop
-        and cannot silently inflate the job's labour cost.
-        """
+        """The rate to persist: a caller who cannot read money cannot set it."""
         return requested if include_costs else 0.0
 
     # ------------------------------------------------------------------ #
     # Response building
     # ------------------------------------------------------------------ #
     @staticmethod
-    def _time_entry_response(entry: TimeEntry, *, include_costs: bool = True) -> TimeEntryResponse:
-        """Serialize a time entry, redacting money unless the caller may see it.
-
-        ``include_costs=False`` (no ``billing:read``) zeroes ``rate`` and
-        ``labor_cost``. The hours and start/end stay: they are how a technician
-        knows the clock is running, and they carry no pricing.
-        """
+    def _time_entry_response(
+        entry: TimeEntry,
+        *,
+        include_costs: bool = True,
+        viewer_user_id: int | None = None,
+    ) -> TimeEntryResponse:
+        """Serialize time while redacting rates from callers without billing access."""
         hours = _duration_hours(entry.started_at, entry.ended_at)
         rate = float(entry.rate or 0) if include_costs else 0.0
         return TimeEntryResponse(
@@ -98,6 +137,8 @@ class JobCostingService:
             technician_id=entry.technician_id,
             started_at=entry.started_at,
             ended_at=entry.ended_at,
+            stop_reason=cast(Literal["paused", "ended", "manual"] | None, entry.stop_reason),
+            is_mine=viewer_user_id is not None and entry.created_by_id == viewer_user_id,
             rate=rate,
             note=entry.note,
             duration_hours=hours,
@@ -110,9 +151,15 @@ class JobCostingService:
     # Time entries
     # ------------------------------------------------------------------ #
     async def list_time_entries(
-        self, job_id: uuid.UUID, workspace_id: uuid.UUID, *, include_costs: bool = True
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        include_costs: bool = True,
+        viewer_user_id: int | None = None,
+        visible_to_user_id: int | None = None,
     ) -> list[TimeEntryResponse]:
-        await self._assert_job(job_id, workspace_id)
+        await self._assert_job(job_id, workspace_id, visible_to_user_id=visible_to_user_id)
         rows = (
             (
                 await self.db.execute(
@@ -124,10 +171,17 @@ class JobCostingService:
             .scalars()
             .all()
         )
-        return [self._time_entry_response(row, include_costs=include_costs) for row in rows]
+        return [
+            self._time_entry_response(
+                row, include_costs=include_costs, viewer_user_id=viewer_user_id
+            )
+            for row in rows
+        ]
 
-    async def _open_entry(self, job_id: uuid.UUID, workspace_id: uuid.UUID) -> TimeEntry | None:
-        """Return the job's currently-running entry, if any."""
+    async def _latest_timer_entry(
+        self, job_id: uuid.UUID, workspace_id: uuid.UUID, created_by_id: int
+    ) -> TimeEntry | None:
+        """Return this user's latest non-manual timer interval for the job."""
         return (
             (
                 await self.db.execute(
@@ -135,7 +189,8 @@ class JobCostingService:
                         TimeEntry,
                         workspace_id,
                         TimeEntry.job_id == job_id,
-                        TimeEntry.ended_at.is_(None),
+                        TimeEntry.created_by_id == created_by_id,
+                        (TimeEntry.stop_reason.is_(None) | (TimeEntry.stop_reason != "manual")),
                     ).order_by(TimeEntry.started_at.desc())
                 )
             )
@@ -149,22 +204,39 @@ class JobCostingService:
         workspace_id: uuid.UUID,
         payload: ClockInRequest,
         *,
-        created_by_id: int | None = None,
+        created_by_id: int,
         include_costs: bool = True,
+        visible_to_user_id: int | None = None,
     ) -> TimeEntryResponse:
-        """Open a running time entry. Rejected if the job already has one."""
-        await self._assert_job(job_id, workspace_id)
-        if payload.technician_id is not None:
-            await self._assert_technician(payload.technician_id, workspace_id)
-        if await self._open_entry(job_id, workspace_id) is not None:
-            raise ConflictError("This job already has a running timer")
+        """Start or resume this user's timer for an assigned job."""
+        job = await self._assert_job(
+            job_id,
+            workspace_id,
+            visible_to_user_id=visible_to_user_id,
+            for_update=True,
+        )
+        if job.status in {JobStatus.COMPLETED, JobStatus.CANCELLED}:
+            raise ConflictError("Time cannot be added to a completed or cancelled job")
 
+        technician_id = payload.technician_id
+        if technician_id is not None:
+            await self._assert_technician(technician_id, workspace_id)
+        else:
+            technician_id = await self._technician_for_user(workspace_id, created_by_id)
+
+        latest = await self._latest_timer_entry(job_id, workspace_id, created_by_id)
+        if latest is not None and latest.ended_at is None:
+            raise ConflictError("Your timer is already running on this job")
+        # An ended interval is final, but the job may need a later return visit.
+        # Starting again opens a fresh interval; only a paused interval is resumed.
+        now = datetime.now(UTC)
         entry = TimeEntry(
             workspace_id=workspace_id,
             job_id=job_id,
-            technician_id=payload.technician_id,
-            started_at=datetime.now(UTC),
+            technician_id=technician_id,
+            started_at=now,
             ended_at=None,
+            stop_reason=None,
             rate=self._rate_for(payload.rate, include_costs=include_costs),
             note=payload.note,
             created_by_id=created_by_id,
@@ -172,22 +244,100 @@ class JobCostingService:
         self.db.add(entry)
         await self.db.flush()
         await self.db.refresh(entry)
-        self.log.info("time_clock_in", job_id=str(job_id), entry_id=str(entry.id))
-        return self._time_entry_response(entry, include_costs=include_costs)
+        self.log.info("job_timer_started", job_id=str(job_id), entry_id=str(entry.id))
+        return self._time_entry_response(
+            entry, include_costs=include_costs, viewer_user_id=created_by_id
+        )
 
-    async def clock_out(
-        self, job_id: uuid.UUID, workspace_id: uuid.UUID, *, include_costs: bool = True
+    async def pause_timer(
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        created_by_id: int,
+        include_costs: bool = True,
+        visible_to_user_id: int | None = None,
     ) -> TimeEntryResponse:
-        """Close the job's running time entry."""
-        await self._assert_job(job_id, workspace_id)
-        entry = await self._open_entry(job_id, workspace_id)
+        """Pause this user's running timer, preserving the completed interval."""
+        await self._assert_job(
+            job_id,
+            workspace_id,
+            visible_to_user_id=visible_to_user_id,
+            for_update=True,
+        )
+        entry = await self._latest_timer_entry(job_id, workspace_id, created_by_id)
         if entry is None:
-            raise ConflictError("This job has no running timer")
+            raise ConflictError("Your timer has not been started on this job")
+        if entry.stop_reason == "ended":
+            raise ConflictError("Your timer for this job has ended")
+        if entry.ended_at is not None:
+            if entry.stop_reason == "paused":
+                return self._time_entry_response(
+                    entry, include_costs=include_costs, viewer_user_id=created_by_id
+                )
+            raise ConflictError("Your timer is not running on this job")
+
         entry.ended_at = datetime.now(UTC)
+        entry.stop_reason = "paused"
         await self.db.flush()
         await self.db.refresh(entry)
-        self.log.info("time_clock_out", job_id=str(job_id), entry_id=str(entry.id))
-        return self._time_entry_response(entry, include_costs=include_costs)
+        self.log.info("job_timer_paused", job_id=str(job_id), entry_id=str(entry.id))
+        return self._time_entry_response(
+            entry, include_costs=include_costs, viewer_user_id=created_by_id
+        )
+
+    async def end_timer(
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        created_by_id: int,
+        include_costs: bool = True,
+        visible_to_user_id: int | None = None,
+    ) -> TimeEntryResponse:
+        """End this user's timer after a running or paused interval."""
+        await self._assert_job(
+            job_id,
+            workspace_id,
+            visible_to_user_id=visible_to_user_id,
+            for_update=True,
+        )
+        entry = await self._latest_timer_entry(job_id, workspace_id, created_by_id)
+        if entry is None:
+            raise ConflictError("Your timer has not been started on this job")
+        if entry.stop_reason == "ended":
+            return self._time_entry_response(
+                entry, include_costs=include_costs, viewer_user_id=created_by_id
+            )
+        if entry.ended_at is None:
+            entry.ended_at = datetime.now(UTC)
+        elif entry.stop_reason != "paused":
+            raise ConflictError("Your timer is not running or paused on this job")
+        entry.stop_reason = "ended"
+        await self.db.flush()
+        await self.db.refresh(entry)
+        self.log.info("job_timer_ended", job_id=str(job_id), entry_id=str(entry.id))
+        return self._time_entry_response(
+            entry, include_costs=include_costs, viewer_user_id=created_by_id
+        )
+
+    async def clock_out(
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        created_by_id: int,
+        include_costs: bool = True,
+        visible_to_user_id: int | None = None,
+    ) -> TimeEntryResponse:
+        """Backward-compatible alias: clocking out pauses the current user's timer."""
+        return await self.pause_timer(
+            job_id,
+            workspace_id,
+            created_by_id=created_by_id,
+            include_costs=include_costs,
+            visible_to_user_id=visible_to_user_id,
+        )
 
     async def add_time_entry(
         self,
@@ -197,20 +347,25 @@ class JobCostingService:
         *,
         created_by_id: int | None = None,
         include_costs: bool = True,
+        visible_to_user_id: int | None = None,
     ) -> TimeEntryResponse:
-        """Log a completed time entry from an explicit start/end."""
-        await self._assert_job(job_id, workspace_id)
-        if payload.technician_id is not None:
-            await self._assert_technician(payload.technician_id, workspace_id)
+        """Log a completed manual entry from an explicit start and end."""
+        await self._assert_job(job_id, workspace_id, visible_to_user_id=visible_to_user_id)
+        technician_id = payload.technician_id
+        if technician_id is not None:
+            await self._assert_technician(technician_id, workspace_id)
+        elif created_by_id is not None:
+            technician_id = await self._technician_for_user(workspace_id, created_by_id)
         if payload.ended_at <= payload.started_at:
             raise ConflictError("ended_at must be after started_at")
 
         entry = TimeEntry(
             workspace_id=workspace_id,
             job_id=job_id,
-            technician_id=payload.technician_id,
+            technician_id=technician_id,
             started_at=payload.started_at,
             ended_at=payload.ended_at,
+            stop_reason="manual",
             rate=self._rate_for(payload.rate, include_costs=include_costs),
             note=payload.note,
             created_by_id=created_by_id,
@@ -218,7 +373,9 @@ class JobCostingService:
         self.db.add(entry)
         await self.db.flush()
         await self.db.refresh(entry)
-        return self._time_entry_response(entry, include_costs=include_costs)
+        return self._time_entry_response(
+            entry, include_costs=include_costs, viewer_user_id=created_by_id
+        )
 
     async def delete_time_entry(
         self,
@@ -227,16 +384,10 @@ class JobCostingService:
         entry_id: uuid.UUID,
         *,
         restrict_to_user_id: int | None = None,
+        visible_to_user_id: int | None = None,
     ) -> None:
-        """Delete a time entry, optionally only if ``restrict_to_user_id`` logged it.
-
-        Time entries are payroll input, so a caller without ``attendance:manage``
-        may only delete their own (see
-        :func:`app.core.permissions.time_entry_owner_scope`). The restriction is
-        an extra filter on the lookup rather than a check after it, so someone
-        else's entry reads as "not found" and its existence is not disclosed.
-        """
-        await self._assert_job(job_id, workspace_id)
+        """Delete a visible time entry, optionally restricted to its creator."""
+        await self._assert_job(job_id, workspace_id, visible_to_user_id=visible_to_user_id)
         ownership = (
             (TimeEntry.created_by_id == restrict_to_user_id,)
             if restrict_to_user_id is not None
@@ -254,13 +405,71 @@ class JobCostingService:
         await self.db.delete(entry)
         await self.db.flush()
 
+    async def get_contact_time_summary(
+        self, contact_id: int, workspace_id: uuid.UUID, *, limit: int = 50
+    ) -> ContactJobTimeSummaryResponse:
+        """Return saved, price-free job time associated with one client profile."""
+        await assert_workspace_owned(
+            self.db, Contact, contact_id, workspace_id, detail="Contact not found"
+        )
+        job_filter = (
+            Job.workspace_id == workspace_id,
+            Job.contact_id == contact_id,
+        )
+        duration_seconds = func.extract("epoch", TimeEntry.ended_at - TimeEntry.started_at)
+        entry_count, total_seconds = (
+            await self.db.execute(
+                select(
+                    func.count(TimeEntry.id),
+                    func.coalesce(func.sum(duration_seconds), 0),
+                )
+                .select_from(TimeEntry)
+                .join(Job, Job.id == TimeEntry.job_id)
+                .where(TimeEntry.workspace_id == workspace_id, *job_filter)
+            )
+        ).one()
+
+        rows = (
+            await self.db.execute(
+                select(TimeEntry, Job.title, Technician.name, User.full_name)
+                .join(Job, Job.id == TimeEntry.job_id)
+                .outerjoin(Technician, Technician.id == TimeEntry.technician_id)
+                .outerjoin(User, User.id == TimeEntry.created_by_id)
+                .where(TimeEntry.workspace_id == workspace_id, *job_filter)
+                .order_by(TimeEntry.started_at.desc())
+                .limit(limit)
+            )
+        ).all()
+        entries = [
+            ContactJobTimeEntryResponse(
+                id=entry.id,
+                job_id=entry.job_id,
+                job_title=job_title,
+                technician_name=technician_name or creator_name,
+                started_at=entry.started_at,
+                ended_at=entry.ended_at,
+                stop_reason=cast(Literal["paused", "ended", "manual"] | None, entry.stop_reason),
+                duration_hours=_duration_hours(entry.started_at, entry.ended_at),
+            )
+            for entry, job_title, technician_name, creator_name in rows
+        ]
+        return ContactJobTimeSummaryResponse(
+            total_hours=round(float(total_seconds or 0) / 3600.0, 4),
+            entry_count=int(entry_count or 0),
+            entries=entries,
+        )
+
     # ------------------------------------------------------------------ #
     # Expenses
     # ------------------------------------------------------------------ #
     async def list_expenses(
-        self, job_id: uuid.UUID, workspace_id: uuid.UUID
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        visible_to_user_id: int | None = None,
     ) -> list[JobExpenseResponse]:
-        await self._assert_job(job_id, workspace_id)
+        await self._assert_job(job_id, workspace_id, visible_to_user_id=visible_to_user_id)
         rows = (
             (
                 await self.db.execute(
@@ -281,8 +490,9 @@ class JobCostingService:
         payload: JobExpenseCreate,
         *,
         created_by_id: int | None = None,
+        visible_to_user_id: int | None = None,
     ) -> JobExpenseResponse:
-        await self._assert_job(job_id, workspace_id)
+        await self._assert_job(job_id, workspace_id, visible_to_user_id=visible_to_user_id)
         expense = JobExpense(
             workspace_id=workspace_id,
             job_id=job_id,
@@ -306,6 +516,7 @@ class JobCostingService:
         expense_id: uuid.UUID,
         *,
         restrict_to_user_id: int | None = None,
+        visible_to_user_id: int | None = None,
     ) -> None:
         """Delete an expense, optionally only if ``restrict_to_user_id`` recorded it.
 
@@ -316,7 +527,7 @@ class JobCostingService:
         — which matters here because the same tier cannot read the expense list
         at all.
         """
-        await self._assert_job(job_id, workspace_id)
+        await self._assert_job(job_id, workspace_id, visible_to_user_id=visible_to_user_id)
         ownership = (
             (JobExpense.created_by_id == restrict_to_user_id,)
             if restrict_to_user_id is not None
@@ -338,10 +549,14 @@ class JobCostingService:
     # Profitability
     # ------------------------------------------------------------------ #
     async def get_profitability(
-        self, job_id: uuid.UUID, workspace_id: uuid.UUID
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        visible_to_user_id: int | None = None,
     ) -> JobProfitability:
         """Revenue (linked invoice) minus labor, expenses, and materials."""
-        job = await self._assert_job(job_id, workspace_id)
+        job = await self._assert_job(job_id, workspace_id, visible_to_user_id=visible_to_user_id)
 
         revenue = 0.0
         currency = "USD"

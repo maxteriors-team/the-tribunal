@@ -433,10 +433,17 @@ async def delete_job_visit(
 async def get_job_pricing(
     job_id: uuid.UUID,
     membership: CanReadBilling,
+    current_user: CurrentUser,
     db: DB,
 ) -> JobPricingResponse:
-    """Return priced scope only to roles with billing visibility."""
-    return await JobService(db).get_pricing(job_id, membership.workspace_id)
+    """Return priced scope only when both job visibility and billing access allow it."""
+    service = JobService(db)
+    await service.get(
+        job_id,
+        membership.workspace_id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
+    return await service.get_pricing(job_id, membership.workspace_id)
 
 
 @router.put("/{job_id}/pricing", response_model=JobPricingResponse)
@@ -524,46 +531,87 @@ async def unassign_technician(
 # --------------------------------------------------------------------------- #
 # Field execution: time tracking, expenses, profitability.
 #
-# Time entries stay open to any workspace member — a field technician must be
-# able to clock in/out and see whether the timer is running — but the money on
-# them (``rate``, ``labor_cost``) is redacted to 0 for callers without
-# ``billing:read``, and a rate they submit is discarded. Expense *reads* are
-# gated outright: an expense row is nothing but a cost, so there is no price-free
-# projection worth serving. Profitability stays gated as before.
-#
-# This is the server-side half of the UI hiding done in edc79b5, which was a
-# display filter only: the payloads still carried the amounts. Every call is
-# workspace-scoped in the service.
+# Field users can operate only jobs assigned to them or their crew. Timer
+# payloads remain price-free below billing:read, and each user controls only
+# their own running timer. Expense reads and profitability stay billing-gated.
 # --------------------------------------------------------------------------- #
 @router.get("/{job_id}/time-entries", response_model=list[TimeEntryResponse])
 async def list_time_entries(
     job_id: uuid.UUID,
     workspace: WorkspaceAccess,
-    membership: CurrentMembership,
+    membership: CanReadJobs,
+    current_user: CurrentUser,
     db: DB,
 ) -> list[TimeEntryResponse]:
-    """List a job's time entries, newest first (money redacted below billing:read)."""
+    """List saved job time after applying assignment and pricing boundaries."""
     return await JobCostingService(db).list_time_entries(
-        job_id, workspace.id, include_costs=_can_see_costs(membership)
+        job_id,
+        workspace.id,
+        include_costs=_can_see_costs(membership),
+        viewer_user_id=current_user.id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
     )
 
 
-@router.post("/{job_id}/time-entries/clock-in", response_model=TimeEntryResponse, status_code=201)
+@router.post(
+    "/{job_id}/time-entries/clock-in",
+    response_model=TimeEntryResponse,
+    status_code=201,
+)
 async def clock_in(
     job_id: uuid.UUID,
     payload: ClockInRequest,
     workspace: WorkspaceAccess,
-    membership: CurrentMembership,
+    membership: CanReadJobs,
     current_user: CurrentUser,
     db: TransactionalDB,
 ) -> TimeEntryResponse:
-    """Start the clock on a job (rejected if a timer is already running)."""
+    """Start or resume the signed-in user's timer on an assigned job."""
+    if time_entry_owner_scope(membership.role, current_user.id) is not None:
+        payload = payload.model_copy(update={"technician_id": None})
     return await JobCostingService(db).clock_in(
         job_id,
         workspace.id,
         payload,
         created_by_id=current_user.id,
         include_costs=_can_see_costs(membership),
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
+
+
+@router.post("/{job_id}/time-entries/pause", response_model=TimeEntryResponse)
+async def pause_timer(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    membership: CanReadJobs,
+    current_user: CurrentUser,
+    db: TransactionalDB,
+) -> TimeEntryResponse:
+    """Pause the signed-in user's running timer."""
+    return await JobCostingService(db).pause_timer(
+        job_id,
+        workspace.id,
+        created_by_id=current_user.id,
+        include_costs=_can_see_costs(membership),
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
+
+
+@router.post("/{job_id}/time-entries/end", response_model=TimeEntryResponse)
+async def end_timer(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    membership: CanReadJobs,
+    current_user: CurrentUser,
+    db: TransactionalDB,
+) -> TimeEntryResponse:
+    """End the signed-in user's running or paused timer."""
+    return await JobCostingService(db).end_timer(
+        job_id,
+        workspace.id,
+        created_by_id=current_user.id,
+        include_costs=_can_see_costs(membership),
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
     )
 
 
@@ -571,12 +619,17 @@ async def clock_in(
 async def clock_out(
     job_id: uuid.UUID,
     workspace: WorkspaceAccess,
-    membership: CurrentMembership,
+    membership: CanReadJobs,
+    current_user: CurrentUser,
     db: TransactionalDB,
 ) -> TimeEntryResponse:
-    """Stop the job's running timer."""
+    """Backward-compatible clock-out action; equivalent to pausing."""
     return await JobCostingService(db).clock_out(
-        job_id, workspace.id, include_costs=_can_see_costs(membership)
+        job_id,
+        workspace.id,
+        created_by_id=current_user.id,
+        include_costs=_can_see_costs(membership),
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
     )
 
 
@@ -585,17 +638,20 @@ async def add_time_entry(
     job_id: uuid.UUID,
     payload: TimeEntryCreate,
     workspace: WorkspaceAccess,
-    membership: CurrentMembership,
+    membership: CanReadJobs,
     current_user: CurrentUser,
     db: TransactionalDB,
 ) -> TimeEntryResponse:
-    """Log a completed time entry with an explicit start and end."""
+    """Log a completed manual time entry on an assigned job."""
+    if time_entry_owner_scope(membership.role, current_user.id) is not None:
+        payload = payload.model_copy(update={"technician_id": None})
     return await JobCostingService(db).add_time_entry(
         job_id,
         workspace.id,
         payload,
         created_by_id=current_user.id,
         include_costs=_can_see_costs(membership),
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
     )
 
 
@@ -604,21 +660,17 @@ async def delete_time_entry(
     job_id: uuid.UUID,
     entry_id: uuid.UUID,
     workspace: WorkspaceAccess,
-    membership: CurrentMembership,
+    membership: CanReadJobs,
     current_user: CurrentUser,
     db: TransactionalDB,
 ) -> None:
-    """Delete a time entry the caller logged (any entry with ``attendance:manage``).
-
-    Payroll input, so it is owner-scoped rather than merely workspace-scoped:
-    without the scope a technician could delete a colleague's hours. Finding 4
-    of docs/technician-role-audit.md.
-    """
+    """Delete an owned entry, or any entry with attendance management."""
     await JobCostingService(db).delete_time_entry(
         job_id,
         workspace.id,
         entry_id,
         restrict_to_user_id=time_entry_owner_scope(membership.role, current_user.id),
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
     )
 
 
@@ -627,16 +679,15 @@ async def list_expenses(
     job_id: uuid.UUID,
     workspace: WorkspaceAccess,
     membership: CanReadBilling,
+    current_user: CurrentUser,
     db: DB,
 ) -> list[JobExpenseResponse]:
-    """List a job's expenses, newest first.
-
-    Gated on ``billing:read``: every field on an expense is a cost the customer
-    never sees and a technician has no operational use for. A field technician
-    may still *record* one (POST below) — that only echoes back the amount they
-    submitted — but cannot read the job's costs back out.
-    """
-    return await JobCostingService(db).list_expenses(job_id, workspace.id)
+    """List costs only when billing and job visibility both allow it."""
+    return await JobCostingService(db).list_expenses(
+        job_id,
+        workspace.id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
 
 
 @router.post("/{job_id}/expenses", response_model=JobExpenseResponse, status_code=201)
@@ -644,17 +695,17 @@ async def add_expense(
     job_id: uuid.UUID,
     payload: JobExpenseCreate,
     workspace: WorkspaceAccess,
+    membership: CurrentMembership,
     current_user: CurrentUser,
     db: TransactionalDB,
 ) -> JobExpenseResponse:
-    """Record a cost incurred on a job.
-
-    Open to any workspace member so a technician can still log that a cost
-    happened; the response only reflects the amount the caller just supplied, so
-    it discloses nothing they did not already know.
-    """
+    """Record a known cost on an assigned job without revealing other costs."""
     return await JobCostingService(db).add_expense(
-        job_id, workspace.id, payload, created_by_id=current_user.id
+        job_id,
+        workspace.id,
+        payload,
+        created_by_id=current_user.id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
     )
 
 
@@ -667,17 +718,13 @@ async def delete_expense(
     current_user: CurrentUser,
     db: TransactionalDB,
 ) -> None:
-    """Delete an expense the caller recorded (any expense with ``billing:write``).
-
-    Owner-scoped for the same reason time entries are, and for one more: reading
-    this job's expenses needs ``billing:read``, so a tier that cannot see a cost
-    must not be able to destroy it. Another member's expense reads as 404.
-    """
+    """Delete an owned cost, or any cost with billing write access."""
     await JobCostingService(db).delete_expense(
         job_id,
         workspace.id,
         expense_id,
         restrict_to_user_id=job_expense_owner_scope(membership.role, current_user.id),
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
     )
 
 
@@ -686,15 +733,15 @@ async def job_profitability(
     job_id: uuid.UUID,
     workspace: WorkspaceAccess,
     membership: CanReadBilling,
+    current_user: CurrentUser,
     db: DB,
 ) -> JobProfitability:
-    """Compute the job's P&L (revenue from the linked invoice minus costs).
-
-    Gated on ``billing:read``: the P&L exposes customer revenue, profit, and
-    margin, so a field technician (``jobs:read`` only, no billing) must not see
-    it — even though they can still log their own time and expenses on the job.
-    """
-    return await JobCostingService(db).get_profitability(job_id, workspace.id)
+    """Compute P&L only when billing and job visibility both allow it."""
+    return await JobCostingService(db).get_profitability(
+        job_id,
+        workspace.id,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+    )
 
 
 # --------------------------------------------------------------------------- #

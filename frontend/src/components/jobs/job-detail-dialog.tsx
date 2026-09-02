@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import {
   useAssignTechnicians,
   useDeleteJob,
@@ -85,6 +86,9 @@ export function JobDetailDialog({
   onOpenChange,
   readOnly = false,
 }: JobDetailDialogProps) {
+  const { can } = useCapabilities();
+  const canViewPricing = can("billing:read");
+  const canEditPricing = !readOnly && can("billing:write");
   const [start, setStart] = useState(() => isoToLocalInput(job?.scheduled_start ?? null));
   const [end, setEnd] = useState(() => isoToLocalInput(job?.scheduled_end ?? null));
   const [selectedTechs, setSelectedTechs] = useState<string[]>(() =>
@@ -218,213 +222,226 @@ export function JobDetailDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] overflow-y-auto p-4 sm:max-w-[560px] sm:p-6">
-        {/* Left-aligned at every width: the header sits above an address and a
+        <DialogContent className="max-h-[88vh] overflow-y-auto p-4 sm:max-w-[560px] sm:p-6">
+          {/* Left-aligned at every width: the header sits above an address and a
             scope list, and `DialogHeader`'s mobile default centres it. */}
-        <DialogHeader className="text-left">
-          <DialogTitle className="flex flex-wrap items-center gap-2 pr-6">
-            {job.title}
-            <Badge variant="outline" className={jobStatusColors[job.status]}>
-              {jobStatusLabel(job.status)}
-            </Badge>
-          </DialogTitle>
-          <DialogDescription>{subtitle}</DialogDescription>
-        </DialogHeader>
+          <DialogHeader className="text-left">
+            <DialogTitle className="flex flex-wrap items-center gap-2 pr-6">
+              {job.title}
+              <Badge variant="outline" className={jobStatusColors[job.status]}>
+                {jobStatusLabel(job.status)}
+              </Badge>
+            </DialogTitle>
+            <DialogDescription>{subtitle}</DialogDescription>
+          </DialogHeader>
 
-        <Tabs defaultValue="details" className="w-full">
-          <TabsList
-            className={`grid w-full ${
-              job.lighting_project_id && showNeighbors
-                ? "grid-cols-5"
-                : job.lighting_project_id || showNeighbors
-                  ? "grid-cols-4"
-                  : "grid-cols-3"
-            }`}
-          >
-            <TabsTrigger value="details">{readOnly ? "Details" : "Dispatch"}</TabsTrigger>
-            {job.lighting_project_id ? (
-              <TabsTrigger value="installation-plan">Installation plan</TabsTrigger>
-            ) : null}
-            <TabsTrigger value="visits-pricing">Visits & pricing</TabsTrigger>
-            <TabsTrigger value="field-work">Time tracking</TabsTrigger>
-            {showNeighbors && <TabsTrigger value="neighbors">Neighbors</TabsTrigger>}
-          </TabsList>
-          <TabsContent value="details" className="space-y-5 pt-2">
-            {/* Site, customer, access notes and scope: the technician's "what am I
+          <Tabs defaultValue="details" className="w-full">
+            <TabsList
+              className={`grid w-full ${
+                job.lighting_project_id && showNeighbors
+                  ? "grid-cols-5"
+                  : job.lighting_project_id || showNeighbors
+                    ? "grid-cols-4"
+                    : "grid-cols-3"
+              }`}
+            >
+              <TabsTrigger value="details">{readOnly ? "Details" : "Dispatch"}</TabsTrigger>
+              {job.lighting_project_id ? (
+                <TabsTrigger value="installation-plan">Installation plan</TabsTrigger>
+              ) : null}
+              <TabsTrigger value="visits-pricing">
+                {canViewPricing ? "Visits & pricing" : "Visits"}
+              </TabsTrigger>
+              <TabsTrigger value="field-work">Time tracking</TabsTrigger>
+              {showNeighbors && <TabsTrigger value="neighbors">Neighbors</TabsTrigger>}
+            </TabsList>
+            <TabsContent value="details" className="space-y-5 pt-2">
+              {/* Site, customer, access notes and scope: the technician's "what am I
               doing and where", and useful to dispatch too. */}
-            <JobBrief job={job} />
-            <HandoffImages mode="job" workspaceId={workspaceId} jobId={job.id} />
+              <JobBrief job={job} />
+              <HandoffImages mode="job" workspaceId={workspaceId} jobId={job.id} />
 
-            {readOnly ? (
-              <div className="space-y-1.5">
-                <Label className="flex items-center gap-2">
-                  <Users className="size-4" />
-                  Assigned
-                </Label>
-                {(job.technicians ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No technicians assigned.</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {(job.technicians ?? []).map((tech) => (
-                      <div
-                        key={tech.id}
-                        className="flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2"
-                      >
-                        <Avatar className="size-5">
-                          <AvatarFallback
-                            className="text-[9px] text-white"
-                            style={{ backgroundColor: tech.color }}
-                          >
-                            {technicianInitials(tech.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-xs">{tech.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* Schedule */}
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-2">
-                    <CalendarClock className="size-4" />
-                    Time window
-                  </Label>
-                  {/* Stacked on a phone: two `datetime-local` inputs side by side
-                    clip their own value at 390px wide. */}
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Input
-                      aria-label="Start"
-                      type="datetime-local"
-                      value={start}
-                      onChange={(event) => setStart(event.target.value)}
-                    />
-                    <Input
-                      aria-label="End"
-                      type="datetime-local"
-                      value={end}
-                      onChange={(event) => setEnd(event.target.value)}
-                    />
-                  </div>
-                  {windowError && <p className="text-xs text-destructive">{windowError}</p>}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleSchedule}
-                    disabled={busy || !start || !end || Boolean(windowError)}
-                  >
-                    {scheduleJob.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-                    Save schedule
-                  </Button>
-                </div>
-
-                {/* Status */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="job-status">Status</Label>
-                  <Select
-                    value={job.status}
-                    onValueChange={(value) => handleStatus(value as JobStatus)}
-                  >
-                    <SelectTrigger id="job-status" disabled={busy}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {JOB_STATUS_VALUES.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {jobStatusLabel(status)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Technicians */}
+              {readOnly ? (
                 <div className="space-y-1.5">
                   <Label className="flex items-center gap-2">
                     <Users className="size-4" />
-                    Assigned technicians
+                    Assigned
                   </Label>
-                  <TechnicianSelect
-                    technicians={technicians}
-                    selectedIds={selectedTechs}
-                    onToggle={toggleTech}
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void handleSaveTechnicians()}
-                    disabled={busy || !techDirty}
-                  >
-                    {(assignTechs.isPending || unassignTech.isPending) && (
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                    )}
-                    Save assignments
-                  </Button>
+                  {(job.technicians ?? []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No technicians assigned.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {(job.technicians ?? []).map((tech) => (
+                        <div
+                          key={tech.id}
+                          className="flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2"
+                        >
+                          <Avatar className="size-5">
+                            <AvatarFallback
+                              className="text-[9px] text-white"
+                              style={{ backgroundColor: tech.color }}
+                            >
+                              {technicianInitials(tech.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs">{tech.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <>
+                  {/* Schedule */}
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-2">
+                      <CalendarClock className="size-4" />
+                      Time window
+                    </Label>
+                    {/* Stacked on a phone: two `datetime-local` inputs side by side
+                    clip their own value at 390px wide. */}
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <Input
+                        aria-label="Start"
+                        type="datetime-local"
+                        value={start}
+                        onChange={(event) => setStart(event.target.value)}
+                      />
+                      <Input
+                        aria-label="End"
+                        type="datetime-local"
+                        value={end}
+                        onChange={(event) => setEnd(event.target.value)}
+                      />
+                    </div>
+                    {windowError && <p className="text-xs text-destructive">{windowError}</p>}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={handleSchedule}
+                      disabled={busy || !start || !end || Boolean(windowError)}
+                    >
+                      {scheduleJob.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+                      Save schedule
+                    </Button>
+                  </div>
 
-                {/* Delete */}
-                <div className="flex justify-end border-t pt-3">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => setConfirmDelete(true)}
-                    disabled={busy}
-                  >
-                    <Trash2 className="mr-2 size-4" />
-                    Delete job
-                  </Button>
-                </div>
-              </>
-            )}
-          </TabsContent>
-          {job.lighting_project_id ? (
-            <TabsContent value="installation-plan" className="space-y-5 pt-2">
-              <InstallationPlanPanel workspaceId={workspaceId} jobId={job.id} />
+                  {/* Status */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="job-status">Status</Label>
+                    <Select
+                      value={job.status}
+                      onValueChange={(value) => handleStatus(value as JobStatus)}
+                    >
+                      <SelectTrigger id="job-status" disabled={busy}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {JOB_STATUS_VALUES.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {jobStatusLabel(status)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Technicians */}
+                  <div className="space-y-1.5">
+                    <Label className="flex items-center gap-2">
+                      <Users className="size-4" />
+                      Assigned technicians
+                    </Label>
+                    <TechnicianSelect
+                      technicians={technicians}
+                      selectedIds={selectedTechs}
+                      onToggle={toggleTech}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void handleSaveTechnicians()}
+                      disabled={busy || !techDirty}
+                    >
+                      {(assignTechs.isPending || unassignTech.isPending) && (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      )}
+                      Save assignments
+                    </Button>
+                  </div>
+
+                  {/* Delete */}
+                  <div className="flex justify-end border-t pt-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => setConfirmDelete(true)}
+                      disabled={busy}
+                    >
+                      <Trash2 className="mr-2 size-4" />
+                      Delete job
+                    </Button>
+                  </div>
+                </>
+              )}
             </TabsContent>
-          ) : null}
-          <TabsContent value="visits-pricing" className="pt-2">
-            <JobVisitsPricing workspaceId={workspaceId} jobId={job.id} readOnly={readOnly} />
-          </TabsContent>
-          <TabsContent value="field-work" className="space-y-5 pt-2">
-            <JobCostingPanel workspaceId={workspaceId} jobId={job.id} />
-            {/* Materials sit beside time and expenses: same tab, separate
+            {job.lighting_project_id ? (
+              <TabsContent value="installation-plan" className="space-y-5 pt-2">
+                <InstallationPlanPanel workspaceId={workspaceId} jobId={job.id} />
+              </TabsContent>
+            ) : null}
+            <TabsContent value="visits-pricing" className="pt-2">
+              <JobVisitsPricing
+                workspaceId={workspaceId}
+                jobId={job.id}
+                readOnly={readOnly}
+                canViewPricing={canViewPricing}
+                canEditPricing={canEditPricing}
+              />
+            </TabsContent>
+            <TabsContent value="field-work" className="space-y-5 pt-2">
+              <JobCostingPanel
+                workspaceId={workspaceId}
+                jobId={job.id}
+                contactId={job.contact_id}
+                jobStatus={job.status}
+              />
+              {/* Materials sit beside time and expenses: same tab, separate
                 section, because stock consumption moves real inventory rather
                 than just recording a number. */}
-            <div className="border-t pt-4">
-              <JobMaterialsPanel workspaceId={workspaceId} jobId={job.id} readOnly={readOnly} />
-            </div>
-          </TabsContent>
-          {showNeighbors && (
-            <TabsContent value="neighbors" className="pt-2">
-              <JobNeighborsPanel workspaceId={workspaceId} jobId={job.id} readOnly={readOnly} />
+              <div className="border-t pt-4">
+                <JobMaterialsPanel workspaceId={workspaceId} jobId={job.id} readOnly={readOnly} />
+              </div>
             </TabsContent>
-          )}
-        </Tabs>
-      </DialogContent>
+            {showNeighbors && (
+              <TabsContent value="neighbors" className="pt-2">
+                <JobNeighborsPanel workspaceId={workspaceId} jobId={job.id} readOnly={readOnly} />
+              </TabsContent>
+            )}
+          </Tabs>
+        </DialogContent>
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete job</AlertDialogTitle>
-            <AlertDialogDescription>
-              Delete &quot;{job.title}&quot;? This removes it from every assigned worker&apos;s
-              calendar and cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={handleDelete}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete job</AlertDialogTitle>
+              <AlertDialogDescription>
+                Delete &quot;{job.title}&quot;? This removes it from every assigned worker&apos;s
+                calendar and cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={handleDelete}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </Dialog>
       {inventoryPlan ? (
         <JobInventoryCompletionDialog

@@ -19,6 +19,7 @@ import { OutboundCallDialog } from "@/components/calls/outbound-call-dialog";
 import { ClientNoteDialog } from "@/components/contacts/client-note-dialog";
 import { ContactAIKnowledge } from "@/components/contacts/contact-detail/contact-ai-knowledge";
 import { ContactHistory } from "@/components/contacts/contact-detail/contact-history";
+import { ContactJobTime } from "@/components/contacts/contact-detail/contact-job-time";
 import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import { ContactFilesMedia } from "@/components/contacts/contact-sidebar/contact-files-media";
 import { ContactInfoSection } from "@/components/contacts/contact-sidebar/contact-info-section";
@@ -244,6 +245,12 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
           <Card>
             <CardContent className="space-y-6">
               <EngagementSummary workspaceId={workspaceId ?? ""} contactId={contact.id} />
+              {workspaceId ? (
+                <>
+                  <Separator />
+                  <ContactJobTime workspaceId={workspaceId} contactId={contact.id} />
+                </>
+              ) : null}
               <Separator />
               <ContactFilesMedia contactId={contact.id} />
             </CardContent>

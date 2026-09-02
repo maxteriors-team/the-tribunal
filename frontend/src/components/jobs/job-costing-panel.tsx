@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  DollarSign,
-  Loader2,
-  Play,
-  Plus,
-  Square,
-  Trash2,
-} from "lucide-react";
+import { DollarSign, Loader2, Pause, Play, Plus, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -19,13 +12,15 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import {
   useAddExpense,
   useClockIn,
-  useClockOut,
   useDeleteExpense,
   useDeleteTimeEntry,
+  useEndJobTimer,
   useJobExpenses,
   useJobProfitability,
   useJobTimeEntries,
+  usePauseJobTimer,
 } from "@/hooks/useJobCosting";
+import type { JobStatus } from "@/lib/api/jobs";
 import { formatDate } from "@/lib/utils/date";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
@@ -33,34 +28,35 @@ import { formatCurrency } from "@/lib/utils/number";
 interface JobCostingPanelProps {
   workspaceId: string;
   jobId: string;
+  contactId: number;
+  jobStatus: JobStatus;
 }
 
 /**
- * Field-execution panel for a job: clock in/out, logged time, expenses, and a
- * live P&L (revenue from the linked invoice minus labor and expense cost). Used
- * inside the job detail dialog; the layout is single-column so it reads on a
- * phone-width screen.
+ * Field-execution panel for start/pause/end timers, logged time, expenses, and
+ * billing-gated P&L. Timer controls are per-user, so one technician cannot stop
+ * another technician's active interval.
  */
-export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
-  const { can, tier } = useCapabilities();
-  // Revenue, profit, and margin are billing data. Technicians (jobs:read only)
-  // log their time/expenses but must not see what the customer pays or the
-  // job's margin — mirror the backend billing:read gate on /profitability.
+export function JobCostingPanel({
+  workspaceId,
+  jobId,
+  contactId,
+  jobStatus,
+}: JobCostingPanelProps) {
+  const { can } = useCapabilities();
   const canViewPnl = can("billing:read");
-  // The field tier sees no money on a job at all — no hourly rate, no labor
-  // cost, no expenses. Clock in/out stays as a plain start/stop so workers can
-  // still log their time. NOTE: this hides the UI only; the time-entry and
-  // expense payloads still carry amounts, so it is not yet a security boundary
-  // (server-side stripping is tracked separately).
-  const canSeeCosts = tier !== "field";
+  const canManageAttendance = can("attendance:manage");
+  // The backend independently strips these values; match its permission here.
+  const canSeeCosts = can("billing:read");
 
   const timeEntries = useJobTimeEntries(workspaceId, jobId);
   const expenses = useJobExpenses(workspaceId, jobId, canSeeCosts);
   const pnl = useJobProfitability(workspaceId, jobId, canViewPnl);
 
-  const clockIn = useClockIn(workspaceId, jobId);
-  const clockOut = useClockOut(workspaceId, jobId);
-  const deleteEntry = useDeleteTimeEntry(workspaceId, jobId);
+  const clockIn = useClockIn(workspaceId, jobId, contactId);
+  const pauseTimer = usePauseJobTimer(workspaceId, jobId, contactId);
+  const endTimer = useEndJobTimer(workspaceId, jobId, contactId);
+  const deleteEntry = useDeleteTimeEntry(workspaceId, jobId, contactId);
   const addExpense = useAddExpense(workspaceId, jobId);
   const deleteExpense = useDeleteExpense(workspaceId, jobId);
 
@@ -68,26 +64,41 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
   const [expenseDesc, setExpenseDesc] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
 
-  // Derive the running-timer state from the time entries (a running entry has
-  // no ``ended_at``) rather than the P&L payload, so clock in/out still works
-  // for technicians who cannot read profitability.
-  const openTimer = (timeEntries.data ?? []).some((entry) => !entry.ended_at);
+  const entries = timeEntries.data ?? [];
+  const ownTimerEntries = entries.filter(
+    (entry) => entry.is_mine && entry.stop_reason !== "manual",
+  );
+  const openTimer = ownTimerEntries.find((entry) => !entry.ended_at);
+  const latestTimer = ownTimerEntries[0];
+  const timerEnded =
+    latestTimer?.stop_reason === "ended" ||
+    Boolean(latestTimer?.ended_at && latestTimer.stop_reason == null);
+  const timerPaused = latestTimer?.stop_reason === "paused";
+  const anyTimerRunning = entries.some((entry) => !entry.ended_at);
+  const jobClosed = jobStatus === "completed" || jobStatus === "cancelled";
   const currency = pnl.data?.currency ?? "USD";
 
   const handleClockIn = () => {
     clockIn.mutate(
       { rate: !canSeeCosts || rate === "" ? 0 : Number(rate) },
       {
-        onSuccess: () => toast.success("Clocked in"),
-        onError: (err) => toast.error(getApiErrorMessage(err, "Failed to clock in")),
+        onSuccess: () => toast.success(timerPaused ? "Timer resumed" : "Job timer started"),
+        onError: (err) => toast.error(getApiErrorMessage(err, "Failed to start timer")),
       },
     );
   };
 
-  const handleClockOut = () => {
-    clockOut.mutate(undefined, {
-      onSuccess: () => toast.success("Clocked out"),
-      onError: (err) => toast.error(getApiErrorMessage(err, "Failed to clock out")),
+  const handlePause = () => {
+    pauseTimer.mutate(undefined, {
+      onSuccess: () => toast.success("Timer paused"),
+      onError: (err) => toast.error(getApiErrorMessage(err, "Failed to pause timer")),
+    });
+  };
+
+  const handleEnd = () => {
+    endTimer.mutate(undefined, {
+      onSuccess: () => toast.success("Job timer ended"),
+      onError: (err) => toast.error(getApiErrorMessage(err, "Failed to end timer")),
     });
   };
 
@@ -110,7 +121,12 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
     );
   };
 
-  const busy = clockIn.isPending || clockOut.isPending;
+  const busy =
+    timeEntries.isPending ||
+    timeEntries.isError ||
+    clockIn.isPending ||
+    pauseTimer.isPending ||
+    endTimer.isPending;
 
   return (
     <div className="space-y-5">
@@ -120,7 +136,7 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
         <div className="rounded-lg border p-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">Profitability</span>
-            {openTimer && (
+            {anyTimerRunning && (
               <Badge variant="secondary" className="gap-1">
                 <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
                 Timer running
@@ -136,9 +152,7 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
                 <span className="text-right tabular-nums">
                   {formatCurrency(pnl.data.revenue, currency)}
                 </span>
-                <span className="text-muted-foreground">
-                  Labor · {pnl.data.total_hours}h
-                </span>
+                <span className="text-muted-foreground">Labor · {pnl.data.total_hours}h</span>
                 <span className="text-right tabular-nums">
                   −{formatCurrency(pnl.data.labor_cost, currency)}
                 </span>
@@ -156,8 +170,8 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
               </div>
               {pnl.data.material_cost > 0 && pnl.data.expense_cost > 0 && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Materials are stock pulled from inventory; expenses are costs
-                  entered by hand. They are counted separately.
+                  Materials are stock pulled from inventory; expenses are costs entered by hand.
+                  They are counted separately.
                 </p>
               )}
               <div className="mt-2 flex items-center justify-between border-t pt-2">
@@ -182,9 +196,23 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
 
       {/* Time tracking */}
       <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-sm">Job timer</Label>
+          {openTimer ? (
+            <Badge variant="secondary" className="gap-1">
+              <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+              Running
+            </Badge>
+          ) : timerEnded ? (
+            <Badge variant="outline">Ended</Badge>
+          ) : timerPaused ? (
+            <Badge variant="outline">Paused</Badge>
+          ) : null}
+        </div>
+
         <div className="flex flex-wrap items-end gap-2">
           {canSeeCosts && (
-            <div className="flex-1 space-y-1">
+            <div className="min-w-36 flex-1 space-y-1">
               <Label htmlFor="clock-rate" className="text-xs">
                 Hourly rate
               </Label>
@@ -196,42 +224,77 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
                 inputMode="decimal"
                 placeholder="0.00"
                 value={rate}
-                onChange={(e) => setRate(e.target.value)}
-                disabled={openTimer || busy}
+                onChange={(event) => setRate(event.target.value)}
+                disabled={Boolean(openTimer) || busy || jobClosed}
               />
             </div>
           )}
-          {openTimer ? (
-            <Button variant="destructive" onClick={handleClockOut} disabled={busy}>
-              {clockOut.isPending ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
+
+          {!jobClosed && (
+            <>
+              {openTimer ? (
+                <Button variant="secondary" onClick={handlePause} disabled={busy}>
+                  {pauseTimer.isPending ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <Pause className="mr-2 size-4" />
+                  )}
+                  Pause
+                </Button>
               ) : (
-                <Square className="mr-2 size-4" />
+                <Button onClick={handleClockIn} disabled={busy}>
+                  {clockIn.isPending ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <Play className="mr-2 size-4" />
+                  )}
+                  {timerPaused ? "Resume" : "Start"}
+                </Button>
               )}
-              Clock out
-            </Button>
-          ) : (
-            <Button onClick={handleClockIn} disabled={busy}>
-              {clockIn.isPending ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : (
-                <Play className="mr-2 size-4" />
+              {(openTimer || timerPaused) && (
+                <Button variant="destructive" onClick={handleEnd} disabled={busy}>
+                  {endTimer.isPending ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <Square className="mr-2 size-4" />
+                  )}
+                  End
+                </Button>
               )}
-              Clock in
-            </Button>
+            </>
           )}
         </div>
 
-        {(timeEntries.data ?? []).length > 0 && (
+        {jobClosed && (
+          <p className="text-xs text-muted-foreground">Timers are closed for {jobStatus} jobs.</p>
+        )}
+        {timeEntries.isError && (
+          <p className="text-xs text-destructive">Job time could not be loaded.</p>
+        )}
+
+        {entries.length > 0 ? (
           <ul className="divide-y rounded-md border text-sm">
-            {(timeEntries.data ?? []).map((entry) => (
-              <li key={entry.id} className="flex items-center justify-between gap-2 px-3 py-2">
+            {entries.map((entry) => (
+              <li
+                key={entry.id}
+                className="flex items-center justify-between gap-2 px-3 py-2"
+              >
                 <div className="min-w-0">
-                  <div className="truncate">
-                    {formatDate(entry.started_at, { pattern: "MMM d, h:mm a" })}
-                    {entry.ended_at
-                      ? ` · ${entry.duration_hours}h`
-                      : " · running"}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="truncate">
+                      {formatDate(entry.started_at, { pattern: "MMM d, h:mm a" })}
+                      {entry.ended_at ? ` · ${entry.duration_hours}h` : " · running"}
+                    </span>
+                    {entry.is_mine && (
+                      <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                        You
+                      </Badge>
+                    )}
+                    {entry.stop_reason && entry.stop_reason !== "manual" && (
+                      <span className="text-xs capitalize text-muted-foreground">
+                        {entry.stop_reason}
+                      </span>
+                    )}
                   </div>
                   {canSeeCosts && (
                     <div className="text-xs text-muted-foreground">
@@ -240,24 +303,29 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
                     </div>
                   )}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => deleteEntry.mutate(entry.id)}
-                  disabled={deleteEntry.isPending}
-                  aria-label="Delete time entry"
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
+                {(entry.is_mine || canManageAttendance) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => deleteEntry.mutate(entry.id)}
+                    disabled={deleteEntry.isPending}
+                    aria-label="Delete time entry"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
+        ) : (
+          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+            No time recorded yet.
+          </p>
         )}
       </div>
 
-      {/* Expenses — every row is a dollar amount, so the whole section is
-          hidden from the field tier. */}
+      {/* Expenses — every row is a dollar amount, so billing permission gates it. */}
       {canSeeCosts && (
         <div className="space-y-2">
           <Label className="flex items-center gap-2 text-sm">
@@ -299,10 +367,7 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
           {(expenses.data ?? []).length > 0 && (
             <ul className="divide-y rounded-md border text-sm">
               {(expenses.data ?? []).map((expense) => (
-                <li
-                  key={expense.id}
-                  className="flex items-center justify-between gap-2 px-3 py-2"
-                >
+                <li key={expense.id} className="flex items-center justify-between gap-2 px-3 py-2">
                   <div className="min-w-0">
                     <div className="truncate">{expense.description}</div>
                     {expense.category && (
@@ -310,9 +375,7 @@ export function JobCostingPanel({ workspaceId, jobId }: JobCostingPanelProps) {
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="tabular-nums">
-                      {formatCurrency(expense.amount, currency)}
-                    </span>
+                    <span className="tabular-nums">{formatCurrency(expense.amount, currency)}</span>
                     <Button
                       variant="ghost"
                       size="icon"

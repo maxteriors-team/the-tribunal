@@ -13,9 +13,9 @@ A job response is *self-contained for the field*: the site address, the
 customer's name and phone, and the scope of work are embedded, because the field
 tier holds ``jobs:read`` only and is denied the contact/service-location
 endpoints it would otherwise need to resolve them. Everything embedded is
-price-free (see :class:`app.schemas.job.JobLineItemSummary`). The relations that
-feeds are eager-loaded and line items are fetched one query per *page* rather
-than one per job, so widening the payload did not add an N+1.
+price-free (see :class:`app.schemas.job.JobLineItemSummary`). Feed relations are
+eager-loaded, while job, quote, and invoice scope items are fetched in bounded
+batch queries rather than once per job, so the payload avoids an N+1.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ from app.models.field_service import (
 from app.models.inventory import InventoryJobAllocation
 from app.models.invoice import Invoice, InvoiceLineItem
 from app.models.lighting_project import LightingProject
-from app.models.quote import Quote
+from app.models.quote import Quote, QuoteLineItem
 from app.models.user import User
 from app.models.workspace import WorkspaceMembership
 from app.schemas.job import (
@@ -214,7 +214,28 @@ class JobService:
             .scalars()
             .all()
         )
-        return self._pricing_response(job, items)
+        if items or job.source_quote_id is None:
+            return self._pricing_response(job, items)
+
+        quote = await assert_workspace_owned(
+            self.db,
+            Quote,
+            job.source_quote_id,
+            workspace_id,
+            detail="Quote not found",
+        )
+        quote_items = (
+            (
+                await self.db.execute(
+                    select(QuoteLineItem)
+                    .where(QuoteLineItem.quote_id == quote.id)
+                    .order_by(QuoteLineItem.created_at, QuoteLineItem.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return self._quote_pricing_response(job.id, quote, quote_items)
 
     async def replace_pricing(
         self,
@@ -266,8 +287,47 @@ class JobService:
             tax_rate=job.tax_rate,
             items=response_items,
             subtotal=subtotal,
+            discount=Decimal("0.00"),
             tax=tax,
             total=subtotal + tax,
+        )
+
+    @staticmethod
+    def _quote_pricing_response(
+        job_id: uuid.UUID, quote: Quote, items: Sequence[QuoteLineItem]
+    ) -> JobPricingResponse:
+        """Preserve accepted-quote totals for jobs without edited pricing."""
+        cent = Decimal("0.01")
+        subtotal = Decimal(quote.subtotal or 0).quantize(cent, rounding=ROUND_HALF_UP)
+        discount = Decimal(quote.discount_amount or 0).quantize(cent, rounding=ROUND_HALF_UP)
+        tax = Decimal(quote.tax_amount or 0).quantize(cent, rounding=ROUND_HALF_UP)
+        taxable_base = subtotal - discount
+        tax_rate = (
+            (tax / taxable_base * Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if taxable_base > 0
+            else Decimal("0.00")
+        )
+        response_items = [
+            JobPricedLineItemResponse(
+                id=item.id,
+                name=item.name,
+                description=item.description,
+                quantity=Decimal(str(item.quantity)),
+                unit_price=Decimal(str(item.unit_price)),
+                taxable=True,
+                position=position,
+                total=Decimal(str(item.total)),
+            )
+            for position, item in enumerate(items)
+        ]
+        return JobPricingResponse(
+            job_id=job_id,
+            tax_rate=tax_rate,
+            items=response_items,
+            subtotal=subtotal,
+            discount=discount,
+            tax=tax,
+            total=Decimal(quote.total or 0).quantize(cent, rounding=ROUND_HALF_UP),
         )
 
     async def assignment_recipient_user_ids(
@@ -545,17 +605,12 @@ class JobService:
     # Response building
     # ------------------------------------------------------------------ #
     @staticmethod
-    def _to_response(job: Job, line_items: Sequence[InvoiceLineItem] = ()) -> JobResponse:
-        """Build a response from a job with :data:`_LOAD_OPTIONS` relations loaded.
-
-        ``service_location`` is populated by ``model_validate`` straight off the
-        eager-loaded relation; the customer is mapped by hand so only name and
-        phone cross the boundary (see :class:`JobCustomerSummary`).
-        """
+    def _to_response(job: Job, line_items: Sequence[JobLineItemSummary] = ()) -> JobResponse:
+        """Build a price-free field response from eagerly loaded job relations."""
         response = JobResponse.model_validate(job)
         response.technicians = [
             TechnicianSummary.model_validate(tech)
-            for tech in sorted(job.technicians, key=lambda t: t.name)
+            for tech in sorted(job.technicians, key=lambda tech: tech.name)
         ]
         contact = job.contact
         if contact is not None:
@@ -564,52 +619,107 @@ class JobService:
                 name=contact.full_name,
                 phone_number=contact.phone_number,
             )
-        response.line_items = [JobLineItemSummary.model_validate(item) for item in line_items]
+        response.line_items = list(line_items)
         return response
 
-    async def _line_items_by_invoice(
-        self, workspace_id: uuid.UUID, invoice_ids: set[uuid.UUID]
-    ) -> dict[uuid.UUID, list[InvoiceLineItem]]:
-        """Scope-of-work lines for the given invoices, in one query.
+    @staticmethod
+    def _scope_summary(item: JobLineItem | QuoteLineItem | InvoiceLineItem) -> JobLineItemSummary:
+        """Project any priced source into the field-safe scope shape."""
+        return JobLineItemSummary(
+            id=item.id,
+            name=item.name,
+            description=item.description,
+            quantity=float(item.quantity),
+        )
 
-        One statement for a whole page of jobs rather than one per job, so the
-        calendar's query count stays flat as the day fills up. Joined through
-        :class:`Invoice` and filtered on ``workspace_id`` so a stale or tampered
-        ``job.invoice_id`` can never reach another tenant's lines.
-        """
-        if not invoice_ids:
+    async def _scope_items_by_job(
+        self, jobs: Sequence[Job], workspace_id: uuid.UUID
+    ) -> dict[uuid.UUID, list[JobLineItemSummary]]:
+        """Batch scope from job pricing, accepted quotes, then linked invoices."""
+        if not jobs:
             return {}
-        rows = (
+        job_ids = {job.id for job in jobs}
+        grouped: dict[uuid.UUID, list[JobLineItemSummary]] = defaultdict(list)
+
+        job_rows = (
             (
                 await self.db.execute(
-                    select(InvoiceLineItem)
-                    .join(Invoice, Invoice.id == InvoiceLineItem.invoice_id)
+                    select(JobLineItem)
+                    .join(Job, Job.id == JobLineItem.job_id)
                     .where(
-                        Invoice.workspace_id == workspace_id,
-                        InvoiceLineItem.invoice_id.in_(invoice_ids),
+                        Job.workspace_id == workspace_id,
+                        JobLineItem.job_id.in_(job_ids),
                     )
-                    .order_by(InvoiceLineItem.invoice_id, InvoiceLineItem.created_at)
+                    .order_by(JobLineItem.job_id, JobLineItem.position, JobLineItem.id)
                 )
             )
             .scalars()
             .all()
         )
-        grouped: dict[uuid.UUID, list[InvoiceLineItem]] = defaultdict(list)
-        for row in rows:
-            grouped[row.invoice_id].append(row)
-        return grouped
+        for job_item in job_rows:
+            grouped[job_item.job_id].append(self._scope_summary(job_item))
+
+        unresolved = [job for job in jobs if not grouped[job.id]]
+        quote_ids = {job.source_quote_id for job in unresolved if job.source_quote_id is not None}
+        quote_grouped: dict[uuid.UUID, list[JobLineItemSummary]] = defaultdict(list)
+        if quote_ids:
+            quote_rows = (
+                (
+                    await self.db.execute(
+                        select(QuoteLineItem)
+                        .join(Quote, Quote.id == QuoteLineItem.quote_id)
+                        .where(
+                            Quote.workspace_id == workspace_id,
+                            QuoteLineItem.quote_id.in_(quote_ids),
+                        )
+                        .order_by(
+                            QuoteLineItem.quote_id,
+                            QuoteLineItem.created_at,
+                            QuoteLineItem.id,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for quote_item in quote_rows:
+                quote_grouped[quote_item.quote_id].append(self._scope_summary(quote_item))
+            for job in unresolved:
+                if job.source_quote_id and quote_grouped[job.source_quote_id]:
+                    grouped[job.id] = quote_grouped[job.source_quote_id]
+
+        unresolved = [job for job in unresolved if not grouped[job.id]]
+        invoice_ids = {job.invoice_id for job in unresolved if job.invoice_id is not None}
+        invoice_grouped: dict[uuid.UUID, list[JobLineItemSummary]] = defaultdict(list)
+        if invoice_ids:
+            invoice_rows = (
+                (
+                    await self.db.execute(
+                        select(InvoiceLineItem)
+                        .join(Invoice, Invoice.id == InvoiceLineItem.invoice_id)
+                        .where(
+                            Invoice.workspace_id == workspace_id,
+                            InvoiceLineItem.invoice_id.in_(invoice_ids),
+                        )
+                        .order_by(InvoiceLineItem.invoice_id, InvoiceLineItem.created_at)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for invoice_item in invoice_rows:
+                invoice_grouped[invoice_item.invoice_id].append(self._scope_summary(invoice_item))
+            for job in unresolved:
+                if job.invoice_id:
+                    grouped[job.id] = invoice_grouped[job.invoice_id]
+        return dict(grouped)
 
     async def _to_responses(
         self, jobs: Sequence[Job], workspace_id: uuid.UUID
     ) -> list[JobResponse]:
-        """Serialize a page of jobs, batching their scope-of-work lookup."""
-        grouped = await self._line_items_by_invoice(
-            workspace_id, {job.invoice_id for job in jobs if job.invoice_id is not None}
-        )
-        return [
-            self._to_response(job, grouped.get(job.invoice_id, ()) if job.invoice_id else ())
-            for job in jobs
-        ]
+        """Serialize jobs with batched, price-free scope-of-work lookups."""
+        grouped = await self._scope_items_by_job(jobs, workspace_id)
+        return [self._to_response(job, grouped.get(job.id, ())) for job in jobs]
 
     async def _one_response(self, job: Job, workspace_id: uuid.UUID) -> JobResponse:
         """Serialize a single job (same embedding rules as a page)."""
