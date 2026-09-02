@@ -43,6 +43,7 @@ interface OpportunityCardProps {
   onOpen: (opportunityId: string) => void;
   onMove: (opportunityId: string, stageId: string) => void;
   onCall: (opportunity: Opportunity) => void;
+  onText: (opportunity: Opportunity) => void;
   onSchedule: (opportunity: Opportunity) => void;
   onRemove: (opportunity: Opportunity) => void;
 }
@@ -53,6 +54,7 @@ export function OpportunityCard({
   onOpen,
   onMove,
   onCall,
+  onText,
   onSchedule,
   onRemove,
 }: OpportunityCardProps) {
@@ -70,7 +72,7 @@ export function OpportunityCard({
         // quick action leaves that button focused, and focus-within would strand
         // the card in a highlighted state that reads as "selected".
         "hover:border-primary/50 has-[:focus-visible]:border-primary/60",
-        isDragging && "opacity-50"
+        isDragging && "opacity-50",
       )}
       data-testid={`opportunity-card-${opportunity.id}`}
     >
@@ -81,9 +83,15 @@ export function OpportunityCard({
       <button
         type="button"
         className="w-full cursor-pointer rounded-t-md px-3 pb-2 pt-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        onClick={() => onOpen(opportunity.id)}
         {...attributes}
         {...listeners}
+        aria-label={`Open ${opportunity.name}`}
+        onClick={() => onOpen(opportunity.id)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          onOpen(opportunity.id);
+        }}
       >
         <OpportunityCardSummary opportunity={opportunity} />
       </button>
@@ -92,6 +100,7 @@ export function OpportunityCard({
         <OpportunityQuickActions
           contact={contact}
           onCall={() => onCall(opportunity)}
+          onText={() => onText(opportunity)}
           onSchedule={() => onSchedule(opportunity)}
         />
       ) : null}
@@ -105,9 +114,7 @@ export function OpportunityCard({
             <MoreVertical className="h-4 w-4" aria-hidden />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onOpen(opportunity.id)}>
-              Open deal
-            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onOpen(opportunity.id)}>Open deal</DropdownMenuItem>
             {contact ? (
               <DropdownMenuItem asChild>
                 <Link href={`/contacts/${contact.id}/details`}>View contact</Link>
@@ -119,18 +126,12 @@ export function OpportunityCard({
             {stages
               .filter((s) => s.id !== opportunity.stage_id)
               .map((stage) => (
-                <DropdownMenuItem
-                  key={stage.id}
-                  onClick={() => onMove(opportunity.id, stage.id)}
-                >
+                <DropdownMenuItem key={stage.id} onClick={() => onMove(opportunity.id, stage.id)}>
                   {stage.name}
                 </DropdownMenuItem>
               ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              onClick={() => onRemove(opportunity)}
-            >
+            <DropdownMenuItem variant="destructive" onClick={() => onRemove(opportunity)}>
               Remove from pipeline
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -162,7 +163,9 @@ export function OpportunityCardSummary({
   const showStageAge = stageAge !== null && stageAge >= 1;
 
   return (
-    <div className={cn("space-y-2", dragging && "w-64 rounded-md border bg-background p-3 shadow-md")}>
+    <div
+      className={cn("space-y-2", dragging && "w-64 rounded-md border bg-background p-3 shadow-md")}
+    >
       <div className="pr-6">
         <p className="line-clamp-2 text-sm font-medium leading-snug">{opportunity.name}</p>
       </div>
@@ -190,7 +193,8 @@ export function OpportunityCardSummary({
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <User className="size-3 shrink-0" aria-hidden />
         <span className="truncate">
-          Owner: {opportunity.assignee
+          Owner:{" "}
+          {opportunity.assignee
             ? opportunity.assignee.full_name || opportunity.assignee.email
             : "Unassigned"}
         </span>
@@ -211,9 +215,7 @@ export function OpportunityCardSummary({
         <p
           className={cn(
             "flex items-center gap-1.5 text-xs",
-            closeDate.tone === "overdue"
-              ? "font-medium text-destructive"
-              : "text-muted-foreground"
+            closeDate.tone === "overdue" ? "font-medium text-destructive" : "text-muted-foreground",
           )}
         >
           <CalendarClock className="size-3 shrink-0" aria-hidden />
@@ -225,7 +227,7 @@ export function OpportunityCardSummary({
         <p
           className={cn(
             "flex items-center gap-1.5 text-xs",
-            isStale ? "font-medium text-foreground" : "text-muted-foreground"
+            isStale ? "font-medium text-foreground" : "text-muted-foreground",
           )}
         >
           <TimerReset className="size-3 shrink-0" aria-hidden />
@@ -245,9 +247,7 @@ export function OpportunityCardSummary({
             <Badge variant="outline" className="font-normal">
               <Receipt className="size-3" aria-hidden />
               {itemCount} {itemCount === 1 ? "item" : "items"}
-              {itemsTotal != null
-                ? ` · ${formatCurrency(itemsTotal, opportunity.currency)}`
-                : ""}
+              {itemsTotal != null ? ` · ${formatCurrency(itemsTotal, opportunity.currency)}` : ""}
             </Badge>
           ) : null}
         </div>
@@ -271,16 +271,18 @@ function ContactStatusDot({ status }: { status: string }) {
 
 /**
  * Click-to-call and the two follow-ups an operator reaches for next, without
- * opening the deal. Rendered only when a contact is linked — every action here
+ * opening a menu. Rendered only when a contact is linked because every action
  * needs one.
  */
 function OpportunityQuickActions({
   contact,
   onCall,
+  onText,
   onSchedule,
 }: {
   contact: OpportunityContact;
   onCall: () => void;
+  onText: () => void;
   onSchedule: () => void;
 }) {
   const hasPhone = Boolean(contact.phone_number);
@@ -296,18 +298,28 @@ function OpportunityQuickActions({
         aria-label={
           hasPhone
             ? `Call ${contact.full_name}`
-            : `Call ${contact.full_name} — no phone number on file`
+            : `Call ${contact.full_name}: no phone number on file`
         }
         data-testid={`opportunity-call-${contact.id}`}
       >
         <Phone className="size-3.5" aria-hidden />
         Call
       </Button>
-      <Button variant="ghost" size="sm" className="h-7 flex-1 px-1.5 text-xs" asChild>
-        <Link href={`/contacts/${contact.id}`} aria-label={`Text ${contact.full_name}`}>
-          <MessageSquare className="size-3.5" aria-hidden />
-          Text
-        </Link>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 flex-1 px-1.5 text-xs"
+        onClick={onText}
+        disabled={!hasPhone}
+        aria-label={
+          hasPhone
+            ? `Text ${contact.full_name}`
+            : `Text ${contact.full_name}: no phone number on file`
+        }
+      >
+        <MessageSquare className="size-3.5" aria-hidden />
+        Text
       </Button>
       <Button
         variant="ghost"

@@ -986,3 +986,17 @@ Scope: new landscape-lighting quotes that staff explicitly email or text after c
 ### Verification boundary
 
 Targeted backend and frontend regressions passed locally, and the OpenAPI/client contracts were regenerated. No Resend or Telnyx message was sent, no paid Stripe Checkout was created, and no legal review, live carrier delivery, or production payment was performed.
+
+## Focused addendum — routed opportunity deal workspace (2026-09-01)
+
+Snapshot: 1 September 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE** · Working tree based on `83edf8cf`
+
+Scope: authenticated staff can open an existing deal, review its linked customer thread, and use the existing manual SMS composer without leaving the deal. No provider, recipient-resolution, send endpoint, automation, or campaign behavior changed; this is not a product-wide re-audit.
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| ODW-001 | HIGH | Staff can send customer SMS from the routed deal | CODE + RUNTIME: the workspace passes the fetched, workspace-scoped contact into the existing conversation feed; the composer still mounts only for an existing contact conversation, and the authenticated `CanSendComms` endpoint is unchanged | Keep sends operator-initiated and recipient-scoped; enforce consent, opt-out, sender identity, quiet hours, and truthful delivery at the shared server boundary | Existing UI behavior reused; product-wide `MSG-001` remains open | Focused workspace/contact tests plus existing conversation-send tests; no live carrier send |
+
+### Verification boundary
+
+Forty-eight focused component tests, TypeScript, changed-file lint, and mocked desktop/mobile route checks passed. Notes and SMS returned no WCAG-tagged axe violations after message contrast fixes, with no horizontal overflow at 320 px. No real contact was loaded, no SMS was sent, and consent basis, carrier delivery, physical touch drag, screen-reader output, and legal policy were not verified.
