@@ -688,7 +688,10 @@ class UpsellService:
         )
 
         created = await QuoteService(self.db).create_quote(
-            workspace_id, quote_in, created_by_id=user_id
+            workspace_id,
+            quote_in,
+            created_by_id=user_id,
+            is_onsite_upsell=True,
         )
 
         if proposal_document:

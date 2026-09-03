@@ -5,6 +5,8 @@ tags:
   - calendar
   - appointments
   - jobs
+  - scoreboard
+  - lighting league
   - upsell
   - service plans
   - inventory
@@ -30,6 +32,12 @@ Route: `/jobs`. Sidebar label: **Jobs**.
 5. Open a job to update its schedule, assignment, notes, and progress when your role permits it.
 
 A field technician may have a read-only or operational subset of the job controls. Dispatch changes should be made on `/jobs`, not inferred from a calendar card alone.
+
+## Review Lighting League progress
+
+Route: `/scoreboard`. Sidebar label: **Lighting League**.
+
+Active technicians can compare current-month rank, XP, and lifetime lighting levels. Technicians see only their own attendance, completed-job, and approved-upsell breakdown; authorized office roles can open those private details for any technician. Monthly standings reset, while lifetime levels remain. Lighting League is recognition only—not payroll, prizes, discipline, or a performance review.
 
 ## Sell an add-on on site
 

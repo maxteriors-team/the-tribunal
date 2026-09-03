@@ -70,6 +70,7 @@ from app.api.v1 import (
     segments,
     settings,
     tags,
+    technician_scoreboard,
     upsell,
     voice_campaigns,
     workspaces,
@@ -443,6 +444,11 @@ api_router.include_router(
     upsell.router,
     prefix="/workspaces/{workspace_id}/upsell",
     tags=["Upsell"],
+)
+api_router.include_router(
+    technician_scoreboard.router,
+    prefix="/workspaces/{workspace_id}/technician-scoreboard",
+    tags=["Technician Scoreboard"],
 )
 api_router.include_router(
     jobs.router,

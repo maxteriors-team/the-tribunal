@@ -25,12 +25,14 @@ const {
   handoffImagesMock,
   capabilitiesMock,
   canvasContext,
+  updateJobMutate,
 } = vi.hoisted(() => ({
   mutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   installationPlanQuery: vi.fn(),
   inventoryPlanMock: vi.fn(),
   handoffImagesMock: vi.fn(),
   capabilitiesMock: vi.fn(),
+  updateJobMutate: vi.fn(),
   canvasContext: {
     clearRect: vi.fn(),
     drawImage: vi.fn(),
@@ -79,7 +81,7 @@ vi.mock("@/hooks/useJobs", () => ({
   useWorkspaceTechnicians: () => ({ data: { items: [] } }),
   useJobInstallationPlan: () => installationPlanQuery(),
   useScheduleJob: mutation,
-  useUpdateJob: mutation,
+  useUpdateJob: () => ({ mutate: updateJobMutate, mutateAsync: vi.fn(), isPending: false }),
   useAssignTechnicians: mutation,
   useUnassignTechnician: mutation,
   useDeleteJob: mutation,
@@ -172,6 +174,7 @@ function renderDialog(readOnly: boolean, jobToRender: Job = fullJob) {
 
 describe("JobDetailDialog", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
       canvasContext as unknown as CanvasRenderingContext2D,
     );
@@ -196,6 +199,9 @@ describe("JobDetailDialog", () => {
     expect(screen.queryByRole("button", { name: /Delete job/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Status")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Start")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Job notes")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Customer requested a call 30 min before arrival.")).toHaveLength(1);
 
     // The assignment roster and time tracking remain available to the field member.
     expect(screen.getByText("Marco Reyes")).toBeInTheDocument();
@@ -216,12 +222,38 @@ describe("JobDetailDialog", () => {
     expect(screen.getByRole("tab", { name: "Visits & pricing" })).toBeInTheDocument();
   });
 
+  it("updates the dispatcher title and job notes without duplicating the notes", async () => {
+    const user = userEvent.setup();
+    renderDialog(false);
+    const title = screen.getByLabelText("Title");
+    const notes = screen.getByLabelText("Job notes");
+    expect(title).toHaveAttribute("maxlength", "200");
+    expect(notes).toHaveAttribute("maxlength", "5000");
+    const noteMatches = screen.getAllByText("Customer requested a call 30 min before arrival.");
+    expect(noteMatches).toHaveLength(1);
+    expect(noteMatches[0]).toBe(notes);
+
+    await user.clear(title);
+    await user.type(title, "Corrected roof tune-up");
+    await user.clear(notes);
+    await user.type(notes, "Use the north gate.");
+    await user.click(screen.getByRole("button", { name: "Save job details" }));
+
+    expect(updateJobMutate).toHaveBeenCalledWith(
+      {
+        jobId: "job-1",
+        body: { title: "Corrected roof tune-up", description: "Use the north gate." },
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    );
+  });
+
   it.each([true, false])("renders job handoff images (readOnly=%s)", (readOnly) => {
     renderDialog(readOnly);
 
     expect(screen.getByRole("region", { name: "Field handoff images" })).toBeInTheDocument();
     expect(handoffImagesMock).toHaveBeenLastCalledWith({
-      mode: "job",
+      mode: readOnly ? "technician-read" : "job-edit",
       workspaceId: "ws-1",
       jobId: "job-1",
     });

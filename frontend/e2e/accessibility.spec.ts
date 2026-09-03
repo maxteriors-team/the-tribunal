@@ -19,6 +19,7 @@ const AUDITED_ROUTES = [
   "/find-leads-ai",
   "/experiments",
   "/scorecard",
+  "/scoreboard",
   "/referral-partners",
   "/service-plans",
   "/settings?tab=profile",

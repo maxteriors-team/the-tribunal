@@ -1,4 +1,4 @@
-"""Private handoff images attached to a quote and exposed through its converted job."""
+"""Private handoff images attached directly to a job."""
 
 import uuid
 from datetime import UTC, datetime
@@ -9,16 +9,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.db.tenancy import WorkspaceScoped
-
-HANDOFF_IMAGE_CONTENT_TYPES = ("image/jpeg", "image/png", "image/webp")
-MAX_HANDOFF_IMAGE_BYTES = 10 * 1024 * 1024
-MAX_HANDOFF_IMAGES_PER_QUOTE = 10
+from app.models.quote_handoff_image import HANDOFF_IMAGE_CONTENT_TYPES, MAX_HANDOFF_IMAGE_BYTES
 
 
-class QuoteHandoffImage(Base, WorkspaceScoped):
-    """A bounded image stored for the field team handling a converted quote."""
+class JobHandoffImage(Base, WorkspaceScoped):
+    """A bounded office-uploaded image stored for a job's field team."""
 
-    __tablename__ = "quote_handoff_images"
+    __tablename__ = "job_handoff_images"
     __table_args__ = (
         CheckConstraint(
             f"content_type IN {HANDOFF_IMAGE_CONTENT_TYPES}",
@@ -33,9 +30,9 @@ class QuoteHandoffImage(Base, WorkspaceScoped):
             name="data_size",
         ),
         Index(
-            "ix_quote_handoff_images_workspace_quote_created",
+            "ix_job_handoff_images_workspace_job_created",
             "workspace_id",
-            "quote_id",
+            "job_id",
             "created_at",
         ),
     )
@@ -46,9 +43,9 @@ class QuoteHandoffImage(Base, WorkspaceScoped):
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=False,
     )
-    quote_id: Mapped[uuid.UUID] = mapped_column(
+    job_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("quotes.id", ondelete="CASCADE"),
+        ForeignKey("field_service_jobs.id", ondelete="CASCADE"),
         nullable=False,
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -67,4 +64,4 @@ class QuoteHandoffImage(Base, WorkspaceScoped):
     @property
     def source(self) -> str:
         """Identify this row's immutable storage owner in API metadata."""
-        return "quote"
+        return "job"

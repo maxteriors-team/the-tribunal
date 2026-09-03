@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { useJobs } from "@/hooks/useJobs";
 import type { Job, JobStatus } from "@/lib/api/jobs";
 import { jobStatusColors, jobStatusLabel } from "@/lib/jobs/job-derivations";
@@ -41,6 +42,8 @@ function isLate(job: Job) {
 
 export function JobsPage() {
   const { currentWorkspaceId } = useWorkspace();
+  const { can } = useCapabilities();
+  const canWriteJobs = can("jobs:write");
   const workspaceId = currentWorkspaceId ?? "";
   const [status, setStatus] = useState<JobStatus | "all">("all");
   const [search, setSearch] = useState("");
@@ -81,10 +84,12 @@ export function JobsPage() {
             Track scheduled work, assignments, and field progress.
           </p>
         </div>
-        <Button onClick={() => setNewJobOpen(true)}>
-          <Plus className="mr-2 size-4" />
-          New job
-        </Button>
+        {canWriteJobs ? (
+          <Button onClick={() => setNewJobOpen(true)}>
+            <Plus className="mr-2 size-4" />
+            New job
+          </Button>
+        ) : null}
       </div>
 
       <section aria-label="Job overview" className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -227,7 +232,9 @@ export function JobsPage() {
         )}
       </section>
 
-      <NewJobDialog workspaceId={workspaceId} open={newJobOpen} onOpenChange={setNewJobOpen} />
+      {canWriteJobs ? (
+        <NewJobDialog workspaceId={workspaceId} open={newJobOpen} onOpenChange={setNewJobOpen} />
+      ) : null}
       <JobDetailDialog
         key={selectedJob?.id ?? "none"}
         workspaceId={workspaceId}
@@ -236,6 +243,7 @@ export function JobsPage() {
         onOpenChange={(open) => {
           if (!open) setSelectedJobId(null);
         }}
+        readOnly={!canWriteJobs}
       />
     </main>
   );

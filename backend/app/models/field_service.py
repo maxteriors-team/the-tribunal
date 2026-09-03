@@ -388,6 +388,10 @@ class Technician(Base, WorkspaceScoped):
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
     )
+    # Highest Lighting League level whose celebration this technician dismissed.
+    scoreboard_level_seen: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False

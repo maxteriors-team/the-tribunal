@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import {
   useAssignTechnicians,
@@ -91,6 +92,8 @@ export function JobDetailDialog({
   const canEditPricing = !readOnly && can("billing:write");
   const [start, setStart] = useState(() => isoToLocalInput(job?.scheduled_start ?? null));
   const [end, setEnd] = useState(() => isoToLocalInput(job?.scheduled_end ?? null));
+  const [jobTitle, setJobTitle] = useState(job?.title ?? "");
+  const [jobNotes, setJobNotes] = useState(job?.description ?? "");
   const [selectedTechs, setSelectedTechs] = useState<string[]>(() =>
     (job?.technicians ?? []).map((tech) => tech.id),
   );
@@ -124,6 +127,9 @@ export function JobDetailDialog({
   // fixed `grid-cols-2` would leave a third trigger overflowing its row.
   const showNeighbors = job.status === "completed";
   const windowError = jobWindowError(start, end);
+  const normalizedTitle = jobTitle.trim();
+  const normalizedNotes = jobNotes.trim();
+  const briefDirty = normalizedTitle !== job.title || normalizedNotes !== (job.description ?? "");
   // The customer's name, never the raw `contact_id`: a technician can't resolve
   // a database id, and the API now embeds the name for exactly this reason.
   const subtitle =
@@ -155,6 +161,24 @@ export function JobDetailDialog({
       {
         onSuccess: () => toast.success("Job scheduled"),
         onError: () => toast.error("Failed to schedule job"),
+      },
+    );
+  };
+
+  const handleSaveBrief = () => {
+    if (!normalizedTitle || !briefDirty) return;
+    updateJob.mutate(
+      {
+        jobId: job.id,
+        body: { title: normalizedTitle, description: normalizedNotes || null },
+      },
+      {
+        onSuccess: () => {
+          setJobTitle(normalizedTitle);
+          setJobNotes(normalizedNotes);
+          toast.success("Job details updated");
+        },
+        onError: () => toast.error("Failed to update job details"),
       },
     );
   };
@@ -256,10 +280,56 @@ export function JobDetailDialog({
               {showNeighbors && <TabsTrigger value="neighbors">Neighbors</TabsTrigger>}
             </TabsList>
             <TabsContent value="details" className="space-y-5 pt-2">
-              {/* Site, customer, access notes and scope: the technician's "what am I
-              doing and where", and useful to dispatch too. */}
-              <JobBrief job={job} />
-              <HandoffImages mode="job" workspaceId={workspaceId} jobId={job.id} />
+              {!readOnly ? (
+                <section aria-labelledby="job-brief-editor-heading" className="space-y-3 rounded-lg border p-3">
+                  <h3 id="job-brief-editor-heading" className="text-sm font-medium">
+                    Job brief
+                  </h3>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="job-detail-title">Title</Label>
+                    <Input
+                      id="job-detail-title"
+                      value={jobTitle}
+                      maxLength={200}
+                      onChange={(event) => setJobTitle(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="job-detail-notes">Job notes</Label>
+                    <Textarea
+                      id="job-detail-notes"
+                      value={jobNotes}
+                      maxLength={5000}
+                      aria-describedby="job-detail-notes-count"
+                      className="min-h-24"
+                      onChange={(event) => setJobNotes(event.target.value)}
+                    />
+                    <div className="flex items-center justify-between gap-3">
+                      <span id="job-detail-notes-count" className="text-xs text-muted-foreground">
+                        {jobNotes.length}/5000
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!briefDirty || !normalizedTitle || busy}
+                        onClick={handleSaveBrief}
+                      >
+                        {updateJob.isPending ? (
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                        ) : null}
+                        Save job details
+                      </Button>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+              {/* Site, customer, access notes and price-free scope stay readable to both roles. */}
+              <JobBrief job={job} showNotes={readOnly} />
+              <HandoffImages
+                mode={readOnly ? "technician-read" : "job-edit"}
+                workspaceId={workspaceId}
+                jobId={job.id}
+              />
 
               {readOnly ? (
                 <div className="space-y-1.5">

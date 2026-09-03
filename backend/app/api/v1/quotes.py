@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import load_only
 
 from app.api.deps import (
@@ -24,8 +24,13 @@ from app.api.deps import (
     CanWriteQuotes,
     CurrentUser,
 )
+from app.api.handoff_images import (
+    count_handoff_images,
+    lock_handoff_image_collection,
+    read_handoff_image_upload,
+)
 from app.api.service_errors import ServiceErrorRoute
-from app.api.v1.contact_attachments import content_disposition, sanitize_filename
+from app.api.v1.contact_attachments import content_disposition
 from app.core.permissions import Capability, quote_owner_scope, role_can
 from app.models.quote import Quote
 from app.models.quote_handoff_image import (
@@ -127,17 +132,6 @@ _HANDOFF_IMAGE_METADATA_COLUMNS = (
     QuoteHandoffImage.size_bytes,
     QuoteHandoffImage.created_at,
 )
-
-
-def _detect_handoff_image_type(data: bytes) -> str | None:
-    """Return the canonical MIME type for supported image signatures."""
-    if data.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if data.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP":
-        return "image/webp"
-    return None
 
 
 @router.get("", response_model=PaginatedQuotes)
@@ -242,60 +236,31 @@ async def upload_quote_handoff_image(
     _gate: CanWriteQuotes,
 ) -> HandoffImageResponse:
     """Store one validated handoff image for the authorized quote."""
-    data = await file.read(MAX_HANDOFF_IMAGE_BYTES + 1)
-    if not data:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Uploaded image is empty",
-        )
-    if len(data) > MAX_HANDOFF_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail=f"Image exceeds the {MAX_HANDOFF_IMAGE_BYTES // (1024 * 1024)} MB limit",
-        )
+    filename, content_type, data = await read_handoff_image_upload(file)
 
-    detected_type = _detect_handoff_image_type(data)
-    if detected_type is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Use a JPEG, PNG, or WebP image",
-        )
-    if (file.content_type or "").lower() != detected_type:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Declared image type does not match file contents",
-        )
-
-    locked_quote_id = (
-        await db.execute(
-            select(Quote.id)
-            .where(
-                Quote.id == _quote.id,
-                Quote.workspace_id == _quote.workspace_id,
-            )
-            .with_for_update()
-        )
-    ).scalar_one_or_none()
-    if locked_quote_id is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quote not found")
-
-    image_count = await db.scalar(
-        select(func.count(QuoteHandoffImage.id)).where(
-            QuoteHandoffImage.workspace_id == _quote.workspace_id,
-            QuoteHandoffImage.quote_id == _quote.id,
-        )
+    locked_quote_id, linked_job_id = await lock_handoff_image_collection(
+        db, _quote.workspace_id, quote_id=_quote.id
     )
-    if (image_count or 0) >= MAX_HANDOFF_IMAGES_PER_QUOTE:
+    image_count = await count_handoff_images(
+        db,
+        _quote.workspace_id,
+        quote_id=locked_quote_id,
+        job_id=linked_job_id,
+    )
+    if image_count >= MAX_HANDOFF_IMAGES_PER_QUOTE:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"A quote can have at most {MAX_HANDOFF_IMAGES_PER_QUOTE} handoff images",
+            detail=(
+                f"A quote and its job can have at most {MAX_HANDOFF_IMAGES_PER_QUOTE} "
+                "handoff images"
+            ),
         )
 
     image = QuoteHandoffImage(
         workspace_id=_quote.workspace_id,
         quote_id=_quote.id,
-        filename=sanitize_filename(file.filename),
-        content_type=detected_type,
+        filename=filename,
+        content_type=content_type,
         size_bytes=len(data),
         data=data,
         uploaded_by_user_id=current_user.id,

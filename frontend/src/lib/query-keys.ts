@@ -539,6 +539,11 @@ export const queryKeys = {
     technicians: (workspaceId: string, params?: QueryKeyParams | null) =>
       ["scorecard", workspaceId, "technicians", normalizeQueryKeyParams(params)] as const,
   },
+  technicianScoreboard: {
+    all: (workspaceId: string) => ["technician-scoreboard", workspaceId] as const,
+    detail: (workspaceId: string, technicianId: string) =>
+      ["technician-scoreboard", workspaceId, "technicians", technicianId] as const,
+  },
   scraping: createResourceQueryKeys("scraping"),
   segments: {
     ...segments,

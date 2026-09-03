@@ -79,6 +79,7 @@ from app.services.field_service.neighbor_outreach import NeighborOutreachService
 from app.services.jobs.system_tags import completed_install_tags
 from app.services.lighting_projects.images import resolve_document_images
 from app.services.tags import TagService
+from app.services.technician_scoreboard import TechnicianScoreboardService
 
 # Job lifecycle states that drive an automation event when first entered.
 _STATUS_EVENTS: dict[JobStatus, str] = {
@@ -922,6 +923,10 @@ class JobService:
         if prior_status is not None and JobStatus(prior_status) == new_status:
             return
 
+        old_status = JobStatus(prior_status) if prior_status is not None else None
+        if JobStatus.COMPLETED in (new_status, old_status):
+            await TechnicianScoreboardService(self.db).sync_job_awards(job)
+
         installed_system_tags: tuple[str, ...] = ()
         if new_status == JobStatus.COMPLETED:
             completed_at = datetime.now(UTC)
@@ -1160,4 +1165,5 @@ class JobService:
         from app.services.inventory.job_allocations import JobAllocationService
 
         await JobAllocationService(self.db).assert_job_deletable(workspace_id, job_id)
+        await TechnicianScoreboardService(self.db).revoke_job_awards(job)
         await self.db.delete(job)
