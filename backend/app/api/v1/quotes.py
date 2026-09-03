@@ -19,6 +19,7 @@ from sqlalchemy.orm import load_only
 
 from app.api.deps import (
     DB,
+    CanReadBilling,
     CanReadQuotes,
     CanWriteBilling,
     CanWriteQuotes,
@@ -66,6 +67,8 @@ from app.schemas.proposal_wizard import ProposalDocument, ProposalWizardPayload
 from app.schemas.quote import (
     CrewNotificationResult,
     PaginatedQuotes,
+    PermanentProfitabilityResponse,
+    QuoteApproveRequest,
     QuoteAssignmentRequest,
     QuoteConvertRequest,
     QuoteConvertResponse,
@@ -189,6 +192,22 @@ async def get_quote(
     """Get a specific quote with its line items."""
     service = QuoteService(db)
     return await service.get_quote(workspace_id, quote_id)
+
+
+@router.get(
+    "/{quote_id}/permanent-profitability",
+    response_model=PermanentProfitabilityResponse | None,
+)
+async def get_permanent_profitability(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    _quote: ScopedQuote,
+    current_user: CurrentUser,
+    db: DB,
+    _billing: CanReadBilling,
+) -> PermanentProfitabilityResponse | None:
+    """Return private Permanent economics only to billing readers in quote scope."""
+    return await QuoteService(db).get_permanent_profitability(workspace_id, quote_id)
 
 
 @router.get("/{quote_id}/handoff-images", response_model=HandoffImageListResponse)
@@ -440,10 +459,15 @@ async def approve_quote(
     current_user: CurrentUser,
     db: DB,
     membership: CanWriteQuotes,
+    payload: QuoteApproveRequest | None = None,
 ) -> QuoteDetailResponse:
-    """Operator approves a quote on the customer's behalf."""
+    """Operator approves, selecting a method when Permanent terms require one."""
     service = QuoteService(db)
-    return await service.approve_quote(workspace_id, quote_id)
+    return await service.approve_quote(
+        workspace_id,
+        quote_id,
+        payment_option=payload.payment_option if payload else None,
+    )
 
 
 @router.post("/{quote_id}/decline", response_model=QuoteDetailResponse)
@@ -783,8 +807,8 @@ async def convert_estimate_to_quote(
     """Create a draft quote from a measured roofline estimate.
 
     Prices the chosen permanent or seasonal side server-side and turns each
-    grossed component into a quote line — the estimator's core "design → quote"
-    step. Returns the created draft quote.
+    direct-price component into a quote line — the estimator's core
+    "design → quote" step. Returns the created draft quote.
     """
     service = QuoteService(db)
     return await service.create_quote_from_estimate(
@@ -937,6 +961,7 @@ async def approve_public_proposal(
         token,
         proposal_version=payload.proposal_version,
         selected_tier=payload.selected_tier,
+        payment_option=payload.payment_option,
     )
 
 

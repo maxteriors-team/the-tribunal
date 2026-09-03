@@ -59,8 +59,10 @@ export interface ProposalCarePlanView {
 export interface ProposalFinancingView {
   enabled: boolean;
   provider: string;
+  plan_number: string | null;
   terms: number[];
   default_term: number;
+  apr: number;
   max_amount: number;
   headline: string | null;
   body: string | null;
@@ -176,8 +178,10 @@ export function normalizeProposalDocument(doc: ProposalDocument): ProposalDoc {
       ? {
           enabled: doc.financing.enabled,
           provider: doc.financing.provider,
+          plan_number: doc.financing.plan_number ?? null,
           terms: doc.financing.terms ?? [],
           default_term: doc.financing.default_term,
+          apr: doc.financing.apr ?? 0,
           max_amount: doc.financing.max_amount,
           headline: doc.financing.headline ?? null,
           body: doc.financing.body ?? null,

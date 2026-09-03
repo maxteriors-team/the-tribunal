@@ -1,9 +1,7 @@
-"""Unit tests for the ported sales-proposal pricing math.
+"""Pure unit coverage for proposal selling prices and Permanent economics.
 
-Pure (no DB / no marker, so they run in the default suite). Expected values are
-computed from the uploaded landscape-lighting wizard's JavaScript so any drift in
-the Python port is caught: grossing buffer, cash discount, commission, 0% APR
-monthly, Care Plan price/savings, bistro strand fill, and tax.
+Configured catalog amounts are customer prices. Legacy financing/commission settings
+remain parseable but may not gross up any service or create payment presentation.
 """
 
 from __future__ import annotations
@@ -14,7 +12,6 @@ from decimal import Decimal
 import pytest
 
 from app.schemas.pricing import (
-    DEFAULT_FINANCING_DISCLAIMER,
     BistroConfig,
     BistroInstallationConfig,
     BistroProduct,
@@ -101,169 +98,85 @@ def _landscape_config(**overrides) -> PricingSettings:
 
 
 # --------------------------------------------------------------------------- #
-# Buffer + gross-up
+# One-price policy and Permanent-only financing
 # --------------------------------------------------------------------------- #
-def test_price_buffer_is_fee_buffer_when_commission_out_of_price():
-    cfg = _landscape_config()
-    assert pp.price_buffer(cfg) == Decimal("0.11")
-
-
-def test_price_buffer_adds_commission_when_baked_in():
-    cfg = _landscape_config(commission=CommissionConfig(enabled=True, rate=0.12, in_price=True))
-    assert pp.price_buffer(cfg) == Decimal("0.23")
-
-
-def test_gross_up_price_rounds_to_whole_dollar():
-    cfg = _landscape_config()
-    # 2266 / (1 - 0.11) = 2546.06... -> 2546
-    assert pp.gross_up_price(2266, cfg) == Decimal("2546")
-
-
-def test_gross_up_price_identity_when_no_buffer():
-    cfg = _landscape_config(
-        financing=FinancingConfig(enabled=False, fee_buffer=0.0),
-        commission=CommissionConfig(enabled=False, rate=0.0, in_price=False),
+def test_legacy_buffers_never_change_the_configured_selling_price():
+    baked_in = _landscape_config(
+        commission=CommissionConfig(enabled=True, rate=0.12, in_price=True)
     )
-    assert pp.gross_up_price(500, cfg) == Decimal("500")
+    disabled = _landscape_config(financing=FinancingConfig(enabled=False, fee_buffer=0.11))
+
+    for config in (_landscape_config(), baked_in, disabled):
+        assert pp.commission_in_price(config) is False
+        assert pp.price_buffer(config) == 0
+        assert pp.gross_up_price(Decimal("2266.25"), config) == Decimal("2266.25")
+        assert pp.cash_discount_rate(config) == 0
+        assert pp.cash_price(Decimal("2266.25"), config) == Decimal("2266.25")
+        assert pp.cash_savings(Decimal("2266.25"), config) == 0
+        assert pp.commission_amount(Decimal("2266.25"), config) == 0
 
 
-def test_disabling_financing_also_removes_the_price_buffer():
-    """``financing.enabled`` gates the fee buffer, not just the financing offer.
-
-    This is a trap worth stating out loud: we do **not** offer financing to
-    clients any more, but that was removed in the proposal UI, deliberately, and
-    the buffer was kept. Flipping this flag off to "turn financing off" instead
-    would silently cut every sticker price by the buffer — giving away the margin
-    the buffer exists to protect.
-
-    If the buffer should ever apply independently of the financing offer, that is
-    a pricing decision: decouple it on purpose and update this test.
-    """
-    on = _landscape_config()
-    off = _landscape_config(financing=FinancingConfig(enabled=False, fee_buffer=0.11))
-
-    assert pp.price_buffer(on) == Decimal("0.11")
-    assert pp.price_buffer(off) == Decimal("0")
-    # Same net cost, ~11% less revenue — the whole point of the warning.
-    assert pp.gross_up_price(2266, on) == Decimal("2546")
-    assert pp.gross_up_price(2266, off) == Decimal("2266")
+def test_legacy_global_financing_presentation_is_disabled():
+    config = _landscape_config()
+    assert pp.financing_is_offered(config) is False
+    assert pp.financing_is_eligible(9000, {"landscape": 9000}, config) is False
+    assert pp.financing_estimate(9000, {"landscape": 9000}, config) is None
 
 
-# --------------------------------------------------------------------------- #
-# Cash / commission
-# --------------------------------------------------------------------------- #
-def test_cash_discount_rate_backs_out_fee_keeps_reserve():
-    cfg = _landscape_config()
-    # 1 - (1.03 * 0.89 / 1) = 0.0833
-    assert pp.cash_discount_rate(cfg) == Decimal("0.0833")
+def test_amortized_monthly_payment_handles_zero_and_nonzero_apr():
+    assert pp.amortized_monthly_payment(5200, apr=0, term_months=24) == Decimal("216.67")
+    assert pp.amortized_monthly_payment(10000, apr=0.12, term_months=24) == Decimal("470.73")
+    with pytest.raises(ValueError, match="at least one month"):
+        pp.amortized_monthly_payment(5200, apr=0, term_months=0)
 
 
-def test_cash_price_and_savings():
-    cfg = _landscape_config()
-    # 10000 * (1 - 0.0833) = 9167
-    assert pp.cash_price(10000, cfg) == Decimal("9167")
-    assert pp.cash_savings(10000, cfg) == Decimal("833")
+def test_permanent_financing_estimate_uses_nested_green_sky_terms():
+    config = _permanent_config()
+    estimate = pp.permanent_financing_estimate(5200, config)
+
+    assert estimate is not None
+    assert estimate.provider == "GreenSky"
+    assert estimate.plan_number == "6124"
+    assert estimate.default_term == 24
+    assert estimate.apr == 0
+    assert estimate.monthly_payment == 216.67
+    assert "Subject to credit approval" in estimate.disclaimer
 
 
-def test_commission_amount():
-    cfg = _landscape_config()
-    assert pp.commission_amount(9167, cfg) == Decimal("1100")
-
-
-def test_commission_zero_when_disabled():
-    cfg = _landscape_config(commission=CommissionConfig(enabled=False, rate=0.12))
-    assert pp.commission_amount(9167, cfg) == Decimal("0")
-
-
-# --------------------------------------------------------------------------- #
-# Financing
-# --------------------------------------------------------------------------- #
-def test_monthly_payment_zero_apr_is_total_over_term():
-    cfg = _landscape_config()
-    assert pp.monthly_payment(10000, cfg, term=24) == Decimal("416.67")
-    assert pp.monthly_payment(12000, cfg, term=12) == Decimal("1000.00")
-
-
-def test_monthly_payment_zero_over_cap_or_disabled():
-    cfg = _landscape_config()
-    assert pp.monthly_payment(30000, cfg) == Decimal("0")
-    off = _landscape_config(financing=FinancingConfig(enabled=False))
-    assert pp.monthly_payment(5000, off) == Decimal("0")
-
-
-def test_monthly_payment_with_apr():
-    cfg = _landscape_config(
-        financing=FinancingConfig(
-            enabled=True,
-            max_amount=25000,
-            terms=[24],
-            default_term=24,
-            apr=0.12,
-            fee_buffer=0.11,
-        )
+def test_permanent_profitability_keeps_one_price_and_rounds_money():
+    cash = pp.permanent_profitability(
+        5200,
+        material_cogs=1000,
+        merchant_fee_rate=0.1525,
+        sales_commission_rate=0.07,
+        financed=False,
     )
-    # r = .01/mo, 24 mo, 10000 -> ~470.73
-    assert pp.monthly_payment(10000, cfg, term=24) == Decimal("470.73")
-
-
-def test_financing_eligibility_uses_each_category_subtotal_and_minimum():
-    cfg = _landscape_config(
-        financing=FinancingConfig(
-            category_minimums={"roof": 1000, "gutters": 1000},
-            disclaimer=None,
-        )
+    financed = pp.permanent_profitability(
+        5200,
+        material_cogs=1000,
+        merchant_fee_rate=0.1525,
+        sales_commission_rate=0.07,
+        financed=True,
     )
 
-    roof = pp.financing_estimate(9000, {"roof": 9000}, cfg)
-    assert roof is not None
-    assert roof.monthly_payment == 375.0
-    assert roof.disclaimer == DEFAULT_FINANCING_DISCLAIMER
-
-    assert pp.financing_estimate(400, {"gutters": 400}, cfg) is None
-    assert pp.financing_estimate(400, {"roof": 9000}, cfg) is None
-    # A large uncategorized amount cannot make a $400 gutter line qualify.
-    assert pp.financing_estimate(9400, {"gutters": 400, "other": 9000}, cfg) is None
-    assert pp.financing_estimate(9000, {"unknown": 9000}, cfg) is None
+    assert cash.contract_price == financed.contract_price == Decimal("5200.00")
+    assert cash.merchant_fee == Decimal("0.00")
+    assert financed.merchant_fee == Decimal("793.00")
+    assert cash.sales_commission == financed.sales_commission == Decimal("364.00")
+    assert cash.contribution_before_labor == Decimal("3836.00")
+    assert financed.contribution_before_labor == Decimal("3043.00")
 
 
-def test_category_presentation_gate_never_changes_fee_buffer_or_cash_reversal():
-    cfg = _landscape_config(
-        financing=FinancingConfig(
-            enabled=True,
-            fee_buffer=0.11,
-            category_minimums={},
-        )
-    )
+def test_price_tier_contains_only_direct_selling_price_fields():
+    tier = pp.price_tier(base=10000, additional=500, config=_landscape_config())
 
-    assert pp.financing_is_eligible(10000, {"landscape": 10000}, cfg) is False
-    assert pp.gross_up_price(2266, cfg) == Decimal("2546")
-    assert pp.cash_price(10000, cfg) == Decimal("9167")
-
-
-def test_landscape_financing_pricing_bytes_are_unchanged():
-    """Lock the pre-generalization landscape financing payload byte-for-byte."""
-    actual = pp.price_tier(base=10000, additional=0, config=_landscape_config())
-
-    assert actual.model_dump_json().encode() == (
-        b'{"base":10000.0,"additional":0.0,"financed_total":10000.0,'
-        b'"cash_total":9167.0,"cash_savings":833.0,"monthly_payment":416.67,'
-        b'"monthly_by_term":{"6":1666.67,"12":833.33,"24":416.67},'
-        b'"commission_financed":1200.0,"commission_cash":1100.0}'
-    )
-
-
-# --------------------------------------------------------------------------- #
-# Tier aggregate
-# --------------------------------------------------------------------------- #
-def test_price_tier_combines_financed_cash_commission():
-    cfg = _landscape_config()
-    tier = pp.price_tier(base=10000, additional=0, config=cfg)
-    assert tier.financed_total == 10000
-    assert tier.cash_total == 9167
-    assert tier.monthly_payment == pytest.approx(416.67)
-    assert set(tier.monthly_by_term) == {6, 12, 24}
-    assert tier.commission_financed == 1200
-    assert tier.commission_cash == 1100
+    assert tier.financed_total == 10500
+    assert tier.cash_total == 10500
+    assert tier.cash_savings == 0
+    assert tier.monthly_payment == 0
+    assert tier.monthly_by_term == {}
+    assert tier.commission_financed == 0
+    assert tier.commission_cash == 0
 
 
 def test_price_tier_additional_only_added_when_base_positive():
@@ -303,12 +216,11 @@ def test_price_care_plan_returns_all_tiers():
 def test_bistro_color_applies_minimum():
     cfg = _landscape_config()
     result = pp.price_bistro(cfg, product="color", tier_key="easy", feet=100)
-    # 100ft -> two 50ft strands; lights 100*14.86=1486 -> gross 1670; hw 577 -> 648
-    # raw 2318 < gross minimum(2307->2592) -> total 2592
+    # 100ft -> two 50ft strands; direct total falls below the configured minimum.
     assert result.ordered_ft == 100
-    assert result.lights_cost == 1670
-    assert result.hardware == 648
-    assert result.total == 2592
+    assert result.lights_cost == 1486
+    assert result.hardware == 577
+    assert result.total == 2307
     assert result.min_applied is True
 
 
@@ -323,9 +235,9 @@ def test_bistro_color_strand_fill_tops_up_gap():
 def test_bistro_classic_enforces_min_footage():
     cfg = _landscape_config()
     result = pp.price_bistro(cfg, product="classic", tier_key="easy", feet=100)
-    # min footage 200 applied; 200*11.63=2326 -> gross 2613; +hw 35->39 = 2652
+    # Minimum footage applies, while each configured amount remains a direct price.
     assert result.ordered_ft == 200
-    assert result.total == 2652
+    assert result.total == 2361
 
 
 def test_bistro_zero_feet_is_empty():
@@ -364,9 +276,9 @@ def test_bistro_temporary_run_prices_lights_and_poles_separately():
 
     assert result.pricing_mode == "installation"
     assert result.feet == 100
-    assert result.lights_cost == 1124
-    assert result.poles_cost == 1348
-    assert result.total == 2472
+    assert result.lights_cost == 1000
+    assert result.poles_cost == 1200
+    assert result.total == 2200
     assert result.installations[0].installation == "temporary"
     assert result.installations[0].pole_count == 3
     assert result.installations[0].poles_each == 400
@@ -377,9 +289,9 @@ def test_bistro_permanent_run_uses_permanent_rates():
         _measured_bistro_config(), {"permanent": 80}, {"permanent": 4}
     )
 
-    assert result.lights_cost == 1798
-    assert result.poles_cost == 1573
-    assert result.total == 3371
+    assert result.lights_cost == 1600
+    assert result.poles_cost == 1400
+    assert result.total == 3000
     assert result.installations[0].installation == "permanent"
     assert result.installations[0].pole_count == 4
 
@@ -392,11 +304,11 @@ def test_bistro_mixed_runs_apply_one_minimum_after_all_components():
     )
 
     assert [row.installation for row in result.installations] == ["temporary", "permanent"]
-    assert result.lights_cost == 2248
-    assert result.poles_cost == 1686
-    assert result.raw_total == 3934
-    assert result.minimum == 4494
-    assert result.total == 4494
+    assert result.lights_cost == 2000
+    assert result.poles_cost == 1500
+    assert result.raw_total == 3500
+    assert result.minimum == 4000
+    assert result.total == 4000
     assert result.min_applied is True
 
 
@@ -458,11 +370,11 @@ def test_permanent_rounds_165_feet_up_to_200_foot_kit():
     assert result.package_feet == 200
     assert result.package_cogs == 2099
     assert result.markup == 3
-    # $2,099 COGS × 3, then grossed up for the configured 11% fee buffer.
-    assert result.raw_total == 7075
-    assert result.total == 7075
+    # $2,099 COGS × 3 is the actual selling price; no fee is passed through.
+    assert result.raw_total == 6297
+    assert result.total == 6297
     assert result.min_applied is False
-    assert sum(line.line_total for line in result.lines) == 7075
+    assert sum(line.line_total for line in result.lines) == 6297
 
 
 def test_permanent_complexity_selects_configured_multiplier():
@@ -473,7 +385,7 @@ def test_permanent_complexity_selects_configured_multiplier():
     complex_job = pp.price_permanent(config, feet=100, complexity="complex")
 
     assert (easy.markup, standard.markup, complex_job.markup) == (2.5, 3, 3.5)
-    assert (easy.raw_total, standard.raw_total, complex_job.raw_total) == (3508, 4210, 4912)
+    assert (easy.raw_total, standard.raw_total, complex_job.raw_total) == (3122.5, 3747, 4371.5)
 
 
 def test_permanent_complexity_preserves_configured_multiplier_identity():
@@ -527,16 +439,16 @@ def test_permanent_weights_markup_by_measured_run_footage():
 
     assert result.package_feet == 100
     assert result.markup == 2.75
-    # $1,249 COGS × weighted 2.75 multiplier, then the configured fee buffer.
-    assert result.raw_total == 3859
+    # $1,249 COGS × weighted 2.75 multiplier is sold directly.
+    assert result.raw_total == 3434.75
 
 
 def test_permanent_applies_minimum():
     result = pp.price_permanent(_permanent_config(minimum=5000), feet=100)
 
-    # $1,249 COGS × 3 grosses to $4,210; the $5,000 net floor grosses to $5,618.
-    assert result.raw_total == 4210
-    assert result.total == 5618
+    # The direct $3,747 package price is raised only to the configured $5,000 floor.
+    assert result.raw_total == 3747
+    assert result.total == 5000
     assert result.min_applied is True
 
 
@@ -608,33 +520,30 @@ def test_christmas_prices_roofline_decor_takedown_and_storage():
         takedown=True,
         storage=True,
     )
-    # roofline 900 -> 1011; trees 2*260 & 1*520 each 520 -> 584 each = 1168;
-    # bushes 4*35=140 -> 157; wreaths 2*85=170 -> 191;
-    # takedown 0.25*(900+1040+140+170=2250)=562.5 -> 632; storage 200 -> 225.
-    assert r.roofline_cost == 1011
+    # Every configured amount is direct; takedown remains 25% of selected work.
+    assert r.roofline_cost == 900
     costs = {i.key: i.cost for i in r.items}
-    assert costs["trees"] == 1168
-    assert costs["bushes"] == 157
-    assert costs["wreaths"] == 191
+    assert costs["trees"] == 1040
+    assert costs["bushes"] == 140
+    assert costs["wreaths"] == 170
     # Categories with no selection are absent from the breakdown.
     assert "garland" not in costs
-    assert r.takedown_cost == 632
-    assert r.storage_cost == 225
-    assert r.raw_total == 3384
-    assert r.total == 3384
-    assert sum(line.line_total for line in r.lines) == 3384
+    assert r.takedown_cost == 562.5
+    assert r.storage_cost == 200
+    assert r.raw_total == 3012.5
+    assert r.total == 3012.5
+    assert sum(line.line_total for line in r.lines) == 3012.5
 
 
 def test_christmas_prices_garland_per_linear_foot():
     cfg = _christmas_config()
-    # Garland is per_ft: 80 ft * $8 = $640 net -> grossed. Folds into takedown base.
+    # Garland is per_ft: 80 ft * $8 = a direct $640 price.
     r = pp.price_christmas(cfg, roofline_feet=0, items={"garland": {"standard": 80}})
     costs = {i.key: i.cost for i in r.items}
     garland = next(i for i in r.items if i.key == "garland")
     assert garland.unit == "per_ft"
-    # 640 net grossed at 0.11 buffer -> round(640 / 0.89) = 719.
-    assert costs["garland"] == 719
-    assert r.total == 719
+    assert costs["garland"] == 640
+    assert r.total == 640
     assert any("ft Garland" in line.label for line in r.lines)
 
 
@@ -675,21 +584,20 @@ def test_christmas_prices_multi_product_payload_with_mini_lights():
             "wreaths": {"36in": 1},
         },
     )
-    # buffer 0.11 -> gross = round_half_up(net / 0.89):
-    # roofline 600 -> 674; mini 300 -> 337; trees 240 -> 270; wreaths 85 -> 96.
-    assert r.roofline_cost == 674
+    # Roofline and decor retain their configured direct selling prices.
+    assert r.roofline_cost == 600
     costs = {i.key: i.cost for i in r.items}
-    assert costs["mini_lights"] == 337
+    assert costs["mini_lights"] == 300
     mini = next(i for i in r.items if i.key == "mini_lights")
     assert mini.unit == "per_ft"
-    assert costs["trees"] == 270
-    assert costs["wreaths"] == 96
+    assert costs["trees"] == 240
+    assert costs["wreaths"] == 85
     # Unselected categories stay out of the breakdown.
     assert "bushes" not in costs
     assert "garland" not in costs
-    assert r.raw_total == 1377
-    assert r.total == 1377
-    assert sum(line.line_total for line in r.lines) == 1377
+    assert r.raw_total == 1225
+    assert r.total == 1225
+    assert sum(line.line_total for line in r.lines) == 1225
 
 
 def test_christmas_ignores_unknown_and_zero_counts():
@@ -709,9 +617,9 @@ def test_christmas_ignores_unknown_and_zero_counts():
 def test_christmas_takedown_requires_config_enabled():
     cfg = _christmas_config(takedown_enabled=False)
     r = pp.price_christmas(cfg, items={"trees": {"small": 1}}, takedown=True)
-    # 120 -> gross 135; no takedown line because config disables it.
+    # The direct $120 item remains unchanged; disabled takedown adds nothing.
     assert r.takedown_cost == 0
-    assert r.total == 135
+    assert r.total == 120
 
 
 def test_christmas_legacy_rate_lists_upgrade_and_price_identically():
@@ -734,11 +642,10 @@ def test_christmas_legacy_rate_lists_upgrade_and_price_identically():
         items={"trees": {"medium": 1}, "bushes": {"small": 2}, "wreaths": {"standard": 1}},
     )
     costs = {i.key: i.cost for i in r.items}
-    # trees 260 -> 292; bushes 2*35=70 -> 79; wreaths 85 -> 96; roofline 600 -> 674.
-    assert costs["trees"] == 292
-    assert costs["bushes"] == 79
-    assert costs["wreaths"] == 96
-    assert r.roofline_cost == 674
+    assert costs["trees"] == 260
+    assert costs["bushes"] == 70
+    assert costs["wreaths"] == 85
+    assert r.roofline_cost == 600
 
 
 # --------------------------------------------------------------------------- #
@@ -793,10 +700,10 @@ def test_christmas_package_scopes_decor_and_roofline_to_coverage():
     assert essential.roofline_cost == 0
     assert {i.key for i in essential.items} == {"trees", "bushes"}
     # Middle adds the roofline but still no wreaths/garland.
-    assert middle.roofline_cost == 1011
+    assert middle.roofline_cost == 900
     assert {i.key for i in middle.items} == {"trees", "bushes"}
     # Premier is the full display: roofline + every decor category.
-    assert premier.roofline_cost == 1011
+    assert premier.roofline_cost == 900
     assert {i.key for i in premier.items} == {"trees", "bushes", "wreaths", "garland"}
 
 
@@ -805,7 +712,7 @@ def test_christmas_packages_are_monotonic_good_better_best():
     pkgs = pp.price_christmas_packages(cfg, roofline_feet=150, items=_PACKAGE_ITEMS)
     totals = [p.pricing.total for p in pkgs]
     # Each higher tier is a superset of coverage, so totals never decrease.
-    assert totals == [1325, 2336, 3246]
+    assert totals == [1180, 2080, 2890]
     assert totals[0] <= totals[1] <= totals[2]
 
 
@@ -823,10 +730,10 @@ def test_christmas_packages_follow_package_order_and_carry_copy():
 def test_christmas_package_applies_job_minimum_per_package():
     cfg = _christmas_packages_config(minimum=5000)
     pkgs = pp.price_christmas_packages(cfg, roofline_feet=150, items=_PACKAGE_ITEMS)
-    # The grossed job minimum (5000 -> 5618) floors every package independently.
+    # The direct job minimum floors every package independently.
     for p in pkgs:
         assert p.pricing.min_applied is True
-        assert p.pricing.total == 5618
+        assert p.pricing.total == 5000
 
 
 def test_price_christmas_package_direct_excludes_uncovered_selection():

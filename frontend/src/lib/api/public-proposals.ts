@@ -4,6 +4,7 @@ import type {
   PublicProposalActionResult,
   PublicProposalDepositCheckout,
   PublicProposalDepositStatus,
+  QuotePaymentOption,
 } from "@/types/proposal";
 
 // Public client proposal API (no auth required — keyed on the share token).
@@ -16,13 +17,15 @@ export const publicProposalsApi = {
    * package; the server still re-derives every line and amount.
    */
   approve: (
-    token: string,
+    token: PublicProposal["token"],
     proposalVersion: number,
     selectedTier?: string | null,
+    paymentOption?: QuotePaymentOption | null,
   ): Promise<PublicProposalActionResult> =>
     apiPost<PublicProposalActionResult>(`/api/v1/p/quotes/${token}/approve`, {
       proposal_version: proposalVersion,
       selected_tier: selectedTier ?? null,
+      payment_option: paymentOption ?? null,
     }),
 
   /**
@@ -43,10 +46,7 @@ export const publicProposalsApi = {
     }
   },
 
-  decline: (
-    token: string,
-    reason?: string,
-  ): Promise<PublicProposalActionResult> =>
+  decline: (token: string, reason?: string): Promise<PublicProposalActionResult> =>
     apiPost<PublicProposalActionResult>(`/api/v1/p/quotes/${token}/decline`, {
       reason,
     }),
@@ -54,14 +54,10 @@ export const publicProposalsApi = {
   // Start a Stripe Checkout Session for the proposal's deposit; returns the
   // hosted payment URL for the page to redirect to.
   depositCheckout: (token: string): Promise<PublicProposalDepositCheckout> =>
-    apiPost<PublicProposalDepositCheckout>(
-      `/api/v1/p/quotes/${token}/deposit-checkout`,
-    ),
+    apiPost<PublicProposalDepositCheckout>(`/api/v1/p/quotes/${token}/deposit-checkout`),
 
   // Reconcile the deposit against Stripe on return from checkout (webhook
   // backstop). Marks paid if Stripe confirms it; safe to call repeatedly.
   depositStatus: (token: string): Promise<PublicProposalDepositStatus> =>
-    apiPost<PublicProposalDepositStatus>(
-      `/api/v1/p/quotes/${token}/deposit-status`,
-    ),
+    apiPost<PublicProposalDepositStatus>(`/api/v1/p/quotes/${token}/deposit-status`),
 };

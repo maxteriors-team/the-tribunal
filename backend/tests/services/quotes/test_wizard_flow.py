@@ -38,7 +38,7 @@ from app.schemas.proposal_wizard import (
     WizardPermanentSelection,
 )
 from app.schemas.quote import QuoteUpdate
-from app.services.exceptions import ConflictError
+from app.services.exceptions import ConflictError, ValidationError
 from app.services.quotes import QuoteService
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -52,8 +52,8 @@ async def _fresh_engine_pool() -> AsyncIterator[None]:
     await engine.dispose()
 
 
-# Minimal two-tier lighting config: 11% finance buffer + 3% cash reserve,
-# commission out of margin — the exact defaults the uploaded wizard shipped.
+# Minimal two-tier config with legacy global buffers retained to prove they do not
+# alter direct prices or expose financing on non-Permanent proposals.
 PRICING = {
     "financing": {
         "enabled": True,
@@ -227,19 +227,19 @@ async def test_preview_computes_document_from_config_and_catalog() -> None:
         assert doc.headline_tier == "best"  # highest base wins
 
         best = doc.tiers[0]
-        # Net 2266 grossed by the 11% buffer: round(2266 / 0.89) = 2546.
-        assert best.lines[0].unit_price == 2546.0
+        # Legacy financing, cash, and commission buffers never alter selling prices.
+        assert best.lines[0].unit_price == 2266.0
         # Zero-qty rows still ship (the calculator shows every fixture's price).
         good = doc.tiers[1]
         assert {line.item_id for line in good.lines} == {"tx-ex", "up-evo"}
 
-        # base = 2546 + 12×882 = 13130; additional = round(500/0.89) = 562.
-        assert best.pricing.base == 13130.0
-        assert best.pricing.additional == 562.0
-        assert best.pricing.financed_total == 13692.0
-        # Cash backs out the buffer, keeps the 3% reserve: 13692×0.89×1.03.
-        assert best.pricing.cash_total == 12551.0
-        assert best.pricing.monthly_by_term[24] == 570.5
+        # Configured catalog prices and charges are used directly.
+        assert best.pricing.base == 11686.0
+        assert best.pricing.additional == 500.0
+        assert best.pricing.financed_total == 12186.0
+        assert best.pricing.cash_total == 12186.0
+        assert best.pricing.monthly_by_term == {}
+        assert doc.financing is None
 
         # Care Plan counts non-transformer fixtures of the headline tier.
         assert doc.care_plan is not None
@@ -247,10 +247,10 @@ async def test_preview_computes_document_from_config_and_catalog() -> None:
         premier = doc.care_plan.options[0]
         assert premier.price == 349.0  # 299 + 25 × (12 − 10)
 
-        # Bistro: 120 ft fills as 50+50+20 strands; grossed rate + hardware.
+        # Bistro uses the configured direct rate plus hardware.
         assert doc.bistro is not None
         assert doc.bistro.ordered_ft == 120.0
-        assert doc.bistro.total == 3090.0
+        assert doc.bistro.total == 2750.2
         assert doc.bistro.min_applied is False
 
 
@@ -273,13 +273,13 @@ async def test_bistro_only_design_creates_a_clear_customer_quote() -> None:
 
         doc = await svc.preview_from_wizard(ws.id, payload)
         assert doc.bistro is not None
-        assert doc.bistro.lights_cost == 7022
-        assert doc.bistro.poles_cost == 787
-        assert doc.bistro.total == 7809
-        assert doc.grand_financed_total == 7809
+        assert doc.bistro.lights_cost == 6250
+        assert doc.bistro.poles_cost == 700
+        assert doc.bistro.total == 6950
+        assert doc.grand_financed_total == 6950
 
         quote = await svc.save_from_wizard(ws.id, payload)
-        assert float(quote.total) == 7809
+        assert float(quote.total) == 6950
         assert len(quote.line_items) == 1
         assert quote.line_items[0].name == "Bistro Lighting"
         assert quote.line_items[0].description == ("312.5 ft Permanent Bistro Lighting · 2 poles")
@@ -358,16 +358,16 @@ async def test_grouped_bistro_runs_price_and_persist_without_legacy_labels() -> 
         assert doc.bistro.pricing_mode == "installation"
         assert doc.bistro.feet == 175
         assert [row.feet for row in doc.bistro.installations] == [125, 50]
-        assert doc.bistro.lights_cost == 2528
-        assert doc.bistro.poles_cost == 2528
-        assert doc.bistro.total == 5056
+        assert doc.bistro.lights_cost == 2250
+        assert doc.bistro.poles_cost == 2250
+        assert doc.bistro.total == 4500
 
         quote = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
         bistro_line = next(line for line in quote.line_items if line.name == "Bistro Lighting")
         assert bistro_line.description == (
             "125 ft Temporary Bistro Lighting · 3 poles · 50 ft Permanent Bistro Lighting · 3 poles"
         )
-        assert float(bistro_line.unit_price) == 5056
+        assert float(bistro_line.unit_price) == 4500
 
         parts = {part.sku: part for part in doc.fulfillment}
         assert parts["59409312"].qty == 1.0
@@ -410,9 +410,7 @@ async def test_price_book_mode_skips_finance_and_uses_catalog_prices_exactly() -
         assert best.pricing.cash_total == 12186.0
         assert best.pricing.monthly_payment == 0
         assert best.pricing.monthly_by_term == {}
-        assert doc.financing is not None
-        assert doc.financing.enabled is False
-        assert doc.financing.terms == []
+        assert doc.financing is None
         assert doc.selected_cash_total == doc.selected_financed_total == 12186.0
         assert doc.grand_monthly_payment == 0
 
@@ -439,11 +437,11 @@ async def test_save_persists_snapshot_and_recomputed_lines() -> None:
             "Core drilling",
             "Color Changing Bistro Lights",
         ]
-        # Quote total = financed tier total + bistro total (server-computed).
-        assert quote.total == 13692.0 + 3090.0
+        # Quote total = direct tier total + direct bistro total (server-computed).
+        assert quote.total == 12186.0 + 2750.2
         assert quote.proposal_document is not None
         assert quote.proposal_document["selected_tier"] == "best"
-        assert quote.proposal_document["selected_cash_total"] == 12551.0
+        assert quote.proposal_document["selected_cash_total"] == 12186.0
 
 
 async def test_public_read_carries_the_snapshot() -> None:
@@ -460,9 +458,9 @@ async def test_public_read_carries_the_snapshot() -> None:
         assert public.proposal_document["headline_tier"] == "best"
         tiers = public.proposal_document["tiers"]
         assert [t["key"] for t in tiers] == ["best", "good"]
-        # The public page leads with cash/check; both figures ride the snapshot.
-        assert tiers[0]["pricing"]["cash_total"] == 12551.0
-        assert tiers[0]["pricing"]["financed_total"] == 13692.0
+        # Cash/check and financing share one direct customer price.
+        assert tiers[0]["pricing"]["cash_total"] == 12186.0
+        assert tiers[0]["pricing"]["financed_total"] == 12186.0
 
 
 async def test_mockups_persist_into_snapshot_and_public_read() -> None:
@@ -675,14 +673,14 @@ async def test_combined_multi_category_quote_prices_and_saves_all_lines() -> Non
         assert [s.key for s in doc.category_sections] == ["permanent", "christmas"]
         perm = doc.category_sections[0]
         chris = doc.category_sections[1]
-        # The 100 ft kit costs 1,249; standard 3× markup = 3,747 net -> 4,210 financed.
-        # Deprecated controller/channel inputs are intentionally ignored by kit pricing.
-        assert perm.financed_total == 4210.0
-        # roofline 900->1011; trees 2*260=520->584; bushes 140->157; wreaths 170->191;
-        # takedown 0.25*1730=432.5->486.
-        assert chris.financed_total == 2429.0
-        # Grand total = landscape selected tier + both category sections.
-        assert doc.grand_financed_total == doc.selected_financed_total + 4210.0 + 2429.0
+        # Every configured amount is the customer price; no fee buffer is added.
+        assert perm.financed_total == 3747.0
+        assert chris.financed_total == 2162.5
+        # Grand total = landscape selected tier + both direct category totals.
+        assert doc.grand_financed_total == doc.selected_financed_total + 3747.0 + 2162.5
+        assert doc.grand_cash_total == doc.grand_financed_total
+        assert doc.grand_monthly_payment == 0
+        assert doc.financing is None
 
         # The rep wizard is single-service, but the API stays permissive: a payload
         # spanning service paths still prices and is recorded as "mixed".
@@ -700,6 +698,10 @@ async def test_combined_multi_category_quote_prices_and_saves_all_lines() -> Non
             "christmas",
         ]
         assert quote.proposal_document["service"] == "mixed"
+        stored = await db.get(Quote, uuid.UUID(str(quote.id)))
+        assert stored is not None
+        assert stored.permanent_pricing_snapshot is None
+        assert stored.payment_option is None
 
 
 async def test_christmas_only_quote_has_no_landscape_tiers() -> None:
@@ -823,6 +825,39 @@ async def test_permanent_only_quote_is_its_own_service_path() -> None:
         assert doc.service == "permanent"
         assert [s.key for s in doc.category_sections] == ["permanent"]
         assert doc.tiers == []
+        assert doc.financing is not None
+        assert doc.financing.provider == "GreenSky"
+        assert doc.financing.plan_number == "6124"
+        assert doc.grand_cash_total == doc.grand_financed_total
+
+        saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
+        stored = await db.get(Quote, uuid.UUID(str(saved.id)))
+        assert stored is not None
+        assert stored.permanent_pricing_snapshot is not None
+        assert stored.permanent_pricing_snapshot["cash_check_price"] == f"{saved.total:.2f}"
+        assert stored.permanent_pricing_snapshot["financing_price"] == f"{saved.total:.2f}"
+        assert stored.permanent_pricing_snapshot["material_cogs"] == "1649.00"
+
+        with pytest.raises(ValidationError, match="Choose cash/check"):
+            await svc.approve_quote(ws.id, uuid.UUID(str(saved.id)))
+        approved = await svc.approve_quote(
+            ws.id, uuid.UUID(str(saved.id)), payment_option="financing"
+        )
+        assert approved.payment_option == "financing"
+        repeated = await svc.approve_quote(
+            ws.id, uuid.UUID(str(saved.id)), payment_option="financing"
+        )
+        assert repeated.status == "approved"
+        with pytest.raises(ConflictError, match="cannot be changed"):
+            await svc.approve_quote(ws.id, uuid.UUID(str(saved.id)), payment_option="cash_check")
+
+        profitability = await svc.get_permanent_profitability(ws.id, uuid.UUID(str(saved.id)))
+        assert profitability is not None
+        assert profitability.selected_payment_option == "financing"
+        assert profitability.cash_check.contract_price == profitability.financing.contract_price
+        assert profitability.cash_check.merchant_fee == 0
+        assert profitability.financing.merchant_fee > 0
+        assert profitability.cash_check.sales_commission == profitability.financing.sales_commission
 
 
 async def test_landscape_service_covers_bistro_without_becoming_mixed() -> None:
@@ -875,14 +910,14 @@ async def test_wizard_deposit_persists_and_shows_in_document() -> None:
         payload.deposit = WizardDepositSelection(mode="percentage", value=50)
 
         doc = await svc.preview_from_wizard(ws.id, payload)
-        # Deposit is taken on the combined financed total (13692 + 3090 = 16782).
-        assert doc.grand_financed_total == 16782.0
+        # Deposit is taken on the combined direct total (12186 + 2750.20).
+        assert doc.grand_financed_total == 14936.2
         assert doc.deposit_mode == "percentage"
-        assert doc.deposit_amount == 8391.0
+        assert doc.deposit_amount == 7468.1
 
         saved = await svc.save_from_wizard(ws.id, payload, created_by_id=None)
         assert saved.deposit_percentage == 50.0
-        assert saved.deposit_amount == 8391.0
+        assert saved.deposit_amount == 7468.1
         assert saved.deposit_required is True
         assert saved.deposit_paid is False
 
@@ -1247,9 +1282,8 @@ async def test_public_read_offers_every_package_with_its_own_deposit() -> None:
         packages = {p.key: p for p in public.packages}
         assert set(packages) == {"best", "good"}
 
-        # Each package total is its tier plus the charges/bistro that ride along
-        # with every package — the same recipe the quote's line items use.
-        assert packages["best"].total == 13692.0 + 3090.0
+        # Each package total is its direct tier price plus shared charges/bistro.
+        assert packages["best"].total == 12186.0 + 2750.2
         assert packages["best"].is_selected is True
         assert packages["good"].is_selected is False
         assert packages["good"].total < packages["best"].total

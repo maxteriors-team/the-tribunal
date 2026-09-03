@@ -10,7 +10,7 @@ import { DeadPublicLink } from "@/components/shared/dead-public-link";
 import { PageLoadingState } from "@/components/ui/page-state";
 import { publicProposalsApi } from "@/lib/api/public-proposals";
 import { queryKeys } from "@/lib/query-keys";
-import type { PublicProposal } from "@/types/proposal";
+import type { PublicProposal, QuotePaymentOption } from "@/types/proposal";
 
 interface PublicProposalPageProps {
   params: Promise<{ token: string }>;
@@ -42,16 +42,34 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
   }, [token]);
 
   const approveMutation = useMutation({
-    // The client submits the terms version rendered on this page. A racing seller
-    // edit gets a 409 and a refetch instead of accepting prices they never saw.
-    mutationFn: (selectedTier: string | null) => {
+    // The client submits only the rendered version, package key, and method enum.
+    mutationFn: (selection: {
+      selectedTier: string | null;
+      paymentOption: QuotePaymentOption | null;
+    }) => {
       if (!data) throw new Error("Proposal is still loading");
-      return publicProposalsApi.approve(token, data.proposal_version, selectedTier);
+      if (selection.paymentOption === null) {
+        return publicProposalsApi.approve(token, data.proposal_version, selection.selectedTier);
+      }
+      return publicProposalsApi.approve(
+        token,
+        data.proposal_version,
+        selection.selectedTier,
+        selection.paymentOption,
+      );
     },
     onSuccess: (result) => {
       queryClient.setQueryData<PublicProposal | undefined>(
         queryKeys.publicProposals.byToken(token),
-        (prev) => (prev ? { ...prev, status: result.status, is_decided: true } : prev),
+        (prev) =>
+          prev
+            ? {
+                ...prev,
+                status: result.status,
+                payment_option: result.payment_option ?? prev.payment_option,
+                is_decided: true,
+              }
+            : prev,
       );
       // Accept = pay: when a deposit is owed, roll straight into Stripe so the
       // customer never has to hunt for a second button.
@@ -153,7 +171,12 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
         justDeclined={justDeclined}
         busy={busy}
         actionError={actionError}
-        onApprove={(selectedTier) => approveMutation.mutate(selectedTier)}
+        onApprove={(selectedTier, paymentOption) =>
+          approveMutation.mutate({
+            selectedTier,
+            paymentOption: paymentOption ?? null,
+          })
+        }
         onDecline={(reason) => declineMutation.mutate(reason)}
       />
     );
@@ -166,7 +189,9 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
       justDeclined={justDeclined}
       busy={busy}
       actionError={actionError}
-      onApprove={() => approveMutation.mutate(null)}
+      onApprove={(paymentOption) =>
+        approveMutation.mutate({ selectedTier: null, paymentOption: paymentOption ?? null })
+      }
       onDecline={(reason) => declineMutation.mutate(reason)}
     />
   );

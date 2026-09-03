@@ -15,7 +15,7 @@ import { useMemo, useState } from "react";
 
 import { TermsAndConditionsLink } from "@/components/shared/terms-and-conditions-link";
 import { formatDate } from "@/lib/utils/date";
-import type { PublicProposal } from "@/types/proposal";
+import type { PublicProposal, QuotePaymentOption } from "@/types/proposal";
 
 import {
   ChristmasGuarantee,
@@ -32,7 +32,7 @@ import {
   proposalValueProps,
   type ProposalDoc,
 } from "./document";
-import { FinancingEstimate, financingFromSnapshot } from "./financing-estimate";
+import { PermanentPaymentOptions } from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
 import { proposalAccentVars } from "./proposal-brand";
 import { proposalFontVars } from "./proposal-fonts";
@@ -53,8 +53,8 @@ interface ClientProposalViewProps {
   justDeclined: boolean;
   busy: boolean;
   actionError: boolean;
-  /** Accepts the proposal at the package key the client chose. */
-  onApprove: (selectedTier: string | null) => void;
+  /** Accepts only the server-priced package and, when required, payment enum. */
+  onApprove: (selectedTier: string | null, paymentOption?: QuotePaymentOption | null) => void;
   onDecline: (reason: string) => void;
 }
 
@@ -73,6 +73,9 @@ export function ClientProposalView({
 
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
+  const [paymentOption, setPaymentOption] = useState<QuotePaymentOption | null>(
+    data.payment_option ?? null,
+  );
 
   // Packages the client may pick between, priced server-side. One package is
   // not a choice, so the cards stay presentational in that case.
@@ -124,14 +127,6 @@ export function ClientProposalView({
       ? `The ${fullName} Residence`
       : "Your Project";
 
-  const lowestTier = useMemo(() => {
-    const priced = doc.tiers.filter((tier) => tier.pricing.base > 0);
-    return priced.reduce<(typeof priced)[number] | null>(
-      (lowest, tier) =>
-        !lowest || tier.pricing.financed_total < lowest.pricing.financed_total ? tier : lowest,
-      null,
-    );
-  }, [doc.tiers]);
   // A charge pinned to a tier is only charged when that tier is the one being
   // bought, so the client must not read it under a package it doesn't apply to.
   // Mirrors `charges_for_tier` on the server, including the stale-key fallback:
@@ -144,26 +139,13 @@ export function ClientProposalView({
     );
   }, [doc.additional_charges, doc.tiers, selectedTier]);
 
-  // A seasonal Christmas quote presents as Christmas: evergreen palette, lights
-  // and garland, and copy about the season instead of about a permanent
-  // installation. A mixed quote stays neutral (see `isChristmasProposal`).
   const festive = isChristmasProposal(doc);
   const valueProps = proposalValueProps(doc);
 
-  // Seasonal Christmas is sold as one up-front price, so it never shows a
-  // monthly estimate. Suppressing it here (rather than server-side) also cleans
-  // up quotes already saved with a financing block on the snapshot.
-  const financingEstimate = festive
-    ? null
-    : financingFromSnapshot(
-        doc.financing,
-        lowestTier?.pricing.monthly_payment ?? doc.grand_monthly_payment,
-        lowestTier?.pricing.monthly_by_term ?? {},
-      );
-
-  // The client proposal shows one all-inclusive package price. Cash/check
-  // figures remain internal; estimated financing uses the shared compliance
-  // block so its disclaimer always travels with every monthly figure.
+  // Only a server-owned exact Permanent snapshot carries a plan number.
+  const paymentFinancing =
+    doc.service === "permanent" && data.financing?.plan_number ? data.financing : null;
+  const paymentOptionRequired = paymentFinancing !== null;
   const priceLabel = "Installed \u00b7 All-inclusive";
 
   const carePlan = doc.care_plan;
@@ -237,6 +219,16 @@ export function ClientProposalView({
       : chosenLabel
         ? `Accept ${chosenLabel}`
         : "Approve Proposal";
+  const paymentOptionMissing = paymentOptionRequired && paymentOption === null;
+  const submitApproval = () => {
+    if (paymentOptionMissing) {
+      document.getElementById("payment-options")?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    if (paymentOptionRequired) onApprove(selectedTier, paymentOption);
+    else onApprove(selectedTier);
+  };
+  const primaryActionLabel = paymentOptionMissing ? "Choose Payment Method" : acceptActionLabel;
 
   return (
     <div
@@ -357,7 +349,9 @@ export function ClientProposalView({
                 {chosenLabel ?? (priceRange ? "Your estimated range" : "Your lighting proposal")}
               </div>
               <div className="pmock-purchase-price">
-                {priceRange ? `${fmt(priceRange.low)}\u2009\u2013\u2009${fmt(priceRange.high)}` : fmt(visualPrice)}
+                {priceRange
+                  ? `${fmt(priceRange.low)} – ${fmt(priceRange.high)}`
+                  : fmt(visualPrice)}
               </div>
               <div className="pmock-purchase-meta">
                 {priceRange
@@ -388,10 +382,10 @@ export function ClientProposalView({
                   type="button"
                   className="cta-btn-primary"
                   disabled={busy}
-                  aria-label={busy ? "Approving" : acceptActionLabel}
-                  onClick={() => onApprove(selectedTier)}
+                  aria-label={busy ? "Approving" : primaryActionLabel}
+                  onClick={submitApproval}
                 >
-                  {busy ? "Approving…" : acceptActionLabel}
+                  {busy ? "Approving…" : primaryActionLabel}
                 </button>
               ) : null}
               <p>Acceptance is recorded before the existing secure payment checkout opens.</p>
@@ -453,12 +447,6 @@ export function ClientProposalView({
                       {dueToday && dueToday > 0 ? (
                         <div className="pkg-subprice">{`${fmt(dueToday)} due today to start`}</div>
                       ) : null}
-                      {/* Independent of the deposit: this line is the only
-                          thing pointing at the financing block below, so a
-                          package that takes a deposit must not silence it. */}
-                      {financingEstimate && tier.pricing.monthly_payment > 0 ? (
-                        <div className="pkg-monthly">Estimated payment options below</div>
-                      ) : null}
                     </div>
                     {tier.warranty ? (
                       <div className="pkg-warranty">
@@ -493,7 +481,19 @@ export function ClientProposalView({
           </p>
         ) : null}
 
-        <FinancingEstimate financing={financingEstimate} />
+        <PermanentPaymentOptions
+          financing={paymentFinancing}
+          contractPrice={data.total}
+          currency={data.currency}
+          value={paymentOption}
+          onChange={setPaymentOption}
+          disabled={busy || decided}
+        />
+        {paymentOptionMissing ? (
+          <p className="payment-selection-required" role="status">
+            Select a payment method before accepting this proposal.
+          </p>
+        ) : null}
 
         {shownCharges.length ? (
           <div className="addon-bar">
@@ -602,9 +602,7 @@ export function ClientProposalView({
                 >
                   {bistroExperienceName}
                 </div>
-                <div className="pcare-savings-unit">
-                  Patio &amp; pergola
-                </div>
+                <div className="pcare-savings-unit">Patio &amp; pergola</div>
                 <div className="pcare-savings-basis">
                   Magazine-cover evenings &#8212; dinners, parties, and quiet nights, all under a
                   warm canopy of light.
@@ -744,8 +742,15 @@ export function ClientProposalView({
         <DepositPanel
           data={data}
           amountDue={choosable ? (chosenPackage?.deposit_amount ?? null) : undefined}
-          onPayInstead={choosable ? () => onApprove(selectedTier) : undefined}
-          payLabel={choosable ? "Accept & Pay Deposit" : undefined}
+          onPayInstead={choosable || paymentOptionRequired ? submitApproval : undefined}
+          payLabel={
+            paymentOptionMissing
+              ? "Select Payment Method First"
+              : choosable || paymentOptionRequired
+                ? "Accept & Pay Deposit"
+                : undefined
+          }
+          disabled={paymentOptionMissing}
           busy={busy}
         />
 
@@ -814,11 +819,11 @@ export function ClientProposalView({
                 <button
                   type="button"
                   className="cta-btn-primary"
-                  disabled={busy}
-                  aria-label={busy ? "Approving" : acceptActionLabel}
-                  onClick={() => onApprove(selectedTier)}
+                  disabled={busy || paymentOptionMissing}
+                  aria-label={busy ? "Approving" : primaryActionLabel}
+                  onClick={submitApproval}
                 >
-                  {busy ? "Approving…" : <>&#10003;&nbsp;{acceptActionLabel}</>}
+                  {busy ? "Approving…" : <>&#10003;&nbsp;{primaryActionLabel}</>}
                 </button>
                 <button
                   type="button"

@@ -4,21 +4,17 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FinancingSettingsCard } from "@/components/settings/financing-settings-card";
-import type { FinancingConfig, PricingSettings } from "@/types/sales-wizard";
+import type { PricingSettings } from "@/types/sales-wizard";
 
-const { getPricingMock, updatePricingMock, useWorkspaceIdMock, toastError } =
-  vi.hoisted(() => ({
-    getPricingMock: vi.fn(),
-    updatePricingMock: vi.fn(),
-    useWorkspaceIdMock: vi.fn(),
-    toastError: vi.fn(),
-  }));
+const { getPricingMock, updatePricingMock, useWorkspaceIdMock, toastError } = vi.hoisted(() => ({
+  getPricingMock: vi.fn(),
+  updatePricingMock: vi.fn(),
+  useWorkspaceIdMock: vi.fn(),
+  toastError: vi.fn(),
+}));
 
 vi.mock("@/lib/api/sales-wizard", () => ({
-  salesWizardApi: {
-    getPricing: getPricingMock,
-    updatePricing: updatePricingMock,
-  },
+  salesWizardApi: { getPricing: getPricingMock, updatePricing: updatePricingMock },
 }));
 
 vi.mock("@/hooks/useWorkspaceId", () => ({
@@ -29,32 +25,49 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: toastError },
 }));
 
-function financing(overrides: Partial<FinancingConfig> = {}): FinancingConfig {
-  return {
-    enabled: true,
-    provider: "Wisetack",
-    max_amount: 25000,
-    terms: [6, 12, 24],
-    default_term: 24,
+const permanent = {
+  enabled: true,
+  packages: [],
+  easy_markup: 2.5,
+  standard_markup: 3,
+  complex_markup: 3.5,
+  markup: 3.5,
+  per_ft: 0,
+  controller_base: 0,
+  per_channel: 0,
+  included_channels: 0,
+  minimum: 0,
+  label: "Permanent Holiday Lighting",
+  perks: [],
+  financing: {
+    provider: "GreenSky" as const,
+    plan_number: "6124",
     apr: 0,
-    fee_buffer: 0.11,
-    category_minimums: { landscape: 0, roofing: 1000 },
-    headline: null,
-    body: null,
-    points: [],
-    disclaimer: "Estimates only.",
-    ...overrides,
-  };
-}
+    term_months: 24,
+    merchant_fee_rate: 0.1525,
+    sales_commission_rate: 0.07,
+  },
+};
 
-function pricing(fin: FinancingConfig): PricingSettings {
+function pricing(): PricingSettings {
   return {
     comparison_years: 5,
     roofline_comparison_enabled: false,
     quote_validity_days: 30,
-  quote_expiry_enabled: true,
-    financing: fin,
-  };
+    quote_expiry_enabled: true,
+    permanent,
+    financing: {
+      enabled: true,
+      provider: "Legacy provider",
+      max_amount: 99999,
+      terms: [12],
+      default_term: 12,
+      apr: 0,
+      fee_buffer: 0.5,
+      category_minimums: { landscape: 0 },
+      points: [],
+    },
+  } as unknown as PricingSettings;
 }
 
 function renderCard() {
@@ -71,163 +84,80 @@ function renderCard() {
 beforeEach(() => {
   vi.clearAllMocks();
   useWorkspaceIdMock.mockReturnValue("ws-1");
+  getPricingMock.mockResolvedValue(pricing());
+  updatePricingMock.mockResolvedValue(pricing());
 });
 
 describe("FinancingSettingsCard", () => {
-  it("seeds a row per financed service, sorted by name", async () => {
-    getPricingMock.mockResolvedValue(pricing(financing()));
-
+  it("loads nested Permanent settings and explains the one-price policy", async () => {
     renderCard();
 
-    expect(await screen.findByLabelText("Service 1 name")).toHaveValue(
-      "landscape",
-    );
-    expect(screen.getByLabelText("Service 1 minimum ($)")).toHaveValue(0);
-    expect(screen.getByLabelText("Service 2 name")).toHaveValue("roofing");
-    expect(screen.getByLabelText("Service 2 minimum ($)")).toHaveValue(1000);
-    expect(screen.getByLabelText("Estimate disclaimer")).toHaveValue(
-      "Estimates only.",
-    );
+    expect(await screen.findByLabelText("Plan number")).toHaveValue("6124");
+    expect(screen.getByLabelText("Financing term (months)")).toHaveValue(24);
+    expect(screen.getByLabelText("APR (%)")).toHaveValue(0);
+    expect(screen.getByLabelText("Merchant fee (%)")).toHaveValue(15.25);
+    expect(screen.getByLabelText("Sales commission (%)")).toHaveValue(7);
+    expect(screen.getByText(/merchant fee is a company cost/i)).toBeInTheDocument();
+    expect(screen.getByText(/only on exact Permanent Lighting proposals/i)).toBeInTheDocument();
+    expect(screen.queryByText(/landscape/i)).not.toBeInTheDocument();
   });
 
-  it("adds a core service with a minimum and preserves the margin knobs", async () => {
-    getPricingMock.mockResolvedValue(pricing(financing()));
-    updatePricingMock.mockResolvedValue(pricing(financing()));
-
+  it("saves converted percentages inside the full Permanent block", async () => {
     renderCard();
+    const user = userEvent.setup();
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /add service/i }),
-    );
-    await userEvent.type(screen.getByLabelText("Service 3 name"), "siding");
-    const minimum = screen.getByLabelText("Service 3 minimum ($)");
-    await userEvent.clear(minimum);
-    await userEvent.type(minimum, "2500");
-
-    await userEvent.click(
-      screen.getByRole("button", { name: /save financing settings/i }),
-    );
+    const values: Array<[string, string]> = [
+      ["Plan number", "7000"],
+      ["Financing term (months)", "36"],
+      ["APR (%)", "5.5"],
+      ["Merchant fee (%)", "14"],
+      ["Sales commission (%)", "8"],
+    ];
+    for (const [label, value] of values) {
+      const input = await screen.findByLabelText(label);
+      await user.clear(input);
+      await user.type(input, value);
+    }
+    await user.click(screen.getByRole("button", { name: /save GreenSky settings/i }));
 
     await waitFor(() =>
       expect(updatePricingMock).toHaveBeenCalledWith("ws-1", {
-        financing: {
-          ...financing(),
-          category_minimums: { landscape: 0, roofing: 1000, siding: 2500 },
-          disclaimer: "Estimates only.",
-        },
-      }),
-    );
-    // The gross-up and cash-reversal inputs must ride through untouched.
-    const saved = updatePricingMock.mock.calls[0][1].financing as FinancingConfig;
-    expect(saved.fee_buffer).toBe(0.11);
-    expect(saved.enabled).toBe(true);
-    expect(saved.max_amount).toBe(25000);
-  });
-
-  it("removing a service stops it offering financing", async () => {
-    getPricingMock.mockResolvedValue(pricing(financing()));
-    updatePricingMock.mockResolvedValue(pricing(financing()));
-
-    renderCard();
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Remove service 2" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: /save financing settings/i }),
-    );
-
-    await waitFor(() =>
-      expect(updatePricingMock).toHaveBeenCalledWith("ws-1", {
-        financing: {
-          ...financing(),
-          category_minimums: { landscape: 0 },
-          disclaimer: "Estimates only.",
+        permanent: {
+          ...permanent,
+          financing: {
+            provider: "GreenSky",
+            plan_number: "7000",
+            apr: 0.055,
+            term_months: 36,
+            merchant_fee_rate: 0.14,
+            sales_commission_rate: 0.08,
+          },
         },
       }),
     );
   });
 
-  it("normalizes the service name the way the server does", async () => {
-    getPricingMock.mockResolvedValue(
-      pricing(financing({ category_minimums: {} })),
-    );
-    updatePricingMock.mockResolvedValue(pricing(financing()));
-
+  it("rejects a nonnumeric plan number", async () => {
     renderCard();
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText("Plan number");
+    await user.clear(input);
+    await user.type(input, "plan ABC");
+    await user.click(screen.getByRole("button", { name: /save GreenSky settings/i }));
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /add service/i }),
-    );
-    await userEvent.type(screen.getByLabelText("Service 1 name"), "  Roofing ");
-
-    await userEvent.click(
-      screen.getByRole("button", { name: /save financing settings/i }),
-    );
-
-    await waitFor(() =>
-      expect(updatePricingMock).toHaveBeenCalledWith("ws-1", {
-        financing: {
-          ...financing(),
-          category_minimums: { roofing: 0 },
-          disclaimer: "Estimates only.",
-        },
-      }),
-    );
-  });
-
-  it("blocks a duplicate service instead of silently dropping one", async () => {
-    getPricingMock.mockResolvedValue(pricing(financing()));
-
-    renderCard();
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: /add service/i }),
-    );
-    await userEvent.type(screen.getByLabelText("Service 3 name"), "Roofing");
-    await userEvent.click(
-      screen.getByRole("button", { name: /save financing settings/i }),
-    );
-
-    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(toastError).toHaveBeenCalledWith("Plan number must contain 1–32 digits");
     expect(updatePricingMock).not.toHaveBeenCalled();
   });
 
-  it("blocks an unnamed service", async () => {
-    getPricingMock.mockResolvedValue(pricing(financing()));
-
+  it("rejects an out-of-range percentage", async () => {
     renderCard();
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText("Merchant fee (%)");
+    await user.clear(input);
+    await user.type(input, "100");
+    await user.click(screen.getByRole("button", { name: /save GreenSky settings/i }));
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /add service/i }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: /save financing settings/i }),
-    );
-
-    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(toastError).toHaveBeenCalledWith("Merchant fee must be between 0% and less than 100%");
     expect(updatePricingMock).not.toHaveBeenCalled();
-  });
-
-  it("saves a blank disclaimer as null so the standard one is used", async () => {
-    getPricingMock.mockResolvedValue(pricing(financing()));
-    updatePricingMock.mockResolvedValue(pricing(financing()));
-
-    renderCard();
-
-    await userEvent.clear(await screen.findByLabelText("Estimate disclaimer"));
-    await userEvent.click(
-      screen.getByRole("button", { name: /save financing settings/i }),
-    );
-
-    await waitFor(() =>
-      expect(updatePricingMock).toHaveBeenCalledWith("ws-1", {
-        financing: {
-          ...financing(),
-          category_minimums: { landscape: 0, roofing: 1000 },
-          disclaimer: null,
-        },
-      }),
-    );
   });
 });

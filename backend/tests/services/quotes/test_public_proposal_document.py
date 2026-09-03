@@ -145,6 +145,34 @@ def test_sanitizer_drops_fulfillment_and_keeps_presentation() -> None:
     assert "fulfillment" in document
 
 
+def test_sanitizer_removes_internal_commission_and_non_permanent_financing() -> None:
+    document = _document()
+    document["service"] = "landscape"
+    document["financing"] = {"provider": "Legacy provider"}
+    document["tiers"] = [
+        {
+            "pricing": {
+                "financed_total": 5200,
+                "monthly_payment": 216.67,
+                "monthly_by_term": {"24": 216.67},
+                "commission_financed": 364,
+                "commission_cash": 364,
+            }
+        }
+    ]
+
+    safe = client_safe_document(document)
+
+    assert safe is not None
+    assert safe["financing"] is None
+    pricing = safe["tiers"][0]["pricing"]
+    assert "commission_financed" not in pricing
+    assert "commission_cash" not in pricing
+    assert pricing["monthly_payment"] == 0
+    assert pricing["monthly_by_term"] == {}
+    assert document["tiers"][0]["pricing"]["commission_financed"] == 364
+
+
 def test_sanitizer_passes_through_none() -> None:
     assert client_safe_document(None) is None
 

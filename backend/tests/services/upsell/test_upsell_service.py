@@ -58,8 +58,7 @@ FIELD = "technician"
 LEAD = "lead_technician"
 ADMIN = "admin"
 
-# A workspace that caps what a plain technician may sell on site. Zero buffer so
-# the arithmetic in these tests is the price book figure, not a grossed one.
+# A workspace that caps what a plain technician may sell on site.
 LIMIT_PRICING = {
     "pricing": {
         "financing": {"enabled": False},
@@ -78,8 +77,7 @@ async def _fresh_engine_pool():
 
 # A workspace's Care Plan tiers live in ``settings.pricing``. Mirrors the shape
 # ``scripts/demo/seed_lighting_workspace.py`` seeds.
-# The back-end buffer every client-facing price is grossed up by. 11% is the
-# schema default (the Wisetack dealer fee); ``price / (1 - 0.11)``.
+# A retained legacy buffer proves old settings cannot alter direct selling prices.
 BUFFER_PRICING = {"pricing": {"financing": {"enabled": True, "fee_buffer": 0.11}}}
 
 CARE_PLAN_PRICING = {
@@ -384,23 +382,16 @@ async def test_a_truthy_flag_labels_the_rate_even_when_it_is_not_a_real_bool() -
 # Quote creation — server-side pricing
 # --------------------------------------------------------------------------- #
 # --------------------------------------------------------------------------- #
-# Gross-up — the price book holds NET, clients are charged the grossed price
+# Direct selling prices — legacy buffers never change the price book
 # --------------------------------------------------------------------------- #
-async def test_menu_prices_are_grossed_up_not_sold_at_net() -> None:
-    """The technician's menu must never show the net (cost) figure.
-
-    ``catalog_items.unit_price`` is net; every client-facing surface grosses it
-    up (``proposal_builder``: "rep enters net, we gross up — matches every other
-    price"). This screen is the one place nobody can catch the mistake, because
-    the technician cannot see the price book or override a price.
-    """
+async def test_menu_uses_the_configured_selling_price() -> None:
+    """The catalog amount is the customer price on every selling surface."""
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db, settings=BUFFER_PRICING)
         await _catalog_item(db, ws, name="ZDC Color Uplight", price=785.0)
 
         listed = await UpsellService(db).list_attachable_catalog(ws.id)
-        # 785 / (1 - 0.11) = 882, not 785.
-        assert listed.items[0].unit_price == 882.0
+        assert listed.items[0].unit_price == 785.0
 
 
 async def test_quoted_price_matches_the_menu_price_the_technician_read_aloud() -> None:
@@ -423,9 +414,9 @@ async def test_quoted_price_matches_the_menu_price_the_technician_read_aloud() -
             role=LEAD,
         )
 
-        assert menu_price == 882.0
+        assert menu_price == 785.0
         assert quote.line_items[0].unit_price == menu_price
-        assert quote.total == 1764.0
+        assert quote.total == 1570.0
 
 
 async def test_technician_price_equals_the_wizards_price_for_the_same_item() -> None:
@@ -439,8 +430,8 @@ async def test_technician_price_equals_the_wizards_price_for_the_same_item() -> 
         assert listed.items[0].unit_price == float(pp.gross_up_price(411.0, config))
 
 
-async def test_commission_in_price_widens_the_gross_up() -> None:
-    """The buffer is fee + commission when commission is baked into price."""
+async def test_legacy_commission_setting_does_not_increase_the_price() -> None:
+    """Stored commission settings remain compatible but are internal costs."""
     async with AsyncSessionLocal() as db:
         ws = await _workspace(
             db,
@@ -454,12 +445,11 @@ async def test_commission_in_price_widens_the_gross_up() -> None:
         await _catalog_item(db, ws, name="ZDC Color Uplight", price=785.0)
 
         listed = await UpsellService(db).list_attachable_catalog(ws.id)
-        # 785 / (1 - 0.21) = 994 — materially more than the 882 above.
-        assert listed.items[0].unit_price == 994.0
+        assert listed.items[0].unit_price == 785.0
 
 
 async def test_zero_buffer_workspace_sells_at_the_book_price() -> None:
-    """No financing, no in-price commission → gross-up is a no-op, not a markup."""
+    """Disabled legacy financing also preserves the configured selling price."""
     async with AsyncSessionLocal() as db:
         ws = await _workspace(
             db, settings={"pricing": {"financing": {"enabled": False, "fee_buffer": 0.11}}}
@@ -494,15 +484,14 @@ async def test_quote_prices_come_from_the_catalog_not_the_request() -> None:
         assert len(quote.line_items) == 1
         line = quote.line_items[0]
         assert line.name == "Landscape lighting"
-        # The book's 2400 is NET; the client is charged the grossed-up figure
-        # (2400 / 0.89 = 2697). Either way the *request's* numbers are ignored.
-        assert line.unit_price == 2697.0
-        assert line.total == 5394.0
+        # The catalog price is authoritative; request-supplied numbers are ignored.
+        assert line.unit_price == 2400.0
+        assert line.total == 4800.0
         # Attributed to the technician so attach-rate reporting can pay the spiff.
         assert quote.contact_id == contact.id
         # Field orders collect the full one-time total on the customer's device.
         assert quote.deposit_percentage == 100
-        assert quote.deposit_amount == 5394.0
+        assert quote.deposit_amount == 4800.0
         assert quote.deposit_required is True
         # BOM quantities scale by the quoted catalog quantity and stay internal.
         assert quote.proposal_document is not None
@@ -1036,12 +1025,8 @@ async def test_a_basket_exactly_on_the_limit_is_allowed() -> None:
         assert quote.total == 500.0
 
 
-async def test_limit_is_measured_on_the_grossed_up_price_the_client_pays() -> None:
-    """A $460 net item bills at $517 and must count as $517 against a $500 cap.
-
-    Measuring the net figure would let a technician sell past the owner's limit
-    by exactly the back-end buffer.
-    """
+async def test_legacy_buffer_does_not_push_direct_price_past_the_limit() -> None:
+    """A configured $460 selling price remains below the $500 field cap."""
     async with AsyncSessionLocal() as db:
         ws = await _workspace(
             db,
@@ -1058,16 +1043,15 @@ async def test_limit_is_measured_on_the_grossed_up_price_the_client_pays() -> No
         await _assign(db, job, tech)
         item = await _catalog_item(db, ws, name="Borderline", price=460.0)
 
-        with pytest.raises(UpsellProposalLimitError):
-            await UpsellService(db).create_quote(
-                ws.id,
-                job.id,
-                UpsellQuoteRequest(
-                    line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]
-                ),
-                user_id=1,
-                role=LEAD,
-            )
+        quote = await UpsellService(db).create_quote(
+            ws.id,
+            job.id,
+            UpsellQuoteRequest(line_items=[UpsellQuoteLine(catalog_item_id=item.id, quantity=1)]),
+            user_id=1,
+            role=LEAD,
+        )
+
+        assert quote.total == 460.0
 
 
 async def test_no_configured_limit_means_no_cap() -> None:
@@ -1285,8 +1269,8 @@ async def test_care_plan_and_hardware_sell_together_on_one_proposal() -> None:
             role=LEAD,
         )
 
-        # 640 net → 719 charged. The care plan stays out of the one-time total.
-        assert quote.total == 719.0
+        # The $640 configured hardware price is authoritative; care is recurring.
+        assert quote.total == 640.0
         assert quote.proposal_document["care_plan"]["selected"] == "essential"
 
 

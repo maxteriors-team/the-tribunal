@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from app.schemas.pricing import (
     DEFAULT_FINANCING_DISCLAIMER,
+    GREEN_SKY_REQUIRED_DISCLOSURE,
     BistroConfig,
     BistroInstallation,
     BistroInstallationPricing,
@@ -54,7 +56,19 @@ _ZERO = Decimal("0")
 _ONE = Decimal("1")
 _DOLLAR = Decimal("1")
 _CENT = Decimal("0.01")
-_MAX_BUFFER = Decimal("0.95")
+_MARGIN = Decimal("0.0001")
+
+
+@dataclass(frozen=True)
+class PermanentProfitabilityCalculation:
+    """Private Permanent Lighting contribution math for one payment method."""
+
+    contract_price: Decimal
+    merchant_fee: Decimal
+    sales_commission: Decimal
+    material_cogs: Decimal
+    contribution_before_labor: Decimal
+    contribution_margin: Decimal
 
 
 def _d(value: float | int | Decimal | str) -> Decimal:
@@ -74,83 +88,63 @@ def _round_cent(value: Decimal) -> Decimal:
 
 
 # --------------------------------------------------------------------------- #
-# Back-end buffer + gross-up (priceBuffer / grossUpPrice)
+# Legacy pricing adapters (all configured amounts are direct selling prices)
 # --------------------------------------------------------------------------- #
 def commission_in_price(config: PricingSettings) -> bool:
-    """Whether the rep commission is baked into every client price."""
-    c = config.commission
-    return bool(c.enabled and c.in_price and c.rate > 0)
+    """Legacy adapter retained for callers; configured amounts are selling prices."""
+    del config
+    return False
 
 
 def price_buffer(config: PricingSettings) -> Decimal:
-    """Combined back-end buffer recovered from every financed price.
-
-    The ~11% Wisetack dealer fee plus, when ``commission.in_price`` is on, the
-    commission rate — clamped to ``[0, 0.95]``. Never shown to the client.
-    """
-    f = config.financing
-    buf = _d(f.fee_buffer) if f.enabled else _ZERO
-    com = _d(config.commission.rate) if commission_in_price(config) else _ZERO
-    return max(_ZERO, min(_MAX_BUFFER, buf + com))
+    """Legacy adapter: financing fees no longer increase any customer price."""
+    del config
+    return _ZERO
 
 
 def gross_up_price(amount: float | Decimal, config: PricingSettings) -> Decimal:
-    """Gross a net price up so the buffer is pre-absorbed: ``round(n / (1 - b))``.
-
-    Returns the amount unchanged (no rounding) when the buffer is zero, matching
-    the wizard's ``grossUpPrice``.
-    """
-    b = price_buffer(config)
-    a = _d(amount)
-    if b > 0:
-        return _round_dollar(a / (_ONE - b))
-    return a
+    """Return the configured selling price without legacy fee or commission buffers."""
+    del config
+    return _d(amount)
 
 
 # --------------------------------------------------------------------------- #
 # Cash / check pricing (cashDiscountRate / cashPrice)
 # --------------------------------------------------------------------------- #
 def cash_reserve_rate(config: PricingSettings) -> Decimal:
-    c = config.cash_discount
-    return _d(c.card_reserve_rate) if (c.enabled and c.card_reserve_rate > 0) else _ZERO
+    """Legacy adapter: one-price quotes do not reserve card costs in cash pricing."""
+    del config
+    return _ZERO
 
 
 def cash_discount_rate(config: PricingSettings) -> Decimal:
-    """Discount off the posted (financed) price for cash/check.
-
-    Backs out the Wisetack fee buffer while privately keeping the card reserve and
-    (when baked in) the commission recovery:
-        ``1 - (1 + reserve) * (1 - buf - com) / (1 - com)``
-    """
-    c = config.cash_discount
-    if not c.enabled:
-        return _ZERO
-    f = config.financing
-    buf = _d(f.fee_buffer) if f.enabled else _ZERO
-    reserve = cash_reserve_rate(config)
-    com = _d(config.commission.rate) if commission_in_price(config) else _ZERO
-    rate = _ONE - ((_ONE + reserve) * (_ONE - buf - com) / (_ONE - com))
-    return max(_ZERO, min(_ONE, rate))
+    """Legacy adapter: cash/check uses the same configured selling price."""
+    del config
+    return _ZERO
 
 
 def cash_price(total: float | Decimal, config: PricingSettings) -> Decimal:
-    return _round_dollar(_d(total) * (_ONE - cash_discount_rate(config)))
+    del config
+    return _d(total)
 
 
 def cash_savings(total: float | Decimal, config: PricingSettings) -> Decimal:
-    return _round_dollar(_d(total) * cash_discount_rate(config))
+    del total, config
+    return _ZERO
 
 
 # --------------------------------------------------------------------------- #
 # Commission (internal only)
 # --------------------------------------------------------------------------- #
 def commission_rate(config: PricingSettings) -> Decimal:
-    c = config.commission
-    return _d(c.rate) if (c.enabled and c.rate > 0) else _ZERO
+    """Legacy adapter; Permanent commission comes from its snapshotted settings."""
+    del config
+    return _ZERO
 
 
 def commission_amount(total: float | Decimal, config: PricingSettings) -> Decimal:
-    return _round_dollar(_d(total) * commission_rate(config))
+    del total, config
+    return _ZERO
 
 
 # --------------------------------------------------------------------------- #
@@ -161,40 +155,103 @@ def finance_terms(config: PricingSettings) -> list[int]:
     return list(terms) if terms else [24]
 
 
+def amortized_monthly_payment(
+    total: float | Decimal,
+    *,
+    apr: float | Decimal,
+    term_months: int,
+) -> Decimal:
+    """Calculate a cent-rounded payment with Decimal, including nonzero APR."""
+    if term_months < 1:
+        raise ValueError("Financing term must be at least one month")
+    principal = _d(total)
+    if principal <= 0:
+        return _ZERO
+    monthly_rate = _d(apr) / 12
+    if monthly_rate < 0:
+        raise ValueError("APR cannot be negative")
+    if monthly_rate == 0:
+        return _round_cent(principal / term_months)
+    denominator = _ONE - (_ONE + monthly_rate) ** -term_months
+    if denominator == 0:
+        return _ZERO
+    return _round_cent(principal * monthly_rate / denominator)
+
+
 def monthly_payment(
     total: float | Decimal,
     config: PricingSettings,
     term: int | None = None,
 ) -> Decimal:
-    """Estimated monthly payment; 0 when financing is disabled or over the cap."""
-    f = config.financing
-    t = _d(total)
-    if not f.enabled or t <= 0:
+    """Legacy top-level financing calculation retained for stored compatibility."""
+    financing = config.financing
+    principal = _d(total)
+    if not financing.enabled or principal <= 0 or principal > _d(financing.max_amount):
         return _ZERO
-    if t > _d(f.max_amount):
-        return _ZERO
-    n = term or f.default_term or finance_terms(config)[-1]
-    r = _d(f.apr) / 12
-    if r > 0:
-        denom = _ONE - _d(math.pow(1 + float(r), -n))
-        if denom == 0:
-            return _ZERO
-        return _round_cent(t * r / denom)
-    return _round_cent(t / _d(n))
+    return amortized_monthly_payment(
+        principal,
+        apr=financing.apr,
+        term_months=term or financing.default_term or finance_terms(config)[-1],
+    )
+
+
+def permanent_financing_estimate(
+    total: float | Decimal, config: PricingSettings
+) -> FinancingEstimate | None:
+    """Build the sole customer financing estimate, for Permanent Lighting."""
+    financing = config.permanent.financing
+    payment = amortized_monthly_payment(total, apr=financing.apr, term_months=financing.term_months)
+    if payment <= 0:
+        return None
+    return FinancingEstimate(
+        provider=financing.provider,
+        plan_number=financing.plan_number,
+        terms=[financing.term_months],
+        default_term=financing.term_months,
+        apr=financing.apr,
+        monthly_payment=float(payment),
+        monthly_by_term={financing.term_months: float(payment)},
+        disclaimer=GREEN_SKY_REQUIRED_DISCLOSURE,
+    )
+
+
+def permanent_profitability(
+    contract_price: float | Decimal,
+    *,
+    material_cogs: float | Decimal,
+    merchant_fee_rate: float | Decimal,
+    sales_commission_rate: float | Decimal,
+    financed: bool,
+) -> PermanentProfitabilityCalculation:
+    """Calculate private contribution before labor from snapshottable inputs."""
+    price = _round_cent(_d(contract_price))
+    cogs = _round_cent(_d(material_cogs))
+    merchant_rate = _d(merchant_fee_rate)
+    commission_rate_value = _d(sales_commission_rate)
+    if price < 0 or cogs < 0:
+        raise ValueError("Contract price and material COGS cannot be negative")
+    if not _ZERO <= merchant_rate < _ONE:
+        raise ValueError("Merchant fee rate must be between zero and one")
+    if not _ZERO <= commission_rate_value < _ONE:
+        raise ValueError("Sales commission rate must be between zero and one")
+    merchant_fee = _round_cent(price * merchant_rate) if financed else _round_cent(_ZERO)
+    sales_commission = _round_cent(price * commission_rate_value)
+    contribution = _round_cent(price - merchant_fee - cogs - sales_commission)
+    margin = (contribution / price).quantize(_MARGIN, rounding=ROUND_HALF_UP) if price else _ZERO
+    return PermanentProfitabilityCalculation(
+        contract_price=price,
+        merchant_fee=merchant_fee,
+        sales_commission=sales_commission,
+        material_cogs=cogs,
+        contribution_before_labor=contribution,
+        contribution_margin=margin,
+    )
 
 
 def financing_is_offered(config: PricingSettings) -> bool:
-    """Whether this workspace offers financing on anything at all.
-
-    Quote-independent counterpart to :func:`financing_is_eligible`, for copy that
-    has to decide *before* there are line items to price — e.g. telling an
-    operator to walk a customer through payment options. Clearing every category
-    is how a workspace stops offering financing without touching
-    :func:`price_buffer`, so an empty ``category_minimums`` reads as "not
-    offered" even while ``enabled`` stays true to preserve the fee gross-up.
-    """
-    financing = config.financing
-    return bool(financing.enabled and financing.category_minimums)
+    """Legacy global financing is never offered; Permanent uses its own terms."""
+    del config
+    return False
 
 
 def financing_is_eligible(
@@ -202,35 +259,8 @@ def financing_is_eligible(
     category_totals: Mapping[str, float | Decimal],
     config: PricingSettings,
 ) -> bool:
-    """Whether a quote qualifies for an estimated financing presentation.
-
-    A category qualifies when its own subtotal reaches that category's
-    configured minimum *and* the quote total clears the same floor. The overall
-    total must also fit beneath the provider cap. This presentation gate is
-    intentionally separate from :func:`price_buffer`: category settings can hide
-    a noisy payment estimate, but can never silently remove the
-    margin-protecting fee gross-up.
-
-    A minimum of ``0`` means "no floor", which is what preserves the historical
-    lighting behavior exactly: before financing was category-aware, every quote
-    on a financing-enabled workspace showed an estimate, including a landscape
-    package with no priced fixtures sold purely through add-on charges. Those
-    categories ship with a zero minimum, so they still qualify on a subtotal of
-    ``0``; only a category with a *positive* floor has to earn its estimate.
-    """
-    financing = config.financing
-    total_d = _d(total)
-    if not financing.enabled or total_d <= 0 or total_d > _d(financing.max_amount):
-        return False
-
-    minimums = financing.category_minimums
-    for raw_category, raw_subtotal in category_totals.items():
-        category = str(raw_category).strip().lower()
-        if category not in minimums:
-            continue
-        minimum_d = _d(minimums[category])
-        if _d(raw_subtotal) >= minimum_d and total_d >= minimum_d:
-            return True
+    """Legacy category financing is disabled for every service."""
+    del total, category_totals, config
     return False
 
 
@@ -293,29 +323,21 @@ def price_tier(
     *,
     term: int | None = None,
 ) -> TierPricing:
-    """Aggregate one tier's financed/cash/monthly/commission figures.
-
-    ``base`` and ``additional`` must already be grossed-up (fixture prices come
-    from :func:`gross_up_price`); this only combines and discounts them.
-    """
+    """Aggregate direct selling-price fields without legacy financing derivations."""
+    del config, term
     base_d = _d(base)
-    add_d = _d(additional)
-    financed = base_d + add_d if base_d > 0 else base_d
-    cash = cash_price(financed, config) if financed > 0 else _ZERO
-    monthly_terms = {
-        t: float(monthly_payment(financed, config, term=t)) for t in finance_terms(config)
-    }
-    default_term = term or config.financing.default_term
+    additional_d = _d(additional)
+    total = base_d + additional_d if base_d > 0 else base_d
     return TierPricing(
         base=float(base_d),
-        additional=float(add_d),
-        financed_total=float(financed),
-        cash_total=float(cash),
-        cash_savings=float(cash_savings(financed, config) if financed > 0 else _ZERO),
-        monthly_payment=float(monthly_payment(financed, config, term=default_term)),
-        monthly_by_term=monthly_terms,
-        commission_financed=float(commission_amount(financed, config)),
-        commission_cash=float(commission_amount(cash, config)),
+        additional=float(additional_d),
+        financed_total=float(total),
+        cash_total=float(total),
+        cash_savings=0,
+        monthly_payment=0,
+        monthly_by_term={},
+        commission_financed=0,
+        commission_cash=0,
     )
 
 
@@ -392,7 +414,7 @@ def price_bistro(
     tier_key: str,
     feet: float,
 ) -> BistroPricing:
-    """Port of ``bistroCompute`` — grossed-up bistro price with breakdown."""
+    """Port of ``bistroCompute`` — direct bistro price with breakdown."""
     b: BistroConfig = config.bistro
     cfg = b.color if product == "color" else b.classic
     tier = next((t for t in b.tiers if t.key == tier_key), b.tiers[0] if b.tiers else None)
@@ -491,8 +513,8 @@ def price_bistro_installations(
     """Price measured runs and explicitly marked poles from configured rates.
 
     Every requested installation must have both rates configured before any money
-    is returned. Each component passes through the shared gross-up independently,
-    and the Bistro minimum is applied once after every installation is summed.
+    is returned. Each component uses its configured selling price, and the Bistro
+    minimum is applied once after every installation is summed.
     """
     bistro = config.bistro
     requested = {
@@ -595,7 +617,7 @@ def _category_line(
     *,
     detail: str | None = None,
 ) -> CategoryLine:
-    """A grossed display line; unit price is total/qty (cents) for presentation."""
+    """A direct-price line; unit price is total/qty (cents) for presentation."""
     q = _d(quantity)
     unit = _round_cent(line_total / q) if q > 0 else line_total
     return CategoryLine(
@@ -717,12 +739,11 @@ def _price_seasonal_item(
     selection: Mapping[str, float],
     config: PricingSettings,
 ) -> tuple[Decimal, Decimal, list[CategoryLine]]:
-    """Gross each selected option of one decor category.
+    """Price each selected option of one decor category.
 
     ``each`` options price per selected item (value = quantity); ``per_ft``
-    options price per linear foot of the measured run (value = feet). Returns
-    ``(net_subtotal, grossed_subtotal, lines)`` so the caller can fold the net
-    into the takedown base and the gross into the total.
+    options price per linear foot of the measured run (value = feet). The two
+    returned subtotals remain for compatibility and are equal under direct pricing.
     """
     by_key = {o.key: o for o in item.options}
     net = _ZERO
@@ -756,7 +777,7 @@ def price_christmas(
     """Price a seasonal Christmas job.
 
     Roofline, every configured decor category (trees/bushes/wreaths/garland/…),
-    takedown, and storage are grossed up individually so the display lines sum
+    takedown, and storage use configured selling prices so display lines sum
     exactly to ``raw_total``. ``items`` maps a category key to its selection
     (option key → quantity for ``each`` items, → linear feet for ``per_ft``).
     Takedown is a fraction of the *net* install subtotal (roofline + decor).
@@ -833,7 +854,7 @@ def price_christmas_package(
 
     Only the decor categories in ``package.item_keys`` are priced, and the
     roofline run is included only when ``package.includes_roofline``. Everything
-    else — gross-up, takedown (a fraction of *this package's* install subtotal),
+    else — direct pricing, takedown (a fraction of this package's install subtotal),
     storage, and the job minimum — is delegated to :func:`price_christmas`, so a
     package is simply the à la carte price of its covered subset. No new math.
     """
@@ -908,8 +929,8 @@ def price_service_package(
 ) -> ServicePricing:
     """Price one non-seasonal tier from the category's measurement basis.
 
-    Deliberately the same shape as :func:`price_christmas`: every component is
-    grossed up individually so the display ``lines`` sum exactly to ``raw_total``,
+    Deliberately the same shape as :func:`price_christmas`: every component uses
+    its configured selling price so display ``lines`` sum exactly to ``raw_total``,
     and the category's job minimum lifts the final ``total`` the same way. What
     differs is only the *inputs* — a measured quantity and a tier rate instead of
     a roofline and decor selections.

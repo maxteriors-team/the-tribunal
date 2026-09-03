@@ -62,6 +62,7 @@ from app.services.exceptions import (
     PermissionDeniedError,
     ValidationError,
 )
+from app.services.jobs import JobService
 from app.services.quotes import QuoteService
 from app.services.quotes.attach_rules_config import SETTINGS_KEY as ATTACH_RULES_KEY
 
@@ -1100,7 +1101,7 @@ async def test_convert_requires_approved_status() -> None:
 async def _enable_lighting_pricing(db: AsyncSession, ws: Workspace) -> None:
     """Seed a workspace pricing config with both holiday services enabled.
 
-    ``fee_buffer=0`` keeps totals exact so the asserted dollars are obvious.
+    Legacy financing settings remain present but never alter configured prices.
     """
     pricing = PricingSettings(
         financing=FinancingConfig(enabled=True, fee_buffer=0.0),
@@ -1138,6 +1139,11 @@ async def test_create_quote_from_estimate_persists_priced_lines_and_contact() ->
         assert quote.deposit_percentage == 30
         assert quote.deposit_amount == 1124.1
         assert quote.deposit_required is True
+        assert quote.payment_option is None
+        assert quote.financing is not None
+        assert quote.financing.provider == "GreenSky"
+        assert quote.financing.plan_number == "6124"
+        assert quote.financing.monthly_payment == 156.13
         # Client details resolved onto a CRM contact (phone-keyed).
         assert quote.contact_id is not None
         assert [kit.model_dump() for kit in quote.selected_permanent_kits] == [
@@ -1147,6 +1153,20 @@ async def test_create_quote_from_estimate_persists_priced_lines_and_contact() ->
         assert "Permanent lighting package" in names
         # The persisted line items sum back to the quote total.
         assert round(sum(li.total for li in quote.line_items), 2) == quote.total
+        stored = await db.get(Quote, quote.id)
+        assert stored is not None
+        assert stored.proposal_document["service"] == "permanent"
+        assert stored.permanent_pricing_snapshot == {
+            "cash_check_price": "3747.00",
+            "financing_price": "3747.00",
+            "provider": "GreenSky",
+            "plan_number": "6124",
+            "apr": "0.0",
+            "term_months": 24,
+            "merchant_fee_rate": "0.1525",
+            "sales_commission_rate": "0.07",
+            "material_cogs": "1249.00",
+        }
 
         listed = await svc.list_quotes(ws.id)
         assert [kit.model_dump() for kit in listed.items[0].selected_permanent_kits] == [
@@ -1185,7 +1205,11 @@ async def test_create_quote_from_estimate_links_workspace_project_and_contact() 
 
         assert quote.contact_id == contact.id
         assert quote.lighting_project_id == project.id
-        assert quote.proposal_document is None
+        assert quote.proposal_document is not None
+        assert quote.proposal_document["service"] == "permanent"
+        stored = await db.get(Quote, quote.id)
+        assert stored is not None
+        assert stored.permanent_pricing_snapshot is not None
 
 
 async def test_create_quote_from_estimate_snapshots_preview_and_installation_shot() -> None:
@@ -1250,6 +1274,16 @@ async def test_create_quote_from_estimate_snapshots_preview_and_installation_sho
         # Default: one firm number, exactly as before the range option existed.
         assert public.price_range is None
 
+        await svc.approve_quote(ws.id, quote.id)
+        converted = await svc.convert_quote(ws.id, quote.id, create_invoice=False)
+        assert converted.job.contact_id == contact.id
+        assert converted.job.source_quote_id == quote.id
+        assert converted.job.lighting_project_id == project.id
+
+        installation_plan = await JobService(db).get_installation_plan(converted.job.id, ws.id)
+        assert installation_plan.project_id == project.id
+        assert installation_plan.proposal_preview_image == "data:image/jpeg;base64,/9j/2Q=="
+        assert installation_plan.design.items[0].product_id == "fixture-uplight"
 
 async def test_create_quote_from_estimate_can_send_a_price_range(monkeypatch) -> None:
     async with AsyncSessionLocal() as db:
@@ -1302,9 +1336,7 @@ async def test_create_quote_from_estimate_can_send_a_price_range(monkeypatch) ->
         delivered_prices: list[tuple[str, str]] = []
 
         async def capture_email(**kwargs: object) -> bool:
-            delivered_prices.append(
-                (str(kwargs["amount_label"]), str(kwargs["amount_str"]))
-            )
+            delivered_prices.append((str(kwargs["amount_label"]), str(kwargs["amount_str"])))
             return True
 
         from app.services import email as email_module
@@ -1313,7 +1345,7 @@ async def test_create_quote_from_estimate_can_send_a_price_range(monkeypatch) ->
         sent = await svc.mark_sent(ws.id, quote.id)
         assert delivered_prices == [
             ("Estimated range", f"{float(quote.total):.2f}–4000.00 USD")
-        ]
+]
         public = await svc.get_public_proposal(sent.public_token)
         assert public.price_range is not None
         # The quoted total is the bottom of the range, so approving it and the
