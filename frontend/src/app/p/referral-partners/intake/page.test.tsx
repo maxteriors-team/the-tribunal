@@ -52,7 +52,9 @@ describe("ReferralPartnerIntakePage", () => {
     render(<ReferralPartnerIntakePage />);
 
     await waitFor(() => {
-      expect(screen.getByText("This intake link is invalid")).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: "This intake link is invalid", level: 1 }),
+      ).toBeInTheDocument();
     });
     expect(window.location.hash).toBe("");
     expect(window.sessionStorage.getItem(STORAGE_KEY)).toBeNull();
