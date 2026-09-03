@@ -61,6 +61,7 @@ Route: `/referral-partners`. Sidebar label: **Referral Partners**.
 1. Add a partner and its company/contact details.
 2. Track partner activity and referrals from the partner list.
 3. Select a partner to open `/referral-partners/{partner_id}` and review its details and related performance.
+4. From that detail page, a manager can generate and copy a private intake link. The partner opens `/p/referral-partners/intake` to submit its profile; replace or revoke the link if it should no longer work.
 
 ## Create Lead Magnets
 

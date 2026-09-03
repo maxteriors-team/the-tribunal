@@ -43,7 +43,7 @@ _DEFAULT_DAY3_TEMPLATE = (
 )
 _DEFAULT_DAY7_TEMPLATE = (
     "Hi {first_name}, we're offering 300 free video ads to qualified businesses. "
-    "Still interested? Book here: {reschedule_link}"
+    "Still interested? Reply YES and we'll get you booked."
 )
 
 
@@ -295,9 +295,9 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
         return message
 
     def _build_reschedule_link(self, contact: Contact, agent: Agent) -> str:
-        """Public reschedule links are not part of direct Google Calendar booking."""
+        """Keep legacy link placeholders actionable without a public booking URL."""
         del contact, agent
-        return ""
+        return "Reply YES"
 
     async def _resolve_from_number(
         self,

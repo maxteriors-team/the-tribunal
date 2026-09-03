@@ -16,6 +16,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1245,6 +1246,91 @@ async def test_create_quote_from_estimate_snapshots_preview_and_installation_sho
             if text and re.search(r"\d\s*(ft|feet|linear)", text, re.IGNORECASE)
         ]
         assert leaked == []
+
+        # Default: one firm number, exactly as before the range option existed.
+        assert public.price_range is None
+
+
+async def test_create_quote_from_estimate_can_send_a_price_range(monkeypatch) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+        contact = await _make_contact(db, ws.id, email="pat@example.com")
+        project = LightingProject(
+            workspace_id=ws.id,
+            contact_id=contact.id,
+            name="Pat permanent roofline",
+            document=_permanent_project_document(),
+        )
+        db.add(project)
+        await db.flush()
+
+        svc = QuoteService(db)
+        preview = {
+            "shot_id": "front",
+            "image": "data:image/jpeg;base64,/9j/2Q==",
+        }
+        # The browser may choose the top, but the server owns the bottom. It
+        # refuses a range that does not contain the exact quote total.
+        with pytest.raises(ValidationError, match="Higher range amount must be greater"):
+            await svc.create_quote_from_estimate(
+                ws.id,
+                EstimateQuoteRequest(
+                    side="permanent",
+                    feet=100,
+                    client_email="pat@example.com",
+                    price_range_high=1,
+                    lighting_project_id=project.id,
+                    proposal_preview=preview,
+                ),
+            )
+
+        quote = await svc.create_quote_from_estimate(
+            ws.id,
+            EstimateQuoteRequest(
+                side="permanent",
+                feet=100,
+                client_email="pat@example.com",
+                price_range_high=4000,
+                lighting_project_id=project.id,
+                proposal_preview=preview,
+            ),
+        )
+        assert quote.proposal_document is not None
+        assert quote.proposal_document["price_range_high"] == 4000
+
+        delivered_prices: list[tuple[str, str]] = []
+
+        async def capture_email(**kwargs: object) -> bool:
+            delivered_prices.append(
+                (str(kwargs["amount_label"]), str(kwargs["amount_str"]))
+            )
+            return True
+
+        from app.services import email as email_module
+
+        monkeypatch.setattr(email_module, "send_quote_email", capture_email)
+        sent = await svc.mark_sent(ws.id, quote.id)
+        assert delivered_prices == [
+            ("Estimated range", f"{float(quote.total):.2f}–4000.00 USD")
+        ]
+        public = await svc.get_public_proposal(sent.public_token)
+        assert public.price_range is not None
+        # The quoted total is the bottom of the range, so approving it and the
+        # deposit charged still resolve to the exact money on the quote.
+        assert public.price_range.low == public.total == float(quote.total)
+        assert public.price_range.high == 4000
+        # The staff-entered top is exposed only through the validated public pair.
+        assert "price_range_high" not in (public.proposal_document or {})
+
+
+async def test_price_range_is_rejected_without_a_permanent_proposal_preview() -> None:
+    # The range rides on the proposal snapshot; accepting the top without one
+    # would silently send the firm price the rep chose not to commit to.
+    with pytest.raises(PydanticValidationError):
+        EstimateQuoteRequest(side="permanent", feet=100, price_range_high=4000)
+    with pytest.raises(PydanticValidationError):
+        EstimateQuoteRequest(side="seasonal", feet=100, price_range_high=4000)
 
 
 async def test_create_quote_from_estimate_rejects_preview_for_missing_project_shot() -> None:

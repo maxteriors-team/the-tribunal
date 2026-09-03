@@ -446,6 +446,7 @@ export const queryKeys = {
         "scoreboard",
         normalizeQueryKeyParams(params),
       ] as const,
+    publicIntake: (instanceId: string) => ["public-intake", instanceId] as const,
   },
   nudges: {
     ...nudges,

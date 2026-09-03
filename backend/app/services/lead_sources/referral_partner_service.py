@@ -38,6 +38,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.db.scope import get_workspace_owned, select_workspace_owned
 from app.models.contact import Contact
 from app.models.referral_partner import ReferralPartner, ReferralPartnerType
+from app.models.referral_partner_logo import ReferralPartnerLogo
 from app.schemas.referral_partner import (
     DEFAULT_QUIET_AFTER_DAYS,
     ReferralPartnerListResponse,
@@ -238,8 +239,20 @@ class ReferralPartnerService:
         return ReferralPartnerListResponse(items=items, total=len(items))
 
     async def get(self, partner_id: uuid.UUID, workspace_id: uuid.UUID) -> ReferralPartnerResponse:
-        """Return one partner."""
-        return ReferralPartnerResponse.model_validate(await self._get(partner_id, workspace_id))
+        """Return one partner and lightweight logo presence metadata."""
+        partner = await self._get(partner_id, workspace_id)
+        has_logo = (
+            await self.db.scalar(
+                select(ReferralPartnerLogo.id).where(
+                    ReferralPartnerLogo.referral_partner_id == partner.id,
+                    ReferralPartnerLogo.workspace_id == workspace_id,
+                )
+            )
+            is not None
+        )
+        return ReferralPartnerResponse.model_validate(partner).model_copy(
+            update={"has_logo": has_logo}
+        )
 
     async def create(
         self, workspace_id: uuid.UUID, data: dict[str, Any]

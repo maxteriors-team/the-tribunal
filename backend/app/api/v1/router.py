@@ -409,6 +409,11 @@ api_router.include_router(
     prefix="/workspaces/{workspace_id}/referral-partners",
     tags=["Referral Partners"],
 )
+api_router.include_router(
+    referral_partners.public_router,
+    prefix="/public/referral-partners",
+    tags=["Public Referral Partner Intake"],
+)
 # Field service: business locations, service locations, crews, technicians
 # (ServiceTitan/Jobber-style)
 api_router.include_router(

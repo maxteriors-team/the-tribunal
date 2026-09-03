@@ -689,38 +689,33 @@ if settings.frontend_url:
     _cors_origins.add(settings.frontend_url)
 _cors_origins_list = list(_cors_origins)
 
-# Allow-list of request headers the browser may send cross-origin.
+# Allow-list of request headers the browser may send from an exact trusted
+# frontend origin.
 #
-# Auth flows through the ``access_token`` / ``refresh_token`` httpOnly cookies
-# set by ``/api/v1/auth/login`` and forwarded automatically by the browser when
-# ``credentials: "include"`` / ``withCredentials: true`` is set on the request.
-# Cookies are NOT subject to ``Access-Control-Allow-Headers`` — they're gated
-# by ``Access-Control-Allow-Credentials`` instead — so no header entry is
-# needed for authentication itself.
+# Authenticated CRM flows still use the ``access_token`` / ``refresh_token``
+# httpOnly cookies set by ``/api/v1/auth/login`` and forwarded with
+# ``credentials: "include"`` / ``withCredentials: true``. Cookies are not
+# subject to ``Access-Control-Allow-Headers``; they are gated by
+# ``Access-Control-Allow-Credentials`` instead.
 #
 # Why each header IS in the list:
-#   * ``Content-Type`` — set by axios on every JSON POST/PUT/PATCH
-#     (``application/json``) and by direct ``fetch()`` calls in embed pages and
-#     ``/voice-test``. ``application/json`` is not a CORS-safelisted value, so
-#     the preflight rejects the request without this entry.
+#   * ``Content-Type`` — set by axios on JSON writes and multipart uploads.
+#     Non-safelisted values such as ``application/json`` require preflight
+#     approval.
+#   * ``Authorization`` — the fixed-path public referral-partner intake sends
+#     its capability as a bearer header from the configured frontend origin.
+#     Those calls are explicitly credentialless; allowing this header does not
+#     broaden the exact origin allow-list or enable cookies for other origins.
 #
 # Why common headers are deliberately NOT in the list:
-#   * ``Authorization`` — the frontend never sends this header to our backend.
-#     The two ``Authorization: Bearer ...`` uses in the frontend
-#     (``voice-test/page.tsx``, ``embed/[publicId]/_use-voice-session.ts``) go
-#     directly to ``https://api.openai.com/v1/realtime/calls`` with an
-#     ephemeral OpenAI key — a different origin, not subject to our CORS
-#     config. The backend ``X-API-Key`` flow in ``app/api/deps.py`` is
-#     server-to-server only and never originates in a browser.
 #   * ``X-Workspace-Id`` / ``X-CSRF-Token`` — not in use. Workspace scoping
 #     comes from path/query params plus the user's JWT claims; CSRF is
 #     mitigated by SameSite cookies + Origin validation
 #     (``app/core/origin_validation.py``).
 #   * ``Accept`` / ``Origin`` / ``X-Requested-With`` — ``Accept`` and
 #     ``Origin`` are CORS-safelisted or browser-controlled forbidden headers
-#     respectively; they don't require an allow-list entry. Nothing in the
-#     frontend sets ``X-Requested-With``.
-_ALLOWED_REQUEST_HEADERS = ["Content-Type"]
+#     respectively; nothing in the frontend sets ``X-Requested-With``.
+_ALLOWED_REQUEST_HEADERS = ["Content-Type", "Authorization"]
 
 # Exact-match allow-list only. Credentialed CORS (allow_credentials=True) must
 # never be paired with a broad ``*.vercel.app`` / team-slug regex: any tenant
