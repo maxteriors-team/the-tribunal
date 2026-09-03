@@ -214,14 +214,17 @@ class ReferralPartner(Base, WorkspaceScoped):
     # the join has to name its side explicitly or SQLAlchemy sees two FK paths.
     workspace: Mapped["Workspace"] = relationship("Workspace")
     contact: Mapped["Contact | None"] = relationship("Contact", foreign_keys=[contact_id])
-    intake_links: Mapped[list["ReferralPartnerIntakeLink"]] = relationship(
+    # Explicit targets avoid reciprocal model imports; services query concrete models directly.
+    intake_links: Mapped[list[Base]] = relationship(
+        "ReferralPartnerIntakeLink",
         back_populates="referral_partner",
         cascade="all, delete-orphan",
         passive_deletes=True,
         foreign_keys="[ReferralPartnerIntakeLink.referral_partner_id, "
         "ReferralPartnerIntakeLink.workspace_id]",
     )
-    logo: Mapped["ReferralPartnerLogo | None"] = relationship(
+    logo: Mapped[Base | None] = relationship(
+        "ReferralPartnerLogo",
         back_populates="referral_partner",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -233,9 +236,3 @@ class ReferralPartner(Base, WorkspaceScoped):
         return (
             f"<ReferralPartner(id={self.id}, name={self.name}, partner_type={self.partner_type})>"
         )
-
-
-# Reciprocal model-only imports stay after the class to avoid import-order cycles.
-if TYPE_CHECKING:
-    from app.models.referral_partner_intake import ReferralPartnerIntakeLink
-    from app.models.referral_partner_logo import ReferralPartnerLogo
