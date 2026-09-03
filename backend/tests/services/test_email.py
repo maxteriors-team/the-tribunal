@@ -337,6 +337,23 @@ async def test_quote_email_renders_visible_and_plain_text_proposal_links(
 
 
 @pytest.mark.asyncio
+async def test_quote_email_labels_a_ballpark_range_plainly(fake_resend: _FakeResend) -> None:
+    sent = await email.send_quote_email(
+        to_email="client@example.com",
+        workspace_name="Maxteriors Lighting",
+        quote_number="QUO-000043",
+        amount_str="3,300.00–3,900.00 USD",
+        amount_label="Estimated range",
+        proposal_url="https://app.example.com/p/quotes/range-token",
+    )
+
+    assert sent is True
+    params = fake_resend.Emails.send_async.await_args.args[0]
+    assert "Estimated range" in params["html"]
+    assert "3,300.00–3,900.00 USD" in params["text"]
+
+
+@pytest.mark.asyncio
 async def test_quote_email_carries_the_workspace_logo(fake_resend: _FakeResend) -> None:
     """The delivery email is the customer's first impression of the proposal.
 

@@ -1015,3 +1015,38 @@ revision removed the redundant SMS panel heading and kept the composer visible a
 Screen-reader output, physical touch drag, 200% text-only zoom, forced colors, and a complete WCAG
 2.2 criterion audit remain unverified; no accessibility or legal-conformance claim follows from
 automated checks or rendered fixtures alone.
+
+# Public referral-partner intake (September 2026)
+
+## Design read and thesis
+
+- **Surface:** a public, capability-protected business profile form; the dashboard intake panel is
+  its staff-side control surface.
+- **Audience:** a referral partner completing business, offer, and logo details without a CRM login.
+- **Single job:** submit an accurate customer-facing partner profile once, with clear recovery when
+  the profile saves but the logo upload fails.
+- **Risk:** exposing the capability, losing entered data, publishing an incomplete offer, or hiding
+  validation and recovery feedback.
+- **Thesis:** a quiet trust-first form. One content rail, plain section cards, native controls, and
+  one amber submit action reuse the dashboard system without making the external page feel internal.
+
+The form uses existing Card, Input, Textarea, Button, Alert, typography, spacing, focus, and dark-theme
+tokens. Business, offer, and logo sections follow the real submission order. The staff panel keeps
+copy, rotate, revoke, status, and expiry actions together beside the partner record. Loading, invalid
+link, validation, submit, partial logo failure, retry, and completion states retain one layout and
+announce their result in text.
+
+## Responsive and accessibility evidence
+
+Desktop, 390 px, and 320 px captures use the same rail and stack two-column fields without horizontal
+overflow. Keyboard traversal follows document order and omits the intentionally disabled amount field.
+Chromium's accessibility tree exposed the page heading, labeled controls, submit action, and logo
+validation alert. Scoped axe runs reported zero WCAG-tagged violations at desktop, mobile, and the
+validation-error state. The first critique found a disabled amount field producing a contradictory
+error; the revision normalized null values, added a regression test, and moved focus to the required
+logo. It also removed the decorative shield medallion and ambient gradient.
+
+The post-revision rubric is **22/24**: brief specificity, hierarchy, composition, consistency,
+typography, material logic, states, responsive behavior, motion, and authentic content score 2;
+accessibility and visual distinctiveness score 1. Physical screen-reader output, forced colors, RTL,
+and 200% text-only zoom remain unverified, so this evidence is not a WCAG or legal-conformance claim.

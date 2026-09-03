@@ -1000,3 +1000,18 @@ Scope: authenticated staff can open an existing deal, review its linked customer
 ### Verification boundary
 
 Forty-eight focused component tests, TypeScript, changed-file lint, and mocked desktop/mobile route checks passed. Notes and SMS returned no WCAG-tagged axe violations after message contrast fixes, with no horizontal overflow at 320 px. No real contact was loaded, no SMS was sent, and consent basis, carrier delivery, physical touch drag, screen-reader output, and legal policy were not verified.
+
+## Focused addendum — permanent proposal price range (2026-09-02)
+
+Snapshot: 2 September 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
+
+Scope: a staff member may explicitly send a new permanent-lighting proposal as the exact server-priced total through a higher amount that staff enters. The option is off by default and does not change existing proposals, deposits, acceptance totals, payment processing, or provider delivery.
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| PPR-001 | HIGH | A consumer-facing range could obscure what acceptance actually costs | CODE/tests: the server owns the low end, rejects a top that does not exceed it, hides the raw staff field, labels the email and page as a range, and tells customers that approval locks the lower figure while increases require another quote | State the binding amount and prevent the public customer flow from changing either end or the payment total | Fixed locally | Request-boundary, email, public-payload, client-render, and acceptance/deposit regressions |
+| PPR-002 | LAWYER | A proposal range may be treated as an estimate or consumer contract | DEDUCED: the engineering control makes the lower figure binding in-product, but the deployed terms and local estimate rules were not reviewed | Confirm the range wording and change-order process for each jurisdiction served | Open; existing `SPP-003` also applies | Legal review of deployed proposal terms and operating jurisdictions |
+
+### Verification boundary
+
+Static code and local automated checks cover range validation, email/page display, exact accepted total, and unchanged deposit. No proposal was sent to a real customer, no payment was created, and no legal review was performed.

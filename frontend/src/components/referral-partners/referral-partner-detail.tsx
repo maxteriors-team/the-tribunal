@@ -27,6 +27,7 @@ import {
   partnerTypeLabel,
 } from "./partner-metrics";
 import { ReferralPartnerDialog } from "./referral-partner-dialog";
+import { ReferralPartnerIntakePanel } from "./referral-partner-intake-panel";
 
 const QUIET_AFTER_DAYS = 60;
 
@@ -53,16 +54,12 @@ function Stat({
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd
         className={
-          emphasis
-            ? "text-2xl font-semibold tabular-nums"
-            : "text-lg font-medium tabular-nums"
+          emphasis ? "text-2xl font-semibold tabular-nums" : "text-lg font-medium tabular-nums"
         }
       >
         {value}
       </dd>
-      {sample ? (
-        <p className="text-xs text-muted-foreground tabular-nums">{sample}</p>
-      ) : null}
+      {sample ? <p className="text-xs text-muted-foreground tabular-nums">{sample}</p> : null}
     </div>
   );
 }
@@ -86,10 +83,7 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
   // them here and risking a second, disagreeing answer.
   const scoreboardParams = { quiet_after_days: QUIET_AFTER_DAYS };
   const scoreboardQuery = useQuery({
-    queryKey: queryKeys.referralPartners.scoreboard(
-      workspaceId ?? "",
-      scoreboardParams,
-    ),
+    queryKey: queryKeys.referralPartners.scoreboard(workspaceId ?? "", scoreboardParams),
     queryFn: () => referralPartnersApi.scoreboard(workspaceId ?? "", scoreboardParams),
     enabled: Boolean(workspaceId),
     ...REALTIME,
@@ -121,9 +115,7 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
   }
 
   const partner = partnerQuery.data;
-  const row = scoreboardQuery.data?.items.find(
-    (item) => item.partner_id === partnerId,
-  );
+  const row = scoreboardQuery.data?.items.find((item) => item.partner_id === partnerId);
   const currency = scoreboardQuery.data?.currency ?? "USD";
   const silence = row ? describeSilence(row) : null;
 
@@ -135,13 +127,9 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
           <h1 className="text-2xl font-semibold tracking-tight">{partner.name}</h1>
           <div className="flex flex-wrap items-center gap-2">
             {partner.company ? (
-              <span className="text-sm text-muted-foreground">
-                {partner.company}
-              </span>
+              <span className="text-sm text-muted-foreground">{partner.company}</span>
             ) : null}
-            <Badge variant="outline">
-              {partnerTypeLabel(partner.partner_type)}
-            </Badge>
+            <Badge variant="outline">{partnerTypeLabel(partner.partner_type)}</Badge>
             {partner.is_active ? null : <Badge variant="outline">Inactive</Badge>}
             {row?.is_gone_quiet ? (
               <Badge variant="outline" className="gap-1">
@@ -168,10 +156,7 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
         ) : scoreboardQuery.isError ? (
           <PageErrorState
             className="min-h-[120px]"
-            message={getApiErrorMessage(
-              scoreboardQuery.error,
-              "Failed to load production",
-            )}
+            message={getApiErrorMessage(scoreboardQuery.error, "Failed to load production")}
             onRetry={() => void scoreboardQuery.refetch()}
           />
         ) : (
@@ -181,10 +166,7 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
               value={formatMoney(row?.total_revenue ?? 0, currency)}
               emphasis
             />
-            <Stat
-              label="Referrals sent"
-              value={formatNumber(row?.referrals_sent ?? 0)}
-            />
+            <Stat label="Referrals sent" value={formatNumber(row?.referrals_sent ?? 0)} />
             <Stat
               label="Close rate"
               value={formatRate(row?.close_rate)}
@@ -223,10 +205,7 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
             <span className="flex items-center gap-2">
               <Phone className="size-4 text-muted-foreground" aria-hidden />
               {partner.phone ? (
-                <a
-                  href={`tel:${partner.phone}`}
-                  className="underline-offset-4 hover:underline"
-                >
+                <a href={`tel:${partner.phone}`} className="underline-offset-4 hover:underline">
                   {partner.phone}
                 </a>
               ) : (
@@ -236,10 +215,7 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
             <span className="flex items-center gap-2">
               <Mail className="size-4 text-muted-foreground" aria-hidden />
               {partner.email ? (
-                <a
-                  href={`mailto:${partner.email}`}
-                  className="underline-offset-4 hover:underline"
-                >
+                <a href={`mailto:${partner.email}`} className="underline-offset-4 hover:underline">
                   {partner.email}
                 </a>
               ) : (
@@ -261,19 +237,20 @@ export function ReferralPartnerDetail({ partnerId }: { partnerId: string }) {
           {partner.notes ? (
             <>
               <Separator />
-              <p className="whitespace-pre-wrap text-muted-foreground">
-                {partner.notes}
-              </p>
+              <p className="whitespace-pre-wrap text-muted-foreground">{partner.notes}</p>
             </>
           ) : null}
         </div>
       </section>
 
-      <ReferralPartnerDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
+      <ReferralPartnerIntakePanel
         partner={partner}
+        workspaceId={workspaceId}
+        currency={currency}
+        canManage={canManage}
       />
+
+      <ReferralPartnerDialog open={editOpen} onOpenChange={setEditOpen} partner={partner} />
     </div>
   );
 }

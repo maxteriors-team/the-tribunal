@@ -25,6 +25,7 @@ or phone.
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -47,6 +49,8 @@ from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
+    from app.models.referral_partner_intake import ReferralPartnerIntakeLink
+    from app.models.referral_partner_logo import ReferralPartnerLogo
     from app.models.workspace import Workspace
 
 
@@ -67,6 +71,27 @@ class ReferralPartnerType(StrEnum):
     OTHER = "other"
 
 
+class ReferralPartnerIntakeStatus(StrEnum):
+    """State of the public partner-profile intake link."""
+
+    NOT_REQUESTED = "not_requested"
+    PENDING = "pending"
+    SUBMITTED = "submitted"
+    REVOKED = "revoked"
+
+
+class ReferralPartnerOfferType(StrEnum):
+    """Standardized client-facing offer made by a referral partner."""
+
+    NONE = "none"
+    FIXED_DOLLAR_CREDIT = "fixed_dollar_credit"
+    PERCENTAGE_DISCOUNT = "percentage_discount"
+    COMPLIMENTARY_SERVICE = "complimentary_service"
+    FREE_UPGRADE_ADD_ON = "free_upgrade_add_on"
+    GIFT = "gift"
+    OTHER = "other"
+
+
 class ReferralPartner(Base, WorkspaceScoped):
     """A named person or company that sends referral work to the workspace."""
 
@@ -75,6 +100,8 @@ class ReferralPartner(Base, WorkspaceScoped):
         # Two rows for the same partner would split their scoreboard in half and
         # defeat the whole point of tracking partners individually.
         UniqueConstraint("workspace_id", "name", name="uq_referral_partners_workspace_name"),
+        # Enables composite child FKs to reject a partner/workspace mismatch.
+        UniqueConstraint("id", "workspace_id", name="uq_referral_partners_id_workspace"),
         Index("ix_referral_partners_workspace_active", "workspace_id", "is_active"),
         Index("ix_referral_partners_workspace_type", "workspace_id", "partner_type"),
     )
@@ -130,6 +157,51 @@ class ReferralPartner(Base, WorkspaceScoped):
         Boolean, default=True, server_default="true", nullable=False
     )
 
+    # Public intake state. Bearer tokens live in a separate table so they can be
+    # expired, rotated, and revoked without exposing them on this row.
+    intake_status: Mapped[ReferralPartnerIntakeStatus] = mapped_column(
+        SAEnum(
+            ReferralPartnerIntakeStatus,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        default=ReferralPartnerIntakeStatus.NOT_REQUESTED,
+        server_default=ReferralPartnerIntakeStatus.NOT_REQUESTED.value,
+        nullable=False,
+    )
+    intake_link_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    intake_submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    intake_revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    website_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    business_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    services: Mapped[str | None] = mapped_column(Text, nullable=True)
+    service_area: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    offer_headline: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    offer_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    offer_type: Mapped[ReferralPartnerOfferType] = mapped_column(
+        SAEnum(
+            ReferralPartnerOfferType,
+            native_enum=False,
+            create_constraint=False,
+            length=50,
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        default=ReferralPartnerOfferType.NONE,
+        server_default=ReferralPartnerOfferType.NONE.value,
+        nullable=False,
+    )
+    offer_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    offer_terms: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -140,12 +212,24 @@ class ReferralPartner(Base, WorkspaceScoped):
         nullable=False,
     )
 
-    # Relationships are one-directional (cf. ``ServiceLocation.contact``) so
-    # neither the workspace nor the encrypted Contact model has to widen.
     # ``contacts`` also points back here (a referred lead names its partner), so
     # the join has to name its side explicitly or SQLAlchemy sees two FK paths.
     workspace: Mapped["Workspace"] = relationship("Workspace")
     contact: Mapped["Contact | None"] = relationship("Contact", foreign_keys=[contact_id])
+    intake_links: Mapped[list["ReferralPartnerIntakeLink"]] = relationship(
+        back_populates="referral_partner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        foreign_keys="[ReferralPartnerIntakeLink.referral_partner_id, "
+        "ReferralPartnerIntakeLink.workspace_id]",
+    )
+    logo: Mapped["ReferralPartnerLogo | None"] = relationship(
+        back_populates="referral_partner",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        foreign_keys="[ReferralPartnerLogo.referral_partner_id, ReferralPartnerLogo.workspace_id]",
+        uselist=False,
+    )
 
     def __repr__(self) -> str:
         return (
