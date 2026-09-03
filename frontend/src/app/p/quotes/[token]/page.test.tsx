@@ -122,47 +122,8 @@ describe("public proposal view beacon", () => {
     approve.focus();
     await user.keyboard("{Enter}");
 
-    await waitFor(() => expect(approveMock).toHaveBeenCalledWith("tok-abc", 1, null));
-  });
-
-  it("sends the selected Permanent payment enum with no client-owned terms", async () => {
-    const user = userEvent.setup();
-    getMock.mockResolvedValue({
-      ...proposal(),
-      title: "Permanent Lighting",
-      total: 5200,
-      proposal_document: {
-        service: "permanent",
-        category_sections: [
-          {
-            key: "permanent",
-            label: "Permanent Lighting",
-            min_applied: false,
-            financed_total: 5200,
-            cash_total: 5200,
-            cash_savings: 0,
-            monthly_payment: 216.67,
-          },
-        ],
-      },
-      financing: {
-        provider: "GreenSky",
-        plan_number: "6124",
-        terms: [24],
-        default_term: 24,
-        apr: 0,
-        monthly_payment: 216.67,
-        monthly_by_term: { "24": 216.67 },
-        disclaimer: "Estimated payment only. Subject to credit approval.",
-      },
-    });
-    await renderPage();
-
-    const financing = await screen.findByRole("radio", { name: /0% APR FINANCING/i });
-    await user.click(financing);
-    await user.click(screen.getByRole("button", { name: /Approve Proposal/i }));
-
-    await waitFor(() => expect(approveMock).toHaveBeenCalledWith("tok-abc", 1, null, "financing"));
-    expect(approveMock.mock.calls[0]).toHaveLength(4);
+    await waitFor(() =>
+      expect(approveMock).toHaveBeenCalledWith("tok-abc", 1, null),
+    );
   });
 });

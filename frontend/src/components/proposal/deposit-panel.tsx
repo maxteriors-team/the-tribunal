@@ -28,7 +28,6 @@ interface DepositPanelProps {
   /** Replaces direct checkout (used to accept-then-pay the chosen package). */
   onPayInstead?: () => void;
   payLabel?: string;
-  disabled?: boolean;
   busy?: boolean;
 }
 
@@ -37,7 +36,6 @@ export function DepositPanel({
   amountDue,
   onPayInstead,
   payLabel,
-  disabled = false,
   busy = false,
 }: DepositPanelProps) {
   const [error, setError] = useState<string | null>(null);
@@ -87,14 +85,16 @@ export function DepositPanel({
   return (
     <div className="dep-panel">
       <div className="dep-info">
-        <div className="dep-label">{fullPayment ? "Payment Due Today" : "Deposit Due Today"}</div>
+        <div className="dep-label">
+          {fullPayment ? "Payment Due Today" : "Deposit Due Today"}
+        </div>
         <div className="dep-amount">{amountLabel}</div>
         {pctLabel ? <div className="dep-sub">{pctLabel}</div> : null}
       </div>
       <button
         type="button"
         className="dep-pay-btn"
-        disabled={checkout.isPending || busy || disabled}
+        disabled={checkout.isPending || busy}
         onClick={() => {
           setError(null);
           if (onPayInstead) {

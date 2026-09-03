@@ -159,13 +159,28 @@ class UpsellService:
         return get_pricing_config(workspace)
 
     @staticmethod
-    def _sell_price(amount: float, config: PricingSettings) -> float:
-        """Return the configured customer price through the shared legacy adapter.
+    def _sell_price(net: float, config: PricingSettings) -> float:
+        """Convert a price-book figure into the price a client is actually charged.
 
-        The same direct-price function serves the field menu and office wizard,
-        so a fixture quoted in either place matches to the cent.
+        ``catalog_items.unit_price`` holds a **net** price. Every client-facing
+        sales surface grosses it up by the back-end buffer (the Wisetack dealer
+        fee, plus commission when ``commission.in_price`` is on) before showing a
+        number: the wizard does it per fixture and per ad-hoc charge —
+        ``proposal_builder`` calls it out as "rep enters net, we gross up (matches
+        every other price)" — and the bistro and roofline estimators do the same.
+
+        Skipping it would make this the one surface that sells at cost. On the
+        real seeded price book that is an 11% margin leak at the default buffer
+        (a $785 net uplight must sell for $882) and more wherever commission is
+        baked into price. It matters more here than anywhere else precisely
+        because of how this screen is designed: the technician cannot see the
+        price book and cannot override a price, so a net figure handed to them is
+        sold at net every time, with no human left to notice.
+
+        Same function the wizard uses, so a fixture quoted in a driveway and the
+        same fixture quoted from the office come out to the cent.
         """
-        return float(pp.gross_up_price(amount, config))
+        return float(pp.gross_up_price(net, config))
 
     @staticmethod
     def _fulfillment_parts(
@@ -400,7 +415,8 @@ class UpsellService:
         and an item with an empty ``attach_targets`` is treated as unrestricted —
         the column's documented meaning is "no restriction recorded".
 
-        Prices are the configured client selling amounts — see :meth:`_sell_price`.
+        Prices are **grossed up** to what a client is charged — see
+        :meth:`_sell_price`.
 
         ``role`` resolves ``proposal_limit`` on the response so the UI can warn a
         capped technician before they build. Omitting it reports no limit, which
@@ -733,8 +749,8 @@ class UpsellService:
         ``unit_price`` — so the client's warning is a courtesy and this is the
         control.
 
-        Measured on the direct one-time total the customer is charged, and
-        deliberately not on the recurring care plan: see
+        Measured on the **grossed-up** one-time total (what the customer is
+        charged), and deliberately not on the recurring care plan: see
         :class:`~app.schemas.pricing.UpsellConfig`.
 
         No limit configured (the default) means no cap, so a workspace that never

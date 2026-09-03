@@ -12,9 +12,8 @@ from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
 
 from app.api.v1 import quotes
-from app.core.permissions import Capability, quote_owner_scope, role_can
+from app.core.permissions import quote_owner_scope
 from app.models.quote import Quote
-from app.schemas.quote import QuoteApproveRequest
 from app.services.quotes.proposal_pricing import BistroPricingConfigurationError
 
 WORKSPACE_ID = uuid.uuid4()
@@ -197,31 +196,6 @@ async def test_sales_can_send_a_quote_after_owner_scope_resolves() -> None:
         )
 
     service.mark_sent.assert_awaited_once_with(WORKSPACE_ID, QUOTE_ID)
-
-
-async def test_operator_approval_forwards_only_the_payment_enum() -> None:
-    service = MagicMock()
-    service.approve_quote = AsyncMock(return_value=MagicMock())
-
-    with patch.object(quotes, "QuoteService", return_value=service):
-        await quotes.approve_quote(
-            WORKSPACE_ID,
-            QUOTE_ID,
-            MagicMock(),
-            _actor(11),
-            AsyncMock(),
-            _membership("manager"),
-            QuoteApproveRequest(payment_option="cash_check"),
-        )
-
-    service.approve_quote.assert_awaited_once_with(
-        WORKSPACE_ID, QUOTE_ID, payment_option="cash_check"
-    )
-
-
-def test_salespeople_cannot_read_private_profitability() -> None:
-    assert role_can("sales_rep", Capability.BILLING_READ) is False
-    assert role_can("owner", Capability.BILLING_READ) is True
 
 
 def test_every_authenticated_quote_id_route_uses_scoped_dependency() -> None:

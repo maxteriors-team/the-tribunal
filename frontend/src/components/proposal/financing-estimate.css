@@ -173,90 +173,6 @@
   opacity: 0.68;
 }
 
-/* Permanent Lighting's required one-price payment choice. */
-.payment-options {
-  margin: 42px 0;
-  padding: 0;
-  border: 0;
-  color: var(--t1, #f4efe4);
-}
-.payment-options > legend {
-  width: 100%;
-  margin-bottom: 14px;
-  color: var(--gold, #d4af5a);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  text-align: center;
-}
-.payment-options__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-.payment-option {
-  display: flex;
-  min-height: 210px;
-  flex-direction: column;
-  gap: 14px;
-  padding: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.035);
-  cursor: pointer;
-}
-.payment-option:hover {
-  border-color: var(--gold, #d4af5a);
-}
-.payment-option.is-selected {
-  border-color: var(--gold2, #ebca78);
-  box-shadow: inset 0 0 0 1px var(--gold2, #ebca78);
-  background: rgba(212, 175, 90, 0.12);
-}
-.payment-option__heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--t1, #f4efe4);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-}
-.payment-option__heading input {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  accent-color: var(--gold2, #ebca78);
-}
-.payment-option__heading input:focus-visible {
-  outline: 3px solid #ffffff;
-  outline-offset: 3px;
-}
-.payment-option__state {
-  margin-left: auto;
-  color: var(--gold2, #ebca78);
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-.payment-option__price {
-  color: var(--t1, #f4efe4);
-  font-family: var(--font-cormorant, Georgia, serif);
-  font-size: clamp(38px, 6vw, 58px);
-  line-height: 1;
-}
-.payment-option__details {
-  color: var(--t2, #d5cfc4);
-  font-size: 13px;
-  line-height: 1.65;
-}
-.payment-options:disabled .payment-option {
-  cursor: default;
-  opacity: 0.78;
-}
-.payment-selection-required {
-  margin-top: 12px;
-  color: var(--gold2, #ebca78);
-  font-size: 12px;
-}
 @media (max-width: 520px) {
   .financing-estimate__figure {
     flex-wrap: wrap;
@@ -264,10 +180,6 @@
 
   .financing-estimate__figure strong {
     width: 100%;
-  }
-
-  .payment-options__grid {
-    grid-template-columns: 1fr;
   }
 }
 

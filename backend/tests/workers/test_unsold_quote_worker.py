@@ -63,7 +63,6 @@ def _quote(
         approved_at=None,
         declined_at=None,
         proposal_document=None,
-        permanent_pricing_snapshot=None,
         public_token="proposal-token",
         number="Q-1042",
         total=total,
@@ -548,18 +547,15 @@ async def test_missing_template_defers_instead_of_sending_empty_copy() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Revival nudge copy follows the exact terms snapshotted on the quote
+# Revival nudge copy tracks whether the workspace still offers financing
 # --------------------------------------------------------------------------- #
-def _quote_with_financing(
-    *, service: str = "permanent", snapshotted: bool = True
-) -> SimpleNamespace:
+def _quote_with_financing(category_minimums: dict[str, float] | None) -> SimpleNamespace:
+    """A revivable quote whose workspace offers financing only when categories exist."""
     quote = _quote()
-    quote.workspace.settings = {
-        "timezone": "UTC",
-        "pricing": {"financing": {"enabled": True, "fee_buffer": 0.11}},
-    }
-    quote.proposal_document = {"service": service}
-    quote.permanent_pricing_snapshot = {"plan_number": "6124"} if snapshotted else None
+    financing: dict[str, object] = {"enabled": True, "fee_buffer": 0.11}
+    if category_minimums is not None:
+        financing["category_minimums"] = category_minimums
+    quote.workspace.settings = {"timezone": "UTC", "pricing": {"financing": financing}}
     return quote
 
 
@@ -589,23 +585,20 @@ async def _revival_nudge_message(quote: SimpleNamespace) -> str:
 
 
 @pytest.mark.asyncio
-async def test_revival_nudge_pitches_snapshotted_permanent_financing() -> None:
-    message = await _revival_nudge_message(_quote_with_financing())
+async def test_revival_nudge_pitches_financing_when_the_workspace_offers_it() -> None:
+    message = await _revival_nudge_message(_quote_with_financing({"permanent": 0}))
 
     assert "walk through financing" in message
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("service", "snapshotted"),
-    [("permanent", False), ("landscape", True)],
-)
-async def test_revival_nudge_hides_financing_without_exact_permanent_snapshot(
-    service: str, snapshotted: bool
-) -> None:
-    message = await _revival_nudge_message(
-        _quote_with_financing(service=service, snapshotted=snapshotted)
-    )
+async def test_revival_nudge_drops_financing_once_every_category_is_cleared() -> None:
+    """Clearing categories is how financing is switched off without losing the fee buffer.
+
+    The rep gets one revival call per quote; pitching a discontinued product
+    wastes it.
+    """
+    message = await _revival_nudge_message(_quote_with_financing({}))
 
     assert "financing" not in message.lower()
     assert "re-price or re-schedule" in message

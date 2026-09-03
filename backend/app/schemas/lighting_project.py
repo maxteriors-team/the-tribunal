@@ -625,8 +625,6 @@ class LightingProjectRevision(ApiSchema):
 class LightingProjectDetail(LightingProjectSummary):
     document: LandscapeDraftDocument
     created_by_id: int | None
-    contact_email: str | None = None
-    contact_phone: str | None = None
 
 
 class PaginatedLightingProjects(ApiSchema):

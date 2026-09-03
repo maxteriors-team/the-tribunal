@@ -2,14 +2,10 @@
 
 import { useState } from "react";
 
-import type { FinancingEstimate as FinancingEstimateData } from "@/types/financing";
-import type { QuotePaymentOption } from "@/types/proposal";
-
 import "./financing-estimate.css";
 
 export const DEFAULT_FINANCING_DISCLAIMER =
   "Payment figures are estimates for illustration only and are not a financing offer. Financing is subject to application and approval by the provider; actual terms, APR, and payment may vary.";
-export const GREEN_SKY_REQUIRED_DISCLOSURE = "Estimated payment only. Subject to credit approval.";
 
 export interface FinancingPresentationData {
   enabled?: boolean;
@@ -28,10 +24,8 @@ export interface FinancingPresentationData {
 interface FinancingSnapshotCopy {
   enabled: boolean;
   provider: string;
-  plan_number?: string | null;
   terms: number[];
   default_term: number;
-  apr?: number | null;
   headline?: string | null;
   body?: string | null;
   points?: string[];
@@ -45,7 +39,9 @@ export function financingFromSnapshot(
   monthlyByTerm: Record<string, number> = {},
 ): FinancingPresentationData | null {
   if (!financing?.enabled || monthlyPayment <= 0) return null;
-  const pricedTerms = financing.terms.filter((term) => (monthlyByTerm[String(term)] ?? 0) > 0);
+  const pricedTerms = financing.terms.filter(
+    (term) => (monthlyByTerm[String(term)] ?? 0) > 0,
+  );
   return {
     ...financing,
     // Category-only snapshots expose only the default-term grand payment. Do
@@ -63,9 +59,14 @@ interface FinancingEstimateProps {
   className?: string;
 }
 
-function paymentFor(financing: FinancingPresentationData, term: number): number {
+function paymentFor(
+  financing: FinancingPresentationData,
+  term: number,
+): number {
   const byTerm = financing.monthly_by_term[String(term)];
-  return Number.isFinite(byTerm) && byTerm > 0 ? byTerm : financing.monthly_payment;
+  return Number.isFinite(byTerm) && byTerm > 0
+    ? byTerm
+    : financing.monthly_payment;
 }
 
 function formatPayment(value: number): string {
@@ -80,89 +81,6 @@ function formatApr(apr: number | null | undefined): string | null {
   }).format(apr)} APR used for this estimate`;
 }
 
-interface PermanentPaymentOptionsProps {
-  financing: FinancingEstimateData | null | undefined;
-  contractPrice: number;
-  currency?: string;
-  value: QuotePaymentOption | null;
-  onChange: (value: QuotePaymentOption) => void;
-  disabled?: boolean;
-}
-
-function formatContractPrice(value: number, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-/** Exact Permanent Lighting payment methods; prices and estimates remain server-owned. */
-export function PermanentPaymentOptions({
-  financing,
-  contractPrice,
-  currency = "USD",
-  value,
-  onChange,
-  disabled = false,
-}: PermanentPaymentOptionsProps) {
-  if (!financing?.plan_number || financing.monthly_payment <= 0) return null;
-  const term = financing.default_term;
-  const apr = new Intl.NumberFormat("en-US", {
-    style: "percent",
-    maximumFractionDigits: 2,
-  }).format(financing.apr);
-  const price = formatContractPrice(contractPrice, currency);
-  const optionCard = (option: QuotePaymentOption, title: string) => {
-    const selected = value === option;
-    const detailsId = `payment-option-${option}-details`;
-    return (
-      <label className={`payment-option${selected ? " is-selected" : ""}`}>
-        <span className="payment-option__heading">
-          <input
-            type="radio"
-            name="proposal-payment-option"
-            value={option}
-            checked={selected}
-            aria-describedby={detailsId}
-            onChange={() => onChange(option)}
-          />
-          <strong>{title}</strong>
-          <span className="payment-option__state">{selected ? "Selected" : "Select"}</span>
-        </span>
-        <span className="payment-option__price">{price}</span>
-        <span className="payment-option__details" id={detailsId}>
-          {option === "financing" ? (
-            <>
-              {`Approximately $${Math.round(financing.monthly_payment).toLocaleString("en-US")}/month for ${term} months`}
-              <br />
-              GreenSky plan {financing.plan_number}
-              <br />
-              {GREEN_SKY_REQUIRED_DISCLOSURE}
-            </>
-          ) : (
-            "Same contracted customer price."
-          )}
-        </span>
-      </label>
-    );
-  };
-
-  return (
-    <fieldset className="payment-options" id="payment-options" disabled={disabled}>
-      <legend id="payment-options-label">PAYMENT OPTIONS</legend>
-      <div
-        className="payment-options__grid"
-        role="radiogroup"
-        aria-labelledby="payment-options-label"
-      >
-        {optionCard("financing", `${apr} APR FINANCING`)}
-        {optionCard("cash_check", "CASH/CHECK")}
-      </div>
-    </fieldset>
-  );
-}
 /**
  * Shared compliance-safe monthly-payment presentation for wizard, quote, and
  * public proposal surfaces. It never renders a payment without a disclaimer.
@@ -189,7 +107,9 @@ export function FinancingEstimate({
     ? financing.default_term
     : (configuredTerms[0] ?? financing.default_term);
   const term =
-    chosenTerm != null && configuredTerms.includes(chosenTerm) ? chosenTerm : defaultTerm;
+    chosenTerm != null && configuredTerms.includes(chosenTerm)
+      ? chosenTerm
+      : defaultTerm;
   const payment = paymentFor(financing, term);
   const disclaimer = financing.disclaimer?.trim() || DEFAULT_FINANCING_DISCLAIMER;
   const apr = formatApr(financing.apr);
@@ -245,7 +165,8 @@ export function FinancingEstimate({
         </div>
       ) : null}
       <p className="financing-estimate__body">
-        {financing.body || "Illustrative monthly-payment options for this project."}{" "}
+        {financing.body || "Illustrative monthly-payment options for this project."}
+        {" "}
         <span>Provider: {financing.provider}.</span>
       </p>
       {financing.points?.length ? (

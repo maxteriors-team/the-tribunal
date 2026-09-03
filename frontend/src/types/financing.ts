@@ -1,7 +1,6 @@
 /** Server-computed, non-contractual monthly-payment estimate. */
 export interface FinancingEstimate {
   provider: string;
-  plan_number?: string | null;
   terms: number[];
   default_term: number;
   apr: number;

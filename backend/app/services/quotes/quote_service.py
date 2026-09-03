@@ -16,12 +16,11 @@ recorded on the quote so the sales -> work -> billing chain stays auditable.
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from math import isfinite
 from typing import cast
 
 import structlog
-from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -67,7 +66,6 @@ from app.schemas.estimate import (
 )
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
 from app.schemas.pricing import (
-    GREEN_SKY_REQUIRED_DISCLOSURE,
     CategoryLine,
     ChristmasPackagePricing,
     ChristmasPricing,
@@ -96,16 +94,12 @@ from app.schemas.proposal_wizard import (
 )
 from app.schemas.quote import (
     PaginatedQuotes,
-    PermanentPricingSnapshot,
-    PermanentProfitabilityResponse,
-    PermanentProfitabilityScenario,
     QuoteConvertResponse,
     QuoteCreate,
     QuoteDeliverResult,
     QuoteDetailResponse,
     QuoteLineItemCreate,
     QuoteLineItemUpdate,
-    QuotePaymentOption,
     QuoteResponse,
     QuoteServiceCreate,
     QuoteServiceResponse,
@@ -149,8 +143,9 @@ from app.services.quotes.proposal_builder import (
     sellable_tier_keys,
 )
 from app.services.quotes.proposal_pricing import (
-    amortized_monthly_payment,
-    permanent_profitability,
+    financing_estimate as build_financing_estimate,
+)
+from app.services.quotes.proposal_pricing import (
     price_christmas,
     price_christmas_package,
     price_christmas_packages,
@@ -165,7 +160,6 @@ from app.services.workspaces.membership import assert_active_workspace_member
 logger = structlog.get_logger()
 
 WIZARD_INPUT_VERSION = 1
-_MONEY = Decimal("0.01")
 
 
 # Generic over the concrete package type (bound to the presentation contract) so
@@ -525,7 +519,16 @@ class QuoteService:
         )
 
     def _recompute_totals(self, quote: Quote) -> None:
-        """Recompute line-derived totals, attach metrics, and snapshotted prices."""
+        """Recompute every line-item-derived field on the quote, in place.
+
+        Totals *and* the denormalized attach metrics, because both are functions
+        of the same line items. Keeping them in one method is deliberate: this is
+        already called by every path that adds, edits, replaces or removes a line,
+        so the metrics cannot drift by someone adding a mutation path and
+        forgetting a second call.
+
+        Requires ``quote.line_items`` to be loaded.
+        """
         subtotal = round(sum(float(li.total) for li in quote.line_items), 2)
         quote.subtotal = subtotal
         quote.total = round(
@@ -535,195 +538,109 @@ class QuoteService:
         quote.primary_service = primary
         quote.attach_count = attach_count
         quote.attach_value = attach_value
-        self._sync_permanent_snapshot_price(quote)
 
     @staticmethod
-    def _money(value: float | Decimal) -> Decimal:
-        return Decimal(str(value)).quantize(_MONEY, rounding=ROUND_HALF_UP)
-
-    @staticmethod
-    def _proposal_service(quote: Quote) -> str | None:
-        document = quote.proposal_document
-        if not isinstance(document, Mapping):
-            return None
-        service = document.get("service")
-        return service if isinstance(service, str) else None
-
-    @classmethod
-    def _permanent_snapshot(
-        cls, quote: Quote, *, strict: bool = False
-    ) -> PermanentPricingSnapshot | None:
-        if cls._proposal_service(quote) != "permanent":
-            return None
-        raw = quote.permanent_pricing_snapshot
-        if raw is None:
-            return None
-        try:
-            return PermanentPricingSnapshot.model_validate(raw)
-        except PydanticValidationError as exc:
-            if strict:
-                raise ValidationError("Permanent Lighting payment terms are unavailable.") from exc
-            return None
-
-    @classmethod
-    def _new_permanent_snapshot(
-        cls,
+    def _quote_category_totals(  # noqa: PLR0912 - handles three persisted quote shapes
         quote: Quote,
-        config: PricingSettings,
-        *,
-        material_cogs: float | Decimal,
-    ) -> dict[str, object] | None:
-        if cls._proposal_service(quote) != "permanent":
-            return None
-        price = cls._money(quote.total or 0)
-        financing = config.permanent.financing
-        return PermanentPricingSnapshot(
-            cash_check_price=price,
-            financing_price=price,
-            provider=financing.provider,
-            plan_number=financing.plan_number,
-            apr=Decimal(str(financing.apr)),
-            term_months=financing.term_months,
-            merchant_fee_rate=Decimal(str(financing.merchant_fee_rate)),
-            sales_commission_rate=Decimal(str(financing.sales_commission_rate)),
-            material_cogs=cls._money(material_cogs),
-        ).model_dump(mode="json")
+    ) -> dict[str, float]:
+        """Return positive service subtotals used only for financing eligibility.
 
-    @classmethod
-    def _replace_permanent_snapshot(
-        cls,
-        quote: Quote,
-        config: PricingSettings,
-        *,
-        material_cogs: float | Decimal,
-    ) -> None:
-        quote.permanent_pricing_snapshot = cls._new_permanent_snapshot(
-            quote, config, material_cogs=material_cogs
+        Core quotes carry categories on their line items. Wizard quotes predate
+        that snapshot and instead carry product-line keys in ``proposal_document``;
+        list reads may have neither relationship loaded, so ``primary_service`` is
+        the final (single-category) fallback. No branch changes the quote's price.
+        """
+
+        def amount(raw: object) -> float:
+            try:
+                return max(0.0, float(raw or 0))  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return 0.0
+
+        totals: dict[str, float] = {}
+        loaded_lines = quote.__dict__.get("line_items")
+        if loaded_lines is not None:
+            for line in loaded_lines:
+                category = str(line.service_category or "").strip().lower()
+                line_amount = amount(line.total)
+                if category and line_amount > 0:
+                    totals[category] = totals.get(category, 0.0) + line_amount
+        if totals:
+            return totals
+
+        document = quote.proposal_document if isinstance(quote.proposal_document, dict) else {}
+        raw_categories = document.get("categories", [])
+        categories = (
+            [str(category).strip().lower() for category in raw_categories if str(category).strip()]
+            if isinstance(raw_categories, list)
+            else []
         )
-        if quote.permanent_pricing_snapshot is None:
-            quote.payment_option = None
+        raw_sections = document.get("category_sections", [])
+        for section in raw_sections if isinstance(raw_sections, list) else []:
+            if not isinstance(section, dict):
+                continue
+            category = str(section.get("key") or "").strip().lower()
+            section_amount = amount(section.get("financed_total"))
+            if category and section_amount > 0:
+                totals[category] = section_amount
+
+        if "landscape" in categories:
+            selected = document.get("selected_tier")
+            raw_tiers = document.get("tiers", [])
+            for tier in raw_tiers if isinstance(raw_tiers, list) else []:
+                if not isinstance(tier, dict) or tier.get("key") != selected:
+                    continue
+                pricing = tier.get("pricing")
+                tier_amount = amount(pricing.get("base")) if isinstance(pricing, dict) else 0
+                if tier_amount > 0:
+                    totals["landscape"] = tier_amount
+                break
+        bistro = document.get("bistro")
+        if "bistro" in categories and isinstance(bistro, dict):
+            bistro_amount = amount(bistro.get("total"))
+            if bistro_amount > 0:
+                totals["bistro"] = bistro_amount
+        if totals:
+            return totals
+
+        total = amount(quote.total)
+        if categories and total > 0:
+            return dict.fromkeys(categories, total)
+        primary = str(quote.primary_service or "").strip().lower()
+        return {primary: total} if primary and total > 0 else {}
 
     @classmethod
-    def _sync_permanent_snapshot_price(cls, quote: Quote) -> None:
-        """Keep mutable contract totals aligned without changing snapshotted terms."""
-        if cls._proposal_service(quote) != "permanent":
-            quote.permanent_pricing_snapshot = None
-            quote.payment_option = None
-            return
-        snapshot = cls._permanent_snapshot(quote, strict=True)
-        if snapshot is None:
-            return
-        price = cls._money(quote.total or 0)
-        quote.permanent_pricing_snapshot = snapshot.model_copy(
-            update={"cash_check_price": price, "financing_price": price}
-        ).model_dump(mode="json")
-
-    @classmethod
-    def _selected_kit_material_cogs(
-        cls, config: PricingSettings, selections: Sequence[PermanentKitSelection]
-    ) -> Decimal:
-        package_costs = {
-            package.feet: cls._money(package.cost) for package in config.permanent.packages
-        }
-        total = Decimal("0")
-        for selection in selections:
-            package_cost = package_costs.get(selection.feet)
-            if package_cost is None:
-                raise ValidationError("A selected Permanent Lighting package is unavailable.")
-            total += package_cost * selection.quantity
-        return cls._money(total)
-
-    @classmethod
-    def _apply_wizard_permanent_selection(
-        cls,
-        quote: Quote,
-        config: PricingSettings,
-        payload: ProposalWizardPayload,
-    ) -> Decimal:
-        selection = payload.permanent
-        if selection is None:
-            quote.selected_permanent_kits = []
-            return Decimal("0")
-        pricing = price_permanent(config, feet=selection.feet, channels=selection.channels)
-        quote.selected_permanent_kits = [
-            kit.model_dump(mode="json") for kit in pricing.selected_kits
-        ]
-        return cls._money(pricing.package_cogs)
-
-    @classmethod
-    def _financing_for_quote(cls, quote: Quote) -> FinancingEstimate | None:
-        """Return only the estimate stored for an exact Permanent snapshot."""
-        snapshot = cls._permanent_snapshot(quote)
-        if snapshot is None:
-            return None
-        payment = amortized_monthly_payment(
-            snapshot.financing_price,
-            apr=snapshot.apr,
-            term_months=snapshot.term_months,
-        )
-        return FinancingEstimate(
-            provider=snapshot.provider,
-            plan_number=snapshot.plan_number,
-            terms=[snapshot.term_months],
-            default_term=snapshot.term_months,
-            apr=float(snapshot.apr),
-            monthly_payment=float(payment),
-            monthly_by_term={snapshot.term_months: float(payment)},
-            disclaimer=GREEN_SKY_REQUIRED_DISCLOSURE,
+    def _financing_for_quote(
+        cls, quote: Quote, config: PricingSettings
+    ) -> FinancingEstimate | None:
+        """Build the non-contractual payment estimate exposed by quote APIs."""
+        return build_financing_estimate(
+            float(quote.total or 0), cls._quote_category_totals(quote), config
         )
 
-    async def get_permanent_profitability(
-        self, workspace_id: uuid.UUID, quote_id: uuid.UUID
-    ) -> PermanentProfitabilityResponse | None:
-        """Compute both private scenarios from one workspace-scoped snapshot."""
-        quote = await get_or_404(self.db, Quote, quote_id, workspace_id=workspace_id)
-        snapshot = self._permanent_snapshot(quote)
-        if snapshot is None:
-            return None
+    async def _pricing_config_for_quote(self, quote: Quote) -> PricingSettings:
+        """Return the pricing config behind this quote's financing block.
 
-        def scenario(
-            payment_option: QuotePaymentOption, *, financed: bool
-        ) -> PermanentProfitabilityScenario:
-            result = permanent_profitability(
-                snapshot.financing_price if financed else snapshot.cash_check_price,
-                material_cogs=snapshot.material_cogs,
-                merchant_fee_rate=snapshot.merchant_fee_rate,
-                sales_commission_rate=snapshot.sales_commission_rate,
-                financed=financed,
+        Prefers an already-loaded ``workspace`` relationship, then reads through
+        the session's identity map, so decorating a response never costs a
+        second round trip for a workspace the caller already holds.
+
+        A missing workspace falls back to defaults rather than raising. This
+        runs *after* writes like ``approve_quote`` have committed, so turning a
+        settled approval into a 404 would report a failure that did not happen
+        — and it matches ``get_pricing_config``'s own never-500-a-read contract.
+        """
+        workspace = quote.__dict__.get("workspace")
+        if not isinstance(workspace, Workspace):
+            workspace = await self.db.get(Workspace, quote.workspace_id)
+        if not isinstance(workspace, Workspace):
+            logger.warning(
+                "quote_pricing_config_workspace_missing",
+                quote_id=str(quote.id),
+                workspace_id=str(quote.workspace_id),
             )
-            return PermanentProfitabilityScenario(
-                payment_option=payment_option,
-                contract_price=float(result.contract_price),
-                merchant_fee_rate=float(snapshot.merchant_fee_rate) if financed else 0,
-                merchant_fee=float(result.merchant_fee),
-                sales_commission_rate=float(snapshot.sales_commission_rate),
-                sales_commission=float(result.sales_commission),
-                material_cogs=float(result.material_cogs),
-                contribution_before_labor=float(result.contribution_before_labor),
-                contribution_margin=float(result.contribution_margin),
-            )
-
-        payment = amortized_monthly_payment(
-            snapshot.financing_price,
-            apr=snapshot.apr,
-            term_months=snapshot.term_months,
-        )
-        selected = cast(
-            QuotePaymentOption | None,
-            quote.payment_option if quote.payment_option in {"cash_check", "financing"} else None,
-        )
-        return PermanentProfitabilityResponse(
-            quote_id=quote.id,
-            currency=quote.currency,
-            provider=snapshot.provider,
-            plan_number=snapshot.plan_number,
-            apr=float(snapshot.apr),
-            term_months=snapshot.term_months,
-            estimated_monthly_payment=float(payment),
-            selected_payment_option=selected,
-            cash_check=scenario("cash_check", financed=False),
-            financing=scenario("financing", financed=True),
-        )
+            return PricingSettings()
+        return get_pricing_config(workspace)
 
     @staticmethod
     def _is_wizard_quote(quote: Quote) -> bool:
@@ -758,7 +675,8 @@ class QuoteService:
             await self.db.refresh(quote, ["assignee"])
         response = QuoteDetailResponse.model_validate(quote)
         self._decorate_wizard_edit_state(response, quote)
-        response.financing = self._financing_for_quote(quote)
+        config = await self._pricing_config_for_quote(quote)
+        response.financing = self._financing_for_quote(quote, config)
         response.services = self._services_for(quote)
         return response
 
@@ -804,10 +722,10 @@ class QuoteService:
         ]
 
     @classmethod
-    def _summary_response(cls, quote: Quote) -> QuoteResponse:
+    def _summary_response(cls, quote: Quote, config: PricingSettings) -> QuoteResponse:
         response = QuoteResponse.model_validate(quote)
         cls._decorate_wizard_edit_state(response, quote)
-        response.financing = cls._financing_for_quote(quote)
+        response.financing = cls._financing_for_quote(quote, config)
         return response
 
     @staticmethod
@@ -1184,7 +1102,9 @@ class QuoteService:
         query = query.order_by(Quote.created_at.desc())
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
-        items = [self._summary_response(quote) for quote in result.items]
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        config = get_pricing_config(workspace)
+        items = [self._summary_response(quote, config) for quote in result.items]
         return PaginatedQuotes(**result.to_dict(items))
 
     async def create_quote(
@@ -1254,10 +1174,6 @@ class QuoteService:
             quote.line_items.append(self._build_line_item(item, categories))
 
         self._recompute_totals(quote)
-        if self._proposal_service(quote) == "permanent":
-            config = get_pricing_config(workspace)
-            material_cogs = self._selected_kit_material_cogs(config, selected_permanent_kits or ())
-            self._replace_permanent_snapshot(quote, config, material_cogs=material_cogs)
         # Before the insert: a blocking attach rule must reject the save, not
         # persist a quote and then complain about it.
         attach_warning = self._apply_attach_rules(quote, workspace, quote_in.attach_dismissal)
@@ -1644,54 +1560,12 @@ class QuoteService:
             idempotency_id=idempotency_id,
         )
 
-    @classmethod
-    def _apply_approval_payment_option(
-        cls,
-        quote: Quote,
-        requested: QuotePaymentOption | None,
-        *,
-        retry: bool,
-    ) -> None:
-        eligible = (
-            cls._proposal_service(quote) == "permanent"
-            and quote.permanent_pricing_snapshot is not None
-        )
-        if not eligible:
-            if requested is not None:
-                raise ValidationError(
-                    "Payment-method selection is available only for Permanent Lighting proposals."
-                )
-            return
-
-        cls._permanent_snapshot(quote, strict=True)
-        if requested not in {"cash_check", "financing"}:
-            if retry:
-                raise ConflictError(
-                    "Repeat approval using the contracted payment method.",
-                    code="payment_option_mismatch",
-                )
-            raise ValidationError("Choose cash/check or GreenSky financing before approval.")
-        if retry:
-            if quote.payment_option != requested:
-                raise ConflictError(
-                    "An approved contract's payment method cannot be changed.",
-                    code="payment_option_mismatch",
-                )
-            return
-        if quote.payment_option is not None and quote.payment_option != requested:
-            raise ConflictError(
-                "This proposal already has a different payment method.",
-                code="payment_option_mismatch",
-            )
-        quote.payment_option = requested
-
     async def approve_quote(
         self,
         workspace_id: uuid.UUID,
         quote_id: uuid.UUID,
         *,
         expected_proposal_version: int | None = None,
-        payment_option: QuotePaymentOption | None = None,
     ) -> QuoteDetailResponse:
         """Approve once while serializing against any customer-facing edit."""
         await self._expire_overdue(workspace_id)
@@ -1714,7 +1588,6 @@ class QuoteService:
                 code="proposal_changed",
             )
         if quote.status == "approved":
-            self._apply_approval_payment_option(quote, payment_option, retry=True)
             return await self._detail_response(quote)
         if expected_proposal_version is not None and quote.status != "sent":
             raise ConflictError(
@@ -1723,7 +1596,6 @@ class QuoteService:
             )
         if quote.status not in {"draft", "sent"}:
             raise ConflictError(f"Cannot approve a {quote.status} quote")
-        self._apply_approval_payment_option(quote, payment_option, retry=False)
         quote.status = "approved"
         quote.approved_at = datetime.now(UTC)
         await mark_quote_approved_on_pipeline(self.db, workspace_id, quote)
@@ -2066,6 +1938,7 @@ class QuoteService:
         """Return the read-only, safe-fields-only proposal for a public token."""
         quote = await self._load_by_token(token)
         template = get_proposal_template(quote.workspace)
+        pricing_config = get_pricing_config(quote.workspace)
         business_name = template.business_name or (quote.workspace.name if quote.workspace else "")
         client_name: str | None = None
         if quote.contact is not None:
@@ -2088,19 +1961,13 @@ class QuoteService:
             number=quote.number,
             title=quote.title,
             status=quote.status,
-            payment_option=cast(
-                QuotePaymentOption | None,
-                quote.payment_option
-                if quote.payment_option in {"cash_check", "financing"}
-                else None,
-            ),
             proposal_version=quote.proposal_version or 1,
             currency=quote.currency,
             subtotal=float(quote.subtotal or 0),
             tax_amount=float(quote.tax_amount or 0),
             discount_amount=float(quote.discount_amount or 0),
             total=total,
-            financing=self._financing_for_quote(quote),
+            financing=self._financing_for_quote(quote, pricing_config),
             issue_date=quote.issue_date,
             expiry_date=quote.expiry_date,
             is_expired=quote.status == "expired",
@@ -2425,9 +2292,12 @@ class QuoteService:
     async def _config_for_edit(self, quote: Quote) -> PricingSettings:
         """Pricing config for repricing a snapshot, or a 422 when unavailable.
 
-        The owning workspace is required because this config defines tier and
-        service prices. Falling back to defaults would silently reprice the whole
-        quote from unrelated numbers; refusing the edit preserves the snapshot.
+        Deliberately *not* :meth:`_pricing_config_for_quote`, which falls back to
+        default :class:`PricingSettings` for a missing workspace. That is right
+        for decorating a read, and wrong here: this config sets the finance
+        buffer every line on the document is grossed up by, so defaulting it
+        would quietly reprice the customer's whole quote off the wrong numbers.
+        Refusing the edit leaves the quote exactly as the rep last saw it.
         """
         workspace = quote.__dict__.get("workspace")
         if not isinstance(workspace, Workspace):
@@ -2447,7 +2317,6 @@ class QuoteService:
         *,
         proposal_version: int | None,
         selected_tier: str | None = None,
-        payment_option: QuotePaymentOption | None = None,
     ) -> PublicProposalActionResult:
         """Client approves their proposal via the public token (idempotent).
 
@@ -2490,7 +2359,6 @@ class QuoteService:
             quote.workspace_id,
             quote.id,
             expected_proposal_version=expected_version,
-            payment_option=payment_option,
         )
         # Surface any unpaid deposit so the client page can hand off to checkout.
         from app.services.payments.quote_deposit_service import deposit_amount as resolve_amount
@@ -2503,7 +2371,6 @@ class QuoteService:
             token=token,
             status=result.status,
             message="Thank you! Your proposal has been approved.",
-            payment_option=result.payment_option,
             deposit_required=unpaid,
             deposit_amount=due,
         )
@@ -2904,7 +2771,6 @@ class QuoteService:
         document.inventory_availability = await QuoteInventoryAvailabilityService(self.db).snapshot(
             workspace_id, document.fulfillment
         )
-        material_cogs = self._apply_wizard_permanent_selection(quote, config, effective_payload)
 
         quote.contact_id = contact_id
         quote.service_location_id = payload.service_location_id
@@ -2928,11 +2794,6 @@ class QuoteService:
         categories = await self._catalog_categories(workspace_id, line_items)
         quote.line_items = [self._build_line_item(item, categories) for item in line_items]
         self._recompute_totals(quote)
-        self._replace_permanent_snapshot(
-            quote,
-            config,
-            material_cogs=material_cogs,
-        )
 
         # Re-resolve the deposit after the total, clearing whichever old mode was
         # present first so percentage and fixed values can never coexist.
@@ -3092,8 +2953,10 @@ class QuoteService:
     ) -> list[EstimateCustomLineCost]:
         """Price one bucket of standalone lines: quantity × unit price, cent-rounded.
 
-        Like every configured amount, a standalone line is the client-facing
-        selling price. The server applies quantity and cent rounding only.
+        No gross-up. Every other figure on an estimate starts as a *net* rate the
+        engine marks up; a standalone line is the rep typing the client-facing
+        amount directly, so marking it up again would quietly overcharge the
+        number they just quoted out loud in the driveway.
 
         ``package_key`` selects the bucket, and the match is exact both ways:
         ``None`` returns only the global lines (today's behavior), a key returns
@@ -3512,8 +3375,8 @@ class QuoteService:
     ) -> list[QuoteLineItemCreate]:
         """Map a priced breakdown's display lines to quote line items.
 
-        Each direct-price ``CategoryLine`` becomes one quote line at ``quantity=1``
-        and ``unit_price=line_total`` — the authoritative cent-rounded component cost,
+        Each grossed ``CategoryLine`` becomes one quote line at ``quantity=1`` and
+        ``unit_price=line_total`` — the authoritative cent-rounded component cost,
         with the measured feet/counts carried in the line label. This mirrors how
         the sales wizard emits permanent/seasonal sections, so the summed quote
         total matches the estimate exactly rather than drifting on per-unit
@@ -3551,7 +3414,7 @@ class QuoteService:
         """Turn a measured roofline estimate into a real draft quote.
 
         The core of the light-designer tool: the drawn design's measurements price
-        the chosen permanent or seasonal breakdown server-side, each direct-price
+        the chosen permanent or seasonal breakdown server-side, each grossed
         component becomes a quote line, and the client (when name/phone are given)
         is resolved onto a CRM contact with the same dedupe rules as the shared
         comparison. The quote is created as a draft through :meth:`create_quote`,
@@ -3584,9 +3447,7 @@ class QuoteService:
             source="roofline_estimator",
         )
 
-        proposal_document: ProposalDocument | None = (
-            ProposalDocument(service="permanent") if req.side == "permanent" else None
-        )
+        proposal_document: ProposalDocument | None = None
         if req.proposal_preview is not None:
             project_id = req.lighting_project_id
             if project_id is None:

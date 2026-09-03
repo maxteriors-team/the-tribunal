@@ -10650,7 +10650,7 @@
         "type": "object"
       },
       "CashDiscountConfig": {
-        "description": "Legacy cash settings retained for compatibility; prices are no longer adjusted.",
+        "description": "Cash/check pricing: backs out the finance buffer, keeps a card reserve.",
         "properties": {
           "card_reserve_rate": {
             "default": 0.03,
@@ -11115,7 +11115,7 @@
         "type": "object"
       },
       "CategoryLine": {
-        "description": "One direct-price line in a service breakdown (display only).\n\n``line_total`` is the authoritative component price; ``unit_price`` is a\nper-unit display figure and may not exactly divide the total after rounding.",
+        "description": "One grossed-up line in a permanent/christmas breakdown (display only).\n\n``line_total`` is the authoritative grossed component cost; ``unit_price`` is\na per-unit display figure and may not exactly divide the total after rounding.",
         "properties": {
           "detail": {
             "anyOf": [
@@ -11440,7 +11440,7 @@
         "type": "object"
       },
       "ChristmasPackage": {
-        "description": "A seasonal-Christmas service tier (Good/Better/Best for holiday decor).\n\nThe seasonal analog of :class:`TierConfig`: a named, presentable package that\n*includes a subset of the workspace's decor categories* plus (optionally) the\nroofline. One roofline+decor measurement prices every package by restricting\nthe shared :class:`ChristmasConfig.items` selection to ``item_keys`` — so the\nsame direct-price engine, takedown, and job minimum apply to each package subset\n(no separate pricing path). ``item_keys`` reference :class:`SeasonalItem`\nkeys; ``includes_roofline`` gates the ``roofline_per_ft`` run because the\nroofline is not itself a decor item.",
+        "description": "A seasonal-Christmas service tier (Good/Better/Best for holiday decor).\n\nThe seasonal analog of :class:`TierConfig`: a named, presentable package that\n*includes a subset of the workspace's decor categories* plus (optionally) the\nroofline. One roofline+decor measurement prices every package by restricting\nthe shared :class:`ChristmasConfig.items` selection to ``item_keys`` — so the\nsame engine, gross-up, takedown, and job-minimum apply to each package subset\n(no separate pricing path). ``item_keys`` reference :class:`SeasonalItem`\nkeys; ``includes_roofline`` gates the ``roofline_per_ft`` run because the\nroofline is not itself a decor item.",
         "properties": {
           "card_tier": {
             "anyOf": [
@@ -18014,7 +18014,7 @@
         "type": "object"
       },
       "EstimateCustomLine": {
-        "description": "A standalone line the rep adds to an estimate, outside any package.\n\nThe price book and the Good/Better/Best packages cover the work we sell every\nday; this covers the rest — a bucket-truck fee, hand-tying garland on a\nbalcony, removing the last company's clips. By default it is **independent\nof packages**: the amount rides on top of whichever tier the customer picks\n(and on top of à la carte pricing), so a rep never has to fake it into a\ndecor category or edit the workspace's pricing config to land one job.\n\n``unit_price`` is the client-facing selling amount, like catalog and roofline\npricing. The rep is typing what the homeowner will pay, so the server applies\nquantity and cent rounding without adding a financing or commission buffer.\n\n``side`` says which half of the comparison the line belongs to, since the two\nare paid on different clocks: ``permanent`` is one-time, ``seasonal`` recurs\nevery season and is projected over the comparison horizon like the rest of\nthe seasonal total. A line assigned to a side the workspace doesn't offer is\npriced into a total that stays zero — same as every other input for a\ndisabled service — so the rep tool only ever offers the enabled sides.\n\n``package_key`` optionally pins the line **inside one tier**, for the case the\nglobal default can't express: a bucket-truck day the Best install needs and\nGood doesn't. Three rules, and the default is the one that has always been:\n\n* ``None`` (default) — global. Rides on top of whichever tier the client\n  picks, reported in that side's ``custom_total``, in no package card.\n* a priced package's key — priced **inside that card's own total** and\n  nowhere else, so switching tiers re-prices and the line follows the tier it\n  was sold with. Deliberately excluded from ``custom_total`` (which the\n  client page adds *on top of* a package total) so it can't be billed twice.\n* a key no priced package matches — **dropped**, same as a line assigned to a\n  disabled service. Quietly falling back to global would move money the rep\n  never asked to move.",
+        "description": "A standalone line the rep adds to an estimate, outside any package.\n\nThe price book and the Good/Better/Best packages cover the work we sell every\nday; this covers the rest — a bucket-truck fee, hand-tying garland on a\nbalcony, removing the last company's clips. By default it is **independent\nof packages**: the amount rides on top of whichever tier the customer picks\n(and on top of à la carte pricing), so a rep never has to fake it into a\ndecor category or edit the workspace's pricing config to land one job.\n\n``unit_price`` is the *client-facing* amount, not a net cost: unlike catalog\nand roofline pricing it is not grossed up, because the rep is typing what the\nhomeowner will pay. That makes it the one figure on the estimate the server\ndoesn't derive — it is quantity × price, rounded, and nothing more.\n\n``side`` says which half of the comparison the line belongs to, since the two\nare paid on different clocks: ``permanent`` is one-time, ``seasonal`` recurs\nevery season and is projected over the comparison horizon like the rest of\nthe seasonal total. A line assigned to a side the workspace doesn't offer is\npriced into a total that stays zero — same as every other input for a\ndisabled service — so the rep tool only ever offers the enabled sides.\n\n``package_key`` optionally pins the line **inside one tier**, for the case the\nglobal default can't express: a bucket-truck day the Best install needs and\nGood doesn't. Three rules, and the default is the one that has always been:\n\n* ``None`` (default) — global. Rides on top of whichever tier the client\n  picks, reported in that side's ``custom_total``, in no package card.\n* a priced package's key — priced **inside that card's own total** and\n  nowhere else, so switching tiers re-prices and the line follows the tier it\n  was sold with. Deliberately excluded from ``custom_total`` (which the\n  client page adds *on top of* a package total) so it can't be billed twice.\n* a key no priced package matches — **dropped**, same as a line assigned to a\n  disabled service. Quietly falling back to global would move money the rep\n  never asked to move.",
         "properties": {
           "description": {
             "anyOf": [
@@ -18532,7 +18532,7 @@
         "type": "object"
       },
       "FinancingConfig": {
-        "description": "Legacy global financing settings retained for stored-settings compatibility.\n\nThese values no longer change prices or produce payment presentation. New\nPermanent Lighting quotes use :class:`PermanentFinancingConfig`; every other\nservice uses its configured selling price without financing metadata.",
+        "description": "Promotional financing shared across service categories.\n\n``fee_buffer`` grosses every wizard price up by ``price / (1 - fee_buffer)``\nso a financed job never eats margin; cash pricing backs it out again while\nkeeping the card reserve. Category eligibility only controls whether an\nestimate is presented — it never changes that margin-protection math.\n\n``category_minimums`` maps normalized service-category keys to the minimum\nsubtotal that qualifies. Presence enables a category; removing a key disables\nit. Lighting categories default to their historical zero minimum, while core\nexterior categories default to a $1,000 floor.",
         "properties": {
           "apr": {
             "default": 0.0,
@@ -18677,17 +18677,6 @@
           "monthly_payment": {
             "title": "Monthly Payment",
             "type": "number"
-          },
-          "plan_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Plan Number"
           },
           "points": {
             "items": {
@@ -27942,17 +27931,6 @@
             ],
             "title": "Assigned User Id"
           },
-          "contact_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contact Email"
-          },
           "contact_id": {
             "title": "Contact Id",
             "type": "integer"
@@ -27960,17 +27938,6 @@
           "contact_name": {
             "title": "Contact Name",
             "type": "string"
-          },
-          "contact_phone": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contact Phone"
           },
           "created_at": {
             "format": "date-time",
@@ -37301,7 +37268,7 @@
         "type": "object"
       },
       "PermanentConfig": {
-        "description": "Permanent LED roofline priced by the smallest kit covering the job.",
+        "description": "Permanent LED roofline priced by the smallest kit that covers the job.\n\nPackage costs are COGS. ``markup`` converts COGS to the net installed sale\nprice before the standard cash/financing gross-up is applied.",
         "properties": {
           "complex_markup": {
             "default": 3.5,
@@ -37325,9 +37292,6 @@
             "default": false,
             "title": "Enabled",
             "type": "boolean"
-          },
-          "financing": {
-            "$ref": "#/components/schemas/PermanentFinancingConfig"
           },
           "included_channels": {
             "default": 0,
@@ -37443,55 +37407,6 @@
         "title": "PermanentEstimate",
         "type": "object"
       },
-      "PermanentFinancingConfig": {
-        "description": "Server-owned GreenSky terms and internal Permanent Lighting costs.",
-        "properties": {
-          "apr": {
-            "default": 0,
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Apr",
-            "type": "number"
-          },
-          "merchant_fee_rate": {
-            "default": 0.1525,
-            "exclusiveMaximum": 1.0,
-            "minimum": 0.0,
-            "title": "Merchant Fee Rate",
-            "type": "number"
-          },
-          "plan_number": {
-            "default": "6124",
-            "maxLength": 32,
-            "minLength": 1,
-            "pattern": "^\\d+$",
-            "title": "Plan Number",
-            "type": "string"
-          },
-          "provider": {
-            "const": "GreenSky",
-            "default": "GreenSky",
-            "title": "Provider",
-            "type": "string"
-          },
-          "sales_commission_rate": {
-            "default": 0.07,
-            "exclusiveMaximum": 1.0,
-            "minimum": 0.0,
-            "title": "Sales Commission Rate",
-            "type": "number"
-          },
-          "term_months": {
-            "default": 24,
-            "maximum": 360.0,
-            "minimum": 1.0,
-            "title": "Term Months",
-            "type": "integer"
-          }
-        },
-        "title": "PermanentFinancingConfig",
-        "type": "object"
-      },
       "PermanentKitSelection": {
         "description": "Procurement-safe permanent-light kit quantity selected by the pricer.",
         "properties": {
@@ -37532,132 +37447,6 @@
           "cost"
         ],
         "title": "PermanentPackage",
-        "type": "object"
-      },
-      "PermanentProfitabilityResponse": {
-        "description": "Billing-scoped comparison computed only from the quote's private snapshot.",
-        "properties": {
-          "apr": {
-            "title": "Apr",
-            "type": "number"
-          },
-          "cash_check": {
-            "$ref": "#/components/schemas/PermanentProfitabilityScenario"
-          },
-          "currency": {
-            "title": "Currency",
-            "type": "string"
-          },
-          "estimated_monthly_payment": {
-            "title": "Estimated Monthly Payment",
-            "type": "number"
-          },
-          "financing": {
-            "$ref": "#/components/schemas/PermanentProfitabilityScenario"
-          },
-          "plan_number": {
-            "title": "Plan Number",
-            "type": "string"
-          },
-          "provider": {
-            "title": "Provider",
-            "type": "string"
-          },
-          "quote_id": {
-            "format": "uuid",
-            "title": "Quote Id",
-            "type": "string"
-          },
-          "selected_payment_option": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cash_check",
-                  "financing"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Selected Payment Option"
-          },
-          "term_months": {
-            "title": "Term Months",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "quote_id",
-          "currency",
-          "provider",
-          "plan_number",
-          "apr",
-          "term_months",
-          "estimated_monthly_payment",
-          "cash_check",
-          "financing"
-        ],
-        "title": "PermanentProfitabilityResponse",
-        "type": "object"
-      },
-      "PermanentProfitabilityScenario": {
-        "description": "Private economics for one Permanent Lighting payment method.",
-        "properties": {
-          "contract_price": {
-            "title": "Contract Price",
-            "type": "number"
-          },
-          "contribution_before_labor": {
-            "title": "Contribution Before Labor",
-            "type": "number"
-          },
-          "contribution_margin": {
-            "title": "Contribution Margin",
-            "type": "number"
-          },
-          "material_cogs": {
-            "title": "Material Cogs",
-            "type": "number"
-          },
-          "merchant_fee": {
-            "title": "Merchant Fee",
-            "type": "number"
-          },
-          "merchant_fee_rate": {
-            "title": "Merchant Fee Rate",
-            "type": "number"
-          },
-          "payment_option": {
-            "enum": [
-              "cash_check",
-              "financing"
-            ],
-            "title": "Payment Option",
-            "type": "string"
-          },
-          "sales_commission": {
-            "title": "Sales Commission",
-            "type": "number"
-          },
-          "sales_commission_rate": {
-            "title": "Sales Commission Rate",
-            "type": "number"
-          }
-        },
-        "required": [
-          "payment_option",
-          "contract_price",
-          "merchant_fee_rate",
-          "merchant_fee",
-          "sales_commission_rate",
-          "sales_commission",
-          "material_cogs",
-          "contribution_before_labor",
-          "contribution_margin"
-        ],
-        "title": "PermanentProfitabilityScenario",
         "type": "object"
       },
       "PersonResult": {
@@ -40750,7 +40539,7 @@
         "type": "object"
       },
       "ProposalCharge": {
-        "description": "A direct-price add-on charge.\n\nOn every tier unless ``tier_key`` pins it to one — see :class:`WizardCharge`\nfor the rules. Snapshotted onto the document so re-selecting a tier reprices\ncorrectly without the original wizard payload.",
+        "description": "A grossed-up add-on charge.\n\nOn every tier unless ``tier_key`` pins it to one — see :class:`WizardCharge`\nfor the rules. Snapshotted onto the document so re-selecting a tier reprices\ncorrectly without the original wizard payload.",
         "properties": {
           "amount": {
             "title": "Amount",
@@ -41231,15 +41020,8 @@
         "type": "object"
       },
       "ProposalFinancing": {
-        "description": "Customer-safe GreenSky terms snapshotted into a Permanent proposal.",
+        "description": "Financing copy echoed into the snapshot for the public page.",
         "properties": {
-          "apr": {
-            "default": 0,
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Apr",
-            "type": "number"
-          },
           "body": {
             "anyOf": [
               {
@@ -41252,9 +41034,6 @@
             "title": "Body"
           },
           "default_term": {
-            "default": 24,
-            "maximum": 360.0,
-            "minimum": 1.0,
             "title": "Default Term",
             "type": "integer"
           },
@@ -41270,7 +41049,6 @@
             "title": "Disclaimer"
           },
           "enabled": {
-            "default": true,
             "title": "Enabled",
             "type": "boolean"
           },
@@ -41286,21 +41064,8 @@
             "title": "Headline"
           },
           "max_amount": {
-            "default": 0,
-            "minimum": 0.0,
             "title": "Max Amount",
             "type": "number"
-          },
-          "plan_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Plan Number"
           },
           "points": {
             "items": {
@@ -41322,13 +41087,17 @@
           }
         },
         "required": [
-          "provider"
+          "enabled",
+          "provider",
+          "terms",
+          "default_term",
+          "max_amount"
         ],
         "title": "ProposalFinancing",
         "type": "object"
       },
       "ProposalLine": {
-        "description": "A fixture line priced from its configured selling amount.",
+        "description": "A priced fixture line within a tier (grossed-up unit price).",
         "properties": {
           "item_id": {
             "title": "Item Id",
@@ -43591,21 +43360,6 @@
             "title": "Packages",
             "type": "array"
           },
-          "payment_option": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cash_check",
-                  "financing"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Payment Option"
-          },
           "price_range": {
             "anyOf": [
               {
@@ -43714,21 +43468,6 @@
             "title": "Message",
             "type": "string"
           },
-          "payment_option": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cash_check",
-                  "financing"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Payment Option"
-          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -43747,24 +43486,8 @@
         "type": "object"
       },
       "PublicProposalApprove": {
-        "additionalProperties": false,
-        "description": "The client's acceptance of one exact rendered proposal version.\n\nOnly the package and payment-method enums cross the wire; all money and terms\nremain server-owned. The optional version supports only the brief deployment\noverlap for untouched version-one proposals.",
+        "description": "The client's acceptance of one exact rendered proposal version.\n\nOnly the package *key* crosses the wire: the server re-derives the lines and\ntotals from the saved snapshot, so a client can never talk their own price\ndown. ``proposal_version`` closes the edit/approve race: if the operator\nchanged customer-facing terms after this page loaded, acceptance stops and the\nclient must review the refreshed proposal. It is optional only for the brief\nold-frontend/new-backend deployment window; the service accepts omission solely\nwhile the quote is still version 1 (terms have never changed).",
         "properties": {
-          "payment_option": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cash_check",
-                  "financing"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Payment Option"
-          },
           "proposal_version": {
             "anyOf": [
               {
@@ -44830,29 +44553,6 @@
         "title": "QuizResult",
         "type": "object"
       },
-      "QuoteApproveRequest": {
-        "additionalProperties": false,
-        "description": "Operator approval; Permanent snapshots require one server-validated method.",
-        "properties": {
-          "payment_option": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cash_check",
-                  "financing"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Payment Option"
-          }
-        },
-        "title": "QuoteApproveRequest",
-        "type": "object"
-      },
       "QuoteAssignmentRequest": {
         "description": "Reassign or clear a quote's sales owner independently of quote content.",
         "properties": {
@@ -45586,21 +45286,6 @@
               }
             ],
             "title": "Opportunity Id"
-          },
-          "payment_option": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cash_check",
-                  "financing"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Payment Option"
           },
           "primary_service": {
             "anyOf": [
@@ -46699,21 +46384,6 @@
             ],
             "title": "Opportunity Id"
           },
-          "payment_option": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cash_check",
-                  "financing"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Payment Option"
-          },
           "primary_service": {
             "anyOf": [
               {
@@ -47121,7 +46791,7 @@
         "type": "object"
       },
       "QuoteServiceCreate": {
-        "description": "Add one service to a quote that already exists.\n\nDeliberately amount-only, with no quantity. A quote built by the sales wizard\nstores its money in ``proposal_document`` and only *derives* line items from\nit, so an added service has to persist as a\n:class:`~app.schemas.proposal_wizard.ProposalCharge` to survive the client\nswitching packages (which rebuilds every line from the document). A charge\ncarries an amount and no quantity, and offering a quantity that the wizard\nshape cannot keep would be a field that silently collapses to 1 on most\nquotes.\n\n``amount`` is the customer selling price on every quote. Wizard snapshots keep\nit as a direct add-on charge, matching the amount entered by the operator.",
+        "description": "Add one service to a quote that already exists.\n\nDeliberately amount-only, with no quantity. A quote built by the sales wizard\nstores its money in ``proposal_document`` and only *derives* line items from\nit, so an added service has to persist as a\n:class:`~app.schemas.proposal_wizard.ProposalCharge` to survive the client\nswitching packages (which rebuilds every line from the document). A charge\ncarries an amount and no quantity, and offering a quantity that the wizard\nshape cannot keep would be a field that silently collapses to 1 on most\nquotes.\n\n``amount`` is the **net** the business keeps on a wizard quote — grossed up\nby the finance buffer server-side like every other price on that document —\nand the plain unit price on a quote that has no document. This mirrors the\nwizard's own add-on row, where a price-book price is entered as net.",
         "properties": {
           "amount": {
             "exclusiveMinimum": 0.0,
@@ -55430,7 +55100,7 @@
         "type": "object"
       },
       "TierPricing": {
-        "description": "Computed direct selling price for one tier; legacy totals remain equal.",
+        "description": "Computed money for one tier, both financed and cash.",
         "properties": {
           "additional": {
             "title": "Additional",
@@ -56545,7 +56215,7 @@
         "type": "object"
       },
       "UpsellConfig": {
-        "description": "Limits on what a crew lead may sell from the on-site upsell screen.\n\n``field_proposal_limit`` caps the one-time total a ``lead_technician`` may\nput on a proposal, in major units. Office roles are exempt, and a plain\n``technician`` cannot sell at all, so the crew lead is the only role this\nnumber governs: it separates \"sell small add-ons\" from \"sell a full fixture\npackage without the office seeing it first\".\n\n``None`` means **no cap**, which is the default: adding this block must not\nretroactively restrict a workspace that never asked for a limit. Owners opt\nin by setting a number.\n\nCompared against the direct one-time selling total the client is charged, so\nthe limit means what an owner thinks it means.\nRecurring care plans sit deliberately outside the cap: signing an existing\nsystem onto maintenance is retention every lead should be closing, and it is\ncancellable service rather than a capital purchase.",
+        "description": "Limits on what a crew lead may sell from the on-site upsell screen.\n\n``field_proposal_limit`` caps the one-time total a ``lead_technician`` may\nput on a proposal, in major units. Office roles are exempt, and a plain\n``technician`` cannot sell at all, so the crew lead is the only role this\nnumber governs: it separates \"sell small add-ons\" from \"sell a full fixture\npackage without the office seeing it first\".\n\n``None`` means **no cap**, which is the default: adding this block must not\nretroactively restrict a workspace that never asked for a limit. Owners opt\nin by setting a number.\n\nCompared against the *grossed-up* total the client is actually charged, not\nthe net price-book figure, so the limit means what an owner thinks it means.\nRecurring care plans sit deliberately outside the cap: signing an existing\nsystem onto maintenance is retention every lead should be closing, and it is\ncancellable service rather than a capital purchase.",
         "properties": {
           "field_proposal_limit": {
             "anyOf": [
@@ -94073,7 +93743,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/quotes/estimate/quote": {
       "post": {
-        "description": "Create a draft quote from a measured roofline estimate.\n\nPrices the chosen permanent or seasonal side server-side and turns each\ndirect-price component into a quote line — the estimator's core\n\"design → quote\" step. Returns the created draft quote.",
+        "description": "Create a draft quote from a measured roofline estimate.\n\nPrices the chosen permanent or seasonal side server-side and turns each\ngrossed component into a quote line — the estimator's core \"design → quote\"\nstep. Returns the created draft quote.",
         "operationId": "convert_estimate_to_quote_api_v1_workspaces__workspace_id__quotes_estimate_quote_post",
         "parameters": [
           {
@@ -94603,7 +94273,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/approve": {
       "post": {
-        "description": "Operator approves, selecting a method when Permanent terms require one.",
+        "description": "Operator approves a quote on the customer's behalf.",
         "operationId": "approve_quote_api_v1_workspaces__workspace_id__quotes__quote_id__approve_post",
         "parameters": [
           {
@@ -94627,23 +94297,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/QuoteApproveRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Payload"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "content": {
@@ -95418,73 +95071,6 @@
           }
         ],
         "summary": "Update Line Item",
-        "tags": [
-          "Quotes"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/permanent-profitability": {
-      "get": {
-        "description": "Return private Permanent economics only to billing readers in quote scope.",
-        "operationId": "get_permanent_profitability_api_v1_workspaces__workspace_id__quotes__quote_id__permanent_profitability_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "quote_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Quote Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/PermanentProfitabilityResponse"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "title": "Response Get Permanent Profitability Api V1 Workspaces  Workspace Id  Quotes  Quote Id  Permanent Profitability Get"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get Permanent Profitability",
         "tags": [
           "Quotes"
         ]

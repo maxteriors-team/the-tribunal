@@ -8822,8 +8822,8 @@ export interface paths {
          * @description Create a draft quote from a measured roofline estimate.
          *
          *     Prices the chosen permanent or seasonal side server-side and turns each
-         *     direct-price component into a quote line — the estimator's core
-         *     "design → quote" step. Returns the created draft quote.
+         *     grossed component into a quote line — the estimator's core "design → quote"
+         *     step. Returns the created draft quote.
          */
         post: operations["convert_estimate_to_quote_api_v1_workspaces__workspace_id__quotes_estimate_quote_post"];
         delete?: never;
@@ -8974,7 +8974,7 @@ export interface paths {
         put?: never;
         /**
          * Approve Quote
-         * @description Operator approves, selecting a method when Permanent terms require one.
+         * @description Operator approves a quote on the customer's behalf.
          */
         post: operations["approve_quote_api_v1_workspaces__workspace_id__quotes__quote_id__approve_post"];
         delete?: never;
@@ -9170,26 +9170,6 @@ export interface paths {
          * @description Remove a line item and recompute quote totals.
          */
         delete: operations["remove_line_item_api_v1_workspaces__workspace_id__quotes__quote_id__line_items__item_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/permanent-profitability": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Permanent Profitability
-         * @description Return private Permanent economics only to billing readers in quote scope.
-         */
-        get: operations["get_permanent_profitability_api_v1_workspaces__workspace_id__quotes__quote_id__permanent_profitability_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -15752,7 +15732,7 @@ export interface components {
         };
         /**
          * CashDiscountConfig
-         * @description Legacy cash settings retained for compatibility; prices are no longer adjusted.
+         * @description Cash/check pricing: backs out the finance buffer, keeps a card reserve.
          */
         CashDiscountConfig: {
             /**
@@ -15940,10 +15920,10 @@ export interface components {
         };
         /**
          * CategoryLine
-         * @description One direct-price line in a service breakdown (display only).
+         * @description One grossed-up line in a permanent/christmas breakdown (display only).
          *
-         *     ``line_total`` is the authoritative component price; ``unit_price`` is a
-         *     per-unit display figure and may not exactly divide the total after rounding.
+         *     ``line_total`` is the authoritative grossed component cost; ``unit_price`` is
+         *     a per-unit display figure and may not exactly divide the total after rounding.
          */
         CategoryLine: {
             /** Detail */
@@ -16155,7 +16135,7 @@ export interface components {
          *     *includes a subset of the workspace's decor categories* plus (optionally) the
          *     roofline. One roofline+decor measurement prices every package by restricting
          *     the shared :class:`ChristmasConfig.items` selection to ``item_keys`` — so the
-         *     same direct-price engine, takedown, and job minimum apply to each package subset
+         *     same engine, gross-up, takedown, and job-minimum apply to each package subset
          *     (no separate pricing path). ``item_keys`` reference :class:`SeasonalItem`
          *     keys; ``includes_roofline`` gates the ``roofline_per_ft`` run because the
          *     roofline is not itself a decor item.
@@ -18536,9 +18516,10 @@ export interface components {
          *     (and on top of à la carte pricing), so a rep never has to fake it into a
          *     decor category or edit the workspace's pricing config to land one job.
          *
-         *     ``unit_price`` is the client-facing selling amount, like catalog and roofline
-         *     pricing. The rep is typing what the homeowner will pay, so the server applies
-         *     quantity and cent rounding without adding a financing or commission buffer.
+         *     ``unit_price`` is the *client-facing* amount, not a net cost: unlike catalog
+         *     and roofline pricing it is not grossed up, because the rep is typing what the
+         *     homeowner will pay. That makes it the one figure on the estimate the server
+         *     doesn't derive — it is quantity × price, rounded, and nothing more.
          *
          *     ``side`` says which half of the comparison the line belongs to, since the two
          *     are paid on different clocks: ``permanent`` is one-time, ``seasonal`` recurs
@@ -18769,11 +18750,17 @@ export interface components {
         };
         /**
          * FinancingConfig
-         * @description Legacy global financing settings retained for stored-settings compatibility.
+         * @description Promotional financing shared across service categories.
          *
-         *     These values no longer change prices or produce payment presentation. New
-         *     Permanent Lighting quotes use :class:`PermanentFinancingConfig`; every other
-         *     service uses its configured selling price without financing metadata.
+         *     ``fee_buffer`` grosses every wizard price up by ``price / (1 - fee_buffer)``
+         *     so a financed job never eats margin; cash pricing backs it out again while
+         *     keeping the card reserve. Category eligibility only controls whether an
+         *     estimate is presented — it never changes that margin-protection math.
+         *
+         *     ``category_minimums`` maps normalized service-category keys to the minimum
+         *     subtotal that qualifies. Presence enables a category; removing a key disables
+         *     it. Lighting categories default to their historical zero minimum, while core
+         *     exterior categories default to a $1,000 floor.
          */
         FinancingConfig: {
             /**
@@ -18848,8 +18835,6 @@ export interface components {
             };
             /** Monthly Payment */
             monthly_payment: number;
-            /** Plan Number */
-            plan_number?: string | null;
             /** Points */
             points?: string[];
             /** Provider */
@@ -22574,14 +22559,10 @@ export interface components {
         LightingProjectDetail: {
             /** Assigned User Id */
             assigned_user_id: number | null;
-            /** Contact Email */
-            contact_email?: string | null;
             /** Contact Id */
             contact_id: number;
             /** Contact Name */
             contact_name: string;
-            /** Contact Phone */
-            contact_phone?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -25898,7 +25879,10 @@ export interface components {
         };
         /**
          * PermanentConfig
-         * @description Permanent LED roofline priced by the smallest kit covering the job.
+         * @description Permanent LED roofline priced by the smallest kit that covers the job.
+         *
+         *     Package costs are COGS. ``markup`` converts COGS to the net installed sale
+         *     price before the standard cash/financing gross-up is applied.
          */
         PermanentConfig: {
             /**
@@ -25921,7 +25905,6 @@ export interface components {
              * @default false
              */
             enabled: boolean;
-            financing?: components["schemas"]["PermanentFinancingConfig"];
             /**
              * Included Channels
              * @default 0
@@ -26008,43 +25991,6 @@ export interface components {
             total: number;
         };
         /**
-         * PermanentFinancingConfig
-         * @description Server-owned GreenSky terms and internal Permanent Lighting costs.
-         */
-        PermanentFinancingConfig: {
-            /**
-             * Apr
-             * @default 0
-             */
-            apr: number;
-            /**
-             * Merchant Fee Rate
-             * @default 0.1525
-             */
-            merchant_fee_rate: number;
-            /**
-             * Plan Number
-             * @default 6124
-             */
-            plan_number: string;
-            /**
-             * Provider
-             * @default GreenSky
-             * @constant
-             */
-            provider: "GreenSky";
-            /**
-             * Sales Commission Rate
-             * @default 0.07
-             */
-            sales_commission_rate: number;
-            /**
-             * Term Months
-             * @default 24
-             */
-            term_months: number;
-        };
-        /**
          * PermanentKitSelection
          * @description Procurement-safe permanent-light kit quantity selected by the pricer.
          */
@@ -26063,60 +26009,6 @@ export interface components {
             cost: number;
             /** Feet */
             feet: number;
-        };
-        /**
-         * PermanentProfitabilityResponse
-         * @description Billing-scoped comparison computed only from the quote's private snapshot.
-         */
-        PermanentProfitabilityResponse: {
-            /** Apr */
-            apr: number;
-            cash_check: components["schemas"]["PermanentProfitabilityScenario"];
-            /** Currency */
-            currency: string;
-            /** Estimated Monthly Payment */
-            estimated_monthly_payment: number;
-            financing: components["schemas"]["PermanentProfitabilityScenario"];
-            /** Plan Number */
-            plan_number: string;
-            /** Provider */
-            provider: string;
-            /**
-             * Quote Id
-             * Format: uuid
-             */
-            quote_id: string;
-            /** Selected Payment Option */
-            selected_payment_option?: ("cash_check" | "financing") | null;
-            /** Term Months */
-            term_months: number;
-        };
-        /**
-         * PermanentProfitabilityScenario
-         * @description Private economics for one Permanent Lighting payment method.
-         */
-        PermanentProfitabilityScenario: {
-            /** Contract Price */
-            contract_price: number;
-            /** Contribution Before Labor */
-            contribution_before_labor: number;
-            /** Contribution Margin */
-            contribution_margin: number;
-            /** Material Cogs */
-            material_cogs: number;
-            /** Merchant Fee */
-            merchant_fee: number;
-            /** Merchant Fee Rate */
-            merchant_fee_rate: number;
-            /**
-             * Payment Option
-             * @enum {string}
-             */
-            payment_option: "cash_check" | "financing";
-            /** Sales Commission */
-            sales_commission: number;
-            /** Sales Commission Rate */
-            sales_commission_rate: number;
         };
         /**
          * PersonResult
@@ -27231,7 +27123,7 @@ export interface components {
         };
         /**
          * ProposalCharge
-         * @description A direct-price add-on charge.
+         * @description A grossed-up add-on charge.
          *
          *     On every tier unless ``tier_key`` pins it to one — see :class:`WizardCharge`
          *     for the rules. Snapshotted onto the document so re-selecting a tier reprices
@@ -27407,47 +27299,31 @@ export interface components {
         };
         /**
          * ProposalFinancing
-         * @description Customer-safe GreenSky terms snapshotted into a Permanent proposal.
+         * @description Financing copy echoed into the snapshot for the public page.
          */
         ProposalFinancing: {
-            /**
-             * Apr
-             * @default 0
-             */
-            apr: number;
             /** Body */
             body?: string | null;
-            /**
-             * Default Term
-             * @default 24
-             */
+            /** Default Term */
             default_term: number;
             /** Disclaimer */
             disclaimer?: string | null;
-            /**
-             * Enabled
-             * @default true
-             */
+            /** Enabled */
             enabled: boolean;
             /** Headline */
             headline?: string | null;
-            /**
-             * Max Amount
-             * @default 0
-             */
+            /** Max Amount */
             max_amount: number;
-            /** Plan Number */
-            plan_number?: string | null;
             /** Points */
             points?: string[];
             /** Provider */
             provider: string;
             /** Terms */
-            terms?: number[];
+            terms: number[];
         };
         /**
          * ProposalLine
-         * @description A fixture line priced from its configured selling amount.
+         * @description A priced fixture line within a tier (grossed-up unit price).
          */
         ProposalLine: {
             /** Item Id */
@@ -28289,8 +28165,6 @@ export interface components {
             number: string;
             /** Packages */
             packages?: components["schemas"]["PublicProposalPackage"][];
-            /** Payment Option */
-            payment_option?: ("cash_check" | "financing") | null;
             price_range?: components["schemas"]["PublicProposalPriceRange"] | null;
             /** Proposal Document */
             proposal_document?: {
@@ -28333,8 +28207,6 @@ export interface components {
             deposit_required: boolean;
             /** Message */
             message: string;
-            /** Payment Option */
-            payment_option?: ("cash_check" | "financing") | null;
             /** Status */
             status: string;
             /** Token */
@@ -28344,13 +28216,15 @@ export interface components {
          * PublicProposalApprove
          * @description The client's acceptance of one exact rendered proposal version.
          *
-         *     Only the package and payment-method enums cross the wire; all money and terms
-         *     remain server-owned. The optional version supports only the brief deployment
-         *     overlap for untouched version-one proposals.
+         *     Only the package *key* crosses the wire: the server re-derives the lines and
+         *     totals from the saved snapshot, so a client can never talk their own price
+         *     down. ``proposal_version`` closes the edit/approve race: if the operator
+         *     changed customer-facing terms after this page loaded, acceptance stops and the
+         *     client must review the refreshed proposal. It is optional only for the brief
+         *     old-frontend/new-backend deployment window; the service accepts omission solely
+         *     while the quote is still version 1 (terms have never changed).
          */
         PublicProposalApprove: {
-            /** Payment Option */
-            payment_option?: ("cash_check" | "financing") | null;
             /** Proposal Version */
             proposal_version?: number | null;
             /** Selected Tier */
@@ -28781,14 +28655,6 @@ export interface components {
             title: string;
         };
         /**
-         * QuoteApproveRequest
-         * @description Operator approval; Permanent snapshots require one server-validated method.
-         */
-        QuoteApproveRequest: {
-            /** Payment Option */
-            payment_option?: ("cash_check" | "financing") | null;
-        };
-        /**
          * QuoteAssignmentRequest
          * @description Reassign or clear a quote's sales owner independently of quote content.
          */
@@ -29039,8 +28905,6 @@ export interface components {
             number: string;
             /** Opportunity Id */
             opportunity_id?: string | null;
-            /** Payment Option */
-            payment_option?: ("cash_check" | "financing") | null;
             /** Primary Service */
             primary_service?: string | null;
             /** Proposal Document */
@@ -29429,8 +29293,6 @@ export interface components {
             number: string;
             /** Opportunity Id */
             opportunity_id?: string | null;
-            /** Payment Option */
-            payment_option?: ("cash_check" | "financing") | null;
             /** Primary Service */
             primary_service?: string | null;
             /**
@@ -29573,8 +29435,10 @@ export interface components {
          *     shape cannot keep would be a field that silently collapses to 1 on most
          *     quotes.
          *
-         *     ``amount`` is the customer selling price on every quote. Wizard snapshots keep
-         *     it as a direct add-on charge, matching the amount entered by the operator.
+         *     ``amount`` is the **net** the business keeps on a wizard quote — grossed up
+         *     by the finance buffer server-side like every other price on that document —
+         *     and the plain unit price on a quote that has no document. This mirrors the
+         *     wizard's own add-on row, where a price-book price is entered as net.
          */
         QuoteServiceCreate: {
             /** Amount */
@@ -32932,7 +32796,7 @@ export interface components {
         };
         /**
          * TierPricing
-         * @description Computed direct selling price for one tier; legacy totals remain equal.
+         * @description Computed money for one tier, both financed and cash.
          */
         TierPricing: {
             /** Additional */
@@ -33452,8 +33316,8 @@ export interface components {
          *     retroactively restrict a workspace that never asked for a limit. Owners opt
          *     in by setting a number.
          *
-         *     Compared against the direct one-time selling total the client is charged, so
-         *     the limit means what an owner thinks it means.
+         *     Compared against the *grossed-up* total the client is actually charged, not
+         *     the net price-book figure, so the limit means what an owner thinks it means.
          *     Recurring care plans sit deliberately outside the cap: signing an existing
          *     system onto maintenance is retention every lead should be closing, and it is
          *     cancellable service rather than a capital purchase.
@@ -53097,11 +52961,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["QuoteApproveRequest"] | null;
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -53492,38 +53352,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_permanent_profitability_api_v1_workspaces__workspace_id__quotes__quote_id__permanent_profitability_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                quote_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PermanentProfitabilityResponse"] | null;
                 };
             };
             /** @description Validation Error */

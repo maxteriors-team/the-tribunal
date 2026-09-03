@@ -337,8 +337,6 @@ def _api_response(**overrides: object) -> dict[str, object]:
         "workspace_id": str(WS_ID),
         "contact_id": 42,
         "contact_name": "Pat Lee",
-        "contact_email": "pat@example.com",
-        "contact_phone": "+15551234567",
         "service_location_id": None,
         "opportunity_id": None,
         "assigned_user_id": None,
@@ -368,8 +366,6 @@ def _api_summary_response(**overrides: object) -> dict[str, object]:
     response = _api_response(**overrides)
     response.pop("created_by_id")
     response.pop("document")
-    response.pop("contact_email")
-    response.pop("contact_phone")
     return response
 
 
@@ -426,12 +422,6 @@ class TestLightingProjectApiPermissions:
         list_response = await manager_client.get(base)
         assert list_response.status_code == 200
         assert "document" not in list_response.json()["items"][0]
-        assert "contact_email" not in list_response.json()["items"][0]
-        assert "contact_phone" not in list_response.json()["items"][0]
-        detail_response = await manager_client.get(f"{base}/{PROJECT_ID}")
-        assert detail_response.status_code == 200
-        assert detail_response.json()["contact_email"] == "pat@example.com"
-        assert detail_response.json()["contact_phone"] == "+15551234567"
         revision_response = await manager_client.get(f"{base}/{PROJECT_ID}/revision")
         assert revision_response.status_code == 200
         assert revision_response.json() == {"version": 1}
@@ -599,9 +589,6 @@ async def test_permanent_project_persists_client_design_reopen_and_resave(
         workspace = await _make_workspace(db, "Permanent Lighting Co")
         creator = await _make_member(db, workspace.id, name="Morgan Manager")
         contact = await _make_contact(db, workspace.id, name="Avery")
-        contact.email = "avery@example.com"
-        contact.email_hash = hash_value(contact.email)
-        await db.flush()
         service = LightingProjectService(db)
 
         created = await service.create_project(
@@ -616,8 +603,6 @@ async def test_permanent_project_persists_client_design_reopen_and_resave(
         )
         assert created.contact_id == contact.id
         assert created.contact_name == "Avery"
-        assert created.contact_email == "avery@example.com"
-        assert created.contact_phone == contact.phone_number
         assert created.project_type == "permanent"
         assert created.document.project_type == "permanent"
 

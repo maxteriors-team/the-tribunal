@@ -20,12 +20,9 @@ const {
   deleteMock,
   assignMock,
   reopenMock,
-  approveMock,
-  profitabilityMock,
   lightingProjectGetMock,
   routerPushMock,
   useWorkspaceIdMock,
-  canMock,
   toastMock,
 } = vi.hoisted(() => ({
   listMock: vi.fn(),
@@ -36,12 +33,9 @@ const {
   deleteMock: vi.fn(),
   assignMock: vi.fn(),
   reopenMock: vi.fn(),
-  approveMock: vi.fn(),
-  profitabilityMock: vi.fn(),
   lightingProjectGetMock: vi.fn(),
   routerPushMock: vi.fn(),
   useWorkspaceIdMock: vi.fn(),
-  canMock: vi.fn(),
   toastMock: { success: vi.fn(), error: vi.fn() },
 }));
 
@@ -63,8 +57,7 @@ vi.mock("@/lib/api/quotes", () => ({
     send: sendMock,
     deliver: deliverMock,
     recordDeposit: recordDepositMock,
-    approve: approveMock,
-    permanentProfitability: profitabilityMock,
+    approve: vi.fn(),
     decline: vi.fn(),
     reopen: reopenMock,
   },
@@ -100,8 +93,9 @@ vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => useWorkspaceIdMock(),
 }));
 
+// These list tests exercise full-access quote behavior; billing denial is covered by the dialog suite.
 vi.mock("@/hooks/useCapabilities", () => ({
-  useCapabilities: () => ({ can: canMock }),
+  useCapabilities: () => ({ can: () => true }),
 }));
 
 function quote(overrides: Partial<Quote> = {}): Quote {
@@ -137,7 +131,6 @@ function renderList() {
 beforeEach(() => {
   vi.clearAllMocks();
   useWorkspaceIdMock.mockReturnValue("ws-1");
-  canMock.mockReturnValue(true);
 });
 
 describe("QuotesList client-view signal", () => {
@@ -217,107 +210,6 @@ describe("QuotesList deposits", () => {
     expect(await screen.findByText("Deposit paid · Check")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Actions" }));
     expect(screen.queryByRole("menuitem", { name: "Record deposit" })).not.toBeInTheDocument();
-  });
-});
-
-describe("Permanent quote payment workflow", () => {
-  const financing = {
-    provider: "GreenSky",
-    plan_number: "6124",
-    terms: [24],
-    default_term: 24,
-    apr: 0,
-    monthly_payment: 216.67,
-    monthly_by_term: { "24": 216.67 },
-    disclaimer: "Estimated payment only. Subject to credit approval.",
-  };
-
-  const listPermanent = (overrides: Partial<Quote> = {}) =>
-    listMock.mockResolvedValue({
-      items: [quote({ total: 5200, financing, ...overrides })],
-      total: 1,
-      page: 1,
-      page_size: 100,
-      pages: 1,
-    });
-
-  it("requires an operator payment selection before approving", async () => {
-    listPermanent();
-    approveMock.mockResolvedValue(quote({ status: "approved", payment_option: "financing" }));
-    renderList();
-    await screen.findByText("QUO-000123");
-
-    await userEvent.click(screen.getByRole("button", { name: "Actions" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "Approve" }));
-    expect(screen.getByRole("button", { name: "Approve quote" })).toBeDisabled();
-    const financingOption = screen.getByRole("radio", { name: /GreenSky financing/i });
-    const cashOption = screen.getByRole("radio", { name: /Cash\/check/i });
-    expect(financingOption.closest("label")).toHaveTextContent("$5,200.00");
-    expect(cashOption.closest("label")).toHaveTextContent("$5,200.00");
-    await userEvent.click(financingOption);
-    await userEvent.click(screen.getByRole("button", { name: "Approve quote" }));
-
-    await waitFor(() => expect(approveMock).toHaveBeenCalledWith("ws-1", "quote-1", "financing"));
-  });
-
-  it("hides private profitability from staff without billing access", async () => {
-    canMock.mockImplementation((capability: string) => capability !== "billing:read");
-    listPermanent();
-    renderList();
-    await screen.findByText("QUO-000123");
-
-    await userEvent.click(screen.getByRole("button", { name: "Actions" }));
-    expect(screen.queryByRole("menuitem", { name: "Profitability" })).not.toBeInTheDocument();
-    expect(profitabilityMock).not.toHaveBeenCalled();
-  });
-
-  it("fetches and displays both contribution scenarios only after opening", async () => {
-    listPermanent({ status: "approved", payment_option: "financing" });
-    profitabilityMock.mockResolvedValue({
-      quote_id: "quote-1",
-      currency: "USD",
-      provider: "GreenSky",
-      plan_number: "6124",
-      apr: 0,
-      term_months: 24,
-      estimated_monthly_payment: 216.67,
-      selected_payment_option: "financing",
-      cash_check: {
-        payment_option: "cash_check",
-        contract_price: 5200,
-        merchant_fee_rate: 0,
-        merchant_fee: 0,
-        sales_commission_rate: 0.07,
-        sales_commission: 364,
-        material_cogs: 1000,
-        contribution_before_labor: 3836,
-        contribution_margin: 0.7377,
-      },
-      financing: {
-        payment_option: "financing",
-        contract_price: 5200,
-        merchant_fee_rate: 0.1525,
-        merchant_fee: 793,
-        sales_commission_rate: 0.07,
-        sales_commission: 364,
-        material_cogs: 1000,
-        contribution_before_labor: 3043,
-        contribution_margin: 0.5852,
-      },
-    });
-    renderList();
-    await screen.findByText("QUO-000123");
-    expect(profitabilityMock).not.toHaveBeenCalled();
-
-    await userEvent.click(screen.getByRole("button", { name: "Actions" }));
-    await userEvent.click(screen.getByRole("menuitem", { name: "Profitability" }));
-
-    await waitFor(() => expect(profitabilityMock).toHaveBeenCalledWith("ws-1", "quote-1"));
-    expect(await screen.findByText("Permanent Lighting Profitability")).toBeInTheDocument();
-    expect(screen.getAllByText("Contribution Before Labor")).toHaveLength(2);
-    expect(screen.getByText("$793.00")).toBeInTheDocument();
-    expect(screen.getAllByText("$364.00")).toHaveLength(2);
-    expect(screen.getByText("Contracted")).toBeInTheDocument();
   });
 });
 

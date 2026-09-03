@@ -14,10 +14,10 @@ import { useState } from "react";
 import { TermsAndConditionsLink } from "@/components/shared/terms-and-conditions-link";
 import { formatDate } from "@/lib/utils/date";
 import { formatCurrency } from "@/lib/utils/number";
-import type { PublicProposal, QuotePaymentOption } from "@/types/proposal";
+import type { PublicProposal } from "@/types/proposal";
 
 import { DepositPanel } from "./deposit-panel";
-import { PermanentPaymentOptions } from "./financing-estimate";
+import { FinancingEstimate } from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
 import { proposalAccentVars } from "./proposal-brand";
 import { proposalFontVars } from "./proposal-fonts";
@@ -30,7 +30,7 @@ interface PlainQuoteViewProps {
   justDeclined: boolean;
   busy: boolean;
   actionError: boolean;
-  onApprove: (paymentOption?: QuotePaymentOption | null) => void;
+  onApprove: () => void;
   onDecline: (reason: string) => void;
 }
 
@@ -46,7 +46,10 @@ function proposalPreviews(document: Record<string, unknown> | null | undefined):
     if (!mockup || typeof mockup !== "object") return [];
     const record = mockup as Record<string, unknown>;
     const image = record.image;
-    if (typeof image !== "string" || !/^data:image\/(?:jpeg|png|webp);base64,/.test(image)) {
+    if (
+      typeof image !== "string" ||
+      !/^data:image\/(?:jpeg|png|webp);base64,/.test(image)
+    ) {
       return [];
     }
     return [
@@ -75,24 +78,10 @@ export function PlainQuoteView({
   const previews = proposalPreviews(data.proposal_document);
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
-  const [paymentOption, setPaymentOption] = useState<QuotePaymentOption | null>(
-    data.payment_option ?? null,
-  );
 
   const decided = data.is_decided || justApproved || justDeclined;
   const approved = justApproved || data.status === "approved";
   const currency = data.currency;
-  const paymentFinancing =
-    data.proposal_document?.service === "permanent" && data.financing?.plan_number
-      ? data.financing
-      : null;
-  const paymentOptionRequired = paymentFinancing !== null;
-  const paymentOptionMissing = paymentOptionRequired && paymentOption === null;
-  const submitApproval = () => {
-    if (paymentOptionMissing) return;
-    if (paymentOptionRequired) onApprove(paymentOption);
-    else onApprove();
-  };
 
   const contactLine = [branding.business_phone, branding.business_email]
     .filter(Boolean)
@@ -252,34 +241,10 @@ export function PlainQuoteView({
           </div>
         </div>
 
-        <PermanentPaymentOptions
-          financing={paymentFinancing}
-          contractPrice={data.total}
-          currency={data.currency}
-          value={paymentOption}
-          onChange={setPaymentOption}
-          disabled={busy || decided}
-        />
-        {paymentOptionMissing ? (
-          <p className="payment-selection-required" role="status">
-            Select a payment method before accepting this proposal.
-          </p>
-        ) : null}
+        <FinancingEstimate financing={data.financing} />
 
         {/* Deposit (pay online) */}
-        <DepositPanel
-          data={data}
-          onPayInstead={paymentOptionRequired ? submitApproval : undefined}
-          payLabel={
-            paymentOptionMissing
-              ? "Select Payment Method First"
-              : paymentOptionRequired
-                ? "Accept & Pay Deposit"
-                : undefined
-          }
-          disabled={paymentOptionMissing}
-          busy={busy}
-        />
+        <DepositPanel data={data} />
 
         {/* Notes + terms */}
         {data.notes ? (
@@ -353,8 +318,8 @@ export function PlainQuoteView({
                 <button
                   type="button"
                   className="cta-btn-primary"
-                  disabled={busy || paymentOptionMissing}
-                  onClick={submitApproval}
+                  disabled={busy}
+                  onClick={onApprove}
                 >
                   {busy ? (
                     "Approving…"

@@ -23,9 +23,11 @@ export interface PublicProposalBranding {
   footer?: string | null;
 }
 
-export type PublicProposalStatus = "sent" | "approved" | "declined" | "expired";
-
-export type QuotePaymentOption = "cash_check" | "financing";
+export type PublicProposalStatus =
+  | "sent"
+  | "approved"
+  | "declined"
+  | "expired";
 
 /**
  * One package the client can choose between before accepting. Every figure is
@@ -56,7 +58,6 @@ export interface PublicProposal {
   number: string;
   title?: string | null;
   status: PublicProposalStatus;
-  payment_option?: QuotePaymentOption | null;
   /** Monotonic customer-facing terms version submitted with acceptance. */
   proposal_version: number;
   currency: string;
@@ -100,10 +101,9 @@ export interface PublicProposalDepositCheckout {
 }
 
 export interface PublicProposalActionResult {
-  token: PublicProposal["token"];
+  token: string;
   status: PublicProposalStatus;
   message: string;
-  payment_option?: QuotePaymentOption | null;
   deposit_required?: boolean;
   deposit_amount?: number | null;
 }

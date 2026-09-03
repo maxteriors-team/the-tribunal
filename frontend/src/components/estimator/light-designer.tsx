@@ -243,8 +243,6 @@ export interface LandscapeProjectPersistenceAdapter {
   projectName?: string;
   contactName?: string;
   contactId?: number | null;
-  contactEmail?: string | null;
-  contactPhone?: string | null;
   opportunityId?: string | null;
   serviceLocationId?: string | null;
   installationShotId?: string | null;
@@ -3182,10 +3180,9 @@ export function LightDesigner({
   // Which rail is mid-send, so only the pressed button shows "Sending…" while
   // both stay disabled — a rep can't fire the text and the email at once.
   const [sendingChannel, setSendingChannel] = useState<SendChannel | null>(null);
-  const [clientName, setClientName] = useState(landscapeProject?.contactName ?? "");
-  const [clientEmail, setClientEmail] = useState(landscapeProject?.contactEmail ?? "");
-  const [clientPhone, setClientPhone] = useState(landscapeProject?.contactPhone ?? "");
-  const customerProfileLocked = landscapeProject?.contactId != null;
+  const [clientName, setClientName] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
   const [savedToCustomer, setSavedToCustomer] = useState(false);
   // The draft quote created from the current proposal inputs. Its signature keeps
   // delivery from reusing a stale quote after pricing, customer, or design changes.
@@ -4992,7 +4989,8 @@ export function LightDesigner({
                         onSelectCoverage={setCoverage}
                         coverageFeet={permanentCoverageFeet}
                         coveragePrices={COVERAGE_OPTIONS.map(
-                          (option, index) => coveragePricing[index]?.data?.permanent.total ?? null,
+                          (option, index) =>
+                            coveragePricing[index]?.data?.permanent.total ?? null,
                         )}
                       />
                     ) : null}
@@ -5252,7 +5250,6 @@ export function LightDesigner({
                                 editCustomer(setClientEmail)(contact.email ?? "");
                                 editCustomer(setClientPhone)(contact.phone_number ?? "");
                               }}
-                              disabled={customerProfileLocked}
                             />
                             <input
                               className="est-input"
@@ -5262,7 +5259,6 @@ export function LightDesigner({
                               value={clientEmail}
                               onChange={(e) => editCustomer(setClientEmail)(e.target.value)}
                               aria-label="Customer email"
-                              disabled={customerProfileLocked}
                             />
                             <input
                               className="est-input"
@@ -5272,24 +5268,11 @@ export function LightDesigner({
                               value={clientPhone}
                               onChange={(e) => editCustomer(setClientPhone)(e.target.value)}
                               aria-label="Customer phone"
-                              disabled={customerProfileLocked}
                             />
                           </div>
                           <div className="est-customer-hint">
-                            {customerProfileLocked && landscapeProject?.contactId ? (
-                              <>
-                                This proposal and future job stay attached to{" "}
-                                <Link href={`/contacts/${landscapeProject.contactId}`}>
-                                  {landscapeProject.contactName ?? "the linked customer"}
-                                </Link>
-                                . Update delivery details on their profile.
-                              </>
-                            ) : (
-                              <>
-                                Add a phone number to save this estimate to a customer record.
-                                Without one you can still share the link.
-                              </>
-                            )}
+                            Add a phone number to save this estimate to a customer record. Without
+                            one you can still share the link.
                           </div>
                           {proposalSide === "permanent" ? (
                             <>
@@ -5312,11 +5295,7 @@ export function LightDesigner({
                                     <input
                                       className="est-input"
                                       type="number"
-                                      min={
-                                        permanentRangeLow > 0
-                                          ? round2(permanentRangeLow + 0.01)
-                                          : 0.01
-                                      }
+                                      min={permanentRangeLow > 0 ? round2(permanentRangeLow + 0.01) : 0.01}
                                       step="50"
                                       inputMode="decimal"
                                       placeholder="3900"

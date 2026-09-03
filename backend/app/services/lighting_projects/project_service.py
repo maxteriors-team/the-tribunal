@@ -128,8 +128,6 @@ class LightingProjectService:
             **summary.model_dump(),
             document=document,
             created_by_id=project.created_by_id,
-            contact_email=project.contact.email,
-            contact_phone=project.contact.phone_number,
         )
 
     async def _validate_references(

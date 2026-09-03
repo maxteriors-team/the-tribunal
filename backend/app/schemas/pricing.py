@@ -42,7 +42,6 @@ DEFAULT_FINANCING_DISCLAIMER = (
     "Financing is subject to application and approval by the provider; actual terms, APR, "
     "and payment may vary."
 )
-GREEN_SKY_REQUIRED_DISCLOSURE = "Estimated payment only. Subject to credit approval."
 
 
 def _default_financing_category_minimums() -> dict[str, float]:
@@ -68,11 +67,17 @@ def _default_financing_category_minimums() -> dict[str, float]:
 
 
 class FinancingConfig(BaseModel):
-    """Legacy global financing settings retained for stored-settings compatibility.
+    """Promotional financing shared across service categories.
 
-    These values no longer change prices or produce payment presentation. New
-    Permanent Lighting quotes use :class:`PermanentFinancingConfig`; every other
-    service uses its configured selling price without financing metadata.
+    ``fee_buffer`` grosses every wizard price up by ``price / (1 - fee_buffer)``
+    so a financed job never eats margin; cash pricing backs it out again while
+    keeping the card reserve. Category eligibility only controls whether an
+    estimate is presented — it never changes that margin-protection math.
+
+    ``category_minimums`` maps normalized service-category keys to the minimum
+    subtotal that qualifies. Presence enables a category; removing a key disables
+    it. Lighting categories default to their historical zero minimum, while core
+    exterior categories default to a $1,000 floor.
     """
 
     enabled: bool = True
@@ -107,7 +112,6 @@ class FinancingEstimate(BaseModel):
     """Client-safe, server-computed monthly-payment estimate for one quote."""
 
     provider: str
-    plan_number: str | None = None
     terms: list[int] = Field(default_factory=list)
     default_term: int
     apr: float = 0
@@ -120,7 +124,7 @@ class FinancingEstimate(BaseModel):
 
 
 class CashDiscountConfig(BaseModel):
-    """Legacy cash settings retained for compatibility; prices are no longer adjusted."""
+    """Cash/check pricing: backs out the finance buffer, keeps a card reserve."""
 
     enabled: bool = True
     card_reserve_rate: float = Field(default=0.03, ge=0, lt=0.95)
@@ -178,8 +182,8 @@ class UpsellConfig(BaseModel):
     retroactively restrict a workspace that never asked for a limit. Owners opt
     in by setting a number.
 
-    Compared against the direct one-time selling total the client is charged, so
-    the limit means what an owner thinks it means.
+    Compared against the *grossed-up* total the client is actually charged, not
+    the net price-book figure, so the limit means what an owner thinks it means.
     Recurring care plans sit deliberately outside the cap: signing an existing
     system onto maintenance is retention every lead should be closing, and it is
     cancellable service rather than a capital purchase.
@@ -375,21 +379,12 @@ def _default_permanent_packages() -> list[PermanentPackage]:
     ]
 
 
-class PermanentFinancingConfig(BaseModel):
-    """Server-owned GreenSky terms and internal Permanent Lighting costs."""
-
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    provider: Literal["GreenSky"] = "GreenSky"
-    plan_number: str = Field(default="6124", min_length=1, max_length=32, pattern=r"^\d+$")
-    apr: float = Field(default=0, ge=0, le=1)
-    term_months: int = Field(default=24, ge=1, le=360)
-    merchant_fee_rate: float = Field(default=0.1525, ge=0, lt=1)
-    sales_commission_rate: float = Field(default=0.07, ge=0, lt=1)
-
-
 class PermanentConfig(BaseModel):
-    """Permanent LED roofline priced by the smallest kit covering the job."""
+    """Permanent LED roofline priced by the smallest kit that covers the job.
+
+    Package costs are COGS. ``markup`` converts COGS to the net installed sale
+    price before the standard cash/financing gross-up is applied.
+    """
 
     enabled: bool = False
     packages: list[PermanentPackage] = Field(
@@ -408,8 +403,8 @@ class PermanentConfig(BaseModel):
     included_channels: int = Field(default=0, ge=0)
     minimum: float = Field(default=0, ge=0)
     label: str = "Permanent Holiday Lighting"
+    # Client-facing perks rendered on the comparison page (operator-editable).
     perks: list[str] = Field(default_factory=_default_permanent_perks)
-    financing: PermanentFinancingConfig = Field(default_factory=PermanentFinancingConfig)
 
 
 # --------------------------------------------------------------------------- #
@@ -598,7 +593,7 @@ class ChristmasPackage(BaseModel):
     *includes a subset of the workspace's decor categories* plus (optionally) the
     roofline. One roofline+decor measurement prices every package by restricting
     the shared :class:`ChristmasConfig.items` selection to ``item_keys`` — so the
-    same direct-price engine, takedown, and job minimum apply to each package subset
+    same engine, gross-up, takedown, and job-minimum apply to each package subset
     (no separate pricing path). ``item_keys`` reference :class:`SeasonalItem`
     keys; ``includes_roofline`` gates the ``roofline_per_ft`` run because the
     roofline is not itself a decor item.
@@ -839,7 +834,8 @@ class ServiceInclusion(BaseModel):
 
     key: str = Field(min_length=1, max_length=60)
     label: str
-    # Selling price added directly to any tier that includes this item.
+    # Net price added to any tier that includes this item. Grossed up by the
+    # shared engine like every other price, never stored pre-grossed.
     price: float = Field(default=0, ge=0)
     # When True ``price`` is per measured unit rather than a flat add.
     per_unit: bool = False
@@ -1011,10 +1007,10 @@ class PricingSettings(BaseModel):
 # and the wizard payload schema can reference them without a schemas -> services
 # import cycle.
 class TierPricing(BaseModel):
-    """Computed direct selling price for one tier; legacy totals remain equal."""
+    """Computed money for one tier, both financed and cash."""
 
-    base: float  # sum of configured fixture prices × qty
-    additional: float  # direct add-on charges included in every tier
+    base: float  # sum of grossed fixture prices × qty
+    additional: float  # grossed add-on charges included in every tier
     financed_total: float  # base + additional (the posted quote total)
     cash_total: float
     cash_savings: float
@@ -1083,10 +1079,10 @@ class BistroPricing(BaseModel):
 
 
 class CategoryLine(BaseModel):
-    """One direct-price line in a service breakdown (display only).
+    """One grossed-up line in a permanent/christmas breakdown (display only).
 
-    ``line_total`` is the authoritative component price; ``unit_price`` is a
-    per-unit display figure and may not exactly divide the total after rounding.
+    ``line_total`` is the authoritative grossed component cost; ``unit_price`` is
+    a per-unit display figure and may not exactly divide the total after rounding.
     """
 
     label: str

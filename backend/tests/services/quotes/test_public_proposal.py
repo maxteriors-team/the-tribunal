@@ -23,10 +23,9 @@ from app.models.catalog import CatalogItem
 from app.models.contact import Contact
 from app.models.quote import Quote
 from app.models.workspace import Workspace
-from app.schemas.pricing import PricingSettings
 from app.schemas.proposal import PublicProposal, PublicProposalLineItem
 from app.schemas.quote import QuoteCreate, QuoteLineItemCreate
-from app.services.exceptions import ConflictError, NotFoundError, ValidationError
+from app.services.exceptions import ConflictError, NotFoundError
 from app.services.quotes import QuoteService
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -127,7 +126,7 @@ async def test_public_get_returns_safe_proposal_with_branding() -> None:
         assert proposal.is_decided is False
 
 
-async def test_core_quotes_never_expose_global_financing_on_public_payload() -> None:
+async def test_core_quote_financing_respects_category_minimum_on_public_payload() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(
             db,
@@ -165,10 +164,13 @@ async def test_core_quotes_never_expose_global_financing_on_public_payload() -> 
                 ],
             ),
         )
-        assert roof_quote.financing is None
+        assert roof_quote.financing is not None
+        assert roof_quote.financing.monthly_payment == 375.0
         roof_sent = await svc.mark_sent(ws.id, roof_quote.id)
         roof_proposal = await svc.get_public_proposal(roof_sent.public_token or "")
-        assert roof_proposal.financing is None
+        assert roof_proposal.financing is not None
+        assert roof_proposal.financing.monthly_payment == 375.0
+        assert "not a financing offer" in roof_proposal.financing.disclaimer
 
         gutter_quote = await svc.create_quote(
             ws.id,
@@ -234,47 +236,6 @@ async def test_public_approve_flips_status_and_is_idempotent(
         proposal = await svc.get_public_proposal(token)
         assert proposal.status == "approved"
         assert proposal.is_decided is True
-
-
-async def test_permanent_public_approval_requires_and_locks_one_payment_method(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    receipt = AsyncMock(return_value=True)
-    monkeypatch.setattr(
-        "app.services.quotes.quote_service.send_quote_acceptance_receipt",
-        receipt,
-    )
-    async with AsyncSessionLocal() as db:
-        workspace = await _make_workspace(db)
-        contact = await _make_contact(db, workspace.id)
-        service = QuoteService(db)
-        token, quote_id = await _sent_quote(service, workspace.id, contact.id)
-        quote = await db.get(Quote, quote_id)
-        assert quote is not None
-        quote.proposal_document = {"service": "permanent"}
-        quote.permanent_pricing_snapshot = service._new_permanent_snapshot(
-            quote, PricingSettings(), material_cogs=100
-        )
-        await db.commit()
-
-        proposal = await service.get_public_proposal(token)
-        assert proposal.financing is not None
-        assert proposal.financing.plan_number == "6124"
-        assert "permanent_pricing_snapshot" not in proposal.model_dump()
-
-        with pytest.raises(ValidationError, match="Choose cash/check"):
-            await service.approve_public(token, proposal_version=1)
-        approved = await service.approve_public(
-            token, proposal_version=1, payment_option="financing"
-        )
-        assert approved.payment_option == "financing"
-        repeated = await service.approve_public(
-            token, proposal_version=1, payment_option="financing"
-        )
-        assert repeated.status == "approved"
-        with pytest.raises(ConflictError, match="cannot be changed"):
-            await service.approve_public(token, proposal_version=1, payment_option="cash_check")
-        receipt.assert_awaited_once()
 
 
 async def test_acceptance_receipt_carries_brand_logo_and_accepted_warranty(

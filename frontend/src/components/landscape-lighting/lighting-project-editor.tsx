@@ -404,8 +404,6 @@ function ActiveProjectEditor({
             projectName: autosave.project.name,
             contactName: autosave.project.contact_name,
             contactId: autosave.project.contact_id,
-            contactEmail: autosave.project.contact_email,
-            contactPhone: autosave.project.contact_phone,
             opportunityId: autosave.project.opportunity_id,
             serviceLocationId: autosave.project.service_location_id,
             installationShotId: autosave.project.installation_shot_id,

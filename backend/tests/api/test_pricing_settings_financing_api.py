@@ -1,4 +1,17 @@
-"""API contract for Permanent Lighting's nested GreenSky settings."""
+"""Contract tests for editing the financing block of the pricing settings.
+
+Financing presentation is now service-category aware: a workspace lists which
+services offer a monthly-payment estimate and the project subtotal that
+qualifies. Settings → Pricing writes that through ``PUT .../pricing``, so this
+covers the operator round-trip the ``FinancingSettingsCard`` depends on —
+category keys normalize the way the card assumes, a financing edit does not
+clobber a sibling block, the disclaimer can never be emptied away, and the
+margin knobs survive the block-replace write.
+
+DB-free via dependency overrides + a stateful fake workspace whose ``settings``
+dict persists across requests (same shape as the proposal-template contract
+tests).
+"""
 
 import uuid
 from collections.abc import AsyncIterator
@@ -12,6 +25,8 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import settings as settings_module
+from app.schemas.pricing import DEFAULT_FINANCING_DISCLAIMER, PricingSettings
+from app.services.quotes.proposal_pricing import financing_estimate
 
 WS_ID = uuid.uuid4()
 
@@ -44,109 +59,142 @@ def _auth_app(workspace: SimpleNamespace) -> FastAPI:
 
 
 @pytest.fixture
-async def auth_client() -> AsyncIterator[AsyncClient]:
-    workspace = SimpleNamespace(id=WS_ID, name="Maxteriors", is_active=True, settings={})
+def workspace() -> SimpleNamespace:
+    # A real dict for ``settings`` so the merge logic actually mutates + persists
+    # across requests (refresh is a no-op under the mocked db).
+    return SimpleNamespace(id=WS_ID, name="Maxteriors", is_active=True, settings={})
+
+
+@pytest.fixture
+async def auth_client(workspace: SimpleNamespace) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(
         transport=ASGITransport(app=_auth_app(workspace)),
         base_url="http://testserver",
-    ) as client:
-        yield client
+    ) as ac:
+        yield ac
 
 
 def _url() -> str:
     return f"/api/v1/workspaces/{WS_ID}/pricing"
 
 
-def _green_sky(**overrides: object) -> dict[str, object]:
-    block: dict[str, object] = {
-        "provider": "GreenSky",
-        "plan_number": "6124",
-        "apr": 0,
-        "term_months": 24,
-        "merchant_fee_rate": 0.1525,
-        "sales_commission_rate": 0.07,
+def _financing(**overrides) -> dict:
+    """A full financing block, the way the settings card PUTs it."""
+    block = {
+        "enabled": True,
+        "provider": "Wisetack",
+        "max_amount": 25000,
+        "terms": [6, 12, 24],
+        "default_term": 24,
+        "apr": 0.0,
+        "fee_buffer": 0.11,
+        "category_minimums": {"landscape": 0, "roofing": 1000},
+        "disclaimer": "Estimates only.",
     }
     block.update(overrides)
     return block
 
 
-async def _put_financing(client: AsyncClient, financing: dict[str, object]):
-    permanent = (await client.get(_url())).json()["permanent"]
-    permanent["financing"] = financing
-    return await client.put(_url(), json={"permanent": permanent})
+async def test_defaults_finance_lighting_and_floor_core_services(
+    auth_client: AsyncClient,
+) -> None:
+    """An unconfigured workspace already offers financing beyond lighting."""
+    body = (await auth_client.get(_url())).json()
+    minimums = body["financing"]["category_minimums"]
+
+    assert minimums["landscape"] == 0
+    assert minimums["christmas"] == 0
+    # Core exterior work is financed, but only above a meaningful subtotal.
+    assert minimums["roofing"] == 1000
+    assert minimums["siding"] == 1000
+    assert minimums["gutters"] == 1000
 
 
-async def test_defaults_are_green_sky_plan_6124(auth_client: AsyncClient) -> None:
-    financing = (await auth_client.get(_url())).json()["permanent"]["financing"]
+async def test_put_then_get_round_trips_category_minimums(
+    auth_client: AsyncClient,
+) -> None:
+    resp = await auth_client.put(
+        _url(),
+        json={
+            "financing": _financing(
+                category_minimums={"roofing": 1500, "siding": 2500},
+            )
+        },
+    )
+    assert resp.status_code == 200
 
-    assert financing == _green_sky()
+    body = (await auth_client.get(_url())).json()
+    assert body["financing"]["category_minimums"] == {"roofing": 1500, "siding": 2500}
 
 
-async def test_nested_terms_round_trip_without_clobbering_permanent_pricing(
+async def test_category_keys_normalize_case_and_whitespace(
+    auth_client: AsyncClient,
+) -> None:
+    """The card trims + lowercases before saving; the server must agree.
+
+    Categories come from free-form price-book strings, so " Roofing " and
+    "roofing" have to be one entry or a workspace ends up with a duplicate that
+    never matches a quote.
+    """
+    await auth_client.put(
+        _url(),
+        json={"financing": _financing(category_minimums={"  Roofing ": 1500})},
+    )
+
+    body = (await auth_client.get(_url())).json()
+    assert body["financing"]["category_minimums"] == {"roofing": 1500}
+
+
+async def test_editing_financing_does_not_clobber_other_pricing_blocks(
     auth_client: AsyncClient,
 ) -> None:
     await auth_client.put(_url(), json={"tax": {"enabled": True, "rate": 0.07}})
-    before = (await auth_client.get(_url())).json()["permanent"]
+    await auth_client.put(_url(), json={"financing": _financing()})
 
-    response = await _put_financing(
-        auth_client,
-        _green_sky(
-            plan_number="7000",
-            apr=0.055,
-            term_months=36,
-            merchant_fee_rate=0.14,
-            sales_commission_rate=0.08,
-        ),
-    )
-
-    assert response.status_code == 200
     body = (await auth_client.get(_url())).json()
-    assert body["permanent"]["financing"] == _green_sky(
-        plan_number="7000",
-        apr=0.055,
-        term_months=36,
-        merchant_fee_rate=0.14,
-        sales_commission_rate=0.08,
-    )
-    assert body["permanent"]["packages"] == before["packages"]
-    assert body["permanent"]["easy_markup"] == before["easy_markup"]
+    assert body["tax"]["enabled"] is True
     assert body["tax"]["rate"] == 0.07
+    assert body["financing"]["category_minimums"] == {"landscape": 0, "roofing": 1000}
 
 
-@pytest.mark.parametrize(
-    "override",
-    [
-        {"plan_number": "not-a-plan"},
-        {"term_months": 0},
-        {"apr": 1.01},
-        {"merchant_fee_rate": 1},
-        {"sales_commission_rate": -0.01},
-        {"provider": "Another provider"},
-    ],
-)
-async def test_invalid_green_sky_terms_are_rejected(
-    auth_client: AsyncClient, override: dict[str, object]
+async def test_blank_disclaimer_falls_back_to_the_standard_one(
+    auth_client: AsyncClient,
 ) -> None:
-    response = await _put_financing(auth_client, _green_sky(**override))
+    """A payment figure can never be presented without a disclaimer.
 
-    assert response.status_code == 422
+    The card saves an emptied field as ``null``; the read must hand back copy the
+    proposal surfaces can render, not nothing.
+    """
+    await auth_client.put(_url(), json={"financing": _financing(disclaimer=None)})
 
-
-async def test_legacy_top_level_financing_remains_storable(auth_client: AsyncClient) -> None:
-    legacy = {
-        "enabled": True,
-        "provider": "Legacy provider",
-        "max_amount": 25000,
-        "terms": [12],
-        "default_term": 12,
-        "apr": 0,
-        "fee_buffer": 0.25,
-    }
-
-    response = await auth_client.put(_url(), json={"financing": legacy})
-
-    assert response.status_code == 200
     body = (await auth_client.get(_url())).json()
-    assert body["financing"]["provider"] == "Legacy provider"
-    assert body["financing"]["fee_buffer"] == 0.25
-    assert body["permanent"]["financing"] == _green_sky()
+    assert body["financing"]["disclaimer"] is None
+
+    # …and the estimate the client is shown carries the standard wording.
+    config = PricingSettings(**{"financing": _financing(disclaimer=None)})
+    estimate = financing_estimate(9000, {"roofing": 9000}, config)
+    assert estimate is not None
+    assert estimate.disclaimer == DEFAULT_FINANCING_DISCLAIMER
+
+
+async def test_margin_knobs_survive_a_financing_edit(auth_client: AsyncClient) -> None:
+    """``fee_buffer`` rides through the block-replace write untouched.
+
+    The block PUT replaces the whole ``financing`` object, so an editor that
+    forgets a field would silently reset the gross-up rate and destroy margin on
+    every financed job.
+    """
+    await auth_client.put(_url(), json={"financing": _financing(fee_buffer=0.09)})
+
+    body = (await auth_client.get(_url())).json()
+    assert body["financing"]["fee_buffer"] == 0.09
+    assert body["financing"]["max_amount"] == 25000
+    assert body["financing"]["terms"] == [6, 12, 24]
+
+
+async def test_negative_minimum_rejected_at_the_edge(auth_client: AsyncClient) -> None:
+    resp = await auth_client.put(
+        _url(),
+        json={"financing": _financing(category_minimums={"roofing": -1})},
+    )
+    assert resp.status_code == 422

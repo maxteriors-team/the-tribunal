@@ -10,7 +10,6 @@ rendered by the public page). Client totals are never trusted.
 
 import uuid
 from collections.abc import Sequence
-from copy import deepcopy
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -306,7 +305,8 @@ def _validate_night_preview(value: dict[str, Any] | None) -> dict[str, Any] | No
 class ProposalWizardPayload(BaseModel):
     """Everything the authenticated wizard submits (selection only, no money)."""
 
-    # Retained for snapshot compatibility; both sources use configured selling prices.
+    # Dedicated design tools can quote the workspace catalog price exactly, while
+    # the general sales wizard retains its configured gross-up/cash/finance model.
     pricing_source: Literal["workspace_rules", "price_book"] = "workspace_rules"
     contact_id: int | None = None
     service_location_id: uuid.UUID | None = None
@@ -358,7 +358,7 @@ class ProposalWizardPayload(BaseModel):
 # Output (computed proposal document)
 # --------------------------------------------------------------------------- #
 class ProposalLine(BaseModel):
-    """A fixture line priced from its configured selling amount."""
+    """A priced fixture line within a tier (grossed-up unit price)."""
 
     item_id: str
     name: str
@@ -385,7 +385,7 @@ class ProposalTierView(BaseModel):
 
 
 class ProposalCharge(BaseModel):
-    """A direct-price add-on charge.
+    """A grossed-up add-on charge.
 
     On every tier unless ``tier_key`` pins it to one — see :class:`WizardCharge`
     for the rules. Snapshotted onto the document so re-selecting a tier reprices
@@ -416,16 +416,13 @@ class ProposalCarePlan(BaseModel):
 
 
 class ProposalFinancing(BaseModel):
-    """Customer-safe GreenSky terms snapshotted into a Permanent proposal."""
+    """Financing copy echoed into the snapshot for the public page."""
 
-    enabled: bool = True
+    enabled: bool
     provider: str
-    plan_number: str | None = None
-    terms: list[int] = Field(default_factory=list)
-    default_term: int = Field(default=24, ge=1, le=360)
-    apr: float = Field(default=0, ge=0, le=1)
-    # Legacy presentation fields remain readable on historical snapshots.
-    max_amount: float = Field(default=0, ge=0)
+    terms: list[int]
+    default_term: int
+    max_amount: float
     headline: str | None = None
     body: str | None = None
     points: list[str] = Field(default_factory=list)
@@ -606,29 +603,13 @@ CLIENT_SAFE_DOCUMENT_FIELDS: frozenset[str] = frozenset(
 
 
 def client_safe_document(document: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Deep-copy and redact a stored proposal document for the public API."""
+    """Copy a stored ``proposal_document`` down to its client-safe fields.
+
+    The stored snapshot mixes presentation data with staff-only data (see
+    :data:`CLIENT_SAFE_DOCUMENT_FIELDS`). Never hand the raw dict to the public
+    proposal payload — run it through here first. Returns a new dict; the
+    caller's snapshot is not mutated.
+    """
     if document is None:
         return None
-    safe = deepcopy({k: v for k, v in document.items() if k in CLIENT_SAFE_DOCUMENT_FIELDS})
-    for tier in safe.get("tiers") or []:
-        pricing = tier.get("pricing") if isinstance(tier, dict) else None
-        if isinstance(pricing, dict):
-            pricing.pop("commission_financed", None)
-            pricing.pop("commission_cash", None)
-
-    if safe.get("service") != "permanent":
-        if "financing" in safe:
-            safe["financing"] = None
-        if "selected_monthly_payment" in safe:
-            safe["selected_monthly_payment"] = 0
-        if "grand_monthly_payment" in safe:
-            safe["grand_monthly_payment"] = 0
-        for tier in safe.get("tiers") or []:
-            pricing = tier.get("pricing") if isinstance(tier, dict) else None
-            if isinstance(pricing, dict):
-                pricing["monthly_payment"] = 0
-                pricing["monthly_by_term"] = {}
-        for section in safe.get("category_sections") or []:
-            if isinstance(section, dict):
-                section["monthly_payment"] = 0
-    return safe
+    return {k: v for k, v in document.items() if k in CLIENT_SAFE_DOCUMENT_FIELDS}

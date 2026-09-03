@@ -1,14 +1,12 @@
-import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
+import { apiPost, apiPut, apiDelete } from "@/lib/api";
 import type {
   CreateQuoteRequest,
   ManualDepositPaymentMethod,
-  PermanentProfitability,
   Quote,
   QuoteConvertResult,
   QuoteDeliverChannel,
   QuoteDeliverResult,
   QuoteLineItemInput,
-  QuotePaymentOption,
   QuoteServiceInput,
   UpdateQuoteRequest,
 } from "@/types";
@@ -77,24 +75,9 @@ export const quotesApi = {
     });
   },
 
-  approve: async (
-    workspaceId: string,
-    quoteId: string,
-    paymentOption?: QuotePaymentOption | null,
-  ): Promise<Quote> => {
-    return apiPost<Quote>(
-      `${quotePath(workspaceId, quoteId)}/approve`,
-      paymentOption ? { payment_option: paymentOption } : undefined,
-    );
+  approve: async (workspaceId: string, quoteId: string): Promise<Quote> => {
+    return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/approve`);
   },
-
-  permanentProfitability: async (
-    workspaceId: string,
-    quoteId: string,
-  ): Promise<PermanentProfitability | null> =>
-    apiGet<PermanentProfitability | null>(
-      `${quotePath(workspaceId, quoteId)}/permanent-profitability`,
-    ),
 
   decline: async (workspaceId: string, quoteId: string, reason?: string): Promise<Quote> => {
     return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/decline`, {

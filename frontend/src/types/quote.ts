@@ -5,7 +5,6 @@ import type { components } from "@/lib/api/_generated";
 import type { FinancingEstimate } from "./financing";
 
 export type QuoteStatus = "draft" | "sent" | "approved" | "declined" | "expired";
-export type QuotePaymentOption = "cash_check" | "financing";
 export type DepositPaymentMethod = "card" | "cash" | "check" | "other";
 export type ManualDepositPaymentMethod = Exclude<DepositPaymentMethod, "card">;
 
@@ -43,13 +42,12 @@ export interface Quote {
   number: string;
   title?: string | null;
   status: QuoteStatus;
-  payment_option?: QuotePaymentOption | null;
   subtotal: number;
   tax_amount: number;
   discount_amount: number;
   total: number;
   currency: string;
-  /** Server-owned estimate only for a new exact Permanent Lighting snapshot. */
+  /** Server-computed estimate for category-qualified quotes; never an offer. */
   financing?: FinancingEstimate | null;
   /** Optional upfront deposit as a percentage of the total (0–100); null = none. */
   deposit_percentage?: number | null;
@@ -123,7 +121,7 @@ export interface QuoteService {
 
 export interface QuoteServiceInput {
   name: string;
-  /** Actual selling price; no financing or commission gross-up is added. */
+  /** Net the business keeps; the server adds the finance buffer on a wizard quote. */
   amount: number;
   /** Price-book item this came from, so the add registers as an attach. */
   catalog_item_id?: string;
@@ -183,31 +181,6 @@ export interface QuoteConvertResult {
   invoice_id: string | null;
   idempotent_replay: boolean;
   crew_notification: CrewNotificationResult;
-}
-
-export interface PermanentProfitabilityScenario {
-  payment_option: QuotePaymentOption;
-  contract_price: number;
-  merchant_fee_rate: number;
-  merchant_fee: number;
-  sales_commission_rate: number;
-  sales_commission: number;
-  material_cogs: number;
-  contribution_before_labor: number;
-  contribution_margin: number;
-}
-
-export interface PermanentProfitability {
-  quote_id: string;
-  currency: string;
-  provider: string;
-  plan_number: string;
-  apr: number;
-  term_months: number;
-  estimated_monthly_payment: number;
-  selected_payment_option?: QuotePaymentOption | null;
-  cash_check: PermanentProfitabilityScenario;
-  financing: PermanentProfitabilityScenario;
 }
 
 /**

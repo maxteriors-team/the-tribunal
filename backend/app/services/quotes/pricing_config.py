@@ -1,8 +1,8 @@
 """Per-workspace sales-pricing config stored in ``workspace.settings``.
 
-Single source of truth for the proposal engine (tax, Permanent GreenSky terms,
-Good/Better/Best tiers, Care Plan, bistro, and legacy settings compatibility) —
-the uploaded wizard's ``CONFIG`` minus the fixture catalog. Both the settings API
+Single source of truth for the proposal *engine* (tax, Wisetack financing, cash
+pricing, commission, Good/Better/Best tiers, Care Plan, savings, bistro) — the
+uploaded wizard's ``CONFIG`` minus the fixture catalog. Both the settings API
 (``GET/PUT .../pricing``) and the proposal-pricing service read through
 :func:`get_pricing_config`, so an operator edit is reflected everywhere with no
 code change. Mirrors :mod:`app.services.quotes.proposal_template`.

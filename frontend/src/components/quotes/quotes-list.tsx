@@ -50,9 +50,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Label } from "@/components/ui/label";
 import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Table,
   TableBody,
@@ -62,7 +60,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TeamMemberPicker } from "@/components/workspaces/team-member-picker";
-import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { lightingProjectsApi } from "@/lib/api/lighting-projects";
 import { quotesApi } from "@/lib/api/quotes";
@@ -71,10 +68,9 @@ import { POLL_60S } from "@/lib/query-options";
 import { formatDate, formatRelative } from "@/lib/utils/date";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
-import type { Quote, QuoteDeliverChannel, QuotePaymentOption, QuoteStatus } from "@/types";
+import type { Quote, QuoteDeliverChannel, QuoteStatus } from "@/types";
 
 import { ConvertQuoteDialog } from "./convert-quote-dialog";
-import { PermanentProfitabilityDialog } from "./permanent-profitability-dialog";
 import { QuoteEditDialog } from "./quote-edit-dialog";
 import { QuoteServicesDialog } from "./quote-services-dialog";
 import { depositPaymentMethodLabel, RecordDepositDialog } from "./record-deposit-dialog";
@@ -98,19 +94,12 @@ export function QuotesList() {
   const workspaceId = useWorkspaceId();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const { can } = useCapabilities();
-  const canReadProfitability = can("billing:read");
   const [convertQuote, setConvertQuote] = useState<Quote | null>(null);
   const [recordDepositQuote, setRecordDepositQuote] = useState<Quote | null>(null);
   const [editing, setEditing] = useState<Quote | null>(null);
   const [servicesQuote, setServicesQuote] = useState<Quote | null>(null);
   const [assignmentQuote, setAssignmentQuote] = useState<Quote | null>(null);
   const [assignmentUserId, setAssignmentUserId] = useState<number | null>(null);
-  const [approvalQuote, setApprovalQuote] = useState<Quote | null>(null);
-  const [approvalPaymentOption, setApprovalPaymentOption] = useState<QuotePaymentOption | null>(
-    null,
-  );
-  const [profitabilityQuote, setProfitabilityQuote] = useState<Quote | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Quote | null>(null);
 
   const query = useQuery({
@@ -157,17 +146,9 @@ export function QuotesList() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: ({
-      quote,
-      paymentOption,
-    }: {
-      quote: Quote;
-      paymentOption: QuotePaymentOption | null;
-    }) => quotesApi.approve(workspaceId ?? "", quote.id, paymentOption),
-    onSuccess: (quote) => {
-      toast.success(`Quote ${quote.number} approved`);
-      setApprovalQuote(null);
-      setApprovalPaymentOption(null);
+    mutationFn: (id: string) => quotesApi.approve(workspaceId ?? "", id),
+    onSuccess: (q) => {
+      toast.success(`Quote ${q.number} approved`);
       invalidate();
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to approve quote")),
@@ -243,14 +224,6 @@ export function QuotesList() {
     }
   };
 
-  const requestApproval = (quote: Quote) => {
-    if (quote.financing?.plan_number) {
-      setApprovalQuote(quote);
-      setApprovalPaymentOption(null);
-      return;
-    }
-    approveMutation.mutate({ quote, paymentOption: null });
-  };
   const busy =
     sendMutation.isPending ||
     deliverMutation.isPending ||
@@ -398,7 +371,7 @@ export function QuotesList() {
                     onEdit={() => setEditing(quote)}
                     onSend={() => sendMutation.mutate(quote.id)}
                     onDeliver={(channel) => deliverMutation.mutate({ id: quote.id, channel })}
-                    onApprove={() => requestApproval(quote)}
+                    onApprove={() => approveMutation.mutate(quote.id)}
                     onDecline={() => declineMutation.mutate(quote.id)}
                     onReopen={() => reopenMutation.mutate(quote.id)}
                     onRecordDeposit={() => setRecordDepositQuote(quote)}
@@ -406,10 +379,6 @@ export function QuotesList() {
                     onAddServices={() => setServicesQuote(quote)}
                     onCopyLink={() => copyClientLink(quote)}
                     onPreview={() => openClientProposal(quote)}
-                    showProfitability={
-                      canReadProfitability && Boolean(quote.financing?.plan_number)
-                    }
-                    onProfitability={() => setProfitabilityQuote(quote)}
                     onDelete={() => setPendingDelete(quote)}
                   />
                 </TableCell>
@@ -432,15 +401,6 @@ export function QuotesList() {
           if (!open) setConvertQuote(null);
         }}
       />
-      {canReadProfitability ? (
-        <PermanentProfitabilityDialog
-          quote={profitabilityQuote}
-          open={profitabilityQuote !== null}
-          onOpenChange={(open) => {
-            if (!open) setProfitabilityQuote(null);
-          }}
-        />
-      ) : null}
       {recordDepositQuote ? (
         <RecordDepositDialog
           workspaceId={workspaceId ?? ""}
@@ -468,92 +428,6 @@ export function QuotesList() {
         }}
       />
 
-      <Dialog
-        open={approvalQuote !== null}
-        onOpenChange={(open) => {
-          if (!open && !approveMutation.isPending) {
-            setApprovalQuote(null);
-            setApprovalPaymentOption(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Select the contracted payment method</DialogTitle>
-            <DialogDescription>
-              Quote {approvalQuote?.number} keeps the same customer price for either method.
-            </DialogDescription>
-          </DialogHeader>
-          {approvalQuote ? (
-            <RadioGroup
-              value={approvalPaymentOption ?? ""}
-              onValueChange={(value) => {
-                if (value === "cash_check" || value === "financing") {
-                  setApprovalPaymentOption(value);
-                }
-              }}
-              aria-label="Contracted payment method"
-              className="gap-3"
-            >
-              <Label
-                htmlFor="quote-payment-financing"
-                className="flex cursor-pointer items-start gap-3 rounded-lg border p-4"
-              >
-                <RadioGroupItem id="quote-payment-financing" value="financing" className="mt-1" />
-                <span>
-                  <span className="block font-medium">GreenSky financing</span>
-                  <span className="mt-1 block text-sm text-muted-foreground">
-                    {formatCurrency(approvalQuote.total, approvalQuote.currency)} · Approximately{" "}
-                    {formatCurrency(
-                      Math.round(approvalQuote.financing?.monthly_payment ?? 0),
-                      approvalQuote.currency,
-                    )}
-                    /month for {approvalQuote.financing?.default_term} months · Plan{" "}
-                    {approvalQuote.financing?.plan_number}
-                  </span>
-                </span>
-              </Label>
-              <Label
-                htmlFor="quote-payment-cash"
-                className="flex cursor-pointer items-start gap-3 rounded-lg border p-4"
-              >
-                <RadioGroupItem id="quote-payment-cash" value="cash_check" className="mt-1" />
-                <span>
-                  <span className="block font-medium">Cash/check</span>
-                  <span className="mt-1 block text-sm text-muted-foreground">
-                    {formatCurrency(approvalQuote.total, approvalQuote.currency)} · Same contracted
-                    customer price
-                  </span>
-                </span>
-              </Label>
-            </RadioGroup>
-          ) : null}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={approveMutation.isPending}
-              onClick={() => setApprovalQuote(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={!approvalQuote || !approvalPaymentOption || approveMutation.isPending}
-              onClick={() => {
-                if (approvalQuote && approvalPaymentOption) {
-                  approveMutation.mutate({
-                    quote: approvalQuote,
-                    paymentOption: approvalPaymentOption,
-                  });
-                }
-              }}
-            >
-              {approveMutation.isPending ? "Approving…" : "Approve quote"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <Dialog
         open={assignmentQuote !== null}
         onOpenChange={(open) => {
@@ -660,8 +534,6 @@ interface RowActionsProps {
   onAddServices: () => void;
   onCopyLink: () => void;
   onPreview: () => void;
-  showProfitability: boolean;
-  onProfitability: () => void;
   onDelete: () => void;
 }
 
@@ -686,8 +558,6 @@ function RowActions({
   onAddServices,
   onCopyLink,
   onPreview,
-  showProfitability,
-  onProfitability,
   onDelete,
 }: RowActionsProps) {
   const isOpen = quote.status === "draft" || quote.status === "sent";
@@ -716,12 +586,6 @@ function RowActions({
           <UserRound className="mr-2 h-4 w-4" />
           Assign owner
         </DropdownMenuItem>
-        {showProfitability ? (
-          <DropdownMenuItem onClick={onProfitability}>
-            <Banknote className="mr-2 h-4 w-4" />
-            Profitability
-          </DropdownMenuItem>
-        ) : null}
         {canRecordDeposit && (
           <DropdownMenuItem onClick={onRecordDeposit}>
             <Banknote className="mr-2 h-4 w-4" />

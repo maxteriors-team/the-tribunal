@@ -8,7 +8,6 @@ never accepted from clients.
 
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import (
@@ -26,32 +25,9 @@ from app.schemas.proposal_wizard import ProposalWizardPayload
 from app.schemas.user import AssigneeSummary
 
 QuoteStatus = Literal["draft", "sent", "approved", "declined", "expired"]
-QuotePaymentOption = Literal["cash_check", "financing"]
 WizardEditMode = Literal["update", "revise"]
 DepositPaymentMethod = Literal["card", "cash", "check", "other"]
 ManualDepositPaymentMethod = Literal["cash", "check", "other"]
-
-
-class PermanentPricingSnapshot(BaseModel):
-    """Private, immutable-at-approval Permanent Lighting economics."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    cash_check_price: Decimal = Field(ge=0, decimal_places=2)
-    financing_price: Decimal = Field(ge=0, decimal_places=2)
-    provider: Literal["GreenSky"] = "GreenSky"
-    plan_number: str = Field(min_length=1, max_length=32, pattern=r"^\d+$")
-    apr: Decimal = Field(ge=0, le=1)
-    term_months: int = Field(ge=1, le=360)
-    merchant_fee_rate: Decimal = Field(ge=0, lt=1)
-    sales_commission_rate: Decimal = Field(ge=0, lt=1)
-    material_cogs: Decimal = Field(ge=0, decimal_places=2)
-
-    @model_validator(mode="after")
-    def one_customer_price(self) -> "PermanentPricingSnapshot":
-        if self.cash_check_price != self.financing_price:
-            raise ValueError("Cash/check and financing prices must match")
-        return self
 
 
 # --------------------------------------------------------------------------- #
@@ -189,8 +165,10 @@ class QuoteServiceCreate(BaseModel):
     shape cannot keep would be a field that silently collapses to 1 on most
     quotes.
 
-    ``amount`` is the customer selling price on every quote. Wizard snapshots keep
-    it as a direct add-on charge, matching the amount entered by the operator.
+    ``amount`` is the **net** the business keeps on a wizard quote — grossed up
+    by the finance buffer server-side like every other price on that document —
+    and the plain unit price on a quote that has no document. This mirrors the
+    wizard's own add-on row, where a price-book price is entered as net.
     """
 
     name: str = Field(min_length=1, max_length=300)
@@ -235,14 +213,6 @@ class QuoteDeclineRequest(BaseModel):
     """Operator decline with an optional reason."""
 
     reason: str | None = Field(default=None, max_length=2000)
-
-
-class QuoteApproveRequest(BaseModel):
-    """Operator approval; Permanent snapshots require one server-validated method."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    payment_option: QuotePaymentOption | None = None
 
 
 class QuoteDepositRecordRequest(BaseModel):
@@ -333,13 +303,13 @@ class QuoteResponse(BaseModel):
     number: str
     title: str | None = None
     status: QuoteStatus
-    payment_option: QuotePaymentOption | None = None
     subtotal: float
     tax_amount: float
     discount_amount: float
     total: float
     currency: str
-    # Server-computed only for newly snapshotted exact Permanent Lighting quotes.
+    # Category-qualified, server-computed estimate. Null means this quote's
+    # categorized subtotal is disabled, below its minimum, or above the cap.
     financing: FinancingEstimate | None = None
     deposit_percentage: float | None = None
     deposit_amount_fixed: float | None = None
@@ -442,35 +412,6 @@ class QuoteResponse(BaseModel):
         return self.deposit_paid_at is not None
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class PermanentProfitabilityScenario(BaseModel):
-    """Private economics for one Permanent Lighting payment method."""
-
-    payment_option: QuotePaymentOption
-    contract_price: float
-    merchant_fee_rate: float
-    merchant_fee: float
-    sales_commission_rate: float
-    sales_commission: float
-    material_cogs: float
-    contribution_before_labor: float
-    contribution_margin: float
-
-
-class PermanentProfitabilityResponse(BaseModel):
-    """Billing-scoped comparison computed only from the quote's private snapshot."""
-
-    quote_id: uuid.UUID
-    currency: str
-    provider: str
-    plan_number: str
-    apr: float
-    term_months: int
-    estimated_monthly_payment: float
-    selected_payment_option: QuotePaymentOption | None = None
-    cash_check: PermanentProfitabilityScenario
-    financing: PermanentProfitabilityScenario
 
 
 class QuoteDetailResponse(QuoteResponse):

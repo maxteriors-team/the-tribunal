@@ -16,6 +16,7 @@ from decimal import Decimal
 from typing import Any, Literal
 
 from app.schemas.pricing import (
+    DEFAULT_FINANCING_DISCLAIMER,
     MAINTENANCE_THROUGH_TOKEN,
     BistroInstallation,
     BistroPricing,
@@ -46,11 +47,11 @@ from app.services.quotes import proposal_pricing as pp
 
 @dataclass
 class CatalogEntry:
-    """Resolved catalog item with its selling price and fulfillment parts."""
+    """Resolved catalog item the builder needs (net price + fulfillment parts)."""
 
     item_id: str
     name: str
-    unit_price: Decimal
+    unit_price: Decimal  # net (pre-gross-up)
     transformer: bool = False
     components: list[dict[str, Any]] = field(default_factory=list)
     # The price-book row's real primary key, carried alongside the stable
@@ -124,12 +125,19 @@ def _category_section(
     key: str,
     label: str,
     pricing: PermanentPricing | ChristmasPricing,
+    config: PricingSettings,
     *,
     takedown: bool | None = None,
     storage: bool | None = None,
     value_props: list[ValueProp] | None = None,
 ) -> ProposalCategorySection:
-    """Wrap a category pricing result with direct selling-price figures."""
+    """Wrap a category pricing result with financed/cash/monthly figures.
+
+    ``takedown``/``storage`` are the seasonal services the client bought. Only
+    the christmas section passes them (permanent leaves them ``None``) so
+    dispatch can later read what was sold instead of inferring it from the
+    wording of a display line. ``value_props`` is likewise seasonal-only today.
+    """
     total = _d(pricing.total)
     return ProposalCategorySection(
         key=key,
@@ -137,9 +145,9 @@ def _category_section(
         lines=list(pricing.lines),
         value_props=list(value_props or []),
         financed_total=float(total),
-        cash_total=float(total),
-        cash_savings=0,
-        monthly_payment=0,
+        cash_total=float(pp.cash_price(total, config)) if total > 0 else 0.0,
+        cash_savings=float(pp.cash_savings(total, config)) if total > 0 else 0.0,
+        monthly_payment=float(pp.monthly_payment(total, config)) if total > 0 else 0.0,
         min_applied=pricing.min_applied,
         takedown=takedown,
         storage=storage,
@@ -343,7 +351,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         )
         if permanent_pricing.total > 0:
             category_sections.append(
-                _category_section("permanent", config.permanent.label, permanent_pricing)
+                _category_section("permanent", config.permanent.label, permanent_pricing, config)
             )
     christmas_pricing = None
     if "christmas" in categories and payload.christmas is not None:
@@ -383,6 +391,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
                     "christmas",
                     config.christmas.label,
                     christmas_pricing,
+                    config,
                     # What the client bought, not what the workspace offers:
                     # takedown only counts when the config allowed it too, so
                     # this matches the money the engine actually charged.
@@ -403,25 +412,38 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         pricing_source=payload.pricing_source,
     )
 
-    service = service_for_categories(categories)
-    estimate = (
-        pp.permanent_financing_estimate(selection.grand_financed, config)
-        if service == "permanent"
-        else None
-    )
-    financing = (
-        ProposalFinancing(
-            enabled=True,
-            provider=estimate.provider,
-            plan_number=estimate.plan_number,
-            terms=estimate.terms,
-            default_term=estimate.default_term,
-            apr=estimate.apr,
-            max_amount=selection.grand_financed,
-            disclaimer=estimate.disclaimer,
-        )
-        if estimate is not None
-        else None
+    # Financing eligibility is presentation-only. Keep the existing price buffer
+    # global so category configuration can never remove the fee gross-up or alter
+    # cash-price reversal. Each qualifying service contributes its own subtotal;
+    # uncategorized add-on charges cannot make an otherwise ineligible quote qualify.
+    #
+    # Every product line the quote covers starts at 0 rather than being omitted:
+    # a category with no priced work still *is* part of this quote, and lighting
+    # categories carry a zero minimum, so a landscape package sold entirely on
+    # add-on charges keeps the estimate it showed before financing became
+    # category-aware. A category with a real floor still has to clear it.
+    category_totals: dict[str, float] = dict.fromkeys(categories, 0.0)
+    for section in category_sections:
+        category_totals[section.key] = section.financed_total
+    selected_view = next((view for view in tier_views if view.key == selected), None)
+    if has_landscape and selected_view is not None:
+        category_totals["landscape"] = selected_view.pricing.base
+    if bistro is not None and bistro.total > 0:
+        category_totals["bistro"] = bistro.total
+
+    financing = ProposalFinancing(
+        enabled=(
+            not use_price_book
+            and pp.financing_is_eligible(selection.grand_financed, category_totals, config)
+        ),
+        provider=config.financing.provider,
+        terms=[] if use_price_book else pp.finance_terms(config),
+        default_term=config.financing.default_term,
+        max_amount=config.financing.max_amount,
+        headline=config.financing.headline,
+        body=config.financing.body,
+        points=list(config.financing.points),
+        disclaimer=(config.financing.disclaimer or DEFAULT_FINANCING_DISCLAIMER),
     )
 
     document = ProposalDocument(
@@ -440,13 +462,13 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         mockups=payload.mockups,
         categories=categories,
         category_sections=category_sections,
-        service=service,
+        service=service_for_categories(categories),
         selected_financed_total=selection.selected_financed,
         selected_cash_total=selection.selected_cash,
-        selected_monthly_payment=0,
+        selected_monthly_payment=selection.selected_monthly,
         grand_financed_total=selection.grand_financed,
-        grand_cash_total=selection.grand_financed,
-        grand_monthly_payment=estimate.monthly_payment if estimate is not None else 0,
+        grand_cash_total=selection.grand_cash,
+        grand_monthly_payment=selection.grand_monthly,
         fulfillment=selection.fulfillment,
         notes=payload.notes,
         terms=payload.terms,
@@ -661,8 +683,14 @@ def select_tier(
         (_d(li.unit_price) * _d(li.quantity) - _d(li.discount) for li in line_items),
         Decimal("0"),
     )
-    grand_cash = grand_financed
-    grand_monthly = Decimal("0")
+    if pricing_source == "price_book":
+        grand_cash = grand_financed
+        grand_monthly = Decimal("0")
+    else:
+        grand_cash = pp.cash_price(grand_financed, config) if grand_financed > 0 else Decimal("0")
+        grand_monthly = (
+            pp.monthly_payment(grand_financed, config) if grand_financed > 0 else Decimal("0")
+        )
 
     return TierSelection(
         line_items=line_items,
@@ -691,8 +719,9 @@ def add_charge(
 ) -> tuple[ProposalDocument, str]:
     """Append one add-on charge to a snapshot, returning it and the new charge id.
 
-    ``net_amount`` is the legacy parameter name for the selling price. It is
-    stored directly, so a service added afterwards prices identically to the same
+    ``net_amount`` is what the rep keeps; it is grossed up by the finance buffer
+    exactly as :func:`build_proposal_document` does for a charge typed during the
+    original build, so a service added afterwards prices identically to the same
     service added before saving.
 
     Does **not** reprice — the caller pairs this with :func:`reprice_document`,
@@ -769,20 +798,13 @@ def reprice_document(
         catalog=catalog,
         pricing_source=document.pricing_source,
     )
-    monthly_payment = Decimal("0")
-    if document.service == "permanent" and document.financing is not None:
-        monthly_payment = pp.amortized_monthly_payment(
-            selection.grand_financed,
-            apr=getattr(document.financing, "apr", 0),
-            term_months=document.financing.default_term,
-        )
     update: dict[str, Any] = {
         "selected_financed_total": selection.selected_financed,
-        "selected_cash_total": selection.selected_financed,
-        "selected_monthly_payment": 0,
+        "selected_cash_total": selection.selected_cash,
+        "selected_monthly_payment": selection.selected_monthly,
         "grand_financed_total": selection.grand_financed,
-        "grand_cash_total": selection.grand_financed,
-        "grand_monthly_payment": float(monthly_payment),
+        "grand_cash_total": selection.grand_cash,
+        "grand_monthly_payment": selection.grand_monthly,
         "fulfillment": selection.fulfillment,
     }
     if document.deposit_mode and document.deposit_value > 0:

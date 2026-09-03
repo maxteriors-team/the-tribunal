@@ -1,8 +1,21 @@
-"""Regression lock on direct seasonal-Christmas selling prices.
+"""Byte-level regression lock on the seasonal-Christmas pricing output.
 
-Legacy financing, cash-discount, and commission settings remain parseable, but
-must not alter configured Christmas prices. Stored proposal snapshots protect
-already-sent quotes; these DB-free tests pin the engine used for new quotes.
+Christmas quotes, saved pricing configs, and already-shared public proposal links
+must keep rendering *identically* while seasonal work happens around them. The
+tests in :mod:`test_proposal_pricing` prove the engine is internally consistent
+(takedown is a fraction of the net install subtotal, packages scope their
+coverage, …). These assert something narrower and blunter: **these exact inputs
+produce these exact numbers and these exact display lines.**
+
+That distinction matters because the engine is under active development on two
+fronts — package-tier generalization, and the seasonal settings/renewal work this
+file ships with. A refactor that keeps every invariant while shifting a rounding
+step, reordering lines, or renaming a label would pass the invariant tests and
+silently re-render a proposal the customer already signed.
+
+Pure and DB-free: the numbers below were produced by the engine as it stands and
+are pinned deliberately. If one changes, that is a product decision about already
+sold work, not a test to update reflexively.
 """
 
 from __future__ import annotations
@@ -58,7 +71,7 @@ FROZEN_ITEMS = [
 
 
 def _frozen_config(**christmas_overrides) -> PricingSettings:
-    """Legacy money knobs remain stored but no longer alter selling prices."""
+    """A workspace pinned to the shipped money knobs (11% buffer, 3% reserve)."""
     return PricingSettings(
         financing=FinancingConfig(
             enabled=True,
@@ -105,11 +118,11 @@ def test_frozen_full_seasonal_quote_totals_are_unchanged():
     )
 
     assert priced.roofline_feet == 160
-    assert priced.roofline_cost == 960
-    assert priced.takedown_cost == 466.25
-    assert priced.storage_cost == 200
-    assert priced.raw_total == 2531.25
-    assert priced.total == 2531.25
+    assert priced.roofline_cost == 1079
+    assert priced.takedown_cost == 524
+    assert priced.storage_cost == 225
+    assert priced.raw_total == 2845
+    assert priced.total == 2845
     assert priced.min_applied is False
 
 
@@ -124,13 +137,13 @@ def test_frozen_full_seasonal_quote_display_lines_are_unchanged():
     )
 
     assert [(line.label, line.line_total) for line in priced.lines] == [
-        ("Roofline", 960),
-        ("Medium tree (8–15 ft)", 520),
-        ("Small bush / shrub", 140),
-        ("Wreath (36 in)", 85),
-        ("20 ft Garland (installed)", 160),
-        ("Post-season takedown", 466.25),
-        ("Off-season storage", 200),
+        ("Roofline", 1079),
+        ("Medium tree (8–15 ft)", 584),
+        ("Small bush / shrub", 157),
+        ("Wreath (36 in)", 96),
+        ("20 ft Garland (installed)", 180),
+        ("Post-season takedown", 524),
+        ("Off-season storage", 225),
     ]
     # The breakdown the customer sees must still add up to the posted total.
     assert sum(line.line_total for line in priced.lines) == priced.raw_total
@@ -147,10 +160,10 @@ def test_frozen_per_category_costs_are_unchanged():
     )
 
     assert [(cost.key, cost.unit, cost.cost) for cost in priced.items] == [
-        ("trees", "each", 520),
-        ("bushes", "each", 140),
-        ("wreaths", "each", 85),
-        ("garland", "per_ft", 160),
+        ("trees", "each", 584),
+        ("bushes", "each", 157),
+        ("wreaths", "each", 96),
+        ("garland", "per_ft", 180),
     ]
 
 
@@ -166,7 +179,7 @@ def test_frozen_install_only_quote_is_unchanged():
 
     assert priced.takedown_cost == 0
     assert priced.storage_cost == 0
-    assert priced.raw_total == 1865
+    assert priced.raw_total == 2096
     assert [line.label for line in priced.lines] == [
         "Roofline",
         "Medium tree (8–15 ft)",
@@ -185,9 +198,9 @@ def test_frozen_job_minimum_still_lifts_a_small_quote():
         storage=False,
     )
 
-    assert priced.raw_total == 85
-    assert priced.minimum == 900
-    assert priced.total == 900
+    assert priced.raw_total == 96
+    assert priced.minimum == 1011
+    assert priced.total == 1011
     assert priced.min_applied is True
 
 
@@ -226,10 +239,10 @@ def test_frozen_legacy_blob_prices_identically_to_the_standardized_catalog():
 
     # The standardized catalog's numbers minus the garland run and its share of
     # takedown — the legacy blob has no garland category to select.
-    assert priced.roofline_cost == 960
-    assert priced.takedown_cost == 426.25
-    assert priced.storage_cost == 200
-    assert priced.raw_total == 2331.25
+    assert priced.roofline_cost == 1079
+    assert priced.takedown_cost == 479
+    assert priced.storage_cost == 225
+    assert priced.raw_total == 2620
 
 
 # --------------------------------------------------------------------------- #
@@ -273,9 +286,9 @@ def test_frozen_package_totals_and_order_are_unchanged():
     )
 
     assert [(pkg.key, pkg.pricing.total) for pkg in priced] == [
-        ("essential", 1025),
-        ("middle", 2225),
-        ("premier", 2531.25),
+        ("essential", 1151),
+        ("middle", 2500),
+        ("premier", 2845),
     ]
     # Widening coverage must never make a package cheaper.
     totals = [pkg.pricing.total for pkg in priced]
