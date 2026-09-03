@@ -49,8 +49,6 @@ from app.db.tenancy import WorkspaceScoped
 
 if TYPE_CHECKING:
     from app.models.contact import Contact
-    from app.models.referral_partner_intake import ReferralPartnerIntakeLink
-    from app.models.referral_partner_logo import ReferralPartnerLogo
     from app.models.workspace import Workspace
 
 
@@ -235,3 +233,9 @@ class ReferralPartner(Base, WorkspaceScoped):
         return (
             f"<ReferralPartner(id={self.id}, name={self.name}, partner_type={self.partner_type})>"
         )
+
+
+# Reciprocal model-only imports stay after the class to avoid import-order cycles.
+if TYPE_CHECKING:
+    from app.models.referral_partner_intake import ReferralPartnerIntakeLink
+    from app.models.referral_partner_logo import ReferralPartnerLogo

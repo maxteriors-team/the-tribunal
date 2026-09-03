@@ -12,10 +12,6 @@ from app.core.encryption import EncryptedString
 from app.db.base import Base
 from app.db.tenancy import WorkspaceScoped
 
-if TYPE_CHECKING:
-    from app.models.referral_partner import ReferralPartner
-    from app.models.workspace import Workspace
-
 
 class ReferralPartnerIntakeLink(Base, WorkspaceScoped):
     """A time-bounded bearer capability bound to one partner and workspace."""
@@ -67,3 +63,9 @@ class ReferralPartnerIntakeLink(Base, WorkspaceScoped):
         foreign_keys=[referral_partner_id, workspace_id],
         overlaps="workspace",
     )
+
+
+# Reciprocal model-only imports stay after the class to avoid import-order cycles.
+if TYPE_CHECKING:
+    from app.models.referral_partner import ReferralPartner
+    from app.models.workspace import Workspace
