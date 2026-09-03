@@ -19,10 +19,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.db.tenancy import WorkspaceScoped
 
-if TYPE_CHECKING:
-    from app.models.referral_partner import ReferralPartner
-    from app.models.workspace import Workspace
-
 MAX_REFERRAL_PARTNER_LOGO_BYTES = 2 * 1024 * 1024
 REFERRAL_PARTNER_LOGO_CONTENT_TYPES = ("image/jpeg", "image/png", "image/webp")
 
@@ -83,3 +79,9 @@ class ReferralPartnerLogo(Base, WorkspaceScoped):
         foreign_keys=[referral_partner_id, workspace_id],
         overlaps="workspace",
     )
+
+
+# Reciprocal model-only imports stay after the class to avoid import-order cycles.
+if TYPE_CHECKING:
+    from app.models.referral_partner import ReferralPartner
+    from app.models.workspace import Workspace
