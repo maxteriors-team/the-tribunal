@@ -10,7 +10,7 @@ vi.mock("@/components/referral-partners/public-referral-partner-intake", () => (
 }));
 
 const STORAGE_KEY = "referral-partner-intake-token";
-const TOKEN = "abcdefghijklmnopqrstuvwxyz_ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234";
+const TOKEN = "test-capability";
 
 describe("ReferralPartnerIntakePage", () => {
   beforeEach(() => {
