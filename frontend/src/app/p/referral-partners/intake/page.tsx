@@ -4,7 +4,7 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { PublicReferralPartnerIntake } from "@/components/referral-partners/public-referral-partner-intake";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader } from "@/components/ui/card";
 
 const INTAKE_TOKEN_STORAGE_KEY = "referral-partner-intake-token";
 const SAFE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
@@ -74,7 +74,7 @@ export default function ReferralPartnerIntakePage() {
             <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-destructive/10">
               <AlertCircle className="size-6 text-destructive" aria-hidden />
             </div>
-            <CardTitle>This intake link is invalid</CardTitle>
+            <h1 className="font-semibold leading-none">This intake link is invalid</h1>
             <CardDescription>
               Ask your contact for a new referral-partner intake link and open the complete link
               they send you.
