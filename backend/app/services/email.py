@@ -1019,10 +1019,12 @@ async def send_quote_email(
     proposal_url: str | None = None,
     logo_url: str | None = None,
     idempotency_key: uuid.UUID | None = None,
+    amount_label: str = "Total",
 ) -> bool:
     """Email a customer their quote/estimate.
 
-    ``amount_str`` is the pre-formatted quoted total (e.g. ``"250.00 USD"``).
+    ``amount_str`` is the pre-formatted price (e.g. ``"250.00 USD"``); callers
+    sending an estimate range set ``amount_label`` to ``"Estimated range"``.
     ``title`` and ``notes`` are operator-authored free text and are HTML-escaped.
     ``proposal_url`` is the client-facing proposal page link; when provided a
     prominent "View your proposal" button is rendered so the customer can open,
@@ -1039,7 +1041,7 @@ async def send_quote_email(
     details: dict[str, str] = {}
     if title:
         details["For"] = title
-    details["Total"] = amount_str
+    details[amount_label] = amount_str
     if expiry_date:
         details["Valid until"] = expiry_date
 

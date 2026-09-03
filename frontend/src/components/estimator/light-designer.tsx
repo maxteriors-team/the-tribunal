@@ -86,6 +86,7 @@ import {
 import { ConvertQuoteDialog } from "@/components/quotes/convert-quote-dialog";
 import { QuoteEditDialog } from "@/components/quotes/quote-edit-dialog";
 import { ContactCombobox } from "@/components/ui/contact-combobox";
+import { Switch } from "@/components/ui/switch";
 import { estimatorApi } from "@/lib/api/estimator";
 import { quotesApi } from "@/lib/api/quotes";
 import { salesWizardApi } from "@/lib/api/sales-wizard";
@@ -3161,6 +3162,10 @@ export function LightDesigner({
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
   const [discountInput, setDiscountInput] = useState<number | null>(null);
   const [permanentDepositInput, setPermanentDepositInput] = useState("");
+  // The exact estimate is the range's bottom; the rep supplies only its top.
+  // Acceptance and the deposit stay on that exact lower amount.
+  const [permanentPriceRange, setPermanentPriceRange] = useState(false);
+  const [permanentPriceRangeHighInput, setPermanentPriceRangeHighInput] = useState("");
   // Standalone lines the rep typed for work the price book doesn't carry. Held
   // as raw drafts; only complete rows are priced (see `toEstimateCustomLines`).
   const [customLines, setCustomLines] = useState<CustomLineDraft[]>([]);
@@ -4022,6 +4027,21 @@ export function LightDesigner({
     permanentDepositPercentage != null
       ? round2((estimate?.permanent.total ?? 0) * permanentDepositPercentage * 0.01)
       : null;
+  const parsedPermanentPriceRangeHigh = Number(permanentPriceRangeHighInput);
+  const permanentPriceRangeHigh =
+    permanentPriceRangeHighInput !== "" && Number.isFinite(parsedPermanentPriceRangeHigh)
+      ? round2(parsedPermanentPriceRangeHigh)
+      : null;
+  const permanentRangeLow = estimate?.permanent.total ?? 0;
+  const permanentPriceRangeValid =
+    !permanentPriceRange ||
+    (permanentRangeLow > 0 &&
+      permanentPriceRangeHigh != null &&
+      permanentPriceRangeHigh > permanentRangeLow);
+  const permanentRangeLabel =
+    permanentPriceRangeValid && permanentPriceRangeHigh != null
+      ? `${formatCurrency(permanentRangeLow)} – ${formatCurrency(permanentPriceRangeHigh)}`
+      : null;
   const permanentPreviewShot = liveShots.find((shot) => shot.id === activeShotId);
   const permanentProjectPreviewReady =
     !landscapeProject ||
@@ -4034,6 +4054,8 @@ export function LightDesigner({
       side,
       inputs: shareParams,
       deposit_percentage: side === "permanent" ? permanentDepositPercentage : null,
+      price_range_high:
+        side === "permanent" && permanentPriceRange ? permanentPriceRangeHigh : null,
       lighting_project_id: side === "permanent" ? (landscapeProject?.projectId ?? null) : null,
       preview:
         side === "permanent" && permanentPreviewShot
@@ -4085,6 +4107,12 @@ export function LightDesigner({
         ...(side === "permanent" && permanentDepositPercentage != null
           ? { deposit_percentage: permanentDepositPercentage }
           : {}),
+        // Invalid/blank tops intentionally travel as zero: the API rejects them
+        // instead of silently dropping the range and sending one firm price.
+        price_range_high:
+          side === "permanent" && permanentPriceRange
+            ? (permanentPriceRangeHigh ?? 0)
+            : null,
       });
     },
     onSuccess: (quote, { side, signature }) =>
@@ -4143,7 +4171,8 @@ export function LightDesigner({
   const canSend = (channel: SendChannel) =>
     hasHolidayProposal &&
     (channel === "email" ? clientEmail : clientPhone).trim().length > 0 &&
-    (proposalSide !== "permanent" || (permanentDepositValid && permanentProjectPreviewReady));
+    (proposalSide !== "permanent" ||
+      (permanentDepositValid && permanentPriceRangeValid && permanentProjectPreviewReady));
   const sendEstimate = async (channel: SendChannel) => {
     if (!canSend(channel) || sendPending) return;
     setSendingChannel(channel);
@@ -5245,11 +5274,65 @@ export function LightDesigner({
                             Add a phone number to save this estimate to a customer record. Without
                             one you can still share the link.
                           </div>
+                          {proposalSide === "permanent" ? (
+                            <>
+                              <div className="est-quote-deposit est-quote-range">
+                                <label htmlFor="permanent-price-range">Send as a price range</label>
+                                <Switch
+                                  id="permanent-price-range"
+                                  checked={permanentPriceRange}
+                                  onCheckedChange={(checked) => {
+                                    setPermanentPriceRange(checked);
+                                    setQuoteResult(null);
+                                  }}
+                                />
+                              </div>
+                              {permanentPriceRange ? (
+                                <label className="est-quote-deposit">
+                                  <span>Higher amount</span>
+                                  <span className="est-quote-deposit-input">
+                                    <span aria-hidden="true">$</span>
+                                    <input
+                                      className="est-input"
+                                      type="number"
+                                      min={permanentRangeLow > 0 ? round2(permanentRangeLow + 0.01) : 0.01}
+                                      step="50"
+                                      inputMode="decimal"
+                                      placeholder="3900"
+                                      value={permanentPriceRangeHighInput}
+                                      aria-invalid={!permanentPriceRangeValid}
+                                      onChange={(event) => {
+                                        setPermanentPriceRangeHighInput(event.target.value);
+                                        setQuoteResult(null);
+                                      }}
+                                    />
+                                  </span>
+                                </label>
+                              ) : null}
+                              <div
+                                className={
+                                  permanentPriceRangeValid ? "est-customer-hint" : "est-send-error"
+                                }
+                              >
+                                {!permanentPriceRange
+                                  ? "Off: the customer sees one firm price."
+                                  : permanentRangeLow <= 0
+                                    ? "Draw the design to set the lower amount."
+                                    : permanentRangeLabel
+                                      ? `The customer sees ${permanentRangeLabel}. Approving still charges the lower figure, so the deposit is unchanged.`
+                                      : `Enter a higher amount than ${formatCurrency(permanentRangeLow)}.`}
+                              </div>
+                            </>
+                          ) : null}
                           <div className="est-send-actions">
                             <button
                               className="est-btn primary est-save-btn"
                               type="button"
-                              disabled={!canSend("email") || sendPending}
+                              disabled={
+                                !canSend("email") ||
+                                sendPending ||
+                                (proposalSide === "permanent" && !permanentPriceRangeValid)
+                              }
                               title={
                                 canSend("email")
                                   ? `${proposalSide === "permanent" ? "Email the proposal" : "Email the estimate"} to ${clientEmail.trim()}`
@@ -5271,7 +5354,11 @@ export function LightDesigner({
                             <button
                               className="est-btn primary est-save-btn"
                               type="button"
-                              disabled={!canSend("sms") || sendPending}
+                              disabled={
+                                !canSend("sms") ||
+                                sendPending ||
+                                (proposalSide === "permanent" && !permanentPriceRangeValid)
+                              }
                               title={
                                 canSend("sms")
                                   ? `${proposalSide === "permanent" ? "Text the proposal" : "Text the estimate"} to ${clientPhone.trim()}`
@@ -5359,7 +5446,8 @@ export function LightDesigner({
                                       !hasHolidayDesign ||
                                       !permanentProjectPreviewReady ||
                                       quotePending ||
-                                      !permanentDepositValid
+                                      !permanentDepositValid ||
+                                      !permanentPriceRangeValid
                                     }
                                     onClick={() =>
                                       createQuoteMutation.mutate({

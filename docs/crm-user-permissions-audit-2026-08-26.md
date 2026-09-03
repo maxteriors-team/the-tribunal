@@ -68,7 +68,7 @@ This report does **not** claim the CRM is secure. Production rows were not inspe
 
 **Fix:** `QuoClient.get_user` validates provider identity and uses the path-versioned endpoint. Sync resolves each distinct outbound sender once per service run, snapshots full name with email fallback, and stores the provider user ID. Provider lookup failures preserve the message and use the provider ID as an honest display fallback. A later sync may replace only that fallback; a real snapshot is not overwritten.
 
-**Backfill path:** the existing bounded `scripts/ops/backfill_quo.py` replays messages through the same sync service. Historical windows must be rerun dry-run-first after backup; this review did not execute a production backfill.
+**Retirement note (2026-09-02):** the former provider backfill command was removed during code severance. This review did not execute a production backfill.
 
 ## Sender API and UI behavior
 

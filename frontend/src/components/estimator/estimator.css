@@ -2119,6 +2119,12 @@
   color: var(--t3);
 }
 
+/* Switch rows read as label-left, control-right instead of stacking. */
+.est-quote-range {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
 .est-quote-deposit-input {
   display: flex;
   align-items: center;

@@ -44,8 +44,18 @@ PART_SKUS = ("59409312", "59409010", "BM-050-C-AB")
 # gutters on it"). It is preview-only and never persisted, but classifying it
 # keeps the guard honest: telling a homeowner what the business wishes it had
 # sold them is not client-facing under any circumstances.
+#
+# ``price_range_high`` is the staff-entered top of a ballpark proposal. The
+# homeowner gets the validated low/high pair on the public payload; the raw
+# proposal snapshot remains private like every other operator pricing input.
 INTERNAL_ONLY_FIELDS = frozenset(
-    {"fulfillment", "inventory_availability", "attach_warning", "pricing_source"}
+    {
+        "fulfillment",
+        "inventory_availability",
+        "attach_warning",
+        "pricing_source",
+        "price_range_high",
+    }
 )
 
 

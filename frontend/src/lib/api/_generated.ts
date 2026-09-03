@@ -1086,6 +1086,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/referral-partners/intake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Referral Partner Intake
+         * @description Return safe editable prefill data for a live bearer capability.
+         */
+        get: operations["get_public_referral_partner_intake_api_v1_public_referral_partners_intake_get"];
+        put?: never;
+        /**
+         * Submit Public Referral Partner Intake
+         * @description Update the capability's existing partner; never creates a CRM entity.
+         */
+        post: operations["submit_public_referral_partner_intake_api_v1_public_referral_partners_intake_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/referral-partners/intake/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Public Referral Partner Logo
+         * @description Serve validated raster bytes only while the bearer capability is live.
+         */
+        get: operations["download_public_referral_partner_logo_api_v1_public_referral_partners_intake_logo_get"];
+        put?: never;
+        /**
+         * Upload Public Referral Partner Logo
+         * @description Replace this partner's logo after bearer auth and strict raster validation.
+         */
+        post: operations["upload_public_referral_partner_logo_api_v1_public_referral_partners_intake_logo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/realtime/token/{agent_id}": {
         parameters: {
             query?: never;
@@ -9382,6 +9430,70 @@ export interface paths {
          * @description Delete a referral partner. Their referred leads and jobs keep their history.
          */
         delete: operations["delete_referral_partner_api_v1_workspaces__workspace_id__referral_partners__partner_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/referral-partners/{partner_id}/intake-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue Referral Partner Intake Link
+         * @description Create or reuse a copyable public intake link for this scoped partner.
+         */
+        post: operations["issue_referral_partner_intake_link_api_v1_workspaces__workspace_id__referral_partners__partner_id__intake_link_post"];
+        /**
+         * Revoke Referral Partner Intake Link
+         * @description Revoke every public intake capability for this scoped partner.
+         */
+        delete: operations["revoke_referral_partner_intake_link_api_v1_workspaces__workspace_id__referral_partners__partner_id__intake_link_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/referral-partners/{partner_id}/intake-link/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate Referral Partner Intake Link
+         * @description Revoke existing capabilities and return a newly generated intake link.
+         */
+        post: operations["rotate_referral_partner_intake_link_api_v1_workspaces__workspace_id__referral_partners__partner_id__intake_link_rotate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/referral-partners/{partner_id}/logo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Referral Partner Logo
+         * @description Download a scoped partner's validated raster logo.
+         */
+        get: operations["download_referral_partner_logo_api_v1_workspaces__workspace_id__referral_partners__partner_id__logo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -18459,6 +18571,8 @@ export interface components {
             permanent_complexity_feet?: {
                 [key: string]: number;
             };
+            /** Price Range High */
+            price_range_high?: number | null;
             proposal_preview?: components["schemas"]["EstimateProposalPreview"] | null;
             /**
              * Proposal Side
@@ -26990,6 +27104,8 @@ export interface components {
             } | null;
             /** Notes */
             notes?: string | null;
+            /** Price Range High */
+            price_range_high?: number | null;
             /**
              * Pricing Source
              * @default workspace_rules
@@ -27955,6 +28071,7 @@ export interface components {
             number: string;
             /** Packages */
             packages?: components["schemas"]["PublicProposalPackage"][];
+            price_range?: components["schemas"]["PublicProposalPriceRange"] | null;
             /** Proposal Document */
             proposal_document?: {
                 [key: string]: unknown;
@@ -28123,6 +28240,21 @@ export interface components {
             total: number;
         };
         /**
+         * PublicProposalPriceRange
+         * @description A ballpark range shown in place of the proposal's single headline price.
+         *
+         *     ``low`` is the server-priced quote total — what the customer is charged if
+         *     they accept as written, so acceptance and the deposit stay exact. ``high``
+         *     is the operator-entered top after server validation; the raw internal field
+         *     never crosses to the public page.
+         */
+        PublicProposalPriceRange: {
+            /** High */
+            high: number;
+            /** Low */
+            low: number;
+        };
+        /**
          * PublicRatingResult
          * @description Routing result after a public rating submission (the rating gate).
          */
@@ -28150,6 +28282,80 @@ export interface components {
         PublicRatingSubmit: {
             /** Rating */
             rating: number;
+        };
+        /**
+         * PublicReferralPartnerIntake
+         * @description Safe editable prefill only; never exposes tenant, CRM, or internal fields.
+         */
+        PublicReferralPartnerIntake: {
+            /** Business Description */
+            business_description: string | null;
+            /** Company */
+            company: string | null;
+            /** Email */
+            email: string | null;
+            /**
+             * Has Logo
+             * @default false
+             */
+            has_logo: boolean;
+            intake_status: components["schemas"]["ReferralPartnerIntakeStatus"];
+            /** Intake Submitted At */
+            intake_submitted_at: string | null;
+            /** Name */
+            name: string;
+            /** Offer Description */
+            offer_description: string | null;
+            /** Offer Headline */
+            offer_headline: string | null;
+            /** Offer Terms */
+            offer_terms: string | null;
+            offer_type: components["schemas"]["ReferralPartnerOfferType"];
+            /** Offer Value */
+            offer_value: string | null;
+            partner_type: components["schemas"]["ReferralPartnerType"];
+            /** Phone */
+            phone: string | null;
+            /** Service Area */
+            service_area: string | null;
+            /** Services */
+            services: string | null;
+            /** Website Url */
+            website_url: string | null;
+        };
+        /**
+         * PublicReferralPartnerIntakeSubmit
+         * @description Required profile fields; internal CRM classification is deliberately excluded.
+         */
+        PublicReferralPartnerIntakeSubmit: {
+            /** Business Description */
+            business_description: string;
+            /** Company */
+            company: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Name */
+            name: string;
+            /** Offer Description */
+            offer_description: string;
+            /** Offer Headline */
+            offer_headline: string;
+            /** Offer Terms */
+            offer_terms: string;
+            offer_type: components["schemas"]["ReferralPartnerOfferType"];
+            /** Offer Value */
+            offer_value?: number | string | null;
+            /** Phone */
+            phone: string;
+            /** Service Area */
+            service_area: string;
+            /** Services */
+            services: string;
+            /** Website Url */
+            website_url: string;
         };
         /**
          * PublicReviewRequest
@@ -29544,6 +29750,8 @@ export interface components {
          * @description Create a referral partner.
          */
         ReferralPartnerCreate: {
+            /** Business Description */
+            business_description?: string | null;
             /** Company */
             company?: string | null;
             /**
@@ -29562,11 +29770,52 @@ export interface components {
             name: string;
             /** Notes */
             notes?: string | null;
+            /** Offer Description */
+            offer_description?: string | null;
+            /** Offer Headline */
+            offer_headline?: string | null;
+            /** Offer Terms */
+            offer_terms?: string | null;
+            /** @default none */
+            offer_type: components["schemas"]["ReferralPartnerOfferType"];
+            /** Offer Value */
+            offer_value?: number | string | null;
             /** @default other */
             partner_type: components["schemas"]["ReferralPartnerType"];
             /** Phone */
             phone?: string | null;
+            /** Service Area */
+            service_area?: string | null;
+            /** Services */
+            services?: string | null;
+            /** Website Url */
+            website_url?: string | null;
         };
+        /**
+         * ReferralPartnerIntakeLinkResponse
+         * @description An authenticated user's copyable public intake capability.
+         */
+        ReferralPartnerIntakeLinkResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Intake Url */
+            intake_url: string;
+            status: components["schemas"]["ReferralPartnerIntakeStatus"];
+        };
+        /**
+         * ReferralPartnerIntakeStatus
+         * @description State of the public partner-profile intake link.
+         * @enum {string}
+         */
+        ReferralPartnerIntakeStatus: "not_requested" | "pending" | "submitted" | "revoked";
         /**
          * ReferralPartnerListResponse
          * @description List of referral partners.
@@ -29578,10 +29827,38 @@ export interface components {
             total: number;
         };
         /**
+         * ReferralPartnerLogoResponse
+         * @description Logo metadata only; bytes are served from a dedicated endpoint.
+         */
+        ReferralPartnerLogoResponse: {
+            /** Content Type */
+            content_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ReferralPartnerOfferType
+         * @description Standardized client-facing offer made by a referral partner.
+         * @enum {string}
+         */
+        ReferralPartnerOfferType: "none" | "fixed_dollar_credit" | "percentage_discount" | "complimentary_service" | "free_upgrade_add_on" | "gift" | "other";
+        /**
          * ReferralPartnerResponse
-         * @description A referral partner record.
+         * @description A referral partner record, including its submitted public profile.
          */
         ReferralPartnerResponse: {
+            /** Business Description */
+            business_description?: string | null;
             /** Company */
             company?: string | null;
             /**
@@ -29597,10 +29874,23 @@ export interface components {
             /** Email */
             email?: string | null;
             /**
+             * Has Logo
+             * @default false
+             */
+            has_logo: boolean;
+            /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Intake Link Created At */
+            intake_link_created_at?: string | null;
+            /** Intake Revoked At */
+            intake_revoked_at?: string | null;
+            /** @default not_requested */
+            intake_status: components["schemas"]["ReferralPartnerIntakeStatus"];
+            /** Intake Submitted At */
+            intake_submitted_at?: string | null;
             /**
              * Is Active
              * @default true
@@ -29610,15 +29900,31 @@ export interface components {
             name: string;
             /** Notes */
             notes?: string | null;
+            /** Offer Description */
+            offer_description?: string | null;
+            /** Offer Headline */
+            offer_headline?: string | null;
+            /** Offer Terms */
+            offer_terms?: string | null;
+            /** @default none */
+            offer_type: components["schemas"]["ReferralPartnerOfferType"];
+            /** Offer Value */
+            offer_value?: string | null;
             /** @default other */
             partner_type: components["schemas"]["ReferralPartnerType"];
             /** Phone */
             phone?: string | null;
+            /** Service Area */
+            service_area?: string | null;
+            /** Services */
+            services?: string | null;
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
+            /** Website Url */
+            website_url?: string | null;
             /**
              * Workspace Id
              * Format: uuid
@@ -35706,6 +36012,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_referral_partner_intake_api_v1_public_referral_partners_intake_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicReferralPartnerIntake"];
+                };
+            };
+        };
+    };
+    submit_public_referral_partner_intake_api_v1_public_referral_partners_intake_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicReferralPartnerIntakeSubmit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicReferralPartnerIntake"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_public_referral_partner_logo_api_v1_public_referral_partners_intake_logo_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    upload_public_referral_partner_logo_api_v1_public_referral_partners_intake_logo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralPartnerLogoResponse"];
                 };
             };
         };
@@ -53296,6 +53702,132 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_referral_partner_intake_link_api_v1_workspaces__workspace_id__referral_partners__partner_id__intake_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralPartnerIntakeLinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_referral_partner_intake_link_api_v1_workspaces__workspace_id__referral_partners__partner_id__intake_link_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_referral_partner_intake_link_api_v1_workspaces__workspace_id__referral_partners__partner_id__intake_link_rotate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralPartnerIntakeLinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_referral_partner_logo_api_v1_workspaces__workspace_id__referral_partners__partner_id__logo_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {

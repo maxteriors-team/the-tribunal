@@ -46,6 +46,13 @@ export interface PublicProposalPackage {
   is_selected: boolean;
 }
 
+export interface PublicProposalPriceRange {
+  /** Exact quote total accepted and charged if the customer approves. */
+  low: number;
+  /** Upper ballpark amount; any increase still requires a separate quote. */
+  high: number;
+}
+
 export interface PublicProposal {
   token: string;
   number: string;
@@ -74,6 +81,8 @@ export interface PublicProposal {
   deposit_paid: boolean;
   /** True when a deposit is owed and not yet paid (drives the client CTA). */
   deposit_required?: boolean;
+  /** Default-off ballpark display; acceptance and payment still use `low`. */
+  price_range?: PublicProposalPriceRange | null;
   /**
    * Packages the client may pick between. Empty when there's nothing to choose
    * (a plain quote, or a proposal offering a single priced package).

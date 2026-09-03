@@ -166,7 +166,14 @@ from app.models.quote import Quote, QuoteLineItem
 from app.models.quote_followup_touch import QuoteFollowupTouch
 from app.models.quote_handoff_image import QuoteHandoffImage
 from app.models.recurring_job import RecurrenceFrequency, RecurringJobTemplate
-from app.models.referral_partner import ReferralPartner, ReferralPartnerType
+from app.models.referral_partner import (
+    ReferralPartner,
+    ReferralPartnerIntakeStatus,
+    ReferralPartnerOfferType,
+    ReferralPartnerType,
+)
+from app.models.referral_partner_intake import ReferralPartnerIntakeLink
+from app.models.referral_partner_logo import ReferralPartnerLogo
 from app.models.refresh_token import RefreshToken
 from app.models.revenue_target import RevenueTarget
 from app.models.review import (
@@ -299,6 +306,10 @@ __all__ = [
     "RecurrenceFrequency",
     "ReferralPartner",
     "ReferralPartnerType",
+    "ReferralPartnerIntakeStatus",
+    "ReferralPartnerOfferType",
+    "ReferralPartnerIntakeLink",
+    "ReferralPartnerLogo",
     "RevenueTarget",
     "MessageAttachment",
     "EmailTemplate",
