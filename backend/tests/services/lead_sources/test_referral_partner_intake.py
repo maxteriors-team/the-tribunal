@@ -300,11 +300,16 @@ async def test_logo_route_authenticates_before_bounded_multipart_parse(
         {"type": "http", "headers": [], "client": ("203.0.113.8", 4000), "scheme": "https"}
     )
     response = Response()
+    db = MagicMock()
+    db.info = {}
     await intake_routes.upload_public_referral_partner_logo(
-        "secret-capability", request, MagicMock(), response
+        "secret-capability", request, db, response
     )
 
     assert events == ["rate", "auth", "bounded-parse", "upload"]
+    assert db.info["app.tenancy.system"] == (
+        "public referral-partner intake resolves workspace from capability"
+    )
     assert response.headers["cache-control"] == "no-store,max-age=0"
     assert response.headers["pragma"] == "no-cache"
 
@@ -362,6 +367,8 @@ async def test_sensitive_json_responses_disable_storage(monkeypatch: pytest.Monk
         {"type": "http", "headers": [], "client": ("203.0.113.8", 4000), "scheme": "https"}
     )
     responses = [Response() for _ in range(4)]
+    public_db = MagicMock()
+    public_db.info = {}
 
     await intake_routes.issue_referral_partner_intake_link(
         uuid.uuid4(), membership, MagicMock(), responses[0]
@@ -370,10 +377,10 @@ async def test_sensitive_json_responses_disable_storage(monkeypatch: pytest.Monk
         uuid.uuid4(), membership, MagicMock(), responses[1]
     )
     await intake_routes.get_public_referral_partner_intake(
-        "secret-capability", request, MagicMock(), responses[2]
+        "secret-capability", request, public_db, responses[2]
     )
     await intake_routes.submit_public_referral_partner_intake(
-        "secret-capability", _payload(), request, MagicMock(), responses[3]
+        "secret-capability", _payload(), request, public_db, responses[3]
     )
 
     for response in responses:

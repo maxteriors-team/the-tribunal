@@ -17,6 +17,7 @@ from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException, MultiPartParser
 
@@ -32,6 +33,7 @@ from app.api.service_errors import ServiceErrorRoute
 from app.core.config import settings
 from app.core.permissions import Capability
 from app.core.utils import get_client_ip
+from app.db.tenancy import mark_session_as_system
 from app.models.referral_partner import ReferralPartnerType
 from app.models.referral_partner_logo import (
     MAX_REFERRAL_PARTNER_LOGO_BYTES,
@@ -132,7 +134,16 @@ def _set_no_store(response: Response) -> None:
     response.headers.update(_NO_STORE_HEADERS)
 
 
-async def _rate_limit_public(request: Request, token: str, *, write: bool) -> None:
+def _public_intake_service(db: AsyncSession) -> ReferralPartnerIntakeService:
+    """Allow only capability resolution to discover its owning workspace."""
+    mark_session_as_system(
+        db,
+        reason="public referral-partner intake resolves workspace from capability",
+    )
+    return ReferralPartnerIntakeService(db)
+
+
+async def _rate_limit_public(request: Request, token: PublicIntakeToken, *, write: bool) -> None:
     client_ip = get_client_ip(request, settings.trusted_proxies)
     digest = intake_token_digest(token)
     kind = "write" if write else "read"
@@ -364,7 +375,7 @@ async def get_public_referral_partner_intake(
     """Return safe editable prefill data for a live bearer capability."""
     await _rate_limit_public(request, token, write=False)
     try:
-        result = await ReferralPartnerIntakeService(db).public_prefill(token)
+        result = await _public_intake_service(db).public_prefill(token)
     except ReferralPartnerIntakeNotFoundError:
         _raise_intake_not_found()
     _set_no_store(response)
@@ -382,7 +393,7 @@ async def submit_public_referral_partner_intake(
     """Update the capability's existing partner; never creates a CRM entity."""
     await _rate_limit_public(request, token, write=True)
     try:
-        result = await ReferralPartnerIntakeService(db).submit(token, payload)
+        result = await _public_intake_service(db).submit(token, payload)
     except ReferralPartnerIntakeNotFoundError:
         _raise_intake_not_found()
     _set_no_store(response)
@@ -400,7 +411,7 @@ async def upload_public_referral_partner_logo(
 ) -> ReferralPartnerLogoResponse:
     """Replace this partner's logo after bearer auth and strict raster validation."""
     await _rate_limit_public(request, token, write=True)
-    service = ReferralPartnerIntakeService(db)
+    service = _public_intake_service(db)
     try:
         # No FastAPI body parameter: bearer auth completes before multipart parsing.
         await service.public_prefill(token)
@@ -431,7 +442,7 @@ async def download_public_referral_partner_logo(
     """Serve validated raster bytes only while the bearer capability is live."""
     await _rate_limit_public(request, token, write=False)
     try:
-        logo = await ReferralPartnerIntakeService(db).public_logo(token)
+        logo = await _public_intake_service(db).public_logo(token)
     except ReferralPartnerIntakeNotFoundError:
         _raise_intake_not_found()
     return _logo_response(logo, public=True)
