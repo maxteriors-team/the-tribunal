@@ -703,17 +703,6 @@ def test_appointment_reminder_takes_no_request_body() -> None:
     )
 
 
-async def test_technician_cannot_probe_quo_contact_history(
-    technician_client: AsyncClient,
-) -> None:
-    """Passing contact_id reveals whether that contact has Quo history.
-
-    Every sibling route in the credentials module needs ``workspace:manage``;
-    this one was the only ungated route in it.
-    """
-    async with technician_client as client:
-        suffix = "/integrations/quo/active-line?contact_id=1"
-        assert await _status(client, "GET", suffix) == 403
 
 
 def test_job_expense_deletes_are_scoped_to_their_author() -> None:

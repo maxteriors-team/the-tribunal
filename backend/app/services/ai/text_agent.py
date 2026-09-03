@@ -92,7 +92,7 @@ async def process_inbound_with_ai(  # noqa: PLR0911
         log.error("conversation_not_found")
         return
     if (
-        getattr(conversation, "source_provider", None) == "quo"
+        getattr(conversation, "source_provider", None) is not None
         or not conversation.ai_enabled
         or conversation.ai_paused
     ):
@@ -596,7 +596,7 @@ async def _load_sendable_conversation(
         log.info("conversation_removed_before_ai_response_send")
         return None
     if (
-        current_conversation.source_provider == "quo"
+        current_conversation.source_provider is not None
         or not current_conversation.ai_enabled
         or current_conversation.ai_paused
         or current_conversation.assigned_agent_id != agent_id

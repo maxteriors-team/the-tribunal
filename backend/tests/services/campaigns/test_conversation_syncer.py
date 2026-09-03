@@ -1,4 +1,4 @@
-"""Campaign settings never enable automation on Quo conversations."""
+"""Campaign settings never enable automation on imported conversations."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -10,10 +10,10 @@ from app.services.campaigns.conversation_syncer import CampaignConversationSynce
 
 
 @pytest.mark.asyncio
-async def test_quo_conversation_skips_campaign_agent_and_ai_sync() -> None:
+async def test_imported_conversation_skips_campaign_agent_and_ai_sync() -> None:
     conversation = SimpleNamespace(
         id=uuid4(),
-        source_provider="quo",
+        source_provider="legacy_import",
         assigned_agent_id=None,
         ai_enabled=False,
     )

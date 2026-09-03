@@ -25,7 +25,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { formatPhoneNumber } from "@/lib/utils/phone";
 import type { Conversation } from "@/types";
 import type { Agent } from "@/types/agent";
 import { CHANNEL_LABELS } from "@/types/conversation";
@@ -35,8 +34,6 @@ interface ChatHeaderProps {
   contactId: number;
   contactName?: string;
   phoneNumber?: string | null;
-  quoPhoneNumber?: string | null;
-  manualMessagingOnly?: boolean;
   conversation?: Conversation;
   agents: Agent[];
   hasTimelineItems: boolean;
@@ -55,8 +52,6 @@ export function ChatHeader({
   contactId,
   contactName,
   phoneNumber,
-  quoPhoneNumber,
-  manualMessagingOnly = false,
   conversation,
   agents,
   hasTimelineItems,
@@ -79,7 +74,7 @@ export function ChatHeader({
   };
 
   const unreadCount = conversation?.unread_count ?? 0;
-  const isQuoConversation = manualMessagingOnly || conversation?.source_provider === "quo";
+  const isImportedConversation = conversation?.source_provider != null;
   // SMS is the default and needs no badge; every other channel gets one, because
   // the reply rules differ per channel.
   const channelLabel = CHANNEL_LABELS[conversation?.channel ?? ""];
@@ -103,9 +98,9 @@ export function ChatHeader({
               {phoneNumber}
             </span>
           )}
-          {quoPhoneNumber ? (
+          {isImportedConversation ? (
             <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
-              via Quo · {formatPhoneNumber(quoPhoneNumber)}
+              Imported history
             </Badge>
           ) : null}
           {channelLabel ? (
@@ -115,7 +110,7 @@ export function ChatHeader({
           ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {!isQuoConversation ? (
+          {!isImportedConversation ? (
             <>
               {/* AI Toggle Button */}
               <Button
@@ -207,16 +202,20 @@ export function ChatHeader({
                 )}
                 Mark as read
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={() => setShowClearHistoryDialog(true)}
-                disabled={!conversation || !hasTimelineItems}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Clear history
-              </DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive">Archive</DropdownMenuItem>
+              {!isImportedConversation ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => setShowClearHistoryDialog(true)}
+                    disabled={!conversation || !hasTimelineItems}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Clear history
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive">Archive</DropdownMenuItem>
+                </>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

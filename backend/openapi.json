@@ -20718,8 +20718,7 @@
               "meta_lead_ads",
               "meta_ad_library",
               "google_ads_transparency",
-              "companycam",
-              "quo"
+              "companycam"
             ],
             "title": "Integration Type",
             "type": "string"
@@ -20804,20 +20803,6 @@
           "message": {
             "title": "Message",
             "type": "string"
-          },
-          "phone_numbers": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/QuoPhoneNumberChoice"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone Numbers"
           },
           "success": {
             "title": "Success",
@@ -44205,77 +44190,6 @@
           "description"
         ],
         "title": "QuizResult",
-        "type": "object"
-      },
-      "QuoActiveLineStatus": {
-        "description": "Non-secret active Quo line visible to authenticated CRM readers.",
-        "properties": {
-          "active": {
-            "title": "Active",
-            "type": "boolean"
-          },
-          "has_contact_history": {
-            "default": false,
-            "title": "Has Contact History",
-            "type": "boolean"
-          },
-          "phone_number": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone Number"
-          },
-          "phone_number_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Phone Number Id"
-          }
-        },
-        "required": [
-          "active"
-        ],
-        "title": "QuoActiveLineStatus",
-        "type": "object"
-      },
-      "QuoPhoneNumberChoice": {
-        "description": "Safe Quo sender option returned after credential validation.",
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "phone_number": {
-            "title": "Phone Number",
-            "type": "string"
-          },
-          "provider_label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Provider Label"
-          }
-        },
-        "required": [
-          "id",
-          "phone_number"
-        ],
-        "title": "QuoPhoneNumberChoice",
         "type": "object"
       },
       "QuoteAssignmentRequest": {
@@ -77737,72 +77651,6 @@
           }
         ],
         "summary": "Get Openai Subscription Status",
-        "tags": [
-          "Integrations"
-        ]
-      }
-    },
-    "/api/v1/workspaces/{workspace_id}/integrations/quo/active-line": {
-      "get": {
-        "description": "Return the selected Quo line without exposing integration secrets.\n\nEvery sibling route in this module requires ``workspace:manage``; this one is\nthe messaging UI's pre-flight check, so it takes the lower ``crm:read`` floor\nrather than being left open. It needs *a* gate because passing ``contact_id``\nreveals whether that contact has Quo conversation history — an existence\noracle over the same contacts the field tier is 403 on at ``/contacts``.",
-        "operationId": "get_active_quo_line_api_v1_workspaces__workspace_id__integrations_quo_active_line_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "workspace_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Workspace Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "contact_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "minimum": 1,
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Contact Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QuoActiveLineStatus"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ],
-        "summary": "Get Active Quo Line",
         "tags": [
           "Integrations"
         ]

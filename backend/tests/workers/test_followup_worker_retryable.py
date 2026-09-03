@@ -32,6 +32,7 @@ async def test_followup_uses_workspace_openai_credential() -> None:
         id=uuid4(),
         workspace_id=uuid4(),
         followup_delay_hours=1,
+        source_provider=None,
     )
     db = MagicMock()
     db.commit = AsyncMock()
@@ -64,9 +65,9 @@ async def test_followup_uses_workspace_openai_credential() -> None:
 
 
 @pytest.mark.asyncio
-async def test_quo_followup_stops_before_ai_or_sms() -> None:
+async def test_imported_followup_stops_before_ai_or_sms() -> None:
     worker = FollowupWorker()
-    conversation = MagicMock(id=uuid4(), source_provider="quo")
+    conversation = MagicMock(id=uuid4(), source_provider="legacy_import")
     db = MagicMock()
 
     with (

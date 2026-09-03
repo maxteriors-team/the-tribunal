@@ -61,8 +61,8 @@ class ConversationNoteResponse(BaseModel):
     id: uuid.UUID
     conversation_id: uuid.UUID
     body: str
-    # "human" or "quo_summary"; the UI badges synced summaries so a rep never
-    # mistakes an AI recap for a colleague's observation.
+    # Human-authored or imported summary; the UI badges imported summaries so
+    # a rep never mistakes a provider recap for a colleague's observation.
     source: str
     author_user_id: int | None = None
     author_name: str | None = None

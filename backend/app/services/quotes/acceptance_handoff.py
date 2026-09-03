@@ -126,8 +126,8 @@ async def _send_acknowledgement(
     log: Any,
 ) -> None:
     """Text the customer that their approval landed. Best-effort."""
-    if getattr(conversation, "source_provider", None) == "quo":
-        log.info("quo_manual_messaging_only")
+    if getattr(conversation, "source_provider", None) is not None:
+        log.info("imported_conversation_read_only")
         return
     body = build_acknowledgement(contact)
     to_address, from_address = outbound_addresses(conversation)

@@ -83,9 +83,9 @@ describe("MessageComposer outbound images", () => {
     expect(screen.getByRole("button", { name: "Attach image" })).toBeDisabled();
   });
 
-  it("keeps Quo replies fixed-sender and text-only", async () => {
+  it("keeps text-only channels fixed-sender and attachment-free", async () => {
     const { onSend } = renderComposer({
-      message: "Quo reply",
+      message: "Text-only reply",
       textOnly: true,
       phoneNumbers: [phone, { ...phone, id: "phone-2", phone_number: "+12125550102" }],
     });

@@ -27,13 +27,6 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useSettingsSaveMutation } from "@/hooks/useSettingsSaveMutation";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
@@ -41,17 +34,14 @@ import {
   type CreateIntegrationRequest,
   type IntegrationTestResult,
   type IntegrationWithMaskedCredentials,
-  type QuoPhoneNumberChoice,
 } from "@/lib/api/integrations";
 import { queryKeys } from "@/lib/query-keys";
-import { formatPhoneNumber } from "@/lib/utils/phone";
 type IntegrationType =
   | "telnyx"
   | "openai"
   | "resend"
   | "meta_lead_ads"
   | "lob"
-  | "quo"
   | "companycam";
 
 interface IntegrationConfig {
@@ -228,20 +218,6 @@ const INTEGRATION_CONFIGS: Record<IntegrationType, IntegrationConfig> = {
       },
     ],
   },
-  quo: {
-    name: "Quo",
-    description: "Connect Quo for workspace-scoped business phone access",
-    fields: [
-      {
-        key: "api_key",
-        label: "Quo API Key",
-        placeholder: "Paste your Quo API key",
-        description: "Create this in Quo Settings > Integrations > API keys",
-        required: true,
-        type: "password",
-      },
-    ],
-  },
   companycam: {
     name: "CompanyCam",
     description: "Show job-site photos on the matching contact",
@@ -271,9 +247,6 @@ function getSchema(integrationType: IntegrationType, hasExistingIntegration: boo
     }
   }
 
-  if (integrationType === "quo") {
-    shape.phone_number_id = z.string().min(1, "Select one Quo phone number");
-  }
 
   const schema = z.object(shape);
 
@@ -304,26 +277,11 @@ export function IntegrationConfigDialog({
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [testResult, setTestResult] = useState<IntegrationTestResult | null>(null);
-  const [quoPhoneNumbers, setQuoPhoneNumbers] = useState<QuoPhoneNumberChoice[]>([]);
   const [isTesting, setIsTesting] = useState(false);
 
   const config = INTEGRATION_CONFIGS[integrationType];
   const schema = getSchema(integrationType, Boolean(existingIntegration));
   type FormValues = z.infer<typeof schema>;
-  const existingQuoPhoneId = existingIntegration?.masked_credentials.phone_number_id ?? "";
-  const existingQuoPhoneNumber = existingIntegration?.masked_credentials.phone_number ?? "";
-  const displayedQuoPhoneNumbers =
-    quoPhoneNumbers.length > 0
-      ? quoPhoneNumbers
-      : integrationType === "quo" && existingQuoPhoneId && existingQuoPhoneNumber
-        ? [
-            {
-              id: existingQuoPhoneId,
-              phone_number: existingQuoPhoneNumber,
-              provider_label: null,
-            },
-          ]
-        : [];
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -335,7 +293,6 @@ export function IntegrationConfigDialog({
         },
         {} as Record<string, string>,
       ),
-      ...(integrationType === "quo" ? { phone_number_id: existingQuoPhoneId } : {}),
     },
   });
 
@@ -350,10 +307,9 @@ export function IntegrationConfigDialog({
           },
           {} as Record<string, string>,
         ),
-        ...(integrationType === "quo" ? { phone_number_id: existingQuoPhoneId } : {}),
       });
     }
-  }, [open, integrationType, form, config.fields, existingQuoPhoneId]);
+  }, [open, integrationType, form, config.fields]);
 
   // Derive effective test result - null when dialog is closed
   const effectiveTestResult = open ? testResult : null;
@@ -369,14 +325,6 @@ export function IntegrationConfigDialog({
       queryClient.invalidateQueries({
         queryKey: queryKeys.integrations.all(workspaceId ?? ""),
       });
-      if (integrationType === "quo") {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all(workspaceId ?? ""),
-        });
-        queryClient.removeQueries({
-          queryKey: queryKeys.contacts.all(workspaceId ?? ""),
-        });
-      }
       onOpenChange(false);
     },
     onSettled: () => {
@@ -396,14 +344,6 @@ export function IntegrationConfigDialog({
       queryClient.invalidateQueries({
         queryKey: queryKeys.integrations.all(workspaceId ?? ""),
       });
-      if (integrationType === "quo") {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.conversations.all(workspaceId ?? ""),
-        });
-        queryClient.removeQueries({
-          queryKey: queryKeys.contacts.all(workspaceId ?? ""),
-        });
-      }
       onOpenChange(false);
     },
     onSettled: () => {
@@ -414,24 +354,9 @@ export function IntegrationConfigDialog({
   const testMutation = useMutation({
     mutationFn: (credentials?: Record<string, string>) =>
       integrationsApi.test(workspaceId!, integrationType, credentials),
-    onSuccess: (result) => {
-      setTestResult(result);
-      if (integrationType === "quo") {
-        const choices = result.phone_numbers ?? [];
-        setQuoPhoneNumbers(choices);
-        const selectedId = form.getValues().phone_number_id;
-        if (
-          typeof selectedId === "string" &&
-          selectedId &&
-          !choices.some((choice) => choice.id === selectedId)
-        ) {
-          form.setValue("phone_number_id", "", { shouldValidate: true });
-        }
-      }
-    },
+    onSuccess: setTestResult,
     onError: () => {
       setTestResult({ success: false, message: "Failed to test connection" });
-      if (integrationType === "quo") setQuoPhoneNumbers([]);
     },
     onSettled: () => {
       setIsTesting(false);
@@ -499,7 +424,6 @@ export function IntegrationConfigDialog({
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       setTestResult(null);
-      setQuoPhoneNumbers([]);
     }
     onOpenChange(nextOpen);
   };
@@ -545,44 +469,6 @@ export function IntegrationConfigDialog({
               />
             ))}
 
-            {integrationType === "quo" && (
-              <FormField
-                control={form.control}
-                name="phone_number_id"
-                render={({ field: formField }) => (
-                  <FormItem>
-                    <FormLabel>Quo phone number *</FormLabel>
-                    <Select
-                      value={typeof formField.value === "string" ? formField.value : ""}
-                      onValueChange={formField.onChange}
-                      disabled={displayedQuoPhoneNumbers.length === 0}
-                    >
-                      <FormControl>
-                        <SelectTrigger aria-label="Quo phone number">
-                          <SelectValue placeholder="Select a phone number" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {displayedQuoPhoneNumbers.map((phoneNumber) => (
-                          <SelectItem key={phoneNumber.id} value={phoneNumber.id}>
-                            {phoneNumber.provider_label ? `${phoneNumber.provider_label} · ` : ""}
-                            {formatPhoneNumber(phoneNumber.phone_number)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      {existingQuoPhoneNumber
-                        ? `Active number: ${formatPhoneNumber(existingQuoPhoneNumber)}`
-                        : displayedQuoPhoneNumbers.length === 0
-                          ? "Test the connection to load available phone numbers."
-                          : "Choose the single Quo line this workspace will use."}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
             <div className="rounded-lg border p-3 bg-muted/50">
               <p className="text-sm text-muted-foreground mb-2">
                 {existingIntegration

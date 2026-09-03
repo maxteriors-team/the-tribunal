@@ -93,10 +93,6 @@ from app.services.lead_sources.attribution_service import (
 )
 from app.services.lead_sources.capture_settings import get_lead_source_capture_settings
 from app.services.messaging.media_storage import MMSMediaStorage, MMSStorageError
-from app.services.quo.line import (
-    get_active_quo_line,
-    visible_conversation_provider_clause,
-)
 
 router = APIRouter(route_class=ServiceErrorRoute)
 
@@ -696,16 +692,6 @@ async def get_contact_timeline(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversation not found",
             )
-        if conversation.source_provider == "quo":
-            active_line = await get_active_quo_line(db, workspace_id)
-            if active_line is None or conversation.workspace_phone_hash != hash_phone(
-                active_line.phone_number
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Conversation not found",
-                )
-
     service = ContactTimelineService(db)
     timeline_items_data = await service.get_contact_timeline(
         contact_id=contact_id,
@@ -754,7 +740,6 @@ async def get_timeline_attachment_content(
             Conversation.contact_phone_hash == hash_phone(contact.phone_number)
         )
 
-    visible_provider = await visible_conversation_provider_clause(db, workspace_id)
     attachment_result = await db.execute(
         select(MessageAttachment)
         .join(Message, MessageAttachment.message_id == Message.id)
@@ -764,7 +749,6 @@ async def get_timeline_attachment_content(
             MessageAttachment.workspace_id == workspace_id,
             Conversation.workspace_id == workspace_id,
             or_(*conversation_matches),
-            visible_provider,
         )
     )
     attachment = attachment_result.scalar_one_or_none()

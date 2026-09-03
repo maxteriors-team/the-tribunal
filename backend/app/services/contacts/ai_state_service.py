@@ -191,6 +191,7 @@ class ContactAIStateService:
                 Conversation.workspace_id == workspace_id,
                 Conversation.contact_id == contact_id,
                 Conversation.channel.in_(("sms", "imessage")),
+                Conversation.source_provider.is_(None),
             )
             .order_by(Conversation.updated_at.desc())
             .limit(1)
@@ -208,6 +209,7 @@ class ContactAIStateService:
             .where(
                 Conversation.workspace_id == workspace_id,
                 Conversation.channel.in_(("sms", "imessage")),
+                Conversation.source_provider.is_(None),
                 Conversation.contact_phone_hash.in_(
                     sorted({hash_phone(contact_phone), hash_phone(normalized_contact_phone)})
                 ),

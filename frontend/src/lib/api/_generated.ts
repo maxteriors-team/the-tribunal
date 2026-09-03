@@ -5328,32 +5328,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_id}/integrations/quo/active-line": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Active Quo Line
-         * @description Return the selected Quo line without exposing integration secrets.
-         *
-         *     Every sibling route in this module requires ``workspace:manage``; this one is
-         *     the messaging UI's pre-flight check, so it takes the lower ``crm:read`` floor
-         *     rather than being left open. It needs *a* gate because passing ``contact_id``
-         *     reveals whether that contact has Quo conversation history — an existence
-         *     oracle over the same contacts the field tier is 403 on at ``/contacts``.
-         */
-        get: operations["get_active_quo_line_api_v1_workspaces__workspace_id__integrations_quo_active_line_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/workspaces/{workspace_id}/integrations/{integration_type}": {
         parameters: {
             query?: never;
@@ -19501,7 +19475,7 @@ export interface components {
              * Integration Type
              * @enum {string}
              */
-            integration_type: "telnyx" | "openai" | "resend" | "meta_lead_ads" | "meta_ad_library" | "google_ads_transparency" | "companycam" | "quo";
+            integration_type: "telnyx" | "openai" | "resend" | "meta_lead_ads" | "meta_ad_library" | "google_ads_transparency" | "companycam";
             /**
              * Is Active
              * @default true
@@ -19550,8 +19524,6 @@ export interface components {
             } | null;
             /** Message */
             message: string;
-            /** Phone Numbers */
-            phone_numbers?: components["schemas"]["QuoPhoneNumberChoice"][] | null;
             /** Success */
             success: boolean;
         };
@@ -28381,35 +28353,6 @@ export interface components {
             min_score: number;
             /** Title */
             title: string;
-        };
-        /**
-         * QuoActiveLineStatus
-         * @description Non-secret active Quo line visible to authenticated CRM readers.
-         */
-        QuoActiveLineStatus: {
-            /** Active */
-            active: boolean;
-            /**
-             * Has Contact History
-             * @default false
-             */
-            has_contact_history: boolean;
-            /** Phone Number */
-            phone_number?: string | null;
-            /** Phone Number Id */
-            phone_number_id?: string | null;
-        };
-        /**
-         * QuoPhoneNumberChoice
-         * @description Safe Quo sender option returned after credential validation.
-         */
-        QuoPhoneNumberChoice: {
-            /** Id */
-            id: string;
-            /** Phone Number */
-            phone_number: string;
-            /** Provider Label */
-            provider_label?: string | null;
         };
         /**
          * QuoteAssignmentRequest
@@ -44634,39 +44577,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OpenAIOAuthStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_active_quo_line_api_v1_workspaces__workspace_id__integrations_quo_active_line_get: {
-        parameters: {
-            query?: {
-                contact_id?: number | null;
-            };
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QuoActiveLineStatus"];
                 };
             };
             /** @description Validation Error */

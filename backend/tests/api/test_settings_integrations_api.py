@@ -1,14 +1,8 @@
-"""Settings integrations endpoint contract test.
-
-Verifies that the workspace integrations status list surfaces Follow Up Boss
-alongside the other known providers, so it has a durable management surface in
-Settings -> Integrations (RF-006). DB-free via dependency overrides.
-"""
+"""Settings integration catalog and credential-test contracts."""
 
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -25,8 +19,6 @@ from app.api.deps import (
 )
 from app.api.v1 import settings as settings_module
 from app.api.v1.integrations import credentials as credentials_module
-from app.models.workspace import WorkspaceIntegration
-from app.schemas.integration import IntegrationTestResult
 
 WS_ID = uuid.uuid4()
 
@@ -104,17 +96,12 @@ async def test_integrations_list_excludes_followupboss(auth_client: AsyncClient)
     assert "followupboss" not in by_type
 
 
-async def test_integrations_list_includes_quo(auth_client: AsyncClient) -> None:
+async def test_integrations_list_excludes_quo(auth_client: AsyncClient) -> None:
     resp = await auth_client.get(f"/api/v1/workspaces/{WS_ID}/integrations")
     assert resp.status_code == 200
 
-    by_type = {item["integration_type"]: item for item in resp.json()["integrations"]}
-    assert by_type["quo"] == {
-        "integration_type": "quo",
-        "is_connected": False,
-        "display_name": "Quo",
-        "description": "Business phone and messaging",
-    }
+    integration_types = {item["integration_type"] for item in resp.json()["integrations"]}
+    assert "quo" not in integration_types
 
 
 def _credentials_app(mock_db: AsyncMock) -> FastAPI:
@@ -211,34 +198,37 @@ async def test_test_integration_without_body_requires_stored_row(
     assert resp.status_code == 404
 
 
-async def test_create_quo_validates_and_encrypts_workspace_credentials(
-    mock_db: AsyncMock, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("method", "suffix", "body"),
+    [
+        ("GET", "quo", None),
+        ("PUT", "quo", {}),
+        ("DELETE", "quo", None),
+        ("POST", "quo/test", {"credentials": {"api_key": "retired"}}),
+    ],
+)
+async def test_retired_quo_credential_routes_return_not_found(
+    mock_db: AsyncMock,
+    method: str,
+    suffix: str,
+    body: dict[str, object] | None,
 ) -> None:
-    api_key = "quo_api_key_that_must_not_leak"
-    organization_id = "OR123"
-    mock_db.execute = AsyncMock(
-        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
-    )
-    mock_db.add = MagicMock()
-    validated_credentials = {"api_key": api_key, "organization_id": organization_id}
-    validated = AsyncMock(return_value=validated_credentials)
-    provisioned_credentials = {
-        **validated_credentials,
-        "webhook_id": "12345",
-        "webhook_signing_key": "whsec_signing_key",
-        "webhook_api_version": "2026-03-30",
-    }
-    provision = AsyncMock(return_value=provisioned_credentials)
-    monkeypatch.setattr(credentials_module, "_validate_quo_credentials", validated)
-    monkeypatch.setattr(credentials_module, "_provision_quo_webhook", provision)
+    async with AsyncClient(
+        transport=ASGITransport(app=_credentials_app(mock_db)),
+        base_url="http://testserver",
+    ) as ac:
+        resp = await ac.request(
+            method,
+            f"/api/v1/workspaces/{WS_ID}/integrations/{suffix}",
+            json=body,
+        )
 
-    async def refresh(integration: WorkspaceIntegration) -> None:
-        now = datetime.now(UTC)
-        integration.created_at = now
-        integration.updated_at = now
+    assert resp.status_code == 404
+    assert resp.json() == {"detail": "Integration 'quo' not found"}
+    mock_db.execute.assert_not_awaited()
 
-    mock_db.refresh = AsyncMock(side_effect=refresh)
 
+async def test_retired_quo_credentials_cannot_be_created(mock_db: AsyncMock) -> None:
     async with AsyncClient(
         transport=ASGITransport(app=_credentials_app(mock_db)),
         base_url="http://testserver",
@@ -247,65 +237,10 @@ async def test_create_quo_validates_and_encrypts_workspace_credentials(
             f"/api/v1/workspaces/{WS_ID}/integrations",
             json={
                 "integration_type": "quo",
-                "credentials": {"api_key": api_key},
+                "credentials": {"api_key": "retired"},
                 "is_active": True,
             },
         )
 
-    assert resp.status_code == 201
-    validated.assert_awaited_once_with({"api_key": api_key})
-    integration = mock_db.add.call_args.args[0]
-    provision.assert_awaited_once_with(
-        validated_credentials,
-        integration_id=integration.id,
-        expected_organization_id=organization_id,
-    )
-    assert integration.workspace_id == WS_ID
-    assert integration.credentials == provisioned_credentials
-    assert api_key not in integration.encrypted_credentials
-    assert provisioned_credentials["webhook_signing_key"] not in resp.text
-    assert api_key not in resp.text
-    assert resp.json()["masked_credentials"]["api_key"] != api_key
-
-
-async def test_stored_quo_test_is_tenant_scoped_and_persists_returned_organization_id(
-    mock_db: AsyncMock, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    api_key = "quo_stored_secret"
-    integration = WorkspaceIntegration(
-        id=uuid.uuid4(),
-        workspace_id=WS_ID,
-        integration_type="quo",
-        encrypted_credentials=credentials_module.encrypt_json({"api_key": api_key}),
-        is_active=True,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
-    mock_db.execute = AsyncMock(
-        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=integration))
-    )
-    run_test = AsyncMock(
-        return_value=IntegrationTestResult(
-            success=True,
-            message="Successfully connected to Quo",
-            details={"organization_id": "OR456"},
-        )
-    )
-    monkeypatch.setattr(credentials_module, "_run_integration_test", run_test)
-
-    async with AsyncClient(
-        transport=ASGITransport(app=_credentials_app(mock_db)),
-        base_url="http://testserver",
-    ) as ac:
-        resp = await ac.post(f"/api/v1/workspaces/{WS_ID}/integrations/quo/test")
-
-    assert resp.status_code == 200
-    assert api_key not in resp.text
-    assert integration.credentials == {"api_key": api_key, "organization_id": "OR456"}
-    assert api_key not in integration.encrypted_credentials
-    mock_db.commit.assert_awaited_once()
-
-    statement = mock_db.execute.await_args.args[0]
-    params = statement.compile().params.values()
-    assert WS_ID in params
-    assert "quo" in params
+    assert resp.status_code == 422
+    mock_db.execute.assert_not_awaited()
