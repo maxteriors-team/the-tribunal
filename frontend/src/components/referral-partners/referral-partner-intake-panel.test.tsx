@@ -133,7 +133,9 @@ describe("ReferralPartnerIntakePanel", () => {
     expect(profile.getByText("Taylor Home Services")).toBeInTheDocument();
     expect(profile.getByText("taylor@example.com")).toBeInTheDocument();
     expect(profile.getByText("Greater Denver")).toBeInTheDocument();
-    expect(profile.getByRole("link", { name: /taylor\.example\.com/ })).toHaveAttribute(
+    expect(
+      profile.getByRole("link", { name: "https://taylor.example.com" }),
+    ).toHaveAttribute(
       "href",
       "https://taylor.example.com",
     );
