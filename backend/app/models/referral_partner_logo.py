@@ -2,7 +2,6 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     CheckConstraint,
@@ -70,18 +69,13 @@ class ReferralPartnerLogo(Base, WorkspaceScoped):
         nullable=False,
     )
 
-    workspace: Mapped["Workspace"] = relationship(
+    # Explicit targets avoid importing reciprocal mapped modules.
+    workspace: Mapped[Base] = relationship(
         "Workspace", foreign_keys=[workspace_id], overlaps="logo"
     )
-    referral_partner: Mapped["ReferralPartner"] = relationship(
+    referral_partner: Mapped[Base] = relationship(
         "ReferralPartner",
         back_populates="logo",
         foreign_keys=[referral_partner_id, workspace_id],
         overlaps="workspace",
     )
-
-
-# Reciprocal model-only imports stay after the class to avoid import-order cycles.
-if TYPE_CHECKING:
-    from app.models.referral_partner import ReferralPartner
-    from app.models.workspace import Workspace
