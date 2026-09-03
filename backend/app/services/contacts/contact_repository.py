@@ -17,7 +17,6 @@ from app.models.conversation import Conversation, Message
 from app.models.message_attachment import MessageAttachment
 from app.models.tag import ContactTag
 from app.services.contacts.contact_filters import apply_contact_filters, apply_contact_list_filters
-from app.services.quo.line import visible_conversation_provider_clause
 from app.services.tags import TagService
 from app.utils.phone import normalize_phone_safe
 
@@ -482,11 +481,9 @@ async def get_contact_timeline(
             ),
         )
 
-    visible_provider = await visible_conversation_provider_clause(db, workspace_id)
     conv_query = select(Conversation).where(
         Conversation.workspace_id == workspace_id,
         conversation_contact_filter,
-        visible_provider,
     )
     if conversation_id is not None:
         conv_query = conv_query.where(Conversation.id == conversation_id)

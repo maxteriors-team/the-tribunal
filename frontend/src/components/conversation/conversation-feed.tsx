@@ -21,12 +21,11 @@ import { useDeadlinePassed } from "@/hooks/useDeadlinePassed";
 import { usePhoneNumbers } from "@/hooks/usePhoneNumbers";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { conversationsApi } from "@/lib/api/conversations";
-import { integrationsApi } from "@/lib/api/integrations";
 import { useContactStore } from "@/lib/contact-store";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { isSameDay } from "@/lib/utils/date";
-import { getApiErrorCode, getApiErrorMessage, getApiErrorStatus } from "@/lib/utils/errors";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 import { normalizePhoneForComparison } from "@/lib/utils/phone";
 import type { Contact, Conversation, TimelineItem } from "@/types";
 import { CHANNEL_LABELS } from "@/types/conversation";
@@ -65,11 +64,6 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
   const [isSending, setIsSending] = useState(false);
   const [selectedFromNumber, setSelectedFromNumber] = useState<string | undefined>();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const quoPendingRequestRef = useRef<{
-    id: string;
-    body: string;
-    conversationId: string;
-  } | null>(null);
   const [teachAIMessage, setTeachAIMessage] = useState<TimelineItem | null>(null);
 
   const { data: phoneNumbersData } = usePhoneNumbers(workspaceId ?? "", {
@@ -79,12 +73,6 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
   const phoneNumbers = useMemo(() => phoneNumbersData?.items ?? [], [phoneNumbersData?.items]);
   const fallbackFromNumber = phoneNumbers[0]?.phone_number;
 
-  const { data: activeQuoLine, isPending: isActiveQuoLinePending } = useQuery({
-    queryKey: queryKeys.integrations.activeQuoLine(workspaceId ?? "", selectedContact?.id),
-    queryFn: () => integrationsApi.getActiveQuoLine(workspaceId ?? "", selectedContact?.id),
-    enabled: !!workspaceId,
-    staleTime: 30_000,
-  });
 
   const { data: agentsData } = useAgents(workspaceId ?? "");
   const agents = useMemo(() => agentsData?.items ?? [], [agentsData?.items]);
@@ -116,51 +104,22 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
       }) ?? [],
     [conversationsData?.items, selectedContact?.id, selectedContactPhone],
   );
-  const activeQuoPhone = normalizePhoneForComparison(activeQuoLine?.phone_number);
-  const hasQuoHistory =
-    activeQuoLine?.has_contact_history ??
-    contactConversations.some((conversation) => conversation.source_provider === "quo");
-  const activeQuoConversation =
-    activeQuoLine?.active && activeQuoPhone
-      ? contactConversations.find(
-          (conversation) =>
-            conversation.source_provider === "quo" &&
-            normalizePhoneForComparison(conversation.workspace_phone) === activeQuoPhone,
-        )
-      : undefined;
-  const quoMode = hasQuoHistory;
-  const contactConversation: Conversation | undefined = quoMode
-    ? activeQuoConversation
-    : contactConversations[0];
-  const isQuoConversation = contactConversation?.source_provider === "quo";
+  const contactConversation: Conversation | undefined = contactConversations[0];
+  const isImportedConversation = contactConversation?.source_provider != null;
   // Meta only allows a reply for 24h after the person's last message, and the
   // 7-day human-agent tag does not cover bot replies. Past the deadline every
   // send is rejected, so say so rather than let an operator type into a box that
   // silently fails.
   const messengerWindowClosed = useDeadlinePassed(contactConversation?.messenger_window_expires_at);
-  const shouldLoadTimeline = !quoMode || !!activeQuoConversation;
   const {
     data: timelineData,
     isLoading: isLoadingTimeline,
     isError: isTimelineError,
     refetch: refetchTimeline,
-  } = useContactTimeline(
-    workspaceId ?? "",
-    selectedContact?.id ?? 0,
-    100,
-    isQuoConversation ? contactConversation.id : undefined,
-    shouldLoadTimeline,
-  );
-  const timeline = useMemo(
-    () => (shouldLoadTimeline ? (timelineData ?? []) : []),
-    [shouldLoadTimeline, timelineData],
-  );
-  const isConversationPending = isActiveQuoLinePending || isConversationsPending;
-  const activeFromNumber = isQuoConversation
-    ? // A Quo line is always phone-backed; `?? undefined` only narrows the type
-      // now that Messenger threads made `workspace_phone` nullable.
-      (activeQuoLine?.phone_number ?? contactConversation.workspace_phone ?? undefined)
-    : (selectedFromNumber ?? fallbackFromNumber);
+  } = useContactTimeline(workspaceId ?? "", selectedContact?.id ?? 0, 100);
+  const timeline = useMemo(() => timelineData ?? [], [timelineData]);
+  const isConversationPending = isConversationsPending;
+  const activeFromNumber = selectedFromNumber ?? fallbackFromNumber;
 
   // Mutations for AI toggle, agent assignment, and clear history
   const toggleAIMutation = useToggleConversationAI(workspaceId ?? "");
@@ -209,7 +168,7 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
   };
 
   const handleTeachAI = (item: TimelineItem) => {
-    if (isQuoConversation) return;
+    if (item.source_provider != null) return;
     if (!item.agent_id) {
       toast.error("This AI reply has no assigned agent to teach");
       return;
@@ -222,76 +181,36 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
   };
 
   const handleSendMessage = async (imageDataUrl?: string) => {
-    const quoConversationId = isQuoConversation ? contactConversation?.id : undefined;
     if (
       isConversationPending ||
+      isImportedConversation ||
       (!message.trim() && !imageDataUrl) ||
       !selectedContact ||
       !workspaceId ||
-      isSending ||
-      (isQuoConversation && (imageDataUrl || !quoConversationId))
+      isSending
     ) {
       return;
     }
 
     const messageBody = message.trim();
-    const pendingRequest = quoPendingRequestRef.current;
-    const clientRequestId =
-      isQuoConversation && quoConversationId
-        ? pendingRequest?.body === messageBody &&
-          pendingRequest.conversationId === quoConversationId
-          ? pendingRequest.id
-          : globalThis.crypto.randomUUID()
-        : undefined;
-    if (clientRequestId && quoConversationId) {
-      quoPendingRequestRef.current = {
-        id: clientRequestId,
-        body: messageBody,
-        conversationId: quoConversationId,
-      };
-    }
     setMessage("");
     setIsSending(true);
 
     try {
-      if (isQuoConversation && quoConversationId) {
-        await conversationsApi.sendMessage(
-          workspaceId,
-          quoConversationId,
-          messageBody,
-          clientRequestId,
-        );
-      } else {
-        await conversationsApi.sendMessageToContact(
-          workspaceId,
-          selectedContact.id,
-          messageBody,
-          activeFromNumber,
-          imageDataUrl,
-        );
-      }
-      quoPendingRequestRef.current = null;
+      await conversationsApi.sendMessageToContact(
+        workspaceId,
+        selectedContact.id,
+        messageBody,
+        activeFromNumber,
+        imageDataUrl,
+      );
       void queryClient.invalidateQueries({
         queryKey: queryKeys.contacts.timeline(workspaceId, selectedContact.id),
       });
       toast.success(imageDataUrl ? "Image sent" : "Message sent");
     } catch (error) {
       setMessage(messageBody);
-      const errorMessage = getApiErrorMessage(error, "Failed to send message");
-      const errorCode = getApiErrorCode(error);
-      const errorStatus = getApiErrorStatus(error);
-      const isDefinitiveQuoRejection = errorCode === "quo_send_rejected";
-      const isUnknownQuoStatus =
-        isQuoConversation &&
-        (errorCode === "quo_send_status_unknown" ||
-          errorStatus === null ||
-          (errorStatus >= 500 && !isDefinitiveQuoRejection));
-      if (!isUnknownQuoStatus) quoPendingRequestRef.current = null;
-      toast.error(
-        isUnknownQuoStatus
-          ? "Delivery status unknown—wait for the message to appear before retrying"
-          : errorMessage,
-      );
+      toast.error(getApiErrorMessage(error, "Failed to send message"));
       throw error;
     } finally {
       setIsSending(false);
@@ -300,13 +219,10 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
 
   const handleMessageChange = (value: string) => {
     setMessage(value);
-    if (quoPendingRequestRef.current?.body !== value.trim()) {
-      quoPendingRequestRef.current = null;
-    }
   };
 
   const handleToggleAI = () => {
-    if (isQuoConversation) return;
+    if (isImportedConversation) return;
     if (!contactConversation) {
       toast.error("No conversation found for this contact");
       return;
@@ -327,7 +243,7 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
   };
 
   const handleAssignAgent = (agentId: string | null) => {
-    if (isQuoConversation) return;
+    if (isImportedConversation) return;
     if (!contactConversation) {
       toast.error("No conversation found for this contact");
       return;
@@ -366,6 +282,7 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
   };
 
   const handleClearHistory = () => {
+    if (isImportedConversation) return;
     if (!contactConversation) {
       toast.error("No conversation found for this contact");
       return;
@@ -406,8 +323,6 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
         contactId={selectedContact.id}
         contactName={contactName}
         phoneNumber={selectedContact.phone_number}
-        quoPhoneNumber={quoMode ? activeQuoLine?.phone_number : null}
-        manualMessagingOnly={quoMode}
         conversation={contactConversation}
         agents={agents}
         hasTimelineItems={timeline.length > 0}
@@ -437,8 +352,8 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
             icon={<MessageSquare className="h-8 w-8" />}
             title="No conversation yet"
             description={
-              quoMode
-                ? "No conversation exists for this contact on the active messaging line."
+              isImportedConversation
+                ? "No messages are available in this imported conversation."
                 : "Start a conversation by sending a message, making a call, or scheduling an appointment."
             }
           />
@@ -453,7 +368,9 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
                       key={item.id}
                       item={item}
                       contactName={contactName}
-                      onTeachAI={!isQuoConversation && item.agent_id ? handleTeachAI : undefined}
+                      onTeachAI={
+                        item.source_provider == null && item.agent_id ? handleTeachAI : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -463,7 +380,7 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
         )}
       </ScrollArea>
 
-      {workspaceId && contactConversation && !isQuoConversation && teachAIMessage && (
+      {workspaceId && contactConversation && !isImportedConversation && teachAIMessage && (
         <TeachAIDialog
           open={true}
           onOpenChange={(open) => {
@@ -493,7 +410,7 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
         >
           Loading reply controls…
         </div>
-      ) : messengerWindowClosed ? (
+      ) : !isImportedConversation && messengerWindowClosed ? (
         <div
           role="status"
           className="shrink-0 border-t px-4 py-3 text-center text-xs text-muted-foreground"
@@ -503,17 +420,16 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
           for 24 hours after their last message — they need to message again before you can respond
           here.
         </div>
-      ) : contactConversation ? (
+      ) : contactConversation && !isImportedConversation ? (
         <MessageComposer
-          key={contactConversation.id}
+          key={selectedContact.id}
           message={message}
           onMessageChange={handleMessageChange}
           onSend={handleSendMessage}
           isSending={isSending}
-          phoneNumbers={isQuoConversation ? [] : phoneNumbers}
+          phoneNumbers={phoneNumbers}
           selectedFromNumber={activeFromNumber}
           onFromNumberChange={setSelectedFromNumber}
-          textOnly={isQuoConversation}
         />
       ) : null}
     </div>

@@ -1,12 +1,11 @@
 import { apiDelete, apiGet, apiPost } from "@/lib/api";
-import type { components } from "@/lib/api/_generated";
 
 import { createApiClient } from "./create-api-client";
 
 export interface IntegrationWithMaskedCredentials {
   id: string;
   workspace_id: string;
-  integration_type: "telnyx" | "openai" | "sendgrid" | "resend" | "lob" | "quo" | "companycam";
+  integration_type: "telnyx" | "openai" | "sendgrid" | "resend" | "lob" | "companycam";
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -14,7 +13,7 @@ export interface IntegrationWithMaskedCredentials {
 }
 
 export interface CreateIntegrationRequest {
-  integration_type: "telnyx" | "openai" | "sendgrid" | "resend" | "lob" | "quo" | "companycam";
+  integration_type: "telnyx" | "openai" | "sendgrid" | "resend" | "lob" | "companycam";
   credentials: Record<string, string>;
   is_active?: boolean;
 }
@@ -24,14 +23,11 @@ export interface UpdateIntegrationRequest {
   is_active?: boolean;
 }
 
-export type QuoPhoneNumberChoice = components["schemas"]["QuoPhoneNumberChoice"];
-export type QuoActiveLineStatus = components["schemas"]["QuoActiveLineStatus"];
 
 export interface IntegrationTestResult {
   success: boolean;
   message: string;
   details?: Record<string, unknown> | null;
-  phone_numbers?: QuoPhoneNumberChoice[] | null;
 }
 
 export interface OpenAIOAuthStatus {
@@ -108,15 +104,6 @@ export const integrationsApi = {
     );
   },
 
-  getActiveQuoLine: async (
-    workspaceId: string,
-    contactId?: number,
-  ): Promise<QuoActiveLineStatus> => {
-    const query = contactId ? `?contact_id=${contactId}` : "";
-    return apiGet<QuoActiveLineStatus>(
-      `/api/v1/workspaces/${workspaceId}/integrations/quo/active-line${query}`,
-    );
-  },
 
   getOpenAIOAuthStatus: async (workspaceId: string): Promise<OpenAIOAuthStatus> => {
     return apiGet<OpenAIOAuthStatus>(

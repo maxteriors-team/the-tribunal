@@ -1,18 +1,14 @@
-"""Conversation notes: rep-authored observations plus synced Quo summaries."""
+"""Conversation notes and rep-authored follow-up reminders."""
 
 import uuid
 from datetime import datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.conversation_note import (
-    NOTE_SOURCE_HUMAN,
-    NOTE_SOURCE_QUO_SUMMARY,
-    ConversationNote,
-)
+from app.models.conversation_note import NOTE_SOURCE_HUMAN, ConversationNote
 from app.models.human_nudge import HumanNudge
 from app.models.user import User
 from app.schemas.conversation_note import ConversationNoteResponse
@@ -47,9 +43,8 @@ class ConversationNoteService:
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
-        # Reused rather than re-implemented: it enforces workspace scoping *and*
-        # the Quo-line visibility rule, so notes can never become a side door to
-        # a conversation the caller cannot open.
+        # Reused rather than re-implemented so every note lookup inherits the
+        # conversation service's workspace boundary.
         self._conversations = ConversationService(db)
 
     async def _assert_conversation_visible(
@@ -105,8 +100,8 @@ class ConversationNoteService:
         """Return one conversation's notes, oldest first."""
         await self._assert_conversation_visible(conversation_id, workspace_id)
 
-        # Left join: Quo summaries have no author, and a departed rep's notes
-        # must keep rendering after users.id is nulled out.
+        # Imported summaries have no author, and a departed rep's notes must
+        # keep rendering after users.id is nulled out.
         result = await self.db.execute(
             select(ConversationNote, User.full_name)
             .outerjoin(User, User.id == ConversationNote.author_user_id)
@@ -209,39 +204,6 @@ class ConversationNoteService:
 
         await self.db.delete(note)
         await self.db.commit()
-
-    async def record_quo_summary(
-        self,
-        conversation_id: uuid.UUID,
-        workspace_id: uuid.UUID,
-        call_id: str,
-        body: str,
-    ) -> None:
-        """Persist a Quo call summary as a note, idempotently.
-
-        Quo retries webhooks and may resend a call's summary after refining it,
-        so this upserts on (workspace_id, source_ref): a redelivery updates the
-        existing note in place instead of appending a duplicate recap to the
-        rep's rail. Deliberately does not commit — the caller owns the
-        transaction that also writes the call's message row, so a failure leaves
-        neither behind.
-        """
-        statement = pg_insert(ConversationNote).values(
-            id=uuid.uuid4(),
-            workspace_id=workspace_id,
-            conversation_id=conversation_id,
-            author_user_id=None,
-            source=NOTE_SOURCE_QUO_SUMMARY,
-            source_ref=call_id,
-            body=body,
-        )
-        await self.db.execute(
-            statement.on_conflict_do_update(
-                index_elements=[ConversationNote.workspace_id, ConversationNote.source_ref],
-                index_where=text("source_ref IS NOT NULL"),
-                set_={"body": statement.excluded.body},
-            )
-        )
 
     async def set_reminder(
         self,

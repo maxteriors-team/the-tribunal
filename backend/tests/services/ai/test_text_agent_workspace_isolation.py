@@ -35,10 +35,10 @@ async def test_inbound_conversation_lookup_is_workspace_scoped() -> None:
 
 
 @pytest.mark.asyncio
-async def test_quo_inbound_never_reaches_ai_agent_lookup() -> None:
+async def test_imported_inbound_never_reaches_ai_agent_lookup() -> None:
     workspace_id = uuid.uuid4()
     conversation = SimpleNamespace(
-        source_provider="quo",
+        source_provider="legacy_import",
         ai_enabled=True,
         ai_paused=False,
         assigned_agent_id=uuid.uuid4(),

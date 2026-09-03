@@ -66,7 +66,7 @@ const colleagueNote = makeNote({
   author_user_id: 99,
   author_name: "Sam Closer",
 });
-const quoNote = makeNote({
+const importedNote = makeNote({
   id: "note-3",
   body: "Caller asked for a gutter quote.",
   source: "quo_summary",
@@ -110,12 +110,12 @@ describe("ConversationNotes", () => {
     expect(listMock).toHaveBeenCalledWith("ws-1", "conv-1");
   });
 
-  it("badges an AI call recap and never offers to edit it", async () => {
-    renderRail([quoNote]);
+  it("badges an imported call recap and never offers to edit it", async () => {
+    renderRail([importedNote]);
 
     const note = await screen.findByTestId("note-note-3");
-    expect(within(note).getByText("Quo summary")).toBeInTheDocument();
-    expect(within(note).getByText("Quo")).toBeInTheDocument();
+    expect(within(note).getByText("Imported summary")).toBeInTheDocument();
+    expect(within(note).getByText("Imported")).toBeInTheDocument();
     expect(within(note).queryByRole("button", { name: /edit/i })).not.toBeInTheDocument();
     expect(within(note).queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
     expect(within(note).queryByRole("button", { name: /reminder/i })).not.toBeInTheDocument();

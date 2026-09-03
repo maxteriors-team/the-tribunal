@@ -39,20 +39,20 @@ interface ConversationNotesProps {
   className?: string;
 }
 
-function isQuoSummary(note: ConversationNote): boolean {
+function isImportedSummary(note: ConversationNote): boolean {
   return note.source === "quo_summary";
 }
 
 function authorLabel(note: ConversationNote): string {
-  if (isQuoSummary(note)) return "Quo";
+  if (isImportedSummary(note)) return "Imported";
   return note.author_name?.trim() || "Teammate";
 }
 
 /**
  * The conversation's notes rail.
  *
- * Two kinds of note share the list: what a rep typed, and Quo's AI recap of a
- * call. They are badged apart on purpose — a recap read as a colleague's
+ * Two kinds of note share the list: what a rep typed, and an imported AI recap
+ * of a call. They are badged apart on purpose — a recap read as a colleague's
  * first-hand observation is how a rep ends up repeating a machine's guess to a
  * customer.
  */
@@ -232,11 +232,11 @@ export function ConversationNotes({
         ) : (
           <ul className="space-y-2 p-3">
             {notes.map((note) => {
-              const quoSummary = isQuoSummary(note);
-              // Quo recaps have no author, so `null === null` would otherwise
+              const importedSummary = isImportedSummary(note);
+              // Imported recaps have no author, so `null === null` would otherwise
               // hand every rep edit rights over the AI's notes.
               const isOwnNote =
-                !quoSummary && currentUserId !== null && note.author_user_id === currentUserId;
+                !importedSummary && currentUserId !== null && note.author_user_id === currentUserId;
               const isEditing = editingNoteId === note.id;
               const isSettingReminder = reminderNoteId === note.id;
 
@@ -244,10 +244,10 @@ export function ConversationNotes({
                 <li key={note.id} className="rounded-md border p-3" data-testid={`note-${note.id}`}>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-sm font-medium">{authorLabel(note)}</span>
-                    {quoSummary ? (
+                    {importedSummary ? (
                       <Badge variant="secondary" className="gap-1">
                         <Sparkles aria-hidden="true" />
-                        Quo summary
+                        Imported summary
                       </Badge>
                     ) : null}
                     <span

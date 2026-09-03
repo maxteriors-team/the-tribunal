@@ -754,6 +754,7 @@ class TelnyxSMSService:
                 Conversation.workspace_id == workspace_id,
                 Conversation.workspace_phone_hash == hash_phone(workspace_phone),
                 Conversation.contact_phone_hash == hash_phone(contact_phone),
+                Conversation.source_provider.is_(None),
             )
         )
         conversation = result.scalar_one_or_none()
