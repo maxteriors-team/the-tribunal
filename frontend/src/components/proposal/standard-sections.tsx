@@ -112,21 +112,21 @@ export function StandardSteps() {
       <div className="section-heading">How It Works</div>
       <div className="steps-grid">
         <div className="step-card">
-          <div className="step-num">I</div>
+          <div className="step-num" aria-hidden="true">I</div>
           <div className="step-title">You Choose</div>
           <div className="step-desc">
             Pick the option that fits your vision and your home.
           </div>
         </div>
         <div className="step-card">
-          <div className="step-num">II</div>
+          <div className="step-num" aria-hidden="true">II</div>
           <div className="step-title">We Install</div>
           <div className="step-desc">
             Our team handles everything — expertly, cleanly, and on schedule.
           </div>
         </div>
         <div className="step-card">
-          <div className="step-num">III</div>
+          <div className="step-num" aria-hidden="true">III</div>
           <div className="step-title">We Maintain</div>
           <div className="step-desc">
             Our Care Plan keeps your display looking its best, so you can enjoy

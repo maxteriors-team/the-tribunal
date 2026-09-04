@@ -1137,3 +1137,61 @@ consistency and flow 4/4; accessibility 3/4 because automated, keyboard, reflow,
 reduced-motion evidence passed but manual assistive-technology coverage is unavailable. No quality-floor
 criterion is zero. Targeted frontend coverage passes 52/52 tests alongside TypeScript, changed-file ESLint,
 Prettier, generated-contract checks, and the runtime evidence above.
+
+## Permanent Lighting proposal payment choice — 2026-09-04
+
+### Design read
+
+- **Surface:** a public proposal and commerce surface, used live in video meetings or asynchronously.
+- **Audience:** homeowners making a high-cost choice on touch, keyboard, mobile, and desktop.
+- **Single job:** understand the year-round design, then choose deposit or GreenSky without price ambiguity.
+- **Risk:** unclear contract acceptance, hidden fees, unsupported credit claims, and accidental lender impersonation.
+- **Evidence source:** the existing charcoal/gold proposal, large real-house previews, editorial type, bordered sections, and one shared content rail.
+
+### Thesis and hierarchy
+
+The house remains the emotional first glance. A calm “Choose how to move forward” section is the second:
+one project price above two equal cards, not a checkout funnel disguised as financing. Deposit and GreenSky
+use the same visual weight. The page adds no logo, badge, testimonial, urgency, approval claim, hover lift,
+glass, or new gradient. Permanent-specific copy names the customer’s year-round plan without inventing
+hardware, warranty, savings, or performance claims.
+
+GreenSky-enabled proposals remove repeated project totals from the visual CTA, product lines, category
+summary, and grand-total panel. The top CTA becomes a native in-page link to the semantic payment heading.
+The existing contract-acceptance section remains separate; an external application never accepts the quote.
+
+### Components, states, and resilience
+
+- `PermanentPaymentOptions` owns one price, exact deposit copy, program identifiers, ordered steps, disclosures, and both next-step states.
+- Pre-acceptance GreenSky remains available; Stripe remains locked behind recorded acceptance.
+- Approved proposals expose the existing explicit Stripe action; paid deposits remove the application action.
+- Expired and declined proposals retain printable facts and disclosures but expose no payment/application action.
+- Missing deposits are described plainly. Missing imagery does not remove pricing or payment choices.
+- Invalid or operator-controlled application snapshots fail closed and cannot create an outbound open redirect.
+
+### Responsive and accessibility contract
+
+The two cards use `repeat(2,minmax(0,1fr))` and become one ordered column below 660 px. Text and identifiers
+wrap within zero-minimum-width cells; 320 px adds tighter padding without horizontal clipping. Native links,
+buttons, a real section heading, ordered-list steps, definition-list identifiers, announced new-tab names,
+and visible focus outlines define the keyboard contract. Application and disclosure links use a fixed HTTPS
+destination, a new tab, `noopener noreferrer`, and no referrer. Interactive controls hide in print while
+program facts and disclosures remain.
+
+Automated checks are evidence, not WCAG or legal certification. VoiceOver, NVDA, TalkBack, qualified
+contrast review, and counsel/provider review remain separate launch evidence.
+
+### Verification evidence
+
+Focused verification passes 51/51 settings, proposal, page-flow, and accent tests; TypeScript and changed-file
+ESLint pass. The final `make ci.all` run passed 5,292 backend and 1,740 frontend tests, clean code generation,
+production build, and migration reversibility against a fresh disposable database.
+
+Runtime production-build captures at 1280, 390, and 320 px show the intended two-card/one-column hierarchy
+without horizontal overflow or browser errors. Axe reported zero tested WCAG A/AA violations at each width.
+Keyboard order reached deposit, GreenSky, disclosures, then contract acceptance; the GreenSky link had a
+three-pixel focus outline. The popup sent no referrer and left the proposal intact. Print retained disclosures
+while hiding application controls. Artifacts: `.ezcoder/eyes/out/permanent-greensky/` (local and gitignored).
+
+The 320 px run is the 400%-at-1280 reflow equivalent. Automated evidence is not assistive-technology, device,
+provider, counsel, or WCAG certification; those launch gates remain explicit in `COMPLIANCE.md`.

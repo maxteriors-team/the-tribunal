@@ -1015,3 +1015,136 @@ Scope: a staff member may explicitly send a new permanent-lighting proposal as t
 ### Verification boundary
 
 Static code and local automated checks cover range validation, email/page display, exact accepted total, and unchanged deposit. No proposal was sent to a real customer, no payment was created, and no legal review was performed.
+
+## Focused addendum — Permanent Lighting GreenSky referral (2026-09-04)
+
+Snapshot: 4 September 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE** · Backend released at `a8aef252`; frontend implementation working tree
+
+Scope: the public Permanent Lighting proposal’s GreenSky referral, one-price presentation, existing Stripe
+deposit path, staff program settings, and related customer disclosures. This is a focused engineering review,
+not a product-wide re-audit and not a conclusion that the program, marketing, contract, or site is legally
+compliant.
+
+### Assumed exposure profile
+
+- **Confirmed:** public capability URL; real homeowner identity/address and project pricing; hosted Stripe Checkout; GreenSky application opens on GreenSky’s site.
+- **Confirmed:** Tribunal sends no customer data to GreenSky, collects no credit fields or decisions, and records no application interaction.
+- **Assumed:** a US commercial operator, internet reach without a country gate, real customers, and possible under-18 access to a shared proposal link.
+- **Confirmed:** no new dependency, database table, upload, email/SMS path, analytics event, cookie, ad pixel, user-content surface, or automated credit decision.
+- **Deduced:** GreenSky’s merchant number and plan number are intended public program identifiers, not customer financial identifiers.
+
+### Coverage ledger
+
+| # | Checklist item | fail / pass / n-a | Evidence |
+|---|---|---|---|
+| 1 | Committed/browser secrets | pass | CODE/tests: no real merchant or plan value is present; no credential or customer financial value enters the client bundle. |
+| 2 | Client-reachable database row security | n-a | Browser uses server APIs; this change adds no direct database SDK/table. |
+| 3 | Browser-reachable admin key | pass | CODE: no provider SDK, key, or privileged GreenSky API exists in the browser. |
+| 4 | Server/data-layer authorization | pass | CODE/tests: existing billing read/write permissions protect staff settings; the public capability exposes only its saved proposal snapshot. |
+| 4a | Defaults grant access/entitlement | pass | CODE/tests: GreenSky defaults disabled and cannot enable without complete valid program facts. |
+| 4b | Tenant from client input | pass | CODE: settings retain the existing authenticated workspace derivation; no tenant field was added. |
+| 5 | Mass assignment | pass | CODE/tests: Pydantic and generated contracts allow-list six settings fields; the public snapshot is separately typed. |
+| 6 | String-built queries | n-a | No query was added. |
+| 7 | Unauthenticated internal endpoint/webhook | n-a | No endpoint, webhook, cron, or admin route was added. |
+| 8 | Public writable/listable storage | n-a | No storage path was added. |
+| 9 | Expensive/abusable endpoint rate limit | n-a | The application is a direct external link; Tribunal receives no application request. |
+| 10 | Password storage | n-a | Authentication was unchanged. |
+| 11 | Session cookie/token safety | pass | Existing public capability/session behavior is unchanged; the outbound link suppresses its referrer. |
+| 12 | JWT verification | n-a | No token verification path changed. |
+| 13 | Credentialed wildcard CORS | pass | No CORS behavior changed; the application is a navigation, not a browser API call. |
+| 14 | Card data touches Tribunal | pass | CODE: deposit payment still uses hosted Stripe Checkout; no card field was added. |
+| 14b | Consumer financial/identity columns in cleartext | pass | CODE: Tribunal collects no GreenSky credit field, decision, SSN, government ID, or bank value. |
+| 15 | PII in logs/error tracking | pass | CODE: application clicks/status are not sent to Tribunal and no new logging was added. |
+| 16 | Transport security/mixed content | pass | CODE: fixed GreenSky application and disclosures destinations are HTTPS. |
+| 17 | Server-side user-URL fetch/SSRF | n-a | No server-side fetch or operator-controlled URL exists. |
+| 18 | Backup/restore | n-a | No schema, migration, or durable data class was added; existing workspace-settings backup controls remain. |
+| U1 | Privacy notice, deletion, vendor list | pass (scoped) | CODE: no customer data is disclosed by Tribunal to GreenSky; existing product-wide privacy findings remain open. |
+| U2 | Third-party script consent | n-a | No GreenSky script, iframe, cookie, pixel, or tracker is embedded. |
+| U3 | Account/login baseline | pass (reused) | Staff configuration reuses existing authentication and billing permissions. |
+| U4 | Public-page accessibility | pass (automated scope) | CODE/tests: semantic heading/list/definition list, native controls, focus styling, responsive wrapping, and no-referrer names; manual AT remains GS-008. |
+| U5 | Email duties | n-a | No email behavior changed. |
+| U6 | Contact-form duties | n-a | No form submits to Tribunal; credit data is entered only on GreenSky’s site. |
+| U7 | Error tracking/logs | pass | No application intent or provider outcome is observed or logged. |
+| U8 | Contracting entity/personal liability | fail | DEDUCED: the exact operating/contracting entity and jurisdictions were not established; see GS-009. |
+| A1 | Image alternatives | pass | CODE: existing proposal imagery retains descriptive alt text; the new section adds no image/logo. |
+| A2 | Form labels | pass | CODE/tests: every new staff field and switch has a programmatic label. |
+| A3 | Keyboard operability | pass (code) | Native links/buttons/switches are used; runtime order is recorded separately in release evidence. |
+| A4 | Colour contrast | pass (runtime/code) | RUNTIME: Axe found zero tested A/AA violations at 1280, 390, and 320 px after the shared brand-accent generator was hardened; its tests now require both text accents to remain at least 4.5:1 on the lightest solid proposal surface. |
+| A5 | Focus visibility | pass | CODE: new proposal links receive a three-pixel visible gold focus outline with offset. |
+| A6 | Media controls/captions | n-a | The new section adds no audio or video. |
+| A7 | Page language | pass (reused) | Existing public proposal document language declaration is unchanged. |
+| C1-US | Consumer contract/payment duties | fail | Existing cancellation, refund, tax, capacity, cooling-off, and home-improvement contract review remains open; see GS-007. |
+| C1-EU/UK | Consumer pre-contract/withdrawal duties | fail | No geographic gate or reviewed EU/UK withdrawal/early-service design was established; see GS-011. |
+| P1-US | Platform/user-content duties | n-a | No public posting, profile, upload, or user-to-user content was added. |
+| P1-EU/UK | Platform/user-content duties | n-a | Same scope reason; this is a merchant proposal, not a hosting platform. |
+| M1 | Minors/capacity | fail | A shared public link has no age/capacity gate; see GS-010. |
+
+### Findings
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| GS-001 | HIGH | GreenSky charges Maxteriors a 15.25% merchant fee | CODE/tests: Permanent public cash totals equal the existing contract total; cash savings are zero; the fee is absent from the snapshot and customer UI | Never surcharge or increase a borrower’s price because they use the loan | Fixed in engineering | Backend one-price/isolation tests; staff warning; one-price client test |
+| GS-002 | HIGH | A specific 0%-for-24-month credit promotion is shown | CODE/tests: the claim comes only from a complete saved program snapshot; IDs and approved copy have no fabricated defaults; the generic estimator is hidden | Show only the current provider-approved plan terms and avoid approval odds, alternatives, or invented savings | Engineering gate fixed; provider approval remains GS-006 | Validation, snapshot, settings, and customer-copy tests |
+| GS-003 | HIGH | Public proposal tokens could leak to an external lender or an editable URL could become phishing | CODE/tests: the application host/path is fixed; alternate URLs fail closed; both external links use `noopener noreferrer` and `no-referrer`; no query/tracking/customer parameter is sent | Keep the capability token and customer facts out of external requests | Fixed | Fixed literal plus document-normalization and anchor-attribute tests |
+| GS-004 | HIGH | Credit intake or decisions would move Tribunal toward regulated lending/data duties | CODE: Tribunal renders a referral link only; it has no application fields, provider API, status callback, decision, score, or credit-intent event | Keep GreenSky as the application/decision surface and do not represent Tribunal as lender or broker | Fixed for this scope | Architecture boundary plus absence of endpoint/event; regression review if an integration is proposed |
+| GS-005 | HIGH | Applying, accepting the sales contract, and paying a deposit are distinct acts | CODE/tests: GreenSky is available before acceptance; applying never changes proposal state; GreenSky-enabled acceptance stays on-page; Stripe unlocks only after acceptance; paid/expired/declined states suppress actions | Obtain explicit contract acceptance and never imply that an application reserves work or guarantees approval | Fixed | Component and page-flow state tests |
+| GS-006 | LAWYER | Merchant-created GreenSky marketing and trademark/lender presentation are contract- and law-sensitive | CODE/DEDUCED: UI requires provider-approved copy, but no provider or counsel approval was supplied | Before enabling, approve exact 0%/24-month wording, marks, lender/Equal Housing presentation, employee training, and current Operating Instructions | Open — launch prerequisite | Keep disabled until written provider/counsel approval and real program identifiers exist |
+| GS-007 | LAWYER | Proposal acceptance/deposit can form a US home-services consumer contract | DEDUCED: source preserves existing terms, but cancellation, refund, tax, change-order, cooling-off, contractor-registration, and state-specific substance were not reviewed | Review the actual contract and sales method in every US state served | Open; existing SPP-003/QR-005 also apply | Counsel-approved terms and operating checklist |
+| GS-008 | MEDIUM | Automated semantics/contrast checks cannot establish accessibility on customer devices | RUNTIME/CODE: Axe returned zero tested A/AA violations at three widths; 320 px reflowed without overflow; keyboard order reached both paths before contract acceptance; the GreenSky link showed a three-pixel focus outline; VoiceOver/NVDA/TalkBack were not performed | Verify physical-device and assistive-technology behavior before broad reliance | Automated/runtime evidence complete; manual AT open | `.ezcoder/eyes/out/permanent-greensky/evidence.json` plus manual AT follow-up |
+| GS-009 | LAWYER | The exact merchant/contracting entity and service jurisdictions were not established | DEDUCED | Confirm who signs, who absorbs the fee, where services are sold, and whose GreenSky account/approvals apply | Open before enablement | Written launch owner and jurisdiction matrix |
+| GS-010 | MEDIUM | A shared proposal link could be opened or accepted by a minor | DEDUCED: no technical age/capacity gate exists | Define who may accept the home-services contract and how staff handles questionable capacity | Open product/legal decision | Contract-capacity policy; add a gate only if counsel requires it |
+| GS-011 | LAWYER | The paid public flow is technically reachable from the EU/UK | DEDUCED: no country block or EU/UK consumer-sales design was found | Do not offer there until pre-contract information, withdrawal, early-service waiver, tax, and GreenSky availability are reviewed | Open/conditional | Geographic operating policy or technical eligibility gate |
+
+### Product-model cross-check
+
+- **Value movement:** Tribunal redirects to hosted Stripe Checkout and never holds or routes customer funds; GreenSky lenders own credit decisions/funding.
+- **Platform:** no user-content hosting or user-to-user surface is added.
+- **Synthetic media:** none is generated or changed by this feature.
+- **Financial identifiers:** only public merchant/plan program identifiers are stored; customer credit identifiers stay with GreenSky.
+- **Cross-context tracking:** no application click, status, pixel, or tracking parameter is created.
+- **Combined-regime check:** public consumer contracting plus credit promotion drives GS-006/GS-007; the referral boundary avoids building a lending decision system.
+
+### Implemented in this pass
+
+- GreenSky is disabled by default; complete numeric merchant/plan values, bounded APR/term, and approved copy are required to enable it.
+- Only new Permanent-only snapshots receive GreenSky facts; old proposals and every other service remain isolated.
+- Permanent customers see one contract price. Maxteriors’ merchant cost never enters the public contract or outbound URL.
+- The official application opens separately with no referrer; the proposal remains usable if the provider tab fails.
+- Tribunal does not collect application data, receive a decision, infer status, or log credit intent.
+- Customer copy identifies GreenSky Servicing, LLC as a financial technology company, not a lender, and leaves credit/terms to program lenders.
+
+### Needs provider/counsel before enablement
+
+1. Obtain the real merchant number, plan number, and written approval for the exact 0% APR / 24-month offer text.
+2. Review current GreenSky Operating Instructions, trademark/Equal Housing requirements, employee training, and state-specific merchant duties.
+3. Review the underlying proposal contract, cancellation/refund/cooling-off terms, capacity, and actual service jurisdictions.
+
+### Date-sensitive sources and verification boundary
+
+On 4 September 2026, GreenSky’s official merchant-agreement page linked the current Program Agreement;
+a publicly hosted copy identified v7.1, last updated 30 June 2026. Sections 2(b)(v) and 5(b) prohibit
+adding program/processing fees through a surcharge or increased borrower price; section 11(a)(x) requires
+the merchant to represent that no price or fee increased because credit was used. Sections 2(a)(vi),
+2(b)(i)–(iii), 5(a), 6, and 7 also constrain approved materials, claims, applications, and decisions.
+Re-check the current agreement and Operating Instructions at `https://www.greensky.com/merchantagreement/`
+before relying on this snapshot. Official customer disclosures are linked at
+`https://www.greensky.com/disclosures/`.
+
+Current source: GreenSky Merchant Program Agreement v7.1 (30 June 2026), retrieved 4 September 2026
+from the official agreement index and a publicly hosted agreement copy. The agreement can change by notice;
+the repository cannot prove merchant-specific plan approval, training, or account standing.
+
+RUNTIME: desktop, 390 px, and 320 px production-build fixtures rendered without horizontal overflow or
+browser errors; 320 px supplies the 400%-at-1280 reflow equivalent. Axe returned zero tested WCAG A/AA
+violations at all three widths. Keyboard order reached deposit, GreenSky, disclosures, then contract acceptance;
+the application link showed a three-pixel focus outline. The outbound popup sent no `Referer`, did not accept
+the proposal, and left it usable. Print hid application controls while retaining disclosure text. GreenSky’s
+application returned HTTP 200, redirected to its current `/merchantlogin/newapplication` page, and still asked
+for merchant and plan values. Screenshots and machine evidence are under
+`.ezcoder/eyes/out/permanent-greensky/` (gitignored local verification artifacts).
+
+`make ci.all` exited zero against a fresh disposable database: 5,292 backend tests passed at 61.87% coverage,
+1,740 frontend tests passed, the production build completed, generated contracts were clean, and migration
+up/check/down/up completed. Backend PR #227 remains live at `a8aef252` with readiness and six smoke tests.
+Final Vercel deployment, real merchant setup, physical-device assistive technology, a real GreenSky application
+submission, a real Stripe payment, provider approval, and legal review are not claimed in this addendum.

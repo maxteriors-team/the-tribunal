@@ -27,6 +27,10 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
     retry: false,
   });
 
+  const proposalDocument = parseProposalDocument(data?.proposal_document);
+  const hasGreenSky =
+    proposalDocument?.service === "permanent" && proposalDocument.green_sky !== null;
+
   const [payingDeposit, setPayingDeposit] = useState(false);
 
   // Hand off to Stripe's hosted deposit page. Shared by the standalone "Pay
@@ -53,9 +57,9 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
         queryKeys.publicProposals.byToken(token),
         (prev) => (prev ? { ...prev, status: result.status, is_decided: true } : prev),
       );
-      // Accept = pay: when a deposit is owed, roll straight into Stripe so the
-      // customer never has to hunt for a second button.
-      if (result.deposit_required) void payDeposit();
+      // GreenSky proposals keep both next steps visible after acceptance. Every
+      // legacy deposit flow still rolls straight into Stripe.
+      if (result.deposit_required && !hasGreenSky) void payDeposit();
     },
     onError: () => {
       void queryClient.invalidateQueries({
@@ -142,8 +146,6 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
   // Rich proposals (landscape, permanent, bistro, christmas) render the
   // multi-tier presentation; plain line-item quotes render the itemized quote.
   // Both share the dark/gold client theme so every recipient sees one brand.
-  const proposalDocument = parseProposalDocument(data.proposal_document);
-
   if (proposalDocument) {
     return (
       <ClientProposalView

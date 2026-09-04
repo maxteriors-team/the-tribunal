@@ -23,6 +23,7 @@ type CategoryLine = Schemas["CategoryLine"];
 type TierPricing = Schemas["TierPricing"];
 type CarePlanPricing = Schemas["CarePlanPricing"];
 type BistroPricing = Schemas["BistroPricing"];
+type ProposalGreenSky = Schemas["ProposalGreenSky"];
 type WizardClient = Schemas["WizardClient"];
 type ProposalMockup = Schemas["ProposalMockup"];
 export type ProposalValueProp = Schemas["ValueProp"];
@@ -68,6 +69,18 @@ export interface ProposalFinancingView {
   disclaimer: string | null;
 }
 
+export const GREEN_SKY_APPLICATION_URL = "https://projects.greensky.com/applyshort" as const;
+
+export interface ProposalGreenSkyView {
+  application_url: typeof GREEN_SKY_APPLICATION_URL;
+  merchant_number: string;
+  plan_number: string;
+  apr_percent: number;
+  term_months: number;
+  offer_details: string;
+  disclosure: string;
+}
+
 export interface ProposalBistroView extends Omit<BistroPricing, "lines"> {
   lines: NonNullable<BistroPricing["lines"]>;
 }
@@ -92,6 +105,7 @@ export interface ProposalDoc {
   care_plan: ProposalCarePlanView | null;
   bistro: ProposalBistroView | null;
   financing: ProposalFinancingView | null;
+  green_sky: ProposalGreenSkyView | null;
   night_preview: Record<string, unknown> | null;
   mockups: ProposalMockup[];
   categories: string[];
@@ -131,6 +145,43 @@ const SERVICES: readonly ProposalService[] = [
  */
 function parseService(value: unknown): ProposalService | null {
   return SERVICES.find((s) => s === value) ?? null;
+}
+
+function greenSkyFromSnapshot(
+  value: ProposalGreenSky | null | undefined,
+): ProposalGreenSkyView | null {
+  if (
+    !value ||
+    value.application_url !== GREEN_SKY_APPLICATION_URL ||
+    typeof value.merchant_number !== "string" ||
+    !/^[0-9]+$/.test(value.merchant_number) ||
+    typeof value.plan_number !== "string" ||
+    !/^[0-9]+$/.test(value.plan_number) ||
+    typeof value.apr_percent !== "number" ||
+    !Number.isFinite(value.apr_percent) ||
+    value.apr_percent < 0 ||
+    value.apr_percent > 100 ||
+    typeof value.term_months !== "number" ||
+    !Number.isInteger(value.term_months) ||
+    value.term_months < 1 ||
+    value.term_months > 360 ||
+    typeof value.offer_details !== "string" ||
+    !value.offer_details.trim() ||
+    typeof value.disclosure !== "string" ||
+    !value.disclosure.trim()
+  ) {
+    return null;
+  }
+
+  return {
+    application_url: GREEN_SKY_APPLICATION_URL,
+    merchant_number: value.merchant_number,
+    plan_number: value.plan_number,
+    apr_percent: value.apr_percent,
+    term_months: value.term_months,
+    offer_details: value.offer_details,
+    disclosure: value.disclosure,
+  };
 }
 
 export function normalizeProposalDocument(doc: ProposalDocument): ProposalDoc {
@@ -185,6 +236,7 @@ export function normalizeProposalDocument(doc: ProposalDocument): ProposalDoc {
           disclaimer: doc.financing.disclaimer ?? null,
         }
       : null,
+    green_sky: greenSkyFromSnapshot(doc.green_sky),
     night_preview: (doc.night_preview as Record<string, unknown> | null | undefined) ?? null,
     mockups: (doc.mockups ?? []).filter((m): m is ProposalMockup => Boolean(m?.image)),
     categories: doc.categories ?? [],

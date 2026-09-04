@@ -2284,7 +2284,7 @@
     font-family: var(--font-cormorant), sans-serif;
     font-size: 48px;
     font-weight: 700;
-    color: rgba(212, 175, 90, 0.15);
+    color: rgba(212, 175, 90, 0.5);
     line-height: 1;
     margin-bottom: 12px;
   }
@@ -3197,7 +3197,7 @@
     font-weight: 600;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--t4);
+    color: var(--t3);
     margin-top: 16px;
     line-height: 1.8;
   }
@@ -3697,6 +3697,199 @@
 .proposal-view .pq-total-row.grand strong {
   color: var(--gold);
   font-size: 34px;
+}
+
+/* Permanent Lighting: one price with two equal next-step paths. */
+.proposal-view .permanent-payment-options {
+  margin: 56px 0;
+  padding: clamp(28px, 5vw, 48px);
+  border: 1px solid var(--bdr-g);
+  background: var(--s1);
+  scroll-margin-top: 24px;
+  overflow-wrap: anywhere;
+}
+.proposal-view .permanent-payment-intro {
+  max-width: 720px;
+  margin: 0 auto 30px;
+  text-align: center;
+}
+.proposal-view .permanent-payment-intro .section-heading {
+  margin-bottom: 16px;
+}
+.proposal-view .permanent-payment-price {
+  color: var(--t1);
+  font-family: var(--font-cormorant), sans-serif;
+  font-size: clamp(42px, 7vw, 68px);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.proposal-view .permanent-payment-intro p {
+  max-width: 620px;
+  margin: 14px auto 0;
+  color: var(--t2);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.proposal-view .permanent-payment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.proposal-view .permanent-payment-card {
+  min-width: 0;
+  padding: clamp(22px, 4vw, 32px);
+  border: 1px solid var(--bdr);
+  background: var(--black);
+}
+.proposal-view .permanent-payment-kicker {
+  margin-bottom: 10px;
+  color: var(--gold-d);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.proposal-view .permanent-payment-card h3 {
+  color: var(--t1);
+  font-family: var(--font-cormorant), sans-serif;
+  font-size: clamp(26px, 3.2vw, 34px);
+  font-weight: 700;
+  line-height: 1.1;
+}
+.proposal-view .permanent-payment-card > p {
+  margin-top: 14px;
+  color: var(--t2);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.proposal-view .permanent-payment-amount {
+  margin-top: 18px;
+  color: var(--gold-l);
+  font-family: var(--font-cormorant), sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.proposal-view .permanent-payment-identifiers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+}
+.proposal-view .permanent-payment-identifiers > div {
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--bdr);
+}
+.proposal-view .permanent-payment-identifiers dt {
+  color: var(--t3);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.proposal-view .permanent-payment-identifiers dd {
+  margin-top: 6px;
+  color: var(--t1);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.proposal-view .permanent-payment-steps {
+  margin-top: 22px;
+  padding-left: 20px;
+  color: var(--t2);
+  font-size: 13px;
+  line-height: 1.6;
+  list-style: decimal;
+}
+.proposal-view .permanent-payment-steps li + li {
+  margin-top: 8px;
+}
+.proposal-view .permanent-payment-card > .cta-btn-primary,
+.proposal-view .permanent-payment-link {
+  width: 100%;
+  justify-content: center;
+  margin-top: 22px;
+  text-align: center;
+}
+.proposal-view .permanent-payment-link svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+.proposal-view .permanent-payment-status {
+  margin-top: 22px;
+  padding: 12px 14px;
+  border: 1px solid var(--bdr);
+  color: var(--t2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.proposal-view .permanent-payment-disclosure {
+  padding-top: 18px;
+  border-top: 1px solid var(--bdr);
+  color: var(--t3) !important;
+  font-size: 10px !important;
+  line-height: 1.65 !important;
+}
+.proposal-view .permanent-payment-disclosure a {
+  color: var(--gold-l);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.proposal-view .permanent-payment-action .dep-panel {
+  max-width: none;
+  margin: 22px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.proposal-view .permanent-payment-action .dep-info {
+  display: none;
+}
+.proposal-view .permanent-payment-action .dep-pay-btn {
+  width: 100%;
+}
+.proposal-view .permanent-payment-options a:focus-visible,
+.proposal-view .pmock-purchase-action a:focus-visible {
+  outline: 3px solid var(--gold-l);
+  outline-offset: 4px;
+}
+.proposal-view .permanent-payment-card,
+.proposal-view .permanent-payment-identifiers,
+.proposal-view .permanent-payment-steps,
+.proposal-view .permanent-payment-disclosure {
+  break-inside: avoid;
+}
+
+@media (max-width: 660px) {
+  .proposal-view .permanent-payment-options {
+    margin: 42px 0;
+    padding: 26px 18px;
+  }
+  .proposal-view .permanent-payment-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .proposal-view .permanent-payment-card {
+    padding: 24px 20px;
+  }
+}
+
+@media (max-width: 360px) {
+  .proposal-view .permanent-payment-options {
+    padding-inline: 14px;
+  }
+  .proposal-view .permanent-payment-card {
+    padding-inline: 16px;
+  }
+  .proposal-view .permanent-payment-card > .cta-btn-primary,
+  .proposal-view .permanent-payment-link {
+    padding-inline: 18px;
+    letter-spacing: 0.12em;
+  }
 }
 
 /* ------------------------------------------------------------------ *
