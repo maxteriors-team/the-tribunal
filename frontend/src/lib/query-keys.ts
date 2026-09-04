@@ -352,8 +352,6 @@ export const queryKeys = {
   },
   integrations: {
     ...integrations,
-    activeQuoLine: (workspaceId: string, contactId?: number) =>
-      [...integrations.all(workspaceId), "quo-active-line", contactId] as const,
     openAIOAuth: (workspaceId: string) =>
       [...integrations.all(workspaceId), "openai-oauth"] as const,
   },

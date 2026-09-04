@@ -3,13 +3,11 @@ import { formatPhoneNumber } from "./phone";
 /**
  * Display label for a contact.
  *
- * Some contacts genuinely have no name: an inbound SMS or call from a number
- * the provider has no contact record for creates a row with a blank
- * `first_name` (see `backend/app/services/quo/sync.py`). Blank is the honest
- * value to *store* — `first_name` feeds SMS/AI personalisation, so a
- * placeholder there would text customers "Hi (555) 123-4567". It is only the
- * display that needs a fallback, so the phone number is used here: it is
- * something an operator can actually act on, unlike "Unknown".
+ * Some contacts genuinely have no name: an imported or inbound conversation
+ * may only identify the customer's number. Blank is the honest value to *store*
+ * because `first_name` feeds SMS and AI personalisation, so a placeholder would
+ * text customers "Hi (555) 123-4567". Only the display needs a fallback, so
+ * the phone number is used here: it is something an operator can act on.
  */
 export function contactDisplayName(contact: {
   first_name?: string | null;

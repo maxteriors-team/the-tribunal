@@ -45,8 +45,8 @@ class CampaignConversationSyncer:
         """
         if log is None:
             log = self.logger
-        if conversation.source_provider == "quo":
-            log.info("quo_manual_messaging_only", conversation_id=str(conversation.id))
+        if conversation.source_provider is not None:
+            log.info("imported_conversation_read_only", conversation_id=str(conversation.id))
             return False
 
         # Check if conversation is part of a campaign

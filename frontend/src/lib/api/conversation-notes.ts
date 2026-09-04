@@ -17,7 +17,7 @@ export type ConversationNoteCreateRequest = components["schemas"]["ConversationN
 export type ConversationNoteUpdateRequest = components["schemas"]["ConversationNoteUpdate"];
 export type NoteReminderRequest = components["schemas"]["NoteReminderCreate"];
 
-/** `human` is a rep's own observation; `quo_summary` is an AI call recap. */
+/** `human` is a rep observation; `quo_summary` preserves imported recap provenance. */
 export type ConversationNoteSource = "human" | "quo_summary";
 
 export type NoteReminderStatus = "pending" | "sent" | "acted" | "dismissed" | "snoozed";

@@ -163,11 +163,11 @@ async def test_handoff_texts_the_customer_once(_sender: AsyncMock, _notifier: As
     assert "materials" in _sender.await_args.kwargs["body"].lower()
 
 
-async def test_quo_handoff_pauses_ai_without_automated_acknowledgement(
+async def test_imported_handoff_pauses_ai_without_automated_acknowledgement(
     _sender: AsyncMock, _notifier: AsyncMock
 ) -> None:
     conversation = _conversation()
-    conversation.source_provider = "quo"
+    conversation.source_provider = "legacy_import"
 
     await hand_off_accepted_quote(
         _FakeDB(),

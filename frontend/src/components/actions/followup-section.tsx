@@ -73,13 +73,13 @@ export function FollowupSection() {
   const contactConversation: Conversation | undefined = conversationsData?.items?.find(
     (conv) => conv.contact_id === selectedContact?.id,
   );
-  const isQuoConversation = contactConversation?.source_provider === "quo";
+  const isImportedConversation = contactConversation?.source_provider != null;
 
   const conversationId = contactConversation?.id ?? "";
   const generatedMessage = generatedMessagesByConversation[conversationId] ?? "";
 
   const setGeneratedMessage = (message: string) => {
-    if (!conversationId || isQuoConversation) return;
+    if (!conversationId || isImportedConversation) return;
 
     setGeneratedMessagesByConversation((currentMessages) => ({
       ...currentMessages,
@@ -98,7 +98,7 @@ export function FollowupSection() {
   const resetCounter = useResetFollowupCounter(workspaceId ?? "");
 
   const handleToggleEnabled = async (enabled: boolean) => {
-    if (!conversationId || isQuoConversation) return;
+    if (!conversationId || isImportedConversation) return;
 
     try {
       await updateSettings.mutateAsync({
@@ -112,7 +112,7 @@ export function FollowupSection() {
   };
 
   const handleDelayChange = async (value: string) => {
-    if (!conversationId || isQuoConversation) return;
+    if (!conversationId || isImportedConversation) return;
 
     try {
       await updateSettings.mutateAsync({
@@ -125,7 +125,7 @@ export function FollowupSection() {
   };
 
   const handleMaxCountChange = async (value: string) => {
-    if (!conversationId || isQuoConversation) return;
+    if (!conversationId || isImportedConversation) return;
 
     try {
       await updateSettings.mutateAsync({
@@ -138,7 +138,7 @@ export function FollowupSection() {
   };
 
   const handleGenerate = async () => {
-    if (!conversationId || isQuoConversation) return;
+    if (!conversationId || isImportedConversation) return;
 
     try {
       const result = await generateFollowup.mutateAsync({
@@ -152,7 +152,7 @@ export function FollowupSection() {
   };
 
   const handleSend = async () => {
-    if (!conversationId || isQuoConversation) return;
+    if (!conversationId || isImportedConversation) return;
 
     try {
       await sendFollowup.mutateAsync({
@@ -167,7 +167,7 @@ export function FollowupSection() {
   };
 
   const handleReset = async () => {
-    if (!conversationId || isQuoConversation) return;
+    if (!conversationId || isImportedConversation) return;
 
     try {
       await resetCounter.mutateAsync(conversationId);
@@ -199,18 +199,18 @@ export function FollowupSection() {
     );
   }
 
-  if (isQuoConversation) {
+  if (isImportedConversation) {
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <RefreshCw className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h3 className="text-sm font-semibold">Follow-up</h3>
           <Badge variant="outline" className="ml-auto text-xs">
-            Manual messaging only
+            Imported history
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          Follow-up generation and sending are unavailable for manual-only conversations.
+          Follow-up generation and sending are unavailable for imported conversations.
         </p>
       </div>
     );

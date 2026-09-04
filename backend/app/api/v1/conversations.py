@@ -178,7 +178,6 @@ async def send_message(
         body=message_in.body,
         sender_user_id=current_user.id,
         sender_display_name=current_user.full_name or current_user.email,
-        client_request_id=message_in.client_request_id,
     )
 
 

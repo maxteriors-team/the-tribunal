@@ -40,7 +40,7 @@ export function MessageItemShell({
   const shouldReduceMotion = useReducedMotion();
   const isCall = item.type === "call";
   const isAppointment = item.type === "appointment";
-  const isQuoActivity = (item.type === "sms" || isCall) && item.source_provider === "quo";
+  const isImportedActivity = (item.type === "sms" || isCall) && item.source_provider != null;
   const timestamp = formatTime(item.timestamp);
   const senderName = isOutbound
     ? item.sender_display_name?.trim() || "Unknown sender (historical)"
@@ -87,9 +87,9 @@ export function MessageItemShell({
               AI
             </Badge>
           )}
-          {isQuoActivity ? (
+          {isImportedActivity ? (
             <Badge variant="outline" className="h-4 shrink-0 px-1.5 py-0 text-[10px]">
-              via Quo
+              Imported
             </Badge>
           ) : null}
           <span className="shrink-0">{timestamp}</span>

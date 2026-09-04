@@ -155,7 +155,7 @@ export function AIAgentsSection() {
       );
     },
   );
-  const isQuoConversation = contactConversation?.source_provider === "quo";
+  const isImportedConversation = contactConversation?.source_provider != null;
 
   const assignedAgentId = contactConversation?.assigned_agent_id;
   const assignedAgent = useMemo(() => {
@@ -164,7 +164,7 @@ export function AIAgentsSection() {
   }, [agents, assignedAgentId]);
 
   const handleAssign = (agentId: string | null) => {
-    if (!selectedContact || isConversationPending || isQuoConversation) return;
+    if (!selectedContact || isConversationPending || isImportedConversation) return;
 
     assignAgentMutation.mutate(
       { contactId: selectedContact.id, agentId },
@@ -180,7 +180,7 @@ export function AIAgentsSection() {
   };
 
   const handleToggle = () => {
-    if (!selectedContact || !contactConversation || isConversationPending || isQuoConversation) {
+    if (!selectedContact || !contactConversation || isConversationPending || isImportedConversation) {
       return;
     }
 
@@ -214,18 +214,18 @@ export function AIAgentsSection() {
     );
   }
 
-  if (isQuoConversation) {
+  if (isImportedConversation) {
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h3 className="text-sm font-semibold">AI Agents</h3>
           <Badge variant="outline" className="ml-auto text-xs">
-            Manual messaging only
+            Imported history
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
-          AI controls are unavailable while this conversation uses manual messaging only.
+          AI controls are unavailable for imported conversations.
         </p>
       </div>
     );

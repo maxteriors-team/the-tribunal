@@ -85,6 +85,7 @@ async def test_manual_followup_forwards_authenticated_sender_snapshot() -> None:
         contact_phone="+15555550100",
         workspace_phone="+15555550101",
         channel="sms",
+        source_provider=None,
         followup_count_sent=0,
         followup_enabled=False,
         followup_max_count=3,

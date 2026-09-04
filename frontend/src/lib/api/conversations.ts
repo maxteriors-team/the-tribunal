@@ -90,11 +90,10 @@ export const conversationsApi = {
     workspaceId: string,
     conversationId: string,
     body: string,
-    clientRequestId?: string,
   ): Promise<Message> => {
     return apiPost<Message>(
       `/api/v1/workspaces/${workspaceId}/conversations/${conversationId}/messages`,
-      { body, client_request_id: clientRequestId },
+      { body },
     );
   },
 

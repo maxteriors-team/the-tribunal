@@ -23,7 +23,6 @@ from app.models.conversation_note import MAX_NOTE_BODY_CHARS, ConversationNote
 from app.models.human_nudge import HumanNudge
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
-from app.services.conversations.note_service import ConversationNoteService
 
 pytestmark = pytest.mark.integration
 
@@ -259,25 +258,18 @@ async def test_note_bodies_are_encrypted_at_rest() -> None:
 
 
 @pytest.mark.asyncio
-async def test_quo_summary_is_stored_once_across_webhook_redeliveries() -> None:
-    """Quo retries webhooks; a redelivery must refine the note, not duplicate it."""
+async def test_historical_imported_summary_remains_visible() -> None:
     async with _scenario() as scenario:
-        call_id = f"quo-call-{uuid.uuid4().hex}"
         async with AsyncSessionLocal() as db:
-            service = ConversationNoteService(db)
-            await service.record_quo_summary(
-                conversation_id=scenario.conversation_id,
-                workspace_id=scenario.workspace_id,
-                call_id=call_id,
-                body="Customer wants a gutter quote. Next steps: call Tuesday",
-            )
-            await db.commit()
-
-            await service.record_quo_summary(
-                conversation_id=scenario.conversation_id,
-                workspace_id=scenario.workspace_id,
-                call_id=call_id,
-                body="Customer wants a gutter quote. Next steps: call Wednesday",
+            db.add(
+                ConversationNote(
+                    workspace_id=scenario.workspace_id,
+                    conversation_id=scenario.conversation_id,
+                    author_user_id=None,
+                    source="quo_summary",
+                    source_ref=f"historical-call-{uuid.uuid4().hex}",
+                    body="Imported provider recap",
+                )
             )
             await db.commit()
 
@@ -288,37 +280,9 @@ async def test_quo_summary_is_stored_once_across_webhook_redeliveries() -> None:
 
         assert len(notes) == 1
         assert notes[0]["source"] == "quo_summary"
-        # The refined summary wins, and an AI note has no human author.
-        assert notes[0]["body"].endswith("call Wednesday")
+        assert notes[0]["body"] == "Imported provider recap"
         assert notes[0]["author_user_id"] is None
         assert notes[0]["author_name"] is None
-
-
-@pytest.mark.asyncio
-async def test_a_reps_note_and_a_quo_summary_coexist_on_one_conversation() -> None:
-    async with _scenario() as scenario:
-        async with await _client(_make_app(scenario)) as client:
-            await client.post(
-                _notes_url(scenario.workspace_id, scenario.conversation_id),
-                json={"body": "Rep typed this"},
-            )
-
-        async with AsyncSessionLocal() as db:
-            await ConversationNoteService(db).record_quo_summary(
-                conversation_id=scenario.conversation_id,
-                workspace_id=scenario.workspace_id,
-                call_id=f"quo-call-{uuid.uuid4().hex}",
-                body="Quo recapped this",
-            )
-            await db.commit()
-
-        async with await _client(_make_app(scenario)) as client:
-            notes = (
-                await client.get(_notes_url(scenario.workspace_id, scenario.conversation_id))
-            ).json()
-
-        assert {note["source"] for note in notes} == {"human", "quo_summary"}
-        assert len(notes) == 2
 
 
 @pytest.mark.asyncio

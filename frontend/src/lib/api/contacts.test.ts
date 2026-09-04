@@ -86,13 +86,13 @@ describe("contact timeline API", () => {
         direction: "inbound",
         is_ai: false,
         agent_id: null,
-        content: "Mirrored from Quo",
+        content: "Imported provider message",
         duration_seconds: null,
         recording_url: null,
         transcript: null,
         status: "received",
-        source_provider: "quo",
-        external_url: "https://my.quo.com/inbox/conversations/abc",
+        source_provider: "legacy_import",
+        external_url: "https://archive.example/conversations/abc",
         booking_outcome: null,
         signals: null,
         attachments: [],
@@ -103,8 +103,8 @@ describe("contact timeline API", () => {
 
     await expect(contactsApi.getTimeline(workspaceId, contactId)).resolves.toEqual([
       expect.objectContaining({
-        source_provider: "quo",
-        external_url: "https://my.quo.com/inbox/conversations/abc",
+        source_provider: "legacy_import",
+        external_url: "https://archive.example/conversations/abc",
       }),
     ]);
   });

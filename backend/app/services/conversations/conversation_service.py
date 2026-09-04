@@ -9,20 +9,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import CursorResult, delete, func, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy.sql import ColumnElement
 
-from app.core.encryption import hash_phone
 from app.db.pagination import paginate
 from app.models.agent import Agent
 from app.models.campaign import CampaignContact
-from app.models.contact import Contact
-from app.models.conversation import (
-    Conversation,
-    Message,
-    MessageChannel,
-    MessageDirection,
-)
-from app.models.workspace import WorkspaceIntegration
+from app.models.conversation import Conversation, Message
 from app.schemas.conversation import (
     ConversationResponse,
     ConversationWithMessages,
@@ -41,21 +32,6 @@ from app.services.ai.openai_credentials import (
 )
 from app.services.ai.text_response_generator import generate_followup_message
 from app.services.campaigns.conversation_syncer import CampaignConversationSyncer
-from app.services.quo.line import (
-    get_active_quo_line,
-    visible_conversation_provider_clause,
-)
-from app.services.quo.outbound import (
-    QuoOutboundSender,
-    QuoRequestConflictError,
-    QuoSendRejectedError,
-    QuoSendStatusUnknownError,
-    claim_quo_send_attempt,
-    execute_quo_send,
-    get_quo_send_replay,
-    reconcile_accepted_quo_send,
-)
-from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.text_provider import (
     get_text_message_provider,
     provider_for_conversation,
@@ -64,58 +40,12 @@ from app.services.telephony.text_provider import (
 logger = structlog.get_logger()
 
 
-def _quo_status_unknown_http_error() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail={
-            "code": "quo_send_status_unknown",
-            "message": "Delivery status unknown—wait for the message to appear before retrying",
-        },
-    )
-
-
-def _quo_rejected_http_error() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        detail={"code": "quo_send_rejected", "message": "Quo rejected the message"},
-    )
-
-
-def _quo_manual_only_http_error() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail="Quo conversations support manual messaging only",
-    )
-
-
-async def _quo_replay_message(
-    db: AsyncSession,
-    *,
-    workspace_id: uuid.UUID,
-    conversation_id: uuid.UUID,
-    client_request_id: uuid.UUID,
-) -> Message | None:
-    try:
-        replay = await get_quo_send_replay(
-            db,
-            workspace_id=workspace_id,
-            conversation_id=conversation_id,
-            client_request_id=client_request_id,
-        )
-    except QuoRequestConflictError as exc:
+def _ensure_conversation_writable(conversation: Conversation) -> None:
+    if conversation.source_provider is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Client request ID is already in use",
-        ) from exc
-    except QuoSendRejectedError as exc:
-        raise _quo_rejected_http_error() from exc
-    except QuoSendStatusUnknownError as exc:
-        raise _quo_status_unknown_http_error() from exc
-    if replay is None:
-        return None
-    if replay.replay_message is None:  # pragma: no cover - helper invariant
-        raise _quo_status_unknown_http_error()
-    return replay.replay_message
+            detail="Imported conversations are read-only",
+        )
 
 
 def serialize_conversation(conversation: Conversation) -> ConversationResponse:
@@ -142,12 +72,6 @@ class ConversationService:
         self.log = logger.bind(service="conversation")
         self._syncer = CampaignConversationSyncer()
 
-    async def _visible_provider_clause(
-        self,
-        workspace_id: uuid.UUID,
-    ) -> ColumnElement[bool]:
-        return await visible_conversation_provider_clause(self.db, workspace_id)
-
     async def _get_conversation(
         self,
         conversation_id: uuid.UUID,
@@ -172,15 +96,6 @@ class ConversationService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversation not found",
             )
-        if getattr(conversation, "source_provider", None) == "quo":
-            active_line = await get_active_quo_line(self.db, workspace_id)
-            if active_line is None or conversation.workspace_phone_hash != hash_phone(
-                active_line.phone_number
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Conversation not found",
-                )
         return conversation
 
     async def list_conversations(
@@ -193,14 +108,10 @@ class ConversationService:
         unread_only: bool = False,
     ) -> PaginatedConversations:
         """List conversations in a workspace with batch campaign sync."""
-        visible_provider = await self._visible_provider_clause(workspace_id)
         query = (
             select(Conversation)
             .options(selectinload(Conversation.contact))
-            .where(
-                Conversation.workspace_id == workspace_id,
-                visible_provider,
-            )
+            .where(Conversation.workspace_id == workspace_id)
         )
 
         if status_filter:
@@ -232,7 +143,7 @@ class ConversationService:
 
             modified = False
             for conv in conversations:
-                if conv.source_provider == "quo":
+                if conv.source_provider is not None:
                     continue
                 campaign = campaign_by_conv_id.get(conv.id)
                 if campaign and campaign.agent_id:
@@ -295,14 +206,12 @@ class ConversationService:
         One aggregate query rather than paging the thread list, because the
         header badge polls this from every screen in the app.
         """
-        visible_provider = await self._visible_provider_clause(workspace_id)
         result = await self.db.execute(
             select(
                 func.count(Conversation.id),
                 func.coalesce(func.sum(Conversation.unread_count), 0),
             ).where(
                 Conversation.workspace_id == workspace_id,
-                visible_provider,
                 Conversation.unread_count > 0,
             )
         )
@@ -332,12 +241,10 @@ class ConversationService:
 
     async def mark_all_read(self, workspace_id: uuid.UUID) -> MarkAllReadResponse:
         """Clear unread counters across the workspace in a single statement."""
-        visible_provider = await self._visible_provider_clause(workspace_id)
         result = await self.db.execute(
             update(Conversation)
             .where(
                 Conversation.workspace_id == workspace_id,
-                visible_provider,
                 Conversation.unread_count > 0,
             )
             .values(unread_count=0)
@@ -358,34 +265,24 @@ class ConversationService:
         body: str,
         sender_user_id: int | None = None,
         sender_display_name: str | None = None,
-        client_request_id: uuid.UUID | None = None,
     ) -> Message:
-        """Send through the provider bound to the workspace-scoped conversation."""
+        """Send a message from a native conversation."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
+        _ensure_conversation_writable(conversation)
 
-        if getattr(conversation, "source_provider", None) == "quo":
-            message = await self._send_quo_message(
-                conversation=conversation,
-                workspace_id=workspace_id,
+        sms_service = get_text_message_provider(provider_for_conversation(conversation))
+        try:
+            message = await sms_service.send_message(
+                to_number=conversation.contact_phone,
+                from_number=conversation.workspace_phone,
                 body=body,
+                db=self.db,
+                workspace_id=workspace_id,
                 sender_user_id=sender_user_id,
                 sender_display_name=sender_display_name,
-                client_request_id=client_request_id,
             )
-        else:
-            sms_service = get_text_message_provider(provider_for_conversation(conversation))
-            try:
-                message = await sms_service.send_message(
-                    to_number=conversation.contact_phone,
-                    from_number=conversation.workspace_phone,
-                    body=body,
-                    db=self.db,
-                    workspace_id=workspace_id,
-                    sender_user_id=sender_user_id,
-                    sender_display_name=sender_display_name,
-                )
-            finally:
-                await sms_service.close()
+        finally:
+            await sms_service.close()
 
         # A successful human outbound reply completes the current SMS exchange.
         # Memory is best-effort and must never turn a delivered message into a 500.
@@ -413,176 +310,6 @@ class ConversationService:
             )
         return message
 
-    async def _send_quo_message(
-        self,
-        *,
-        conversation: Conversation,
-        workspace_id: uuid.UUID,
-        body: str,
-        sender_user_id: int | None,
-        sender_display_name: str | None,
-        client_request_id: uuid.UUID | None,
-    ) -> Message:
-        if conversation.channel != MessageChannel.SMS or not body.strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Quo manual messaging supports non-empty text only",
-            )
-        if client_request_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="A client request ID is required for Quo messages",
-            )
-
-        replay_message = await _quo_replay_message(
-            self.db,
-            workspace_id=workspace_id,
-            conversation_id=conversation.id,
-            client_request_id=client_request_id,
-        )
-        if replay_message is not None:
-            return replay_message
-
-        api_key, selected_phone = await self._quo_send_credentials(
-            workspace_id=workspace_id,
-            conversation=conversation,
-        )
-        await self._enforce_quo_consent(
-            workspace_id=workspace_id,
-            conversation=conversation,
-        )
-        try:
-            claim = await claim_quo_send_attempt(
-                self.db,
-                workspace_id=workspace_id,
-                conversation_id=conversation.id,
-                client_request_id=client_request_id,
-            )
-        except QuoRequestConflictError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Client request ID is already in use",
-            ) from exc
-        except QuoSendRejectedError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Quo rejected the message",
-            ) from exc
-        except QuoSendStatusUnknownError as exc:
-            raise _quo_status_unknown_http_error() from exc
-        if claim.replay_message is not None:
-            return claim.replay_message
-
-        quo_sender = QuoOutboundSender(api_key)
-        try:
-            accepted = await execute_quo_send(
-                self.db,
-                attempt=claim.attempt,
-                sender=quo_sender,
-                content=body,
-                from_number=selected_phone,
-                to_number=conversation.contact_phone,
-            )
-            return await reconcile_accepted_quo_send(
-                self.db,
-                workspace_id=workspace_id,
-                conversation=conversation,
-                attempt=claim.attempt,
-                accepted=accepted,
-                content=body,
-                from_number=selected_phone,
-                to_number=conversation.contact_phone,
-                sender_user_id=sender_user_id,
-                sender_display_name=sender_display_name,
-            )
-        except QuoSendRejectedError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Quo rejected the message",
-            ) from exc
-        except QuoSendStatusUnknownError as exc:
-            raise _quo_status_unknown_http_error() from exc
-        finally:
-            await quo_sender.close()
-
-    async def _quo_send_credentials(
-        self,
-        *,
-        workspace_id: uuid.UUID,
-        conversation: Conversation,
-    ) -> tuple[str, str]:
-        integration = await self.db.scalar(
-            select(WorkspaceIntegration).where(
-                WorkspaceIntegration.workspace_id == workspace_id,
-                WorkspaceIntegration.integration_type == "quo",
-                WorkspaceIntegration.is_active.is_(True),
-            )
-        )
-        credentials = integration.safe_credentials() if integration is not None else None
-        api_key = credentials.get("api_key") if credentials else None
-        phone_number_id = credentials.get("phone_number_id") if credentials else None
-        selected_phone = credentials.get("phone_number") if credentials else None
-        if (
-            not isinstance(api_key, str)
-            or not api_key.strip()
-            or not isinstance(phone_number_id, str)
-            or not phone_number_id.strip()
-            or not isinstance(selected_phone, str)
-            or selected_phone != conversation.workspace_phone
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Select this conversation's Quo phone number in Settings before sending",
-            )
-        return api_key, selected_phone
-
-    async def _enforce_quo_consent(
-        self,
-        *,
-        workspace_id: uuid.UUID,
-        conversation: Conversation,
-    ) -> None:
-        consent_status: str | None = None
-        if conversation.contact_id is not None:
-            consent_status = await self.db.scalar(
-                select(Contact.sms_consent_status).where(
-                    Contact.id == conversation.contact_id,
-                    Contact.workspace_id == workspace_id,
-                )
-            )
-        globally_opted_out = await OptOutManager().check_opt_out(
-            workspace_id,
-            conversation.contact_phone,
-            self.db,
-        )
-        if consent_status == "opted_out" or globally_opted_out:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This contact has opted out of SMS",
-            )
-        if consent_status == "opted_in":
-            return
-        if consent_status not in {None, "unknown"}:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Recorded SMS consent is required before sending",
-            )
-
-        inbound_message_id = await self.db.scalar(
-            select(Message.id)
-            .where(
-                Message.conversation_id == conversation.id,
-                Message.channel == MessageChannel.SMS,
-                Message.direction == MessageDirection.INBOUND,
-            )
-            .limit(1)
-        )
-        if inbound_message_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Recorded SMS consent or an inbound reply is required before sending",
-            )
-
     async def toggle_ai(
         self,
         conversation_id: uuid.UUID,
@@ -591,8 +318,7 @@ class ConversationService:
     ) -> dict[str, bool]:
         """Toggle AI for a conversation."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
-        if getattr(conversation, "source_provider", None) == "quo" and enabled:
-            raise _quo_manual_only_http_error()
+        _ensure_conversation_writable(conversation)
         conversation.ai_enabled = enabled
         await self.db.commit()
         return {"ai_enabled": conversation.ai_enabled}
@@ -604,6 +330,7 @@ class ConversationService:
     ) -> dict[str, bool]:
         """Pause AI for a conversation (temporary)."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
+        _ensure_conversation_writable(conversation)
         conversation.ai_paused = True
         await self.db.commit()
         return {"ai_paused": True}
@@ -615,8 +342,7 @@ class ConversationService:
     ) -> dict[str, bool]:
         """Resume AI for a conversation."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
-        if getattr(conversation, "source_provider", None) == "quo":
-            raise _quo_manual_only_http_error()
+        _ensure_conversation_writable(conversation)
         conversation.ai_paused = False
         await self.db.commit()
         return {"ai_paused": False}
@@ -629,6 +355,7 @@ class ConversationService:
     ) -> dict[str, uuid.UUID | None]:
         """Assign an agent to a conversation."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
+        _ensure_conversation_writable(conversation)
 
         if agent_id:
             agent_result = await self.db.execute(
@@ -655,6 +382,7 @@ class ConversationService:
     ) -> None:
         """Clear all messages in a conversation."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
+        _ensure_conversation_writable(conversation)
 
         await self.db.execute(delete(Message).where(Message.conversation_id == conversation_id))
 
@@ -690,8 +418,7 @@ class ConversationService:
     ) -> FollowupSettingsResponse:
         """Update follow-up settings for a conversation."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
-        if getattr(conversation, "source_provider", None) == "quo":
-            raise _quo_manual_only_http_error()
+        _ensure_conversation_writable(conversation)
 
         if enabled is not None:
             conversation.followup_enabled = enabled
@@ -738,8 +465,7 @@ class ConversationService:
     ) -> FollowupGenerateResponse:
         """Generate a follow-up message preview (does not send)."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
-        if getattr(conversation, "source_provider", None) == "quo":
-            raise _quo_manual_only_http_error()
+        _ensure_conversation_writable(conversation)
 
         credential = await self._resolve_followup_openai_credential(workspace_id)
         message = await generate_followup_message(
@@ -772,8 +498,7 @@ class ConversationService:
     ) -> FollowupSendResponse:
         """Send a follow-up message. Generates one if not provided."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
-        if getattr(conversation, "source_provider", None) == "quo":
-            raise _quo_manual_only_http_error()
+        _ensure_conversation_writable(conversation)
 
         message_body = message
         if not message_body:
@@ -843,8 +568,7 @@ class ConversationService:
     ) -> dict[str, int]:
         """Reset the follow-up counter to 0."""
         conversation = await self._get_conversation(conversation_id, workspace_id)
-        if getattr(conversation, "source_provider", None) == "quo":
-            raise _quo_manual_only_http_error()
+        _ensure_conversation_writable(conversation)
 
         conversation.followup_count_sent = 0
 

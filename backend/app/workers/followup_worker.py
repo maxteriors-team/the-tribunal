@@ -53,7 +53,7 @@ class FollowupWorker(RetryableWorker, BaseWorker):
                         Conversation.next_followup_at <= now,
                         Conversation.followup_count_sent < Conversation.followup_max_count,
                         Conversation.ai_enabled.is_(True),
-                        Conversation.source_provider.is_distinct_from("quo"),
+                        Conversation.source_provider.is_(None),
                         # Only follow up if last message was outbound (no reply)
                         Conversation.last_message_direction == "outbound",
                     )
@@ -92,8 +92,8 @@ class FollowupWorker(RetryableWorker, BaseWorker):
             can back off and try again.
         """
         log = self.logger.bind(conversation_id=str(conversation.id))
-        if conversation.source_provider == "quo":
-            log.info("quo_manual_messaging_only")
+        if conversation.source_provider is not None:
+            log.info("imported_conversation_read_only")
             return True
 
         try:

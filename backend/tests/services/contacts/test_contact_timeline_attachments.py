@@ -51,8 +51,8 @@ async def test_contact_timeline_includes_attachment_metadata_and_provenance(
         recording_url=None,
         transcript=None,
         status="received",
-        source_provider="quo",
-        external_url="https://app.quo.com/messages/example",
+        source_provider="legacy_import",
+        external_url="https://archive.example/messages/example",
         is_voicemail=False,
         booking_outcome=None,
         call_outcome=None,
@@ -77,7 +77,6 @@ async def test_contact_timeline_includes_attachment_metadata_and_provenance(
     db = MagicMock()
     db.execute = AsyncMock(
         side_effect=[
-            _Result([]),
             _Result([conversation]),
             _Result([message]),
             _Result([attachment]),
@@ -93,8 +92,8 @@ async def test_contact_timeline_includes_attachment_metadata_and_provenance(
     assert len(timeline) == 1
     item = TimelineItem.model_validate(timeline[0])
     assert item.content == ""
-    assert item.source_provider == "quo"
-    assert item.external_url == "https://app.quo.com/messages/example"
+    assert item.source_provider == "legacy_import"
+    assert item.external_url == "https://archive.example/messages/example"
     assert item.is_voicemail is False
     assert timeline[0]["attachments"] == [
         {
@@ -109,7 +108,7 @@ async def test_contact_timeline_includes_attachment_metadata_and_provenance(
             ),
         }
     ]
-    assert db.execute.await_count == 4
+    assert db.execute.await_count == 3
 
 
 @pytest.mark.parametrize(
@@ -144,7 +143,6 @@ async def test_contact_timeline_populates_nullable_sender_from_message(
     db = MagicMock()
     db.execute = AsyncMock(
         side_effect=[
-            _Result([]),
             _Result([conversation]),
             _Result([message]),
         ]
@@ -168,4 +166,4 @@ async def test_contact_timeline_populates_nullable_sender_from_message(
         "sender_user_id": sender_user_id,
         "sender_display_name": sender_display_name,
     }
-    assert db.execute.await_count == 3
+    assert db.execute.await_count == 2

@@ -10,7 +10,6 @@ class MessageCreate(BaseModel):
     """Schema for sending a message."""
 
     body: str
-    client_request_id: uuid.UUID | None = None
 
 
 class MessageResponse(BaseModel):
