@@ -360,7 +360,7 @@ async def _email_workspace_members(
     analysis: VoicemailAnalysis,
     log: Any,
 ) -> None:
-    """Email opted-in global operators about the voicemail."""
+    """Email opted-in active workspace admins about the voicemail."""
     from app.services.email import send_voicemail_notification
     from app.services.notification_recipients import workspace_notification_email_users
 

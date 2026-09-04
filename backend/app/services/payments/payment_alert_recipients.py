@@ -30,7 +30,7 @@ async def payment_alert_email_recipients(
     workspace_id: uuid.UUID,
     workspace: Workspace | None,
 ) -> list[PaymentAlertRecipient]:
-    """Return one configured payment inbox, otherwise opted-in global operators."""
+    """Return the configured payment inbox, otherwise opted-in active admins."""
     workspace_settings = getattr(workspace, "settings", None)
     raw = workspace_settings.get(SETTINGS_KEY) if isinstance(workspace_settings, dict) else None
     if raw is not None:

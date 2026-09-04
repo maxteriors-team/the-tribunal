@@ -60,9 +60,9 @@ async def notify_workspace_event(
 ) -> NotificationDispatchResult:
     """Send an actionable-event notification for a workspace.
 
-    Push remains workspace-wide. Email goes to global operators unless callers
-    explicitly target member IDs, and still respects user notification preferences
-    plus per-event idempotency.
+    Push remains workspace-wide. Email goes only to active admins unless callers
+    explicitly target member IDs for operational work; preferences and per-event
+    idempotency still apply.
     """
     workspace_id_str = str(workspace_id)
     recipients = tuple(dict.fromkeys(recipient_user_ids or ()))
@@ -169,7 +169,7 @@ async def _send_emails(
     dedupe_key: str | uuid.UUID | None,
     recipient_user_ids: Sequence[int] | None,
 ) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    """Email opted-in global operators, or any explicitly targeted members."""
+    """Email opted-in active admins, or active members explicitly targeted for work."""
     pref_attr = NOTIFICATION_TYPE_PREFS.get(notification_type)
     members = await workspace_notification_email_users(
         db,

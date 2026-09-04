@@ -299,7 +299,7 @@ async def handle_checkout_session_completed(
 
 
 async def notify_payment_operators(db: AsyncSession, payment: CallPayment) -> None:
-    """Notify the workspace of a successful in-call payment (push + email).
+    """Push successful in-call payment news workspace-wide; email the financial inbox.
 
     Guarded by ``operators_notified_at`` so the webhook and an in-call status
     poll racing to confirm the same payment never double-notify.

@@ -1,4 +1,4 @@
-"""Role-scoped recipients for operator notification emails."""
+"""Authorize recipients for internal workspace notification emails."""
 
 import uuid
 from collections.abc import Sequence
@@ -10,11 +10,9 @@ from app.core.roles import WorkspaceRole
 from app.models.user import User
 from app.models.workspace import WorkspaceMembership
 
-_WORKSPACE_WIDE_EMAIL_ROLES = (
+_ADMIN_EMAIL_ROLES = (
     WorkspaceRole.OWNER.value,
     WorkspaceRole.ADMIN.value,
-    WorkspaceRole.MANAGER.value,
-    WorkspaceRole.DISPATCHER.value,
 )
 
 
@@ -24,15 +22,18 @@ async def workspace_notification_email_users(
     *,
     recipient_user_ids: Sequence[int] | None = None,
 ) -> list[User]:
-    """Return global operators, or any explicitly targeted workspace members."""
+    """Return active admins, or active members explicitly targeted for operational work."""
     workspace_uuid = uuid.UUID(str(workspace_id))
     query = (
         select(User)
         .join(WorkspaceMembership, WorkspaceMembership.user_id == User.id)
-        .where(WorkspaceMembership.workspace_id == workspace_uuid)
+        .where(
+            WorkspaceMembership.workspace_id == workspace_uuid,
+            User.is_active.is_(True),
+        )
     )
     if recipient_user_ids is None:
-        query = query.where(WorkspaceMembership.role.in_(_WORKSPACE_WIDE_EMAIL_ROLES))
+        query = query.where(WorkspaceMembership.role.in_(_ADMIN_EMAIL_ROLES))
     else:
         query = query.where(User.id.in_(recipient_user_ids))
 
