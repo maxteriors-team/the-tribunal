@@ -421,6 +421,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     <SidebarProvider
       key={focusedLightingProject ? "studio" : "crm"}
       defaultOpen={!focusedLightingProject}
+      overlayOnCompact={focusedLightingProject}
       data-app-shell
     >
       <Sidebar
