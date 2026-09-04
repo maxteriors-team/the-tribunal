@@ -379,6 +379,40 @@ def _default_permanent_packages() -> list[PermanentPackage]:
     ]
 
 
+class PermanentGreenSkyConfig(BaseModel):
+    """Operator-supplied GreenSky program details for Permanent proposals."""
+
+    enabled: bool = False
+    merchant_number: str | None = Field(default=None, pattern=r"^[0-9]+$", max_length=32)
+    plan_number: str | None = Field(default=None, pattern=r"^[0-9]+$", max_length=32)
+    term_months: int | None = Field(default=None, ge=1, le=360)
+    apr_percent: float | None = Field(default=None, ge=0, le=100)
+    offer_details: str | None = Field(default=None, max_length=500)
+
+    @field_validator("merchant_number", "plan_number", "offer_details", mode="before")
+    @classmethod
+    def _trim_optional_text(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @model_validator(mode="after")
+    def _require_complete_enabled_program(self) -> "PermanentGreenSkyConfig":
+        if self.enabled and any(
+            value is None
+            for value in (
+                self.merchant_number,
+                self.plan_number,
+                self.term_months,
+                self.apr_percent,
+                self.offer_details,
+            )
+        ):
+            msg = "Enabled GreenSky financing requires complete program details"
+            raise ValueError(msg)
+        return self
+
+
 class PermanentConfig(BaseModel):
     """Permanent LED roofline priced by the smallest kit that covers the job.
 
@@ -405,6 +439,7 @@ class PermanentConfig(BaseModel):
     label: str = "Permanent Holiday Lighting"
     # Client-facing perks rendered on the comparison page (operator-editable).
     perks: list[str] = Field(default_factory=_default_permanent_perks)
+    green_sky: PermanentGreenSkyConfig = Field(default_factory=PermanentGreenSkyConfig)
 
 
 # --------------------------------------------------------------------------- #

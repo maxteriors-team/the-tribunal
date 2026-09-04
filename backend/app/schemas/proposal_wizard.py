@@ -429,6 +429,33 @@ class ProposalFinancing(BaseModel):
     disclaimer: str | None = None
 
 
+GREEN_SKY_APPLICATION_URL: Literal["https://projects.greensky.com/applyshort"] = (
+    "https://projects.greensky.com/applyshort"
+)
+GREEN_SKY_APPLICATION_DISCLOSURE = (
+    "Financing is subject to credit approval and the terms in your GreenSky loan "
+    "documents. Applying does not accept this proposal, reserve an installation date, "
+    "or guarantee approval. GreenSky Servicing, LLC is a financial technology company, "
+    "not a lender. Program lenders determine credit approval and loan terms."
+)
+
+
+class ProposalGreenSky(BaseModel):
+    """Public-safe snapshot of one configured GreenSky merchant program."""
+
+    application_url: Literal["https://projects.greensky.com/applyshort"] = GREEN_SKY_APPLICATION_URL
+    merchant_number: str = Field(pattern=r"^[0-9]+$", max_length=32)
+    plan_number: str = Field(pattern=r"^[0-9]+$", max_length=32)
+    apr_percent: float = Field(ge=0, le=100)
+    term_months: int = Field(ge=1, le=360)
+    offer_details: str = Field(min_length=1, max_length=500)
+    disclosure: str = Field(
+        default=GREEN_SKY_APPLICATION_DISCLOSURE,
+        min_length=1,
+        max_length=500,
+    )
+
+
 class ProposalCategorySection(BaseModel):
     """One priced product-line section (permanent / christmas) in a quote.
 
@@ -512,6 +539,7 @@ class ProposalDocument(BaseModel):
     care_plan: ProposalCarePlan | None = None
     bistro: BistroPricing | None = None
     financing: ProposalFinancing | None = None
+    green_sky: ProposalGreenSky | None = None
     night_preview: dict[str, Any] | None = None
     # Rep-uploaded design mockups (data-URL images) shown in the visual gallery.
     mockups: list[ProposalMockup] = Field(default_factory=list)
@@ -579,6 +607,7 @@ CLIENT_SAFE_DOCUMENT_FIELDS: frozenset[str] = frozenset(
         "care_plan",
         "bistro",
         "financing",
+        "green_sky",
         "night_preview",
         "mockups",
         "categories",

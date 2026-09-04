@@ -37315,6 +37315,9 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "green_sky": {
+            "$ref": "#/components/schemas/PermanentGreenSkyConfig"
+          },
           "included_channels": {
             "default": 0,
             "minimum": 0.0,
@@ -37427,6 +37430,82 @@
           "total"
         ],
         "title": "PermanentEstimate",
+        "type": "object"
+      },
+      "PermanentGreenSkyConfig": {
+        "description": "Operator-supplied GreenSky program details for Permanent proposals.",
+        "properties": {
+          "apr_percent": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apr Percent"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "merchant_number": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "pattern": "^[0-9]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant Number"
+          },
+          "offer_details": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Details"
+          },
+          "plan_number": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "pattern": "^[0-9]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Number"
+          },
+          "term_months": {
+            "anyOf": [
+              {
+                "maximum": 360.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term Months"
+          }
+        },
+        "title": "PermanentGreenSkyConfig",
         "type": "object"
       },
       "PermanentKitSelection": {
@@ -40730,6 +40809,16 @@
             "title": "Grand Monthly Payment",
             "type": "number"
           },
+          "green_sky": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalGreenSky"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "headline_tier": {
             "anyOf": [
               {
@@ -41116,6 +41205,63 @@
           "max_amount"
         ],
         "title": "ProposalFinancing",
+        "type": "object"
+      },
+      "ProposalGreenSky": {
+        "description": "Public-safe snapshot of one configured GreenSky merchant program.",
+        "properties": {
+          "application_url": {
+            "const": "https://projects.greensky.com/applyshort",
+            "default": "https://projects.greensky.com/applyshort",
+            "title": "Application Url",
+            "type": "string"
+          },
+          "apr_percent": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Apr Percent",
+            "type": "number"
+          },
+          "disclosure": {
+            "default": "Financing is subject to credit approval and the terms in your GreenSky loan documents. Applying does not accept this proposal, reserve an installation date, or guarantee approval. GreenSky Servicing, LLC is a financial technology company, not a lender. Program lenders determine credit approval and loan terms.",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Disclosure",
+            "type": "string"
+          },
+          "merchant_number": {
+            "maxLength": 32,
+            "pattern": "^[0-9]+$",
+            "title": "Merchant Number",
+            "type": "string"
+          },
+          "offer_details": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Offer Details",
+            "type": "string"
+          },
+          "plan_number": {
+            "maxLength": 32,
+            "pattern": "^[0-9]+$",
+            "title": "Plan Number",
+            "type": "string"
+          },
+          "term_months": {
+            "maximum": 360.0,
+            "minimum": 1.0,
+            "title": "Term Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "merchant_number",
+          "plan_number",
+          "apr_percent",
+          "term_months",
+          "offer_details"
+        ],
+        "title": "ProposalGreenSky",
         "type": "object"
       },
       "ProposalLine": {

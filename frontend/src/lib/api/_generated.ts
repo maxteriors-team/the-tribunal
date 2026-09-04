@@ -25909,6 +25909,7 @@ export interface components {
              * @default false
              */
             enabled: boolean;
+            green_sky?: components["schemas"]["PermanentGreenSkyConfig"];
             /**
              * Included Channels
              * @default 0
@@ -25993,6 +25994,27 @@ export interface components {
             subtotal: number;
             /** Total */
             total: number;
+        };
+        /**
+         * PermanentGreenSkyConfig
+         * @description Operator-supplied GreenSky program details for Permanent proposals.
+         */
+        PermanentGreenSkyConfig: {
+            /** Apr Percent */
+            apr_percent?: number | null;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Merchant Number */
+            merchant_number?: string | null;
+            /** Offer Details */
+            offer_details?: string | null;
+            /** Plan Number */
+            plan_number?: string | null;
+            /** Term Months */
+            term_months?: number | null;
         };
         /**
          * PermanentKitSelection
@@ -27190,6 +27212,7 @@ export interface components {
              * @default 0
              */
             grand_monthly_payment: number;
+            green_sky?: components["schemas"]["ProposalGreenSky"] | null;
             /** Headline Tier */
             headline_tier?: string | null;
             inventory_availability?: components["schemas"]["QuoteInventoryAvailability"] | null;
@@ -27324,6 +27347,33 @@ export interface components {
             provider: string;
             /** Terms */
             terms: number[];
+        };
+        /**
+         * ProposalGreenSky
+         * @description Public-safe snapshot of one configured GreenSky merchant program.
+         */
+        ProposalGreenSky: {
+            /**
+             * Application Url
+             * @default https://projects.greensky.com/applyshort
+             * @constant
+             */
+            application_url: "https://projects.greensky.com/applyshort";
+            /** Apr Percent */
+            apr_percent: number;
+            /**
+             * Disclosure
+             * @default Financing is subject to credit approval and the terms in your GreenSky loan documents. Applying does not accept this proposal, reserve an installation date, or guarantee approval. GreenSky Servicing, LLC is a financial technology company, not a lender. Program lenders determine credit approval and loan terms.
+             */
+            disclosure: string;
+            /** Merchant Number */
+            merchant_number: string;
+            /** Offer Details */
+            offer_details: string;
+            /** Plan Number */
+            plan_number: string;
+            /** Term Months */
+            term_months: number;
         };
         /**
          * ProposalLine
