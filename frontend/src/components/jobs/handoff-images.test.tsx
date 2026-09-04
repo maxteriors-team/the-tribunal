@@ -6,13 +6,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HandoffImages } from "@/components/jobs/handoff-images";
 import type { HandoffImage, HandoffImageList } from "@/lib/api/handoff-images";
 
-const { deleteQuoteImageMock, listJobImagesMock, listQuoteImagesMock, uploadQuoteImageMock } =
-  vi.hoisted(() => ({
-    deleteQuoteImageMock: vi.fn(),
-    listJobImagesMock: vi.fn(),
-    listQuoteImagesMock: vi.fn(),
-    uploadQuoteImageMock: vi.fn(),
-  }));
+const {
+  deleteJobImageMock,
+  deleteQuoteImageMock,
+  listJobImagesMock,
+  listQuoteImagesMock,
+  uploadJobImageMock,
+  uploadQuoteImageMock,
+} = vi.hoisted(() => ({
+  deleteJobImageMock: vi.fn(),
+  deleteQuoteImageMock: vi.fn(),
+  listJobImagesMock: vi.fn(),
+  listQuoteImagesMock: vi.fn(),
+  uploadJobImageMock: vi.fn(),
+  uploadQuoteImageMock: vi.fn(),
+}));
 
 vi.mock("@/lib/api/handoff-images", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/handoff-images")>(
@@ -20,19 +28,29 @@ vi.mock("@/lib/api/handoff-images", async () => {
   );
   return {
     ...actual,
+    deleteJobHandoffImage: deleteJobImageMock,
     deleteQuoteHandoffImage: deleteQuoteImageMock,
     listJobHandoffImages: listJobImagesMock,
     listQuoteHandoffImages: listQuoteImagesMock,
+    uploadJobHandoffImage: uploadJobImageMock,
     uploadQuoteHandoffImage: uploadQuoteImageMock,
   };
 });
 
 const image: HandoffImage = {
   id: "image-1",
+  source: "quote",
   filename: "roof-before.png",
   content_type: "image/png",
   size_bytes: 128,
   created_at: "2026-08-28T12:00:00Z",
+};
+
+const jobImage: HandoffImage = {
+  ...image,
+  id: "job-image-1",
+  source: "job",
+  filename: "gate-code.png",
 };
 
 const emptyList: HandoffImageList = {
@@ -47,7 +65,7 @@ function renderQuotePanel() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <HandoffImages mode="quote" workspaceId="workspace-1" quoteId="quote-1" />
+      <HandoffImages mode="quote-edit" workspaceId="workspace-1" quoteId="quote-1" />
     </QueryClientProvider>,
   );
 }
@@ -58,7 +76,7 @@ function renderJobPanel() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <HandoffImages mode="job" workspaceId="workspace-1" jobId="job-1" />
+      <HandoffImages mode="technician-read" workspaceId="workspace-1" jobId="job-1" />
     </QueryClientProvider>,
   );
 }
@@ -75,7 +93,9 @@ describe("HandoffImages", () => {
     listQuoteImagesMock.mockResolvedValue(emptyList);
     listJobImagesMock.mockResolvedValue(emptyList);
     uploadQuoteImageMock.mockResolvedValue(image);
+    uploadJobImageMock.mockResolvedValue(jobImage);
     deleteQuoteImageMock.mockResolvedValue(undefined);
+    deleteJobImageMock.mockResolvedValue(undefined);
   });
 
   it("shows the editable empty area and server limits", async () => {
@@ -158,21 +178,64 @@ describe("HandoffImages", () => {
   });
 
   it("renders technician job images without mutation controls", async () => {
-    listJobImagesMock.mockResolvedValue({ ...emptyList, images: [image] });
+    listJobImagesMock.mockResolvedValue({ ...emptyList, images: [jobImage] });
     renderJobPanel();
 
-    expect(await screen.findByRole("img", { name: "roof-before.png" })).toHaveAttribute(
+    expect(await screen.findByRole("img", { name: "gate-code.png" })).toHaveAttribute(
       "loading",
       "lazy",
     );
-    expect(screen.getByRole("link", { name: "roof-before.png" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "gate-code.png" })).toHaveAttribute(
       "href",
-      "/api/v1/workspaces/workspace-1/jobs/job-1/handoff-images/image-1/download",
+      "/api/v1/workspaces/workspace-1/jobs/job-1/handoff-images/job-image-1/download",
     );
     expect(screen.queryByRole("button", { name: "Add images" })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Remove roof-before.png" }),
+      screen.queryByRole("button", { name: "Remove gate-code.png" }),
     ).not.toBeInTheDocument();
     expect(deleteQuoteImageMock).not.toHaveBeenCalled();
   });
+  it("shows a direct-job empty state and uploads through the job route", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const user = userEvent.setup();
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <HandoffImages mode="job-edit" workspaceId="workspace-1" jobId="direct-job" />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("No handoff images added yet.")).toBeInTheDocument();
+    expect(listJobImagesMock).toHaveBeenCalledWith("workspace-1", "direct-job");
+    await user.click(screen.getByRole("button", { name: "Add images" }));
+    const upload = new File(["image"], "direct.png", { type: "image/png" });
+    await user.upload(fileInput(container), upload);
+
+    await waitFor(() =>
+      expect(uploadJobImageMock).toHaveBeenCalledWith("workspace-1", "direct-job", upload),
+    );
+    expect(uploadQuoteImageMock).not.toHaveBeenCalled();
+  });
+
+  it("only offers job-owned image deletion while editing a job", async () => {
+    listJobImagesMock.mockResolvedValue({ ...emptyList, images: [image, jobImage] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={client}>
+        <HandoffImages mode="job-edit" workspaceId="workspace-1" jobId="job-1" />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("roof-before.png")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Remove roof-before.png" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove gate-code.png" }));
+
+    await waitFor(() =>
+      expect(deleteJobImageMock).toHaveBeenCalledWith("workspace-1", "job-1", "job-image-1"),
+    );
+    expect(deleteQuoteImageMock).not.toHaveBeenCalled();
+  });
+
 });

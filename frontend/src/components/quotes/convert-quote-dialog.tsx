@@ -318,7 +318,7 @@ export function ConvertQuoteDialog({
             </section>
 
             {createJob && quote ? (
-              <HandoffImages mode="quote" workspaceId={workspaceId} quoteId={quote.id} />
+              <HandoffImages mode="quote-edit" workspaceId={workspaceId} quoteId={quote.id} />
             ) : null}
 
             {createJob ? (

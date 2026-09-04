@@ -13,6 +13,7 @@ class HandoffImageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    source: Literal["quote", "job"]
     filename: str
     content_type: Literal["image/jpeg", "image/png", "image/webp"]
     size_bytes: int

@@ -34,7 +34,13 @@ import { formatPhoneNumber } from "@/lib/utils/phone";
  * the field tier sees; adding a currency here would leak pricing to every
  * technician.
  */
-export function JobBrief({ job }: { job: Job }) {
+export function JobBrief({
+  job,
+  showNotes = true,
+}: {
+  job: Job;
+  showNotes?: boolean;
+}) {
   const site = job.service_location ?? null;
   const customer = job.customer ?? null;
   const addressLines = jobSiteAddressLines(site);
@@ -104,7 +110,7 @@ export function JobBrief({ job }: { job: Job }) {
         </section>
       )}
 
-      {job.description && (
+      {showNotes && job.description && (
         <section className="space-y-1.5">
           <SectionHeading icon={<StickyNote className="size-4" />}>Job notes</SectionHeading>
           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{job.description}</p>

@@ -14,6 +14,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_membership
+from app.api.handoff_images import detect_handoff_image_type
 from app.api.v1 import quotes
 from app.db.session import AsyncSessionLocal, engine
 from app.models.quote import Quote
@@ -147,7 +148,7 @@ def _quote_url(scenario: Scenario, quote_id: uuid.UUID) -> str:
     ],
 )
 def test_supported_image_signatures_are_canonical(data: bytes, content_type: str) -> None:
-    assert quotes._detect_handoff_image_type(data) == content_type
+    assert detect_handoff_image_type(data) == content_type
 
 
 @pytest.mark.asyncio

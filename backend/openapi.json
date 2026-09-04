@@ -6373,6 +6373,20 @@
         "title": "Body_upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post",
         "type": "object"
       },
+      "Body_upload_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_post",
+        "type": "object"
+      },
       "Body_upload_quote_handoff_image_api_v1_workspaces__workspace_id__quotes__quote_id__handoff_images_post": {
         "properties": {
           "file": {
@@ -19629,10 +19643,19 @@
           "size_bytes": {
             "title": "Size Bytes",
             "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "quote",
+              "job"
+            ],
+            "title": "Source",
+            "type": "string"
           }
         },
         "required": [
           "id",
+          "source",
           "filename",
           "content_type",
           "size_bytes",
@@ -54010,6 +54033,35 @@
         "title": "TechnicianCreate",
         "type": "object"
       },
+      "TechnicianLevelAcknowledgementRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level"
+        ],
+        "title": "TechnicianLevelAcknowledgementRequest",
+        "type": "object"
+      },
+      "TechnicianLevelAcknowledgementResponse": {
+        "properties": {
+          "level_seen": {
+            "title": "Level Seen",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level_seen"
+        ],
+        "title": "TechnicianLevelAcknowledgementResponse",
+        "type": "object"
+      },
       "TechnicianListResponse": {
         "description": "List of technicians.",
         "properties": {
@@ -54148,6 +54200,344 @@
           "updated_at"
         ],
         "title": "TechnicianResponse",
+        "type": "object"
+      },
+      "TechnicianScoreboardDetail": {
+        "properties": {
+          "approved_upsells": {
+            "title": "Approved Upsells",
+            "type": "integer"
+          },
+          "attendance_days": {
+            "title": "Attendance Days",
+            "type": "integer"
+          },
+          "attendance_xp": {
+            "title": "Attendance Xp",
+            "type": "integer"
+          },
+          "completed_jobs": {
+            "title": "Completed Jobs",
+            "type": "integer"
+          },
+          "current_level_threshold": {
+            "title": "Current Level Threshold",
+            "type": "integer"
+          },
+          "job_xp": {
+            "title": "Job Xp",
+            "type": "integer"
+          },
+          "level_number": {
+            "title": "Level Number",
+            "type": "integer"
+          },
+          "level_progress": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Level Progress",
+            "type": "number"
+          },
+          "level_title": {
+            "title": "Level Title",
+            "type": "string"
+          },
+          "lifetime_xp": {
+            "title": "Lifetime Xp",
+            "type": "integer"
+          },
+          "monthly_xp": {
+            "title": "Monthly Xp",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "next_level_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Level Number"
+          },
+          "next_level_threshold": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Level Threshold"
+          },
+          "next_level_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Level Title"
+          },
+          "technician_id": {
+            "format": "uuid",
+            "title": "Technician Id",
+            "type": "string"
+          },
+          "upsell_xp": {
+            "title": "Upsell Xp",
+            "type": "integer"
+          },
+          "xp_into_level": {
+            "title": "Xp Into Level",
+            "type": "integer"
+          },
+          "xp_to_next_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xp To Next Level"
+          }
+        },
+        "required": [
+          "technician_id",
+          "name",
+          "lifetime_xp",
+          "monthly_xp",
+          "level_number",
+          "level_title",
+          "current_level_threshold",
+          "next_level_number",
+          "next_level_title",
+          "next_level_threshold",
+          "xp_into_level",
+          "xp_to_next_level",
+          "level_progress",
+          "attendance_days",
+          "completed_jobs",
+          "approved_upsells",
+          "attendance_xp",
+          "job_xp",
+          "upsell_xp"
+        ],
+        "title": "TechnicianScoreboardDetail",
+        "type": "object"
+      },
+      "TechnicianScoreboardLevel": {
+        "properties": {
+          "lifetime_xp": {
+            "title": "Lifetime Xp",
+            "type": "integer"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "lifetime_xp"
+        ],
+        "title": "TechnicianScoreboardLevel",
+        "type": "object"
+      },
+      "TechnicianScoreboardPeriod": {
+        "properties": {
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_date",
+          "end_date",
+          "starts_at",
+          "ends_at",
+          "timezone"
+        ],
+        "title": "TechnicianScoreboardPeriod",
+        "type": "object"
+      },
+      "TechnicianScoreboardResponse": {
+        "properties": {
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicianScoreboardLevel"
+            },
+            "title": "Levels",
+            "type": "array"
+          },
+          "period": {
+            "$ref": "#/components/schemas/TechnicianScoreboardPeriod"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/TechnicianScoreboardRules"
+          },
+          "standings": {
+            "items": {
+              "$ref": "#/components/schemas/TechnicianScoreboardStanding"
+            },
+            "title": "Standings",
+            "type": "array"
+          },
+          "viewer_detail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnicianScoreboardDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "viewer_level_seen": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewer Level Seen"
+          }
+        },
+        "required": [
+          "period",
+          "rules",
+          "levels",
+          "standings",
+          "viewer_detail",
+          "viewer_level_seen"
+        ],
+        "title": "TechnicianScoreboardResponse",
+        "type": "object"
+      },
+      "TechnicianScoreboardRules": {
+        "properties": {
+          "attendance_day_xp": {
+            "title": "Attendance Day Xp",
+            "type": "integer"
+          },
+          "completed_job_xp": {
+            "title": "Completed Job Xp",
+            "type": "integer"
+          },
+          "upsell_base_xp": {
+            "title": "Upsell Base Xp",
+            "type": "integer"
+          },
+          "upsell_max_xp": {
+            "title": "Upsell Max Xp",
+            "type": "integer"
+          },
+          "upsell_value_bonus_cap": {
+            "title": "Upsell Value Bonus Cap",
+            "type": "integer"
+          },
+          "upsell_value_divisor": {
+            "title": "Upsell Value Divisor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attendance_day_xp",
+          "completed_job_xp",
+          "upsell_base_xp",
+          "upsell_value_divisor",
+          "upsell_value_bonus_cap",
+          "upsell_max_xp"
+        ],
+        "title": "TechnicianScoreboardRules",
+        "type": "object"
+      },
+      "TechnicianScoreboardStanding": {
+        "properties": {
+          "is_viewer": {
+            "title": "Is Viewer",
+            "type": "boolean"
+          },
+          "level_number": {
+            "title": "Level Number",
+            "type": "integer"
+          },
+          "level_title": {
+            "title": "Level Title",
+            "type": "string"
+          },
+          "monthly_xp": {
+            "title": "Monthly Xp",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "technician_id": {
+            "format": "uuid",
+            "title": "Technician Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "technician_id",
+          "name",
+          "rank",
+          "monthly_xp",
+          "level_number",
+          "level_title",
+          "is_viewer"
+        ],
+        "title": "TechnicianScoreboardStanding",
         "type": "object"
       },
       "TechnicianSummary": {
@@ -81759,7 +82149,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/handoff-images": {
       "get": {
-        "description": "List source-quote images after applying normal job visibility rules.",
+        "description": "List job and source-quote images after applying job visibility rules.",
         "operationId": "list_job_handoff_images_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_get",
         "parameters": [
           {
@@ -81814,11 +82204,140 @@
         "tags": [
           "Field Service"
         ]
+      },
+      "post": {
+        "description": "Store one office-authored image after locking the shared collection.",
+        "operationId": "upload_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoffImageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Upload Job Handoff Image",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/handoff-images/{image_id}": {
+      "delete": {
+        "description": "Delete only a job-owned image from an office-visible job.",
+        "operationId": "delete_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images__image_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "image_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Image Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Delete Job Handoff Image",
+        "tags": [
+          "Field Service"
+        ]
       }
     },
     "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/handoff-images/{image_id}/download": {
       "get": {
-        "description": "Serve a source-quote image only to callers allowed to read this job.",
+        "description": "Serve one job-visible image from either private storage owner.",
         "operationId": "download_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images__image_id__download_get",
         "parameters": [
           {
@@ -100268,6 +100787,173 @@
         "summary": "Update Tag",
         "tags": [
           "Tags"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/technician-scoreboard": {
+      "get": {
+        "description": "Return public standings plus only the linked viewer's private breakdown.",
+        "operationId": "get_technician_scoreboard_api_v1_workspaces__workspace_id__technician_scoreboard_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnicianScoreboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Technician Scoreboard",
+        "tags": [
+          "Technician Scoreboard"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/technician-scoreboard/me/acknowledge-level": {
+      "post": {
+        "description": "Monotonically acknowledge only a level the linked technician has reached.",
+        "operationId": "acknowledge_technician_level_api_v1_workspaces__workspace_id__technician_scoreboard_me_acknowledge_level_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TechnicianLevelAcknowledgementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnicianLevelAcknowledgementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Acknowledge Technician Level",
+        "tags": [
+          "Technician Scoreboard"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/technician-scoreboard/technicians/{technician_id}": {
+      "get": {
+        "description": "Return self detail, or peer detail only to office job writers.",
+        "operationId": "get_technician_scoreboard_detail_api_v1_workspaces__workspace_id__technician_scoreboard_technicians__technician_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "technician_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Technician Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnicianScoreboardDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Technician Scoreboard Detail",
+        "tags": [
+          "Technician Scoreboard"
         ]
       }
     },

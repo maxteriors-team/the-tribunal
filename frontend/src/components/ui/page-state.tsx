@@ -26,7 +26,7 @@ export interface PageLoadingStateProps extends PageStateWrapperProps {
 export function PageLoadingState({ message, ...props }: PageLoadingStateProps) {
   return (
     <PageStateWrapper {...props}>
-      <Loader2 className="size-8 animate-spin text-muted-foreground" />
+      <Loader2 className="size-8 animate-spin text-muted-foreground motion-reduce:animate-none" />
       {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
     </PageStateWrapper>
   );
@@ -52,7 +52,11 @@ export function PageErrorState({
       {title ? <h2 className="text-base font-medium">{title}</h2> : null}
       <p className="text-sm text-muted-foreground">{message}</p>
       {onRetry ? (
-        <Button variant="outline" size="sm" onClick={onRetry}>
+        <Button
+          variant="outline"
+          className="min-h-11 hover:scale-100 active:scale-100"
+          onClick={onRetry}
+        >
           {retryLabel}
         </Button>
       ) : null}

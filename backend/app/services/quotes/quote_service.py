@@ -154,6 +154,7 @@ from app.services.quotes.proposal_pricing import (
 from app.services.quotes.proposal_template import get_proposal_template
 from app.services.quotes.quote_expiry import EXPIRED_STATUS, overdue_sent_predicate
 from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProvisioner
+from app.services.technician_scoreboard import TechnicianScoreboardService
 from app.services.workspaces.membership import assert_active_workspace_member
 
 logger = structlog.get_logger()
@@ -1115,6 +1116,7 @@ class QuoteService:
         assigned_user_id: int | None = None,
         selected_permanent_kits: Sequence[PermanentKitSelection] | None = None,
         proposal_document: ProposalDocument | None = None,
+        is_onsite_upsell: bool = False,
     ) -> QuoteDetailResponse:
         """Create a draft quote with its initial line items and computed totals."""
         contact_id = quote_in.contact_id
@@ -1155,6 +1157,7 @@ class QuoteService:
             terms=quote_in.terms,
             status="draft",
             created_by_id=created_by_id,
+            is_onsite_upsell=is_onsite_upsell,
             proposal_document=(
                 proposal_document.model_dump(mode="json") if proposal_document else None
             ),
@@ -1603,6 +1606,8 @@ class QuoteService:
         # makes it data rather than a best-effort side effect like the parts
         # notification below. Re-approving a quote provisions nothing new.
         await ServicePlanProvisioner(self.db).provision_from_quote(quote)
+        if quote.is_onsite_upsell:
+            await TechnicianScoreboardService(self.db).award_approved_upsell(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
         self.log.info("quote_approved", quote_id=str(quote.id), workspace_id=str(workspace_id))

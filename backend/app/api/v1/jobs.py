@@ -14,7 +14,8 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+import structlog
+from fastapi import APIRouter, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import load_only
 
@@ -32,6 +33,11 @@ from app.api.deps import (
     WorkspaceAccess,
     WorkspaceDispatcher,
 )
+from app.api.handoff_images import (
+    count_handoff_images,
+    lock_handoff_image_collection,
+    read_handoff_image_upload,
+)
 from app.api.service_errors import ServiceErrorRoute
 from app.api.v1.contact_attachments import content_disposition
 from app.core.permissions import (
@@ -41,6 +47,7 @@ from app.core.permissions import (
     time_entry_owner_scope,
 )
 from app.models.field_service import JobStatus
+from app.models.job_handoff_image import JobHandoffImage
 from app.models.quote_handoff_image import (
     MAX_HANDOFF_IMAGE_BYTES,
     MAX_HANDOFF_IMAGES_PER_QUOTE,
@@ -91,14 +98,22 @@ from app.services.field_service.neighbor_outreach import NeighborOutreachService
 from app.services.inventory import JobAllocationService
 from app.services.jobs import JobCostingService, JobMaterialsService, JobService
 
+logger = structlog.get_logger(__name__)
 router = APIRouter(route_class=ServiceErrorRoute)
 
-_HANDOFF_IMAGE_METADATA_COLUMNS = (
+_QUOTE_HANDOFF_IMAGE_METADATA_COLUMNS = (
     QuoteHandoffImage.id,
     QuoteHandoffImage.filename,
     QuoteHandoffImage.content_type,
     QuoteHandoffImage.size_bytes,
     QuoteHandoffImage.created_at,
+)
+_JOB_HANDOFF_IMAGE_METADATA_COLUMNS = (
+    JobHandoffImage.id,
+    JobHandoffImage.filename,
+    JobHandoffImage.content_type,
+    JobHandoffImage.size_bytes,
+    JobHandoffImage.created_at,
 )
 
 
@@ -239,6 +254,61 @@ async def get_job(
     )
 
 
+@router.post(
+    "/{job_id}/handoff-images",
+    response_model=HandoffImageResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_job_handoff_image(
+    job_id: uuid.UUID,
+    file: UploadFile,
+    membership: CanWriteJobs,
+    current_user: CurrentUser,
+    db: DB,
+) -> HandoffImageResponse:
+    """Store one office-authored image after locking the shared collection."""
+    await JobService(db).get(job_id, membership.workspace_id)
+    filename, content_type, data = await read_handoff_image_upload(file)
+    source_quote_id, locked_job_id = await lock_handoff_image_collection(
+        db, membership.workspace_id, job_id=job_id
+    )
+    image_count = await count_handoff_images(
+        db,
+        membership.workspace_id,
+        quote_id=source_quote_id,
+        job_id=locked_job_id,
+    )
+    if image_count >= MAX_HANDOFF_IMAGES_PER_QUOTE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"A job can have at most {MAX_HANDOFF_IMAGES_PER_QUOTE} handoff images, "
+                "including source quote images"
+            ),
+        )
+
+    image = JobHandoffImage(
+        workspace_id=membership.workspace_id,
+        job_id=job_id,
+        filename=filename,
+        content_type=content_type,
+        size_bytes=len(data),
+        data=data,
+        uploaded_by_user_id=current_user.id,
+    )
+    db.add(image)
+    await db.commit()
+    await db.refresh(image)
+    logger.info(
+        "job_handoff_image_uploaded",
+        workspace_id=str(membership.workspace_id),
+        job_id=str(job_id),
+        image_id=str(image.id),
+        size_bytes=image.size_bytes,
+    )
+    return HandoffImageResponse.model_validate(image)
+
+
 @router.get("/{job_id}/handoff-images", response_model=HandoffImageListResponse)
 async def list_job_handoff_images(
     job_id: uuid.UUID,
@@ -247,31 +317,49 @@ async def list_job_handoff_images(
     current_user: CurrentUser,
     db: DB,
 ) -> HandoffImageListResponse:
-    """List source-quote images after applying normal job visibility rules."""
+    """List job and source-quote images after applying job visibility rules."""
     job = await JobService(db).get(
         job_id,
         workspace.id,
         visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
     )
-    rows: list[QuoteHandoffImage] = []
+    quote_rows: list[QuoteHandoffImage] = []
     if job.source_quote_id is not None:
-        rows = list(
+        quote_rows = list(
             (
                 await db.execute(
                     select(QuoteHandoffImage)
-                    .options(load_only(*_HANDOFF_IMAGE_METADATA_COLUMNS))
+                    .options(load_only(*_QUOTE_HANDOFF_IMAGE_METADATA_COLUMNS))
                     .where(
                         QuoteHandoffImage.workspace_id == workspace.id,
                         QuoteHandoffImage.quote_id == job.source_quote_id,
                     )
-                    .order_by(QuoteHandoffImage.created_at.desc())
                 )
             )
             .scalars()
             .all()
         )
+    job_rows = list(
+        (
+            await db.execute(
+                select(JobHandoffImage)
+                .options(load_only(*_JOB_HANDOFF_IMAGE_METADATA_COLUMNS))
+                .where(
+                    JobHandoffImage.workspace_id == workspace.id,
+                    JobHandoffImage.job_id == job_id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    images = sorted(
+        [HandoffImageResponse.model_validate(row) for row in [*quote_rows, *job_rows]],
+        key=lambda image: image.created_at,
+        reverse=True,
+    )
     return HandoffImageListResponse(
-        images=[HandoffImageResponse.model_validate(row) for row in rows],
+        images=images,
         max_images=MAX_HANDOFF_IMAGES_PER_QUOTE,
         max_image_bytes=MAX_HANDOFF_IMAGE_BYTES,
     )
@@ -286,14 +374,22 @@ async def download_job_handoff_image(
     current_user: CurrentUser,
     db: DB,
 ) -> Response:
-    """Serve a source-quote image only to callers allowed to read this job."""
+    """Serve one job-visible image from either private storage owner."""
     job = await JobService(db).get(
         job_id,
         workspace.id,
         visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
     )
-    image = None
-    if job.source_quote_id is not None:
+    image: JobHandoffImage | QuoteHandoffImage | None = (
+        await db.execute(
+            select(JobHandoffImage).where(
+                JobHandoffImage.id == image_id,
+                JobHandoffImage.workspace_id == workspace.id,
+                JobHandoffImage.job_id == job_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if image is None and job.source_quote_id is not None:
         image = (
             await db.execute(
                 select(QuoteHandoffImage).where(
@@ -316,6 +412,46 @@ async def download_job_handoff_image(
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "private, max-age=3600",
         },
+    )
+
+
+@router.delete(
+    "/{job_id}/handoff-images/{image_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_job_handoff_image(
+    job_id: uuid.UUID,
+    image_id: uuid.UUID,
+    membership: CanWriteJobs,
+    db: DB,
+) -> None:
+    """Delete only a job-owned image from an office-visible job."""
+    await JobService(db).get(job_id, membership.workspace_id)
+    image = (
+        await db.execute(
+            select(JobHandoffImage)
+            .options(load_only(JobHandoffImage.id, JobHandoffImage.size_bytes))
+            .where(
+                JobHandoffImage.id == image_id,
+                JobHandoffImage.workspace_id == membership.workspace_id,
+                JobHandoffImage.job_id == job_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if image is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Handoff image not found",
+        )
+    size_bytes = image.size_bytes
+    await db.delete(image)
+    await db.commit()
+    logger.info(
+        "job_handoff_image_deleted",
+        workspace_id=str(membership.workspace_id),
+        job_id=str(job_id),
+        image_id=str(image_id),
+        size_bytes=size_bytes,
     )
 
 

@@ -46,7 +46,7 @@ export function UpsellScoreboard({ stats }: UpsellScoreboardProps) {
         </h2>
         {rank?.current_name ? (
           <span className="rounded-full border border-primary/40 bg-accent/40 px-2 py-0.5 text-xs font-medium">
-            {rank.current_name}
+            Upsell tier: {rank.current_name}
           </span>
         ) : null}
       </div>
@@ -68,9 +68,7 @@ export function UpsellScoreboard({ stats }: UpsellScoreboardProps) {
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">Care plans</dt>
-              <dd className="text-lg font-semibold tabular-nums">
-                {stats.care_plans_sold}
-              </dd>
+              <dd className="text-lg font-semibold tabular-nums">{stats.care_plans_sold}</dd>
             </div>
           </dl>
 
@@ -80,9 +78,7 @@ export function UpsellScoreboard({ stats }: UpsellScoreboardProps) {
                 <span className="text-muted-foreground">
                   {formatCurrency(rank.amount_to_next ?? 0)} to {rank.next_name}
                 </span>
-                {rank.next_reward ? (
-                  <span className="font-medium">{rank.next_reward}</span>
-                ) : null}
+                {rank.next_reward ? <span className="font-medium">{rank.next_reward}</span> : null}
               </div>
               {/* Native progress element: announced by screen readers without a
                   hand-rolled role/aria-value trio, and honours forced colors. */}
