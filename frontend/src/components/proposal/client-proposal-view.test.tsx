@@ -140,7 +140,9 @@ const card = (name: RegExp) => screen.getByRole("radio", { name });
 const acceptButton = () => {
   const cta = document.querySelector<HTMLElement>(".cta-buttons");
   if (!cta) throw new Error("No CTA section rendered");
-  return within(cta).getByRole("button", { name: /accept|approve proposal/i });
+  return within(cta).getByRole("button", {
+    name: /accept|approve proposal|choose payment method/i,
+  });
 };
 
 describe("customer-facing tenant branding", () => {
@@ -384,50 +386,67 @@ describe("client package selection", () => {
     expect(screen.getByText("$4,700.00")).toBeInTheDocument();
   });
 
-  it("renders configured payment estimates with their disclaimer", async () => {
+  it("requires an accessible Permanent payment choice and submits only its enum", async () => {
     const user = userEvent.setup();
-    const financed = {
-      ...DOCUMENT,
-      grand_monthly_payment: 699,
-      selected_monthly_payment: 699,
+    const permanentDocument = { ...DOCUMENT, service: "permanent" };
+    const { onApprove } = renderView({
+      total: 5200,
+      deposit_amount: 0,
+      deposit_required: false,
+      packages: [],
+      proposal_document: permanentDocument as unknown as Record<string, unknown>,
       financing: {
-        enabled: true,
-        provider: "Wisetack",
-        terms: [12, 24],
+        provider: "GreenSky",
+        plan_number: "6124",
+        terms: [24],
         default_term: 24,
-        max_amount: 25000,
-        headline: "0% APR financing available.",
-        body: "Pay monthly instead.",
-        points: ["No interest, ever"],
-        disclaimer: "Payment estimates are not offers and are subject to credit approval.",
+        apr: 0,
+        monthly_payment: 216.67,
+        monthly_by_term: { "24": 216.67 },
+        disclaimer: "This client-provided copy must not replace required wording.",
       },
-      tiers: DOCUMENT.tiers.map((t) => ({
-        ...t,
-        pricing: {
-          ...t.pricing,
-          monthly_payment: 699,
-          monthly_by_term: { "12": 1398, "24": 699 },
-        },
-      })),
-    };
+    });
+
+    const group = screen.getByRole("radiogroup", { name: /payment options/i });
+    const financing = within(group).getByRole("radio", { name: /0% APR FINANCING/i });
+    const cash = within(group).getByRole("radio", { name: /CASH\/CHECK/i });
+    expect(financing).not.toBeChecked();
+    expect(cash).not.toBeChecked();
+    expect(acceptButton()).toBeDisabled();
+    expect(within(group).getAllByText("$5,200")).toHaveLength(2);
+    expect(group).toHaveTextContent("Approximately $217/month for 24 months");
+    expect(group).toHaveTextContent("GreenSky plan 6124");
+    expect(group).toHaveTextContent("Estimated payment only. Subject to credit approval.");
+    expect(group).not.toHaveTextContent("client-provided copy");
+
+    financing.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(cash).toBeChecked();
+    await user.click(financing);
+    expect(financing).toBeChecked();
+    expect(acceptButton()).toBeEnabled();
+    await user.click(acceptButton());
+    expect(onApprove).toHaveBeenCalledWith("best", "financing");
+  });
+
+  it("hides obsolete financing on every non-Permanent proposal", () => {
     renderView({
-      proposal_document: financed as unknown as Record<string, unknown>,
+      financing: {
+        provider: "GreenSky",
+        plan_number: "6124",
+        terms: [24],
+        default_term: 24,
+        apr: 0,
+        monthly_payment: 216.67,
+        monthly_by_term: { "24": 216.67 },
+        disclaimer: "Estimated payment only. Subject to credit approval.",
+      },
     });
 
-    const estimate = screen.getByRole("complementary", {
-      name: /estimated financing payments/i,
-    });
-    expect(estimate).toHaveTextContent("$699/month");
-    expect(estimate).toHaveTextContent(
-      "Payment estimates are not offers and are subject to credit approval.",
-    );
-    expect(estimate).toHaveTextContent("Wisetack");
-    expect(card(/The Premier/)).toHaveTextContent("Estimated payment options below");
-
-    await user.click(within(estimate).getByRole("button", { name: /12 months.*\$1,398\/mo est/i }));
-    expect(estimate).toHaveTextContent("$1,398/month");
-    // Financing presentation is additive; package pricing remains untouched.
-    expect(card(/The Premier/)).toHaveTextContent("$16,782");
+    expect(screen.queryByRole("radiogroup", { name: /payment options/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", { name: /estimated financing payments/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("stops offering a choice once the proposal is decided", () => {

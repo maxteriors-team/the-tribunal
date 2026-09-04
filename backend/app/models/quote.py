@@ -48,6 +48,8 @@ if TYPE_CHECKING:
 # are terminal operator decisions; ``expired`` is derived from ``expiry_date`` on
 # a still-``sent`` quote by the service (never free-set by API clients).
 QUOTE_STATUSES = ("draft", "sent", "approved", "declined", "expired")
+QUOTE_PAYMENT_OPTIONS = ("cash_check", "financing")
+
 
 # Deposit provenance distinguishes Stripe-confirmed card payments from an
 # authenticated operator's offline-payment attestation.
@@ -84,6 +86,10 @@ class Quote(Base, WorkspaceScoped):
         CheckConstraint(
             f"deposit_payment_method IN {DEPOSIT_PAYMENT_METHODS}",
             name="ck_quotes_deposit_payment_method",
+        ),
+        CheckConstraint(
+            f"payment_option IN {QUOTE_PAYMENT_OPTIONS}",
+            name="ck_quotes_payment_option",
         ),
         CheckConstraint("proposal_version >= 1", name="ck_quotes_proposal_version_positive"),
         CheckConstraint("revision_number >= 1", name="ck_quotes_revision_number_positive"),
@@ -257,6 +263,12 @@ class Quote(Base, WorkspaceScoped):
     # Structured snapshot of the priced, customer-facing proposal. This remains
     # the historical rendering contract and never trusts client-submitted totals.
     proposal_document: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
+    # Selected contract method. Null means undecided or not applicable.
+    payment_option: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Private Permanent Lighting economics. Never serialize this through normal or
+    # public quote responses; the billing-scoped profitability endpoint owns access.
+    permanent_pricing_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # Lossless, server-validated proposal input used to reopen and reprice the
     # rich document. ``attach_dismissal`` is deliberately omitted: dismissals are

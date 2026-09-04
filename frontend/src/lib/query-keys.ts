@@ -488,6 +488,8 @@ export const queryKeys = {
       quotes.list(workspaceId, { contact_id: contactId }),
     handoffImages: (workspaceId: string, quoteId: string) =>
       [...quotes.detail(workspaceId, quoteId), "handoff-images"] as const,
+    permanentProfitability: (workspaceId: string, quoteId: string) =>
+      [...quotes.detail(workspaceId, quoteId), "permanent-profitability"] as const,
   },
   proposalTemplate: {
     settings: (workspaceId: string) => ["proposal-template", workspaceId] as const,

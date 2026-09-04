@@ -15,6 +15,7 @@ export type FinancingConfig = Schemas["FinancingConfig"];
 export type UpsellConfig = Schemas["UpsellConfig"];
 export type UpsellRankConfig = Schemas["UpsellRankConfig"];
 export type PermanentConfig = Schemas["PermanentConfig"];
+export type PermanentFinancingConfig = Schemas["PermanentFinancingConfig"];
 export type ChristmasConfig = Schemas["ChristmasConfig"];
 export type ChristmasPackage = Schemas["ChristmasPackage"];
 export type SeasonalItem = Schemas["SeasonalItem"];

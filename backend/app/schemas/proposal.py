@@ -21,6 +21,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.pricing import FinancingEstimate
+from app.schemas.quote import QuotePaymentOption
 
 # Accepts ``#rgb`` or ``#rrggbb`` (case-insensitive).
 _HEX_COLOR = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
@@ -173,6 +174,7 @@ class PublicProposal(BaseModel):
     number: str
     title: str | None = None
     status: str
+    payment_option: QuotePaymentOption | None = None
     # Submitted back on acceptance; rejects a click made against superseded terms.
     proposal_version: int = Field(default=1, ge=1)
     currency: str
@@ -180,8 +182,7 @@ class PublicProposal(BaseModel):
     tax_amount: float
     discount_amount: float
     total: float
-    # Estimated monthly payments for category-qualified flat/core quotes. Rich
-    # wizard proposals also retain their snapshotted financing presentation.
+    # Available only for newly snapshotted exact Permanent Lighting quotes.
     financing: FinancingEstimate | None = None
     issue_date: date | None = None
     expiry_date: date | None = None
@@ -222,17 +223,16 @@ class PublicProposalDecline(BaseModel):
 class PublicProposalApprove(BaseModel):
     """The client's acceptance of one exact rendered proposal version.
 
-    Only the package *key* crosses the wire: the server re-derives the lines and
-    totals from the saved snapshot, so a client can never talk their own price
-    down. ``proposal_version`` closes the edit/approve race: if the operator
-    changed customer-facing terms after this page loaded, acceptance stops and the
-    client must review the refreshed proposal. It is optional only for the brief
-    old-frontend/new-backend deployment window; the service accepts omission solely
-    while the quote is still version 1 (terms have never changed).
+    Only the package and payment-method enums cross the wire; all money and terms
+    remain server-owned. The optional version supports only the brief deployment
+    overlap for untouched version-one proposals.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     proposal_version: int | None = Field(default=None, ge=1)
     selected_tier: str | None = Field(default=None, max_length=60)
+    payment_option: QuotePaymentOption | None = None
 
 
 class PublicProposalActionResult(BaseModel):
@@ -245,6 +245,7 @@ class PublicProposalActionResult(BaseModel):
     token: str
     status: str
     message: str
+    payment_option: QuotePaymentOption | None = None
     deposit_required: bool = False
     deposit_amount: float | None = None
 

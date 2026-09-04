@@ -103,10 +103,12 @@ async def test_approve_requires_and_forwards_rendered_version(
         *,
         proposal_version: int,
         selected_tier: str | None = None,
+        payment_option: str | None = None,
     ) -> PublicProposalActionResult:
         seen["token"] = token
         seen["proposal_version"] = proposal_version
         seen["selected_tier"] = selected_tier
+        seen["payment_option"] = payment_option
         return PublicProposalActionResult(token="tok", status="approved", message="Thank you!")
 
     monkeypatch.setattr(quotes_module.QuoteService, "approve_public", _approve)
@@ -117,7 +119,12 @@ async def test_approve_requires_and_forwards_rendered_version(
     assert missing.status_code == 422
     assert resp.status_code == 200
     assert resp.json()["status"] == "approved"
-    assert seen == {"token": "tok", "proposal_version": 7, "selected_tier": None}
+    assert seen == {
+        "token": "tok",
+        "proposal_version": 7,
+        "selected_tier": None,
+        "payment_option": None,
+    }
 
 
 async def test_approve_forwards_the_clients_package_choice(
@@ -133,9 +140,11 @@ async def test_approve_forwards_the_clients_package_choice(
         *,
         proposal_version: int,
         selected_tier: str | None = None,
+        payment_option: str | None = None,
     ) -> PublicProposalActionResult:
         seen["proposal_version"] = proposal_version
         seen["selected_tier"] = selected_tier
+        seen["payment_option"] = payment_option
         return PublicProposalActionResult(
             token="tok",
             status="approved",
@@ -148,9 +157,33 @@ async def test_approve_forwards_the_clients_package_choice(
     async with await _client() as ac:
         resp = await ac.post(
             "/api/v1/p/quotes/tok/approve",
-            json={"proposal_version": 4, "selected_tier": "good"},
+            json={
+                "proposal_version": 4,
+                "selected_tier": "good",
+                "payment_option": "financing",
+            },
         )
 
     assert resp.status_code == 200
-    assert seen == {"proposal_version": 4, "selected_tier": "good"}
+    assert seen == {
+        "proposal_version": 4,
+        "selected_tier": "good",
+        "payment_option": "financing",
+    }
     assert resp.json()["deposit_amount"] == 1055.0
+
+
+async def test_approve_rejects_customer_supplied_financial_terms() -> None:
+    async with await _client() as ac:
+        response = await ac.post(
+            "/api/v1/p/quotes/tok/approve",
+            json={
+                "proposal_version": 1,
+                "payment_option": "financing",
+                "total": 1,
+                "apr": 0,
+                "merchant_fee_rate": 0,
+            },
+        )
+
+    assert response.status_code == 422

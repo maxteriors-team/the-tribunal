@@ -45,7 +45,12 @@ PART_SKUS = ("59409312", "59409010", "BM-050-C-AB")
 # keeps the guard honest: telling a homeowner what the business wishes it had
 # sold them is not client-facing under any circumstances.
 INTERNAL_ONLY_FIELDS = frozenset(
-    {"fulfillment", "inventory_availability", "attach_warning", "pricing_source"}
+    {
+        "fulfillment",
+        "inventory_availability",
+        "attach_warning",
+        "pricing_source",
+    }
 )
 
 
@@ -133,6 +138,34 @@ def test_sanitizer_drops_fulfillment_and_keeps_presentation() -> None:
     assert safe["client"] == {"first_name": "Dana", "last_name": "Homeowner"}
     # The caller's stored snapshot is not mutated.
     assert "fulfillment" in document
+
+
+def test_sanitizer_removes_internal_commission_and_non_permanent_financing() -> None:
+    document = _document()
+    document["service"] = "landscape"
+    document["financing"] = {"provider": "Legacy provider"}
+    document["tiers"] = [
+        {
+            "pricing": {
+                "financed_total": 5200,
+                "monthly_payment": 216.67,
+                "monthly_by_term": {"24": 216.67},
+                "commission_financed": 364,
+                "commission_cash": 364,
+            }
+        }
+    ]
+
+    safe = client_safe_document(document)
+
+    assert safe is not None
+    assert safe["financing"] is None
+    pricing = safe["tiers"][0]["pricing"]
+    assert "commission_financed" not in pricing
+    assert "commission_cash" not in pricing
+    assert pricing["monthly_payment"] == 0
+    assert pricing["monthly_by_term"] == {}
+    assert document["tiers"][0]["pricing"]["commission_financed"] == 364
 
 
 def test_sanitizer_passes_through_none() -> None:

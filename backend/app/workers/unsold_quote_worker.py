@@ -45,8 +45,6 @@ from app.services.compliance.outbound_compliance import (
 )
 from app.services.email import send_automation_email
 from app.services.idempotency import derive_outbound_key, derive_worker_retry_key
-from app.services.quotes.pricing_config import get_pricing_config
-from app.services.quotes.proposal_pricing import financing_is_offered
 from app.services.quotes.revival_config import (
     SETTINGS_KEY as REVIVAL_SETTINGS_KEY,
 )
@@ -612,13 +610,20 @@ class UnsoldQuoteWorker(RetryableWorker, BaseWorker):
                 or "the customer"
             )
             total = f"{float(quote.total or 0):,.2f} {quote.currency.upper()}"
-            # Only suggest financing where the workspace actually offers it —
-            # clearing every eligible category is how financing is switched off,
-            # and telling a rep to pitch a product that no longer exists burns
-            # the one revival call this quote gets.
-            levers = "re-price, re-schedule, or walk through financing"
-            if not financing_is_offered(get_pricing_config(quote.workspace)):
-                levers = "re-price or re-schedule"
+            # Sent terms, not mutable workspace settings, decide whether this quote
+            # still has a financing option.
+            document = quote.proposal_document
+            has_financing = (
+                isinstance(document, dict)
+                and document.get("service") == "permanent"
+                and isinstance(quote.permanent_pricing_snapshot, dict)
+                and bool(quote.permanent_pricing_snapshot)
+            )
+            levers = (
+                "re-price, re-schedule, or walk through financing"
+                if has_financing
+                else "re-price or re-schedule"
+            )
             nudge = HumanNudge(
                 workspace_id=quote.workspace_id,
                 contact_id=quote.contact_id,

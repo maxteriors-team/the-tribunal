@@ -147,10 +147,8 @@ async def test_added_service_survives_the_client_switching_packages() -> None:
         ]
 
 
-async def test_wizard_service_is_grossed_up_like_the_builder_does() -> None:
-    """A service added after saving must price identically to the same service
-    typed during the build — otherwise *when* the rep added it changes the
-    customer's price. The config carries an 11% finance buffer."""
+async def test_wizard_service_uses_the_direct_builder_price() -> None:
+    """Adding a service later must preserve its configured selling price."""
     async with AsyncSessionLocal() as db:
         ws = await _make_lighting_workspace(db)
         svc = QuoteService(db)
@@ -163,9 +161,8 @@ async def test_wizard_service_is_grossed_up_like_the_builder_does() -> None:
         )
 
         added = next(s for s in detail.services if s.name == "Gutter cleaning")
-        # Same gross-up the wizard applies to its own add-on row: net / (1 - .11).
-        assert added.amount == pytest.approx(600.0 / 0.89, rel=1e-3)
-        assert added.amount > 600.0
+        # Legacy workspace buffers cannot increase customer prices.
+        assert added.amount == 600.0
 
 
 async def test_removing_a_wizard_service_reprices_back_down() -> None:
@@ -263,7 +260,7 @@ async def test_plain_quote_service_becomes_a_line_item() -> None:
         )
 
         assert "Gutter cleaning" in [li.name for li in detail.line_items]
-        # No document, so no gross-up: the amount is the price as typed.
+        # The amount is the direct selling price as typed.
         added = next(s for s in detail.services if s.name == "Gutter cleaning")
         assert added.amount == pytest.approx(600.0)
         assert float(detail.total) == pytest.approx(1000.0)

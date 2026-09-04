@@ -70,11 +70,7 @@ async def test_ensure_personal_workspace_provisions_owner_membership_and_pipelin
         assert membership.is_default is True
 
         pipelines = (
-            (
-                await db.execute(
-                    select(Pipeline).where(Pipeline.workspace_id == workspace.id)
-                )
-            )
+            (await db.execute(select(Pipeline).where(Pipeline.workspace_id == workspace.id)))
             .scalars()
             .all()
         )
@@ -101,21 +97,17 @@ async def test_ensure_personal_workspace_provisions_owner_membership_and_pipelin
             ProposalWizardPayload(
                 categories=["landscape"],
                 selected_tier="best",
-                quantities=[
-                    WizardFixtureQty(item_id="starter-estate-uplight", quantity=2)
-                ],
+                quantities=[WizardFixtureQty(item_id="starter-estate-uplight", quantity=2)],
             ),
         )
         estate_tier = next(tier for tier in proposal.tiers if tier.key == "best")
         uplight = next(
-            line
-            for line in estate_tier.lines
-            if line.item_id == "starter-estate-uplight"
+            line for line in estate_tier.lines if line.item_id == "starter-estate-uplight"
         )
         assert uplight.quantity == 2
-        assert uplight.unit_price == 882
-        assert uplight.line_total == 1764
-        assert estate_tier.pricing.financed_total == 1764
+        assert uplight.unit_price == 785
+        assert uplight.line_total == 1570
+        assert estate_tier.pricing.financed_total == 1570
 
 
 async def test_ensure_personal_workspace_is_idempotent() -> None:
@@ -134,9 +126,7 @@ async def test_ensure_personal_workspace_is_idempotent() -> None:
         memberships = (
             (
                 await db.execute(
-                    select(WorkspaceMembership).where(
-                        WorkspaceMembership.user_id == user.id
-                    )
+                    select(WorkspaceMembership).where(WorkspaceMembership.user_id == user.id)
                 )
             )
             .scalars()
@@ -152,9 +142,7 @@ async def test_ensure_personal_workspace_returns_existing_default() -> None:
         db.add(ws)
         await db.flush()
         db.add(
-            WorkspaceMembership(
-                user_id=user.id, workspace_id=ws.id, role="owner", is_default=True
-            )
+            WorkspaceMembership(user_id=user.id, workspace_id=ws.id, role="owner", is_default=True)
         )
         await db.flush()
 

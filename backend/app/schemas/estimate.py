@@ -44,10 +44,9 @@ class EstimateCustomLine(BaseModel):
     (and on top of à la carte pricing), so a rep never has to fake it into a
     decor category or edit the workspace's pricing config to land one job.
 
-    ``unit_price`` is the *client-facing* amount, not a net cost: unlike catalog
-    and roofline pricing it is not grossed up, because the rep is typing what the
-    homeowner will pay. That makes it the one figure on the estimate the server
-    doesn't derive — it is quantity × price, rounded, and nothing more.
+    ``unit_price`` is the client-facing selling amount, like catalog and roofline
+    pricing. The rep is typing what the homeowner will pay, so the server applies
+    quantity and cent rounding without adding a financing or commission buffer.
 
     ``side`` says which half of the comparison the line belongs to, since the two
     are paid on different clocks: ``permanent`` is one-time, ``seasonal`` recurs

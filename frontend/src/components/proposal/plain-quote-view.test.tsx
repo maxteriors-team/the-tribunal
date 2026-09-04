@@ -20,17 +20,17 @@ function proposal(overrides: Partial<PublicProposal> = {}): PublicProposal {
     discount_amount: 0,
     total: 9000,
     financing: {
-      provider: "Wisetack",
-      terms: [12, 24],
+      provider: "GreenSky",
+      plan_number: "6124",
+      terms: [24],
       default_term: 24,
       apr: 0,
       monthly_payment: 375,
-      monthly_by_term: { "12": 750, "24": 375 },
-      headline: "Flexible payment options",
-      body: "Estimated monthly payments for this roof project.",
+      monthly_by_term: { "24": 375 },
+      headline: null,
+      body: null,
       points: [],
-      disclaimer:
-        "Payment figures are estimates, not offers, and remain subject to approval.",
+      disclaimer: "Estimated payment only. Subject to credit approval.",
     },
     is_expired: false,
     is_decided: false,
@@ -76,18 +76,17 @@ function renderQuote(overrides: Partial<PublicProposal> = {}) {
 }
 
 describe("plain quote financing", () => {
-  it("shows the server estimate and disclaimer beside the core quote total", () => {
-    renderQuote();
-
-    expect(screen.getAllByText("$9,000.00").length).toBeGreaterThan(0);
-    const estimate = screen.getByRole("complementary", {
-      name: /estimated financing payments/i,
+  it("shows equal Permanent Lighting payment options from the server estimate", () => {
+    renderQuote({
+      title: "Permanent Lighting",
+      proposal_document: { service: "permanent" },
     });
-    expect(estimate).toHaveTextContent("$375/month");
-    expect(estimate).toHaveTextContent(
-      "Payment figures are estimates, not offers, and remain subject to approval.",
-    );
-    expect(estimate).toHaveTextContent("Wisetack");
+
+    expect(screen.getAllByText("$9,000").length).toBeGreaterThanOrEqual(2);
+    const options = screen.getByRole("radiogroup", { name: "PAYMENT OPTIONS" });
+    expect(options).toHaveTextContent("Approximately $375/month for 24 months");
+    expect(options).toHaveTextContent("GreenSky plan 6124");
+    expect(options).toHaveTextContent("Subject to credit approval");
     expect(screen.getByRole("link", { name: "Terms and Conditions" })).toHaveAttribute(
       "href",
       "https://maxteriorslighting.com/terms-and-conditions/",
@@ -98,6 +97,7 @@ describe("plain quote financing", () => {
     renderQuote({
       title: "Permanent lighting proposal",
       proposal_document: {
+        service: "permanent",
         mockups: [
           {
             image: "data:image/jpeg;base64,/9j/2Q==",
@@ -107,29 +107,26 @@ describe("plain quote financing", () => {
       },
     });
 
-    expect(
-      screen.getByRole("heading", { name: "Preview your permanent lighting" }),
-    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Preview your permanent lighting" })).toBeVisible();
     expect(
       screen.getByRole("img", {
         name: "Pat permanent roofline proposed permanent lighting",
       }),
     ).toHaveAttribute("src", "data:image/jpeg;base64,/9j/2Q==");
-    expect(
-      screen.getByRole("button", { name: /^✓\s+Approve Proposal$/ }),
-    ).toBeVisible();
+    expect(screen.getByRole("button", { name: /^✓\s+Approve Proposal$/ })).toBeVisible();
     expect(screen.getByRole("link", { name: "Terms and Conditions" })).toBeVisible();
   });
 
-  it("shows no financing language when the quote does not qualify", () => {
-    renderQuote({ financing: null, total: 400, subtotal: 400 });
+  it("shows no financing language for a non-Permanent proposal", () => {
+    renderQuote({
+      title: "Roof replacement",
+      proposal_document: { service: "landscape" },
+      total: 400,
+      subtotal: 400,
+    });
 
-    expect(
-      screen.queryByRole("complementary", {
-        name: /estimated financing payments/i,
-      }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText(/\/month/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "PAYMENT OPTIONS" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/financing/i)).not.toBeInTheDocument();
   });
 });
 

@@ -124,9 +124,8 @@ def test_pinned_charge_stays_out_of_other_tiers_card_prices() -> None:
     premier_add = by_key["best"].pricing.additional
     starter_add = by_key["essential"].pricing.additional
 
-    # The Starter carries only the global charge; the Premier carries both, so
-    # the gap is exactly the pinned charge (grossed up like every other price).
+    # The Starter carries only the global charge; the Premier carries both.
     assert starter_add > 0
     assert premier_add > starter_add
-    gross = pp.gross_up_price(900, config)
-    assert premier_add - starter_add == pytest.approx(float(gross))
+    selling_price = pp.gross_up_price(900, config)
+    assert premier_add - starter_add == pytest.approx(float(selling_price))

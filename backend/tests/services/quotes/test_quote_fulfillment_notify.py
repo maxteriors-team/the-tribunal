@@ -13,12 +13,13 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.quote import Quote
 from app.models.workspace import Workspace
-from app.schemas.pricing import PricingSettings
 from app.services.notifications import NotificationDispatchResult
 from app.services.quotes import QuoteService
 from app.services.quotes import quote_service as quote_service_module
@@ -57,12 +58,7 @@ class _FakeResult:
 
 
 class _FakeDb:
-    """Minimal session stand-in for the response-building path.
-
-    ``_detail_response`` reads the workspace pricing config, so ``get`` is part
-    of what ``approve_quote`` legitimately needs; returning ``None`` here would
-    exercise the missing-workspace fallback instead of the normal path.
-    """
+    """Minimal session stand-in for the approval-notification path."""
 
     def __init__(self, workspace: Workspace | None) -> None:
         self.workspace = workspace
@@ -258,30 +254,37 @@ async def test_already_approved_quote_does_not_reorder(
     assert notified == []
 
 
-async def test_preloaded_workspace_costs_no_extra_query() -> None:
-    """A caller that eager-loaded the workspace must not pay a second round trip."""
-    quote = _quote(None)
-    workspace = _workspace(quote)
-    workspace.settings = {"pricing": {}}
-    quote.workspace = workspace
-    db = _FakeDb(None)
+async def test_snapshotted_financing_costs_no_workspace_query() -> None:
+    """Sent Permanent terms come only from the immutable quote snapshot."""
+    quote = _quote({"service": "permanent"})
+    quote.permanent_pricing_snapshot = {
+        "cash_check_price": "5200.00",
+        "financing_price": "5200.00",
+        "provider": "GreenSky",
+        "plan_number": "6124",
+        "apr": "0",
+        "term_months": 24,
+        "merchant_fee_rate": "0.1525",
+        "sales_commission_rate": "0.07",
+        "material_cogs": "1000.00",
+    }
+    quote.assignee = None
+    db = AsyncMock(spec=AsyncSession)
 
-    config = await QuoteService(db=db)._pricing_config_for_quote(quote)  # type: ignore[arg-type]
+    response = await QuoteService(db=db)._detail_response(quote)
 
-    assert db.get_calls == 0
-    assert config is not None
+    db.get.assert_not_awaited()
+    assert response.financing is not None
+    assert response.financing.monthly_payment == 216.67
 
 
-async def test_missing_workspace_falls_back_instead_of_404ing_a_committed_approval() -> None:
-    """``approve_quote`` has already committed by here, so this must not raise.
+async def test_missing_snapshot_returns_no_financing_without_workspace_query() -> None:
+    """Legacy Permanent quotes stay readable without inventing current terms."""
+    quote = _quote({"service": "permanent"})
+    quote.assignee = None
+    db = AsyncMock(spec=AsyncSession)
 
-    ``get_or_404`` used to run at this point, which would report a 404 for an
-    approval that actually succeeded.
-    """
-    quote = _quote(None)
-    db = _FakeDb(None)
+    response = await QuoteService(db=db)._detail_response(quote)
 
-    config = await QuoteService(db=db)._pricing_config_for_quote(quote)  # type: ignore[arg-type]
-
-    assert db.get_calls == 1
-    assert config == PricingSettings()
+    db.get.assert_not_awaited()
+    assert response.financing is None

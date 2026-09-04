@@ -1000,3 +1000,34 @@ Scope: authenticated staff can open an existing deal, review its linked customer
 ### Verification boundary
 
 Forty-eight focused component tests, TypeScript, changed-file lint, and mocked desktop/mobile route checks passed. Notes and SMS returned no WCAG-tagged axe violations after message contrast fixes, with no horizontal overflow at 320 px. No real contact was loaded, no SMS was sent, and consent basis, carrier delivery, physical touch drag, screen-reader output, and legal policy were not verified.
+
+## Focused addendum — Permanent Lighting GreenSky payment options (2026-09-03)
+
+Snapshot: 3 September 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
+
+Scope: newly snapshotted exact Permanent Lighting proposals show one contracted customer price with either cash/check or a GreenSky payment estimate. GreenSky merchant fees and sales commission remain private company economics. Landscape, Christmas, Bistro, service, mixed-service, legacy-unsnapshotted, and all other quotes receive no new financing presentation.
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| PLP-001 | HIGH | A merchant fee could be passed through by raising the borrower's financed price | CODE/tests: every legacy gross-up adapter now returns the entered selling price; cash/check and GreenSky snapshot the same cent-rounded contract price; a `$5,200` quote remains `$5,200` under both methods | Preserve one price as the engineering mitigation recorded for GreenSky Merchant Program Agreement section 2(b)(v), which the supplied agreement summary says prohibits adding transaction fees to borrower pricing | Implemented locally; not a legal or provider approval | Direct-price, non-Permanent exclusion, snapshot, and equal-price regressions |
+| PLP-002 | HIGH | Public or sales users could alter/read APR, fees, commission, COGS, or financing terms | CODE/tests: approval requests forbid extra fields and accept only a payment enum; rates and prices come from the server snapshot; normal/public responses omit the private snapshot; profitability requires quote scope plus `billing:read` | Keep customer input allowlisted and private economics authorization-enforced at the backend | Implemented locally | Public mass-assignment/redaction tests, capability denial, and private endpoint scope dependency |
+| PLP-003 | MEDIUM | A customer could accept without agreeing which method forms the contract | CODE/tests: new Permanent snapshots require cash/check or financing before either public or internal approval; retries must repeat the stored method and cannot switch an approved contract | Record one method atomically with acceptance while preserving legacy quote usability | Implemented locally | Public/internal approval, retry, legacy-flow, keyboard, label, focus, and selected-state regressions |
+| PLP-004 | LAWYER | Custom GreenSky estimate wording/layout and Plan 6124 terms are customer-facing credit marketing | DEDUCED: engineering fixes the provider name, plan number, APR, term, approximate-payment label, and `Subject to credit approval`; no written GreenSky approval or current plan sheet is in source | Obtain written GreenSky approval for the custom quote copy/layout and have counsel/provider confirm Plan 6124, APR, term, required disclosures, licensing, adverse-action boundaries, and jurisdictions before launch | Open — release must not claim compliance | Written provider/counsel approval plus a dated approved-copy fixture |
+
+### Implemented controls
+
+- GreenSky's 15.25% merchant fee is subtracted only in the private financed scenario; it never changes customer price.
+- Carter's/sales commission defaults to 7% of the contracted total for either method.
+- The private result is labelled **Contribution Before Labor** because labor is intentionally excluded; it is not represented as net profit.
+- The customer headline rounds only the server-computed monthly estimate to the nearest dollar; contract prices and stored economics remain cent-rounded.
+- Required estimate and credit-approval wording is fixed in code rather than editable settings.
+
+### Needs GreenSky and counsel
+
+- Get written GreenSky approval for the custom payment-options layout and exact fixed disclosure before customer use.
+- Confirm from current provider materials that Plan 6124 remains 0% APR for 24 months, the 15.25% merchant fee is current, and no additional mandated wording or presentation order applies.
+- Confirm consumer-contract, credit-advertising, licensing, recordkeeping, cancellation/refund, and jurisdiction-specific duties. This engineering addendum does not certify the feature as compliant.
+
+### Verification boundary
+
+Focused source and automated tests cover server-owned pricing, approval payloads, data separation, role hiding, keyboard-operable native radio choices, fixed disclosure, and `$5,200` scenario math (`~$217/month`, `$793` merchant fee, `$364` commission). A fresh-database upgrade/downgrade/upgrade preserved an existing quote row, and local HTTP probes exercised public redaction, Permanent/non-Permanent behavior, authorization denial, required selection, idempotent retry, and immutable approval choice. Full local CI passed on 2026-09-03; assistive-technology review, provider documentation, production configuration, and a real GreenSky application remain unverified.
