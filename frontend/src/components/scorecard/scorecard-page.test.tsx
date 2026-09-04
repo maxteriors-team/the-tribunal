@@ -5,21 +5,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ScorecardPage } from "@/components/scorecard/scorecard-page";
 import type {
+  OfficeRepScorecardRow,
   ReceptionistScorecard,
   TechnicianActivityScorecardRow,
 } from "@/lib/api/scorecard";
 
-const { getScorecardMock, getTechniciansMock, useWorkspaceIdMock, canMock } = vi.hoisted(
-  () => ({
+const { getScorecardMock, getTechniciansMock, getOfficeRepsMock, useWorkspaceIdMock, canMock } =
+  vi.hoisted(() => ({
     getScorecardMock: vi.fn(),
     getTechniciansMock: vi.fn(),
+    getOfficeRepsMock: vi.fn(),
     useWorkspaceIdMock: vi.fn(),
     canMock: vi.fn(() => true),
-  }),
-);
+  }));
 
 vi.mock("@/lib/api/scorecard", () => ({
-  scorecardApi: { get: getScorecardMock, getTechnicians: getTechniciansMock },
+  scorecardApi: {
+    get: getScorecardMock,
+    getTechnicians: getTechniciansMock,
+    getOfficeReps: getOfficeRepsMock,
+  },
 }));
 
 vi.mock("@/hooks/useCapabilities", () => ({
@@ -30,9 +35,7 @@ vi.mock("@/hooks/useWorkspaceId", () => ({
   useWorkspaceId: () => useWorkspaceIdMock(),
 }));
 
-function sampleScorecard(
-  overrides: Partial<ReceptionistScorecard> = {},
-): ReceptionistScorecard {
+function sampleScorecard(overrides: Partial<ReceptionistScorecard> = {}): ReceptionistScorecard {
   return {
     start_date: "2026-01-01",
     end_date: "2026-01-31",
@@ -81,6 +84,24 @@ function sampleTechnicians(): TechnicianActivityScorecardRow[] {
   ];
 }
 
+function sampleOfficeReps(): OfficeRepScorecardRow[] {
+  return [
+    {
+      user_id: 7,
+      name: "Casey Admin",
+      role: "admin",
+      avatar_url: null,
+      attendance_days: 18,
+      attendance_worked_seconds: 432_000,
+      booked_jobs: 12,
+      cancelled_jobs: 1,
+      cancellation_rate: 8.3,
+      responses_measured: 9,
+      avg_response_time_seconds: 92,
+    },
+  ];
+}
+
 function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -96,6 +117,10 @@ function renderPage() {
 
 describe("ScorecardPage", () => {
   beforeEach(() => {
+    getScorecardMock.mockReset();
+    getTechniciansMock.mockReset();
+    getOfficeRepsMock.mockReset();
+    useWorkspaceIdMock.mockReset();
     canMock.mockReset().mockReturnValue(true);
   });
 
@@ -108,6 +133,7 @@ describe("ScorecardPage", () => {
     expect(screen.getByText("Access denied")).toBeVisible();
     expect(getScorecardMock).not.toHaveBeenCalled();
     expect(getTechniciansMock).not.toHaveBeenCalled();
+    expect(getOfficeRepsMock).not.toHaveBeenCalled();
   });
 
   it("renders the receptionist scorecard metrics", async () => {
@@ -116,9 +142,7 @@ describe("ScorecardPage", () => {
 
     renderPage();
 
-    expect(
-      await screen.findByText("Receptionist Scorecard"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Receptionist Scorecard")).toBeInTheDocument();
     // Answered calls metric (answered / total).
     expect(await screen.findByText("34 / 40")).toBeInTheDocument();
     expect(screen.getByText("85.0% answer rate")).toBeInTheDocument();
@@ -136,7 +160,9 @@ describe("ScorecardPage", () => {
     renderPage();
     await userEvent.click(screen.getByRole("tab", { name: "Technicians" }));
 
-    expect(await screen.findByRole("heading", { name: "Technician Scorecard" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Technician Scorecard" }),
+    ).toBeInTheDocument();
     expect(await screen.findByText("Taylor Tech")).toBeInTheDocument();
     expect(screen.getByText("7.0h")).toBeInTheDocument();
     expect(screen.getByText("0.5h")).toBeInTheDocument();
@@ -148,17 +174,36 @@ describe("ScorecardPage", () => {
     );
   });
 
+  it("shows admin and CSR metrics on each private profile", async () => {
+    useWorkspaceIdMock.mockReturnValue("ws-1");
+    getScorecardMock.mockResolvedValue(sampleScorecard());
+    getOfficeRepsMock.mockResolvedValue(sampleOfficeReps());
+
+    renderPage();
+    await userEvent.click(screen.getByRole("tab", { name: "Admin / CSR" }));
+
+    expect(await screen.findByRole("heading", { name: "Admin / CSR Scorecard" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Casey Admin" })).toBeVisible();
+    expect(screen.getByText("Admin")).toBeVisible();
+    expect(screen.getByText("18 days")).toBeVisible();
+    expect(screen.getByText("12")).toBeVisible();
+    expect(screen.getByText("8.3%")).toBeVisible();
+    expect(screen.getByText("1m 32s")).toBeVisible();
+    expect(screen.getByText("9 measured replies")).toBeVisible();
+    expect(screen.getByText("Profile activity, not an automatic rating")).toBeVisible();
+    expect(getOfficeRepsMock).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({ start_date: expect.any(String), end_date: expect.any(String) }),
+    );
+  });
+
   it("shows an empty state for top reasons when none exist", async () => {
     useWorkspaceIdMock.mockReturnValue("ws-1");
-    getScorecardMock.mockResolvedValue(
-      sampleScorecard({ top_call_reasons: [] }),
-    );
+    getScorecardMock.mockResolvedValue(sampleScorecard({ top_call_reasons: [] }));
 
     renderPage();
 
-    expect(
-      await screen.findByText("No call reasons yet"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("No call reasons yet")).toBeInTheDocument();
   });
 
   it("shows the setup empty state when there are no calls and no leads", async () => {
@@ -180,12 +225,11 @@ describe("ScorecardPage", () => {
 
     renderPage();
 
-    expect(
-      await screen.findByText("No receptionist calls yet"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Connect a phone number" }),
-    ).toHaveAttribute("href", "/phone-numbers");
+    expect(await screen.findByText("No receptionist calls yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connect a phone number" })).toHaveAttribute(
+      "href",
+      "/phone-numbers",
+    );
     // The metric grid is hidden until there is something to show.
     expect(screen.queryByText("Calls answered")).not.toBeInTheDocument();
   });
@@ -206,9 +250,7 @@ describe("ScorecardPage", () => {
     renderPage();
 
     expect(await screen.findByText("New leads")).toBeInTheDocument();
-    expect(
-      screen.queryByText("No receptionist calls yet"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("No receptionist calls yet")).not.toBeInTheDocument();
   });
 
   it("reports new leads per day", async () => {
@@ -243,9 +285,7 @@ describe("ScorecardPage", () => {
 
     renderPage();
 
-    expect(
-      await screen.findByText("No new leads in this range"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("No new leads in this range")).toBeInTheDocument();
   });
 
   it("requests data for the selected workspace", async () => {

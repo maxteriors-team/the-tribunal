@@ -209,6 +209,10 @@ export function ClientProposalView({
       ? (data.deposit_amount ?? null)
       : null;
   const visualPrice = chosenPackage?.total ?? data.total;
+  // Sent as a ballpark instead of one firm number. Only the headline reads as a
+  // range: the deposit, the accept button, and anything the customer is charged
+  // stay on the exact quoted total, which is the bottom of that range.
+  const priceRange = chosenPackage ? null : data.price_range;
   const acceptActionLabel =
     ctaDeposit && ctaDeposit > 0
       ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} & Pay ${fmt(ctaDeposit)}`
@@ -342,10 +346,18 @@ export function ClientProposalView({
           <section className="pmock-purchase" aria-labelledby="visual-price-heading">
             <div>
               <div className="pmock-purchase-label" id="visual-price-heading">
-                {chosenLabel ?? "Your lighting proposal"}
+                {chosenLabel ?? (priceRange ? "Your estimated range" : "Your lighting proposal")}
               </div>
-              <div className="pmock-purchase-price">{fmt(visualPrice)}</div>
+              <div className="pmock-purchase-price">
+                {priceRange
+                  ? `${fmt(priceRange.low)}\u2009\u2013\u2009${fmt(priceRange.high)}`
+                  : fmt(visualPrice)}
+              </div>
               <div className="pmock-purchase-meta">
+                {priceRange
+                  ? `Approving locks in ${fmt(priceRange.low)}; anything above that is quoted to you first.`
+                  : null}
+                {priceRange ? " " : null}
                 {ctaDeposit && ctaDeposit > 0
                   ? `${fmt(ctaDeposit)} due today; the remaining balance follows your proposal terms.`
                   : "No online deposit is due today."}

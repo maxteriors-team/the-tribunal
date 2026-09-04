@@ -446,6 +446,7 @@ export const queryKeys = {
         "scoreboard",
         normalizeQueryKeyParams(params),
       ] as const,
+    publicIntake: (capability: string) => ["referral-partner-intake", capability] as const,
   },
   nudges: {
     ...nudges,
@@ -537,6 +538,8 @@ export const queryKeys = {
       ["scorecard", workspaceId, normalizeQueryKeyParams(params)] as const,
     technicians: (workspaceId: string, params?: QueryKeyParams | null) =>
       ["scorecard", workspaceId, "technicians", normalizeQueryKeyParams(params)] as const,
+    officeReps: (workspaceId: string, params?: QueryKeyParams | null) =>
+      ["scorecard", workspaceId, "office-reps", normalizeQueryKeyParams(params)] as const,
   },
   scraping: createResourceQueryKeys("scraping"),
   segments: {

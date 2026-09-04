@@ -9874,6 +9874,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/scorecard/office-reps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Office Rep Activity Scorecard
+         * @description Return private admin/CSR activity profiles over the selected date range.
+         */
+        get: operations["get_office_rep_activity_scorecard_api_v1_workspaces__workspace_id__scorecard_office_reps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/scorecard/technicians": {
         parameters: {
             query?: never;
@@ -23866,6 +23886,34 @@ export interface components {
             valid_until?: string | null;
             /** Value Stack Items */
             value_stack_items?: components["schemas"]["ValueStackItem"][] | null;
+        };
+        /**
+         * OfficeRepScorecardRow
+         * @description Admin/CSR profile activity for the selected local-date range.
+         */
+        OfficeRepScorecardRow: {
+            /** Attendance Days */
+            attendance_days: number;
+            /** Attendance Worked Seconds */
+            attendance_worked_seconds: number;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Avg Response Time Seconds */
+            avg_response_time_seconds: number | null;
+            /** Booked Jobs */
+            booked_jobs: number;
+            /** Cancellation Rate */
+            cancellation_rate: number | null;
+            /** Cancelled Jobs */
+            cancelled_jobs: number;
+            /** Name */
+            name: string;
+            /** Responses Measured */
+            responses_measured: number;
+            /** Role */
+            role: string;
+            /** User Id */
+            user_id: number;
         };
         /**
          * OnboardRequest
@@ -54311,6 +54359,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReceptionistScorecard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_office_rep_activity_scorecard_api_v1_workspaces__workspace_id__scorecard_office_reps_get: {
+        parameters: {
+            query?: {
+                start_date?: string | null;
+                end_date?: string | null;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfficeRepScorecardRow"][];
                 };
             };
             /** @description Validation Error */

@@ -197,6 +197,28 @@ describe("ClientProposalView — visual checkout", () => {
       ),
     ).toBeVisible();
   });
+
+  it("reads as a range when the rep sent one, while the money charged stays exact", async () => {
+    const onApprove = renderView({
+      packages: [],
+      price_range: { low: 16782, high: 19300 },
+      proposal_document: {
+        ...DOCUMENT,
+        mockups: [{ image: "data:image/png;base64,AAAA", caption: "Front elevation" }],
+      } as unknown as Record<string, unknown>,
+    }).onApprove;
+
+    const visualCheckout = screen.getByRole("region", { name: "Your estimated range" });
+    expect(within(visualCheckout).getByText(/\$16,782\s*\u2013\s*\$19,300/)).toBeVisible();
+    // The customer is told which end they are agreeing to, and the deposit and
+    // acceptance still run on the exact quoted total.
+    expect(within(visualCheckout).getByText(/Approving locks in \$16,782/i)).toBeVisible();
+    expect(within(visualCheckout).getByText(/\$8,391 due today/i)).toBeVisible();
+    await userEvent.click(
+      within(visualCheckout).getByRole("button", { name: "Accept & Pay $8,391" }),
+    );
+    expect(onApprove).toHaveBeenCalledWith("best");
+  });
 });
 
 describe("ClientProposalView — measured Bistro pricing", () => {

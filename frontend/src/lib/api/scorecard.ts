@@ -6,6 +6,7 @@ export type ReceptionistScorecard = Schemas["ReceptionistScorecard"];
 export type CallReasonStat = Schemas["CallReasonStat"];
 
 export type TechnicianActivityScorecardRow = Schemas["TechnicianActivityScorecardRow"];
+export type OfficeRepScorecardRow = Schemas["OfficeRepScorecardRow"];
 
 export interface ScorecardParams {
   /** Inclusive ISO date (YYYY-MM-DD). Defaults to 30 days ago server-side. */
@@ -17,20 +18,26 @@ export interface ScorecardParams {
 export const scorecardApi = {
   get: async (
     workspaceId: string,
-    params: ScorecardParams = {}
+    params: ScorecardParams = {},
   ): Promise<ReceptionistScorecard> => {
-    return apiGet<ReceptionistScorecard>(
-      `/api/v1/workspaces/${workspaceId}/scorecard`,
-      { params }
-    );
+    return apiGet<ReceptionistScorecard>(`/api/v1/workspaces/${workspaceId}/scorecard`, { params });
   },
   getTechnicians: async (
     workspaceId: string,
-    params: ScorecardParams = {}
+    params: ScorecardParams = {},
   ): Promise<TechnicianActivityScorecardRow[]> => {
     return apiGet<TechnicianActivityScorecardRow[]>(
       `/api/v1/workspaces/${workspaceId}/scorecard/technicians`,
-      { params }
+      { params },
+    );
+  },
+  getOfficeReps: async (
+    workspaceId: string,
+    params: ScorecardParams = {},
+  ): Promise<OfficeRepScorecardRow[]> => {
+    return apiGet<OfficeRepScorecardRow[]>(
+      `/api/v1/workspaces/${workspaceId}/scorecard/office-reps`,
+      { params },
     );
   },
 };

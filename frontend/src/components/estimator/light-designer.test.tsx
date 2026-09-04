@@ -800,6 +800,130 @@ describe("LightDesigner", () => {
         },
       }),
     );
+    // Off by default: the customer gets one firm number unless the rep says so.
+    expect(estimatorApi.createQuote).toHaveBeenCalledWith(
+      "ws_1",
+      expect.objectContaining({ price_range_high: null }),
+    );
+  });
+
+  it("sends a permanent project to its linked customer profile", async () => {
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        projectType: "permanent",
+        activeShotId: "front",
+        shots: [
+          {
+            id: "front",
+            photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
+            design: {
+              runs: [],
+              items: [
+                {
+                  id: "fixture-1",
+                  productId: "fixture-uplight",
+                  at: { x: 200, y: 220 },
+                  sizePx: 30,
+                },
+              ],
+              calibration: null,
+            },
+            dusk: 0.4,
+          },
+        ],
+        updatedAt: "2026-08-26T12:00:00.000Z",
+      },
+      onLandscapeDraftChange: vi.fn(),
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      projectId: "permanent-project",
+      projectName: "Pat permanent roofline",
+      contactName: "Pat Lee",
+      contactId: 42,
+      contactEmail: "pat@example.com",
+      contactPhone: "+15551234567",
+      flushBeforeProposal: vi.fn().mockResolvedValue(undefined),
+      resetKey: 0,
+    };
+    renderEstimator("permanent", adapter);
+
+    const customerName = await screen.findByRole("combobox", { name: "Customer name" });
+    await waitFor(() => expect(customerName).toHaveValue("Pat Lee"));
+    expect(screen.getByRole("textbox", { name: "Customer email" })).toHaveValue("pat@example.com");
+    expect(screen.getByRole("textbox", { name: "Customer phone" })).toHaveValue("+15551234567");
+    expect(customerName).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "Customer email" })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "Customer phone" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Pat Lee" })).toHaveAttribute("href", "/contacts/42");
+
+    fireEvent.click(screen.getByRole("button", { name: "Email proposal" }));
+
+    await waitFor(() =>
+      expect(estimatorApi.createQuote).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ lighting_project_id: "permanent-project" }),
+      ),
+    );
+    expect(quotesApi.deliver).toHaveBeenCalledWith("ws_1", "quote-1", "email", "pat@example.com");
+  });
+
+  it("sends the permanent proposal as a range when the rep switches it on", async () => {
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        projectType: "permanent",
+        activeShotId: "front",
+        shots: [
+          {
+            id: "front",
+            photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
+            design: {
+              runs: [],
+              items: [
+                {
+                  id: "fixture-1",
+                  productId: "fixture-uplight",
+                  at: { x: 200, y: 220 },
+                  sizePx: 30,
+                },
+              ],
+              calibration: null,
+            },
+            dusk: 0.4,
+          },
+        ],
+        updatedAt: "2026-08-26T12:00:00.000Z",
+      },
+      onLandscapeDraftChange: vi.fn(),
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      projectId: "permanent-project",
+      projectName: "Pat permanent roofline",
+      contactName: "Pat Lee",
+      contactId: 42,
+      flushBeforeProposal: vi.fn().mockResolvedValue(undefined),
+      resetKey: 0,
+    };
+    renderEstimator("permanent", adapter);
+
+    fireEvent.click(await screen.findByRole("switch", { name: /Send as a price range/i }));
+    const createButton = await screen.findByRole("button", { name: /Create permanent quote/i });
+    expect(createButton).toBeDisabled();
+    const highInput = screen.getByRole("spinbutton", { name: /Higher amount/i });
+    expect(highInput).toHaveAttribute("aria-invalid", "true");
+
+    fireEvent.change(highInput, { target: { value: "3900" } });
+    await waitFor(() => {
+      expect(highInput).toHaveAttribute("aria-invalid", "false");
+      expect(createButton).toBeEnabled();
+    });
+    fireEvent.click(createButton);
+
+    await waitFor(() =>
+      expect(estimatorApi.createQuote).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ side: "permanent", price_range_high: 3900 }),
+      ),
+    );
   });
 
   it("keeps permanent proposal creation disabled until the selected shot has a design", async () => {

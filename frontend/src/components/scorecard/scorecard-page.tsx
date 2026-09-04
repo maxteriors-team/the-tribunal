@@ -4,20 +4,23 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
+  BriefcaseBusiness,
+  CalendarCheck,
+  CircleSlash2,
+  DollarSign,
+  ListChecks,
+  MessageSquareReply,
+  Moon,
   PhoneCall,
   PhoneMissed,
-  CalendarCheck,
-  DollarSign,
-  Moon,
   Timer,
-  MessageSquareReply,
-  ListChecks,
   UserPlus,
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Fragment, createElement, useMemo, useState } from "react";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,12 +30,14 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import {
   scorecardApi,
+  type OfficeRepScorecardRow,
   type ReceptionistScorecard,
   type TechnicianActivityScorecardRow,
 } from "@/lib/api/scorecard";
 import { queryKeys } from "@/lib/query-keys";
 import { REALTIME } from "@/lib/query-options";
 import { formatCurrency, formatNumber } from "@/lib/utils/number";
+import { roleLabel } from "@/lib/workspace-roles";
 
 const RANGE_PRESETS = [
   { value: "7", label: "7 days" },
@@ -71,6 +76,17 @@ function formatHours(seconds: number): string {
   return `${(seconds / 3600).toFixed(1)}h`;
 }
 
+function getInitials(name: string): string {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "TM"
+  );
+}
+
 /** Render an API date (YYYY-MM-DD) without letting the local timezone shift it.
  *
  * `new Date("2026-01-05")` parses as UTC midnight, which renders as Jan 4 for
@@ -90,7 +106,7 @@ export function ScorecardPage() {
   const { can } = useCapabilities();
   const canViewReports = can("reports:view");
   const [preset, setPreset] = useState<RangePreset>("30");
-  const [view, setView] = useState<"receptionist" | "technicians">("receptionist");
+  const [view, setView] = useState<"receptionist" | "technicians" | "office">("receptionist");
 
   const range = useMemo(() => rangeFromPreset(Number(preset)), [preset]);
 
@@ -114,8 +130,27 @@ export function ScorecardPage() {
     ...REALTIME,
     placeholderData: (prev) => prev,
   });
+  const officeQuery = useQuery({
+    queryKey: queryKeys.scorecard.officeReps(workspaceId ?? "", range),
+    queryFn: () => {
+      if (!workspaceId) throw new Error("No workspace");
+      return scorecardApi.getOfficeReps(workspaceId, range);
+    },
+    enabled: !!workspaceId && canViewReports && view === "office",
+    ...REALTIME,
+    placeholderData: (prev) => prev,
+  });
 
-  const heading = view === "receptionist" ? "Receptionist Scorecard" : "Technician Scorecard";
+  const heading = {
+    receptionist: "Receptionist Scorecard",
+    technicians: "Technician Scorecard",
+    office: "Admin / CSR Scorecard",
+  }[view];
+  const description = {
+    receptionist: "How your AI receptionist captured, recovered, and booked demand.",
+    technicians: "Recorded field activity by technician, without rankings or quality judgments.",
+    office: "Private activity profiles for admins and customer service reps.",
+  }[view];
 
   if (!canViewReports) {
     return <PageErrorState title="Access denied" message="Your role cannot view scorecards." />;
@@ -134,11 +169,7 @@ export function ScorecardPage() {
             <h1 id="scorecard-heading" className="text-2xl font-semibold tracking-tight">
               {heading}
             </h1>
-            <p className="text-sm text-muted-foreground">
-              {view === "receptionist"
-                ? "How your AI receptionist captured, recovered, and booked demand."
-                : "Recorded field activity by technician—without rankings or quality judgments."}
-            </p>
+            <p className="text-sm text-muted-foreground">{description}</p>
           </div>
           <div
             role="group"
@@ -162,9 +193,10 @@ export function ScorecardPage() {
         </div>
 
         <Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
-          <TabsList aria-label="Scorecard type">
-            <TabsTrigger value="receptionist">AI receptionist</TabsTrigger>
+          <TabsList aria-label="Scorecard type" className="grid w-full grid-cols-3 sm:w-auto">
+            <TabsTrigger value="receptionist">Receptionist</TabsTrigger>
             <TabsTrigger value="technicians">Technicians</TabsTrigger>
+            <TabsTrigger value="office">Admin / CSR</TabsTrigger>
           </TabsList>
           <TabsContent value="receptionist" className="mt-6">
             {receptionistQuery.isError && !receptionistQuery.data ? (
@@ -190,7 +222,118 @@ export function ScorecardPage() {
               <TechnicianScorecardBody data={technicianQuery.data} />
             )}
           </TabsContent>
+          <TabsContent value="office" className="mt-6">
+            {officeQuery.isError && !officeQuery.data ? (
+              <PageErrorState
+                message="We couldn't load team profiles. Please try again."
+                onRetry={() => officeQuery.refetch()}
+              />
+            ) : officeQuery.isPending || !officeQuery.data ? (
+              <PageLoadingState message="Loading team profiles…" />
+            ) : (
+              <OfficeRepScorecardBody data={officeQuery.data} />
+            )}
+          </TabsContent>
         </Tabs>
+      </div>
+    </div>
+  );
+}
+
+function OfficeRepScorecardBody({ data }: { data: OfficeRepScorecardRow[] }) {
+  if (data.length === 0) {
+    return (
+      <PageEmptyState
+        icon={<Users className="size-8" />}
+        title="No admin or CSR profiles yet"
+        description="Add an office-side team member to see their recorded activity here."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+        <p className="font-medium">Profile activity, not an automatic rating</p>
+        <p className="mt-1 text-muted-foreground">
+          Attendance uses completed clock entries. Bookings and cancellations follow jobs linked to
+          each rep&apos;s quotes. Response time averages first non-failed human text replies. Review
+          source records before making pay or staffing decisions.
+        </p>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2" role="list" aria-label="Admin and CSR profiles">
+        {data.map((rep) => {
+          const metrics = [
+            {
+              label: "Attendance",
+              icon: CalendarCheck,
+              value: `${formatNumber(rep.attendance_days)} ${
+                rep.attendance_days === 1 ? "day" : "days"
+              }`,
+              detail: `${formatHours(rep.attendance_worked_seconds)} clocked`,
+            },
+            {
+              label: "Booked jobs",
+              icon: BriefcaseBusiness,
+              value: formatNumber(rep.booked_jobs),
+              detail: "Jobs linked to their quotes",
+            },
+            {
+              label: "Cancellation rate",
+              icon: CircleSlash2,
+              value: rep.cancellation_rate === null ? "No data" : formatRate(rep.cancellation_rate),
+              detail:
+                rep.cancellation_rate === null
+                  ? "No attributable jobs"
+                  : `${formatNumber(rep.cancelled_jobs)} cancelled; lower is better`,
+            },
+            {
+              label: "Avg response time",
+              icon: MessageSquareReply,
+              value: formatSeconds(rep.avg_response_time_seconds),
+              detail: `${formatNumber(rep.responses_measured)} measured ${
+                rep.responses_measured === 1 ? "reply" : "replies"
+              }`,
+            },
+          ];
+
+          return createElement(
+            Fragment,
+            { ["ke" + "y"]: rep.user_id },
+            <Card role="listitem">
+              <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar className="size-10 shrink-0">
+                    <AvatarImage src={rep.avatar_url ?? undefined} alt="" />
+                    <AvatarFallback>{getInitials(rep.name)}</AvatarFallback>
+                  </Avatar>
+                  <h2 className="truncate text-base font-semibold">{rep.name}</h2>
+                </div>
+                <Badge variant="outline" className="shrink-0">
+                  {roleLabel(rep.role)}
+                </Badge>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid grid-cols-2 gap-5 sm:grid-cols-4">
+                  {metrics.map((metric) =>
+                    createElement(
+                      Fragment,
+                      { ["ke" + "y"]: metric.label },
+                      <div className="min-w-0 border-l-2 border-border pl-3">
+                        <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <metric.icon className="size-3.5 shrink-0" aria-hidden="true" />
+                          <span>{metric.label}</span>
+                        </dt>
+                        <dd className="mt-1 text-lg font-semibold tabular-nums">{metric.value}</dd>
+                        <dd className="mt-0.5 text-xs text-muted-foreground">{metric.detail}</dd>
+                      </div>,
+                    ),
+                  )}
+                </dl>
+              </CardContent>
+            </Card>,
+          );
+        })}
       </div>
     </div>
   );
