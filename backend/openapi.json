@@ -18248,6 +18248,18 @@
             "title": "Permanent Complexity Feet",
             "type": "object"
           },
+          "price_range_high": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Range High"
+          },
           "proposal_preview": {
             "anyOf": [
               {
@@ -27700,6 +27712,17 @@
             ],
             "title": "Assigned User Id"
           },
+          "contact_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Email"
+          },
           "contact_id": {
             "title": "Contact Id",
             "type": "integer"
@@ -27707,6 +27730,17 @@
           "contact_name": {
             "title": "Contact Name",
             "type": "string"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
           },
           "created_at": {
             "format": "date-time",
@@ -32579,6 +32613,99 @@
           }
         },
         "title": "OfferUpdate",
+        "type": "object"
+      },
+      "OfficeRepScorecardRow": {
+        "description": "Admin/CSR profile activity for the selected local-date range.",
+        "properties": {
+          "attendance_days": {
+            "minimum": 0.0,
+            "title": "Attendance Days",
+            "type": "integer"
+          },
+          "attendance_worked_seconds": {
+            "minimum": 0.0,
+            "title": "Attendance Worked Seconds",
+            "type": "integer"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "avg_response_time_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Response Time Seconds"
+          },
+          "booked_jobs": {
+            "minimum": 0.0,
+            "title": "Booked Jobs",
+            "type": "integer"
+          },
+          "cancellation_rate": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancellation Rate"
+          },
+          "cancelled_jobs": {
+            "minimum": 0.0,
+            "title": "Cancelled Jobs",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "responses_measured": {
+            "minimum": 0.0,
+            "title": "Responses Measured",
+            "type": "integer"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "role",
+          "avatar_url",
+          "attendance_days",
+          "attendance_worked_seconds",
+          "booked_jobs",
+          "cancelled_jobs",
+          "cancellation_rate",
+          "responses_measured",
+          "avg_response_time_seconds"
+        ],
+        "title": "OfficeRepScorecardRow",
         "type": "object"
       },
       "OnboardRequest": {
@@ -40649,6 +40776,18 @@
             ],
             "title": "Notes"
           },
+          "price_range_high": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Range High"
+          },
           "pricing_source": {
             "default": "workspace_rules",
             "enum": [
@@ -43215,6 +43354,16 @@
             ],
             "title": "Payment Option"
           },
+          "price_range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicProposalPriceRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "proposal_document": {
             "anyOf": [
               {
@@ -43640,6 +43789,25 @@
         "title": "PublicProposalPackage",
         "type": "object"
       },
+      "PublicProposalPriceRange": {
+        "description": "A ballpark range shown in place of the proposal's single headline price.\n\n``low`` is the server-priced quote total — what the customer is charged if\nthey accept as written, so acceptance and the deposit stay exact. ``high``\nis the operator-entered top after server validation; the raw internal field\nnever crosses to the public page.",
+        "properties": {
+          "high": {
+            "title": "High",
+            "type": "number"
+          },
+          "low": {
+            "title": "Low",
+            "type": "number"
+          }
+        },
+        "required": [
+          "low",
+          "high"
+        ],
+        "title": "PublicProposalPriceRange",
+        "type": "object"
+      },
       "PublicRatingResult": {
         "description": "Routing result after a public rating submission (the rating gate).",
         "properties": {
@@ -43699,6 +43867,291 @@
           "rating"
         ],
         "title": "PublicRatingSubmit",
+        "type": "object"
+      },
+      "PublicReferralPartnerIntake": {
+        "description": "Safe editable prefill only; never exposes tenant, CRM, or internal fields.",
+        "properties": {
+          "business_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Description"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "has_logo": {
+            "default": false,
+            "title": "Has Logo",
+            "type": "boolean"
+          },
+          "intake_status": {
+            "$ref": "#/components/schemas/ReferralPartnerIntakeStatus"
+          },
+          "intake_submitted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intake Submitted At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "offer_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Description"
+          },
+          "offer_headline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Headline"
+          },
+          "offer_terms": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Terms"
+          },
+          "offer_type": {
+            "$ref": "#/components/schemas/ReferralPartnerOfferType"
+          },
+          "offer_value": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Value"
+          },
+          "partner_type": {
+            "$ref": "#/components/schemas/ReferralPartnerType"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "service_area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Area"
+          },
+          "services": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Services"
+          },
+          "website_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Url"
+          }
+        },
+        "required": [
+          "name",
+          "company",
+          "partner_type",
+          "email",
+          "phone",
+          "website_url",
+          "business_description",
+          "services",
+          "service_area",
+          "offer_headline",
+          "offer_description",
+          "offer_type",
+          "offer_value",
+          "offer_terms",
+          "intake_status",
+          "intake_submitted_at"
+        ],
+        "title": "PublicReferralPartnerIntake",
+        "type": "object"
+      },
+      "PublicReferralPartnerIntakeSubmit": {
+        "additionalProperties": false,
+        "description": "Required profile fields; internal CRM classification is deliberately excluded.",
+        "properties": {
+          "business_description": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Business Description",
+            "type": "string"
+          },
+          "company": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Company",
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "offer_description": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Offer Description",
+            "type": "string"
+          },
+          "offer_headline": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Offer Headline",
+            "type": "string"
+          },
+          "offer_terms": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Offer Terms",
+            "type": "string"
+          },
+          "offer_type": {
+            "$ref": "#/components/schemas/ReferralPartnerOfferType"
+          },
+          "offer_value": {
+            "anyOf": [
+              {
+                "maximum": 999999999.99,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Value"
+          },
+          "phone": {
+            "maxLength": 50,
+            "minLength": 7,
+            "title": "Phone",
+            "type": "string"
+          },
+          "service_area": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Service Area",
+            "type": "string"
+          },
+          "services": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Services",
+            "type": "string"
+          },
+          "website_url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Website Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "website_url",
+          "business_description",
+          "services",
+          "service_area",
+          "offer_headline",
+          "offer_description",
+          "offer_type",
+          "offer_terms",
+          "name",
+          "company",
+          "email",
+          "phone"
+        ],
+        "title": "PublicReferralPartnerIntakeSubmit",
         "type": "object"
       },
       "PublicReviewRequest": {
@@ -47580,6 +48033,18 @@
       "ReferralPartnerCreate": {
         "description": "Create a referral partner.",
         "properties": {
+          "business_description": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Description"
+          },
           "company": {
             "anyOf": [
               {
@@ -47639,6 +48104,63 @@
             ],
             "title": "Notes"
           },
+          "offer_description": {
+            "anyOf": [
+              {
+                "maxLength": 3000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Description"
+          },
+          "offer_headline": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Headline"
+          },
+          "offer_terms": {
+            "anyOf": [
+              {
+                "maxLength": 3000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Terms"
+          },
+          "offer_type": {
+            "$ref": "#/components/schemas/ReferralPartnerOfferType",
+            "default": "none"
+          },
+          "offer_value": {
+            "anyOf": [
+              {
+                "maximum": 999999999.99,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Value"
+          },
           "partner_type": {
             "$ref": "#/components/schemas/ReferralPartnerType",
             "default": "other"
@@ -47654,6 +48176,42 @@
               }
             ],
             "title": "Phone"
+          },
+          "service_area": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Area"
+          },
+          "services": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Services"
+          },
+          "website_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Url"
           }
         },
         "required": [
@@ -47661,6 +48219,47 @@
         ],
         "title": "ReferralPartnerCreate",
         "type": "object"
+      },
+      "ReferralPartnerIntakeLinkResponse": {
+        "description": "An authenticated user's copyable public intake capability.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "intake_url": {
+            "title": "Intake Url",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ReferralPartnerIntakeStatus"
+          }
+        },
+        "required": [
+          "intake_url",
+          "created_at",
+          "expires_at",
+          "status"
+        ],
+        "title": "ReferralPartnerIntakeLinkResponse",
+        "type": "object"
+      },
+      "ReferralPartnerIntakeStatus": {
+        "description": "State of the public partner-profile intake link.",
+        "enum": [
+          "not_requested",
+          "pending",
+          "submitted",
+          "revoked"
+        ],
+        "title": "ReferralPartnerIntakeStatus",
+        "type": "string"
       },
       "ReferralPartnerListResponse": {
         "description": "List of referral partners.",
@@ -47684,9 +48283,66 @@
         "title": "ReferralPartnerListResponse",
         "type": "object"
       },
-      "ReferralPartnerResponse": {
-        "description": "A referral partner record.",
+      "ReferralPartnerLogoResponse": {
+        "description": "Logo metadata only; bytes are served from a dedicated endpoint.",
         "properties": {
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content_type",
+          "size_bytes",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ReferralPartnerLogoResponse",
+        "type": "object"
+      },
+      "ReferralPartnerOfferType": {
+        "description": "Standardized client-facing offer made by a referral partner.",
+        "enum": [
+          "none",
+          "fixed_dollar_credit",
+          "percentage_discount",
+          "complimentary_service",
+          "free_upgrade_add_on",
+          "gift",
+          "other"
+        ],
+        "title": "ReferralPartnerOfferType",
+        "type": "string"
+      },
+      "ReferralPartnerResponse": {
+        "description": "A referral partner record, including its submitted public profile.",
+        "properties": {
+          "business_description": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Description"
+          },
           "company": {
             "anyOf": [
               {
@@ -47728,10 +48384,55 @@
             ],
             "title": "Email"
           },
+          "has_logo": {
+            "default": false,
+            "title": "Has Logo",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "intake_link_created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intake Link Created At"
+          },
+          "intake_revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intake Revoked At"
+          },
+          "intake_status": {
+            "$ref": "#/components/schemas/ReferralPartnerIntakeStatus",
+            "default": "not_requested"
+          },
+          "intake_submitted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intake Submitted At"
           },
           "is_active": {
             "default": true,
@@ -47756,6 +48457,58 @@
             ],
             "title": "Notes"
           },
+          "offer_description": {
+            "anyOf": [
+              {
+                "maxLength": 3000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Description"
+          },
+          "offer_headline": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Headline"
+          },
+          "offer_terms": {
+            "anyOf": [
+              {
+                "maxLength": 3000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Terms"
+          },
+          "offer_type": {
+            "$ref": "#/components/schemas/ReferralPartnerOfferType",
+            "default": "none"
+          },
+          "offer_value": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offer Value"
+          },
           "partner_type": {
             "$ref": "#/components/schemas/ReferralPartnerType",
             "default": "other"
@@ -47772,10 +48525,46 @@
             ],
             "title": "Phone"
           },
+          "service_area": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Area"
+          },
+          "services": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Services"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "website_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website Url"
           },
           "workspace_id": {
             "format": "uuid",
@@ -58371,6 +59160,10 @@
       }
     },
     "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      },
       "OAuth2PasswordBearer": {
         "flows": {
           "password": {
@@ -60706,6 +61499,147 @@
         "summary": "Submit Public Rating",
         "tags": [
           "Public Reviews"
+        ]
+      }
+    },
+    "/api/v1/public/referral-partners/intake": {
+      "get": {
+        "description": "Return safe editable prefill data for a live bearer capability.",
+        "operationId": "get_public_referral_partner_intake_api_v1_public_referral_partners_intake_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicReferralPartnerIntake"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Public Referral Partner Intake",
+        "tags": [
+          "Public Referral Partner Intake"
+        ]
+      },
+      "post": {
+        "description": "Update the capability's existing partner; never creates a CRM entity.",
+        "operationId": "submit_public_referral_partner_intake_api_v1_public_referral_partners_intake_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicReferralPartnerIntakeSubmit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicReferralPartnerIntake"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit Public Referral Partner Intake",
+        "tags": [
+          "Public Referral Partner Intake"
+        ]
+      }
+    },
+    "/api/v1/public/referral-partners/intake/logo": {
+      "get": {
+        "description": "Serve validated raster bytes only while the bearer capability is live.",
+        "operationId": "download_public_referral_partner_logo_api_v1_public_referral_partners_intake_logo_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download Public Referral Partner Logo",
+        "tags": [
+          "Public Referral Partner Intake"
+        ]
+      },
+      "post": {
+        "description": "Replace this partner's logo after bearer auth and strict raster validation.",
+        "operationId": "upload_public_referral_partner_logo_api_v1_public_referral_partners_intake_logo_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "format": "binary",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralPartnerLogoResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Upload Public Referral Partner Logo",
+        "tags": [
+          "Public Referral Partner Intake"
         ]
       }
     },
@@ -94786,6 +95720,231 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/referral-partners/{partner_id}/intake-link": {
+      "delete": {
+        "description": "Revoke every public intake capability for this scoped partner.",
+        "operationId": "revoke_referral_partner_intake_link_api_v1_workspaces__workspace_id__referral_partners__partner_id__intake_link_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "partner_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Partner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Revoke Referral Partner Intake Link",
+        "tags": [
+          "Referral Partners"
+        ]
+      },
+      "post": {
+        "description": "Create or reuse a copyable public intake link for this scoped partner.",
+        "operationId": "issue_referral_partner_intake_link_api_v1_workspaces__workspace_id__referral_partners__partner_id__intake_link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "partner_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Partner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralPartnerIntakeLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Issue Referral Partner Intake Link",
+        "tags": [
+          "Referral Partners"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/referral-partners/{partner_id}/intake-link/rotate": {
+      "post": {
+        "description": "Revoke existing capabilities and return a newly generated intake link.",
+        "operationId": "rotate_referral_partner_intake_link_api_v1_workspaces__workspace_id__referral_partners__partner_id__intake_link_rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "partner_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Partner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralPartnerIntakeLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Rotate Referral Partner Intake Link",
+        "tags": [
+          "Referral Partners"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/referral-partners/{partner_id}/logo": {
+      "get": {
+        "description": "Download a scoped partner's validated raster logo.",
+        "operationId": "download_referral_partner_logo_api_v1_workspaces__workspace_id__referral_partners__partner_id__logo_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "partner_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Partner Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Download Referral Partner Logo",
+        "tags": [
+          "Referral Partners"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/reports/ar-aging": {
       "get": {
         "description": "Accounts-receivable aging: outstanding balances bucketed by overdue age.",
@@ -97165,6 +98324,93 @@
           }
         ],
         "summary": "Get Receptionist Scorecard",
+        "tags": [
+          "Receptionist Scorecard"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/scorecard/office-reps": {
+      "get": {
+        "description": "Return private admin/CSR activity profiles over the selected date range.",
+        "operationId": "get_office_rep_activity_scorecard_api_v1_workspaces__workspace_id__scorecard_office_reps_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OfficeRepScorecardRow"
+                  },
+                  "title": "Response Get Office Rep Activity Scorecard Api V1 Workspaces  Workspace Id  Scorecard Office Reps Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Office Rep Activity Scorecard",
         "tags": [
           "Receptionist Scorecard"
         ]

@@ -41,12 +41,9 @@ def _make_cors_app() -> FastAPI:
         allow_origins=_build_allow_origins_from_settings(),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        # Mirror the production allow-list. Auth flows through httpOnly
-        # cookies (gated by ``Access-Control-Allow-Credentials``, not
-        # ``Access-Control-Allow-Headers``), so the only request header the
-        # frontend ever sends cross-origin is ``Content-Type``. See
-        # ``backend/app/main.py`` for the per-header rationale.
-        allow_headers=["Content-Type"],
+        # Mirror production: JSON/multipart content types plus the bearer
+        # capability used only by fixed-path public referral-partner intake.
+        allow_headers=["Content-Type", "Authorization"],
     )
 
     @app.get("/ping")
@@ -148,36 +145,21 @@ class TestCorsAllowList:
 
 
 class TestCorsAllowedHeaders:
-    """The allow-list must be the minimum the frontend actually sends.
-
-    Auth is cookie-based (``access_token`` / ``refresh_token`` httpOnly
-    cookies), so ``Authorization`` is no longer expected on cross-origin
-    requests to this API. Trimming the allow-list shrinks the surface a
-    malicious page can exercise via the browser.
-    """
+    """The exact-origin frontend may send only headers used by real flows."""
 
     async def test_content_type_is_allowed(self, cors_client: AsyncClient) -> None:
-        """``Content-Type`` is the only request header the frontend sets."""
+        """JSON and multipart content types are approved by preflight."""
         origin = "http://localhost:3000"
         status = await _preflight_status(cors_client, origin, request_headers="content-type")
         assert status == 200
 
-    async def test_authorization_is_rejected(self, cors_client: AsyncClient) -> None:
-        """Preflights asking for ``Authorization`` fail with 400.
-
-        Regression guard: the previous allow-list included ``Authorization``
-        even though no browser code path sends it to this backend (the two
-        ``Authorization`` headers in the frontend go directly to
-        ``api.openai.com``). Re-adding it without a real need re-opens that
-        surface to any compromised origin.
-        """
+    async def test_authorization_is_allowed(self, cors_client: AsyncClient) -> None:
+        """Public referral intake carries its capability in this header."""
         origin = "http://localhost:3000"
-        status = await _preflight_status(cors_client, origin, request_headers="authorization")
-        assert status == 400, (
-            "Authorization must not be CORS-allowed: the frontend authenticates "
-            "via httpOnly cookies and never sends an Authorization header to "
-            f"this backend. Got preflight status {status}."
+        status = await _preflight_status(
+            cors_client, origin, request_headers="authorization"
         )
+        assert status == 200
 
     async def test_x_requested_with_is_rejected(self, cors_client: AsyncClient) -> None:
         """``X-Requested-With`` was in the old list but nothing sends it."""
@@ -212,13 +194,7 @@ class TestProductionAppCorsWiring:
         assert not any("vercel.app" in origin for origin in allow_origins if "*" in origin)
 
     def test_app_allow_headers_is_minimal(self) -> None:
-        """The production app must not re-introduce ``Authorization`` etc.
-
-        Auth flows through httpOnly cookies; ``Content-Type`` is the only
-        request header the frontend ever sets cross-origin. Re-adding
-        ``Authorization``, ``X-Requested-With``, ``Accept``, or ``Origin``
-        without a real need widens the CORS surface.
-        """
+        """Production allows only content type and the public intake bearer."""
         cors_layers = [
             m
             for m in production_app.user_middleware
@@ -226,8 +202,7 @@ class TestProductionAppCorsWiring:
         ]
         assert cors_layers, "Production app must register CORSMiddleware"
         allow_headers = cors_layers[0].kwargs.get("allow_headers")
-        assert allow_headers == ["Content-Type"], (
-            "Production CORS allow_headers must be exactly ['Content-Type']; "
-            f"got {allow_headers!r}. If you need to add a header, document why "
-            "in app/main.py and update this test."
+        assert allow_headers == ["Content-Type", "Authorization"], (
+            "Production CORS allow_headers must match the documented exact-origin "
+            f"frontend requirements; got {allow_headers!r}."
         )

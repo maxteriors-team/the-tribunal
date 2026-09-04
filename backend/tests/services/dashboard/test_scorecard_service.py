@@ -19,6 +19,8 @@ from app.services.dashboard.scorecard_service import (
     LeadRow,
     ScorecardService,
     TextbackRow,
+    _aggregate_human_response_times,
+    _ResponseMessageRow,
     aggregate_scorecard,
     resolve_range,
 )
@@ -286,6 +288,43 @@ def test_resolve_range_uses_now_when_no_today() -> None:
     assert start <= end
 
 
+class TestHumanResponseTime:
+    def test_only_first_successful_human_reply_is_attributed(self) -> None:
+        human_thread = uuid.uuid4()
+        automated_thread = uuid.uuid4()
+        started = datetime(2026, 1, 10, 9, 0, tzinfo=UTC)
+        rows = [
+            _ResponseMessageRow(human_thread, started, "inbound", "received", None, False),
+            _ResponseMessageRow(
+                human_thread, started + timedelta(minutes=1), "outbound", "failed", 7, False
+            ),
+            _ResponseMessageRow(
+                human_thread, started + timedelta(minutes=2), "outbound", "sent", 7, False
+            ),
+            _ResponseMessageRow(
+                human_thread, started + timedelta(minutes=10), "inbound", "received", None, False
+            ),
+            _ResponseMessageRow(
+                human_thread, started + timedelta(minutes=11), "inbound", "received", None, False
+            ),
+            _ResponseMessageRow(
+                human_thread, started + timedelta(minutes=15), "outbound", "sent", 7, False
+            ),
+            _ResponseMessageRow(automated_thread, started, "inbound", "received", None, False),
+            _ResponseMessageRow(
+                automated_thread, started + timedelta(seconds=30), "outbound", "sent", None, True
+            ),
+            _ResponseMessageRow(
+                automated_thread, started + timedelta(minutes=3), "outbound", "sent", 7, False
+            ),
+        ]
+
+        counts, averages = _aggregate_human_response_times(rows)
+
+        assert counts == {7: 2}
+        assert averages == {7: 210.0}
+
+
 def _mock_result(
     *,
     scalars: list[object] | None = None,
@@ -401,6 +440,103 @@ async def test_technician_activity_keeps_empty_roster_to_one_query() -> None:
         workspace,
         date(2026, 1, 1),
         date(2026, 1, 31),
+    )
+
+    assert rows == []
+    db.execute.assert_awaited_once()
+
+
+async def test_office_rep_activity_builds_private_profile_metrics() -> None:
+    workspace_id = uuid.uuid4()
+    workspace = Workspace(
+        id=workspace_id,
+        name="Test workspace",
+        slug="test-workspace",
+        settings={"timezone": "UTC"},
+    )
+    first_shift = datetime(2026, 1, 10, 9, 0, tzinfo=UTC)
+    second_shift = datetime(2026, 1, 11, 9, 0, tzinfo=UTC)
+    conversation_id = uuid.uuid4()
+    db = AsyncMock()
+    db.execute.side_effect = [
+        _mock_result(
+            rows=[
+                (7, "Casey Admin", None, "admin"),
+                (8, "Dana Dispatch", "https://example.com/dana.jpg", "dispatcher"),
+            ]
+        ),
+        _mock_result(
+            rows=[
+                (7, first_shift, first_shift + timedelta(hours=8), 3_600),
+                (7, second_shift, second_shift + timedelta(hours=8), 0),
+            ]
+        ),
+        _mock_result(rows=[(7, "completed", 3), (7, "cancelled", 1)]),
+        _mock_result(
+            rows=[
+                (conversation_id, first_shift, "inbound", "received", None, False),
+                (
+                    conversation_id,
+                    first_shift + timedelta(minutes=2),
+                    "outbound",
+                    "sent",
+                    7,
+                    False,
+                ),
+            ]
+        ),
+    ]
+
+    rows = await ScorecardService(db).get_office_rep_activity(
+        workspace, date(2026, 1, 1), date(2026, 1, 31)
+    )
+
+    assert rows[0].model_dump() == {
+        "user_id": 7,
+        "name": "Casey Admin",
+        "role": "admin",
+        "avatar_url": None,
+        "attendance_days": 2,
+        "attendance_worked_seconds": 54_000,
+        "booked_jobs": 4,
+        "cancelled_jobs": 1,
+        "cancellation_rate": 25.0,
+        "responses_measured": 1,
+        "avg_response_time_seconds": 120.0,
+    }
+    assert rows[1].model_dump() == {
+        "user_id": 8,
+        "name": "Dana Dispatch",
+        "role": "dispatcher",
+        "avatar_url": "https://example.com/dana.jpg",
+        "attendance_days": 0,
+        "attendance_worked_seconds": 0,
+        "booked_jobs": 0,
+        "cancelled_jobs": 0,
+        "cancellation_rate": None,
+        "responses_measured": 0,
+        "avg_response_time_seconds": None,
+    }
+
+    statements = [call.args[0] for call in db.execute.await_args_list]
+    assert len(statements) == 4
+    for statement in statements:
+        assert workspace_id in statement.compile().params.values()
+    assert "messages.content" not in str(statements[-1])
+
+
+async def test_office_rep_activity_keeps_empty_roster_to_one_query() -> None:
+    workspace = Workspace(
+        id=uuid.uuid4(),
+        name="Empty workspace",
+        slug="empty-workspace",
+        settings={"timezone": "UTC"},
+    )
+    db = AsyncMock()
+    db.execute.return_value = _mock_result(rows=[])
+
+    rows = await ScorecardService(db).get_office_rep_activity(
+        workspace, date(2026, 1, 1), date(2026, 1, 31)
     )
 
     assert rows == []

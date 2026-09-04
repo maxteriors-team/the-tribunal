@@ -314,11 +314,22 @@ class EstimateQuoteRequest(ComparisonShareRequest):
     deposit_percentage: float | None = Field(default=None, ge=0.01, le=100)
     lighting_project_id: uuid.UUID | None = None
     proposal_preview: EstimateProposalPreview | None = None
+    # Optional operator-entered top of a ballpark range. The exact server-priced
+    # quote total is always the bottom; the service rejects a top that does not
+    # exceed it. Keeping this as money rather than a client-selected percentage
+    # makes the rep's intent explicit while preventing a customer from changing it.
+    price_range_high: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def permanent_quote_fields_are_consistent(self) -> Self:
         if self.side != "permanent" and self.deposit_percentage is not None:
             raise ValueError("A deposit percentage can only be added to a permanent quote")
+        if self.side != "permanent" and self.price_range_high is not None:
+            raise ValueError("A price range can only be added to a permanent quote")
+        # The range rides on the proposal snapshot, which only exists alongside a
+        # preview. Refuse rather than accept the top and quietly send a firm number.
+        if self.price_range_high is not None and self.proposal_preview is None:
+            raise ValueError("A price range requires a proposal preview")
         if self.proposal_preview is not None:
             if self.side != "permanent":
                 raise ValueError("A proposal preview can only be added to a permanent quote")

@@ -17,6 +17,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
+from math import isfinite
 from typing import cast
 
 import structlog
@@ -81,6 +82,7 @@ from app.schemas.proposal import (
     PublicProposalBranding,
     PublicProposalLineItem,
     PublicProposalPackage,
+    PublicProposalPriceRange,
 )
 from app.schemas.proposal_wizard import (
     MAX_PROPOSAL_MOCKUP_IMAGE_CHARS,
@@ -462,7 +464,10 @@ class QuoteService:
 
     @staticmethod
     def _permanent_estimate_preview_document(
-        project: LightingProject, preview: EstimateProposalPreview
+        project: LightingProject,
+        preview: EstimateProposalPreview,
+        *,
+        price_range_high: float | None = None,
     ) -> ProposalDocument:
         """Bind the customer-visible render to the saved shot technicians install."""
         from app.schemas.lighting_project import LandscapeDraftDocument
@@ -483,6 +488,7 @@ class QuoteService:
         project.installation_shot_id = selected_shot.id
         return ProposalDocument(
             service="permanent",
+            price_range_high=price_range_high,
             mockups=[
                 ProposalMockup(
                     image=preview.image,
@@ -1906,7 +1912,13 @@ class QuoteService:
             return False
 
         workspace_name = quote.workspace.name if quote.workspace else ""
-        amount_str = f"{float(quote.total or 0):.2f} {quote.currency.upper()}"
+        total = float(quote.total or 0)
+        price_range = self._public_price_range(quote, total)
+        amount_str = (
+            f"{price_range.low:.2f}–{price_range.high:.2f} {quote.currency.upper()}"
+            if price_range
+            else f"{total:.2f} {quote.currency.upper()}"
+        )
         expiry = quote.expiry_date.isoformat() if quote.expiry_date else None
         # Link to the client-facing proposal page so the email is a doorway to a
         # branded, approvable proposal — not just a plain-text summary.
@@ -1922,6 +1934,7 @@ class QuoteService:
                 workspace_name=workspace_name,
                 quote_number=quote.number,
                 amount_str=amount_str,
+                amount_label="Estimated range" if price_range else "Total",
                 title=quote.title,
                 expiry_date=expiry,
                 notes=quote.notes,
@@ -2024,6 +2037,25 @@ class QuoteService:
         )
         return document
 
+    @staticmethod
+    def _public_price_range(quote: Quote, total: float) -> PublicProposalPriceRange | None:
+        """Return the staff-entered ballpark range, or ``None`` if it went stale.
+
+        The exact live quote total is always the bottom. Suppressing an invalid
+        top after an edit is safer than showing a range that no longer contains
+        the amount the customer is actually accepting.
+        """
+        document = quote.proposal_document
+        if not isinstance(document, Mapping) or total <= 0:
+            return None
+        high = document.get("price_range_high")
+        if isinstance(high, bool) or not isinstance(high, int | float):
+            return None
+        high = round(float(high), 2)
+        if not isfinite(high) or high <= total:
+            return None
+        return PublicProposalPriceRange(low=total, high=high)
+
     async def get_public_proposal(self, token: str) -> PublicProposal:
         """Return the read-only, safe-fields-only proposal for a public token."""
         quote = await self._load_by_token(token)
@@ -2075,6 +2107,7 @@ class QuoteService:
             deposit_amount=deposit_due,
             deposit_paid=deposit_paid,
             deposit_required=deposit_due is not None and not deposit_paid,
+            price_range=self._public_price_range(quote, total),
             # Allowlisted copy — the stored snapshot carries the staff-only
             # fulfillment sheet (distributor SKUs), which must not reach the
             # unauthenticated client page. Locked quotes are narrowed further to
@@ -3475,6 +3508,11 @@ class QuoteService:
         discount = round(float(req.discount_amount), 2)
         if discount > float(pricing.total):
             raise ValidationError("Discount cannot exceed the selected proposal total")
+        quoted_total = round(float(pricing.total) - discount, 2)
+        if req.price_range_high is not None and req.price_range_high <= quoted_total:
+            raise ValidationError(
+                f"Higher range amount must be greater than the ${quoted_total:,.2f} quote total"
+            )
         line_items = self._estimate_line_items(pricing)
         if not line_items:
             raise ValidationError("This estimate has nothing to quote yet — draw the design first.")
@@ -3500,7 +3538,11 @@ class QuoteService:
                 workspace_id, project_id, contact_id=contact_id
             )
             proposal_document = self._permanent_estimate_preview_document(
-                project, req.proposal_preview
+                project,
+                req.proposal_preview,
+                price_range_high=(
+                    round(req.price_range_high, 2) if req.price_range_high is not None else None
+                ),
             )
 
         quote = await self.create_quote(

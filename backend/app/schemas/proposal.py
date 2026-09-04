@@ -163,6 +163,19 @@ class PublicProposalPackage(BaseModel):
     is_selected: bool = False
 
 
+class PublicProposalPriceRange(BaseModel):
+    """A ballpark range shown in place of the proposal's single headline price.
+
+    ``low`` is the server-priced quote total — what the customer is charged if
+    they accept as written, so acceptance and the deposit stay exact. ``high``
+    is the operator-entered top after server validation; the raw internal field
+    never crosses to the public page.
+    """
+
+    low: float
+    high: float
+
+
 class PublicProposal(BaseModel):
     """Read-only proposal payload for the client-facing page.
 
@@ -202,6 +215,10 @@ class PublicProposal(BaseModel):
     deposit_paid: bool = False
     # True when a deposit is owed and not yet paid (drives the client CTA).
     deposit_required: bool = False
+    # Set when the operator sent this proposal as a range: the page shows
+    # "low - high" instead of the single total. Null for every other proposal,
+    # which therefore renders exactly as it does today.
+    price_range: PublicProposalPriceRange | None = None
     # Packages the client may choose between before accepting. Empty for plain
     # quotes and for any proposal that offers a single priced package — there is
     # nothing to choose, so the page shouldn't ask.

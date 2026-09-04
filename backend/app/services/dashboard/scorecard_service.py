@@ -23,6 +23,7 @@ import structlog
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.roles import WorkspaceRole
 from app.models.appointment import Appointment
 from app.models.attendance import (
     ATTENDANCE_STATUS_COMPLETE,
@@ -36,14 +37,17 @@ from app.models.conversation import (
     Message,
     MessageChannel,
     MessageDirection,
+    MessageStatus,
 )
-from app.models.field_service import Job, JobAssignment, Technician
+from app.models.field_service import Job, JobAssignment, JobStatus, Technician
 from app.models.job_costing import TimeEntry
 from app.models.quote import Quote
-from app.models.workspace import Workspace
+from app.models.user import User
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.scorecard import (
     CallReasonStat,
     DailyLeadCount,
+    OfficeRepScorecardRow,
     ReceptionistScorecard,
     TechnicianActivityScorecardRow,
 )
@@ -68,6 +72,16 @@ BUSINESS_HOURS_END = time(18, 0)
 TOP_REASONS_LIMIT = 6
 
 DEFAULT_RANGE_DAYS = 30
+
+# Office-side roles are shown together; field roles retain their technician view.
+OFFICE_SCORECARD_ROLES = (
+    WorkspaceRole.OWNER.value,
+    WorkspaceRole.ADMIN.value,
+    WorkspaceRole.MANAGER.value,
+    WorkspaceRole.DISPATCHER.value,
+    WorkspaceRole.SALES_REP.value,
+    WorkspaceRole.MEMBER.value,
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -137,6 +151,18 @@ class _AttendanceDurationRow:
     paused_seconds: int
 
 
+@dataclass(slots=True, frozen=True)
+class _ResponseMessageRow:
+    """Text-message metadata needed to attribute a first human response."""
+
+    conversation_id: uuid.UUID
+    created_at: datetime
+    direction: str
+    status: str
+    sender_user_id: int | None
+    is_ai: bool
+
+
 def _aggregate_attendance_seconds(
     rows: list[_AttendanceDurationRow],
 ) -> tuple[dict[int, int], dict[int, int]]:
@@ -149,6 +175,42 @@ def _aggregate_attendance_seconds(
         worked_totals[row.user_id] += gross_seconds - paused_seconds
         paused_totals[row.user_id] += paused_seconds
     return dict(worked_totals), dict(paused_totals)
+
+
+def _aggregate_human_response_times(
+    rows: list[_ResponseMessageRow],
+) -> tuple[dict[int, int], dict[int, float]]:
+    """Return measured first-response counts and average seconds by human sender."""
+    pending_inbound: dict[uuid.UUID, datetime] = {}
+    response_counts: Counter[int] = Counter()
+    response_seconds: Counter[int] = Counter()
+
+    for row in rows:
+        if row.direction == MessageDirection.INBOUND.value:
+            pending_inbound.setdefault(row.conversation_id, row.created_at)
+            continue
+        if row.direction != MessageDirection.OUTBOUND.value:
+            continue
+        if row.status == MessageStatus.FAILED.value:
+            continue
+
+        inbound_at = pending_inbound.pop(row.conversation_id, None)
+        if inbound_at is None or row.sender_user_id is None or row.is_ai:
+            continue
+        if inbound_at.tzinfo is None:
+            inbound_at = inbound_at.replace(tzinfo=UTC)
+        response_at = row.created_at
+        if response_at.tzinfo is None:
+            response_at = response_at.replace(tzinfo=UTC)
+        elapsed = max(0, int((response_at - inbound_at).total_seconds()))
+        response_counts[row.sender_user_id] += 1
+        response_seconds[row.sender_user_id] += elapsed
+
+    averages = {
+        user_id: round(response_seconds[user_id] / count, 1)
+        for user_id, count in response_counts.items()
+    }
+    return dict(response_counts), averages
 
 
 def _resolve_tz(workspace: Workspace) -> ZoneInfo:
@@ -502,53 +564,10 @@ class ScorecardService:
         user_ids = [
             technician.user_id for technician in technicians if technician.user_id is not None
         ]
-        attendance_by_user: dict[int, int] = {}
-        paused_by_user: dict[int, int] = {}
-        if user_ids:
-            pause_totals = (
-                select(
-                    AttendancePause.entry_id.label("entry_id"),
-                    func.sum(
-                        func.extract(
-                            "epoch",
-                            AttendancePause.ended_at - AttendancePause.started_at,
-                        )
-                    ).label("paused_seconds"),
-                )
-                .where(AttendancePause.ended_at.is_not(None))
-                .group_by(AttendancePause.entry_id)
-                .subquery()
-            )
-            attendance_result = await self.db.execute(
-                select(
-                    AttendanceEntry.user_id,
-                    AttendanceEntry.started_at,
-                    AttendanceEntry.ended_at,
-                    func.coalesce(pause_totals.c.paused_seconds, 0),
-                )
-                .outerjoin(pause_totals, pause_totals.c.entry_id == AttendanceEntry.id)
-                .where(
-                    AttendanceEntry.workspace_id == workspace.id,
-                    AttendanceEntry.user_id.in_(user_ids),
-                    AttendanceEntry.started_at >= window_start,
-                    AttendanceEntry.started_at < window_end,
-                    AttendanceEntry.status == ATTENDANCE_STATUS_COMPLETE,
-                    AttendanceEntry.ended_at.is_not(None),
-                )
-            )
-            attendance_rows = [
-                _AttendanceDurationRow(
-                    user_id=user_id,
-                    started_at=entry_started_at,
-                    ended_at=entry_ended_at,
-                    paused_seconds=int(paused_seconds),
-                )
-                for user_id, entry_started_at, entry_ended_at, paused_seconds in (
-                    attendance_result.all()
-                )
-                if entry_ended_at is not None
-            ]
-            attendance_by_user, paused_by_user = _aggregate_attendance_seconds(attendance_rows)
+        attendance_rows = await self._fetch_completed_attendance(
+            workspace.id, user_ids, window_start, window_end
+        )
+        attendance_by_user, paused_by_user = _aggregate_attendance_seconds(attendance_rows)
 
         return [
             TechnicianActivityScorecardRow(
@@ -570,6 +589,188 @@ class ScorecardService:
                 ),
             )
             for technician in technicians
+        ]
+
+    async def get_office_rep_activity(
+        self,
+        workspace: Workspace,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> list[OfficeRepScorecardRow]:
+        """Return private, non-ranked activity profiles for office-side members."""
+        tz = _resolve_tz(workspace)
+        resolved_start, resolved_end = resolve_range(
+            start_date,
+            end_date,
+            today=datetime.now(tz).date(),
+        )
+        window_start, window_end = local_date_bounds_utc(
+            resolved_start,
+            resolved_end,
+            tz.key,
+        )
+
+        member_result = await self.db.execute(
+            select(
+                WorkspaceMembership.user_id,
+                User.full_name,
+                User.avatar_url,
+                WorkspaceMembership.role,
+            )
+            .join(User, User.id == WorkspaceMembership.user_id)
+            .where(
+                WorkspaceMembership.workspace_id == workspace.id,
+                WorkspaceMembership.role.in_(OFFICE_SCORECARD_ROLES),
+                User.is_active.is_(True),
+            )
+            .order_by(func.lower(func.coalesce(User.full_name, "")), User.id)
+        )
+        members = list(member_result.all())
+        if not members:
+            return []
+
+        user_ids = [user_id for user_id, _name, _avatar_url, _role in members]
+        attendance_rows = await self._fetch_completed_attendance(
+            workspace.id, user_ids, window_start, window_end
+        )
+        attendance_by_user, _paused_by_user = _aggregate_attendance_seconds(attendance_rows)
+        attendance_dates: dict[int, set[date]] = {user_id: set() for user_id in user_ids}
+        for row in attendance_rows:
+            attendance_dates[row.user_id].add(_local_date(row.started_at, tz))
+
+        job_result = await self.db.execute(
+            select(Quote.created_by_id, Job.status, func.count(Job.id))
+            .select_from(Job)
+            .join(Quote, Quote.id == Job.source_quote_id)
+            .where(
+                Job.workspace_id == workspace.id,
+                Quote.workspace_id == workspace.id,
+                Quote.created_by_id.in_(user_ids),
+                Job.created_at >= window_start,
+                Job.created_at < window_end,
+            )
+            .group_by(Quote.created_by_id, Job.status)
+        )
+        booked_jobs: Counter[int] = Counter()
+        cancelled_jobs: Counter[int] = Counter()
+        for user_id, status, count in job_result.all():
+            if user_id is None:
+                continue
+            booked_jobs[user_id] += int(count)
+            if str(status) == JobStatus.CANCELLED.value:
+                cancelled_jobs[user_id] += int(count)
+
+        # simplification: scan bounded text metadata in memory; persist response
+        # facts before supporting high-volume workspaces beyond the 366-day API cap.
+        response_result = await self.db.execute(
+            select(
+                Message.conversation_id,
+                Message.created_at,
+                Message.direction,
+                Message.status,
+                Message.sender_user_id,
+                Message.is_ai,
+            )
+            .select_from(Message)
+            .join(Conversation, Conversation.id == Message.conversation_id)
+            .where(
+                Conversation.workspace_id == workspace.id,
+                Message.channel.in_([MessageChannel.SMS, MessageChannel.IMESSAGE]),
+                Message.created_at >= window_start,
+                Message.created_at < window_end,
+            )
+            .order_by(Message.conversation_id, Message.created_at, Message.id)
+        )
+        response_rows = [
+            _ResponseMessageRow(
+                conversation_id=conversation_id,
+                created_at=created_at,
+                direction=str(direction),
+                status=str(status),
+                sender_user_id=sender_user_id,
+                is_ai=bool(is_ai),
+            )
+            for (
+                conversation_id,
+                created_at,
+                direction,
+                status,
+                sender_user_id,
+                is_ai,
+            ) in response_result.all()
+        ]
+        response_counts, response_averages = _aggregate_human_response_times(response_rows)
+
+        return [
+            OfficeRepScorecardRow(
+                user_id=user_id,
+                name=full_name or "Unnamed team member",
+                role=str(role),
+                avatar_url=avatar_url,
+                attendance_days=len(attendance_dates[user_id]),
+                attendance_worked_seconds=attendance_by_user.get(user_id, 0),
+                booked_jobs=booked_jobs[user_id],
+                cancelled_jobs=cancelled_jobs[user_id],
+                cancellation_rate=(
+                    round(cancelled_jobs[user_id] / booked_jobs[user_id] * 100, 1)
+                    if booked_jobs[user_id]
+                    else None
+                ),
+                responses_measured=response_counts.get(user_id, 0),
+                avg_response_time_seconds=response_averages.get(user_id),
+            )
+            for user_id, full_name, avatar_url, role in members
+        ]
+
+    async def _fetch_completed_attendance(
+        self,
+        workspace_id: uuid.UUID,
+        user_ids: list[int],
+        window_start: datetime,
+        window_end: datetime,
+    ) -> list[_AttendanceDurationRow]:
+        if not user_ids:
+            return []
+        pause_totals = (
+            select(
+                AttendancePause.entry_id.label("entry_id"),
+                func.sum(
+                    func.extract(
+                        "epoch",
+                        AttendancePause.ended_at - AttendancePause.started_at,
+                    )
+                ).label("paused_seconds"),
+            )
+            .where(AttendancePause.ended_at.is_not(None))
+            .group_by(AttendancePause.entry_id)
+            .subquery()
+        )
+        result = await self.db.execute(
+            select(
+                AttendanceEntry.user_id,
+                AttendanceEntry.started_at,
+                AttendanceEntry.ended_at,
+                func.coalesce(pause_totals.c.paused_seconds, 0),
+            )
+            .outerjoin(pause_totals, pause_totals.c.entry_id == AttendanceEntry.id)
+            .where(
+                AttendanceEntry.workspace_id == workspace_id,
+                AttendanceEntry.user_id.in_(user_ids),
+                AttendanceEntry.started_at >= window_start,
+                AttendanceEntry.started_at < window_end,
+                AttendanceEntry.status == ATTENDANCE_STATUS_COMPLETE,
+                AttendanceEntry.ended_at.is_not(None),
+            )
+        )
+        return [
+            _AttendanceDurationRow(
+                user_id=user_id,
+                started_at=entry_started_at,
+                ended_at=entry_ended_at,
+                paused_seconds=int(paused_seconds),
+            )
+            for user_id, entry_started_at, entry_ended_at, paused_seconds in result.all()
+            if entry_ended_at is not None
         ]
 
     async def _fetch_calls(

@@ -10,7 +10,7 @@ coverage, and the average time spent handling a call.
 from datetime import date
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CallReasonStat(BaseModel):
@@ -41,6 +41,22 @@ class TechnicianActivityScorecardRow(BaseModel):
     job_logged_seconds: int
     attendance_worked_seconds: int
     attendance_paused_seconds: int
+
+
+class OfficeRepScorecardRow(BaseModel):
+    """Admin/CSR profile activity for the selected local-date range."""
+
+    user_id: int
+    name: str
+    role: str
+    avatar_url: str | None
+    attendance_days: int = Field(ge=0)
+    attendance_worked_seconds: int = Field(ge=0)
+    booked_jobs: int = Field(ge=0)
+    cancelled_jobs: int = Field(ge=0)
+    cancellation_rate: float | None = Field(ge=0, le=100)
+    responses_measured: int = Field(ge=0)
+    avg_response_time_seconds: float | None = Field(ge=0)
 
 
 class ReceptionistScorecard(BaseModel):

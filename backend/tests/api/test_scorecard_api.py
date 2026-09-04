@@ -11,7 +11,11 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import scorecard as scorecard_module
-from app.schemas.scorecard import ReceptionistScorecard, TechnicianActivityScorecardRow
+from app.schemas.scorecard import (
+    OfficeRepScorecardRow,
+    ReceptionistScorecard,
+    TechnicianActivityScorecardRow,
+)
 
 WS_ID = uuid.uuid4()
 
@@ -98,14 +102,22 @@ class TestScorecardAuth:
         resp = await noauth_client.get("/api/v1/workspaces/not-a-uuid/scorecard")
         assert resp.status_code in (401, 422)
 
-    async def test_requires_reports_capability(self, member_client: AsyncClient) -> None:
-        resp = await member_client.get(f"/api/v1/workspaces/{WS_ID}/scorecard/technicians")
+    @pytest.mark.parametrize("path", ["technicians", "office-reps"])
+    async def test_requires_reports_capability(self, member_client: AsyncClient, path: str) -> None:
+        resp = await member_client.get(f"/api/v1/workspaces/{WS_ID}/scorecard/{path}")
         assert resp.status_code == 403
 
 
 class TestScorecardValidation:
     async def test_invalid_start_date_returns_422(self, client: AsyncClient) -> None:
         resp = await client.get(f"/api/v1/workspaces/{WS_ID}/scorecard?start_date=not-a-date")
+        assert resp.status_code == 422
+
+    async def test_office_range_over_366_days_returns_422(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            f"/api/v1/workspaces/{WS_ID}/scorecard/office-reps"
+            "?start_date=2025-01-01&end_date=2026-01-02"
+        )
         assert resp.status_code == 422
 
 
@@ -157,9 +169,7 @@ class TestScorecardHappyPath:
             {"date": "2026-01-02", "count": 1},
         ]
 
-    async def test_returns_pause_adjusted_technician_activity(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_returns_pause_adjusted_technician_activity(self, client: AsyncClient) -> None:
         sample = [
             TechnicianActivityScorecardRow(
                 id=uuid.uuid4(),
@@ -195,3 +205,49 @@ class TestScorecardHappyPath:
             "attendance_worked_seconds": 14_400,
             "attendance_paused_seconds": 1_800,
         }
+
+    async def test_returns_office_rep_profiles(self, client: AsyncClient) -> None:
+        sample = [
+            OfficeRepScorecardRow(
+                user_id=7,
+                name="Casey Admin",
+                role="admin",
+                avatar_url=None,
+                attendance_days=18,
+                attendance_worked_seconds=432_000,
+                booked_jobs=12,
+                cancelled_jobs=1,
+                cancellation_rate=8.3,
+                responses_measured=9,
+                avg_response_time_seconds=92.0,
+            )
+        ]
+        with pytest.MonkeyPatch().context() as mp:
+            mock_get = AsyncMock(return_value=sample)
+            mp.setattr(
+                scorecard_module.ScorecardService,
+                "get_office_rep_activity",
+                mock_get,
+            )
+            resp = await client.get(
+                f"/api/v1/workspaces/{WS_ID}/scorecard/office-reps"
+                "?start_date=2026-01-01&end_date=2026-01-31"
+            )
+
+        assert resp.status_code == 200
+        assert resp.json() == [
+            {
+                "user_id": 7,
+                "name": "Casey Admin",
+                "role": "admin",
+                "avatar_url": None,
+                "attendance_days": 18,
+                "attendance_worked_seconds": 432_000,
+                "booked_jobs": 12,
+                "cancelled_jobs": 1,
+                "cancellation_rate": 8.3,
+                "responses_measured": 9,
+                "avg_response_time_seconds": 92.0,
+            }
+        ]
+        mock_get.assert_awaited_once()

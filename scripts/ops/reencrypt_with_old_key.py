@@ -162,6 +162,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
     from app.models.opt_out import GlobalOptOut
     from app.models.phone_message import PhoneMessage
     from app.models.referral_partner import ReferralPartner
+    from app.models.referral_partner_intake import ReferralPartnerIntakeLink
     from app.models.user import User
 
     return (
@@ -251,6 +252,9 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
             ("caller_name", "callback_number", "reason", "message_body"),
         ),
         RotationTarget(ReferralPartner, ("email", "phone")),
+        # The digest remains stable because it identifies the unchanged bearer
+        # value; only the encrypted recoverable copy rotates to the new key.
+        RotationTarget(ReferralPartnerIntakeLink, ("token",)),
         RotationTarget(
             LeadProspect,
             ("email", "phone_number"),

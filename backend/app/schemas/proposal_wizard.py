@@ -539,6 +539,10 @@ class ProposalDocument(BaseModel):
     deposit_mode: str | None = None
     deposit_value: float = 0
     deposit_amount: float = 0
+    # Operator-entered top of a ballpark range, snapshotted with the quote.
+    # Deliberately **not** client-safe: the public payload gets the validated
+    # low/high pair, while the proposal document remains staff-only.
+    price_range_high: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     # Internal fulfillment sheet for the selected tier (staff-only).
     fulfillment: list[FulfillmentPart] = Field(default_factory=list)
     # Snapshot of current on-hand coverage when this preview/quote was built.

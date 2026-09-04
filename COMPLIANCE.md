@@ -868,15 +868,15 @@ This review supersedes the earlier `V1` value-movement `n-a` conclusion **for th
 
 ## Focused addendum — internal time and attendance (2026-08-20)
 
-Snapshot: 20 August 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
+Snapshot: 20 August 2026 · Updated: 4 September 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
 
-Scope: authenticated employee clock-in/out/pause/resume, employee self-access, owner/admin review and correction, append-only audit events, generic payroll CSV export, and an owner/admin technician activity scorecard. This is an engineering gate for these employment-data features, not a wage-and-hour legal opinion or product-wide re-audit.
+Scope: authenticated employee clock-in/out/pause/resume, employee self-access, owner/admin review and correction, append-only audit events, generic payroll CSV export, an owner/admin technician activity scorecard, and owner/admin office-rep activity profiles. This is an engineering gate for these employment-data features, not a wage-and-hour legal opinion or product-wide re-audit.
 
 ### Exposure profile
 
 - **Reach — Confirmed:** invite-only authenticated workspace members; owner/admin team access is capability-gated.
-- **Personal data — Confirmed:** employee name, email, shift and pause timestamps, job assignments, job-time totals, optional notes, correction reasons, and payroll export activity.
-- **Monitoring — Confirmed limited:** the feature records staff identity, server timestamps, and optional staff-entered notes. It does not collect precise location, screenshots, keystrokes, device activity, or biometric data.
+- **Personal data — Confirmed:** employee name, email, shift and pause timestamps, job assignments, job-time totals, attributed bookings and cancellations, first-response timing metadata, optional notes, correction reasons, and payroll export activity.
+- **Monitoring — Confirmed limited:** the feature records staff identity, server timestamps, attributed work records, and optional staff-entered notes. It does not collect precise location, screenshots, keystrokes, device activity, message content for scorecard calculations, or biometric data.
 - **Employment/pay — Confirmed:** recorded time can affect wages after an administrator imports it into payroll.
 - **Jurisdiction — Unknown:** company work locations, employee work locations, workweek/overtime rules, break rules, rounding policy, notice/acknowledgement requirements, and record-retention periods were not supplied.
 - **Payroll processor — Unknown:** no payroll vendor is configured in the repository; export is deliberately generic and requires admin review/mapping.
@@ -894,7 +894,7 @@ Scope: authenticated employee clock-in/out/pause/resume, employee self-access, o
 | TNA-007 | MEDIUM | Staff may clock time from phone/keyboard and admins use forms/dialogs/tables | RUNTIME + CODE: labelled native controls, focus-managed tabs/dialogs, text status labels, mobile cards, and explicit states passed frontend lint, type checks, 1,421 tests, production build, and serious/critical Axe checks at desktop/mobile widths | Verify keyboard, zoom/reflow, screen-reader output, contrast, and touch behavior before deployment | Automated checks passed; manual assistive-technology review remains open | Component flow tests, authenticated Playwright, and frontend CI |
 | TNA-008 | MEDIUM | Payroll vendors do not share a universal CSV contract | CODE + official vendor research: QuickBooks templates are case-sensitive and product-specific; Gusto maps customer spreadsheets; ADP inputs depend on tenant identifiers/earning codes | Do not advertise direct vendor compatibility until the customer's exact import template is tested end-to-end | Implemented as Generic payroll CSV only | Vendor-neutral contract doc and UI copy; provider adapter requires separate acceptance fixture |
 | TNA-009 | LAWYER | Employee-initiated pauses are subtracted from exported worked time | RUNTIME + CODE: six PostgreSQL attendance integration tests covered retry-safe pause/resume, frozen worked time, automatic pause closure, audit events, and pause-adjusted export; authenticated browser coverage exercised desktop/mobile pause controls | Employment counsel/payroll must decide which meal/rest/other pauses are compensable in every employee location and how missed/late pauses are corrected | Engineering preserves gross, paused, and net values; pay-policy decision remains open | Immutable pause intervals, gross/paused/net export columns, admin void-and-re-enter correction trail |
-| TNA-010 | MEDIUM | Supervisors can compare technician job and attendance activity | RUNTIME + CODE: service/API tests and authenticated browser coverage verified the `reports:view` gate, populated responsive cards, and serious/critical Axe checks; no composite score, ranking, revenue attribution, quality label, or utilization ratio exists | Give staff notice, limit access, verify source records, and do not use these totals alone for pay, discipline, scheduling, or automated employment decisions | Limited scorecard implemented; employer notice/use policy remains open | Admin-only API/nav gate and explicit non-rating UI/help copy |
+| TNA-010 | MEDIUM | Supervisors can compare technician and office-rep activity | RUNTIME + CODE: technician browser coverage plus service/API/component tests verify the `reports:view` gate and profile-level attendance, booked-job, cancellation, and first-human-response metrics; no composite score, rank, quality label, or automatic recommendation exists | Give staff notice, limit access, verify source records, disclose metric definitions, and do not use these totals alone for pay, discipline, scheduling, or automated employment decisions | Limited scorecards implemented; employer notice/use policy remains open | Owner/admin-only API/nav gate, no message-content query, explicit non-rating copy, source-record warning, and response sample size |
 | TNA-011 | MEDIUM | Principal-scoped React Query data could survive a soft logout on a shared browser | CODE + RUNTIME: independent security review confirmed the root QueryClient persisted across account changes; auth-provider tests and authenticated E2E passed after the fix | Purge in-memory server data whenever authentication ends or a new identity is established | Fixed | `queryClient.clear()` on logout, successful login, and failed session recovery; 20 auth-provider regression tests |
 
 ### Open decisions before payroll reliance
@@ -903,11 +903,11 @@ Scope: authenticated employee clock-in/out/pause/resume, employee self-access, o
 - Identify the actual payroll product and tenant import template, then test one non-production payroll with known regular/overtime/break cases before importing real wages.
 - Set a written retention period and secure process for downloaded CSV files. The repository cannot establish the employer's legal retention facts or payroll vendor settings.
 - Define paid versus unpaid pause categories, required meal/rest periods, missed-pause correction, manager approval, and whether employees must attest to pauses; test those rules with payroll counsel before relying on `total_hours`.
-- Adopt a technician-scorecard notice and manager-use policy. The direct activity totals must not become an unexplained ranking or sole basis for compensation, discipline, or scheduling.
+- Adopt an employee-scorecard notice and manager-use policy. Direct activity totals must not become an unexplained ranking or sole basis for compensation, discipline, or scheduling.
 
 ### Verification boundary
 
-Backend CI passed 4,666 tests (21 skipped); frontend CI passed lint, type checks, 1,421 tests, and production build; attendance integration passed six PostgreSQL tests; migration upgrade/check/downgrade/upgrade passed; and authenticated Playwright passed two desktop/mobile scenarios with pause, correction, export, scorecard, navigation-permission, overflow, and serious/critical Axe assertions. An independent static security review found no Critical/High issue; its confirmed Medium cross-account cache finding was fixed and re-verified by frontend CI plus authenticated E2E. Evidence is stored under `.ezcoder/eyes/out/attendance/`. No production payroll import, live employee notice, payroll-vendor sandbox, manual screen-reader session, or legal review was performed.
+Backend CI passed 4,666 tests (21 skipped); frontend CI passed lint, type checks, 1,421 tests, and production build; attendance integration passed six PostgreSQL tests; migration upgrade/check/downgrade/upgrade passed; and authenticated Playwright passed two desktop/mobile scenarios with pause, correction, export, technician scorecard, navigation-permission, overflow, and serious/critical Axe assertions. The 4 September office-profile extension passed full `make ci.backend` (5,211 tests passed, 21 skipped, 62.04% coverage) and `make ci.frontend` (1,674 tests passed plus the production build), in addition to its targeted checks. A separate one-off execution exercised the real service aggregation, workspace-scoped SQL, message-content exclusion, and route registration without importing the edited tests. Authenticated local HTTP returned 200 for an owner, 403 for a manager without report access, and a fail-closed 404 for a foreign workspace; desktop and 390px screenshots covered the new tab. No manual assistive-technology session covered that tab. An independent static security review found no Critical/High issue; its confirmed Medium cross-account cache finding was fixed and re-verified by frontend CI plus authenticated E2E. Evidence is stored under `.ezcoder/eyes/out/attendance/`. No production payroll import, live employee notice, payroll-vendor sandbox, manual screen-reader session, or legal review was performed.
 
 ## Focused addendum — customer invoice-payment receipts (2026-08-25)
 
@@ -1000,6 +1000,21 @@ Scope: authenticated staff can open an existing deal, review its linked customer
 ### Verification boundary
 
 Forty-eight focused component tests, TypeScript, changed-file lint, and mocked desktop/mobile route checks passed. Notes and SMS returned no WCAG-tagged axe violations after message contrast fixes, with no horizontal overflow at 320 px. No real contact was loaded, no SMS was sent, and consent basis, carrier delivery, physical touch drag, screen-reader output, and legal policy were not verified.
+
+## Focused addendum — permanent proposal price range (2026-09-02)
+
+Snapshot: 2 September 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
+
+Scope: a staff member may explicitly send a new permanent-lighting proposal as the exact server-priced total through a higher amount that staff enters. The option is off by default and does not change existing proposals, deposits, acceptance totals, payment processing, or provider delivery.
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| PPR-001 | HIGH | A consumer-facing range could obscure what acceptance actually costs | CODE/tests: the server owns the low end, rejects a top that does not exceed it, hides the raw staff field, labels the email and page as a range, and tells customers that approval locks the lower figure while increases require another quote | State the binding amount and prevent the public customer flow from changing either end or the payment total | Fixed locally | Request-boundary, email, public-payload, client-render, and acceptance/deposit regressions |
+| PPR-002 | LAWYER | A proposal range may be treated as an estimate or consumer contract | DEDUCED: the engineering control makes the lower figure binding in-product, but the deployed terms and local estimate rules were not reviewed | Confirm the range wording and change-order process for each jurisdiction served | Open; existing `SPP-003` also applies | Legal review of deployed proposal terms and operating jurisdictions |
+
+### Verification boundary
+
+Static code and local automated checks cover range validation, email/page display, exact accepted total, and unchanged deposit. No proposal was sent to a real customer, no payment was created, and no legal review was performed.
 
 ## Focused addendum — Permanent Lighting GreenSky payment options (2026-09-03)
 
