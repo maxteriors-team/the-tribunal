@@ -806,6 +806,66 @@ describe("LightDesigner", () => {
     );
   });
 
+  it("sends a permanent project to its linked customer profile", async () => {
+    const adapter: LandscapeProjectPersistenceAdapter = {
+      initialDraft: {
+        version: 2,
+        projectType: "permanent",
+        activeShotId: "front",
+        shots: [
+          {
+            id: "front",
+            photo: { dataUrl: "data:image/png;base64,AAAA", width: 1200, height: 800 },
+            design: {
+              runs: [],
+              items: [
+                { id: "fixture-1", productId: "fixture-uplight", at: { x: 200, y: 220 }, sizePx: 30 },
+              ],
+              calibration: null,
+            },
+            dusk: 0.4,
+          },
+        ],
+        updatedAt: "2026-08-26T12:00:00.000Z",
+      },
+      onLandscapeDraftChange: vi.fn(),
+      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      projectId: "permanent-project",
+      projectName: "Pat permanent roofline",
+      contactName: "Pat Lee",
+      contactId: 42,
+      contactEmail: "pat@example.com",
+      contactPhone: "+15551234567",
+      flushBeforeProposal: vi.fn().mockResolvedValue(undefined),
+      resetKey: 0,
+    };
+    renderEstimator("permanent", adapter);
+
+    const customerName = await screen.findByRole("combobox", { name: "Customer name" });
+    await waitFor(() => expect(customerName).toHaveValue("Pat Lee"));
+    expect(screen.getByRole("textbox", { name: "Customer email" })).toHaveValue("pat@example.com");
+    expect(screen.getByRole("textbox", { name: "Customer phone" })).toHaveValue("+15551234567");
+    expect(customerName).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "Customer email" })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "Customer phone" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Pat Lee" })).toHaveAttribute("href", "/contacts/42");
+
+    fireEvent.click(screen.getByRole("button", { name: "Email proposal" }));
+
+    await waitFor(() =>
+      expect(estimatorApi.createQuote).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({ lighting_project_id: "permanent-project" }),
+      ),
+    );
+    expect(quotesApi.deliver).toHaveBeenCalledWith(
+      "ws_1",
+      "quote-1",
+      "email",
+      "pat@example.com",
+    );
+  });
+
   it("sends the permanent proposal as a range when the rep switches it on", async () => {
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {

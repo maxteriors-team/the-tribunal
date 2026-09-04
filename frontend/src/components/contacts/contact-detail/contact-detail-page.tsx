@@ -20,6 +20,7 @@ import { ClientNoteDialog } from "@/components/contacts/client-note-dialog";
 import { ContactAIKnowledge } from "@/components/contacts/contact-detail/contact-ai-knowledge";
 import { ContactHistory } from "@/components/contacts/contact-detail/contact-history";
 import { ContactJobTime } from "@/components/contacts/contact-detail/contact-job-time";
+import { ContactLightingProjects } from "@/components/contacts/contact-detail/contact-lighting-projects";
 import { ContactFormDialog } from "@/components/contacts/contact-form-dialog";
 import { ContactFilesMedia } from "@/components/contacts/contact-sidebar/contact-files-media";
 import { ContactInfoSection } from "@/components/contacts/contact-sidebar/contact-info-section";
@@ -235,6 +236,15 @@ export function ContactDetailPage({ contactId }: ContactDetailPageProps) {
           {workspaceId && (
             <ContactLeadSourceCorrection workspaceId={workspaceId} contact={contact} />
           )}
+
+          {workspaceId && can("billing:read") ? (
+            <ContactLightingProjects
+              workspaceId={workspaceId}
+              contactId={contact.id}
+              contactName={displayName}
+              canCreate={can("billing:write")}
+            />
+          ) : null}
 
           <Card>
             <CardContent>

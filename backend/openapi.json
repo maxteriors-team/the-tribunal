@@ -27931,6 +27931,17 @@
             ],
             "title": "Assigned User Id"
           },
+          "contact_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Email"
+          },
           "contact_id": {
             "title": "Contact Id",
             "type": "integer"
@@ -27938,6 +27949,17 @@
           "contact_name": {
             "title": "Contact Name",
             "type": "string"
+          },
+          "contact_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Phone"
           },
           "created_at": {
             "format": "date-time",

@@ -22559,10 +22559,14 @@ export interface components {
         LightingProjectDetail: {
             /** Assigned User Id */
             assigned_user_id: number | null;
+            /** Contact Email */
+            contact_email?: string | null;
             /** Contact Id */
             contact_id: number;
             /** Contact Name */
             contact_name: string;
+            /** Contact Phone */
+            contact_phone?: string | null;
             /**
              * Created At
              * Format: date-time
