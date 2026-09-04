@@ -167,6 +167,41 @@ function setupAerialTool(tool: EditorState["tool"]) {
   return { canvas, dispatch };
 }
 
+describe("LightCanvas — mobile focus view", () => {
+  it("expands and restores the Permanent design canvas", () => {
+    const { container } = render(
+      <LightCanvas
+        photo={PHOTO}
+        products={[UPLIGHT]}
+        state={initialEditorState()}
+        dispatch={vi.fn()}
+        mobileFocusEnabled
+      />,
+    );
+    const canvasRegion = container.querySelector(".lc-wrap")!;
+    const expand = screen.getByRole("button", { name: "View design larger" });
+
+    expect(canvasRegion).not.toHaveClass("lc-mobile-expanded");
+    expect(expand).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(expand);
+
+    expect(canvasRegion).toHaveClass("lc-mobile-expanded");
+    expect(screen.getByRole("button", { name: "Return to standard design view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    fireEvent.keyDown(canvasRegion, { key: "Escape" });
+
+    expect(canvasRegion).not.toHaveClass("lc-mobile-expanded");
+    expect(screen.getByRole("button", { name: "View design larger" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+});
+
 describe("LightCanvas — aerial plan semantics", () => {
   it("labels the landscape canvas and scale controls as top-down aerial", async () => {
     render(

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 
+import AxeBuilder from "@axe-core/playwright";
 import { devices, expect, test, type Page, type Request } from "@playwright/test";
 
 const WORKSPACE_ID = "0ef615a3-4fa5-43e7-bb3b-2dbfa0788a11";
@@ -604,6 +605,96 @@ test.describe("landscape lighting studio", () => {
     });
   });
 
+  test("keeps the Permanent designer canvas readable and primary on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(() => {
+      window.localStorage.setItem("crm-announcement-permanent-customer-handoff-v2", "dismissed");
+    });
+    await installStudioApi(page, { projectType: "permanent" });
+    await page.goto(PERMANENT_PROJECT_URL);
+
+    const canvas = page.getByLabel("Property photo lighting design canvas");
+    const canvasRegion = page.locator(".lc-wrap");
+    const viewToggle = page.locator(".lc-mobile-view-toggle");
+    await expect(canvas).toBeVisible();
+    await expect(viewToggle).toBeVisible();
+    await expect(viewToggle).toHaveAccessibleName("View design larger");
+    await expect(page.locator(".lc-hint-bar")).toBeHidden();
+    await expect(page.locator(".lc-overlay.bottom-right")).toBeVisible();
+    const accessibility = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+      .analyze();
+    expect(
+      accessibility.violations.map(({ id, nodes }) => ({
+        id,
+        targets: nodes.map((node) => node.target),
+      })),
+    ).toEqual([]);
+
+    const drawLightsTop = await page
+      .getByRole("heading", { name: "Draw lights" })
+      .evaluate((element) => element.getBoundingClientRect().top);
+    const toolsTop = await page
+      .getByRole("heading", { name: "Tools" })
+      .evaluate((element) => element.getBoundingClientRect().top);
+    expect(drawLightsTop).toBeLessThan(toolsTop);
+    await expect
+      .poll(() =>
+        page.locator(".tp-rail").evaluate((element) => getComputedStyle(element).overflowY),
+      )
+      .toBe("visible");
+
+    const standardHeight = await canvasRegion.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
+    const standardScale = Number(await canvas.getAttribute("data-view-scale"));
+    await viewToggle.click();
+    await expect(viewToggle).toHaveAttribute("aria-pressed", "true");
+    await expect(viewToggle).toHaveAccessibleName("Return to standard design view");
+    await expect(canvasRegion).toHaveClass(/lc-mobile-expanded/);
+    await expect
+      .poll(() => canvasRegion.evaluate((element) => element.getBoundingClientRect().height))
+      .toBeGreaterThan(standardHeight + 100);
+    await expect
+      .poll(async () => Number(await canvas.getAttribute("data-view-scale")))
+      .toBeGreaterThan(standardScale * 1.2);
+
+    const overflow = await page.evaluate(
+      () =>
+        Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) -
+        document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/permanent-designer-mobile.png",
+      fullPage: true,
+    });
+
+    await viewToggle.click();
+    await expect(viewToggle).toHaveAttribute("aria-pressed", "false");
+    await expect(viewToggle).toHaveAccessibleName("View design larger");
+    await expect(canvasRegion).not.toHaveClass(/lc-mobile-expanded/);
+
+    await page.setViewportSize({ width: 320, height: 700 });
+    await expect(canvas).toBeVisible();
+    expect(
+      await page.evaluate(
+        () =>
+          Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) -
+          document.documentElement.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+    const viewToggleBox = await viewToggle.boundingBox();
+    const zoomControlsBox = await page.locator(".lc-overlay.bottom-right").boundingBox();
+    if (!viewToggleBox || !zoomControlsBox)
+      throw new Error("Mobile canvas controls did not render");
+    expect(viewToggleBox.x + viewToggleBox.width).toBeLessThanOrEqual(zoomControlsBox.x);
+    await page.screenshot({
+      path: "../.ezcoder/screenshots/permanent-designer-mobile-320.png",
+      fullPage: true,
+    });
+  });
+
   test("tags a drawn permanent run with the house face it covers", async ({ page }) => {
     const { updates } = await installStudioApi(page, { projectType: "permanent" });
     await page.goto(PERMANENT_PROJECT_URL);
@@ -637,7 +728,9 @@ test.describe("landscape lighting studio", () => {
     await expect.poll(savedElevations).toEqual(["side"]);
 
     // Measured footage moves with the tag instead of staying on the front.
-    await expect(page.getByText(/Front 0\.0 ft · Side [1-9][\d.]* ft · Back 0\.0 ft/)).toBeVisible();
+    await expect(
+      page.getByText(/Front 0\.0 ft · Side [1-9][\d.]* ft · Back 0\.0 ft/),
+    ).toBeVisible();
     await page.screenshot({
       path: "../.ezcoder/screenshots/permanent-run-elevation-tag.png",
     });
@@ -1215,7 +1308,9 @@ test.describe("landscape lighting studio", () => {
       hasTouch: iPadLandscape.hasTouch,
     });
 
-    test("keeps the design canvas full-width while CRM navigation overlays it", async ({ page }) => {
+    test("keeps the design canvas full-width while CRM navigation overlays it", async ({
+      page,
+    }) => {
       await installStudioApi(page);
       await page.goto(PROJECT_URL);
 

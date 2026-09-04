@@ -12,7 +12,7 @@
  * reducer, passed in as `state`/`dispatch`, so the palette and estimate panel
  * stay in sync with what's on the canvas.
  */
-import { AlertTriangle, ImagePlus, Moon, Sunrise } from "lucide-react";
+import { AlertTriangle, ImagePlus, Maximize2, Minimize2, Moon, Sunrise } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -136,6 +136,7 @@ interface LightCanvasProps {
   defaultSourceVoltage?: number;
   planImageRequestToken?: number;
   onPlanImageRequestHandled?: () => void;
+  mobileFocusEnabled?: boolean;
 }
 
 export function LightCanvas({
@@ -153,6 +154,7 @@ export function LightCanvas({
   defaultSourceVoltage = 12,
   planImageRequestToken = 0,
   onPlanImageRequestHandled,
+  mobileFocusEnabled = false,
 }: LightCanvasProps) {
   const { design, tool, selection, dusk } = state;
   const isAerial = perspective === "aerial";
@@ -174,6 +176,7 @@ export function LightCanvas({
   );
   const [planImageError, setPlanImageError] = useState<string | null>(null);
   const [imageDragActive, setImageDragActive] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState(false);
   const [view, setView] = useState<CanvasView>({ scale: 1, ox: 0, oy: 0 });
   const [draft, setDraft] = useState<Point[]>([]);
   const draftRef = useRef<Point[]>([]);
@@ -1418,7 +1421,9 @@ export function LightCanvas({
   return (
     <div
       ref={containerRef}
-      className={`lc-wrap${imageDragActive ? " lc-image-drag-active" : ""}`}
+      className={`lc-wrap${imageDragActive ? " lc-image-drag-active" : ""}${
+        mobileExpanded ? " lc-mobile-expanded" : ""
+      }`}
       onDragEnter={(event) => {
         if (event.dataTransfer.types.includes("Files")) {
           event.preventDefault();
@@ -1436,6 +1441,12 @@ export function LightCanvas({
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
           setImageDragActive(false);
         }
+      }}
+      onKeyDownCapture={(event) => {
+        if (event.key !== "Escape" || !mobileExpanded) return;
+        fittedRef.current = false;
+        setMobileExpanded(false);
+        window.requestAnimationFrame(fitView);
       }}
       onDrop={onPlanImageDrop}
     >
@@ -1482,6 +1493,28 @@ export function LightCanvas({
         onDoubleClick={onDoubleClick}
         onContextMenu={onContextMenu}
       />
+
+      {mobileFocusEnabled ? (
+        <button
+          type="button"
+          className="lc-mobile-view-toggle"
+          aria-label={mobileExpanded ? "Return to standard design view" : "View design larger"}
+          aria-pressed={mobileExpanded}
+          onClick={() => {
+            const expanded = !mobileExpanded;
+            fittedRef.current = false;
+            setMobileExpanded(expanded);
+            window.requestAnimationFrame(() => {
+              fitView();
+              if (expanded) zoomCenter(1.35);
+              containerRef.current?.scrollIntoView?.({ block: "start", inline: "nearest" });
+            });
+          }}
+        >
+          {mobileExpanded ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+          <span>{mobileExpanded ? "Standard view" : "Larger view"}</span>
+        </button>
+      ) : null}
 
       {!isAerial ? (
         <div className="lc-overlay top-left lc-plan-actions">

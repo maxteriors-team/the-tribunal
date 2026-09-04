@@ -631,8 +631,8 @@
   position: absolute;
   top: 3px;
   right: 3px;
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -648,6 +648,11 @@
 
 .est-shot-del:hover {
   background: #e0726a;
+}
+
+.est-shot-del:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
 }
 
 .est-shot-add {
@@ -853,7 +858,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--t4);
+  color: var(--t3);
 }
 
 .tp-section h2.tp-mt {
@@ -926,7 +931,7 @@
 
 .tp-product-price {
   margin-top: 4px;
-  color: var(--t4);
+  color: var(--t3);
   font-size: 11px;
   flex: 0 0 auto;
 }
@@ -1236,6 +1241,38 @@
   min-width: 0;
   background: #05080f;
   overflow: hidden;
+}
+
+.lc-mobile-view-toggle {
+  appearance: none;
+  display: none;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--bdr);
+  border-radius: 999px;
+  background: rgba(8, 14, 30, 0.94);
+  color: var(--t1);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lc-mobile-view-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.lc-mobile-view-toggle[aria-pressed="true"] {
+  border-color: var(--bdr-g);
+  color: var(--gold);
+}
+
+.lc-mobile-view-toggle:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
 }
 
 .lc-image-drop-target {
@@ -3991,6 +4028,75 @@
     max-height: 52vh;
     overflow-y: auto;
     border-top: 1px solid var(--bdr);
+  }
+
+  /* Permanent projects are canvas-first on touch screens: keep the primary
+     lighting choice immediately below the photo and avoid nested scrolling. */
+  .est-permanent-builder .tp-rail {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .est-permanent-builder .tp-section.tp-grow {
+    order: -1;
+    flex: 0 0 auto;
+  }
+
+  .est-permanent-builder .lc-wrap.lc-mobile-expanded {
+    min-height: min(82vh, 760px);
+    min-height: min(82svh, 760px);
+  }
+
+  .est-permanent-builder .lc-mobile-view-toggle {
+    position: absolute;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: 12px;
+    z-index: 6;
+    display: inline-flex;
+  }
+
+  .est-permanent-builder .lc-overlay.bottom-center {
+    display: none;
+  }
+
+  .est-permanent-builder .lc-overlay.top-left {
+    right: 12px;
+    max-width: none;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .est-permanent-builder .lc-overlay.top-right {
+    top: 64px;
+    left: 12px;
+    max-width: none;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+
+  .est-permanent-builder .lc-chip,
+  .est-permanent-builder .lc-zoom-btn,
+  .est-permanent-builder .tp-tool,
+  .est-permanent-builder .tp-product {
+    min-height: 44px;
+  }
+
+  .est-permanent-builder .lc-zoom-btn {
+    min-width: 44px;
+  }
+}
+
+@media (max-width: 360px) {
+  .est-permanent-builder .lc-mobile-view-toggle {
+    width: 44px;
+    padding-inline: 0;
+    justify-content: center;
+  }
+
+  .est-permanent-builder .lc-mobile-view-toggle span {
+    display: none;
   }
 }
 
