@@ -187,12 +187,41 @@ export function useSetMemberOnRoster(workspaceId: string) {
               email: email ?? null,
               user_id: userId,
               is_active: true,
+              scoreboard_enabled: true,
               color: DEFAULT_TECHNICIAN_COLOR,
             },
           }),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.technicians.all(workspaceId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.technicianScoreboard.all(workspaceId),
+      });
+    },
+  });
+}
+
+interface LeagueToggleInput {
+  technicianId: string;
+  enabled: boolean;
+}
+
+/** Include or hide one rostered member without deleting their earned XP history. */
+export function useSetMemberInLeague(workspaceId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ technicianId, enabled }: LeagueToggleInput) =>
+      apiClient.put("/api/v1/workspaces/{workspace_id}/technicians/{technician_id}", {
+        path: { workspace_id: workspaceId, technician_id: technicianId },
+        body: { scoreboard_enabled: enabled },
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.technicians.all(workspaceId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.technicianScoreboard.all(workspaceId),
       });
     },
   });

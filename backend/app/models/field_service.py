@@ -388,6 +388,10 @@ class Technician(Base, WorkspaceScoped):
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
     )
+    # Managers can hide a technician from Lighting League without losing XP history.
+    scoreboard_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
     # Highest Lighting League level whose celebration this technician dismissed.
     scoreboard_level_seen: Mapped[int] = mapped_column(
         Integer, default=1, server_default="1", nullable=False

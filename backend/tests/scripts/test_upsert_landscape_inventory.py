@@ -237,7 +237,14 @@ def test_payload_is_zero_stock_and_never_invents_a_supplier() -> None:
         for item in definitions
         if item.service_line != "landscape"
     )
-
+    assert {
+        landscape_upsert.SERVICE_CATEGORY_LABELS[item.service_line] for item in definitions
+    } == {
+        "Bistro Lighting",
+        "Christmas Lighting",
+        "Landscape Lighting",
+        "Permanent Holiday Lighting",
+    }
     for definition in definitions:
         payload = landscape_upsert.inventory_item_payload(workspace_id, definition)
         assert payload == {
@@ -246,6 +253,7 @@ def test_payload_is_zero_stock_and_never_invents_a_supplier() -> None:
             "catalog_item_id": None,
             "name": definition.name,
             "sku": definition.sku,
+            "service_category": landscape_upsert.SERVICE_CATEGORY_LABELS[definition.service_line],
             "unit_of_measure": definition.unit_of_measure,
             "is_active": True,
             "valuation_method": "weighted_average",
@@ -433,8 +441,9 @@ def test_stale_piped_name_is_replaced_but_an_operator_rename_is_not(
 
     assert stale.name == "ZD Uplight"
     assert renamed.name == "Front-bed accent (crew name)"
-    assert result.updated == 1
-    assert result.skipped == 1
+    assert stale.service_category == renamed.service_category == "Landscape Lighting"
+    assert result.updated == 2
+    assert result.skipped == 0
 
 
 def test_sheet_spells_the_per_foot_unit_one_way() -> None:
@@ -482,8 +491,9 @@ def test_unit_correction_lands_only_while_an_item_has_never_held_stock(
     assert never_stocked.unit_of_measure == "ft"
     # Rewriting the unit under a counted balance would reinterpret the quantity.
     assert counted.unit_of_measure == "linear_ft"
-    assert result.updated == 1
-    assert result.skipped == 1
+    assert never_stocked.service_category == counted.service_category == "Christmas Lighting"
+    assert result.updated == 2
+    assert result.skipped == 0
     assert result.created == STOCK_ROWS - 2
 
 
