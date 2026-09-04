@@ -137,7 +137,10 @@ const technicians = createResourceQueryKeys("technicians");
 // Sales-wizard: config + catalog are the inputs the wizard loads per workspace.
 const salesWizard = {
   pricing: (workspaceId: string) => ["sales-wizard-pricing", workspaceId] as const,
-  catalog: (workspaceId: string) => ["sales-wizard-catalog", workspaceId] as const,
+  // Distinct array shape, nested under catalog-items so every CRUD invalidation
+  // refreshes package resolution in the designer and other pricing surfaces.
+  catalog: (workspaceId: string) =>
+    [...catalogItems.all(workspaceId), "active-sales-wizard-array"] as const,
 };
 
 // Attach rules: the workspace's cross-sell prompt config, read by the settings

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CatalogItemDialog } from "@/components/catalog/catalog-item-dialog";
+import { queryKeys } from "@/lib/query-keys";
 import { selectOption } from "@/test/select-option";
 import type { CatalogItem } from "@/types";
 
@@ -60,6 +61,7 @@ function renderDialog(item?: CatalogItem) {
       <CatalogItemDialog open onOpenChange={vi.fn()} item={item} />
     </QueryClientProvider>,
   );
+  return client;
 }
 
 beforeEach(() => {
@@ -123,5 +125,21 @@ describe("CatalogItemDialog", () => {
     expect(updateMock.mock.calls[0][2]).toMatchObject({
       service_category: null,
     });
+  });
+
+  it("invalidates the landscape designer catalog after saving a price-book item", async () => {
+    const user = userEvent.setup();
+    const client = renderDialog(makeItem());
+    const designerCatalogKey = queryKeys.salesWizard.catalog("ws-1");
+    client.setQueryDefaults(designerCatalogKey, { gcTime: Infinity });
+    client.setQueryData(designerCatalogKey, [makeItem()]);
+    expect(client.getQueryState(designerCatalogKey)?.isInvalidated).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(client.getQueryState(designerCatalogKey)?.isInvalidated).toBe(true),
+    );
   });
 });
