@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import { expect, test, type Page, type Request } from "@playwright/test";
+import { devices, expect, test, type Page, type Request } from "@playwright/test";
 
 const WORKSPACE_ID = "0ef615a3-4fa5-43e7-bb3b-2dbfa0788a11";
 const PROJECT_ID = "6c5e45fd-7984-4216-8ff4-988c03cc2a11";
@@ -1203,6 +1203,51 @@ test.describe("landscape lighting studio", () => {
     await expect(needed).toHaveValue("2");
     await expect(ordered).toHaveValue("4");
     await expect(unitCost).toHaveValue("82.5");
+  });
+
+  test.describe("iPad landscape navigation", () => {
+    const iPadLandscape = devices["iPad Pro 11 landscape"];
+    test.use({
+      userAgent: iPadLandscape.userAgent,
+      viewport: iPadLandscape.viewport,
+      deviceScaleFactor: iPadLandscape.deviceScaleFactor,
+      isMobile: iPadLandscape.isMobile,
+      hasTouch: iPadLandscape.hasTouch,
+    });
+
+    test("keeps the design canvas full-width while CRM navigation overlays it", async ({ page }) => {
+      await installStudioApi(page);
+      await page.goto(PROJECT_URL);
+
+      const appContent = page.locator('[data-slot="sidebar-inset"]').first();
+      const canvas = page.getByLabel("Top-down aerial lighting plan canvas");
+      const navigationToggle = page.getByRole("button", { name: "Open CRM navigation" });
+      await expect(canvas).toBeVisible();
+      const viewportWidth = await page.evaluate(() => window.innerWidth);
+      const widthBeforeOpening = await appContent.evaluate((element) => element.clientWidth);
+      expect(widthBeforeOpening).toBeGreaterThanOrEqual(viewportWidth - 1);
+      await expect(navigationToggle).toHaveAttribute("aria-expanded", "false");
+
+      await navigationToggle.click();
+      const navigation = page.getByRole("dialog", { name: "Sidebar" });
+      await expect(navigation).toBeVisible();
+      const closeButton = navigation.getByRole("button", { name: "Close" });
+      await expect(closeButton).toBeVisible();
+      expect(await appContent.evaluate((element) => element.clientWidth)).toBe(widthBeforeOpening);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+      ).toBe(true);
+      await closeButton.click();
+      await expect(navigation).toBeHidden();
+      await expect(navigationToggle).toBeFocused();
+      await expect(navigationToggle).toHaveAttribute("aria-expanded", "false");
+
+      await navigationToggle.click();
+      await expect(navigation).toBeVisible();
+      await navigation.getByRole("link", { name: "Landscape Lighting", exact: true }).click();
+      await expect(page).toHaveURL(/\/landscape-lighting$/);
+      await expect(navigation).toBeHidden();
+    });
   });
 
   test("keeps complete geometry at desktop, laptop, mobile, reduced motion, and forced colors", async ({

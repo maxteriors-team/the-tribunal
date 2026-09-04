@@ -22,7 +22,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useIsMobile } from "@/hooks/useMobile"
+import { useIsCompactNavigation, useIsMobile } from "@/hooks/useMobile"
 import { cn } from "@/lib/utils"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
@@ -57,6 +57,7 @@ function SidebarProvider({
   defaultOpen = true,
   open: openProp,
   onOpenChange: setOpenProp,
+  overlayOnCompact = false,
   className,
   style,
   children,
@@ -65,8 +66,10 @@ function SidebarProvider({
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  overlayOnCompact?: boolean
 }) {
-  const isMobile = useIsMobile()
+  const isCompactNavigation = useIsCompactNavigation()
+  const isMobile = useIsMobile() || (overlayOnCompact && isCompactNavigation)
   const [openMobile, setOpenMobile] = React.useState(false)
 
   // This is the internal state of the sidebar.
@@ -187,17 +190,30 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:hidden"
+          className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0 [&_[data-sidebar=header]]:pr-14"
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
             } as React.CSSProperties
           }
           side={side}
+          onClickCapture={(event) => {
+            if (event.target instanceof Element && event.target.closest("a[href]")) {
+              setOpenMobile(false)
+            }
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            Array.from(
+              document.querySelectorAll<HTMLButtonElement>('[data-sidebar="trigger"]')
+            )
+              .find((trigger) => trigger.getClientRects().length > 0)
+              ?.focus({ preventScroll: true })
+          }}
         >
           <SheetHeader className="sr-only">
             <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+            <SheetDescription>Displays the main navigation.</SheetDescription>
           </SheetHeader>
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>
@@ -258,7 +274,7 @@ function SidebarTrigger({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
-  const { toggleSidebar } = useSidebar()
+  const { isMobile, open, openMobile, toggleSidebar } = useSidebar()
 
   return (
     <Button
@@ -267,9 +283,10 @@ function SidebarTrigger({
       variant="ghost"
       size="icon"
       className={cn("size-7", className)}
+      aria-expanded={isMobile ? openMobile : open}
       onClick={(event) => {
         onClick?.(event)
-        toggleSidebar()
+        if (!event.defaultPrevented) toggleSidebar()
       }}
       {...props}
     >
