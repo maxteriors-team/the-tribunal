@@ -12,10 +12,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import delete
 
-from app.services.exceptions import NotFoundError
 from app.db.session import AsyncSessionLocal, engine
 from app.models.roofline_comparison import RooflineComparison
 from app.models.workspace import Workspace
+from app.services.exceptions import NotFoundError
 from app.services.quotes.quote_service import QuoteService
 
 pytestmark = pytest.mark.integration
