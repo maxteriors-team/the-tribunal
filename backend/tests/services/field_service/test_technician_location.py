@@ -57,9 +57,7 @@ async def test_update_technician_assigns_and_clears_location() -> None:
         tech = await service.create(ws.id, {"name": "Sam"})
         assert tech.business_location_id is None
 
-        assigned = await service.update(
-            tech.id, ws.id, {"business_location_id": branch.id}
-        )
+        assigned = await service.update(tech.id, ws.id, {"business_location_id": branch.id})
         assert assigned.business_location_id == branch.id
 
         cleared = await service.update(tech.id, ws.id, {"business_location_id": None})
@@ -77,3 +75,14 @@ async def test_cross_workspace_location_is_rejected() -> None:
             await TechnicianService(db).create(
                 ws_a.id, {"name": "Sam", "business_location_id": branch_b.id}
             )
+
+
+async def test_technicians_join_lighting_league_by_default_and_can_be_removed() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        service = TechnicianService(db)
+        technician = await service.create(ws.id, {"name": "Sam"})
+        assert technician.scoreboard_enabled is True
+
+        removed = await service.update(technician.id, ws.id, {"scoreboard_enabled": False})
+        assert removed.scoreboard_enabled is False

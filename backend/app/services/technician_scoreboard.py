@@ -443,6 +443,7 @@ class TechnicianScoreboardService:
                 select(Technician).where(
                     Technician.workspace_id == workspace_id,
                     Technician.is_active.is_(True),
+                    Technician.scoreboard_enabled.is_(True),
                 )
             )
         )
@@ -502,6 +503,7 @@ class TechnicianScoreboardService:
                 Technician.id == technician_id,
                 Technician.workspace_id == workspace_id,
                 Technician.is_active.is_(True),
+                Technician.scoreboard_enabled.is_(True),
             )
         )
         if technician is None or (not can_view_peers and technician.user_id != requester_user_id):
@@ -522,6 +524,7 @@ class TechnicianScoreboardService:
                 Technician.workspace_id == workspace_id,
                 Technician.user_id == user_id,
                 Technician.is_active.is_(True),
+                Technician.scoreboard_enabled.is_(True),
             )
             .with_for_update()
         )

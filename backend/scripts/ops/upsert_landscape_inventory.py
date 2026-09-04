@@ -73,6 +73,12 @@ MAX_LENGTHS = {
 # lines. Inventory counts only stay comparable under one spelling, so the
 # import canonicalises it; anything not listed here passes through untouched.
 STOCK_UOM_ALIASES = {"linear_ft": "ft"}
+SERVICE_CATEGORY_LABELS = {
+    "bistro": "Bistro Lighting",
+    "christmas": "Christmas Lighting",
+    "landscape": "Landscape Lighting",
+    "permanent_holiday": "Permanent Holiday Lighting",
+}
 # The defect signature of an earlier sheet revision: two candidate names in one
 # field, e.g. `ZD Uplight | Accent Uplight`. Used to tell a stale imported name
 # apart from a name an operator deliberately typed.
@@ -190,9 +196,20 @@ def _validate_row(row: dict[str, str], line_no: int) -> None:
         raise SystemExit(
             f"{INVENTORY_CSV.name} line {line_no}: unknown record_type {record_type!r}"
         )
-    for column in ("internal_sku", "tribunal_item_name", "supplier_item_name", "stock_uom"):
+    for column in (
+        "service_line",
+        "internal_sku",
+        "tribunal_item_name",
+        "supplier_item_name",
+        "stock_uom",
+    ):
         if not _cell(row, column):
             raise SystemExit(f"{INVENTORY_CSV.name} line {line_no}: {column} is required")
+    service_line = _cell(row, "service_line")
+    if service_line not in SERVICE_CATEGORY_LABELS:
+        raise SystemExit(
+            f"{INVENTORY_CSV.name} line {line_no}: unknown service_line {service_line!r}"
+        )
     for column, limit in MAX_LENGTHS.items():
         value = _cell(row, column)
         if len(value) > limit:
@@ -269,6 +286,7 @@ def inventory_item_payload(
         "catalog_item_id": catalog_item_id,
         "name": definition.name,
         "sku": definition.sku,
+        "service_category": SERVICE_CATEGORY_LABELS[definition.service_line],
         "unit_of_measure": definition.unit_of_measure,
         "is_active": True,
         "valuation_method": DEFAULT_VALUATION_METHOD,
@@ -354,11 +372,7 @@ def _reconcile_existing(
     *,
     has_stock_history: bool,
 ) -> bool:
-    """Adopt sheet corrections an operator cannot have made themselves.
-
-    Returns whether anything changed. Operator edits always win; only the two
-    known import defects are repaired.
-    """
+    """Adopt safe source metadata while preserving every operator edit."""
     corrected = False
 
     # A unit may only be corrected while the item has never held stock:
@@ -373,6 +387,12 @@ def _reconcile_existing(
     # A name an operator deliberately typed never looks like that.
     if PIPED_NAME.match(item.name):
         item.name = definition.name
+        corrected = True
+
+    # Legacy imports discarded service_line. Fill only the resulting NULL; an
+    # operator-assigned category always wins on later idempotent runs.
+    if item.service_category is None:
+        item.service_category = SERVICE_CATEGORY_LABELS[definition.service_line]
         corrected = True
 
     return corrected

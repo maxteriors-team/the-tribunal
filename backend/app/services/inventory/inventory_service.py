@@ -167,6 +167,7 @@ class InventoryService:
             catalog_item_id=item.catalog_item_id,
             name=item.name,
             sku=item.sku,
+            service_category=item.service_category,
             unit_of_measure=item.unit_of_measure,
             is_active=item.is_active,
             valuation_method=item.valuation_method,  # type: ignore[arg-type]
@@ -207,7 +208,7 @@ class InventoryService:
         include_inactive: bool = False,
         include_costs: bool = True,
     ) -> PaginatedInventoryItems:
-        """List tracked items alphabetically, with their on-hand position."""
+        """List tracked items by service and name, with their on-hand position."""
         query: Select[tuple[InventoryItem]] = select_workspace_owned(InventoryItem, workspace_id)
         if not include_inactive:
             query = query.where(InventoryItem.is_active.is_(True))
@@ -217,6 +218,7 @@ class InventoryService:
                 or_(
                     InventoryItem.name.ilike(term),
                     InventoryItem.sku.ilike(term),
+                    InventoryItem.service_category.ilike(term),
                     InventoryItem.supplier_name.ilike(term),
                 )
             )
@@ -253,7 +255,10 @@ class InventoryService:
                 InventoryItem.reorder_point.isnot(None),
                 on_hand - reserved - deployed <= InventoryItem.reorder_point,
             )
-        query = query.order_by(InventoryItem.name.asc())
+        query = query.order_by(
+            InventoryItem.service_category.asc().nullslast(),
+            InventoryItem.name.asc(),
+        )
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
         items = list(result.items)
@@ -310,6 +315,7 @@ class InventoryService:
             catalog_item_id=payload.catalog_item_id,
             name=payload.name,
             sku=payload.sku,
+            service_category=payload.service_category,
             unit_of_measure=payload.unit_of_measure,
             is_active=payload.is_active,
             valuation_method=payload.valuation_method,
@@ -384,9 +390,9 @@ class InventoryService:
     ) -> InventoryItemResponse:
         """Update a tracked item. Only supplied fields change.
 
-        ``reorder_point``, ``reorder_quantity``, ``lead_time_days`` and
-        ``catalog_item_id`` are cleared by an explicit ``null`` — without that,
-        an operator could set a reorder point but never un-manage the item.
+        ``reorder_point``, ``reorder_quantity``, ``lead_time_days``,
+        ``catalog_item_id`` and ``service_category`` are cleared by an explicit
+        ``null`` so operators can undo those optional settings.
         """
         item = await assert_workspace_owned(
             self.db, InventoryItem, item_id, workspace_id, detail="Inventory item not found"
@@ -403,6 +409,8 @@ class InventoryService:
                     workspace_id, payload.catalog_item_id, exclude_item_id=item.id
                 )
             item.catalog_item_id = payload.catalog_item_id
+        if "service_category" in fields_set:
+            item.service_category = payload.service_category
 
         for field in (
             "name",

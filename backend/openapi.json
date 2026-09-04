@@ -21178,6 +21178,18 @@
             "title": "Safety Stock",
             "type": "number"
           },
+          "service_category": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Category"
+          },
           "sku": {
             "anyOf": [
               {
@@ -21367,6 +21379,18 @@
             "title": "Safety Stock",
             "type": "number"
           },
+          "service_category": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Category"
+          },
           "sku": {
             "anyOf": [
               {
@@ -21443,7 +21467,7 @@
         "type": "object"
       },
       "InventoryItemUpdate": {
-        "description": "Update a tracked item (all fields optional).\n\n``reorder_point``, ``reorder_quantity``, ``lead_time_days`` and\n``catalog_item_id`` are cleared by an explicit ``null`` (the service checks\n``model_fields_set``); nothing else could un-manage an item once managed.",
+        "description": "Update a tracked item (all fields optional).\n\n``reorder_point``, ``reorder_quantity``, ``lead_time_days``,\n``catalog_item_id`` and ``service_category`` are cleared by an explicit\n``null`` (the service checks ``model_fields_set``).",
         "properties": {
           "catalog_item_id": {
             "anyOf": [
@@ -21540,6 +21564,18 @@
               }
             ],
             "title": "Safety Stock"
+          },
+          "service_category": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Category"
           },
           "sku": {
             "anyOf": [
@@ -54008,6 +54044,11 @@
             ],
             "title": "Phone"
           },
+          "scoreboard_enabled": {
+            "default": true,
+            "title": "Scoreboard Enabled",
+            "type": "boolean"
+          },
           "skills": {
             "items": {
               "type": "string"
@@ -54155,6 +54196,10 @@
             ],
             "title": "Phone"
           },
+          "scoreboard_enabled": {
+            "title": "Scoreboard Enabled",
+            "type": "boolean"
+          },
           "skills": {
             "items": {
               "type": "string"
@@ -54196,6 +54241,7 @@
           "skills",
           "color",
           "is_active",
+          "scoreboard_enabled",
           "created_at",
           "updated_at"
         ],
@@ -54651,6 +54697,17 @@
               }
             ],
             "title": "Phone"
+          },
+          "scoreboard_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoreboard Enabled"
           },
           "skills": {
             "anyOf": [

@@ -34,6 +34,7 @@ interface InventoryItemDialogProps {
 interface FormState {
   name: string;
   sku: string;
+  service_category: string;
   unit_of_measure: string;
   reorder_point: string;
   reorder_quantity: string;
@@ -48,6 +49,7 @@ interface FormState {
 const EMPTY: FormState = {
   name: "",
   sku: "",
+  service_category: "",
   unit_of_measure: "each",
   reorder_point: "",
   reorder_quantity: "",
@@ -75,6 +77,7 @@ function seedFrom(item: InventoryItem | null | undefined): FormState {
   return {
     name: item.name,
     sku: item.sku ?? "",
+    service_category: item.service_category ?? "",
     unit_of_measure: item.unit_of_measure,
     reorder_point: optional(item.reorder_point),
     reorder_quantity: optional(item.reorder_quantity),
@@ -117,6 +120,7 @@ export function InventoryItemDialog({
       const payload = {
         name: values.name.trim(),
         sku: values.sku.trim() || null,
+        service_category: values.service_category.trim() || null,
         unit_of_measure: values.unit_of_measure.trim() || "each",
         // Only weighted-average costing is implemented; the field exists so
         // FIFO can be added later without a data migration.
@@ -144,8 +148,7 @@ export function InventoryItemDialog({
       });
       onOpenChange(false);
     },
-    onError: (error: unknown) =>
-      toast.error(getApiErrorMessage(error, "Failed to save item")),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to save item")),
   });
 
   // The service computes to 4 decimals; a threshold an operator reads and
@@ -170,8 +173,8 @@ export function InventoryItemDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? `Edit ${item?.name}` : "Track a new item"}</DialogTitle>
           <DialogDescription>
-            Stock arrives through a receipt, so quantities are not set here. Set
-            a reorder point to have this item raise a low-stock alert.
+            Assign a service to keep inventory organized. Stock arrives through a receipt, so
+            quantities are not set here.
           </DialogDescription>
         </DialogHeader>
 
@@ -192,6 +195,19 @@ export function InventoryItemDialog({
                 value={values.name}
                 onChange={(event) => set("name", event.target.value)}
               />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="item-service">Service</Label>
+              <Input
+                id="item-service"
+                maxLength={60}
+                placeholder="e.g. Landscape Lighting"
+                value={values.service_category}
+                onChange={(event) => set("service_category", event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank to keep this under General inventory.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="item-sku">SKU</Label>
@@ -229,10 +245,7 @@ export function InventoryItemDialog({
                   onChange={(event) => set("reorder_point", event.target.value)}
                   aria-describedby="item-reorder-point-hint"
                 />
-                <p
-                  id="item-reorder-point-hint"
-                  className="text-xs text-muted-foreground"
-                >
+                <p id="item-reorder-point-hint" className="text-xs text-muted-foreground">
                   {suggested !== null ? (
                     <>
                       Recent usage suggests {suggested}.{" "}

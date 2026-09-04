@@ -204,17 +204,27 @@ async def test_cogs_groups_by_service_category_and_job() -> None:
         db.add(catalog_item)
         await db.flush()
 
-        tracked = await _item(db, ws.id, "Roof mix", catalog_item_id=catalog_item.id)
-        untracked = await _item(db, ws.id, "Generic mix")
+        tracked = await _item(
+            db,
+            ws.id,
+            "Roof mix",
+            catalog_item_id=catalog_item.id,
+        )
+        uncategorized = await _item(db, ws.id, "Generic mix")
+        direct = await _item(db, ws.id, "Soft-wash mix", service_category="Exterior Cleaning")
         job = await _job(db, ws.id, title="Roof wash on Elm")
         stock = StockService(db)
 
         await stock.receive(ws.id, tracked.id, ReceiveStockRequest(quantity=10, unit_cost=3.00))
-        await stock.receive(ws.id, untracked.id, ReceiveStockRequest(quantity=10, unit_cost=2.00))
+        await stock.receive(
+            ws.id, uncategorized.id, ReceiveStockRequest(quantity=10, unit_cost=2.00)
+        )
+        await stock.receive(ws.id, direct.id, ReceiveStockRequest(quantity=2, unit_cost=4.00))
         await stock.consume(
             ws.id, tracked.id, 5, reference_type="job", reference_id=job.id
         )  # 15.00
-        await stock.consume(ws.id, untracked.id, 5)  # 10.00
+        await stock.consume(ws.id, uncategorized.id, 5)  # 10.00
+        await stock.consume(ws.id, direct.id, 2)  # 8.00
 
         today = date.today()
         svc = COGSService(db)
@@ -223,7 +233,11 @@ async def test_cogs_groups_by_service_category_and_job() -> None:
             ws.id, date_from=today, date_to=today, group_by="service_category"
         )
         slices = {row.label: row.cogs for row in by_category.breakdown}
-        assert slices == {"roof": 15.0, "Uncategorized": 10.0}
+        assert slices == {
+            "roof": 15.0,
+            "Uncategorized": 10.0,
+            "Exterior Cleaning": 8.0,
+        }
 
         by_job = await svc.cogs(ws.id, date_from=today, date_to=today, group_by="job")
         # Only the job-referenced consumption appears in a job breakdown.

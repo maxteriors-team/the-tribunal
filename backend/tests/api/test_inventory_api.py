@@ -60,6 +60,7 @@ def _item_payload(**overrides: object) -> dict[str, object]:
         "catalog_item_id": None,
         "name": "Sodium hypochlorite",
         "sku": "SH-12",
+        "service_category": "Exterior Cleaning",
         "unit_of_measure": "gallon",
         "is_active": True,
         "valuation_method": "weighted_average",
@@ -260,9 +261,16 @@ class TestCapabilityGates:
         )
         assert response.status_code == 403
 
-    async def test_admin_can_create_items(self, admin_client: AsyncClient) -> None:
-        response = await admin_client.post(_base("/items"), json={"name": "Soap"})
+    async def test_admin_can_create_items(
+        self, admin_client: AsyncClient, mock_inventory_service: AsyncMock
+    ) -> None:
+        response = await admin_client.post(
+            _base("/items"),
+            json={"name": "Soap", "service_category": "  Exterior Cleaning  "},
+        )
         assert response.status_code == 201
+        payload = mock_inventory_service.create_item.await_args.args[1]
+        assert payload.service_category == "Exterior Cleaning"
 
     async def test_admin_receipt_returns_the_posted_movement(
         self, admin_client: AsyncClient, mock_stock_service: AsyncMock

@@ -681,3 +681,44 @@ async def test_service_detail_helper_returns_same_not_found_for_all_hidden_rows(
                 )
             errors.append(str(exc_info.value))
         assert len(set(errors)) == 1
+
+
+async def test_manager_selection_hides_a_technician_without_losing_xp() -> None:
+    async with _seeded() as seed, AsyncSessionLocal() as db:
+        technician = await db.get(Technician, seed.technician_ids[0])
+        assert technician is not None
+        db.add(
+            TechnicianXpAward(
+                workspace_id=seed.workspace_id,
+                technician_id=technician.id,
+                category="job",
+                source_key="job:before-league-opt-out",
+                points=100,
+            )
+        )
+        technician.scoreboard_enabled = False
+        await db.commit()
+
+        service = TechnicianScoreboardService(db)
+        hidden = await service.get_scoreboard(
+            seed.workspace_id, viewer_user_id=seed.technician_user_ids[0]
+        )
+        assert technician.id not in {row.technician_id for row in hidden.standings}
+        assert hidden.viewer_detail is None
+        with pytest.raises(NotFoundError):
+            await service.get_technician_detail(
+                seed.workspace_id,
+                technician.id,
+                requester_user_id=seed.owner_id,
+                can_view_peers=True,
+            )
+        with pytest.raises(NotFoundError):
+            await service.acknowledge_level(seed.workspace_id, seed.technician_user_ids[0], 1)
+
+        technician.scoreboard_enabled = True
+        await db.commit()
+        visible = await service.get_scoreboard(
+            seed.workspace_id, viewer_user_id=seed.technician_user_ids[0]
+        )
+        assert visible.viewer_detail is not None
+        assert visible.viewer_detail.lifetime_xp == 100

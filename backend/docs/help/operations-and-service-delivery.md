@@ -37,7 +37,7 @@ A field technician may have a read-only or operational subset of the job control
 
 Route: `/scoreboard`. Sidebar label: **Lighting League**.
 
-Active technicians can compare current-month rank, XP, and lifetime lighting levels. Technicians see only their own attendance, completed-job, and approved-upsell breakdown; authorized office roles can open those private details for any technician. Monthly standings reset, while lifetime levels remain. Lighting League is recognition only—not payroll, prizes, discipline, or a performance review.
+Selected active technicians can compare current-month rank, XP, and lifetime lighting levels. In **Settings → Team**, use a rostered member's **Lighting League** switch to include or hide them; hiding someone preserves earned XP. Technicians see only their own attendance, completed-job, and approved-upsell breakdown, while authorized office roles can open those private details for selected technicians. Monthly standings reset, while lifetime levels remain. Lighting League is recognition only—not payroll, prizes, discipline, or a performance review.
 
 ## Sell an add-on on site
 
@@ -71,10 +71,10 @@ Price Book items can autofill quotes and invoices. Pricing and proposal rules al
 
 Route: `/inventory`. Sidebar label: **Inventory**.
 
-1. Select **Track item** and enter the item name, SKU, unit, reorder point and quantity, safety stock, lead time, supplier details, and notes.
+1. Select **Track item** and enter its service, name, SKU, unit, reorder settings, supplier details, and notes.
 2. Receive a delivery with the item's **Receive stock** action so the receipt updates on-hand quantity and cost.
 3. Use **Adjust stock** for a counted correction and record its reason.
 4. Review low-stock and reorder information before placing an order.
-5. Edit an item to change its tracking settings or mark it inactive while preserving report history.
+5. Edit an item to change its service or tracking settings while preserving report history.
 
-Stock quantities are changed through receipts and adjustments, not by editing the item's starting form.
+Items are grouped by service; items without one appear under **General inventory**. Stock quantities change through receipts and adjustments, not the item's starting form.

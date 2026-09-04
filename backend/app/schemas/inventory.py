@@ -85,6 +85,13 @@ class InventoryLocationResponse(InventoryLocationBase):
 # --------------------------------------------------------------------------- #
 # Items
 # --------------------------------------------------------------------------- #
+def _normalize_service_category(value: str | None) -> str | None:
+    """Treat blank service labels as uncategorized and store clean display text."""
+    if value is None:
+        return None
+    return value.strip() or None
+
+
 class InventoryItemBase(BaseModel):
     """Client-settable fields on a tracked item."""
 
@@ -93,6 +100,7 @@ class InventoryItemBase(BaseModel):
     catalog_item_id: uuid.UUID | None = Field(
         default=None, description="Optional link to a price-book item in the same workspace"
     )
+    service_category: str | None = Field(default=None, max_length=60)
     unit_of_measure: str = Field(default="each", min_length=1, max_length=30)
     is_active: bool = True
     valuation_method: InventoryValuationMethod = "weighted_average"
@@ -105,6 +113,8 @@ class InventoryItemBase(BaseModel):
     supplier_sku: str | None = Field(default=None, max_length=100)
     notes: str | None = None
 
+    _strip_service_category = field_validator("service_category")(_normalize_service_category)
+
 
 class InventoryItemCreate(InventoryItemBase):
     """Create a tracked item."""
@@ -113,14 +123,15 @@ class InventoryItemCreate(InventoryItemBase):
 class InventoryItemUpdate(BaseModel):
     """Update a tracked item (all fields optional).
 
-    ``reorder_point``, ``reorder_quantity``, ``lead_time_days`` and
-    ``catalog_item_id`` are cleared by an explicit ``null`` (the service checks
-    ``model_fields_set``); nothing else could un-manage an item once managed.
+    ``reorder_point``, ``reorder_quantity``, ``lead_time_days``,
+    ``catalog_item_id`` and ``service_category`` are cleared by an explicit
+    ``null`` (the service checks ``model_fields_set``).
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     sku: str | None = Field(default=None, max_length=100)
     catalog_item_id: uuid.UUID | None = None
+    service_category: str | None = Field(default=None, max_length=60)
     unit_of_measure: str | None = Field(default=None, min_length=1, max_length=30)
     is_active: bool | None = None
     valuation_method: InventoryValuationMethod | None = None
@@ -131,6 +142,8 @@ class InventoryItemUpdate(BaseModel):
     supplier_name: str | None = Field(default=None, max_length=255)
     supplier_sku: str | None = Field(default=None, max_length=100)
     notes: str | None = None
+
+    _strip_service_category = field_validator("service_category")(_normalize_service_category)
 
 
 class InventoryItemResponse(InventoryItemBase):
