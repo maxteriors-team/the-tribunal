@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,12 +19,14 @@ import type { InventoryItem, ReorderReport } from "@/types/inventory";
 
 const {
   listItemsMock,
+  createItemMock,
   reorderReportMock,
   listLocationsMock,
   capabilitiesMock,
   workspaceIdMock,
 } = vi.hoisted(() => ({
   listItemsMock: vi.fn(),
+  createItemMock: vi.fn(),
   reorderReportMock: vi.fn(),
   listLocationsMock: vi.fn(),
   capabilitiesMock: vi.fn(),
@@ -34,6 +36,7 @@ const {
 vi.mock("@/lib/api/inventory", () => ({
   inventoryApi: {
     listItems: listItemsMock,
+    createItem: createItemMock,
     reorderReport: reorderReportMock,
     listLocations: listLocationsMock,
     deleteItem: vi.fn(),
@@ -63,6 +66,7 @@ const item: InventoryItem = {
   catalog_item_id: null,
   name: "Sodium hypochlorite",
   sku: "SH-125",
+  service_category: "Exterior Cleaning",
   unit_of_measure: "gallon",
   is_active: true,
   valuation_method: "weighted_average",
@@ -135,6 +139,7 @@ describe("InventoryList", () => {
       page_size: 200,
       pages: 1,
     });
+    createItemMock.mockResolvedValue(item);
     reorderReportMock.mockResolvedValue(reorderReport);
     listLocationsMock.mockResolvedValue([]);
   });
@@ -159,12 +164,8 @@ describe("InventoryList", () => {
 
     expect(await screen.findByText("Sodium hypochlorite")).toBeInTheDocument();
     expect(screen.getByText("8")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("columnheader", { name: "Value" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("columnheader", { name: "Avg cost" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Value" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Avg cost" })).not.toBeInTheDocument();
     // Not even a redacted zero: the column is gone, so nothing reads as a price.
     expect(screen.queryByText("$0.00")).not.toBeInTheDocument();
   });
@@ -174,9 +175,7 @@ describe("InventoryList", () => {
     renderList();
 
     await screen.findByText("Sodium hypochlorite");
-    expect(
-      screen.queryByRole("button", { name: "Track item" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Track item" })).not.toBeInTheDocument();
   });
 
   it("flags low stock and can filter down to just those items", async () => {
@@ -185,9 +184,7 @@ describe("InventoryList", () => {
     renderList();
 
     expect(await screen.findByText("Low stock")).toBeInTheDocument();
-    expect(
-      screen.getByText(/1 item at or below the reorder point/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/1 item at or below the reorder point/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Show only these" }));
 
@@ -209,8 +206,66 @@ describe("InventoryList", () => {
     renderList();
 
     await screen.findByText("Sodium hypochlorite");
-    expect(
-      screen.queryByText(/at or below the reorder point/),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/at or below the reorder point/)).not.toBeInTheDocument();
+  });
+
+  it("groups items alphabetically by service and leaves uncategorized items last", async () => {
+    signedInAs("owner");
+    listItemsMock.mockResolvedValue({
+      items: [
+        item,
+        {
+          ...item,
+          id: "item-2",
+          name: "C9 bulbs",
+          sku: "C9",
+          service_category: "Christmas Lighting",
+        },
+        {
+          ...item,
+          id: "item-3",
+          name: "Shop towels",
+          sku: "TOWEL",
+          service_category: null,
+        },
+      ],
+      total: 3,
+      page: 1,
+      page_size: 200,
+      pages: 1,
+    });
+
+    renderList();
+
+    const headings = await screen.findAllByRole("heading", { level: 2 });
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      "Christmas Lighting",
+      "Exterior Cleaning",
+      "General inventory",
+    ]);
+    expect(within(headings[0].closest("tbody")!).getByText("C9 bulbs")).toBeInTheDocument();
+    expect(within(headings[2].closest("tbody")!).getByText("Shop towels")).toBeInTheDocument();
+  });
+
+  it("saves a service when tracking an item", async () => {
+    signedInAs("owner");
+    const user = userEvent.setup();
+    renderList();
+
+    await user.click(await screen.findByRole("button", { name: "Track item" }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Name"), "C7 socket wire");
+    await user.type(within(dialog).getByLabelText("Service"), "Christmas Lighting");
+    await user.click(within(dialog).getByRole("button", { name: "Track item" }));
+
+    await waitFor(() => {
+      expect(createItemMock).toHaveBeenCalledWith(
+        "ws-1",
+        expect.objectContaining({
+          name: "C7 socket wire",
+          service_category: "Christmas Lighting",
+        }),
+      );
+    });
   });
 });

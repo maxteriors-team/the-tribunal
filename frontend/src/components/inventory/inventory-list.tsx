@@ -24,11 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  PageEmptyState,
-  PageErrorState,
-  PageLoadingState,
-} from "@/components/ui/page-state";
+import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
 import {
   Table,
   TableBody,
@@ -53,6 +49,24 @@ import { LowStockBanner } from "./low-stock-banner";
 import { ReceiveStockDialog } from "./receive-stock-dialog";
 
 type ActiveDialog = "edit" | "receive" | "adjust" | "ledger" | null;
+
+const GENERAL_SERVICE = "General inventory";
+
+function groupItemsByService(items: InventoryItem[]) {
+  const groups = new Map<string, { label: string; items: InventoryItem[] }>();
+  for (const item of items) {
+    const label = item.service_category?.trim() || GENERAL_SERVICE;
+    const key = label.toLocaleLowerCase();
+    const group = groups.get(key) ?? { label, items: [] };
+    group.items.push(item);
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort((left, right) => {
+    if (left.label === GENERAL_SERVICE) return 1;
+    if (right.label === GENERAL_SERVICE) return -1;
+    return left.label.localeCompare(right.label);
+  });
+}
 
 /**
  * The inventory home: what needs buying (banner), then what is on hand (table).
@@ -106,8 +120,7 @@ export function InventoryList() {
         queryKey: queryKeys.inventory.reorderReport(workspaceId ?? ""),
       });
     },
-    onError: (error: unknown) =>
-      toast.error(getApiErrorMessage(error, "Failed to remove item")),
+    onError: (error: unknown) => toast.error(getApiErrorMessage(error, "Failed to remove item")),
   });
 
   const openFor = (item: InventoryItem | null, next: ActiveDialog) => {
@@ -123,6 +136,7 @@ export function InventoryList() {
   ) : null;
 
   const rows = items.data?.items ?? [];
+  const serviceGroups = groupItemsByService(rows);
 
   let body: React.ReactNode;
   if (!workspaceId || items.isLoading) {
@@ -138,15 +152,13 @@ export function InventoryList() {
     body = (
       <PageEmptyState
         icon={<Package className="size-8" aria-hidden="true" />}
-        title={
-          search || lowStockOnly ? "No items match" : "Nothing tracked yet"
-        }
+        title={search || lowStockOnly ? "No items match" : "Nothing tracked yet"}
         description={
           search || lowStockOnly
             ? "Try a different search, or clear the low-stock filter."
             : "Track the chemicals, parts, and materials you buy so jobs can pull from real stock and reorder alerts can fire."
         }
-        action={search || lowStockOnly ? undefined : newItemButton ?? undefined}
+        action={search || lowStockOnly ? undefined : (newItemButton ?? undefined)}
       />
     );
   } else {
@@ -173,97 +185,101 @@ export function InventoryList() {
               </TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {rows.map((item) => (
-              <TableRow key={item.id} className={item.is_active ? "" : "opacity-60"}>
-                <TableCell className="font-medium">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {item.name}
-                    {item.is_low_stock && (
-                      <Badge variant="destructive">Low stock</Badge>
-                    )}
-                    {!item.is_active && <Badge variant="outline">Archived</Badge>}
+          {serviceGroups.map((group) => (
+            <TableBody key={group.label}>
+              <TableRow className="bg-muted/50 hover:bg-muted/50 hover:bg-none">
+                <TableCell colSpan={canSeeCosts ? 10 : 8} className="px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="font-semibold text-foreground">{group.label}</h2>
+                    <span className="text-xs text-muted-foreground">
+                      {group.items.length} {group.items.length === 1 ? "item" : "items"}
+                    </span>
                   </div>
-                  {item.sku && (
-                    <div className="text-xs text-muted-foreground">{item.sku}</div>
-                  )}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {item.quantity_on_hand}
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    {item.unit_of_measure}
-                  </span>
-                </TableCell>
-                <TableCell className="hidden text-right tabular-nums text-muted-foreground lg:table-cell">
-                  {item.quantity_reserved}
-                </TableCell>
-                <TableCell className="hidden text-right tabular-nums text-muted-foreground lg:table-cell">
-                  {item.quantity_deployed}
-                </TableCell>
-                <TableCell className="text-right font-medium tabular-nums">
-                  {item.available_to_promise}
-                </TableCell>
-                <TableCell className="hidden text-right tabular-nums text-muted-foreground sm:table-cell">
-                  {item.reorder_point ?? "Not managed"}
-                </TableCell>
-                {canSeeCosts && (
-                  <TableCell className="hidden text-right tabular-nums lg:table-cell">
-                    {formatCurrency(item.avg_unit_cost)}
-                  </TableCell>
-                )}
-                {canSeeCosts && (
-                  <TableCell className="hidden text-right tabular-nums md:table-cell">
-                    {formatCurrency(item.total_value)}
-                  </TableCell>
-                )}
-                <TableCell className="hidden text-muted-foreground md:table-cell">
-                  {item.supplier_name || "—"}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Actions for ${item.name}`}
-                      >
-                        <MoreHorizontal className="size-4" aria-hidden="true" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openFor(item, "ledger")}>
-                        <History className="mr-2 size-4" aria-hidden="true" />
-                        History
-                      </DropdownMenuItem>
-                      {canManageStock && (
-                        <>
-                          <DropdownMenuItem onClick={() => openFor(item, "receive")}>
-                            <PackagePlus className="mr-2 size-4" aria-hidden="true" />
-                            Receive stock
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openFor(item, "adjust")}>
-                            <Scale className="mr-2 size-4" aria-hidden="true" />
-                            Count or write off
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openFor(item, "edit")}>
-                            <Pencil className="mr-2 size-4" aria-hidden="true" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => remove.mutate(item.id)}
-                          >
-                            <Trash2 className="mr-2 size-4" aria-hidden="true" />
-                            Remove
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </TableCell>
               </TableRow>
-            ))}
-          </TableBody>
+              {group.items.map((item) => (
+                <TableRow key={item.id} className={item.is_active ? "" : "opacity-60"}>
+                  <TableCell className="font-medium">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {item.name}
+                      {item.is_low_stock && <Badge variant="destructive">Low stock</Badge>}
+                      {!item.is_active && <Badge variant="outline">Archived</Badge>}
+                    </div>
+                    {item.sku && <div className="text-xs text-muted-foreground">{item.sku}</div>}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {item.quantity_on_hand}
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      {item.unit_of_measure}
+                    </span>
+                  </TableCell>
+                  <TableCell className="hidden text-right tabular-nums text-muted-foreground lg:table-cell">
+                    {item.quantity_reserved}
+                  </TableCell>
+                  <TableCell className="hidden text-right tabular-nums text-muted-foreground lg:table-cell">
+                    {item.quantity_deployed}
+                  </TableCell>
+                  <TableCell className="text-right font-medium tabular-nums">
+                    {item.available_to_promise}
+                  </TableCell>
+                  <TableCell className="hidden text-right tabular-nums text-muted-foreground sm:table-cell">
+                    {item.reorder_point ?? "Not managed"}
+                  </TableCell>
+                  {canSeeCosts && (
+                    <TableCell className="hidden text-right tabular-nums lg:table-cell">
+                      {formatCurrency(item.avg_unit_cost)}
+                    </TableCell>
+                  )}
+                  {canSeeCosts && (
+                    <TableCell className="hidden text-right tabular-nums md:table-cell">
+                      {formatCurrency(item.total_value)}
+                    </TableCell>
+                  )}
+                  <TableCell className="hidden text-muted-foreground md:table-cell">
+                    {item.supplier_name || "—"}
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label={`Actions for ${item.name}`}>
+                          <MoreHorizontal className="size-4" aria-hidden="true" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openFor(item, "ledger")}>
+                          <History className="mr-2 size-4" aria-hidden="true" />
+                          History
+                        </DropdownMenuItem>
+                        {canManageStock && (
+                          <>
+                            <DropdownMenuItem onClick={() => openFor(item, "receive")}>
+                              <PackagePlus className="mr-2 size-4" aria-hidden="true" />
+                              Receive stock
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openFor(item, "adjust")}>
+                              <Scale className="mr-2 size-4" aria-hidden="true" />
+                              Count or write off
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openFor(item, "edit")}>
+                              <Pencil className="mr-2 size-4" aria-hidden="true" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => remove.mutate(item.id)}
+                            >
+                              <Trash2 className="mr-2 size-4" aria-hidden="true" />
+                              Remove
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          ))}
         </Table>
       </div>
     );
@@ -286,7 +302,7 @@ export function InventoryList() {
           <Input
             type="search"
             className="pl-8"
-            placeholder="Search items or suppliers"
+            placeholder="Search items, services, or suppliers"
             aria-label="Search inventory"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
