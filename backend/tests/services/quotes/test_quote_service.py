@@ -1194,6 +1194,15 @@ async def test_create_quote_from_estimate_snapshots_preview_and_installation_sho
         ws = await _make_workspace(db)
         await _enable_lighting_pricing(db, ws)
         contact = await _make_contact(db, ws.id)
+        manager = await _make_member(db, ws.id, name="Office Manager")
+        membership = await db.scalar(
+            select(WorkspaceMembership).where(
+                WorkspaceMembership.workspace_id == ws.id,
+                WorkspaceMembership.user_id == manager.id,
+            )
+        )
+        assert membership is not None
+        membership.role = "manager"
         project = LightingProject(
             workspace_id=ws.id,
             contact_id=contact.id,
@@ -1252,15 +1261,30 @@ async def test_create_quote_from_estimate_snapshots_preview_and_installation_sho
         assert public.price_range is None
 
         await svc.approve_quote(ws.id, quote.id)
-        converted = await svc.convert_quote(ws.id, quote.id, create_invoice=False)
-        assert converted.job.contact_id == contact.id
-        assert converted.job.source_quote_id == quote.id
-        assert converted.job.lighting_project_id == project.id
+        scheduled_start = datetime(2026, 9, 4, 13, tzinfo=UTC)
+        converted = await svc.convert_quote(
+            ws.id,
+            quote.id,
+            create_invoice=False,
+            scheduled_start=scheduled_start,
+            scheduled_end=scheduled_start + timedelta(hours=2),
+        )
+        assert converted.job_id is not None
+        job = await db.get(Job, converted.job_id)
+        assert job is not None
+        assert job.contact_id == contact.id
+        assert job.source_quote_id == quote.id
+        assert job.lighting_project_id == project.id
 
-        installation_plan = await JobService(db).get_installation_plan(converted.job.id, ws.id)
+        installation_plan = await JobService(db).get_installation_plan(
+            job.id,
+            ws.id,
+            membership=membership,
+            user_id=manager.id,
+        )
         assert installation_plan.project_id == project.id
         assert installation_plan.proposal_preview_image == "data:image/jpeg;base64,/9j/2Q=="
-        assert installation_plan.design.items[0].product_id == "fixture-uplight"
+        assert installation_plan.design.items[0].product_id == "product-1"
 
 
 async def test_create_quote_from_estimate_can_send_a_price_range(monkeypatch) -> None:
