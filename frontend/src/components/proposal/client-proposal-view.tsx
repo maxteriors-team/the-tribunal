@@ -34,6 +34,7 @@ import {
 } from "./document";
 import { FinancingEstimate, financingFromSnapshot } from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
+import { PermanentPaymentOptions } from "./permanent-payment-options";
 import { proposalAccentVars } from "./proposal-brand";
 import { proposalFontVars } from "./proposal-fonts";
 import {
@@ -148,18 +149,21 @@ export function ClientProposalView({
   // and garland, and copy about the season instead of about a permanent
   // installation. A mixed quote stays neutral (see `isChristmasProposal`).
   const festive = isChristmasProposal(doc);
+  const permanent = doc.service === "permanent";
+  const greenSky = permanent ? doc.green_sky : null;
   const valueProps = proposalValueProps(doc);
 
   // Seasonal Christmas is sold as one up-front price, so it never shows a
   // monthly estimate. Suppressing it here (rather than server-side) also cleans
   // up quotes already saved with a financing block on the snapshot.
-  const financingEstimate = festive
-    ? null
-    : financingFromSnapshot(
-        doc.financing,
-        lowestTier?.pricing.monthly_payment ?? doc.grand_monthly_payment,
-        lowestTier?.pricing.monthly_by_term ?? {},
-      );
+  const financingEstimate =
+    festive || greenSky
+      ? null
+      : financingFromSnapshot(
+          doc.financing,
+          lowestTier?.pricing.monthly_payment ?? doc.grand_monthly_payment,
+          lowestTier?.pricing.monthly_by_term ?? {},
+        );
 
   // The client proposal shows one all-inclusive package price. Cash/check
   // figures remain internal; estimated financing uses the shared compliance
@@ -213,7 +217,7 @@ export function ClientProposalView({
   // Every angle the rep designed, not just the hero shot.
   const nightPhotos = nightImages(doc.night_preview);
 
-  const decided = data.is_decided || justApproved || justDeclined;
+  const decided = data.is_expired || data.is_decided || justApproved || justDeclined;
   const contactLine = [branding.business_phone, branding.business_email]
     .filter(Boolean)
     .join(" \u00b7 ");
@@ -231,8 +235,11 @@ export function ClientProposalView({
   // range: the deposit, the accept button, and anything the customer is charged
   // stay on the exact quoted total, which is the bottom of that range.
   const priceRange = chosenPackage ? null : data.price_range;
-  const acceptActionLabel =
-    ctaDeposit && ctaDeposit > 0
+  const acceptActionLabel = greenSky
+    ? chosenLabel
+      ? `Accept ${chosenLabel}`
+      : "Accept proposal"
+    : ctaDeposit && ctaDeposit > 0
       ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} & Pay ${fmt(ctaDeposit)}`
       : chosenLabel
         ? `Accept ${chosenLabel}`
@@ -276,7 +283,11 @@ export function ClientProposalView({
           <div className="present-eyebrow">{brandName}</div>
           <div className="present-hi">
             Hi, <strong>{first || "there"}</strong> &#8212;{" "}
-            {festive ? "your Christmas lighting plan" : "your custom proposal"}
+            {festive
+              ? "your Christmas lighting plan"
+              : permanent
+                ? "your permanent lighting plan"
+                : "your custom proposal"}
           </div>
           <div className="present-name">{residence}</div>
           <div className="present-ornament">
@@ -289,6 +300,11 @@ export function ClientProposalView({
               <>
                 {first ? `${first}, this` : "This"} display was designed around your rooflines, your
                 trees, and the way your home should look from the street on Christmas Eve.
+              </>
+            ) : permanent ? (
+              <>
+                {first ? `${first}, we` : "We"} designed this year-round lighting plan around your
+                home, with every visible detail chosen intentionally.
               </>
             ) : (
               <>
@@ -352,51 +368,86 @@ export function ClientProposalView({
 
         {doc.mockups.length || nightPhotos.length ? (
           <section className="pmock-purchase" aria-labelledby="visual-price-heading">
-            <div>
-              <div className="pmock-purchase-label" id="visual-price-heading">
-                {chosenLabel ?? (priceRange ? "Your estimated range" : "Your lighting proposal")}
-              </div>
-              <div className="pmock-purchase-price">
-                {priceRange ? `${fmt(priceRange.low)}\u2009\u2013\u2009${fmt(priceRange.high)}` : fmt(visualPrice)}
-              </div>
-              <div className="pmock-purchase-meta">
-                {priceRange
-                  ? `Approving locks in ${fmt(priceRange.low)}; anything above that is quoted to you first.`
-                  : null}
-                {priceRange ? " " : null}
-                {ctaDeposit && ctaDeposit > 0
-                  ? `${fmt(ctaDeposit)} due today; the remaining balance follows your proposal terms.`
-                  : "No online deposit is due today."}
-              </div>
-            </div>
-            <div className="pmock-purchase-action no-print">
-              {choosable ? (
-                <button
-                  type="button"
-                  className="cta-btn-primary"
-                  onClick={() =>
-                    document.getElementById("proposal-packages")?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "start",
-                    })
-                  }
-                >
-                  Review package options
-                </button>
-              ) : !decided ? (
-                <button
-                  type="button"
-                  className="cta-btn-primary"
-                  disabled={busy}
-                  aria-label={busy ? "Approving" : acceptActionLabel}
-                  onClick={() => onApprove(selectedTier)}
-                >
-                  {busy ? "Approving…" : acceptActionLabel}
-                </button>
-              ) : null}
-              <p>Acceptance is recorded before the existing secure payment checkout opens.</p>
-            </div>
+            {greenSky ? (
+              <>
+                <div>
+                  <div className="pmock-purchase-label" id="visual-price-heading">
+                    Your permanent lighting plan
+                  </div>
+                  <div className="pmock-purchase-price">Two straightforward next steps</div>
+                  <div className="pmock-purchase-meta">
+                    Review the same project price beside deposit and GreenSky paths.
+                  </div>
+                </div>
+                <div className="pmock-purchase-action no-print">
+                  <a className="cta-btn-primary" href="#permanent-payment-options">
+                    Review payment options
+                  </a>
+                  <p>Opening GreenSky does not accept this proposal.</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <div className="pmock-purchase-label" id="visual-price-heading">
+                    {chosenLabel ??
+                      (priceRange ? "Your estimated range" : "Your lighting proposal")}
+                  </div>
+                  <div className="pmock-purchase-price">
+                    {priceRange
+                      ? `${fmt(priceRange.low)}\u2009\u2013\u2009${fmt(priceRange.high)}`
+                      : fmt(visualPrice)}
+                  </div>
+                  <div className="pmock-purchase-meta">
+                    {priceRange
+                      ? `Approving locks in ${fmt(priceRange.low)}; anything above that is quoted to you first.`
+                      : null}
+                    {priceRange ? " " : null}
+                    {ctaDeposit && ctaDeposit > 0
+                      ? `${fmt(ctaDeposit)} due today; the remaining balance follows your proposal terms.`
+                      : "No online deposit is due today."}
+                  </div>
+                </div>
+                <div className="pmock-purchase-action no-print">
+                  {choosable ? (
+                    <button
+                      type="button"
+                      className="cta-btn-primary"
+                      onClick={() =>
+                        document.getElementById("proposal-packages")?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        })
+                      }
+                    >
+                      Review package options
+                    </button>
+                  ) : !decided ? (
+                    <button
+                      type="button"
+                      className="cta-btn-primary"
+                      disabled={busy}
+                      aria-label={busy ? "Approving" : acceptActionLabel}
+                      onClick={() => onApprove(selectedTier)}
+                    >
+                      {busy ? "Approving…" : acceptActionLabel}
+                    </button>
+                  ) : null}
+                  <p>Acceptance is recorded before the existing secure payment checkout opens.</p>
+                </div>
+              </>
+            )}
           </section>
+        ) : null}
+
+        {greenSky ? (
+          <PermanentPaymentOptions
+            data={data}
+            program={greenSky}
+            projectPrice={visualPrice}
+            depositAmount={ctaDeposit}
+            busy={busy}
+          />
         ) : null}
 
         {hasTiers ? (
@@ -602,9 +653,7 @@ export function ClientProposalView({
                 >
                   {bistroExperienceName}
                 </div>
-                <div className="pcare-savings-unit">
-                  Patio &amp; pergola
-                </div>
+                <div className="pcare-savings-unit">Patio &amp; pergola</div>
                 <div className="pcare-savings-basis">
                   Magazine-cover evenings &#8212; dinners, parties, and quiet nights, all under a
                   warm canopy of light.
@@ -624,39 +673,45 @@ export function ClientProposalView({
                       {sec.key === "christmas" ? "Your Holiday Display" : "Your Quote"}
                     </div>
                     <div className="pcare-name">{sec.label}</div>
-                    <div className="pcare-price">
-                      {fmt(sec.financed_total)} <span>one-time</span>
-                    </div>
+                    {greenSky && sec.key === "permanent" ? null : (
+                      <div className="pcare-price">
+                        {fmt(sec.financed_total)} <span>one-time</span>
+                      </div>
+                    )}
                     <div className="pcare-points">
                       {(sec.lines ?? []).map((line, i) => (
                         <div className="pcare-point" key={i}>
                           <span className="pcare-point-mark">&#9670;</span>
                           <div>
                             {line.label}
-                            {line.line_total > 0 ? ` \u2014 ${fmt(line.line_total)}` : ""}
+                            {!greenSky && line.line_total > 0
+                              ? ` \u2014 ${fmt(line.line_total)}`
+                              : ""}
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div className="pcare-right">
-                    <div className="pcare-savings-label">Installed</div>
-                    <div
-                      className="pcare-savings-amount"
-                      style={{ fontSize: "clamp(30px,4.4vw,42px)" }}
-                    >
-                      {fmt(sec.financed_total)}
+                  {greenSky && sec.key === "permanent" ? null : (
+                    <div className="pcare-right">
+                      <div className="pcare-savings-label">Installed</div>
+                      <div
+                        className="pcare-savings-amount"
+                        style={{ fontSize: "clamp(30px,4.4vw,42px)" }}
+                      >
+                        {fmt(sec.financed_total)}
+                      </div>
+                      <div className="pcare-savings-unit">
+                        {sec.key === "christmas"
+                          ? "Install, maintenance, takedown, and storage included"
+                          : "All-inclusive \u00b7 professionally installed"}
+                      </div>
                     </div>
-                    <div className="pcare-savings-unit">
-                      {sec.key === "christmas"
-                        ? "Install, maintenance, takedown, and storage included"
-                        : "All-inclusive \u00b7 professionally installed"}
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             ))}
-            {doc.grand_financed_total > 0 ? (
+            {!greenSky && doc.grand_financed_total > 0 ? (
               <div className="grand-panel" style={{ maxWidth: 460, margin: "18px auto 0" }}>
                 <div className="grand-panel-title">All-In Project Total</div>
                 <div className="grand-rows">
@@ -741,16 +796,32 @@ export function ClientProposalView({
         {/* While a package is still up for grabs, the deposit is whatever the
             client's current choice costs, and paying goes through accept so
             they're never charged for a package they didn't pick. */}
-        <DepositPanel
-          data={data}
-          amountDue={choosable ? (chosenPackage?.deposit_amount ?? null) : undefined}
-          onPayInstead={choosable ? () => onApprove(selectedTier) : undefined}
-          payLabel={choosable ? "Accept & Pay Deposit" : undefined}
-          busy={busy}
-        />
+        {!greenSky ? (
+          <DepositPanel
+            data={data}
+            amountDue={choosable ? (chosenPackage?.deposit_amount ?? null) : undefined}
+            onPayInstead={choosable ? () => onApprove(selectedTier) : undefined}
+            payLabel={choosable ? "Accept & Pay Deposit" : undefined}
+            busy={busy}
+          />
+        ) : null}
 
-        <div className="cta-section no-print">
-          {decided ? (
+        <section
+          id="proposal-response"
+          className="cta-section no-print"
+          aria-label="Proposal response"
+        >
+          {data.is_expired ? (
+            <>
+              <div className="cta-eyebrow">Proposal Expired</div>
+              <div className="cta-heading">Ask us for an updated proposal.</div>
+              <div className="cta-sub">
+                {contactLine
+                  ? `Questions? Reach us anytime — ${contactLine}`
+                  : "This proposal can no longer be accepted or paid online."}
+              </div>
+            </>
+          ) : decided ? (
             <>
               <div className="cta-eyebrow">
                 {justApproved || data.status === "approved" ? "Approved" : "Response Recorded"}
@@ -834,7 +905,7 @@ export function ClientProposalView({
           {actionError ? (
             <div className="pp-error">Something went wrong. Please refresh and try again.</div>
           ) : null}
-        </div>
+        </section>
 
         <div className="rep-sig">
           <div className="rep-sig-brand">{brandName}</div>

@@ -22,9 +22,9 @@ describe("proposalAccentVars", () => {
   it("keeps a dim brand color's hue, lightening it only until it is readable", () => {
     // The green 76 real workspaces use. At 3.73:1 it is too dim for the 11px
     // text this accent paints, but discarding it would strip their branding
-    // entirely — so it is lightened the minimum needed (~11%) and stays green.
+    // entirely — so it is lightened the minimum needed (~16%) and stays green.
     const green = accentColor("#0A7C3A");
-    expect(green).toBe("#258a50");
+    expect(green).toBe("#31915a");
 
     // Still recognizably the same hue: green dominant, red still lowest.
     const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt((green ?? "").slice(i, i + 2), 16));
@@ -65,16 +65,19 @@ describe("proposalAccentVars", () => {
       });
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
-    const pageLuminance = luminance([10, 10, 10]);
+    const surfaceLuminance = luminance([24, 24, 24]);
 
     for (const candidate of ["#0A7C3A", "#7C3AED", "#2563EB", "#FCB400", "#d4af5a", "#8B0000"]) {
-      const applied = accentColor(candidate);
-      if (!applied) continue;
-      const rgb = [1, 3, 5].map((i) => Number.parseInt(applied.slice(i, i + 2), 16));
-      const ratio =
-        (Math.max(luminance(rgb), pageLuminance) + 0.05) /
-        (Math.min(luminance(rgb), pageLuminance) + 0.05);
-      expect(ratio).toBeGreaterThanOrEqual(4.5);
+      const applied = proposalAccentVars(candidate) as Record<string, string>;
+      for (const variable of ["--gold", "--gold-d"]) {
+        const color = applied[variable];
+        if (!color) continue;
+        const rgb = [1, 3, 5].map((i) => Number.parseInt(color.slice(i, i + 2), 16));
+        const ratio =
+          (Math.max(luminance(rgb), surfaceLuminance) + 0.05) /
+          (Math.min(luminance(rgb), surfaceLuminance) + 0.05);
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 

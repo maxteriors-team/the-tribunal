@@ -210,9 +210,7 @@ describe("ClientProposalView — visual checkout", () => {
     expect(within(visualCheckout).getByText(/\$16,782\s*\u2013\s*\$19,300/)).toBeVisible();
     // The customer is told which end they are agreeing to, and the deposit and
     // acceptance still run on the exact quoted total.
-    expect(
-      within(visualCheckout).getByText(/Approving locks in \$16,782/i),
-    ).toBeVisible();
+    expect(within(visualCheckout).getByText(/Approving locks in \$16,782/i)).toBeVisible();
     expect(within(visualCheckout).getByText(/\$8,391 due today/i)).toBeVisible();
     await userEvent.click(
       within(visualCheckout).getByRole("button", { name: "Accept & Pay $8,391" }),
@@ -748,5 +746,161 @@ describe("operator-authored project terms", () => {
     expect(screen.queryByText("Design intent")).toBeNull();
     expect(screen.queryByText("Our commitments")).toBeNull();
     expect(screen.queryByText("Prepared for signature")).toBeNull();
+  });
+});
+
+const PERMANENT_GREEN_SKY_DOCUMENT = {
+  ...DOCUMENT,
+  service: "permanent",
+  tier_order: [],
+  tiers: [],
+  selected_tier: null,
+  headline_tier: null,
+  mockups: [{ image: "data:image/png;base64,AAAA", caption: "Permanent lighting design" }],
+  category_sections: [
+    {
+      key: "permanent",
+      label: "Permanent Lighting",
+      lines: [{ label: "100-foot lighting package", line_total: 12000 }],
+      value_props: [],
+      financed_total: 12000,
+      cash_total: 12000,
+      cash_savings: 0,
+      monthly_payment: 500,
+      min_applied: false,
+      takedown: false,
+      storage: false,
+    },
+  ],
+  grand_financed_total: 12000,
+  grand_cash_total: 12000,
+  grand_monthly_payment: 500,
+  financing: {
+    enabled: true,
+    provider: "Generic estimator",
+    terms: [24],
+    default_term: 24,
+    max_amount: 25000,
+    headline: "Estimated monthly payments",
+    body: null,
+    points: [],
+    disclaimer: "Generic estimate only.",
+  },
+  green_sky: {
+    application_url: "https://projects.greensky.com/applyshort",
+    merchant_number: "1234567890",
+    plan_number: "246810",
+    apr_percent: 0,
+    term_months: 24,
+    offer_details: "Provider-approved 0% APR for 24 months.",
+    disclosure:
+      "Financing is subject to credit approval and the terms in your GreenSky loan documents. Applying does not accept this proposal, reserve an installation date, or guarantee approval. GreenSky Servicing, LLC is a financial technology company, not a lender. Program lenders determine credit approval and loan terms.",
+  },
+};
+
+function renderPermanentGreenSky(
+  overrides: Partial<PublicProposal> = {},
+  documentOverrides: Record<string, unknown> = {},
+) {
+  return renderView({
+    packages: [],
+    total: 12000,
+    subtotal: 12000,
+    deposit_required: true,
+    deposit_amount: 2400,
+    deposit_percentage: 20,
+    proposal_document: {
+      ...PERMANENT_GREEN_SKY_DOCUMENT,
+      ...documentOverrides,
+    } as unknown as Record<string, unknown>,
+    ...overrides,
+  });
+}
+
+describe("ClientProposalView — Permanent GreenSky payment options", () => {
+  it("shows one project price and both pre-acceptance paths", async () => {
+    const user = userEvent.setup();
+    const { onApprove } = renderPermanentGreenSky();
+
+    const options = screen.getByRole("region", { name: /choose how to move forward/i });
+    expect(screen.getAllByText("$12,000")).toHaveLength(1);
+    expect(options).toHaveTextContent(
+      "It stays the same whether you pay the deposit or explore GreenSky financing.",
+    );
+    expect(options).toHaveTextContent("$2,400 due");
+    expect(within(options).getByRole("heading", { name: "0% APR for 24 months" })).toBeVisible();
+    expect(options).toHaveTextContent("1234567890");
+    expect(options).toHaveTextContent("246810");
+    expect(options).toHaveTextContent(/subject to credit approval/i);
+    expect(options).toHaveTextContent(/does not accept this proposal/i);
+    expect(options).toHaveTextContent(/reserve an installation date/i);
+    expect(options).toHaveTextContent(/not a lender/i);
+
+    const apply = within(options).getByRole("link", {
+      name: /start greensky application.*opens in a new tab/i,
+    });
+    expect(apply).toHaveAttribute("href", "https://projects.greensky.com/applyshort");
+    expect(apply).toHaveAttribute("target", "_blank");
+    expect(apply).toHaveAttribute("rel", "noopener noreferrer");
+    expect(apply).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(screen.getByRole("link", { name: "Review payment options" })).toHaveAttribute(
+      "href",
+      "#permanent-payment-options",
+    );
+    expect(screen.queryByRole("complementary", { name: /estimated financing/i })).toBeNull();
+    expect(screen.queryByText("Generic estimator")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pay Deposit" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Accept proposal" }));
+    expect(onApprove).toHaveBeenCalledWith(null);
+  });
+
+  it("exposes Stripe deposit checkout only after recorded acceptance", () => {
+    renderPermanentGreenSky({ status: "approved", is_decided: true });
+
+    expect(screen.getByRole("button", { name: "Pay Deposit" })).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /start greensky application.*new tab/i }),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Accept proposal" })).toBeNull();
+  });
+
+  it.each([
+    ["expired", { is_expired: true }],
+    ["declined", { status: "declined" as const, is_decided: true }],
+  ])("suppresses active actions when the proposal is %s", (_state, overrides) => {
+    renderPermanentGreenSky(overrides);
+
+    expect(screen.queryByRole("link", { name: /start greensky application/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /pay deposit/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /accept proposal/i })).toBeNull();
+  });
+
+  it("suppresses financing after a deposit is paid", () => {
+    renderPermanentGreenSky({ status: "approved", is_decided: true, deposit_paid: true });
+
+    expect(screen.getByText(/deposit received/i)).toBeVisible();
+    expect(screen.queryByRole("link", { name: /start greensky application/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /pay deposit/i })).toBeNull();
+  });
+
+  it("states plainly when no deposit is configured", () => {
+    renderPermanentGreenSky({ deposit_required: false, deposit_amount: 0 });
+
+    expect(screen.getByText("No online deposit")).toBeVisible();
+    expect(screen.getByText(/No deposit is configured for this proposal/i)).toBeVisible();
+    expect(screen.getByRole("link", { name: /start greensky application/i })).toBeVisible();
+  });
+
+  it("rejects an operator-controlled application destination", () => {
+    const parsed = parseProposalDocument({
+      ...PERMANENT_GREEN_SKY_DOCUMENT,
+      green_sky: {
+        ...PERMANENT_GREEN_SKY_DOCUMENT.green_sky,
+        application_url: "https://example.com/phishing",
+      },
+    });
+
+    expect(parsed?.green_sky).toBeNull();
   });
 });
