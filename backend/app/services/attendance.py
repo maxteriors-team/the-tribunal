@@ -51,6 +51,7 @@ from app.services.exceptions import (
     PermissionDeniedError,
     ValidationError,
 )
+from app.services.technician_scoreboard import TechnicianScoreboardService
 
 MAX_ATTENDANCE_ROWS = 5000
 
@@ -133,6 +134,20 @@ class AttendanceService:
             return name, ZoneInfo(name)
         except (ZoneInfoNotFoundError, ValueError):
             return "UTC", ZoneInfo("UTC")
+
+    async def _reconcile_scoreboard_days(
+        self,
+        workspace_id: uuid.UUID,
+        user_id: int,
+        workspace: Workspace,
+        *starts_at: datetime,
+    ) -> None:
+        _name, zone = self._workspace_zone(workspace)
+        await TechnicianScoreboardService(self.db).reconcile_attendance_days(
+            workspace_id,
+            user_id,
+            {started.astimezone(zone).date() for started in starts_at},
+        )
 
     @classmethod
     def _utc_bounds(
@@ -532,6 +547,9 @@ class AttendanceService:
                 )
                 return self._response(retry, auth.user)
             raise ConflictError("Unable to close attendance entry") from exc
+        await self._reconcile_scoreboard_days(
+            workspace_id, entry.user_id, auth.workspace, entry.started_at
+        )
         return self._response(entry, auth.user)
 
     async def pause_shift(
@@ -730,6 +748,9 @@ class AttendanceService:
                 )
                 return self._response(retry, target)
             raise ConflictError("Attendance entry overlaps an existing interval") from exc
+        await self._reconcile_scoreboard_days(
+            workspace_id, entry.user_id, auth.workspace, entry.started_at
+        )
         return self._response(entry, target)
 
     async def _entry_and_user(
@@ -767,6 +788,7 @@ class AttendanceService:
         if entry.status == ATTENDANCE_STATUS_VOID:
             raise ConflictError("Voided attendance entries cannot be edited")
 
+        old_start = entry.started_at
         new_start = (
             payload.started_at.astimezone(UTC)
             if payload.started_at is not None
@@ -830,6 +852,9 @@ class AttendanceService:
             if retry is not None:
                 return retry
             raise ConflictError("Attendance entry overlaps an existing interval") from exc
+        await self._reconcile_scoreboard_days(
+            workspace_id, entry.user_id, auth.workspace, old_start, entry.started_at
+        )
         return self._response(entry, target)
 
     async def void_entry(
@@ -886,6 +911,9 @@ class AttendanceService:
             if retry is not None:
                 return retry
             raise ConflictError("request_id has already been used") from exc
+        await self._reconcile_scoreboard_days(
+            workspace_id, entry.user_id, auth.workspace, entry.started_at
+        )
         return self._response(entry, target)
 
     @staticmethod

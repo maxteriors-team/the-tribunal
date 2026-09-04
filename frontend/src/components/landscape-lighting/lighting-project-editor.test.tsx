@@ -136,6 +136,8 @@ function project(overrides: Partial<LightingProjectDetail> = {}): LightingProjec
     workspace_id: WORKSPACE_ID,
     contact_id: 42,
     contact_name: "Pat Lee",
+    contact_email: "pat@example.com",
+    contact_phone: "+15551234567",
     service_location_id: null,
     opportunity_id: null,
     assigned_user_id: null,
@@ -207,6 +209,10 @@ describe("LightingProjectEditor", () => {
         focus: "landscape",
         landscapeProject: expect.objectContaining({
           initialDraft: expect.objectContaining({ activeShotId: "shot-1" }),
+          contactId: 42,
+          contactName: "Pat Lee",
+          contactEmail: "pat@example.com",
+          contactPhone: "+15551234567",
           persistenceStatus: expect.objectContaining({
             label: "Saved to Tribunal",
           }),

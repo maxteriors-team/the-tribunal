@@ -38,6 +38,7 @@ import {
   Tag,
   Target,
   TreePine,
+  Trophy,
   UserSearch,
   Users,
   Zap,
@@ -420,6 +421,14 @@ export const operationsNavItems: AppNavItem[] = [
     commandPalette: true,
   },
   {
+    title: "Lighting League",
+    url: "/scoreboard",
+    icon: Trophy,
+    sidebar: true,
+    commandPalette: true,
+    requires: "jobs:read",
+  },
+  {
     // Reachable by every tier that can sell (see `upsell:sell`), and the only
     // CRM surface besides jobs/calendar a field technician can open.
     title: "Sell add-on",
@@ -618,6 +627,7 @@ export const breadcrumbLabels: Record<string, string> = {
   experiments: "Experiments",
   calendar: "Calendar",
   jobs: "Jobs",
+  scoreboard: "Lighting League",
   // "Upsell" is internal jargon; the technician using this screen calls it
   // selling an add-on.
   upsell: "Sell add-on",
@@ -669,6 +679,7 @@ export function isNavItemVisible(item: AppNavItem) {
 export const FIELD_OPERATIONAL_PREFIXES: readonly string[] = [
   "/jobs",
   "/calendar",
+  "/scoreboard",
   "/upsell",
   "/time",
 ];

@@ -79,6 +79,7 @@ from app.models.invoice import Invoice, InvoiceLineItem
 from app.models.invoice_payment import InvoicePayment
 from app.models.invoice_payment_receipt_outbox import InvoicePaymentReceiptOutbox
 from app.models.job_costing import JobExpense, TimeEntry
+from app.models.job_handoff_image import JobHandoffImage
 from app.models.knowledge_chunk import KnowledgeChunk
 from app.models.knowledge_document import KnowledgeDocument
 from app.models.lead_discovery_job import (
@@ -198,6 +199,7 @@ from app.models.roofline_comparison import RooflineComparison
 from app.models.segment import Segment
 from app.models.short_link import ShortLink
 from app.models.tag import ContactTag, Tag
+from app.models.technician_xp_award import TechnicianXpAward
 from app.models.user import User
 from app.models.webhook_signature import SeenWebhookSignature
 from app.models.workspace import Workspace, WorkspaceIntegration, WorkspaceMembership
@@ -357,7 +359,9 @@ __all__ = [
     "ServiceLocation",
     "Crew",
     "Technician",
+    "TechnicianXpAward",
     "Job",
+    "JobHandoffImage",
     "JobAssignment",
     "JobLineItem",
     "JobStatus",

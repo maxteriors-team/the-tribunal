@@ -62,6 +62,7 @@ from app.services.exceptions import (
     PermissionDeniedError,
     ValidationError,
 )
+from app.services.jobs import JobService
 from app.services.quotes import QuoteService
 from app.services.quotes.attach_rules_config import SETTINGS_KEY as ATTACH_RULES_KEY
 
@@ -1250,6 +1251,17 @@ async def test_create_quote_from_estimate_snapshots_preview_and_installation_sho
         # Default: one firm number, exactly as before the range option existed.
         assert public.price_range is None
 
+        await svc.approve_quote(ws.id, quote.id)
+        converted = await svc.convert_quote(ws.id, quote.id, create_invoice=False)
+        assert converted.job.contact_id == contact.id
+        assert converted.job.source_quote_id == quote.id
+        assert converted.job.lighting_project_id == project.id
+
+        installation_plan = await JobService(db).get_installation_plan(converted.job.id, ws.id)
+        assert installation_plan.project_id == project.id
+        assert installation_plan.proposal_preview_image == "data:image/jpeg;base64,/9j/2Q=="
+        assert installation_plan.design.items[0].product_id == "fixture-uplight"
+
 
 async def test_create_quote_from_estimate_can_send_a_price_range(monkeypatch) -> None:
     async with AsyncSessionLocal() as db:
@@ -1302,18 +1314,14 @@ async def test_create_quote_from_estimate_can_send_a_price_range(monkeypatch) ->
         delivered_prices: list[tuple[str, str]] = []
 
         async def capture_email(**kwargs: object) -> bool:
-            delivered_prices.append(
-                (str(kwargs["amount_label"]), str(kwargs["amount_str"]))
-            )
+            delivered_prices.append((str(kwargs["amount_label"]), str(kwargs["amount_str"])))
             return True
 
         from app.services import email as email_module
 
         monkeypatch.setattr(email_module, "send_quote_email", capture_email)
         sent = await svc.mark_sent(ws.id, quote.id)
-        assert delivered_prices == [
-            ("Estimated range", f"{float(quote.total):.2f}–4000.00 USD")
-        ]
+        assert delivered_prices == [("Estimated range", f"{float(quote.total):.2f}–4000.00 USD")]
         public = await svc.get_public_proposal(sent.public_token)
         assert public.price_range is not None
         # The quoted total is the bottom of the range, so approving it and the

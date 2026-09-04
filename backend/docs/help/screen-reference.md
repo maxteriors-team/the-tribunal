@@ -80,6 +80,7 @@ A permanent-lighting project uses `/permanent-lighting/{project_id}`. A landscap
 | --- | --- | --- |
 | Calendar | `/calendar` | Schedule and review appointments |
 | Jobs | `/jobs` | Dispatch and work scheduled or unscheduled jobs |
+| Lighting League | `/scoreboard` | Compare monthly XP standings and lifetime lighting levels |
 | Sell add-on | `/upsell` | Build and share on-site add-on proposals |
 | Service Plans | `/service-plans` | Create and manage recurring customer plans |
 | Inventory | `/inventory` | Track stock, receipts, adjustments, and reorder needs |

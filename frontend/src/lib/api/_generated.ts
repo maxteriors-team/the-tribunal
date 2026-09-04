@@ -6139,12 +6139,36 @@ export interface paths {
         };
         /**
          * List Job Handoff Images
-         * @description List source-quote images after applying normal job visibility rules.
+         * @description List job and source-quote images after applying job visibility rules.
          */
         get: operations["list_job_handoff_images_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_get"];
         put?: never;
-        post?: never;
+        /**
+         * Upload Job Handoff Image
+         * @description Store one office-authored image after locking the shared collection.
+         */
+        post: operations["upload_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/handoff-images/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Job Handoff Image
+         * @description Delete only a job-owned image from an office-visible job.
+         */
+        delete: operations["delete_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images__image_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6159,7 +6183,7 @@ export interface paths {
         };
         /**
          * Download Job Handoff Image
-         * @description Serve a source-quote image only to callers allowed to read this job.
+         * @description Serve one job-visible image from either private storage owner.
          */
         get: operations["download_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images__image_id__download_get"];
         put?: never;
@@ -10511,6 +10535,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/technician-scoreboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Technician Scoreboard
+         * @description Return public standings plus only the linked viewer's private breakdown.
+         */
+        get: operations["get_technician_scoreboard_api_v1_workspaces__workspace_id__technician_scoreboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/technician-scoreboard/me/acknowledge-level": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge Technician Level
+         * @description Monotonically acknowledge only a level the linked technician has reached.
+         */
+        post: operations["acknowledge_technician_level_api_v1_workspaces__workspace_id__technician_scoreboard_me_acknowledge_level_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/technician-scoreboard/technicians/{technician_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Technician Scoreboard Detail
+         * @description Return self detail, or peer detail only to office job writers.
+         */
+        get: operations["get_technician_scoreboard_detail_api_v1_workspaces__workspace_id__technician_scoreboard_technicians__technician_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/technicians": {
         parameters: {
             query?: never;
@@ -13943,6 +14027,11 @@ export interface components {
         };
         /** Body_upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post */
         Body_upload_contact_attachment_api_v1_workspaces__workspace_id__contacts__contact_id__attachments_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_upload_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_post */
+        Body_upload_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_post: {
             /** File */
             file: string;
         };
@@ -19135,6 +19224,11 @@ export interface components {
             id: string;
             /** Size Bytes */
             size_bytes: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "quote" | "job";
         };
         /** HighlightSchema */
         HighlightSchema: {
@@ -22465,10 +22559,14 @@ export interface components {
         LightingProjectDetail: {
             /** Assigned User Id */
             assigned_user_id: number | null;
+            /** Contact Email */
+            contact_email?: string | null;
             /** Contact Id */
             contact_id: number;
             /** Contact Name */
             contact_name: string;
+            /** Contact Phone */
+            contact_phone?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -32307,6 +32405,16 @@ export interface components {
             /** User Id */
             user_id?: number | null;
         };
+        /** TechnicianLevelAcknowledgementRequest */
+        TechnicianLevelAcknowledgementRequest: {
+            /** Level */
+            level: number;
+        };
+        /** TechnicianLevelAcknowledgementResponse */
+        TechnicianLevelAcknowledgementResponse: {
+            /** Level Seen */
+            level_seen: number;
+        };
         /**
          * TechnicianListResponse
          * @description List of technicians.
@@ -32360,6 +32468,131 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /** TechnicianScoreboardDetail */
+        TechnicianScoreboardDetail: {
+            /** Approved Upsells */
+            approved_upsells: number;
+            /** Attendance Days */
+            attendance_days: number;
+            /** Attendance Xp */
+            attendance_xp: number;
+            /** Completed Jobs */
+            completed_jobs: number;
+            /** Current Level Threshold */
+            current_level_threshold: number;
+            /** Job Xp */
+            job_xp: number;
+            /** Level Number */
+            level_number: number;
+            /** Level Progress */
+            level_progress: number;
+            /** Level Title */
+            level_title: string;
+            /** Lifetime Xp */
+            lifetime_xp: number;
+            /** Monthly Xp */
+            monthly_xp: number;
+            /** Name */
+            name: string;
+            /** Next Level Number */
+            next_level_number: number | null;
+            /** Next Level Threshold */
+            next_level_threshold: number | null;
+            /** Next Level Title */
+            next_level_title: string | null;
+            /**
+             * Technician Id
+             * Format: uuid
+             */
+            technician_id: string;
+            /** Upsell Xp */
+            upsell_xp: number;
+            /** Xp Into Level */
+            xp_into_level: number;
+            /** Xp To Next Level */
+            xp_to_next_level: number | null;
+        };
+        /** TechnicianScoreboardLevel */
+        TechnicianScoreboardLevel: {
+            /** Lifetime Xp */
+            lifetime_xp: number;
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+        };
+        /** TechnicianScoreboardPeriod */
+        TechnicianScoreboardPeriod: {
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /** Timezone */
+            timezone: string;
+        };
+        /** TechnicianScoreboardResponse */
+        TechnicianScoreboardResponse: {
+            /** Levels */
+            levels: components["schemas"]["TechnicianScoreboardLevel"][];
+            period: components["schemas"]["TechnicianScoreboardPeriod"];
+            rules: components["schemas"]["TechnicianScoreboardRules"];
+            /** Standings */
+            standings: components["schemas"]["TechnicianScoreboardStanding"][];
+            viewer_detail: components["schemas"]["TechnicianScoreboardDetail"] | null;
+            /** Viewer Level Seen */
+            viewer_level_seen: number | null;
+        };
+        /** TechnicianScoreboardRules */
+        TechnicianScoreboardRules: {
+            /** Attendance Day Xp */
+            attendance_day_xp: number;
+            /** Completed Job Xp */
+            completed_job_xp: number;
+            /** Upsell Base Xp */
+            upsell_base_xp: number;
+            /** Upsell Max Xp */
+            upsell_max_xp: number;
+            /** Upsell Value Bonus Cap */
+            upsell_value_bonus_cap: number;
+            /** Upsell Value Divisor */
+            upsell_value_divisor: number;
+        };
+        /** TechnicianScoreboardStanding */
+        TechnicianScoreboardStanding: {
+            /** Is Viewer */
+            is_viewer: boolean;
+            /** Level Number */
+            level_number: number;
+            /** Level Title */
+            level_title: string;
+            /** Monthly Xp */
+            monthly_xp: number;
+            /** Name */
+            name: string;
+            /** Rank */
+            rank: number | null;
+            /**
+             * Technician Id
+             * Format: uuid
+             */
+            technician_id: string;
         };
         /**
          * TechnicianSummary
@@ -46694,6 +46927,73 @@ export interface operations {
             };
         };
     };
+    upload_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandoffImageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images__image_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                image_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_job_handoff_image_api_v1_workspaces__workspace_id__jobs__job_id__handoff_images__image_id__download_get: {
         parameters: {
             query?: never;
@@ -56026,6 +56326,104 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_technician_scoreboard_api_v1_workspaces__workspace_id__technician_scoreboard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianScoreboardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_technician_level_api_v1_workspaces__workspace_id__technician_scoreboard_me_acknowledge_level_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TechnicianLevelAcknowledgementRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianLevelAcknowledgementResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_technician_scoreboard_detail_api_v1_workspaces__workspace_id__technician_scoreboard_technicians__technician_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                technician_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianScoreboardDetail"];
+                };
             };
             /** @description Validation Error */
             422: {

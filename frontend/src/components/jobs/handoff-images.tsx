@@ -7,27 +7,30 @@ import { useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  HANDOFF_IMAGE_CONTENT_TYPES,
   type HandoffImage,
+  deleteJobHandoffImage,
   deleteQuoteHandoffImage,
   jobHandoffImageUrl,
   listJobHandoffImages,
   listQuoteHandoffImages,
   quoteHandoffImageUrl,
+  uploadJobHandoffImage,
   uploadQuoteHandoffImage,
 } from "@/lib/api/handoff-images";
 import { queryKeys } from "@/lib/query-keys";
 import { getApiErrorMessage } from "@/lib/utils/errors";
 
-const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ALLOWED_IMAGE_TYPES = new Set<string>(HANDOFF_IMAGE_CONTENT_TYPES);
 
 interface QuoteHandoffImagesProps {
-  mode: "quote";
+  mode: "quote-edit";
   workspaceId: string;
   quoteId: string;
 }
 
 interface JobHandoffImagesProps {
-  mode: "job";
+  mode: "job-edit" | "technician-read";
   workspaceId: string;
   jobId: string;
 }
@@ -50,7 +53,9 @@ function formatBytes(bytes: number): string {
 
 export function HandoffImages(props: HandoffImagesProps) {
   const { mode, workspaceId } = props;
-  const resourceId = mode === "quote" ? props.quoteId : props.jobId;
+  const quoteMode = mode === "quote-edit";
+  const canEdit = mode !== "technician-read";
+  const resourceId = quoteMode ? props.quoteId : props.jobId;
   const resourceKey = `${mode}:${resourceId}`;
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -65,11 +70,11 @@ export function HandoffImages(props: HandoffImagesProps) {
 
   const imageQuery = useQuery({
     queryKey:
-      mode === "quote"
+      quoteMode
         ? queryKeys.quotes.handoffImages(workspaceId, resourceId)
         : queryKeys.jobs.handoffImages(workspaceId, resourceId),
     queryFn: () =>
-      mode === "quote"
+      quoteMode
         ? listQuoteHandoffImages(workspaceId, resourceId)
         : listJobHandoffImages(workspaceId, resourceId),
     staleTime: 60_000,
@@ -86,7 +91,9 @@ export function HandoffImages(props: HandoffImagesProps) {
       const result: UploadResult = { uploaded: 0, failures: [] };
       for (const file of files) {
         try {
-          await uploadQuoteHandoffImage(workspaceId, resourceId, file);
+          await (quoteMode
+            ? uploadQuoteHandoffImage(workspaceId, resourceId, file)
+            : uploadJobHandoffImage(workspaceId, resourceId, file));
           result.uploaded += 1;
         } catch (error) {
           result.failures.push({
@@ -117,7 +124,10 @@ export function HandoffImages(props: HandoffImagesProps) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (image: HandoffImage) => deleteQuoteHandoffImage(workspaceId, resourceId, image.id),
+    mutationFn: (image: HandoffImage) =>
+      quoteMode
+        ? deleteQuoteHandoffImage(workspaceId, resourceId, image.id)
+        : deleteJobHandoffImage(workspaceId, resourceId, image.id),
     onSuccess: (_data, image) => {
       void invalidateImageCaches();
       setNotice({ kind: "success", text: `${image.filename} removed.` });
@@ -175,7 +185,7 @@ export function HandoffImages(props: HandoffImagesProps) {
   const atCapacity = !!imageQuery.data && images.length >= imageQuery.data.max_images;
   const isMutating = uploadMutation.isPending || deleteMutation.isPending;
   const imageUrl = (image: HandoffImage) =>
-    mode === "quote"
+    quoteMode
       ? quoteHandoffImageUrl(workspaceId, resourceId, image.id)
       : jobHandoffImageUrl(workspaceId, resourceId, image.id);
 
@@ -188,7 +198,7 @@ export function HandoffImages(props: HandoffImagesProps) {
             Field handoff images
           </h3>
           <p className="text-xs text-muted-foreground">
-            {mode === "quote"
+            {quoteMode
               ? "Shared with the assigned field team after scheduling."
               : "Photos shared by the office for this job."}
           </p>
@@ -200,7 +210,7 @@ export function HandoffImages(props: HandoffImagesProps) {
           ) : null}
         </div>
 
-        {mode === "quote" ? (
+        {canEdit ? (
           <>
             <Button
               type="button"
@@ -268,7 +278,7 @@ export function HandoffImages(props: HandoffImagesProps) {
         </div>
       ) : images.length === 0 ? (
         <p className="rounded-md bg-muted/40 px-3 py-4 text-center text-xs text-muted-foreground">
-          {mode === "quote"
+          {canEdit
             ? "No handoff images added yet."
             : "No handoff images were provided for this job."}
         </p>
@@ -295,7 +305,7 @@ export function HandoffImages(props: HandoffImagesProps) {
                   className="object-cover transition-transform group-hover:scale-105"
                 />
               </a>
-              {mode === "quote" ? (
+              {quoteMode || (mode === "job-edit" && image.source === "job") ? (
                 <Button
                   type="button"
                   variant="secondary"

@@ -99,9 +99,10 @@ describe("isFieldOperationalPath", () => {
     expect(isFieldOperationalPath("/jobs/123")).toBe(true);
   });
 
-  it("allows the personal time clock", () => {
+  it("allows the personal time clock and Lighting League", () => {
     expect(isFieldOperationalPath("/time")).toBe(true);
     expect(isFieldOperationalPath("/time/history")).toBe(true);
+    expect(isFieldOperationalPath("/scoreboard")).toBe(true);
   });
 
   it("blocks every other CRM surface", () => {
@@ -115,6 +116,7 @@ describe("canSeeNavItem — field technician is fail-closed to operational route
   it("shows only operational routes to field techs, even with all capabilities", () => {
     expect(canSeeNavItem(navItem("/jobs"), "field", canAll)).toBe(true);
     expect(canSeeNavItem(navItem("/calendar"), "field", canAll)).toBe(true);
+    expect(canSeeNavItem(navItem("/scoreboard", "jobs:read"), "field", canAll)).toBe(true);
     expect(canSeeNavItem(navItem("/time", "attendance:use"), "field", canAll)).toBe(true);
     // Non-operational items are hidden regardless of capability grants.
     expect(canSeeNavItem(navItem("/contacts"), "field", canAll)).toBe(false);
@@ -149,6 +151,7 @@ describe("canSeeNavItem — the crew lead is fail-closed too", () => {
   it("shows the lead exactly the on-site surface", () => {
     expect(canSeeNavItem(navItem("/jobs"), "lead", canAll)).toBe(true);
     expect(canSeeNavItem(navItem("/calendar"), "lead", canAll)).toBe(true);
+    expect(canSeeNavItem(navItem("/scoreboard", "jobs:read"), "lead", canAll)).toBe(true);
     expect(canSeeNavItem(navItem("/time", "attendance:use"), "lead", canAll)).toBe(true);
   });
 
@@ -162,6 +165,7 @@ describe("real nav items under the on-site tiers", () => {
   const calendar = allNavItems.find((i) => i.url === "/calendar")!;
   const upsell = allNavItems.find((i) => i.url === "/upsell")!;
   const time = allNavItems.find((i) => i.url === "/time")!;
+  const scoreboard = allNavItems.find((i) => i.url === "/scoreboard")!;
   const scorecard = allNavItems.find((i) => i.url === "/scorecard")!;
 
   it("hides CRM surfaces but shows Calendar and Time & Attendance", () => {
@@ -186,6 +190,14 @@ describe("real nav items under the on-site tiers", () => {
     const jobsOnly = (c: string) => c === "jobs:read";
     expect(canSeeNavItem(upsell, "lead", canSell as typeof canAll)).toBe(true);
     expect(canSeeNavItem(upsell, "field", jobsOnly as typeof canAll)).toBe(false);
+  });
+
+  it("shows Lighting League wherever jobs are readable", () => {
+    const jobsOnly = (capability: string) => capability === "jobs:read";
+    expect(scoreboard.title).toBe("Lighting League");
+    expect(canSeeNavItem(scoreboard, "field", jobsOnly as typeof canAll)).toBe(true);
+    expect(canSeeNavItem(scoreboard, "lead", jobsOnly as typeof canAll)).toBe(true);
+    expect(canSeeNavItem(scoreboard, "manager", jobsOnly as typeof canAll)).toBe(true);
   });
 
   it("keeps employee activity scorecards behind reports access", () => {
@@ -310,6 +322,7 @@ describe("canonical direct-route capability matrix", () => {
     "/settings",
     "/onboarding",
     "/calendar",
+    "/scoreboard",
     "/upsell",
     "/time",
   ] as const;
@@ -335,6 +348,7 @@ describe("canonical direct-route capability matrix", () => {
       "/offers/new",
       "/settings",
       "/calendar",
+      "/scoreboard",
       "/upsell",
       "/time",
     ],
@@ -347,11 +361,12 @@ describe("canonical direct-route capability matrix", () => {
       "/offers",
       "/settings",
       "/calendar",
+      "/scoreboard",
       "/upsell",
       "/time",
     ],
-    lead_technician: ["/calendar", "/upsell", "/time"],
-    technician: ["/calendar", "/time"],
+    lead_technician: ["/calendar", "/scoreboard", "/upsell", "/time"],
+    technician: ["/calendar", "/scoreboard", "/time"],
   };
 
   it.each(Object.entries(expectedByRole))(

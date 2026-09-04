@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     DATE,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -188,6 +189,10 @@ class Quote(Base, WorkspaceScoped):
         nullable=False,
         default="draft",
         index=True,
+    )
+    # Set only by the authenticated field upsell flow; never accepted from clients.
+    is_onsite_upsell: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
     )
 
     # --- Denormalized attach metrics -------------------------------------

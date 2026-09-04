@@ -80,6 +80,7 @@ import {
   type AppNavSection,
 } from "./app-nav";
 import { NewMessageNotifier } from "./new-message-notifier";
+import { ProductUpdateBanner } from "./product-update-banner";
 import { RecentChatsMenu } from "./recent-chats-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -481,6 +482,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
       </Sidebar>
 
       <SidebarInset className="h-svh overflow-hidden">
+        <ProductUpdateBanner />
         <header
           className={cn(
             "h-14 shrink-0 items-center gap-2 border-b px-4",

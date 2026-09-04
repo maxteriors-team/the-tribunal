@@ -63,3 +63,8 @@ class QuoteHandoffImage(Base, WorkspaceScoped):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
+
+    @property
+    def source(self) -> str:
+        """Identify this row's immutable storage owner in API metadata."""
+        return "quote"

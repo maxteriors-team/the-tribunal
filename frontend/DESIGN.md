@@ -1050,3 +1050,90 @@ The post-revision rubric is **22/24**: brief specificity, hierarchy, composition
 typography, material logic, states, responsive behavior, motion, and authentic content score 2;
 accessibility and visual distinctiveness score 1. Physical screen-reader output, forced colors, RTL,
 and 200% text-only zoom remain unverified, so this evidence is not a WCAG or legal-conformance claim.
+
+# Lighting League scoreboard (September 2026)
+
+## Design read
+
+- **Surface:** authenticated, scan-heavy application dashboard rather than a marketing page or an
+  analytics report.
+- **Audience:** field technicians checking a phone between jobs and office staff reviewing a crew on
+  desktop. Names can be long, standings can be empty or tied, and touch plus keyboard both matter.
+- **Single job:** understand personal lifetime progress and current monthly team standing without
+  exposing a coworker's underlying performance details.
+- **Task and risk:** frequent, low-decision-cost viewing with material morale and employee-privacy
+  consequences when rank or attribution is unclear.
+- **Platform:** one responsive Next.js route from 320 px phones through the existing desktop app shell,
+  using the project's Inter type, light/dark tokens, Lucide icons, and keyboard-first Radix overlays.
+
+## Evidence and thesis
+
+Local evidence leads: the dashboard's shared `max-w-7xl` rail, black/graphite surfaces, yellow primary
+accent, bordered scan rows, `Sheet`, page-state primitives, and React Query conventions. The selected
+dashboard corpus contains only 5 of 74 documents, so its observations are conditional rather than
+brand templates. Airtable supports dense aligned rows; Sentry supports hierarchy, state, and explicit
+recovery. Miro is the useful contrast: standings reject freeform composition because rank requires
+fixed order, comparable columns, and predictable keyboard movement.
+
+The thesis is **an electrical panel, not a casino**. One restrained work surface uses the yellow
+accent like an energized circuit. Personal level is the first glance, monthly standings the second,
+and private contribution detail the third. Borders, alignment, solid surfaces, and tabular numbers
+carry hierarchy. There are no gradients, glass, podiums, confetti, emoji, flashing, looping motion,
+or invented rewards. The ten-stop semantic circuit rail is the memorable device: completed nodes use
+a check and text, the current node uses its number plus “Current,” and future nodes use a lock plus
+their exact threshold.
+
+## Reuse, components, and states
+
+- `TechnicianScoreboardPage` owns the query, 30-second refresh, stale-data recovery, level acknowledgement,
+  and office-only detail selection. The backend contract owns every title, threshold, formula, and rank.
+- `PersonalProgress` pairs exact lifetime XP with Radix progress and the private monthly category totals.
+- `LevelPath` is one ordered ten-level rail. Completion, current position, and future state use text, icon,
+  shape, and semantics rather than color alone.
+- `Standings` is an ordered list with stable ties, “You,” and “Not ranked.” Office rows are native buttons;
+  field rows are static. The detail `Sheet` returns focus to its invoking row and shares no source IDs.
+- Loading, initial error/retry, stale-refresh warning, zero-XP roster, no-technician manager/field variants,
+  detail loading/error/retry, acknowledgement pending/success/failure, and top-level completion are explicit.
+- `Progress` now reports its actual value/max and limits animation to transforms with reduced-motion fallback.
+  `Sheet` removes motion when requested and keeps a 44 px close target.
+
+## Responsive and accessibility contract
+
+The shared rail uses 16 px phone gutters and 24 px larger gutters. The level circuit is vertical below
+desktop and becomes ten aligned columns at `lg`; standings recompose from two columns to four without
+horizontal page scrolling. Names wrap inside `minmax(0,1fr)`. Logical start/end utilities mirror the
+rail, current-row marker, values, and banner in RTL. Touch actions are at least 44 px.
+
+Heading order, landmarks, ordered lists, native buttons, a named progressbar, polite mutation status,
+explicit errors, visible `focus-visible`, Sheet naming/focus recovery, non-color state labels, reduced
+motion, and forced-color-compatible borders are required. Automated checks supplement, but cannot
+establish WCAG or legal conformance without a complete criterion audit and manual assistive-technology
+evidence.
+
+## Verification evidence
+
+Runtime evidence is stored under the gitignored `.ezcoder/eyes/out/` directory: populated desktop
+(`scoreboard-desktop-1440x900.png`), mobile (`scoreboard-mobile-390x844.png`), 320 px narrow reflow,
+manager detail Sheet, reduced motion, forced colors, 200% root text zoom, and RTL/long-name captures.
+The probe reports no document overflow at 390 px, 320 px, 200% text zoom, or RTL; reduced motion computes
+`transition-property: none`; forced colors is active; and the manager Sheet opens by Enter and returns
+focus after Escape. Keyboard dismissal also persisted the level acknowledgement.
+
+Axe reported zero WCAG A/AA findings within the populated technician main surface and the open manager
+Sheet. The Chromium accessibility tree exposed heading, list, and progressbar roles. Its static snapshot
+did not contain a status role because no mutation was pending; component coverage verifies the pending
+polite status and failure alert. These automated results do not establish WCAG or legal conformance;
+VoiceOver, NVDA, TalkBack, and qualified manual criterion review remain unverified.
+
+The critique removed the banner's decorative sparkle because it repeated the heading, consumed narrow
+space, and disappeared in forced colors. The weakest criterion was narrow-screen resilience: the revision
+freed banner width and added a mobile bottom safe area so the shell's fixed account control cannot trap
+the final content underneath it. Recaptured evidence passed the same overflow, axe, keyboard, forced-color,
+and reduced-motion gates.
+
+**Final rendered rubric: 22/24.** Visual hierarchy 4/4; craft 3/4 because the required ten-column desktop
+rail remains intentionally dense; content and interaction authenticity 4/4; responsive behavior 4/4;
+consistency and flow 4/4; accessibility 3/4 because automated, keyboard, reflow, zoom, forced-color, and
+reduced-motion evidence passed but manual assistive-technology coverage is unavailable. No quality-floor
+criterion is zero. Targeted frontend coverage passes 52/52 tests alongside TypeScript, changed-file ESLint,
+Prettier, generated-contract checks, and the runtime evidence above.
