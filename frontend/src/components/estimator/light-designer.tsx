@@ -4113,9 +4113,7 @@ export function LightDesigner({
         // Invalid/blank tops intentionally travel as zero: the API rejects them
         // instead of silently dropping the range and sending one firm price.
         price_range_high:
-          side === "permanent" && permanentPriceRange
-            ? (permanentPriceRangeHigh ?? 0)
-            : null,
+          side === "permanent" && permanentPriceRange ? (permanentPriceRangeHigh ?? 0) : null,
       });
     },
     onSuccess: (quote, { side, signature }) =>
@@ -4412,7 +4410,11 @@ export function LightDesigner({
     );
 
   return (
-    <div className={`cmp-view est-app${landscapeOnly ? " est-landscape-builder" : ""}`}>
+    <div
+      className={`cmp-view est-app${landscapeOnly ? " est-landscape-builder" : ""}${
+        sells("permanent") ? " est-permanent-builder" : ""
+      }`}
+    >
       {!serverBacked ? (
         <div className="est-topbar">
           {landscapeOnly ? (
@@ -4931,6 +4933,7 @@ export function LightDesigner({
                     products={products}
                     state={state}
                     dispatch={dispatchCanvasAction}
+                    mobileFocusEnabled={sells("permanent")}
                   />
                   <div className="est-side">
                     {hasLandscape ? (
@@ -4992,8 +4995,7 @@ export function LightDesigner({
                         onSelectCoverage={setCoverage}
                         coverageFeet={permanentCoverageFeet}
                         coveragePrices={COVERAGE_OPTIONS.map(
-                          (option, index) =>
-                            coveragePricing[index]?.data?.permanent.total ?? null,
+                          (option, index) => coveragePricing[index]?.data?.permanent.total ?? null,
                         )}
                       />
                     ) : null}
@@ -5287,8 +5289,8 @@ export function LightDesigner({
                               </>
                             ) : (
                               <>
-                                Add a phone number to save this estimate to a customer record. Without
-                                one you can still share the link.
+                                Add a phone number to save this estimate to a customer record.
+                                Without one you can still share the link.
                               </>
                             )}
                           </div>
@@ -5313,7 +5315,11 @@ export function LightDesigner({
                                     <input
                                       className="est-input"
                                       type="number"
-                                      min={permanentRangeLow > 0 ? round2(permanentRangeLow + 0.01) : 0.01}
+                                      min={
+                                        permanentRangeLow > 0
+                                          ? round2(permanentRangeLow + 0.01)
+                                          : 0.01
+                                      }
                                       step="50"
                                       inputMode="decimal"
                                       placeholder="3900"

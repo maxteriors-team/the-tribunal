@@ -497,6 +497,10 @@ describe("LightDesigner", () => {
     expect(screen.getByRole("button", { name: /Select & edit/i })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /^Uplight/i })).toBeInTheDocument();
 
+    // Mobile canvas focus follows Permanent mode in the shared designer too.
+    expect(screen.queryByRole("button", { name: "View design larger" })).toBeNull();
+    enableService(/^Permanent$/);
+    expect(screen.getByRole("button", { name: "View design larger" })).toBeInTheDocument();
     // Christmas is a separate service: its products appear once it's toggled on.
     expect(screen.queryByRole("button", { name: /C9 Roofline — Warm White/i })).toBeNull();
     enableService(/^Christmas$/);
@@ -819,7 +823,12 @@ describe("LightDesigner", () => {
             design: {
               runs: [],
               items: [
-                { id: "fixture-1", productId: "fixture-uplight", at: { x: 200, y: 220 }, sizePx: 30 },
+                {
+                  id: "fixture-1",
+                  productId: "fixture-uplight",
+                  at: { x: 200, y: 220 },
+                  sizePx: 30,
+                },
               ],
               calibration: null,
             },
@@ -858,12 +867,7 @@ describe("LightDesigner", () => {
         expect.objectContaining({ lighting_project_id: "permanent-project" }),
       ),
     );
-    expect(quotesApi.deliver).toHaveBeenCalledWith(
-      "ws_1",
-      "quote-1",
-      "email",
-      "pat@example.com",
-    );
+    expect(quotesApi.deliver).toHaveBeenCalledWith("ws_1", "quote-1", "email", "pat@example.com");
   });
 
   it("sends the permanent proposal as a range when the rep switches it on", async () => {
@@ -879,7 +883,12 @@ describe("LightDesigner", () => {
             design: {
               runs: [],
               items: [
-                { id: "fixture-1", productId: "fixture-uplight", at: { x: 200, y: 220 }, sizePx: 30 },
+                {
+                  id: "fixture-1",
+                  productId: "fixture-uplight",
+                  at: { x: 200, y: 220 },
+                  sizePx: 30,
+                },
               ],
               calibration: null,
             },
@@ -1051,9 +1060,7 @@ describe("LightDesigner", () => {
     );
     // The rep confirms the real dollars before the customer ever sees them.
     expect(await screen.findByText(/10% off/)).toHaveTextContent("$330.00 off this proposal");
-    await waitFor(() =>
-      expect(container.querySelector(".ep-totals")).toHaveTextContent("$2,970"),
-    );
+    await waitFor(() => expect(container.querySelector(".ep-totals")).toHaveTextContent("$2,970"));
   });
 
   it("clamps a percentage to 100 so the price never blanks mid-typing", async () => {
