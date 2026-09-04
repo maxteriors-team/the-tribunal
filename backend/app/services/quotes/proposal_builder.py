@@ -35,6 +35,7 @@ from app.schemas.proposal_wizard import (
     ProposalCharge,
     ProposalDocument,
     ProposalFinancing,
+    ProposalGreenSky,
     ProposalLine,
     ProposalTierView,
     ProposalWizardPayload,
@@ -220,6 +221,7 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
                 )
             )
     categories = _active_categories(payload)
+    service = service_for_categories(categories)
     has_landscape = "landscape" in categories
 
     tier_order = (config.tier_order or [t.key for t in config.tiers]) if has_landscape else []
@@ -350,9 +352,17 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
             channels=payload.permanent.channels,
         )
         if permanent_pricing.total > 0:
-            category_sections.append(
-                _category_section("permanent", config.permanent.label, permanent_pricing, config)
+            permanent_section = _category_section(
+                "permanent", config.permanent.label, permanent_pricing, config
             )
+            if service == "permanent":
+                permanent_section = permanent_section.model_copy(
+                    update={
+                        "cash_total": permanent_section.financed_total,
+                        "cash_savings": 0.0,
+                    }
+                )
+            category_sections.append(permanent_section)
     christmas_pricing = None
     if "christmas" in categories and payload.christmas is not None:
         christmas_items = {key: _counts(rows) for key, rows in payload.christmas.items.items()}
@@ -431,6 +441,25 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
     if bistro is not None and bistro.total > 0:
         category_totals["bistro"] = bistro.total
 
+    green_sky_config = config.permanent.green_sky
+    green_sky = None
+    if (
+        service == "permanent"
+        and green_sky_config.enabled
+        and green_sky_config.merchant_number is not None
+        and green_sky_config.plan_number is not None
+        and green_sky_config.term_months is not None
+        and green_sky_config.apr_percent is not None
+        and green_sky_config.offer_details is not None
+    ):
+        green_sky = ProposalGreenSky(
+            merchant_number=green_sky_config.merchant_number,
+            plan_number=green_sky_config.plan_number,
+            apr_percent=green_sky_config.apr_percent,
+            term_months=green_sky_config.term_months,
+            offer_details=green_sky_config.offer_details,
+        )
+
     financing = ProposalFinancing(
         enabled=(
             not use_price_book
@@ -458,16 +487,21 @@ def build_proposal_document(  # noqa: PLR0912, PLR0915 - one cohesive document a
         care_plan=care_plan,
         bistro=bistro,
         financing=financing,
+        green_sky=green_sky,
         night_preview=payload.night_preview,
         mockups=payload.mockups,
         categories=categories,
         category_sections=category_sections,
-        service=service_for_categories(categories),
+        service=service,
         selected_financed_total=selection.selected_financed,
-        selected_cash_total=selection.selected_cash,
+        selected_cash_total=(
+            selection.selected_financed if service == "permanent" else selection.selected_cash
+        ),
         selected_monthly_payment=selection.selected_monthly,
         grand_financed_total=selection.grand_financed,
-        grand_cash_total=selection.grand_cash,
+        grand_cash_total=(
+            selection.grand_financed if service == "permanent" else selection.grand_cash
+        ),
         grand_monthly_payment=selection.grand_monthly,
         fulfillment=selection.fulfillment,
         notes=payload.notes,
@@ -798,12 +832,15 @@ def reprice_document(
         catalog=catalog,
         pricing_source=document.pricing_source,
     )
+    one_price = document.service == "permanent"
     update: dict[str, Any] = {
         "selected_financed_total": selection.selected_financed,
-        "selected_cash_total": selection.selected_cash,
+        "selected_cash_total": (
+            selection.selected_financed if one_price else selection.selected_cash
+        ),
         "selected_monthly_payment": selection.selected_monthly,
         "grand_financed_total": selection.grand_financed,
-        "grand_cash_total": selection.grand_cash,
+        "grand_cash_total": selection.grand_financed if one_price else selection.grand_cash,
         "grand_monthly_payment": selection.grand_monthly,
         "fulfillment": selection.fulfillment,
     }

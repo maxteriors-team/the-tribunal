@@ -28,17 +28,27 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.schemas.pricing import (
+    BistroConfig,
+    BistroInstallationConfig,
     CashDiscountConfig,
+    ChristmasConfig,
     CommissionConfig,
     FinancingConfig,
+    PermanentConfig,
+    PermanentGreenSkyConfig,
+    PermanentPackage,
     PricingSettings,
     TierConfig,
     TierSection,
 )
 from app.schemas.proposal_wizard import (
     ProposalWizardPayload,
+    WizardBistroRun,
+    WizardBistroSelection,
     WizardCharge,
+    WizardChristmasSelection,
     WizardFixtureQty,
+    WizardPermanentSelection,
 )
 from app.services.quotes import proposal_pricing as pp
 from app.services.quotes.proposal_builder import CatalogEntry, build_proposal_document
@@ -313,3 +323,64 @@ def test_landscape_estimate_payload_is_byte_identical():
         b'"disclaimer":"Estimate only, not an offer of credit. '
         b'Subject to application and approval."}'
     )
+
+
+def test_green_sky_config_does_not_reprice_any_other_service_path() -> None:
+    """A merchant-program edit is presentation-only and Permanent-only."""
+    permanent = PermanentConfig(
+        enabled=True,
+        packages=[PermanentPackage(feet=100, cost=1000)],
+    )
+    config = _lighting_config(
+        permanent=permanent,
+        christmas=ChristmasConfig(enabled=True, roofline_per_ft=6),
+        bistro=BistroConfig(
+            enabled=True,
+            permanent=BistroInstallationConfig(
+                label="Permanent Bistro Lighting", lights_per_ft=12, poles_each=75
+            ),
+        ),
+    )
+    enabled = config.model_copy(
+        update={
+            "permanent": permanent.model_copy(
+                update={
+                    "green_sky": PermanentGreenSkyConfig(
+                        enabled=True,
+                        merchant_number="1234567890",
+                        plan_number="246810",
+                        term_months=24,
+                        apr_percent=0,
+                        offer_details="Provider-approved test fixture copy.",
+                    )
+                }
+            )
+        }
+    )
+    payloads = [
+        _landscape_payload(),
+        ProposalWizardPayload(
+            categories=["christmas"],
+            christmas=WizardChristmasSelection(roofline_feet=120),
+        ),
+        ProposalWizardPayload(
+            categories=["bistro"],
+            bistro=WizardBistroSelection(
+                runs=[WizardBistroRun(installation="permanent", feet=80, pole_count=2)]
+            ),
+        ),
+        ProposalWizardPayload(
+            categories=["permanent", "christmas"],
+            permanent=WizardPermanentSelection(feet=100),
+            christmas=WizardChristmasSelection(roofline_feet=120),
+        ),
+    ]
+
+    for payload in payloads:
+        before, _ = build_proposal_document(config, FROZEN_CATALOG, payload)
+        after, _ = build_proposal_document(enabled, FROZEN_CATALOG, payload)
+
+        assert before.service != "permanent"
+        assert before.grand_financed_total > 0
+        assert after.green_sky is None
+        assert after.model_dump(exclude={"green_sky"}) == before.model_dump(exclude={"green_sky"})

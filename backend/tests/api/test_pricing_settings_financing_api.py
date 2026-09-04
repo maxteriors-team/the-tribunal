@@ -95,6 +95,20 @@ def _financing(**overrides) -> dict:
     return block
 
 
+def _green_sky(**overrides) -> dict:
+    """A complete GreenSky fixture; real merchant values never belong in tests."""
+    block = {
+        "enabled": True,
+        "merchant_number": "1234567890",
+        "plan_number": "246810",
+        "term_months": 24,
+        "apr_percent": 0,
+        "offer_details": "Provider-approved test fixture copy.",
+    }
+    block.update(overrides)
+    return block
+
+
 async def test_defaults_finance_lighting_and_floor_core_services(
     auth_client: AsyncClient,
 ) -> None:
@@ -198,3 +212,101 @@ async def test_negative_minimum_rejected_at_the_edge(auth_client: AsyncClient) -
         json={"financing": _financing(category_minimums={"roofing": -1})},
     )
     assert resp.status_code == 422
+
+
+async def test_permanent_green_sky_defaults_disabled_without_program_claims(
+    auth_client: AsyncClient,
+) -> None:
+    body = (await auth_client.get(_url())).json()["permanent"]["green_sky"]
+
+    assert body == {
+        "enabled": False,
+        "merchant_number": None,
+        "plan_number": None,
+        "term_months": None,
+        "apr_percent": None,
+        "offer_details": None,
+    }
+
+
+async def test_permanent_green_sky_round_trips_trimmed_zero_percent_program(
+    auth_client: AsyncClient,
+) -> None:
+    response = await auth_client.put(
+        _url(),
+        json={
+            "permanent": {
+                "green_sky": _green_sky(
+                    merchant_number=" 1234567890 ",
+                    plan_number=" 246810 ",
+                    offer_details=" Provider-approved test fixture copy. ",
+                )
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    program = (await auth_client.get(_url())).json()["permanent"]["green_sky"]
+    assert program == {
+        "enabled": True,
+        "merchant_number": "1234567890",
+        "plan_number": "246810",
+        "term_months": 24,
+        "apr_percent": 0.0,
+        "offer_details": "Provider-approved test fixture copy.",
+    }
+
+
+async def test_disabled_green_sky_keeps_incomplete_drafts(auth_client: AsyncClient) -> None:
+    response = await auth_client.put(
+        _url(),
+        json={
+            "permanent": {
+                "green_sky": {
+                    "enabled": False,
+                    "merchant_number": " 1234567890 ",
+                    "offer_details": " Draft awaiting provider review. ",
+                }
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    program = response.json()["permanent"]["green_sky"]
+    assert program["merchant_number"] == "1234567890"
+    assert program["plan_number"] is None
+    assert program["offer_details"] == "Draft awaiting provider review."
+
+
+async def test_enabled_green_sky_rejects_incomplete_program(
+    auth_client: AsyncClient,
+) -> None:
+    response = await auth_client.put(
+        _url(),
+        json={"permanent": {"green_sky": {"enabled": True}}},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("merchant_number", "123-456"),
+        ("plan_number", "PLAN24"),
+        ("term_months", 0),
+        ("term_months", 361),
+        ("apr_percent", -0.01),
+        ("apr_percent", 100.01),
+        ("offer_details", "x" * 501),
+    ],
+)
+async def test_green_sky_rejects_invalid_identifiers_and_bounds(
+    auth_client: AsyncClient, field: str, value: object
+) -> None:
+    response = await auth_client.put(
+        _url(),
+        json={"permanent": {"green_sky": _green_sky(**{field: value})}},
+    )
+
+    assert response.status_code == 422
