@@ -1168,7 +1168,7 @@ or connected-account model and legal review.
 | PPC-A2 | Customer-supplied price rejection | pass (code/tests) | Approval accepts only two enums; amount, currency, quote, and workspace are server-owned. |
 | PPC-A3 | Cross-tenant merchant isolation | pass for this release | A server-owned, default-empty workspace UUID allowlist and exact `true` tenant flag both gate display, approval, and checkout. |
 | PPC-A4 | Stripe webhook authenticity | pass (reused) | Existing signed webhook parsing runs before dedicated proposal reconciliation. |
-| PPC-A5 | Duplicate-charge/payment handling | pass (code/tests) | Stable Stripe idempotency keys cover uncertain create retries; row locks reuse open sessions; paid transition is atomic. |
+| PPC-A5 | Duplicate-charge/payment handling | pass (code/tests) | Stable Stripe idempotency covers create retries; paid reconciliation survives rollout disablement; transition remains atomic. |
 | PPC-A6 | Stored payment evidence | pass (code/migration) | Choice, amount, session, intent, and paid timestamp persist separately from legacy deposits. |
 | PPC-A7 | Secrets and browser exposure | pass (code) | Browser receives hosted URL only; Stripe secret and webhook secret remain server-side. |
 | PPC-A8 | Form labels and keyboard controls | pass (runtime) | Native labelled radios and buttons completed both payment paths by keyboard. |
@@ -1186,7 +1186,7 @@ or connected-account model and legal review.
 |---|---|---|---|---|
 | PPC-001 | BLOCKER | A shared platform Stripe account could collect money for unrelated tenants | CODE/tests: every new offer and checkout requires both an operator-controlled UUID allowlist and exact `true` workspace flag | Fixed for limited rollout; tenant admins cannot self-enable, and the default-empty allowlist denies every workspace |
 | PPC-002 | HIGH | A browser could alter the amount or payment schedule | CODE/tests: browser submits an enum only; approval locks and persists a cent-rounded server total | Fixed; schema, database constraints, and mismatch tests remain in CI |
-| PPC-003 | HIGH | Retried checkout/webhook traffic could charge twice or mark the wrong quote paid | CODE/tests: stable provider idempotency, active-session reuse, and full metadata/amount/currency/session verification | Fixed for tested paths; atomic paid transition and idempotent notification scope |
+| PPC-003 | HIGH | Retried checkout/webhook traffic could charge twice or leave a completed charge unrecorded | CODE/tests: stable provider idempotency, active-session reuse, exact identity verification, and post-disable reconciliation | Fixed for tested paths; atomic paid transition and idempotent notification scope |
 | PPC-004 | LAWYER | Approval plus immediate payment can form a consumer home-services contract | DEDUCED: exact price and terms link render, but state-specific cancellation/refund/tax language was not reviewed | Open; existing contract review remains required |
 | PPC-005 | MEDIUM | Automated accessibility checks do not cover real assistive technology | RUNTIME: three Playwright flows and desktop/390 px Axe checks passed | Automated evidence complete; physical-device and screen-reader review open |
 | PPC-006 | MEDIUM | A forwarded proposal link could be accepted by someone lacking capacity | DEDUCED: no technical age/capacity gate exists | Open policy/legal decision; do not invent a gate without counsel requirements |
