@@ -1,8 +1,8 @@
-# Theme Audit — PRESTYJ Light + Dark
+# Product Light + Dark Theme Audit
 
 ## Summary
 
-The PRESTYJ light and dark themes are defined in `globals.css` using CSS custom properties and are toggled via `next-themes` (`ThemeProvider attribute="class"`). The audit found **5 categories of issues** that need to be fixed across ~50 component files.
+The product's light and dark themes are defined in `globals.css` using CSS custom properties and are toggled via `next-themes` (`ThemeProvider attribute="class"`). The audit found **5 categories of issues** that need to be fixed across ~50 component files.
 
 ---
 

@@ -72,15 +72,12 @@ Rules for this directory:
 - **Public-only content.** Anything placed here is served unauthenticated at
   `/static/...`. Never put customer files, exports, PII, credentials, or
   per-workspace assets here. Use object storage with signed URLs for those.
-- **Kebab-case filenames** (`dead-lead-reactivation-scripts.pdf`), matching
-  the kebab-case directory convention used by the `lead-magnets/` subfolder
-  and the `/api/v1/.../lead-magnets` route segment.
-- **No duplicate roots.** There was previously a stray `static/` at the repo
-  root that was not served by the app (the mount is relative to the backend
-  package). It has been removed; only `backend/static/` exists. The helper
-  scripts under `scripts/generate_lead_magnet_pdf.py` and
-  `scripts/upload_lead_magnet.py` write into and reference
-  `backend/static/lead-magnets/`.
+- **Kebab-case filenames** (`service-checklist.pdf`), matching the kebab-case
+  directory convention used by the `lead-magnets/` subfolder and the
+  `/api/v1/.../lead-magnets` route segment.
+- **No duplicate roots.** Only `backend/static/` is served by the app. Add
+  public collateral there through reviewed build assets, never from scripts
+  coupled to a specific workspace or customer.
 
 ## Workers
 

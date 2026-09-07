@@ -55,12 +55,12 @@ def _make_offer(workspace_id: uuid.UUID) -> Offer:
     return Offer(
         id=uuid.uuid4(),
         workspace_id=workspace_id,
-        name="Batch Video Ads",
-        description="Batch-produced video ads for local businesses",
+        name="Spring Service Special",
+        description="Seasonal service offer for local businesses",
         discount_type="fixed",
         discount_value=500.0,
-        headline="Launch a month of scroll-stopping video ads in one batch",
-        cta_text="claim your Batch Video Ads audit",
+        headline="Book your spring service before schedules fill",
+        cta_text="schedule your spring service",
         is_active=True,
         created_at=datetime(2026, 5, 1, tzinfo=UTC),
         updated_at=datetime(2026, 5, 2, tzinfo=UTC),
@@ -71,8 +71,8 @@ def _make_segment(workspace_id: uuid.UUID) -> Segment:
     return Segment(
         id=uuid.uuid4(),
         workspace_id=workspace_id,
-        name="Dormant ecommerce leads",
-        description="Leads who asked about creative strategy but never booked",
+        name="Dormant home-service leads",
+        description="Leads who requested service details but never booked",
         definition={
             "logic": "and",
             "rules": [{"field": "status", "operator": "equals", "value": "new"}],
@@ -88,8 +88,8 @@ def _make_agent(workspace_id: uuid.UUID) -> Agent:
     return Agent(
         id=uuid.uuid4(),
         workspace_id=workspace_id,
-        name="Batch Video Ads Responder",
-        description="Qualifies replies for Batch Video Ads",
+        name="Spring Service Special Responder",
+        description="Qualifies replies for Spring Service Special",
         channel_mode="text",
         voice_provider="openai",
         voice_id="alloy",
@@ -181,7 +181,7 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     draft_result = await executor.execute(
         "plan_outbound_growth_workflow",
         {
-            "intent": "Reach out about Batch Video Ads to dormant ecommerce leads",
+            "intent": "Reach out about Spring Service Special to dormant home-service leads",
             "offer_id": str(offer.id),
             "segment_id": str(segment.id),
             "from_phone_number": "+15550009999",
@@ -191,7 +191,7 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
 
     assert draft_result["success"] is True
     assert draft_result["status"] == "draft_ready"
-    assert draft_result["offer"]["name"] == "Batch Video Ads"
+    assert draft_result["offer"]["name"] == "Spring Service Special"
     assert draft_result["segment"]["contact_count"] == len(contacts)
     assert [preview["contact_name"] for preview in draft_result["previews"]] == [
         "Ava Rivera",
@@ -199,11 +199,11 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
         "Noah Rivera",
     ]
     assert draft_result["previews"][0]["message"].startswith("Hi Ava")
-    assert "batch video ads audit" in draft_result["messages"]["initial"]
+    assert "schedule your spring service" in draft_result["messages"]["initial"]
     assert draft_result["responder_agent"] == {
         "action": "recommended_existing",
         "agent_id": str(responder.id),
-        "name": "Batch Video Ads Responder",
+        "name": "Spring Service Special Responder",
         "rationale": (
             "Use the existing active text/both responder so replies stay in the current "
             "operating model."
@@ -218,7 +218,7 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
     campaign.contacts_opted_out = 0
     campaign.error_count = 0
     campaign.follow_up_enabled = False
-    assert campaign.name == "Batch Video Ads → Dormant ecommerce leads"
+    assert campaign.name == "Spring Service Special → Dormant home-service leads"
     assert campaign.agent_id == responder.id
     assert campaign.status == CampaignStatus.DRAFT
     assert draft_result["draft"]["enrolled_contacts"] == len(contacts)
@@ -264,7 +264,7 @@ async def test_outbound_growth_operator_happy_path_drafts_sends_assigns_and_hand
         conversation_id=uuid.uuid4(),
         direction="outbound",
         channel="sms",
-        body="Hi Ava, quick note — Batch Video Ads.",
+        body="Hi Ava, quick note — Spring Service Special.",
         status=MessageStatus.SENT,
     )
     from_phone = MagicMock()

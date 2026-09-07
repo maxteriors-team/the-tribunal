@@ -1,9 +1,8 @@
 """Tests for default-agent resolution.
 
-The contract changed deliberately. This used to seed a canned "Prestyj
-Cold-Lead Responder" (a different company's script, pitching a $497 video-ad
-package) into any workspace that had no agent -- including from live inbound
-webhooks, which meant deleting it just made it come back on the next text.
+The contract changed deliberately. It used to seed another business's canned
+sales script into any workspace that had no agent, including from live inbound
+webhooks. Deleting that generated agent only made it return on the next text.
 
 The rule now: resolve an agent the operator actually created, or none at all.
 Never fabricate one, because a fabricated agent speaks to real customers in the

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -27,16 +27,37 @@ def test_retry_configuration() -> None:
     assert NoshowReengagementWorker.backoff_base_seconds == 2.0
 
 
-def test_default_day7_message_has_actionable_booking_cta() -> None:
+def test_default_day7_message_is_business_neutral() -> None:
     worker = NoshowReengagementWorker()
     contact = MagicMock(first_name="Paulina", last_name=None)
 
     body = worker._render_template(_DEFAULT_DAY7_TEMPLATE, contact, MagicMock())
 
     assert body == (
-        "Hi Paulina, we're offering 300 free video ads to qualified businesses. "
-        "Still interested? Reply YES and we'll get you booked."
+        "Hi Paulina, are you still interested in rescheduling? "
+        "Reply YES and we'll help find a new time."
     )
+
+
+@pytest.mark.asyncio
+async def test_sweep_only_loads_active_agents() -> None:
+    worker = NoshowReengagementWorker()
+    agent_result = MagicMock()
+    agent_result.scalars.return_value.all.return_value = []
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=agent_result)
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=db)
+    context.__aexit__ = AsyncMock(return_value=None)
+
+    with patch(
+        "app.workers.noshow_reengagement_worker.system_session",
+        return_value=context,
+    ):
+        await worker._process_items()
+
+    statement = db.execute.await_args.args[0]
+    assert "agents.is_active IS true" in str(statement)
 
 
 @pytest.mark.parametrize("placeholder", ["reschedule_link", "booking_link"])
