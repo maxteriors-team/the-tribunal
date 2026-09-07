@@ -16,7 +16,7 @@ recorded on the quote so the sales -> work -> billing chain stays auditable.
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from math import isfinite
 from typing import cast
 
@@ -76,11 +76,13 @@ from app.schemas.pricing import (
     PricingSettings,
 )
 from app.schemas.proposal import (
+    ProposalPaymentChoice,
     PublicProposal,
     PublicProposalActionResult,
     PublicProposalBranding,
     PublicProposalLineItem,
     PublicProposalPackage,
+    PublicProposalPaymentAmounts,
     PublicProposalPriceRange,
 )
 from app.schemas.proposal_wizard import (
@@ -1934,6 +1936,40 @@ class QuoteService:
             return None
         return PublicProposalPriceRange(low=total, high=high)
 
+    @staticmethod
+    def _is_permanent_proposal(quote: Quote) -> bool:
+        """Return whether this workspace may offer Permanent proposal payments."""
+        workspace_settings = quote.workspace.settings if quote.workspace else None
+        if not (
+            isinstance(workspace_settings, Mapping)
+            and workspace_settings.get("proposal_payments_enabled") is True
+        ):
+            return False
+        document = quote.proposal_document
+        if not isinstance(document, Mapping):
+            return False
+        service = document.get("service")
+        return isinstance(service, str) and service.strip().lower() == "permanent"
+
+    @classmethod
+    def _public_payment_options(
+        cls, quote: Quote, total: float | Decimal
+    ) -> PublicProposalPaymentAmounts | None:
+        """Return exact server-rounded card amounts for eligible Permanent proposals."""
+        full = Decimal(str(total)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if (
+            not cls._is_permanent_proposal(quote)
+            or full <= 0
+            or cls._public_price_range(quote, float(full)) is not None
+        ):
+            return None
+        down = (full / 2).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return PublicProposalPaymentAmounts(
+            fifty_percent_down_amount=float(down),
+            completion_balance=float(full - down),
+            pay_in_full_amount=float(full),
+        )
+
     async def get_public_proposal(self, token: str) -> PublicProposal:
         """Return the read-only, safe-fields-only proposal for a public token."""
         quote = await self._load_by_token(token)
@@ -1968,6 +2004,22 @@ class QuoteService:
             discount_amount=float(quote.discount_amount or 0),
             total=total,
             financing=self._financing_for_quote(quote, pricing_config),
+            payment_options=self._public_payment_options(quote, total),
+            proposal_payment_choice=cast(
+                ProposalPaymentChoice | None,
+                quote.proposal_payment_choice
+                if quote.proposal_payment_choice in {"fifty_percent_down", "pay_in_full"}
+                else None,
+            ),
+            proposal_payment_amount=(
+                float(quote.proposal_payment_amount)
+                if quote.proposal_payment_amount is not None
+                else None
+            ),
+            proposal_payment_paid=quote.proposal_payment_paid_at is not None,
+            proposal_payment_required=(
+                quote.proposal_payment_choice is not None and quote.proposal_payment_paid_at is None
+            ),
             issue_date=quote.issue_date,
             expiry_date=quote.expiry_date,
             is_expired=quote.status == "expired",
@@ -2058,12 +2110,15 @@ class QuoteService:
                     name=view.name,
                     total=selection.grand_financed,
                     deposit_amount=deposit_for_total(quote, selection.grand_financed),
+                    payment_options=self._public_payment_options(quote, selection.grand_financed),
                     is_selected=key == document.selected_tier,
                 )
             )
         return packages
 
-    async def _apply_client_package(self, quote: Quote, tier_key: str) -> None:
+    async def _apply_client_package(
+        self, quote: Quote, tier_key: str, *, commit: bool = True
+    ) -> None:
         """Re-point a quote at the package the client chose, before approval.
 
         The client sends a package *key*; every line and every figure is
@@ -2089,7 +2144,9 @@ class QuoteService:
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 
-        await self._persist_repriced_document(quote, updated, line_items, increment_version=False)
+        await self._persist_repriced_document(
+            quote, updated, line_items, increment_version=False, commit=commit
+        )
         self.log.info(
             "quote_package_selected_by_client",
             quote_id=str(quote.id),
@@ -2105,8 +2162,9 @@ class QuoteService:
         line_items: list[QuoteLineItemCreate],
         *,
         increment_version: bool = True,
+        commit: bool = True,
     ) -> None:
-        """Write a repriced snapshot and the lines it derives, as one commit.
+        """Write a repriced snapshot and its lines in one transaction.
 
         Every line is replaced rather than diffed, because on a wizard quote the
         line items are output, not state: the document is the only thing that is
@@ -2123,8 +2181,9 @@ class QuoteService:
         self._recompute_totals(quote)
         if increment_version:
             quote.proposal_version += 1
-        await self.db.commit()
-        await self.db.refresh(quote, ["line_items"])
+        if commit:
+            await self.db.commit()
+            await self.db.refresh(quote, ["line_items"])
 
     # ------------------------------------------------------------------
     # Services (post-save adds)
@@ -2311,22 +2370,67 @@ class QuoteService:
             raise ValidationError("This quote can no longer be changed.")
         return get_pricing_config(workspace)
 
+    @classmethod
+    def _apply_proposal_payment_choice(
+        cls,
+        quote: Quote,
+        requested: ProposalPaymentChoice | None,
+        *,
+        retry: bool,
+    ) -> None:
+        """Persist one server-priced Permanent payment choice, or fail closed."""
+        options = cls._public_payment_options(quote, quote.total or 0)
+        if options is None:
+            if requested is not None:
+                raise ValidationError(
+                    "Card-payment selection is available only for exact "
+                    "Permanent Lighting proposals."
+                )
+            return
+        if requested is None:
+            if retry:
+                raise ConflictError(
+                    "Repeat approval using the accepted payment choice.",
+                    code="proposal_payment_choice_mismatch",
+                )
+            raise ValidationError("Choose 50% down or pay in full before approval.")
+
+        amount = Decimal(
+            str(
+                options.fifty_percent_down_amount
+                if requested == "fifty_percent_down"
+                else options.pay_in_full_amount
+            )
+        ).quantize(Decimal("0.01"))
+        if retry:
+            if quote.proposal_payment_choice != requested or quote.proposal_payment_amount is None:
+                raise ConflictError(
+                    "An approved proposal's payment choice cannot be changed.",
+                    code="proposal_payment_choice_mismatch",
+                )
+            return
+        if quote.proposal_payment_choice is not None:
+            if (
+                quote.proposal_payment_choice != requested
+                or quote.proposal_payment_amount != amount
+            ):
+                raise ConflictError(
+                    "This proposal already has a different payment choice.",
+                    code="proposal_payment_choice_mismatch",
+                )
+            return
+        quote.proposal_payment_choice = requested
+        quote.proposal_payment_amount = float(amount)
+
     async def approve_public(
         self,
         token: str,
         *,
         proposal_version: int | None,
         selected_tier: str | None = None,
+        payment_option: ProposalPaymentChoice | None = None,
     ) -> PublicProposalActionResult:
-        """Client approves their proposal via the public token (idempotent).
-
-        When the client picked a package, the quote is re-pointed at it *before*
-        approval so the approved quote, its line items, and the deposit Stripe
-        charges all describe the package they actually chose.
-
-        Reuses the operator approve path so the same lifecycle guards and
-        automation event fire; an expired/declined proposal is rejected there.
-        """
+        """Approve while locking package choice, card amount, and lifecycle together."""
         quote = await self._load_by_token(token, for_update=True)
         expected_version = proposal_version
         if expected_version is None:
@@ -2354,23 +2458,43 @@ class QuoteService:
         # Re-pointing an already-decided selectable quote would rewrite a signed
         # agreement, so a late package switch keeps the existing idempotent behavior.
         if selected_tier and customer_can_select_package and quote.status in {"draft", "sent"}:
-            await self._apply_client_package(quote, selected_tier)
+            await self._apply_client_package(quote, selected_tier, commit=False)
+        self._apply_proposal_payment_choice(quote, payment_option, retry=quote.status == "approved")
+        # ``approve_quote`` reloads with ``populate_existing``; flush first so the
+        # same transaction cannot overwrite the locked package/payment selection.
+        await self.db.flush()
         result = await self.approve_quote(
             quote.workspace_id,
             quote.id,
             expected_proposal_version=expected_version,
         )
-        # Surface any unpaid deposit so the client page can hand off to checkout.
+        # Legacy deposits continue only when this proposal did not capture one of
+        # the Permanent card choices above.
         from app.services.payments.quote_deposit_service import deposit_amount as resolve_amount
 
-        due = resolve_amount(quote)
+        uses_proposal_payment = quote.proposal_payment_choice is not None
+        due = None if uses_proposal_payment else resolve_amount(quote)
         unpaid = due is not None and quote.deposit_paid_at is None
         if should_send_receipt:
             await self._send_acceptance_receipt(quote, deposit_amount=due)
+        stored_choice = (
+            quote.proposal_payment_choice
+            if quote.proposal_payment_choice in {"fifty_percent_down", "pay_in_full"}
+            else None
+        )
         return PublicProposalActionResult(
             token=token,
             status=result.status,
             message="Thank you! Your proposal has been approved.",
+            proposal_payment_choice=cast(ProposalPaymentChoice | None, stored_choice),
+            proposal_payment_required=(
+                stored_choice is not None and quote.proposal_payment_paid_at is None
+            ),
+            proposal_payment_amount=(
+                float(quote.proposal_payment_amount)
+                if quote.proposal_payment_amount is not None
+                else None
+            ),
             deposit_required=unpaid,
             deposit_amount=due,
         )
@@ -2429,6 +2553,12 @@ class QuoteService:
                 deposit_required=deposit_amount is not None,
                 deposit_amount=deposit_amount,
                 deposit_paid=quote.deposit_paid_at is not None,
+                proposal_payment_choice=quote.proposal_payment_choice,
+                proposal_payment_amount=(
+                    float(quote.proposal_payment_amount)
+                    if quote.proposal_payment_amount is not None
+                    else None
+                ),
                 proposal_url=f"{settings.frontend_url.rstrip('/')}/p/quotes/{quote.public_token}",
                 warranty=self._accepted_tier_warranty(quote),
             )

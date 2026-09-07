@@ -16,11 +16,13 @@ never turns a settings read into a 500.
 """
 
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.pricing import FinancingEstimate
+
+ProposalPaymentChoice = Literal["fifty_percent_down", "pay_in_full"]
 
 # Accepts ``#rgb`` or ``#rrggbb`` (case-insensitive).
 _HEX_COLOR = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
@@ -141,6 +143,14 @@ class PublicProposalBranding(BaseModel):
     footer: str | None = None
 
 
+class PublicProposalPaymentAmounts(BaseModel):
+    """Server-priced card choices for one exact Permanent Lighting total."""
+
+    fifty_percent_down_amount: float
+    completion_balance: float
+    pay_in_full_amount: float
+
+
 class PublicProposalPackage(BaseModel):
     """One package the client can choose and buy, priced by the server.
 
@@ -155,8 +165,9 @@ class PublicProposalPackage(BaseModel):
     # All-in total for this package: its own lines plus the charges, bistro, and
     # category lines that ride along with every package on this quote.
     total: float
-    # Deposit owed today if this package is accepted; null when none is due.
+    # Legacy deposit for non-Permanent proposals.
     deposit_amount: float | None = None
+    payment_options: PublicProposalPaymentAmounts | None = None
     # The package the quote currently sits on (the rep's pick until the client
     # chooses otherwise).
     is_selected: bool = False
@@ -196,6 +207,12 @@ class PublicProposal(BaseModel):
     # Estimated monthly payments for category-qualified flat/core quotes. Rich
     # wizard proposals also retain their snapshotted financing presentation.
     financing: FinancingEstimate | None = None
+    # Server-owned card choices are available only for exact Permanent proposals.
+    payment_options: PublicProposalPaymentAmounts | None = None
+    proposal_payment_choice: ProposalPaymentChoice | None = None
+    proposal_payment_amount: float | None = None
+    proposal_payment_paid: bool = False
+    proposal_payment_required: bool = False
     issue_date: date | None = None
     expiry_date: date | None = None
     is_expired: bool = False
@@ -248,8 +265,11 @@ class PublicProposalApprove(BaseModel):
     while the quote is still version 1 (terms have never changed).
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     proposal_version: int | None = Field(default=None, ge=1)
     selected_tier: str | None = Field(default=None, max_length=60)
+    payment_option: ProposalPaymentChoice | None = None
 
 
 class PublicProposalActionResult(BaseModel):
@@ -262,10 +282,34 @@ class PublicProposalActionResult(BaseModel):
     token: str
     status: str
     message: str
+    proposal_payment_choice: ProposalPaymentChoice | None = None
+    proposal_payment_required: bool = False
+    proposal_payment_amount: float | None = None
+    # Legacy non-Permanent deposits remain on their original checkout path.
     deposit_required: bool = False
     deposit_amount: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PublicProposalPaymentCheckout(BaseModel):
+    """Hosted Stripe Checkout URL for the accepted Permanent payment choice."""
+
+    url: str
+    amount: float
+    currency: str
+    payment_choice: ProposalPaymentChoice
+
+
+class PublicProposalPaymentStatus(BaseModel):
+    """Provider-reconciled Permanent proposal payment state."""
+
+    payment_paid: bool
+    payment_required: bool
+    payment_amount: float
+    completion_balance: float
+    currency: str
+    payment_choice: ProposalPaymentChoice
 
 
 class PublicProposalDepositCheckout(BaseModel):

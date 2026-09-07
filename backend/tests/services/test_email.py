@@ -302,6 +302,33 @@ async def test_quote_acceptance_receipt_is_transactional_and_itemized(
 
 
 @pytest.mark.asyncio
+async def test_quote_acceptance_receipt_names_pay_in_full_without_deposit_copy(
+    fake_resend: _FakeResend,
+) -> None:
+    sent = await email.send_quote_acceptance_receipt(
+        to_email="dana@example.com",
+        customer_name="Dana",
+        business_name="Maxteriors Lighting",
+        quote_number="QUO-000043",
+        quote_title="Permanent lighting",
+        total=4242.5,
+        currency="usd",
+        accepted_at=email.datetime(2026, 9, 4, 14, 30, tzinfo=email.UTC),
+        idempotency_key=uuid.uuid4(),
+        proposal_payment_choice="pay_in_full",
+        proposal_payment_amount=4242.5,
+    )
+
+    assert sent is True
+    params = fake_resend.Emails.send_async.await_args.args[0]
+    assert "Payment schedule" in params["html"]
+    assert "Pay in full" in params["html"]
+    assert "USD 4,242.50" in params["html"]
+    assert "Deposit" not in params["html"]
+    assert "Payment schedule: Pay in full" in params["text"]
+
+
+@pytest.mark.asyncio
 async def test_quote_email_renders_visible_and_plain_text_proposal_links(
     fake_resend: _FakeResend,
 ) -> None:

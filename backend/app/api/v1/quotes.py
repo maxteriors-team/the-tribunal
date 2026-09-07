@@ -61,6 +61,8 @@ from app.schemas.proposal import (
     PublicProposalDecline,
     PublicProposalDepositCheckout,
     PublicProposalDepositStatus,
+    PublicProposalPaymentCheckout,
+    PublicProposalPaymentStatus,
 )
 from app.schemas.proposal_wizard import ProposalDocument, ProposalWizardPayload
 from app.schemas.quote import (
@@ -937,6 +939,7 @@ async def approve_public_proposal(
         token,
         proposal_version=payload.proposal_version,
         selected_tier=payload.selected_tier,
+        payment_option=payload.payment_option,
     )
 
 
@@ -982,6 +985,48 @@ async def create_deposit_checkout(token: str, db: DB) -> PublicProposalDepositCh
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return PublicProposalDepositCheckout(
         url=checkout.url, amount=checkout.amount, currency=checkout.currency
+    )
+
+
+@public_router.post("/{token}/payment-checkout", response_model=PublicProposalPaymentCheckout)
+async def create_proposal_payment_checkout(token: str, db: DB) -> PublicProposalPaymentCheckout:
+    """Start hosted checkout for the approved Permanent proposal payment."""
+    from app.services.payments.proposal_payment_service import (
+        ProposalPaymentError,
+        create_proposal_payment_checkout_session,
+    )
+
+    try:
+        checkout = await create_proposal_payment_checkout_session(db, token)
+    except ProposalPaymentError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return PublicProposalPaymentCheckout(
+        url=checkout.url,
+        amount=checkout.amount,
+        currency=checkout.currency,
+        payment_choice=checkout.payment_choice,
+    )
+
+
+@public_router.post("/{token}/payment-status", response_model=PublicProposalPaymentStatus)
+async def reconcile_proposal_payment_status(token: str, db: DB) -> PublicProposalPaymentStatus:
+    """Reconcile the stored Stripe Session as a webhook backstop."""
+    from app.services.payments.proposal_payment_service import (
+        ProposalPaymentError,
+        reconcile_proposal_payment,
+    )
+
+    try:
+        payment = await reconcile_proposal_payment(db, token)
+    except ProposalPaymentError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return PublicProposalPaymentStatus(
+        payment_paid=payment.payment_paid,
+        payment_required=payment.payment_required,
+        payment_amount=payment.payment_amount,
+        completion_balance=payment.completion_balance,
+        currency=payment.currency,
+        payment_choice=payment.payment_choice,
     )
 
 
