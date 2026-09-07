@@ -282,6 +282,8 @@ async def send_quote_acceptance_receipt(
     deposit_required: bool = False,
     deposit_amount: float | None = None,
     deposit_paid: bool = False,
+    proposal_payment_choice: str | None = None,
+    proposal_payment_amount: float | None = None,
     proposal_url: str | None = None,
     warranty: str | None = None,
 ) -> bool:
@@ -299,7 +301,26 @@ async def send_quote_acceptance_receipt(
         f"Accepted: {accepted_label}",
         f"Accepted total: {currency_code} {total:,.2f}",
     ]
-    if deposit_required:
+    if (
+        proposal_payment_choice in {"fifty_percent_down", "pay_in_full"}
+        and proposal_payment_amount is not None
+    ):
+        schedule = (
+            "50% down, balance due at completion"
+            if proposal_payment_choice == "fifty_percent_down"
+            else "Pay in full"
+        )
+        receipt_lines.extend(
+            [
+                f"Payment schedule: {schedule}",
+                f"Due now: {currency_code} {proposal_payment_amount:,.2f}",
+            ]
+        )
+        if proposal_payment_choice == "fifty_percent_down":
+            receipt_lines.append(
+                f"Due at completion: {currency_code} {max(total - proposal_payment_amount, 0):,.2f}"
+            )
+    elif deposit_required:
         deposit_status = "paid" if deposit_paid else "due"
         receipt_lines.append(
             f"Deposit: {currency_code} {(deposit_amount or 0):,.2f} ({deposit_status})"

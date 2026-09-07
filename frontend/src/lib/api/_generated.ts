@@ -1000,6 +1000,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/p/quotes/{token}/payment-checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Proposal Payment Checkout
+         * @description Start hosted checkout for the approved Permanent proposal payment.
+         */
+        post: operations["create_proposal_payment_checkout_api_v1_p_quotes__token__payment_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/p/quotes/{token}/payment-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile Proposal Payment Status
+         * @description Reconcile the stored Stripe Session as a webhook backstop.
+         */
+        post: operations["reconcile_proposal_payment_status_api_v1_p_quotes__token__payment_status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/p/quotes/{token}/view": {
         parameters: {
             query?: never;
@@ -28219,11 +28259,26 @@ export interface components {
             number: string;
             /** Packages */
             packages?: components["schemas"]["PublicProposalPackage"][];
+            payment_options?: components["schemas"]["PublicProposalPaymentAmounts"] | null;
             price_range?: components["schemas"]["PublicProposalPriceRange"] | null;
             /** Proposal Document */
             proposal_document?: {
                 [key: string]: unknown;
             } | null;
+            /** Proposal Payment Amount */
+            proposal_payment_amount?: number | null;
+            /** Proposal Payment Choice */
+            proposal_payment_choice?: ("fifty_percent_down" | "pay_in_full") | null;
+            /**
+             * Proposal Payment Paid
+             * @default false
+             */
+            proposal_payment_paid: boolean;
+            /**
+             * Proposal Payment Required
+             * @default false
+             */
+            proposal_payment_required: boolean;
             /**
              * Proposal Version
              * @default 1
@@ -28261,6 +28316,15 @@ export interface components {
             deposit_required: boolean;
             /** Message */
             message: string;
+            /** Proposal Payment Amount */
+            proposal_payment_amount?: number | null;
+            /** Proposal Payment Choice */
+            proposal_payment_choice?: ("fifty_percent_down" | "pay_in_full") | null;
+            /**
+             * Proposal Payment Required
+             * @default false
+             */
+            proposal_payment_required: boolean;
             /** Status */
             status: string;
             /** Token */
@@ -28279,6 +28343,8 @@ export interface components {
          *     while the quote is still version 1 (terms have never changed).
          */
         PublicProposalApprove: {
+            /** Payment Option */
+            payment_option?: ("fifty_percent_down" | "pay_in_full") | null;
             /** Proposal Version */
             proposal_version?: number | null;
             /** Selected Tier */
@@ -28384,8 +28450,59 @@ export interface components {
             label: string;
             /** Name */
             name?: string | null;
+            payment_options?: components["schemas"]["PublicProposalPaymentAmounts"] | null;
             /** Total */
             total: number;
+        };
+        /**
+         * PublicProposalPaymentAmounts
+         * @description Server-priced card choices for one exact Permanent Lighting total.
+         */
+        PublicProposalPaymentAmounts: {
+            /** Completion Balance */
+            completion_balance: number;
+            /** Fifty Percent Down Amount */
+            fifty_percent_down_amount: number;
+            /** Pay In Full Amount */
+            pay_in_full_amount: number;
+        };
+        /**
+         * PublicProposalPaymentCheckout
+         * @description Hosted Stripe Checkout URL for the accepted Permanent payment choice.
+         */
+        PublicProposalPaymentCheckout: {
+            /** Amount */
+            amount: number;
+            /** Currency */
+            currency: string;
+            /**
+             * Payment Choice
+             * @enum {string}
+             */
+            payment_choice: "fifty_percent_down" | "pay_in_full";
+            /** Url */
+            url: string;
+        };
+        /**
+         * PublicProposalPaymentStatus
+         * @description Provider-reconciled Permanent proposal payment state.
+         */
+        PublicProposalPaymentStatus: {
+            /** Completion Balance */
+            completion_balance: number;
+            /** Currency */
+            currency: string;
+            /** Payment Amount */
+            payment_amount: number;
+            /**
+             * Payment Choice
+             * @enum {string}
+             */
+            payment_choice: "fifty_percent_down" | "pay_in_full";
+            /** Payment Paid */
+            payment_paid: boolean;
+            /** Payment Required */
+            payment_required: boolean;
         };
         /**
          * PublicProposalPriceRange
@@ -36156,6 +36273,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicProposalDepositStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_proposal_payment_checkout_api_v1_p_quotes__token__payment_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProposalPaymentCheckout"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reconcile_proposal_payment_status_api_v1_p_quotes__token__payment_status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProposalPaymentStatus"];
                 };
             };
             /** @description Validation Error */

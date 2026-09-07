@@ -54,6 +54,10 @@ QUOTE_STATUSES = ("draft", "sent", "approved", "declined", "expired")
 # authenticated operator's offline-payment attestation.
 DEPOSIT_PAYMENT_METHODS = ("card", "cash", "check", "other")
 
+# Client-facing Permanent proposal payment choices. Financing remains an
+# informational estimate and is intentionally not an approval choice.
+PROPOSAL_PAYMENT_CHOICES = ("fifty_percent_down", "pay_in_full")
+
 # The unsold pile: issued and undecided. ``draft`` was never presented and
 # ``approved``/``declined`` are settled outcomes, so neither is recoverable
 # revenue. Lives on the model rather than in one worker because two features now
@@ -85,6 +89,19 @@ class Quote(Base, WorkspaceScoped):
         CheckConstraint(
             f"deposit_payment_method IN {DEPOSIT_PAYMENT_METHODS}",
             name="ck_quotes_deposit_payment_method",
+        ),
+        CheckConstraint(
+            f"proposal_payment_choice IN {PROPOSAL_PAYMENT_CHOICES}",
+            name="ck_quotes_proposal_payment_choice",
+        ),
+        CheckConstraint(
+            "proposal_payment_amount > 0",
+            name="ck_quotes_proposal_payment_amount_positive",
+        ),
+        CheckConstraint(
+            "(proposal_payment_choice IS NULL AND proposal_payment_amount IS NULL) OR "
+            "(proposal_payment_choice IS NOT NULL AND proposal_payment_amount IS NOT NULL)",
+            name="ck_quotes_proposal_payment_pair",
         ),
         CheckConstraint("proposal_version >= 1", name="ck_quotes_proposal_version_positive"),
         CheckConstraint("revision_number >= 1", name="ck_quotes_revision_number_positive"),
@@ -183,6 +200,19 @@ class Quote(Base, WorkspaceScoped):
         String(255), nullable=True, index=True
     )
     deposit_payment_intent_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Immutable client-selected payment evidence for approved Permanent proposals.
+    # This is separate from generic deposits so acceptance, checkout, and receipts
+    # all retain the exact server-priced schedule the customer agreed to.
+    proposal_payment_choice: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    proposal_payment_amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    proposal_payment_checkout_session_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    proposal_payment_intent_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    proposal_payment_paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     status: Mapped[str] = mapped_column(
         Enum(*QUOTE_STATUSES, name="quote_status"),

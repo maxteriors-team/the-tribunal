@@ -43528,6 +43528,16 @@
             "title": "Packages",
             "type": "array"
           },
+          "payment_options": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicProposalPaymentAmounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "price_range": {
             "anyOf": [
               {
@@ -43549,6 +43559,42 @@
               }
             ],
             "title": "Proposal Document"
+          },
+          "proposal_payment_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Payment Amount"
+          },
+          "proposal_payment_choice": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fifty_percent_down",
+                  "pay_in_full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Payment Choice"
+          },
+          "proposal_payment_paid": {
+            "default": false,
+            "title": "Proposal Payment Paid",
+            "type": "boolean"
+          },
+          "proposal_payment_required": {
+            "default": false,
+            "title": "Proposal Payment Required",
+            "type": "boolean"
           },
           "proposal_version": {
             "default": 1,
@@ -43636,6 +43682,37 @@
             "title": "Message",
             "type": "string"
           },
+          "proposal_payment_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Payment Amount"
+          },
+          "proposal_payment_choice": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fifty_percent_down",
+                  "pay_in_full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Payment Choice"
+          },
+          "proposal_payment_required": {
+            "default": false,
+            "title": "Proposal Payment Required",
+            "type": "boolean"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -43654,8 +43731,24 @@
         "type": "object"
       },
       "PublicProposalApprove": {
+        "additionalProperties": false,
         "description": "The client's acceptance of one exact rendered proposal version.\n\nOnly the package *key* crosses the wire: the server re-derives the lines and\ntotals from the saved snapshot, so a client can never talk their own price\ndown. ``proposal_version`` closes the edit/approve race: if the operator\nchanged customer-facing terms after this page loaded, acceptance stops and the\nclient must review the refreshed proposal. It is optional only for the brief\nold-frontend/new-backend deployment window; the service accepts omission solely\nwhile the quote is still version 1 (terms have never changed).",
         "properties": {
+          "payment_option": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fifty_percent_down",
+                  "pay_in_full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Option"
+          },
           "proposal_version": {
             "anyOf": [
               {
@@ -43919,6 +44012,16 @@
             ],
             "title": "Name"
           },
+          "payment_options": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicProposalPaymentAmounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "total": {
             "title": "Total",
             "type": "number"
@@ -43930,6 +44033,106 @@
           "total"
         ],
         "title": "PublicProposalPackage",
+        "type": "object"
+      },
+      "PublicProposalPaymentAmounts": {
+        "description": "Server-priced card choices for one exact Permanent Lighting total.",
+        "properties": {
+          "completion_balance": {
+            "title": "Completion Balance",
+            "type": "number"
+          },
+          "fifty_percent_down_amount": {
+            "title": "Fifty Percent Down Amount",
+            "type": "number"
+          },
+          "pay_in_full_amount": {
+            "title": "Pay In Full Amount",
+            "type": "number"
+          }
+        },
+        "required": [
+          "fifty_percent_down_amount",
+          "completion_balance",
+          "pay_in_full_amount"
+        ],
+        "title": "PublicProposalPaymentAmounts",
+        "type": "object"
+      },
+      "PublicProposalPaymentCheckout": {
+        "description": "Hosted Stripe Checkout URL for the accepted Permanent payment choice.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "payment_choice": {
+            "enum": [
+              "fifty_percent_down",
+              "pay_in_full"
+            ],
+            "title": "Payment Choice",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "amount",
+          "currency",
+          "payment_choice"
+        ],
+        "title": "PublicProposalPaymentCheckout",
+        "type": "object"
+      },
+      "PublicProposalPaymentStatus": {
+        "description": "Provider-reconciled Permanent proposal payment state.",
+        "properties": {
+          "completion_balance": {
+            "title": "Completion Balance",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "payment_amount": {
+            "title": "Payment Amount",
+            "type": "number"
+          },
+          "payment_choice": {
+            "enum": [
+              "fifty_percent_down",
+              "pay_in_full"
+            ],
+            "title": "Payment Choice",
+            "type": "string"
+          },
+          "payment_paid": {
+            "title": "Payment Paid",
+            "type": "boolean"
+          },
+          "payment_required": {
+            "title": "Payment Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "payment_paid",
+          "payment_required",
+          "payment_amount",
+          "completion_balance",
+          "currency",
+          "payment_choice"
+        ],
+        "title": "PublicProposalPaymentStatus",
         "type": "object"
       },
       "PublicProposalPriceRange": {
@@ -61822,6 +62025,92 @@
           }
         },
         "summary": "Reconcile Deposit Status",
+        "tags": [
+          "Public Proposals"
+        ]
+      }
+    },
+    "/api/v1/p/quotes/{token}/payment-checkout": {
+      "post": {
+        "description": "Start hosted checkout for the approved Permanent proposal payment.",
+        "operationId": "create_proposal_payment_checkout_api_v1_p_quotes__token__payment_checkout_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProposalPaymentCheckout"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Proposal Payment Checkout",
+        "tags": [
+          "Public Proposals"
+        ]
+      }
+    },
+    "/api/v1/p/quotes/{token}/payment-status": {
+      "post": {
+        "description": "Reconcile the stored Stripe Session as a webhook backstop.",
+        "operationId": "reconcile_proposal_payment_status_api_v1_p_quotes__token__payment_status_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProposalPaymentStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Proposal Payment Status",
         "tags": [
           "Public Proposals"
         ]
