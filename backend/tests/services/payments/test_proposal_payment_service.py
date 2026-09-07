@@ -10,13 +10,21 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.core.config import settings
 from app.models.quote import Quote
 from app.models.workspace import Workspace
 from app.services.payments import proposal_payment_service as payments
 from app.services.payments.call_payment_service import CheckoutSessionResult
 
 
-def _quote(choice: payments.PaymentChoice = "fifty_percent_down") -> Quote:
+@pytest.fixture(autouse=True)
+def _empty_operator_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "proposal_payment_pilot_workspace_ids", set())
+
+
+def _quote(
+    choice: payments.PaymentChoice = "fifty_percent_down", *, operator_enabled: bool = True
+) -> Quote:
     workspace = Workspace(
         id=uuid.uuid4(),
         name="Maxteriors Lighting",
@@ -38,6 +46,8 @@ def _quote(choice: payments.PaymentChoice = "fifty_percent_down") -> Quote:
     )
     quote.total = 1000.01
     quote.workspace = workspace
+    if operator_enabled:
+        settings.proposal_payment_pilot_workspace_ids.add(workspace.id)
     return quote
 
 
@@ -50,12 +60,19 @@ class _ScalarResult:
 
 
 @pytest.mark.asyncio
-async def test_checkout_is_disabled_without_explicit_workspace_enablement(
+@pytest.mark.parametrize(
+    ("operator_enabled", "workspace_enabled"),
+    [(False, True), (True, False)],
+)
+async def test_checkout_requires_operator_and_workspace_enablement(
     monkeypatch: pytest.MonkeyPatch,
+    operator_enabled: bool,
+    workspace_enabled: bool,
 ) -> None:
-    quote = _quote("pay_in_full")
+    quote = _quote("pay_in_full", operator_enabled=operator_enabled)
     assert quote.workspace is not None
-    quote.workspace.settings = {}
+    if not workspace_enabled:
+        quote.workspace.settings = {}
     db = SimpleNamespace(
         execute=AsyncMock(return_value=_ScalarResult(quote)),
         commit=AsyncMock(),
@@ -119,6 +136,9 @@ async def test_checkout_uses_persisted_amount_and_dedicated_metadata(
         "workspace_id": str(quote.workspace_id),
         "proposal_payment_choice": choice,
     }
+    assert captured["idempotency_key"] == str(
+        payments.derive_outbound_key("proposal_payment_checkout", quote.id, choice, "initial")
+    )
     assert checkout.amount == float(expected_amount)
     assert checkout.payment_choice == choice
     assert quote.proposal_payment_checkout_session_id == f"cs_{choice}"

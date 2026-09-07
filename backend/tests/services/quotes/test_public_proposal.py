@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.encryption import hash_phone, hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.catalog import CatalogItem
@@ -264,6 +265,7 @@ async def test_permanent_public_approval_persists_server_owned_payment(
     )
     async with AsyncSessionLocal() as db:
         workspace = await _make_workspace(db, settings={"proposal_payments_enabled": True})
+        monkeypatch.setattr(settings, "proposal_payment_pilot_workspace_ids", set())
         contact = await _make_contact(db, workspace.id)
         service = QuoteService(db)
         token, quote_id = await _sent_quote(service, workspace.id, contact.id)
@@ -272,6 +274,10 @@ async def test_permanent_public_approval_persists_server_owned_payment(
         quote.proposal_document = {"service": "permanent"}
         await db.commit()
 
+        denied = await service.get_public_proposal(token)
+        assert denied.payment_options is None
+
+        settings.proposal_payment_pilot_workspace_ids.add(workspace.id)
         proposal = await service.get_public_proposal(token)
         assert proposal.payment_options is not None
         assert proposal.payment_options.fifty_percent_down_amount == 535.0

@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import structlog
 
+from app.services.idempotency import derive_outbound_key
 from app.services.payments import call_payment_service
+from app.services.payments.proposal_payment_access import proposal_payments_enabled
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,14 +72,13 @@ def _is_permanent(quote: Quote) -> bool:
     return isinstance(service, str) and service.strip().lower() == "permanent"
 
 
-def _payments_enabled(quote: Quote) -> bool:
-    settings = quote.workspace.settings if quote.workspace else None
-    return isinstance(settings, Mapping) and settings.get("proposal_payments_enabled") is True
-
-
 def _payment_state(quote: Quote) -> tuple[PaymentChoice, Decimal, Decimal]:
     """Return validated persisted payment truth and accepted full total."""
-    if quote.status != "approved" or not _is_permanent(quote) or not _payments_enabled(quote):
+    if (
+        quote.status != "approved"
+        or not _is_permanent(quote)
+        or not proposal_payments_enabled(quote)
+    ):
         raise ProposalPaymentError("This proposal is not approved for online payment.")
     choice = quote.proposal_payment_choice
     amount = quote.proposal_payment_amount
@@ -260,6 +261,14 @@ async def create_proposal_payment_checkout_session(
             customer_email=quote.contact.email if quote.contact else None,
             success_url=f"{proposal_url}?payment=paid",
             cancel_url=f"{proposal_url}?payment=cancelled",
+            idempotency_key=str(
+                derive_outbound_key(
+                    "proposal_payment_checkout",
+                    quote.id,
+                    choice,
+                    quote.proposal_payment_checkout_session_id or "initial",
+                )
+            ),
         )
     except Exception as exc:
         logger.warning(

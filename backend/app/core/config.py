@@ -431,6 +431,9 @@ class Settings(BaseSettings):
     stripe_publishable_key: str = ""
     stripe_price_id: str = ""  # Monthly subscription price ID
     stripe_webhook_secret: str = ""
+    # Proposal payments use the platform Stripe account, so a tenant flag alone
+    # can never activate them. Empty fails closed until an operator allowlists IDs.
+    proposal_payment_pilot_workspace_ids: set[uuid.UUID] = Field(default_factory=set)
 
     # Lead form
     lead_form_ip_rate_limit: int = 20  # Max submissions per IP per hour

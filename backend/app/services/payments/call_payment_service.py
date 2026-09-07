@@ -124,6 +124,7 @@ async def create_payment_checkout_session(
     customer_email: str | None = None,
     success_url: str | None = None,
     cancel_url: str | None = None,
+    idempotency_key: str | None = None,
 ) -> CheckoutSessionResult:
     """Create a Stripe Checkout Session (``payment`` mode) for a one-off payment.
 
@@ -157,7 +158,13 @@ async def create_payment_checkout_session(
     if customer_email:
         params["customer_email"] = customer_email
 
-    session = client.checkout.sessions.create(params=params)  # type: ignore[arg-type]
+    options: stripe.RequestOptions = {}
+    if idempotency_key:
+        options["idempotency_key"] = idempotency_key
+    session = client.checkout.sessions.create(
+        params=params,  # type: ignore[arg-type]
+        options=options,
+    )
     payment_intent = getattr(session, "payment_intent", None)
     payment_intent_id = payment_intent if isinstance(payment_intent, str) else None
     return CheckoutSessionResult(

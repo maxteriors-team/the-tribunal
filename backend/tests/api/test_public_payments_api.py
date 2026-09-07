@@ -277,10 +277,12 @@ async def test_default_checkout_success_url_includes_stripe_session_id(monkeypat
         currency="usd",
         product_name="Service payment",
         metadata={"kind": call_payment_service.PAYMENT_KIND},
+        idempotency_key="stable-checkout-attempt",
     )
 
     params = create.call_args.kwargs["params"]
     assert params["success_url"].endswith("/payment-complete?session_id={CHECKOUT_SESSION_ID}")
+    assert create.call_args.kwargs["options"] == {"idempotency_key": "stable-checkout-attempt"}
 
 
 @pytest.mark.asyncio
