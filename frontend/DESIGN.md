@@ -1016,6 +1016,106 @@ Screen-reader output, physical touch drag, 200% text-only zoom, forced colors, a
 2.2 criterion audit remain unverified; no accessibility or legal-conformance claim follows from
 automated checks or rendered fixtures alone.
 
+## Permanent-lighting client quote (2026-09-04)
+
+### Design read and evidence
+
+- **Surface:** a high-consideration residential-service proposal led by commerce and supported by
+  visual proof.
+- **Audience:** a homeowner opening an email or text link, commonly on a phone and without lighting
+  product expertise.
+- **Single job:** recognize the home and contractor, compare exact card choices with an informational
+  monthly estimate, then give an explicit yes or no answer.
+- **Risk:** a wrong amount, accidental approval, unclear financing, missing contractor identity, or
+  another customer's mockup would break trust. Server-owned quote data remains authoritative.
+- **Platform:** the public Next.js route supports keyboard, pointer, and touch without login from
+  narrow phones through wide desktop viewports.
+
+Local proposal components and tokens lead. The selected `nike` observation supports making the
+customer's own house mockup the dominant product proof. The selected `airbnb` observation supports
+familiar selection controls and explicit pricing. `binance` is the contrast: a homeowner proposal
+must not become a dense financial dashboard. These are conditional observations, not copied brand
+systems or universal rules.
+
+### Thesis, hierarchy, and semantic system
+
+The thesis is **one proposal, not two**. One 820 px content rail aligns the branded header, house
+mockup, price summary, scope, payment choices, decision controls, and footer. The saved mockup is the
+memorable device because it shows the customer's real project rather than decorative marketing.
+Cards, gradients, fake metrics, hover lift, emoji icons, and invented claims do not compete with it.
+
+The first glance is workspace identity and the customer's house. The second is a three-price payment
+summary: the informational monthly estimate, exact 50%-down amount, and exact pay-in-full amount.
+Permanent proposals with these options suppress the project range and repeated line-item, subtotal,
+and total amounts; an unpriced project scope remains. The down-payment card states that the balance
+is due at completion without introducing a fourth visible price. Financing omits provider and plan
+copy; one generic credit-approval disclosure stays immediately below the choices. The final controls
+require a payment choice before approval or allow an explicit decline.
+
+Workspace `brand_color` and `accent_color` remain tenant data. Raw validated colors draw only the
+restrained two-color header rule. A contrast-checked accent paints text, focus, and controls; missing,
+dark, or malformed values retain safe defaults. Shared typography, spacing, borders, financing
+terms, Stripe checkout, and proposal state components remain reused.
+
+### Flow, states, and responsive contract
+
+Permanent operator actions are `Save draft quote`, `Save & email client quote`, and `Save & text
+client quote`. Linked customer identity stays fixed; one-send email and phone destinations remain
+editable and never silently update the customer profile. Visible live blockers cover the selected
+photo, deposit, range, and channel destination. Permanent delivery creates and sends `/p/quotes/`
+records only. Existing `/p/compare/` records remain read-only `Estimate preview` links because they
+lack mockups, range highs, payments, and decision state.
+
+The public flow preserves loading, dead-link, expired, pending, approved, declined, payment-required,
+checkout-failure, and already-decided states. Native radios keep arrow-key behavior; focus-visible
+rings do not stick after pointer use. Named transitions have a reduced-motion path, forced colors
+retain boundaries and selection, and long values wrap instead of expanding the page.
+
+At 390 px, the three payment cards stack below 420 px; controls retain their order and the document
+has no horizontal overflow. The route-mocked Chromium proof covers desktop and 390 px, logo and
+mockup visibility, exactly three visible prices, arrow-key payment selection, exact approval and
+decline payloads, and the Stripe checkout redirect. Screen-reader speech, physical devices, 200%
+text-only zoom, and a full WCAG 2.2 criterion audit remain unverified, so no conformance claim is made.
+
+### Rendered critique and revision
+
+The representative captures are `.ezcoder/screenshots/permanent-client-quote-desktop.png` at 1280 px
+and `.ezcoder/screenshots/permanent-client-quote-mobile.png` at 390 px. The latest revision lets the
+three payment cards own every visible price, retains the unpriced project scope, and removes repeated
+range, line-item, subtotal, total, completion-balance, and approval-button amounts. A
+container-relative sticky-header gutter prevents stale viewport units from widening the page after a
+desktop-to-mobile resize. Both captures keep the house, scope, three prices, terms, and decision
+controls clear without horizontal overflow.
+
+Final rubric: **22/24**.
+
+1. Brief specificity **2**: house mockup, price summary, contractor identity, payment, and decision read
+   as a residential permanent-lighting proposal without the logo.
+2. Information hierarchy **2**: mockup, cash/monthly summary, payment, and decision lead; scope and
+   legal text recede.
+3. Composition **2**: header, 820 px body, section rules, totals, payment cards, and footer share keys.
+4. Consistency and flow **2**: existing proposal anatomy, radios, status states, and checkout remain reused.
+5. Typography **2**: display, utility, amount, and body roles stay legible and wrap at both captures.
+6. Material logic **2**: borders separate evidence and choices; the only brand gradient is one rule.
+7. State completeness **2**: tests cover blocked, pending, declined, approved, decided, dead-link, and
+   checkout outcomes without changing server payloads.
+8. Responsive behavior **1**: desktop and 390 px reflow pass, but 320/768 px, RTL, and 200% text remain
+   unverified.
+9. Accessibility floor **1**: axe reports no tagged A/AA violations at both captures and the full flow
+   passes by keyboard, but screen-reader, forced-colors rendering, physical touch, and manual evidence
+   remain unverified.
+10. Motion purpose **2**: active transitions name properties; decorative entry motion is removed and
+    reduced motion has an equivalent resting state.
+11. Content authenticity **2**: production UI renders only server quote/workspace data; tests clearly use
+    synthetic fixtures and fake tokens.
+12. Visual distinctiveness **2**: the customer's illuminated-house mockup is the specific signature.
+
+Applicable automated production checks cover branded media alternatives, semantic radio/decision
+controls, live validation/status text, desktop/mobile no-overflow, keyboard payment and approval,
+exact API payloads, decline recovery, checkout redirect, reduced-motion CSS, and axe A/AA scans.
+Forced-colors visual inspection, assistive-technology speech, physical devices, offline recovery,
+320/768 px, RTL/localization stress, and 200% text-only zoom remain explicitly unverified.
+
 # Public referral-partner intake (September 2026)
 
 ## Design read and thesis

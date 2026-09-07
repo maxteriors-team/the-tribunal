@@ -1,9 +1,12 @@
 import { apiGet, apiPost } from "@/lib/api";
 import type {
+  ProposalPaymentChoice,
   PublicProposal,
   PublicProposalActionResult,
   PublicProposalDepositCheckout,
   PublicProposalDepositStatus,
+  PublicProposalPaymentCheckout,
+  PublicProposalPaymentStatus,
 } from "@/types/proposal";
 
 // Public client proposal API (no auth required — keyed on the share token).
@@ -19,10 +22,12 @@ export const publicProposalsApi = {
     token: string,
     proposalVersion: number,
     selectedTier?: string | null,
+    paymentOption?: ProposalPaymentChoice | null,
   ): Promise<PublicProposalActionResult> =>
     apiPost<PublicProposalActionResult>(`/api/v1/p/quotes/${token}/approve`, {
       proposal_version: proposalVersion,
       selected_tier: selectedTier ?? null,
+      payment_option: paymentOption ?? null,
     }),
 
   /**
@@ -63,5 +68,17 @@ export const publicProposalsApi = {
   depositStatus: (token: string): Promise<PublicProposalDepositStatus> =>
     apiPost<PublicProposalDepositStatus>(
       `/api/v1/p/quotes/${token}/deposit-status`,
+    ),
+
+  // Start or reuse the active Stripe Session for the accepted Permanent payment.
+  paymentCheckout: (token: string): Promise<PublicProposalPaymentCheckout> =>
+    apiPost<PublicProposalPaymentCheckout>(
+      `/api/v1/p/quotes/${token}/payment-checkout`,
+    ),
+
+  // Reconcile a Permanent proposal payment on hosted-checkout return.
+  paymentStatus: (token: string): Promise<PublicProposalPaymentStatus> =>
+    apiPost<PublicProposalPaymentStatus>(
+      `/api/v1/p/quotes/${token}/payment-status`,
     ),
 };

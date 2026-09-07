@@ -10,7 +10,7 @@ import { DeadPublicLink } from "@/components/shared/dead-public-link";
 import { PageLoadingState } from "@/components/ui/page-state";
 import { publicProposalsApi } from "@/lib/api/public-proposals";
 import { queryKeys } from "@/lib/query-keys";
-import type { PublicProposal } from "@/types/proposal";
+import type { ProposalPaymentChoice, PublicProposal } from "@/types/proposal";
 
 interface PublicProposalPageProps {
   params: Promise<{ token: string }>;
@@ -27,11 +27,8 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
     retry: false,
   });
 
-  const proposalDocument = parseProposalDocument(data?.proposal_document);
-  const hasGreenSky =
-    proposalDocument?.service === "permanent" && proposalDocument.green_sky !== null;
-
   const [payingDeposit, setPayingDeposit] = useState(false);
+  const [payingProposal, setPayingProposal] = useState(false);
 
   // Hand off to Stripe's hosted deposit page. Shared by the standalone "Pay
   // Deposit" button and the "Approve & Pay Deposit" flow.
@@ -45,21 +42,59 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
     }
   }, [token]);
 
+  const payProposal = useCallback(async () => {
+    setPayingProposal(true);
+    try {
+      const { url } = await publicProposalsApi.paymentCheckout(token);
+      window.location.href = url;
+    } catch {
+      setPayingProposal(false);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.publicProposals.byToken(token),
+      });
+    }
+  }, [queryClient, token]);
+
   const approveMutation = useMutation({
-    // The client submits the terms version rendered on this page. A racing seller
-    // edit gets a 409 and a refetch instead of accepting prices they never saw.
-    mutationFn: (selectedTier: string | null) => {
+    // The client submits only the rendered version, package key, and method enum.
+    mutationFn: (selection: {
+      selectedTier: string | null;
+      paymentOption: ProposalPaymentChoice | null;
+    }) => {
       if (!data) throw new Error("Proposal is still loading");
-      return publicProposalsApi.approve(token, data.proposal_version, selectedTier);
+      if (selection.paymentOption === null) {
+        return publicProposalsApi.approve(token, data.proposal_version, selection.selectedTier);
+      }
+      return publicProposalsApi.approve(
+        token,
+        data.proposal_version,
+        selection.selectedTier,
+        selection.paymentOption,
+      );
     },
     onSuccess: (result) => {
       queryClient.setQueryData<PublicProposal | undefined>(
         queryKeys.publicProposals.byToken(token),
-        (prev) => (prev ? { ...prev, status: result.status, is_decided: true } : prev),
+        (prev) =>
+          prev
+            ? {
+                ...prev,
+                status: result.status,
+                proposal_payment_choice:
+                  result.proposal_payment_choice ?? prev.proposal_payment_choice,
+                proposal_payment_amount:
+                  result.proposal_payment_amount ?? prev.proposal_payment_amount,
+                proposal_payment_required: result.proposal_payment_required,
+                is_decided: true,
+              }
+            : prev,
       );
-      // GreenSky proposals keep both next steps visible after acceptance. Every
-      // legacy deposit flow still rolls straight into Stripe.
-      if (result.deposit_required && !hasGreenSky) void payDeposit();
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.publicProposals.byToken(token),
+      });
+      // Both card choices immediately continue to their dedicated hosted checkout.
+      if (result.proposal_payment_required) void payProposal();
+      else if (result.deposit_required) void payDeposit();
     },
     onError: () => {
       void queryClient.invalidateQueries({
@@ -127,6 +162,49 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
     };
   }, [token, queryClient]);
 
+  // Stripe may redirect before the signed webhook commits; reconcile the exact
+  // stored Session repeatedly as a backstop, without trusting URL state as payment.
+  const paymentReconciledRef = useRef(false);
+  useEffect(() => {
+    if (paymentReconciledRef.current || !data) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("payment") !== "paid") return;
+    paymentReconciledRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt += 1) {
+        try {
+          const status = await publicProposalsApi.paymentStatus(token);
+          if (status.payment_paid) {
+            queryClient.setQueryData<PublicProposal | undefined>(
+              queryKeys.publicProposals.byToken(token),
+              (prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      proposal_payment_paid: true,
+                      proposal_payment_required: false,
+                      proposal_payment_amount: status.payment_amount,
+                      proposal_payment_choice: status.payment_choice,
+                    }
+                  : prev,
+            );
+            await queryClient.invalidateQueries({
+              queryKey: queryKeys.publicProposals.byToken(token),
+            });
+            return;
+          }
+        } catch {
+          // Ignore and retry; the persisted retry panel remains correct.
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [data, queryClient, token]);
+
   if (isPending) {
     return (
       <div className="min-h-screen bg-[#0a0a0a]">
@@ -139,13 +217,16 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
     return <DeadPublicLink subject="proposal" />;
   }
 
-  const busy = approveMutation.isPending || declineMutation.isPending || payingDeposit;
+  const busy =
+    approveMutation.isPending || declineMutation.isPending || payingDeposit || payingProposal;
   const justApproved = approveMutation.isSuccess || data.status === "approved";
   const justDeclined = declineMutation.isSuccess || data.status === "declined";
   const actionError = approveMutation.isError || declineMutation.isError;
   // Rich proposals (landscape, permanent, bistro, christmas) render the
   // multi-tier presentation; plain line-item quotes render the itemized quote.
   // Both share the dark/gold client theme so every recipient sees one brand.
+  const proposalDocument = parseProposalDocument(data.proposal_document);
+
   if (proposalDocument) {
     return (
       <ClientProposalView
@@ -155,7 +236,12 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
         justDeclined={justDeclined}
         busy={busy}
         actionError={actionError}
-        onApprove={(selectedTier) => approveMutation.mutate(selectedTier)}
+        onApprove={(selectedTier, paymentOption) =>
+          approveMutation.mutate({
+            selectedTier,
+            paymentOption: paymentOption ?? null,
+          })
+        }
         onDecline={(reason) => declineMutation.mutate(reason)}
       />
     );
@@ -168,7 +254,9 @@ export default function PublicProposalPage({ params }: PublicProposalPageProps) 
       justDeclined={justDeclined}
       busy={busy}
       actionError={actionError}
-      onApprove={() => approveMutation.mutate(null)}
+      onApprove={(paymentOption) =>
+        approveMutation.mutate({ selectedTier: null, paymentOption: paymentOption ?? null })
+      }
       onDecline={(reason) => declineMutation.mutate(reason)}
     />
   );
