@@ -116,7 +116,7 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
                     <FormLabel>Day 7 Message</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Value-first offer message — e.g. Hi {first_name}, we're offering 300 free video ads to qualified businesses. Still interested? Book here: {reschedule_link}"
+                        placeholder="Hi {first_name}, are you still interested in rescheduling? Reply YES and we'll help find a new time."
                         className="min-h-[90px] font-mono text-sm resize-none"
                         value={field.value ?? ""}
                         onChange={(e) => field.onChange(e.target.value || null)}
@@ -214,7 +214,7 @@ export function AdvancedTab({ form, voiceProvider, agent }: AdvancedTabProps) {
                     <FormLabel>Re-engagement Message</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Hi {first_name}, just checking in — we're still offering our free video ads strategy session. Book your spot: {booking_link}"
+                        placeholder="Hi {first_name}, are you still interested in learning more? Reply YES and we'll help with next steps."
                         className="min-h-[90px] font-mono text-sm resize-none"
                         value={field.value ?? ""}
                         onChange={(e) => field.onChange(e.target.value || null)}

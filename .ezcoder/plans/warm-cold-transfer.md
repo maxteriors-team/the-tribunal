@@ -162,7 +162,7 @@ logged consistently with existing call-event logging and respects the HITL appro
 8. `backend/app/services/ai/tool_executor.py` (`VoiceToolExecutor`)
    - Add `transfer_call` dispatch in `execute()` → `_execute_transfer_call(reason, mode)`.
    - `_execute_transfer_call`: requires `call_control_id` + `settings.telnyx_api_key`; loads
-     the call Message + conversation + workspace (pattern from `_execute_send_application_link`)
+     the call Message + conversation + workspace using the executor's existing lookup pattern
      to resolve destination + workspace phone + contact/offer info; calls
      `call_transfer.start_transfer(...)`. Returns the dict for the model. The executor already
      has `agent`, `contact_info`, `workspace_id`, `call_control_id`.

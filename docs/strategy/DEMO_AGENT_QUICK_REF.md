@@ -60,12 +60,12 @@ Update the demo agent when you need to:
 ## Environment Variables
 
 ```bash
-DEMO_WORKSPACE_ID=ba0e0e99-c7c9-45ec-9625-567d54d6e9c2
-DEMO_AGENT_ID=5bba3103-f3e0-4eb8-bec0-5423bf4051d4
-DEMO_FROM_PHONE_NUMBER=+12485309314
+DEMO_WORKSPACE_ID='<workspace UUID>'
+DEMO_AGENT_ID='<active demo-agent UUID>'
+DEMO_FROM_PHONE_NUMBER='<dedicated demo number>'
 ```
 
-Set on Railway with: `railway variables set KEY=VALUE`
+Set explicit demo resources on Railway before enabling the demo.
 
 ## Troubleshooting
 

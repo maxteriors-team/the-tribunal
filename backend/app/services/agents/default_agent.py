@@ -4,13 +4,12 @@ Inbound SMS/voice need to know which agent owns a conversation when the
 receiving phone number has no explicit assignment. This module answers that and
 nothing else: it *resolves* an existing agent, it never invents one.
 
-It used to seed a canned "Prestyj Cold-Lead Responder" template into any
-workspace that had no agent -- including on live inbound traffic. That put a
-different company's script (Batch Video Ads, a $497 starter offer) in front of
-real customers of whatever business actually owned the workspace, and it
-resurrected itself every time the operator deleted it. A CRM must never put
-words in an operator's mouth, so a workspace with no agent now simply has no AI
-responder: the message still lands in the inbox for a human to answer.
+An earlier implementation auto-seeded a canned sales agent into any workspace
+that had no agent, including during live inbound traffic. That could put another
+business's script in front of real customers and recreate the agent after an
+operator deleted it. A CRM must never put words in an operator's mouth, so a
+workspace with no agent now simply has no AI responder: the message still lands
+in the inbox for a human to answer.
 """
 
 from __future__ import annotations

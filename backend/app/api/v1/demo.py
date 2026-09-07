@@ -240,8 +240,8 @@ async def trigger_demo_text(
             to_number=demo_request.phone_number,
             from_number=settings.demo_from_phone_number,
             body=(
-                "Hey! This is Jess from Prestige. I help businesses automate "
-                "their customer conversations with AI. Want to see what I can do? "
+                "Hey! This is The Tribunal's AI assistant. I help businesses automate "
+                "customer conversations. Want to see what I can do? "
                 "Reply with anything and let's chat!"
             ),
             db=db,
@@ -254,7 +254,7 @@ async def trigger_demo_text(
 
         return DemoResponse(
             success=True,
-            message="Text sent! Check your phone for a message from Jess.",
+            message="Text sent! Check your phone for a message from the AI assistant.",
         )
     except Exception as e:
         demo_record.status = "failed"
@@ -310,9 +310,9 @@ async def _trigger_demo_text(lead_request: LeadSubmitRequest, db: DB) -> bool:
             to_number=lead_request.phone_number,
             from_number=settings.demo_from_phone_number,
             body=(
-                f"Hey {lead_request.first_name}! This is Jess from Prestige. "
-                "Thanks for your interest! I help businesses automate their "
-                "customer conversations with AI. Reply with anything and let's chat!"
+                f"Hey {lead_request.first_name}! This is The Tribunal's AI assistant. "
+                "Thanks for your interest! I help businesses automate customer "
+                "conversations. Reply with anything and let's chat!"
             ),
             db=db,
             workspace_id=uuid.UUID(settings.demo_workspace_id),
