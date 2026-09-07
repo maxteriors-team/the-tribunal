@@ -292,11 +292,14 @@ async def test_webhook_mismatch_never_marks_payment(
 
 
 @pytest.mark.asyncio
-async def test_verified_webhook_records_exact_session_and_intent(
+async def test_verified_webhook_reconciles_after_rollout_is_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     quote = _quote()
     quote.proposal_payment_checkout_session_id = "cs_expected"
+    settings.proposal_payment_pilot_workspace_ids.clear()
+    assert quote.workspace is not None
+    quote.workspace.settings = {}
     db = SimpleNamespace(execute=AsyncMock(return_value=_ScalarResult(quote)))
     mark_paid = AsyncMock(return_value=True)
     monkeypatch.setattr(payments, "mark_proposal_payment_paid", mark_paid)

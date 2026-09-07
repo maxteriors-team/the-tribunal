@@ -74,11 +74,7 @@ def _is_permanent(quote: Quote) -> bool:
 
 def _payment_state(quote: Quote) -> tuple[PaymentChoice, Decimal, Decimal]:
     """Return validated persisted payment truth and accepted full total."""
-    if (
-        quote.status != "approved"
-        or not _is_permanent(quote)
-        or not proposal_payments_enabled(quote)
-    ):
+    if quote.status != "approved" or not _is_permanent(quote):
         raise ProposalPaymentError("This proposal is not approved for online payment.")
     choice = quote.proposal_payment_choice
     amount = quote.proposal_payment_amount
@@ -234,6 +230,8 @@ async def create_proposal_payment_checkout_session(
     quote = result.scalar_one_or_none()
     if quote is None or quote.status == "draft":
         raise ProposalPaymentError("Proposal not found.")
+    if not proposal_payments_enabled(quote):
+        raise ProposalPaymentError("This proposal is not approved for online payment.")
     choice, amount, _full = _payment_state(quote)
     if quote.proposal_payment_paid_at is not None:
         raise ProposalPaymentError("This proposal payment has already been received.")
