@@ -80,7 +80,7 @@ export function PlainQuoteView({
     data.proposal_payment_choice ?? null,
   );
 
-  const decided = data.is_decided || justApproved || justDeclined;
+  const decided = data.is_expired || data.is_decided || justApproved || justDeclined;
   const approved = justApproved || data.status === "approved";
   const currency = data.currency;
   const priceRange = data.price_range;
@@ -101,11 +101,16 @@ export function PlainQuoteView({
     if (paymentOptionRequired) onApprove(paymentOption);
     else onApprove();
   };
+  const legacyApprovalLabel = data.deposit_required
+    ? Number(data.deposit_percentage) >= 100
+      ? "Approve & Pay Now"
+      : "Approve & Pay Deposit"
+    : "Approve Proposal";
   const approvalLabel = paymentOptionMissing
     ? "Choose payment method"
     : paymentOptionRequired
       ? "Approve and pay"
-      : "Yes, approve this proposal";
+      : legacyApprovalLabel;
   const approvalAriaLabel =
     selectedPaymentAmount && !paymentOptionMissing
       ? `Approve and pay ${formatCurrency(selectedPaymentAmount, currency)}`

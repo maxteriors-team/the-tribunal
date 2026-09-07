@@ -224,7 +224,14 @@ describe("plain quote on-site payment", () => {
     expect(screen.getByText("Payment Due Today")).toBeVisible();
     expect(screen.getByText("Full one-time total")).toBeVisible();
     expect(screen.getByRole("button", { name: "Pay Now" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Yes, approve this proposal" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Approve & Pay Now" })).toBeVisible();
+  });
+
+  it("hides approval actions after the proposal expires", () => {
+    renderQuote({ is_expired: true });
+
+    expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /decline/i })).not.toBeInTheDocument();
   });
 });
 

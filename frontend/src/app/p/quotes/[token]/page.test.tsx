@@ -178,7 +178,7 @@ describe("public proposal view beacon", () => {
     const user = userEvent.setup();
     await renderPage();
     const approve = await screen.findByRole("button", {
-      name: "Yes, approve this proposal",
+      name: "Approve Proposal",
     });
 
     approve.focus();
@@ -356,7 +356,7 @@ describe("public proposal view beacon", () => {
 
     await renderPage();
     await user.click(
-      await screen.findByRole("button", { name: "Yes, approve this proposal" }),
+      await screen.findByRole("button", { name: "Approve & Pay Deposit" }),
     );
 
     await waitFor(() => expect(depositCheckoutMock).toHaveBeenCalledWith("tok-abc"));
