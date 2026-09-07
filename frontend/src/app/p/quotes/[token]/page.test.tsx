@@ -13,15 +13,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import PublicProposalPage from "@/app/p/quotes/[token]/page";
 import type { PublicProposal } from "@/types/proposal";
 
-const { approveMock, getMock, paymentCheckoutMock, paymentStatusMock, recordViewMock } = vi.hoisted(
-  () => ({
-    approveMock: vi.fn(),
-    getMock: vi.fn(),
-    paymentCheckoutMock: vi.fn(),
-    paymentStatusMock: vi.fn(),
-    recordViewMock: vi.fn(),
-  }),
-);
+const {
+  approveMock,
+  depositCheckoutMock,
+  getMock,
+  paymentCheckoutMock,
+  paymentStatusMock,
+  recordViewMock,
+} = vi.hoisted(() => ({
+  approveMock: vi.fn(),
+  depositCheckoutMock: vi.fn(),
+  getMock: vi.fn(),
+  paymentCheckoutMock: vi.fn(),
+  paymentStatusMock: vi.fn(),
+  recordViewMock: vi.fn(),
+}));
 
 vi.mock("@/lib/api/public-proposals", () => ({
   publicProposalsApi: {
@@ -29,7 +35,7 @@ vi.mock("@/lib/api/public-proposals", () => ({
     recordView: recordViewMock,
     approve: approveMock,
     decline: vi.fn(),
-    depositCheckout: vi.fn(),
+    depositCheckout: depositCheckoutMock,
     depositStatus: vi.fn(),
     paymentCheckout: paymentCheckoutMock,
     paymentStatus: paymentStatusMock,
@@ -71,6 +77,44 @@ function proposal(): PublicProposal {
     },
   };
 }
+
+const LEGACY_GREEN_SKY_DOCUMENT = {
+  version: 1,
+  service: "permanent",
+  client: { first_name: "Dana", last_name: "Homeowner" },
+  tier_order: [],
+  tiers: [],
+  additional_charges: [],
+  category_sections: [
+    {
+      key: "permanent",
+      label: "Permanent Lighting",
+      lines: [],
+      value_props: [],
+      financed_total: 1070,
+      cash_total: 1070,
+      cash_savings: 0,
+      monthly_payment: 0,
+      min_applied: false,
+      takedown: false,
+      storage: false,
+    },
+  ],
+  mockups: [],
+  grand_financed_total: 1070,
+  grand_cash_total: 1070,
+  grand_monthly_payment: 0,
+  green_sky: {
+    application_url: "https://projects.greensky.com/applyshort",
+    merchant_number: "1234567890",
+    plan_number: "246810",
+    apr_percent: 0,
+    term_months: 24,
+    offer_details: "Provider-approved 0% APR for 24 months.",
+    disclosure:
+      "Financing is subject to credit approval. Applying does not accept this proposal.",
+  },
+};
 
 async function renderPage() {
   const client = new QueryClient({
@@ -264,5 +308,57 @@ describe("public proposal view beacon", () => {
     expect(await screen.findByRole("heading", { name: "Payment received" })).toBeVisible();
     expect(screen.getByText(/\$2,600.00 remains due at completion/i)).toBeVisible();
     expect(paymentStatusMock).toHaveBeenCalledWith("tok-abc");
+  });
+
+  it("keeps GreenSky approval on-page when direct card choices are disabled", async () => {
+    const user = userEvent.setup();
+    getMock.mockResolvedValue({
+      ...proposal(),
+      deposit_required: true,
+      deposit_amount: 214,
+      proposal_document: LEGACY_GREEN_SKY_DOCUMENT,
+    });
+    approveMock.mockResolvedValue({
+      token: "tok-abc",
+      status: "approved",
+      message: "Thank you",
+      proposal_payment_required: false,
+      deposit_required: true,
+    });
+
+    await renderPage();
+    await user.click(await screen.findByRole("button", { name: "Accept proposal" }));
+
+    await waitFor(() => expect(approveMock).toHaveBeenCalledWith("tok-abc", 1, null));
+    expect(depositCheckoutMock).not.toHaveBeenCalled();
+    expect(await screen.findByText(/thank you, dana/i)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Start GreenSky application/i }),
+    ).toBeVisible();
+  });
+
+  it("preserves automatic checkout for legacy non-GreenSky deposits", async () => {
+    const user = userEvent.setup();
+    getMock.mockResolvedValue({
+      ...proposal(),
+      deposit_required: true,
+      deposit_amount: 214,
+      deposit_percentage: 20,
+    });
+    approveMock.mockResolvedValue({
+      token: "tok-abc",
+      status: "approved",
+      message: "Thank you",
+      proposal_payment_required: false,
+      deposit_required: true,
+    });
+    depositCheckoutMock.mockImplementation(() => new Promise(() => undefined));
+
+    await renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Yes, approve this proposal" }),
+    );
+
+    await waitFor(() => expect(depositCheckoutMock).toHaveBeenCalledWith("tok-abc"));
   });
 });
