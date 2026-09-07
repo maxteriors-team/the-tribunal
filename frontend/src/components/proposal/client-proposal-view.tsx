@@ -199,7 +199,7 @@ export function ClientProposalView({
   // Every angle the rep designed, not just the hero shot.
   const nightPhotos = nightImages(doc.night_preview);
 
-  const decided = data.is_decided || justApproved || justDeclined;
+  const decided = data.is_expired || data.is_decided || justApproved || justDeclined;
   const contactLine = [branding.business_phone, branding.business_email]
     .filter(Boolean)
     .join(" \u00b7 ");
@@ -221,8 +221,11 @@ export function ClientProposalView({
       : paymentOption === "pay_in_full"
         ? paymentOptions?.pay_in_full_amount
         : null;
-  const acceptActionLabel =
-    paymentOptionRequired && selectedPaymentAmount
+  const acceptActionLabel = legacyGreenSky
+    ? chosenLabel
+      ? `Accept ${chosenLabel}`
+      : "Accept proposal"
+    : paymentOptionRequired && selectedPaymentAmount
       ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} & Pay ${fmt(selectedPaymentAmount)}`
       : ctaDeposit && ctaDeposit > 0
         ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} & Pay ${fmt(ctaDeposit)}`
