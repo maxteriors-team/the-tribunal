@@ -7,6 +7,7 @@ import uuid
 import pytest
 from pydantic import ValidationError as PydanticValidationError
 
+from app.core.config import settings
 from app.models.quote import Quote
 from app.models.workspace import Workspace
 from app.schemas.proposal import PublicProposalApprove
@@ -14,7 +15,12 @@ from app.services.exceptions import ConflictError, ValidationError
 from app.services.quotes.quote_service import QuoteService
 
 
-def _quote(*, service: str | None, total: float = 5200) -> Quote:
+@pytest.fixture(autouse=True)
+def _empty_operator_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "proposal_payment_pilot_workspace_ids", set())
+
+
+def _quote(*, service: str | None, total: float = 5200, operator_enabled: bool = True) -> Quote:
     quote = Quote(
         id=uuid.uuid4(),
         workspace_id=uuid.uuid4(),
@@ -31,6 +37,8 @@ def _quote(*, service: str | None, total: float = 5200) -> Quote:
         slug=f"payments-{uuid.uuid4().hex[:8]}",
         settings={"proposal_payments_enabled": True},
     )
+    if operator_enabled:
+        settings.proposal_payment_pilot_workspace_ids.add(quote.workspace_id)
     return quote
 
 
@@ -64,6 +72,14 @@ def test_payment_choice_is_required_and_cannot_change_after_approval() -> None:
 def test_public_approval_schema_rejects_non_customer_payment_choices(choice: str) -> None:
     with pytest.raises(PydanticValidationError):
         PublicProposalApprove.model_validate({"payment_option": choice})
+
+
+def test_payment_choices_require_operator_allowlisting() -> None:
+    quote = _quote(service="permanent", operator_enabled=False)
+
+    assert QuoteService._public_payment_options(quote, quote.total) is None
+    with pytest.raises(ValidationError, match="only for exact Permanent"):
+        QuoteService._apply_proposal_payment_choice(quote, "pay_in_full", retry=False)
 
 
 def test_payment_choices_are_disabled_for_unapproved_workspaces() -> None:

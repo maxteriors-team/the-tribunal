@@ -129,6 +129,7 @@ from app.services.opportunities.quote_opportunity import (
     mark_quote_approved_on_pipeline,
     place_quote_on_pipeline,
 )
+from app.services.payments.proposal_payment_access import proposal_payments_enabled
 from app.services.quotes.attach_metrics import compute_attach_metrics
 from app.services.quotes.attach_rules import evaluate_attach_rules
 from app.services.quotes.attach_rules_config import get_attach_rules_config
@@ -1939,11 +1940,7 @@ class QuoteService:
     @staticmethod
     def _is_permanent_proposal(quote: Quote) -> bool:
         """Return whether this workspace may offer Permanent proposal payments."""
-        workspace_settings = quote.workspace.settings if quote.workspace else None
-        if not (
-            isinstance(workspace_settings, Mapping)
-            and workspace_settings.get("proposal_payments_enabled") is True
-        ):
+        if not proposal_payments_enabled(quote):
             return False
         document = quote.proposal_document
         if not isinstance(document, Mapping):
