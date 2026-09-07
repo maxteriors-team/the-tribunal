@@ -1148,3 +1148,51 @@ for merchant and plan values. Screenshots and machine evidence are under
 up/check/down/up completed. Backend PR #227 remains live at `a8aef252` with readiness and six smoke tests.
 Final Vercel deployment, real merchant setup, physical-device assistive technology, a real GreenSky application
 submission, a real Stripe payment, provider approval, and legal review are not claimed in this addendum.
+
+## Permanent proposal card-payment addendum (7 September 2026)
+
+**Engineering guidance, not legal advice.** Reviewed against the public Permanent Lighting proposal
+flow before release. The surface is publicly reachable by capability token, handles real customer and
+contract data, takes consumer card payments through hosted Stripe Checkout, and remains technically
+reachable worldwide. The exact contracting entity, service states, and Stripe account owner were not
+independently established; the production key is deliberately restricted and denied account-profile
+retrieval. Rollout therefore defaults off and must remain limited to the explicitly approved operator
+workspace. It must not be enabled for unrelated Tribunal tenants without a supported merchant-of-record
+or connected-account model and legal review.
+
+### Focused coverage ledger
+
+| ID | Checklist item | Result | Evidence |
+|---|---|---|---|
+| PPC-A1 | Public capability-token authorization | pass (code/tests) | Token lookup returns only one proposal; checkout uses the same token and persisted quote. |
+| PPC-A2 | Customer-supplied price rejection | pass (code/tests) | Approval accepts only two enums; amount, currency, quote, and workspace are server-owned. |
+| PPC-A3 | Cross-tenant merchant isolation | pass for this release | `proposal_payments_enabled` defaults false per workspace and gates display, approval, and checkout. |
+| PPC-A4 | Stripe webhook authenticity | pass (reused) | Existing signed webhook parsing runs before dedicated proposal reconciliation. |
+| PPC-A5 | Duplicate-charge/payment handling | pass (code/tests) | Row lock reuses open sessions; paid transition is atomic and idempotent. |
+| PPC-A6 | Stored payment evidence | pass (code/migration) | Choice, amount, session, intent, and paid timestamp persist separately from legacy deposits. |
+| PPC-A7 | Secrets and browser exposure | pass (code) | Browser receives hosted URL only; Stripe secret and webhook secret remain server-side. |
+| PPC-A8 | Form labels and keyboard controls | pass (runtime) | Native labelled radios and buttons completed both payment paths by keyboard. |
+| PPC-A9 | Image alternatives | pass (runtime) | Workspace logo and customer mockup expose contextual alternatives in the rendered fixture. |
+| PPC-A10 | Colour, focus, reflow, page language | partial | Axe found no tested A/AA violations at desktop and 390 px; manual assistive-technology review remains open. |
+| PPC-A11 | Media controls/captions | n-a | This flow adds no audio or video. |
+| PPC-C1-US | Consumer contract, cancellation, refund, and tax duties | fail/open | Existing GS-007/SPP-003 legal review remains required before broad reliance. |
+| PPC-C1-EU/UK | Pre-contract and withdrawal duties | fail/open | No geographic gate or reviewed EU/UK consumer-sales flow was established. |
+| PPC-M1 | Minor/capacity handling | fail/open | Public proposal acceptance has no age or contracting-capacity gate. |
+| PPC-P1 | User-content platform duties | n-a | Customer mockups are operator-authored contract media, not public user posting. |
+
+### Findings and controls
+
+| ID | Severity | Trigger | Evidence | Status / guard |
+|---|---|---|---|---|
+| PPC-001 | BLOCKER | A shared platform Stripe account could collect money for unrelated tenants | CODE/tests: every new offer and checkout requires an exact `true` workspace flag | Fixed for limited rollout; default deny, enable one approved operator only |
+| PPC-002 | HIGH | A browser could alter the amount or payment schedule | CODE/tests: browser submits an enum only; approval locks and persists a cent-rounded server total | Fixed; schema, database constraints, and mismatch tests remain in CI |
+| PPC-003 | HIGH | Retried checkout/webhook traffic could charge twice or mark the wrong quote paid | CODE/tests: active sessions are reused; metadata, amount, currency, session, status, and quote are verified | Fixed for tested paths; atomic paid transition and idempotent notification scope |
+| PPC-004 | LAWYER | Approval plus immediate payment can form a consumer home-services contract | DEDUCED: exact price and terms link render, but state-specific cancellation/refund/tax language was not reviewed | Open; existing contract review remains required |
+| PPC-005 | MEDIUM | Automated accessibility checks do not cover real assistive technology | RUNTIME: three Playwright flows and desktop/390 px Axe checks passed | Automated evidence complete; physical-device and screen-reader review open |
+| PPC-006 | MEDIUM | A forwarded proposal link could be accepted by someone lacking capacity | DEDUCED: no technical age/capacity gate exists | Open policy/legal decision; do not invent a gate without counsel requirements |
+
+RUNTIME: migration upgrade/check/downgrade/upgrade completed against a fresh disposable PostgreSQL
+database. Sixty-six focused backend tests, eleven integration tests, 101 focused frontend tests, and
+three Chromium proposal journeys passed. The rendered desktop and 390 px fixtures had no horizontal
+overflow or tested Axe A/AA violations. A real Stripe charge/refund, physical devices, screen readers,
+production enablement, and legal review were not claimed at this checkpoint.

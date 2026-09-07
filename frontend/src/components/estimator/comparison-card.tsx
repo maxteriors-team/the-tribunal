@@ -9,8 +9,6 @@
  * deliberately the feet-free intersection of the estimate + public payloads so a
  * measurement value cannot be passed in by construction.
  */
-import type { ReactNode } from "react";
-
 import { formatCurrency } from "@/lib/utils/number";
 
 import { PackageGrid, type ComparisonPackageView, type PackageSectionCopy } from "./package-grid";
@@ -104,16 +102,10 @@ function Perks({ perks }: { perks?: string[] }) {
 
 export function ComparisonCard({
   view,
-  footer,
+  legacyPreview = false,
 }: {
   view: ComparisonView;
-  /**
-   * Rendered inside the card, under the prices. Anything the client is meant to
-   * act on belongs here rather than loose on the page beneath it: dropped into
-   * the page background it reads as leftover furniture instead of part of the
-   * offer they were sent.
-   */
-  footer?: ReactNode;
+  legacyPreview?: boolean;
 }) {
   const currency = view.currency || "USD";
   const bothOffered = view.permanent.enabled && view.christmas.enabled;
@@ -126,16 +118,20 @@ export function ComparisonCard({
   const packages = view.christmas.enabled ? (view.christmasPackages ?? []) : [];
   const roofline = bothOffered ? (view.roofline ?? null) : null;
   const customLines = view.customLines ?? [];
-  const heading = permanentOnly
-    ? "Permanent Lighting Proposal"
-    : seasonalOnly
-      ? "Seasonal Lighting Proposal"
-      : "Permanent vs. Seasonal Lighting";
-  const intro = permanentOnly
-    ? "A permanent lighting package designed for your home — installed once and ready year-round."
-    : seasonalOnly
-      ? "A seasonal lighting package designed for your home and this year’s display."
-      : "Two ways to light your home for the holidays — here’s what each costs and how they compare over time.";
+  const heading = legacyPreview
+    ? "Estimate preview"
+    : permanentOnly
+      ? "Permanent Lighting Proposal"
+      : seasonalOnly
+        ? "Seasonal Lighting Proposal"
+        : "Permanent vs. Seasonal Lighting";
+  const intro = legacyPreview
+    ? "This saved estimate shows pricing only. It is not an approval or payment request."
+    : permanentOnly
+      ? "A permanent lighting package designed for your home, installed once and ready year-round."
+      : seasonalOnly
+        ? "A seasonal lighting package designed for your home and this year’s display."
+        : "Two ways to light your home for the holidays, with pricing compared over time.";
   // Permanent wins the roofline-only comparison when paying every season costs
   // more over the horizon than installing once.
   const rooflineSavings = roofline && roofline.savings > 0 ? roofline.savings : 0;
@@ -280,8 +276,6 @@ export function ComparisonCard({
       ) : null}
 
       <PackageGrid packages={packages} currency={currency} copy={view.packageSection} />
-
-      {footer}
     </div>
   );
 }
