@@ -83,13 +83,19 @@ vi.mock("@/components/jobs/job-detail-dialog", () => ({
     job,
     open,
     readOnly,
+    calendarOperations,
   }: {
     job: Job | null;
     open: boolean;
     readOnly?: boolean;
+    calendarOperations?: boolean;
   }) =>
     open && job ? (
-      <div data-testid="job-detail-dialog" data-readonly={String(Boolean(readOnly))}>
+      <div
+        data-testid="job-detail-dialog"
+        data-readonly={String(Boolean(readOnly))}
+        data-calendar-operations={String(Boolean(calendarOperations))}
+      >
         Detail: {job.title}
       </div>
     ) : null,
@@ -427,7 +433,7 @@ describe("unscheduled dispatch queue", () => {
  * list, so the board affordances are not just hidden — they would be refused.
  */
 describe("dispatch affordances are gated on jobs:write", () => {
-  it("hides queue, New job, Only mine, and dead Settings from a field technician", async () => {
+  it("hides creation, queue, filters, and dead Settings from a field technician", async () => {
     signedInAs("technician");
     renderCalendar();
 
@@ -435,6 +441,7 @@ describe("dispatch affordances are gated on jobs:write", () => {
 
     expect(screen.queryByText("Jobs waiting for a time window")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /New job/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /New appointment/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Settings/i })).not.toBeInTheDocument();
     // Their view is already scoped server-side, so the filter would be a no-op.
     expect(screen.queryByLabelText("Only mine")).not.toBeInTheDocument();
@@ -450,6 +457,7 @@ describe("dispatch affordances are gated on jobs:write", () => {
 
     expect(screen.getByText("Jobs waiting for a time window")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /New job/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /New appointment/i })).toBeInTheDocument();
     expect(screen.getByLabelText("Only mine")).toBeInTheDocument();
   });
 
@@ -461,12 +469,13 @@ describe("dispatch affordances are gated on jobs:write", () => {
     const chip = (await screen.findAllByRole("button", { name: /^Job: Roof tune-up/ }))[0];
     await user.click(chip);
 
-    await waitFor(() =>
+    await waitFor(() => {
+      expect(screen.getByTestId("job-detail-dialog")).toHaveAttribute("data-readonly", "true");
       expect(screen.getByTestId("job-detail-dialog")).toHaveAttribute(
-        "data-readonly",
+        "data-calendar-operations",
         "true",
-      ),
-    );
+      );
+    });
   });
 
   it("scopes both lists to the caller when a dispatcher picks Only mine", async () => {

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import (
     DB,
+    CanReadCRM,
     CurrentMembership,
     CurrentUser,
     get_workspace,
@@ -22,6 +23,7 @@ from app.schemas.appointment import (
     AppointmentUpdate,
     PaginatedAppointments,
 )
+from app.schemas.reminder import CustomerReminderResponse
 from app.services.appointments import AppointmentService
 from app.services.rate_limiting.appointment_reminder_limiter import (
     enforce_appointment_reminder_rate_limit,
@@ -103,16 +105,15 @@ async def create_appointment(
     workspace_id: uuid.UUID,
     appointment_in: AppointmentCreate,
     current_user: CurrentUser,
-    membership: CurrentMembership,
+    membership: CanReadCRM,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> Any:
-    """Create a new appointment.
+    """Create a new appointment for a contact the caller may already access.
 
-    Dispatch-tier callers may leave it unassigned or tag a booking-enabled user.
-    Restricted callers are assigned to their active linked booking resource so
-    the row remains visible on their scoped calendar; an admin must enable that
-    resource in Settings → Team first.
+    Requiring CRM read prevents field-only callers from selecting arbitrary
+    workspace contacts through the API. Lower CRM-capable roles remain assigned
+    to their active linked booking resource.
     """
     service = AppointmentService(db)
     visible_to_user_id = _calendar_scope_user_id(membership, current_user.id)
@@ -227,7 +228,7 @@ async def delete_appointment(
 # Widen the payload to free text and this reasoning no longer holds.
 @router.post(
     "/{appointment_id}/send-reminder",
-    response_model=dict,
+    response_model=CustomerReminderResponse,
     summary="Manually send an SMS reminder for a scheduled appointment",
 )
 async def send_appointment_reminder(
@@ -237,7 +238,7 @@ async def send_appointment_reminder(
     membership: CurrentMembership,
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
-) -> dict[str, Any]:
+) -> CustomerReminderResponse:
     """Send an immediate SMS reminder for an appointment visible to the caller.
 
     Only works for appointments with status='scheduled'.
@@ -258,9 +259,11 @@ async def send_appointment_reminder(
             appointment_id,
             workspace,
             visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+            sender_user_id=current_user.id,
+            sender_display_name=getattr(current_user, "full_name", None) or "Staff",
         )
         log.info("manual_reminder_result", success=result.get("success"))
-        return result
+        return CustomerReminderResponse.model_validate(result)
     except HTTPException:
         raise
     except Exception as exc:

@@ -34,13 +34,32 @@ import { formatPhoneNumber } from "@/lib/utils/phone";
  * the field tier sees; adding a currency here would leak pricing to every
  * technician.
  */
-export function JobBrief({ job }: { job: Job }) {
+interface JobBriefProps {
+  job: Job;
+  linkSiteAddress?: boolean;
+  customerAction?: ReactNode;
+}
+
+export function JobBrief({ job, linkSiteAddress = false, customerAction }: JobBriefProps) {
   const site = job.service_location ?? null;
   const customer = job.customer ?? null;
   const addressLines = jobSiteAddressLines(site);
   const mapsUrl = jobSiteMapsUrl(site);
+  const siteLabel = addressLines.join(", ") || site?.name || "job site";
   const phoneNumber = customer?.phone_number?.trim() ?? "";
   const lineItems = job.line_items ?? [];
+  const siteDetails = site && (site.name || addressLines.length > 0) && (
+    <address className="text-sm not-italic">
+      {site.name && <span className="block font-medium">{site.name}</span>}
+      {/* Index key: address lines are a fixed, never-reordered projection, and
+          bad data can repeat one (line2 typed same as line1). */}
+      {addressLines.map((line, index) => (
+        <span key={index} className="block text-muted-foreground">
+          {line}
+        </span>
+      ))}
+    </address>
+  );
 
   return (
     <div className="space-y-4">
@@ -49,21 +68,28 @@ export function JobBrief({ job }: { job: Job }) {
       <div className="rounded-lg border">
         <section className="space-y-2 p-3">
           <SectionHeading icon={<MapPin className="size-4" />}>Site</SectionHeading>
-          {site && (site.name || addressLines.length > 0) ? (
-            <address className="text-sm not-italic">
-              {site.name && <span className="block font-medium">{site.name}</span>}
-              {/* Index key: the lines are a fixed, never-reordered projection,
-                  and bad data can repeat one (line2 typed same as line1). */}
-              {addressLines.map((line, index) => (
-                <span key={index} className="block text-muted-foreground">
-                  {line}
-                </span>
-              ))}
-            </address>
+          {siteDetails ? (
+            linkSiteAddress && mapsUrl ? (
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Open ${siteLabel} in Google Maps (new tab)`}
+                className="group flex w-fit items-start gap-2 rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {siteDetails}
+                <Navigation
+                  className="mt-0.5 size-4 shrink-0 text-muted-foreground group-hover:text-foreground"
+                  aria-hidden="true"
+                />
+              </a>
+            ) : (
+              siteDetails
+            )
           ) : (
             <EmptyLine>No site address on this job.</EmptyLine>
           )}
-          {mapsUrl && (
+          {mapsUrl && !linkSiteAddress && (
             <Button variant="outline" asChild className="h-10 w-full justify-start sm:h-9 sm:w-auto">
               <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
                 <Navigation className="mr-2 size-4" />
@@ -90,6 +116,7 @@ export function JobBrief({ job }: { job: Job }) {
           ) : (
             customer && <EmptyLine>No phone number on file.</EmptyLine>
           )}
+          {customerAction}
         </section>
       </div>
 

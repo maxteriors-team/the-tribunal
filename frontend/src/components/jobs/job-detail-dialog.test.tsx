@@ -22,6 +22,7 @@ const {
   mutation,
   installationPlanQuery,
   inventoryPlanMock,
+  sendReminderMock,
   handoffImagesMock,
   capabilitiesMock,
   canvasContext,
@@ -29,6 +30,7 @@ const {
   mutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   installationPlanQuery: vi.fn(),
   inventoryPlanMock: vi.fn(),
+  sendReminderMock: vi.fn(),
   handoffImagesMock: vi.fn(),
   capabilitiesMock: vi.fn(),
   canvasContext: {
@@ -57,7 +59,14 @@ const {
 
 vi.mock("@/lib/api/jobs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/jobs")>();
-  return { ...actual, jobsApi: { ...actual.jobsApi, inventoryPlan: inventoryPlanMock } };
+  return {
+    ...actual,
+    jobsApi: {
+      ...actual.jobsApi,
+      inventoryPlan: inventoryPlanMock,
+      sendReminder: sendReminderMock,
+    },
+  };
 });
 
 vi.mock("@/components/jobs/handoff-images", () => ({
@@ -149,7 +158,7 @@ const fullJob = makeJob({
   ],
 });
 
-function renderDialog(readOnly: boolean, jobToRender: Job = fullJob) {
+function renderDialog(readOnly: boolean, jobToRender: Job = fullJob, calendarOperations = false) {
   capabilitiesMock.mockReturnValue({
     can: (capability: string) =>
       readOnly
@@ -163,6 +172,7 @@ function renderDialog(readOnly: boolean, jobToRender: Job = fullJob) {
       open
       onOpenChange={vi.fn()}
       readOnly={readOnly}
+      calendarOperations={calendarOperations}
     />,
   );
 }
@@ -184,6 +194,12 @@ describe("JobDetailDialog", () => {
       completion_confirmation_required: true,
       allocations: [{ id: "allocation-1" }],
     });
+    sendReminderMock.mockReset();
+    sendReminderMock.mockResolvedValue({
+      success: true,
+      message: "Reminder sent",
+      sent_to: "***0142",
+    });
   });
   it("renders no dispatch write controls when read-only", () => {
     renderDialog(true);
@@ -200,6 +216,32 @@ describe("JobDetailDialog", () => {
     expect(screen.getByRole("tab", { name: "Visits" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /pricing/i })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Time tracking" })).toBeInTheDocument();
+  });
+
+  it("links the site and sends a stock reminder from the technician calendar", async () => {
+    const user = userEvent.setup();
+    renderDialog(
+      true,
+      {
+        ...fullJob,
+        scheduled_start: "2099-07-15T15:00:00.000Z",
+        scheduled_end: "2099-07-15T17:00:00.000Z",
+      },
+      true,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /Open 4412 Ridgeview Dr, Austin, TX 78731/i }),
+    ).toHaveAttribute(
+      "href",
+      "https://maps.google.com/?q=4412%20Ridgeview%20Dr%2C%20Austin%2C%20TX%2078731",
+    );
+    expect(screen.queryByRole("link", { name: /Navigate/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Customer reminder" }));
+
+    expect(sendReminderMock).toHaveBeenCalledWith("ws-1", "job-1");
+    expect(await screen.findByRole("button", { name: "Reminder sent" })).toBeDisabled();
   });
 
   it("renders the full dispatch panel when writable", () => {
@@ -301,6 +343,7 @@ describe("JobDetailDialog field brief", () => {
       "href",
       "https://maps.google.com/?q=4412%20Ridgeview%20Dr%2C%20Austin%2C%20TX%2078731",
     );
+    expect(screen.queryByRole("button", { name: "Customer reminder" })).not.toBeInTheDocument();
 
     // Access notes: safety/entry info, called out separately.
     expect(screen.getByRole("heading", { name: /Access notes/ })).toBeInTheDocument();

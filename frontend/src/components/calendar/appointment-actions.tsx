@@ -95,7 +95,7 @@ export function SendReminderButton({ appointment, workspaceId, onSent }: SendRem
     try {
       const result = await appointmentsApi.sendReminder(workspaceId, appointment.id);
       if (result.success) {
-        toast.success(`Reminder sent to ${result.sent_to ?? "contact"}`);
+        toast.success(`${result.message}${result.sent_to ? ` to ${result.sent_to}` : ""}`);
         onSent();
       } else {
         toast.error(result.message || "Failed to send reminder");
@@ -111,13 +111,13 @@ export function SendReminderButton({ appointment, workspaceId, onSent }: SendRem
     <Button
       variant="outline"
       size="sm"
-      className="text-xs h-7 gap-1"
+      className="h-7 gap-1 text-xs"
       onClick={handleSend}
       disabled={isSending}
-      title="Send SMS reminder"
+      title="Send customer SMS reminder"
     >
       {isSending ? <Loader2 className="size-3 animate-spin" /> : <Bell className="size-3" />}
-      Remind
+      {isSending ? "Sending…" : "Customer reminder"}
     </Button>
   );
 }

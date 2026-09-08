@@ -28,6 +28,7 @@ export type JobVisitCreate = Schemas["JobVisitCreate"];
 export type JobVisitUpdate = Schemas["JobVisitUpdate"];
 export type JobPricing = Schemas["JobPricingResponse"];
 export type JobPricingReplace = Schemas["JobPricingReplace"];
+export type CustomerReminderResult = Schemas["CustomerReminderResponse"];
 
 // Field execution: time tracking, expenses, profitability.
 export type TimeEntry = Schemas["TimeEntryResponse"];
@@ -92,6 +93,10 @@ export const jobsApi = {
       path: { workspace_id: workspaceId, job_id: jobId },
     }),
 
+  sendReminder: (workspaceId: string, jobId: string): Promise<CustomerReminderResult> =>
+    apiClient.post("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/send-reminder", {
+      path: { workspace_id: workspaceId, job_id: jobId },
+    }),
   installationPlan: (workspaceId: string, jobId: string): Promise<JobInstallationPlan> =>
     apiClient.get("/api/v1/workspaces/{workspace_id}/jobs/{job_id}/installation-plan", {
       path: { workspace_id: workspaceId, job_id: jobId },

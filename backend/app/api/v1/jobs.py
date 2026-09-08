@@ -87,9 +87,13 @@ from app.schemas.neighbor_outreach import (
     NeighborOutreachExportResponse,
     NeighborOutreachGenerateRequest,
 )
+from app.schemas.reminder import CustomerReminderResponse
 from app.services.field_service.neighbor_outreach import NeighborOutreachService
 from app.services.inventory import JobAllocationService
 from app.services.jobs import JobCostingService, JobMaterialsService, JobService
+from app.services.rate_limiting.appointment_reminder_limiter import (
+    enforce_appointment_reminder_rate_limit,
+)
 
 router = APIRouter(route_class=ServiceErrorRoute)
 
@@ -237,6 +241,31 @@ async def get_job(
         workspace.id,
         visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
     )
+
+
+@router.post("/{job_id}/send-reminder", response_model=CustomerReminderResponse)
+async def send_job_reminder(
+    job_id: uuid.UUID,
+    workspace: WorkspaceAccess,
+    membership: CurrentMembership,
+    current_user: CurrentUser,
+    db: DB,
+) -> CustomerReminderResponse:
+    """Send a rate-limited stock reminder for an upcoming visible job.
+
+    Field staff may trigger this calendar operation because neither message
+    content nor recipient is caller-controlled. Global SMS opt-outs still apply.
+    """
+    await enforce_appointment_reminder_rate_limit(workspace.id, current_user.id)
+    result = await JobService(db).send_reminder(
+        job_id,
+        workspace.id,
+        workspace,
+        visible_to_user_id=_calendar_scope_user_id(membership, current_user.id),
+        sender_user_id=current_user.id,
+        sender_display_name=getattr(current_user, "full_name", None) or "Staff",
+    )
+    return CustomerReminderResponse.model_validate(result)
 
 
 @router.get("/{job_id}/handoff-images", response_model=HandoffImageListResponse)

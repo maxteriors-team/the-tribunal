@@ -2498,12 +2498,11 @@ export interface paths {
         put?: never;
         /**
          * Create Appointment
-         * @description Create a new appointment.
+         * @description Create a new appointment for a contact the caller may already access.
          *
-         *     Dispatch-tier callers may leave it unassigned or tag a booking-enabled user.
-         *     Restricted callers are assigned to their active linked booking resource so
-         *     the row remains visible on their scoped calendar; an admin must enable that
-         *     resource in Settings → Team first.
+         *     Requiring CRM read prevents field-only callers from selecting arbitrary
+         *     workspace contacts through the API. Lower CRM-capable roles remain assigned
+         *     to their active linked booking resource.
          */
         post: operations["create_appointment_api_v1_workspaces__workspace_id__appointments_post"];
         delete?: never;
@@ -6396,6 +6395,29 @@ export interface paths {
          * @description Set a job's time window (flips unscheduled -> scheduled).
          */
         post: operations["schedule_job_api_v1_workspaces__workspace_id__jobs__job_id__schedule_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/send-reminder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Job Reminder
+         * @description Send a rate-limited stock reminder for an upcoming visible job.
+         *
+         *     Field staff may trigger this calendar operation because neither message
+         *     content nor recipient is caller-controlled. Global SMS opt-outs still apply.
+         */
+        post: operations["send_job_reminder_api_v1_workspaces__workspace_id__jobs__job_id__send_reminder_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16834,9 +16856,19 @@ export interface components {
         };
         /**
          * ContactSummary
-         * @description Minimal contact info for appointments.
+         * @description Contact details needed by calendar staff and assigned field technicians.
          */
         ContactSummary: {
+            /** Address City */
+            address_city?: string | null;
+            /** Address Line1 */
+            address_line1?: string | null;
+            /** Address Line2 */
+            address_line2?: string | null;
+            /** Address State */
+            address_state?: string | null;
+            /** Address Zip */
+            address_zip?: string | null;
             /** Email */
             email: string | null;
             /** First Name */
@@ -16846,7 +16878,7 @@ export interface components {
             /** Last Name */
             last_name: string | null;
             /** Phone Number */
-            phone_number: string;
+            phone_number: string | null;
         };
         /**
          * ContactUpdate
@@ -17366,6 +17398,23 @@ export interface components {
             is_active?: boolean | null;
             /** Name */
             name?: string | null;
+        };
+        /**
+         * CustomerReminderResponse
+         * @description Result of attempting to send a stock customer reminder.
+         */
+        CustomerReminderResponse: {
+            /**
+             * Already Sent
+             * @default false
+             */
+            already_sent: boolean;
+            /** Message */
+            message: string;
+            /** Sent To */
+            sent_to?: string | null;
+            /** Success */
+            success: boolean;
         };
         /**
          * DailyLeadCount
@@ -39421,9 +39470,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["CustomerReminderResponse"];
                 };
             };
             /** @description Validation Error */
@@ -47127,6 +47174,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_job_reminder_api_v1_workspaces__workspace_id__jobs__job_id__send_reminder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerReminderResponse"];
                 };
             };
             /** @description Validation Error */

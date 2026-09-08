@@ -96,6 +96,7 @@ export function CalendarPage({ initialJobId }: { initialJobId?: string } = {}) {
   // filter for "only mine" would be a no-op switch, and the queue is dispatch
   // work they cannot act on.
   const canWriteJobs = can("jobs:write");
+  const canReadCrm = can("crm:read");
   const canViewReports = can("reports:view");
 
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -325,14 +326,18 @@ export function CalendarPage({ initialJobId }: { initialJobId?: string } = {}) {
               New job
             </Button>
           )}
-          <Button onClick={() => setIsScheduleOpen(true)}>
-            <Plus className="mr-2 size-4" />
-            New appointment
-          </Button>
+          {canReadCrm && (
+            <Button onClick={() => setIsScheduleOpen(true)}>
+              <Plus className="mr-2 size-4" />
+              New appointment
+            </Button>
+          )}
         </div>
       </div>
 
-      <NewAppointmentDialog open={isScheduleOpen} onOpenChange={setIsScheduleOpen} />
+      {canReadCrm && (
+        <NewAppointmentDialog open={isScheduleOpen} onOpenChange={setIsScheduleOpen} />
+      )}
 
       {/* Mounted only for dispatchers: the create form's customer picker reads
           the workspace contact list, which is 403 for a field technician. */}
@@ -687,6 +692,7 @@ export function CalendarPage({ initialJobId }: { initialJobId?: string } = {}) {
         open={selectedJob !== null}
         onOpenChange={(next) => !next && setSelectedJobId(null)}
         readOnly={!canWriteJobs}
+        calendarOperations
       />
     </div>
   );
