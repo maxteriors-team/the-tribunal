@@ -98,6 +98,18 @@ const FAQS = [
     a: "Yes. We set the schedule with you at the walkthrough so the lights come on and off when you want them, and we show you how to adjust it as the seasons change.",
   },
   {
+    q: "What fixtures do you use?",
+    a: "FX Luminaire, and nothing off a big box shelf. Cheap store-bought fixtures fade, fill with water, and start failing within a season or two. Professional-grade brass and copper hardware is the reason a system still looks right years in.",
+  },
+  {
+    // "Up to" and "depending on the package" are load-bearing: the nine years
+    // is the ceiling on the product warranty, not a blanket promise on every
+    // job, and it covers the fixtures rather than labor. Do not shorten this to
+    // "nine year warranty" — that is a claim the business would have to honor.
+    q: "Is the lighting under warranty?",
+    a: "Yes. Depending on the package you choose, the fixtures carry a product warranty of up to nine years. Which package fits your property, and exactly what it covers, is something we go through with you at the consultation.",
+  },
+  {
     q: "Do you service the system later?",
     a: "We do. Aiming drifts as plantings grow and bulbs eventually age out, so we come back to re-aim, adjust, and repair. Ask about coverage and service options at your consultation.",
   },
