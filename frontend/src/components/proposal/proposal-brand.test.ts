@@ -2,15 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import { proposalAccentVars } from "./proposal-brand";
 
-/** The `--gold` value applied for `brandColor`, or undefined when untouched. */
-function accentColor(brandColor: string): string | undefined {
-  return (proposalAccentVars(brandColor) as Record<string, string>)["--gold"];
+/** The accessible `--gold` text/control color, or undefined when the theme default wins. */
+function accentColor(primary: string, accent?: string): string | undefined {
+  return (proposalAccentVars(primary, accent) as Record<string, string>)["--gold"];
 }
 
 describe("proposalAccentVars", () => {
   it("passes through a brand color that is already readable, unchanged", () => {
     // Maxteriors amber, sampled from the logo: 11:1, needs no adjustment.
     expect(proposalAccentVars("#FCB400")).toEqual({
+      "--brand-primary": "#fcb400",
       "--gold": "#fcb400",
       "--gold-l": "#fdd673",
       "--gold-d": "#b07e00",
@@ -36,7 +37,7 @@ describe("proposalAccentVars", () => {
     // Every workspace that never customized branding reads back `#0F172A`. It
     // would need 42% lightening to be readable and would land on grey, so it is
     // left alone rather than invented into a color nobody chose.
-    expect(proposalAccentVars("#0F172A")).toEqual({});
+    expect(proposalAccentVars("#0F172A")).toEqual({ "--brand-primary": "#0f172a" });
   });
 
   it("keeps the theme default for any color too dark to rescue", () => {
@@ -45,8 +46,26 @@ describe("proposalAccentVars", () => {
     // color that still cannot serve as an accent on a near-black page, which is
     // exactly the case the cap exists to catch.
     for (const tooDark of ["#000000", "#1a1a1a", "#111111", "#304854", "#8B0000"]) {
-      expect(proposalAccentVars(tooDark)).toEqual({});
+      expect(proposalAccentVars(tooDark)).toEqual({
+        "--brand-primary": tooDark.toLowerCase(),
+      });
     }
+  });
+
+  it("uses a readable accent for controls while retaining a dark primary for decoration", () => {
+    expect(proposalAccentVars("#304854", "#FCB400")).toMatchObject({
+      "--brand-primary": "#304854",
+      "--brand-accent": "#fcb400",
+      "--gold": "#fcb400",
+    });
+  });
+
+  it("falls back to a readable primary when the configured accent is unusable", () => {
+    expect(proposalAccentVars("#FCB400", "#111111")).toMatchObject({
+      "--brand-primary": "#fcb400",
+      "--brand-accent": "#111111",
+      "--gold": "#fcb400",
+    });
   });
 
   it("applies light and mid-tone colors that need no or little help", () => {
@@ -68,19 +87,24 @@ describe("proposalAccentVars", () => {
     const pageLuminance = luminance([10, 10, 10]);
 
     for (const candidate of ["#0A7C3A", "#7C3AED", "#2563EB", "#FCB400", "#d4af5a", "#8B0000"]) {
-      const applied = accentColor(candidate);
-      if (!applied) continue;
-      const rgb = [1, 3, 5].map((i) => Number.parseInt(applied.slice(i, i + 2), 16));
-      const ratio =
-        (Math.max(luminance(rgb), pageLuminance) + 0.05) /
-        (Math.min(luminance(rgb), pageLuminance) + 0.05);
-      expect(ratio).toBeGreaterThanOrEqual(4.5);
+      const variables = proposalAccentVars(candidate) as Record<string, string>;
+      for (const applied of [variables["--gold"], variables["--gold-d"]].filter(Boolean)) {
+        const rgb = [1, 3, 5].map((i) => Number.parseInt(applied.slice(i, i + 2), 16));
+        const ratio =
+          (Math.max(luminance(rgb), pageLuminance) + 0.05) /
+          (Math.min(luminance(rgb), pageLuminance) + 0.05);
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 
-  it("ignores a missing or malformed color instead of throwing", () => {
+  it("ignores missing or malformed colors independently instead of throwing", () => {
     for (const bad of [null, undefined, "", "   ", "not-a-color", "#12", "#1234567"]) {
       expect(proposalAccentVars(bad)).toEqual({});
+      expect(proposalAccentVars(bad, "#FCB400")).toMatchObject({
+        "--brand-accent": "#fcb400",
+        "--gold": "#fcb400",
+      });
     }
   });
 

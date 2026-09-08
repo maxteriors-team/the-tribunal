@@ -1,20 +1,8 @@
 /**
- * Map a workspace's configured `brand_color` onto the proposal theme's accent
- * variables, so the client page renders in the operator's brand rather than the
- * built-in gold.
- *
- * `proposal-theme.css` declares these on `.proposal-view`; the object returned
- * here is spread onto that element's `style` so it overrides them per render.
- *
- * The page is near-black and the accent paints text as small as 11px, so a dark
- * brand color would be unreadable rather than merely off-key. Instead of
- * discarding such a color, this preserves the operator's hue and lightens it
- * just enough to clear the contrast floor — measured against the real data, the
- * brand colors in use need 11–15% lightening and stay recognizably themselves.
- *
- * Past a cap the result is no longer the brand (a near-black slate lightens into
- * grey mush), so those keep the built-in gold. That is why this returns an empty
- * object rather than a fallback color: it means "leave the theme alone".
+ * Map validated workspace primary/accent colors onto the public proposal theme.
+ * Raw colors remain available for decorative rules. Text and controls use the
+ * accent, then the primary, only after it clears contrast against the real dark
+ * background. Unusable text colors leave the theme's safe default untouched.
  */
 import type { CSSProperties } from "react";
 
@@ -96,21 +84,38 @@ function toReadable(rgb: RGB): RGB | null {
   return null;
 }
 
-/**
- * Accent CSS variables for `brandColor`, or `{}` to keep the theme default when
- * the color is missing, malformed, or too dark to make readable on the page.
- */
-export function proposalAccentVars(brandColor: string | null | undefined): CSSProperties {
-  const parsed = parseHex(brandColor ?? "");
-  const accent = parsed && toReadable(parsed);
-  if (!accent) return {};
+/** Keep the subdued text accent as dark as possible without losing AA contrast. */
+function readableDarkAccent(rgb: RGB): RGB {
+  for (let step = 30; step >= 0; step -= 1) {
+    const candidate = mix(rgb, 0, step / 100);
+    if (contrast(candidate, PAGE_BACKGROUND) >= MIN_CONTRAST) return candidate;
+  }
+  return rgb;
+}
 
-  const [r, g, b] = accent.map(toChannel) as RGB;
-  return {
-    "--gold": toHex(accent),
-    "--gold-l": toHex(mix(accent, 255, 0.45)),
-    "--gold-d": toHex(mix(accent, 0, 0.3)),
-    "--gold-g": `rgba(${r}, ${g}, ${b}, 0.1)`,
-    "--bdr-g": `rgba(${r}, ${g}, ${b}, 0.3)`,
-  } as CSSProperties;
+/**
+ * Validated workspace brand variables. Raw colors are decorative only; readable
+ * accent variables paint text, controls, and focus indicators on the dark page.
+ */
+export function proposalAccentVars(
+  primaryColor: string | null | undefined,
+  accentColor?: string | null,
+): CSSProperties {
+  const primary = parseHex(primaryColor ?? "");
+  const accent = parseHex(accentColor ?? "");
+  const readableAccent = (accent && toReadable(accent)) || (primary && toReadable(primary));
+  const variables: Record<string, string> = {};
+
+  if (primary) variables["--brand-primary"] = toHex(primary);
+  if (accent) variables["--brand-accent"] = toHex(accent);
+  if (readableAccent) {
+    const [r, g, b] = readableAccent.map(toChannel) as RGB;
+    variables["--gold"] = toHex(readableAccent);
+    variables["--gold-l"] = toHex(mix(readableAccent, 255, 0.45));
+    variables["--gold-d"] = toHex(readableDarkAccent(readableAccent));
+    variables["--gold-g"] = `rgba(${r}, ${g}, ${b}, 0.1)`;
+    variables["--bdr-g"] = `rgba(${r}, ${g}, ${b}, 0.3)`;
+  }
+
+  return variables as CSSProperties;
 }
