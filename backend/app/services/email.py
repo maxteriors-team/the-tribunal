@@ -8,6 +8,8 @@ assemble content blocks, and talk to the provider.
 
 import re
 import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import escape as html_escape
 from typing import TYPE_CHECKING, Any, Protocol, cast
@@ -57,6 +59,46 @@ class _ResendEmails(Protocol):
 class _ResendModule(Protocol):
     api_key: str | None
     Emails: _ResendEmails
+
+
+@dataclass(frozen=True, slots=True)
+class EmailAttachment:
+    """One file to attach to an outbound message.
+
+    ``filename`` is sanitized on construction rather than trusted: it reaches a
+    recipient's mail client and, from there, their filesystem. A name carrying
+    path separators or control characters is a directory-traversal and
+    display-spoofing vector in some clients, so only a flat basename survives.
+    """
+
+    filename: str
+    content: bytes
+    content_type: str = "application/octet-stream"
+
+    def to_resend(self) -> dict[str, Any]:
+        """Serialize for Resend's ``attachments`` parameter.
+
+        Resend's Python SDK expects ``content`` as a list of byte values, which
+        is what the existing ICS attachment senders in this module already do.
+        """
+        return {
+            "filename": _safe_attachment_filename(self.filename),
+            "content": list(self.content),
+            "content_type": self.content_type,
+        }
+
+
+# Everything outside this set is replaced. Deliberately an allowlist: a denylist
+# of "bad" filename characters has to anticipate every client's parsing quirk,
+# and this one only has to preserve names we actually generate.
+_UNSAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _safe_attachment_filename(filename: str) -> str:
+    """Reduce a filename to a flat, inert basename."""
+    base = (filename or "").replace("\\", "/").rsplit("/", maxsplit=1)[-1]
+    cleaned = _UNSAFE_FILENAME_RE.sub("_", base).lstrip(".")[:120]
+    return cleaned or "attachment"
 
 
 def _from_address() -> str:
@@ -224,6 +266,7 @@ async def send_event_notification_email(
     intro: str,
     details: dict[str, str] | None = None,
     idempotency_key: uuid.UUID | None = None,
+    attachments: Sequence[EmailAttachment] | None = None,
 ) -> bool:
     """Email an operator about a new actionable workspace event.
 
@@ -251,6 +294,8 @@ async def send_event_notification_email(
         "html": rendered.html,
         "text": rendered.text,
     }
+    if attachments:
+        params["attachments"] = [item.to_resend() for item in attachments]
 
     response = await _send(params, idempotency_key=idempotency_key)
     if response is None:
@@ -282,14 +327,22 @@ async def send_quote_acceptance_receipt(
     deposit_required: bool = False,
     deposit_amount: float | None = None,
     deposit_paid: bool = False,
+    proposal_payment_choice: str | None = None,
+    proposal_payment_amount: float | None = None,
     proposal_url: str | None = None,
     warranty: str | None = None,
+    attachments: Sequence[EmailAttachment] | None = None,
 ) -> bool:
     """Send the customer a transactional receipt for their accepted quote.
 
     ``warranty`` is the accepted package's own warranty line, so the receipt the
     customer keeps states the coverage they actually bought rather than a
     generic promise.
+
+    ``attachments`` carries the signed agreement PDF when one was generated. It
+    is optional on purpose: PDF rendering is best-effort and must never stop the
+    receipt going out, so a failed render degrades to the previous link-only
+    receipt rather than to no mail at all.
     """
     currency_code = (currency or "USD").upper()
     accepted_label = accepted_at.astimezone(UTC).strftime("%B %-d, %Y at %-I:%M %p UTC")
@@ -299,7 +352,26 @@ async def send_quote_acceptance_receipt(
         f"Accepted: {accepted_label}",
         f"Accepted total: {currency_code} {total:,.2f}",
     ]
-    if deposit_required:
+    if (
+        proposal_payment_choice in {"fifty_percent_down", "pay_in_full"}
+        and proposal_payment_amount is not None
+    ):
+        schedule = (
+            "50% down, balance due at completion"
+            if proposal_payment_choice == "fifty_percent_down"
+            else "Pay in full"
+        )
+        receipt_lines.extend(
+            [
+                f"Payment schedule: {schedule}",
+                f"Due now: {currency_code} {proposal_payment_amount:,.2f}",
+            ]
+        )
+        if proposal_payment_choice == "fifty_percent_down":
+            receipt_lines.append(
+                f"Due at completion: {currency_code} {max(total - proposal_payment_amount, 0):,.2f}"
+            )
+    elif deposit_required:
         deposit_status = "paid" if deposit_paid else "due"
         receipt_lines.append(
             f"Deposit: {currency_code} {(deposit_amount or 0):,.2f} ({deposit_status})"
@@ -345,16 +417,16 @@ async def send_quote_acceptance_receipt(
         blocks=blocks,
         brand=_brand(business_name, logo_url),
     )
-    response = await _send(
-        {
-            "from": _from_address(),
-            "to": [to_email],
-            "subject": f"Receipt for accepted proposal {quote_number}",
-            "html": rendered.html,
-            "text": rendered.text,
-        },
-        idempotency_key=idempotency_key,
-    )
+    params: dict[str, Any] = {
+        "from": _from_address(),
+        "to": [to_email],
+        "subject": f"Receipt for accepted proposal {quote_number}",
+        "html": rendered.html,
+        "text": rendered.text,
+    }
+    if attachments:
+        params["attachments"] = [item.to_resend() for item in attachments]
+    response = await _send(params, idempotency_key=idempotency_key)
     if response is None:
         return False
     logger.info(

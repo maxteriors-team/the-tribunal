@@ -15,6 +15,7 @@ quote -> job -> invoice chain stays auditable.
 import secrets
 import uuid
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
@@ -29,10 +30,13 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
+    inspect,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.encryption import EncryptedString
 from app.db.base import Base
 from app.db.tenancy import WorkspaceScoped
 
@@ -49,7 +53,7 @@ if TYPE_CHECKING:
 # a still-``sent`` quote by the service (never free-set by API clients).
 QUOTE_STATUSES = ("draft", "sent", "approved", "declined", "expired")
 QUOTE_PAYMENT_OPTIONS = ("cash_check", "financing")
-
+PROPOSAL_PAYMENT_CHOICES = ("fifty_percent_down", "pay_in_full")
 
 # Deposit provenance distinguishes Stripe-confirmed card payments from an
 # authenticated operator's offline-payment attestation.
@@ -91,7 +95,34 @@ class Quote(Base, WorkspaceScoped):
             f"payment_option IN {QUOTE_PAYMENT_OPTIONS}",
             name="ck_quotes_payment_option",
         ),
+        CheckConstraint(
+            f"proposal_payment_choice IN {PROPOSAL_PAYMENT_CHOICES}",
+            name="ck_quotes_proposal_payment_choice",
+        ),
+        CheckConstraint(
+            "proposal_payment_amount > 0",
+            name="ck_quotes_proposal_payment_amount_positive",
+        ),
+        CheckConstraint(
+            "(proposal_payment_choice IS NULL AND proposal_payment_amount IS NULL) OR "
+            "(proposal_payment_choice IS NOT NULL AND proposal_payment_amount IS NOT NULL)",
+            name="ck_quotes_proposal_payment_pair",
+        ),
         CheckConstraint("proposal_version >= 1", name="ck_quotes_proposal_version_positive"),
+        CheckConstraint("terms_version >= 1", name="ck_quotes_terms_version_positive"),
+        # A signature is all-or-nothing. A row carrying a typed name but no
+        # e-consent timestamp (or vice versa) is a half-recorded ceremony, and a
+        # half-recorded ceremony rendered into a legal PDF is worse evidence than
+        # none: it asserts a consent event that the data cannot actually support.
+        # Either all five signature facts are present or none are.
+        CheckConstraint(
+            "(signed_name IS NULL AND signed_at IS NULL AND signed_ip IS NULL "
+            "AND econsent_accepted_at IS NULL AND cancellation_acknowledged_at IS NULL) OR "
+            "(signed_name IS NOT NULL AND signed_at IS NOT NULL AND signed_ip IS NOT NULL "
+            "AND econsent_accepted_at IS NOT NULL "
+            "AND cancellation_acknowledged_at IS NOT NULL)",
+            name="ck_quotes_signature_complete",
+        ),
         CheckConstraint("revision_number >= 1", name="ck_quotes_revision_number_positive"),
         CheckConstraint(
             "(revision_of_quote_id IS NULL AND revision_root_quote_id IS NULL "
@@ -259,13 +290,68 @@ class Quote(Base, WorkspaceScoped):
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     terms: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Bumped by ``QuoteService._bump_terms_version`` whenever ``terms`` text
+    # actually changes, so the signed agreement can name *which* revision of the
+    # cancellation terms the customer agreed to. Without a version, "they agreed
+    # to the terms" is unfalsifiable once an operator edits the terms box.
+    terms_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
+    # --- Electronic signature ceremony ------------------------------------
+    # Written once by ``QuoteService.approve_public`` from the customer's own
+    # accept action and never accepted from an operator-facing route: these five
+    # fields are the evidence that a specific human agreed to specific terms at a
+    # specific moment, and an operator who can write them can forge a signature.
+    #
+    # Legacy approvals (and operator-side ``approve_quote``) leave all of them
+    # NULL. That is a deliberate, readable state meaning "accepted, but no
+    # e-signature ceremony was performed" — see ``ck_quotes_signature_complete``.
+    #
+    # The name the customer typed into the signature field. Distinct from
+    # ``proposal_document.narrative.signature_name``, which is the *rep's* typed
+    # name on the prepared proposal and carries no consent whatsoever.
+    signed_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # When they signed. Rendered in the workspace timezone on the agreement PDF,
+    # stored in UTC like every other timestamp here.
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Signer IP, encrypted at rest: it is personal data under GDPR/CCPA whose
+    # only legitimate use is dispute evidence, so it is never listed, never
+    # serialized to a public response, and never leaves an authenticated route.
+    # ``EncryptedString`` matches the precedent in ``app.models.link_click``.
+    signed_ip: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
+    # E-SIGN Act 15 U.S.C. 7001(c) consent-to-electronic-records timestamp.
+    econsent_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Separate affirmative acknowledgement of the cancellation terms, kept apart
+    # from e-consent because they are two distinct disclosures and a dispute
+    # usually turns on the second one.
+    cancellation_acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # The cancellation/terms text **verbatim as displayed at signing**, frozen
+    # here so a later edit to ``terms`` cannot retroactively change what the
+    # customer is recorded as having agreed to.
+    signed_terms_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Structured snapshot of the priced, customer-facing proposal. This remains
     # the historical rendering contract and never trusts client-submitted totals.
     proposal_document: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
-    # Selected contract method. Null means undecided or not applicable.
+    # Selected pricing method used by the internal Permanent Lighting economics.
     payment_option: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Immutable customer-selected card schedule and amount accepted with this proposal.
+    # These fields intentionally remain separate from legacy deposit terms and records.
+    proposal_payment_choice: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    proposal_payment_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    proposal_payment_checkout_session_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    proposal_payment_intent_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    proposal_payment_paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Private Permanent Lighting economics. Never serialize this through normal or
     # public quote responses; the billing-scoped profitability endpoint owns access.
     permanent_pricing_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -363,6 +449,35 @@ class Quote(Base, WorkspaceScoped):
 
     def __repr__(self) -> str:
         return f"<Quote(id={self.id}, number={self.number}, total={self.total} {self.currency})>"
+
+
+def _bump_terms_version(_mapper: object, _connection: object, target: Quote) -> None:
+    """Advance ``terms_version`` whenever the terms text actually changes.
+
+    Hooked at the mapper rather than at the two service call sites that assign
+    ``quote.terms`` today, because the version only means something if it is
+    impossible to change the terms without it moving. A third write path added
+    later (an import, a bulk edit, a migration backfill) inherits this for free;
+    a call-site bump would silently not apply and the signed agreement would cite
+    a terms revision that never existed.
+
+    Only a real value change counts: SQLAlchemy reports the attribute as modified
+    on any assignment, including rewriting the identical string, and an unchanged
+    reassignment must not invent a new revision.
+    """
+    history = inspect(target).attrs.terms.history
+    if not history.has_changes():
+        return
+    before = history.deleted[0] if history.deleted else None
+    after = history.added[0] if history.added else None
+    if (before or None) == (after or None):
+        return
+    target.terms_version = (target.terms_version or 1) + 1
+
+
+# before_update only: a brand-new quote starts at version 1 by column default,
+# and bumping on insert would make every quote's first terms revision "2".
+event.listen(Quote, "before_update", _bump_terms_version)
 
 
 class QuoteLineItem(Base):

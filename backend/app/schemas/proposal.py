@@ -16,12 +16,13 @@ never turns a settings read into a 500.
 """
 
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.pricing import FinancingEstimate
-from app.schemas.quote import QuotePaymentOption
+
+ProposalPaymentChoice = Literal["fifty_percent_down", "pay_in_full"]
 
 # Accepts ``#rgb`` or ``#rrggbb`` (case-insensitive).
 _HEX_COLOR = r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
@@ -142,12 +143,20 @@ class PublicProposalBranding(BaseModel):
     footer: str | None = None
 
 
+class PublicProposalPaymentAmounts(BaseModel):
+    """Server-priced card choices for one exact Permanent Lighting total."""
+
+    fifty_percent_down_amount: float
+    completion_balance: float
+    pay_in_full_amount: float
+
+
 class PublicProposalPackage(BaseModel):
     """One package the client can choose and buy, priced by the server.
 
     Every figure here is derived server-side from the saved proposal snapshot so
-    the page can show "this is the total, this is due today" per package without
-    the browser doing money math. The client only ever sends ``key`` back.
+    the page can show the exact package and card-payment amounts without doing
+    browser money math. The client only ever sends ``key`` back.
     """
 
     key: str
@@ -156,8 +165,9 @@ class PublicProposalPackage(BaseModel):
     # All-in total for this package: its own lines plus the charges, bistro, and
     # category lines that ride along with every package on this quote.
     total: float
-    # Deposit owed today if this package is accepted; null when none is due.
+    # Legacy deposit for non-Permanent proposals.
     deposit_amount: float | None = None
+    payment_options: PublicProposalPaymentAmounts | None = None
     # The package the quote currently sits on (the rep's pick until the client
     # chooses otherwise).
     is_selected: bool = False
@@ -187,7 +197,6 @@ class PublicProposal(BaseModel):
     number: str
     title: str | None = None
     status: str
-    payment_option: QuotePaymentOption | None = None
     # Submitted back on acceptance; rejects a click made against superseded terms.
     proposal_version: int = Field(default=1, ge=1)
     currency: str
@@ -197,6 +206,11 @@ class PublicProposal(BaseModel):
     total: float
     # Available only for newly snapshotted exact Permanent Lighting quotes.
     financing: FinancingEstimate | None = None
+    payment_options: PublicProposalPaymentAmounts | None = None
+    proposal_payment_choice: ProposalPaymentChoice | None = None
+    proposal_payment_amount: float | None = None
+    proposal_payment_paid: bool = False
+    proposal_payment_required: bool = False
     issue_date: date | None = None
     expiry_date: date | None = None
     is_expired: bool = False
@@ -240,33 +254,80 @@ class PublicProposalDecline(BaseModel):
 class PublicProposalApprove(BaseModel):
     """The client's acceptance of one exact rendered proposal version.
 
-    Only the package and payment-method enums cross the wire; all money and terms
-    remain server-owned. The optional version supports only the brief deployment
-    overlap for untouched version-one proposals.
+    Only the package and Permanent Lighting card schedule cross the wire; all money
+    and terms remain server-owned. The optional version supports only the brief
+    deployment overlap for untouched version-one proposals.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     proposal_version: int | None = Field(default=None, ge=1)
     selected_tier: str | None = Field(default=None, max_length=60)
-    payment_option: QuotePaymentOption | None = None
+    payment_option: ProposalPaymentChoice | None = None
+
+    # --- Electronic signature ceremony ------------------------------------
+    # Optional at the schema level only so the field is not required of a
+    # rendered page from the previous deployment. The service still refuses to
+    # record a *partial* ceremony: see ``_signature_from_payload``.
+    #
+    # The timestamps are deliberately NOT accepted from the client. The moment
+    # of consent is server time; a client-supplied timestamp is a value the
+    # signer controls, which is exactly the thing a dispute would contest. The
+    # booleans below say "this was affirmed", and the server says when.
+    signed_name: str | None = Field(default=None, min_length=1, max_length=120)
+    econsent_accepted: bool = False
+    cancellation_acknowledged: bool = False
+
+    @field_validator("signed_name")
+    @classmethod
+    def _clean_signed_name(cls, value: str | None) -> str | None:
+        """Collapse whitespace and reject a name that is only punctuation.
+
+        A signature field submitted as spaces or "..." is not a signature, and
+        storing it would put an empty name on a legal document.
+        """
+        if value is None:
+            return None
+        cleaned = " ".join(value.split())
+        if not any(ch.isalnum() for ch in cleaned):
+            raise ValueError("Type your full name to sign.")
+        return cleaned
 
 
 class PublicProposalActionResult(BaseModel):
-    """Result of a client approve/decline on the public proposal page.
-
-    On approval, ``deposit_required``/``deposit_amount`` let the client page chain
-    straight into the Stripe deposit checkout when money is owed.
-    """
+    """Result of a client approve/decline on the public proposal page."""
 
     token: str
     status: str
     message: str
-    payment_option: QuotePaymentOption | None = None
+    proposal_payment_choice: ProposalPaymentChoice | None = None
+    proposal_payment_required: bool = False
+    proposal_payment_amount: float | None = None
+    # Legacy non-Permanent deposits remain on their original checkout path.
     deposit_required: bool = False
     deposit_amount: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PublicProposalPaymentCheckout(BaseModel):
+    """Hosted Stripe Checkout URL for the accepted Permanent payment choice."""
+
+    url: str
+    amount: float
+    currency: str
+    payment_choice: ProposalPaymentChoice
+
+
+class PublicProposalPaymentStatus(BaseModel):
+    """Provider-reconciled Permanent proposal payment state."""
+
+    payment_paid: bool
+    payment_required: bool
+    payment_amount: float
+    completion_balance: float
+    currency: str
+    payment_choice: ProposalPaymentChoice
 
 
 class PublicProposalDepositCheckout(BaseModel):

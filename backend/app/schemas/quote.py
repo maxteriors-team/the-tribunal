@@ -473,6 +473,25 @@ class PermanentProfitabilityResponse(BaseModel):
     financing: PermanentProfitabilityScenario
 
 
+class SignedAgreementSummary(BaseModel):
+    """What the CRM shows about a stored agreement, without loading it.
+
+    Deliberately omits ``data`` (megabytes per row) and the signer's IP address:
+    the IP is personal data whose only legitimate use is settling a dispute, so
+    it lives on the document itself, behind the authenticated download, rather
+    than in a payload the dashboard fetches on every page open.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    generated_at: datetime
+    filename: str
+    byte_size: int
+    sha256: str
+    terms_version: int
+
+
 class QuoteDetailResponse(QuoteResponse):
     """Quote with its line items and (when built by the wizard) its rich snapshot."""
 
@@ -495,6 +514,10 @@ class QuoteDetailResponse(QuoteResponse):
     # always null on a plain read. Null also means "nothing to ask" — a blocking
     # rule never returns here because it rejects the save instead.
     attach_warning: AttachWarning | None = None
+    # Metadata for the stored signed agreement PDF, when the customer signed.
+    # Never the bytes, and never the signer's IP: this response loads on every
+    # open of the quote detail page and neither belongs in it.
+    signed_agreement: SignedAgreementSummary | None = None
 
 
 class PaginatedQuotes(BaseModel):

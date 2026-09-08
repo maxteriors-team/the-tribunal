@@ -104,7 +104,16 @@ export interface Quote {
   /** Exact validated proposal input; authenticated detail responses only. */
   proposal_input?: components["schemas"]["ProposalWizardPayload"] | null;
   proposal_input_version?: number | null;
+  /**
+   * Metadata for the stored signed agreement PDF, present once the customer has
+   * signed. Never carries the bytes or the signer's IP — download the document
+   * itself for those. Detail responses only.
+   */
+  signed_agreement?: SignedAgreementSummary | null;
 }
+
+/** Stored signed-agreement metadata, without the bytes. */
+export type SignedAgreementSummary = components["schemas"]["SignedAgreementSummary"];
 
 /**
  * A service an operator added to an existing quote.

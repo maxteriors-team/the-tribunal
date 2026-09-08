@@ -1,0 +1,26 @@
+# Railway builds this service with nixpacks (see railway.toml), NOT with the
+# Dockerfile -- the Dockerfile is only used by plain `docker build` and local
+# compose. So system libraries needed at runtime must be declared HERE as well,
+# or they exist locally and are missing in production.
+#
+# These are WeasyPrint's runtime text stack, used to render the signed agreement
+# PDF (app/services/quotes/agreement_pdf.py). The nixpacks base image is Debian,
+# so this is the same package set as the Dockerfile's runtime stage; keep the two
+# lists in sync when either changes.
+#
+# Without these, `import weasyprint` raises OSError at import time. The import in
+# agreement_pdf.py is deliberately lazy and the caller treats a render failure as
+# non-fatal, so a missing library here does NOT crash the API or block approvals
+# -- it silently produces no agreement PDF, which is exactly the kind of quiet
+# failure worth preventing at build time.
+#
+# fonts-dejavu-core is not optional: with no font available Pango renders every
+# glyph as an empty box, producing a blank contract rather than an error.
+[phases.setup]
+aptPkgs = [
+    "...",
+    "libpango-1.0-0",
+    "libpangoft2-1.0-0",
+    "libharfbuzz-subset0",
+    "fonts-dejavu-core",
+]

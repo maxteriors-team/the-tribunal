@@ -44,10 +44,26 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 # curl is needed for HEALTHCHECK; libgomp1 covers scikit-learn/scipy OpenMP runtime.
+#
+# The libpango/libharfbuzz trio is WeasyPrint's runtime text stack, used to render
+# the signed agreement PDF (app/services/quotes/agreement_pdf.py). This is the
+# package list the WeasyPrint docs give for Debian >= 11 installing into a
+# virtualenv from wheels; python:3.12-slim is Debian bookworm. Notes:
+#   - libcairo2 is deliberately absent. WeasyPrint dropped Cairo in v53 and now
+#     draws through pydyf; re-adding it is cargo cult and grows the image.
+#   - libgobject-2.0 and libffi arrive transitively via libpango-1.0-0's
+#     dependency on libglib2.0-0, so they are not listed separately.
+#   - fonts-dejavu-core is NOT optional. With no font installed, Pango has
+#     nothing to fall back to and every glyph renders as an empty box -- a blank
+#     contract, which fails silently and looks like a working deploy.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
         libgomp1 \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libharfbuzz-subset0 \
+        fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 1001 app \
     && useradd --system --uid 1001 --gid app --home-dir /app --shell /usr/sbin/nologin app

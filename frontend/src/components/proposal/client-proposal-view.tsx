@@ -14,8 +14,9 @@
 import { useMemo, useState } from "react";
 
 import { TermsAndConditionsLink } from "@/components/shared/terms-and-conditions-link";
+import type { ProposalSignature } from "@/lib/api/public-proposals";
 import { formatDate } from "@/lib/utils/date";
-import type { PublicProposal, QuotePaymentOption } from "@/types/proposal";
+import type { ProposalPaymentChoice, PublicProposal } from "@/types/proposal";
 
 import {
   ChristmasGuarantee,
@@ -36,6 +37,8 @@ import { PermanentPaymentOptions } from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
 import { proposalAccentVars } from "./proposal-brand";
 import { proposalFontVars } from "./proposal-fonts";
+import { ProposalPaymentPanel } from "./proposal-payment-panel";
+import { EMPTY_SIGNATURE, isSignatureComplete, SignatureBlock } from "./signature-block";
 import {
   StandardExperience,
   StandardGuarantee,
@@ -53,8 +56,12 @@ interface ClientProposalViewProps {
   justDeclined: boolean;
   busy: boolean;
   actionError: boolean;
-  /** Accepts only the server-priced package and, when required, payment enum. */
-  onApprove: (selectedTier: string | null, paymentOption?: QuotePaymentOption | null) => void;
+  /** Accepts only the server-priced package, the payment enum, and the signature. */
+  onApprove: (
+    selectedTier: string | null,
+    paymentOption: ProposalPaymentChoice | null | undefined,
+    signature: ProposalSignature,
+  ) => void;
   onDecline: (reason: string) => void;
 }
 
@@ -73,9 +80,13 @@ export function ClientProposalView({
 
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
-  const [paymentOption, setPaymentOption] = useState<QuotePaymentOption | null>(
-    data.payment_option ?? null,
+  const [paymentOption, setPaymentOption] = useState<ProposalPaymentChoice | null>(
+    data.proposal_payment_choice ?? null,
   );
+  const [signature, setSignature] = useState<ProposalSignature>(EMPTY_SIGNATURE);
+  // Errors stay hidden until the first submit attempt, so the form does not
+  // greet the customer with three complaints about fields they never reached.
+  const [signatureAttempted, setSignatureAttempted] = useState(false);
 
   // Packages the client may pick between, priced server-side. One package is
   // not a choice, so the cards stay presentational in that case.
@@ -142,11 +153,10 @@ export function ClientProposalView({
   const festive = isChristmasProposal(doc);
   const valueProps = proposalValueProps(doc);
 
-  // Only a server-owned exact Permanent snapshot carries a plan number.
-  const paymentFinancing =
-    doc.service === "permanent" && data.financing?.plan_number ? data.financing : null;
-  const paymentOptionRequired = paymentFinancing !== null;
-  const priceLabel = "Installed \u00b7 All-inclusive";
+  const paymentOptions = chosenPackage?.payment_options ?? data.payment_options ?? null;
+  const paymentFinancing = doc.service === "permanent" && data.financing ? data.financing : null;
+  const paymentOptionRequired = doc.service === "permanent" && paymentOptions !== null;
+  const priceLabel = "Installed · All-inclusive";
 
   const carePlan = doc.care_plan;
   const careSelected = carePlan
@@ -200,8 +210,7 @@ export function ClientProposalView({
     .filter(Boolean)
     .join(" \u00b7 ");
 
-  // The accept button names what's being accepted and what it costs today, so
-  // the last click is never ambiguous about which package was bought.
+  // The final click names the exact server-owned amount selected for today.
   const chosenLabel = choosable ? (chosenPackage?.name ?? chosenPackage?.label ?? null) : null;
   const ctaDeposit = choosable
     ? (chosenPackage?.deposit_amount ?? null)
@@ -210,30 +219,42 @@ export function ClientProposalView({
       : null;
   const visualPrice = chosenPackage?.total ?? data.total;
   // Sent as a ballpark instead of one firm number. Only the headline reads as a
-  // range: the deposit, the accept button, and anything the customer is charged
-  // stay on the exact quoted total, which is the bottom of that range.
+  // range; every selectable payment amount remains exact and server-owned.
   const priceRange = chosenPackage ? null : data.price_range;
+  const selectedPaymentAmount =
+    paymentOption === "fifty_percent_down"
+      ? paymentOptions?.fifty_percent_down_amount
+      : paymentOption === "pay_in_full"
+        ? paymentOptions?.pay_in_full_amount
+        : null;
   const acceptActionLabel =
-    ctaDeposit && ctaDeposit > 0
-      ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} & Pay ${fmt(ctaDeposit)}`
-      : chosenLabel
-        ? `Accept ${chosenLabel}`
-        : "Approve Proposal";
+    paymentOptionRequired && selectedPaymentAmount
+      ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} & Pay ${fmt(selectedPaymentAmount)}`
+      : ctaDeposit && ctaDeposit > 0
+        ? `Accept${chosenLabel ? ` ${chosenLabel}` : ""} & Pay ${fmt(ctaDeposit)}`
+        : chosenLabel
+          ? `Accept ${chosenLabel}`
+          : "Approve Proposal";
   const paymentOptionMissing = paymentOptionRequired && paymentOption === null;
+  const signatureComplete = isSignatureComplete(signature);
   const submitApproval = () => {
     if (paymentOptionMissing) {
       document.getElementById("payment-options")?.scrollIntoView({ behavior: "smooth" });
       return;
     }
-    if (paymentOptionRequired) onApprove(selectedTier, paymentOption);
-    else onApprove(selectedTier);
+    if (!signatureComplete) {
+      setSignatureAttempted(true);
+      document.getElementById("proposal-signature")?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    onApprove(selectedTier, paymentOptionRequired ? paymentOption : undefined, signature);
   };
   const primaryActionLabel = paymentOptionMissing ? "Choose Payment Method" : acceptActionLabel;
 
   return (
     <div
       className={`proposal-view${festive ? " is-christmas" : ""} ${proposalFontVars}`}
-      style={proposalAccentVars(branding.brand_color)}
+      style={proposalAccentVars(branding.brand_color, branding.accent_color)}
     >
       <div className="present-nav no-print">
         <div className="present-nav-brand">{`${brandName} · Proposal ${data.number}`}</div>
@@ -358,9 +379,13 @@ export function ClientProposalView({
                   ? `Approving locks in ${fmt(priceRange.low)}; anything above that is quoted to you first.`
                   : null}
                 {priceRange ? " " : null}
-                {ctaDeposit && ctaDeposit > 0
-                  ? `${fmt(ctaDeposit)} due today; the remaining balance follows your proposal terms.`
-                  : "No online deposit is due today."}
+                {paymentOptionRequired
+                  ? paymentOption && selectedPaymentAmount
+                    ? `${fmt(selectedPaymentAmount)} due today with your selected payment schedule.`
+                    : "Choose 50% down or pay in full below."
+                  : ctaDeposit && ctaDeposit > 0
+                    ? `${fmt(ctaDeposit)} due today; the remaining balance follows your proposal terms.`
+                    : "No online deposit is due today."}
               </div>
             </div>
             <div className="pmock-purchase-action no-print">
@@ -420,7 +445,8 @@ export function ClientProposalView({
                   : "Custom Quote";
               const isSelected = hasValue && tier.key === selectedTier;
               const isChoice = choosable && Boolean(offer);
-              const dueToday = offer?.deposit_amount ?? null;
+              const dueToday =
+                offer?.payment_options?.fifty_percent_down_amount ?? offer?.deposit_amount ?? null;
               return (
                 <div
                   className={`pkg-card ${tier.key}${isSelected ? " pp-selected" : ""}${isChoice ? " pp-choosable" : ""}`}
@@ -445,7 +471,11 @@ export function ClientProposalView({
                       <div className="pkg-price">{lead}</div>
                       <div className="pkg-price-label">{priceLabel}</div>
                       {dueToday && dueToday > 0 ? (
-                        <div className="pkg-subprice">{`${fmt(dueToday)} due today to start`}</div>
+                        <div className="pkg-subprice">
+                          {offer?.payment_options
+                            ? `${fmt(dueToday)} with 50% down`
+                            : `${fmt(dueToday)} due today to start`}
+                        </div>
                       ) : null}
                     </div>
                     {tier.warranty ? (
@@ -481,18 +511,22 @@ export function ClientProposalView({
           </p>
         ) : null}
 
-        <PermanentPaymentOptions
-          financing={paymentFinancing}
-          contractPrice={data.total}
-          currency={data.currency}
-          value={paymentOption}
-          onChange={setPaymentOption}
-          disabled={busy || decided}
-        />
-        {paymentOptionMissing ? (
-          <p className="payment-selection-required" role="status">
-            Select a payment method before accepting this proposal.
-          </p>
+        {!decided && paymentOptionRequired ? (
+          <>
+            <PermanentPaymentOptions
+              financing={paymentFinancing}
+              paymentOptions={paymentOptions}
+              currency={data.currency}
+              value={paymentOption}
+              onChange={setPaymentOption}
+              disabled={busy}
+            />
+            {paymentOptionMissing ? (
+              <p className="payment-selection-required" role="status">
+                Select 50% down or pay in full before accepting this proposal.
+              </p>
+            ) : null}
+          </>
         ) : null}
 
         {shownCharges.length ? (
@@ -736,23 +770,32 @@ export function ClientProposalView({
           </div>
         ) : null}
 
-        {/* While a package is still up for grabs, the deposit is whatever the
-            client's current choice costs, and paying goes through accept so
-            they're never charged for a package they didn't pick. */}
-        <DepositPanel
-          data={data}
-          amountDue={choosable ? (chosenPackage?.deposit_amount ?? null) : undefined}
-          onPayInstead={choosable || paymentOptionRequired ? submitApproval : undefined}
-          payLabel={
-            paymentOptionMissing
-              ? "Select Payment Method First"
-              : choosable || paymentOptionRequired
-                ? "Accept & Pay Deposit"
-                : undefined
-          }
-          disabled={paymentOptionMissing}
-          busy={busy}
-        />
+        <ProposalPaymentPanel data={data} />
+
+        {/* Payment-option cards already carry their own payment timing. */}
+        {!paymentOptionRequired ? (
+          <DepositPanel
+            data={data}
+            amountDue={choosable ? (chosenPackage?.deposit_amount ?? null) : undefined}
+            onPayInstead={choosable ? submitApproval : undefined}
+            payLabel={choosable ? "Accept & Pay Deposit" : undefined}
+            busy={busy}
+          />
+        ) : null}
+
+        {/* The signing ceremony sits immediately above the accept button, so the
+            affirmations and the action they authorize read as one unit. */}
+        {!decided ? (
+          <div id="proposal-signature" className="no-print">
+            <SignatureBlock
+              value={signature}
+              onChange={setSignature}
+              terms={data.terms}
+              disabled={busy}
+              showErrors={signatureAttempted}
+            />
+          </div>
+        ) : null}
 
         <div className="cta-section no-print">
           {decided ? (

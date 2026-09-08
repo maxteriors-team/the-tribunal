@@ -197,6 +197,7 @@ from app.models.roleplay import (
 from app.models.roofline_comparison import RooflineComparison
 from app.models.segment import Segment
 from app.models.short_link import ShortLink
+from app.models.signed_agreement_document import SignedAgreementDocument
 from app.models.tag import ContactTag, Tag
 from app.models.user import User
 from app.models.webhook_signature import SeenWebhookSignature
@@ -348,6 +349,7 @@ __all__ = [
     "RooflineComparison",
     "Segment",
     "ShortLink",
+    "SignedAgreementDocument",
     "DripCampaign",
     "DripEnrollment",
     "DeviceToken",

@@ -13,7 +13,7 @@ from datetime import UTC
 from typing import Annotated, Literal
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import load_only
 
@@ -27,13 +27,16 @@ from app.api.deps import (
 )
 from app.api.service_errors import ServiceErrorRoute
 from app.api.v1.contact_attachments import content_disposition, sanitize_filename
+from app.core.config import settings
 from app.core.permissions import Capability, quote_owner_scope, role_can
+from app.core.utils import get_client_ip
 from app.models.quote import Quote
 from app.models.quote_handoff_image import (
     MAX_HANDOFF_IMAGE_BYTES,
     MAX_HANDOFF_IMAGES_PER_QUOTE,
     QuoteHandoffImage,
 )
+from app.models.signed_agreement_document import SignedAgreementDocument
 from app.schemas.estimate import (
     ComparisonDeliverRequest,
     ComparisonDeliverResult,
@@ -55,6 +58,8 @@ from app.schemas.proposal import (
     PublicProposalDecline,
     PublicProposalDepositCheckout,
     PublicProposalDepositStatus,
+    PublicProposalPaymentCheckout,
+    PublicProposalPaymentStatus,
 )
 from app.schemas.proposal_wizard import ProposalDocument, ProposalWizardPayload
 from app.schemas.quote import (
@@ -87,6 +92,7 @@ from app.services.payments.quote_deposit_service import record_manual_deposit
 from app.services.quotes import QuoteService
 from app.services.quotes.ownership import quote_owner_predicate
 from app.services.quotes.proposal_pricing import BistroPricingConfigurationError
+from app.services.quotes.signature import SignatureCeremony
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(route_class=ServiceErrorRoute)
@@ -969,6 +975,53 @@ async def remove_line_item(
     return await service.remove_line_item(workspace_id, quote_id, item_id)
 
 
+@router.get("/{quote_id}/signed-agreement/download")
+async def download_signed_agreement(
+    workspace_id: uuid.UUID,
+    quote_id: uuid.UUID,
+    _quote: ScopedQuote,
+    db: DB,
+) -> Response:
+    """Serve the stored signed agreement PDF to an authorized operator.
+
+    **Deliberately on the authenticated router only.** This document carries the
+    signer's IP address and the full completion certificate, so it is not
+    reachable by the public proposal token that the customer's own link uses --
+    that token is emailed, forwardable, and unauthenticated. ``ScopedQuote``
+    applies workspace scoping, the quote-read capability, and the owner-scope
+    predicate before this body runs, so a member who cannot see the quote cannot
+    see its agreement either.
+
+    Always ``Content-Disposition: attachment``: a PDF rendered inline in the
+    app's own origin is an unnecessary script-execution surface, and this file
+    is meant to be saved anyway.
+    """
+    document = (
+        await db.execute(
+            select(SignedAgreementDocument).where(
+                SignedAgreementDocument.quote_id == quote_id,
+                SignedAgreementDocument.workspace_id == workspace_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No signed agreement for this quote"
+        )
+    filename = sanitize_filename(document.filename)
+    return Response(
+        content=document.data,
+        media_type=document.content_type or "application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            # The bytes never change, but they are workspace-private: a shared
+            # cache must not be allowed to hold a copy.
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public client proposal (no auth, token-keyed)
 # ---------------------------------------------------------------------------
@@ -983,18 +1036,34 @@ async def approve_public_proposal(
     token: str,
     db: DB,
     payload: PublicProposalApprove,
+    request: Request,
 ) -> PublicProposalActionResult:
     """Client approves their proposal (idempotent; expired/declined rejected).
 
     An optional ``selected_tier`` names the package they chose; the server
     re-derives that package's lines, totals, and deposit from the saved snapshot
     before approving. The rendered proposal version is required to prevent accepting stale terms.
+
+    The signer's IP comes from :func:`get_client_ip`, never from the payload:
+    the whole value of an IP as evidence is that the signer did not choose it.
     """
-    return await QuoteService(db).approve_public(
+    service = QuoteService(db)
+    signature = SignatureCeremony(
+        signed_name=payload.signed_name,
+        econsent_accepted=payload.econsent_accepted,
+        cancellation_acknowledged=payload.cancellation_acknowledged,
+        ip_address=get_client_ip(request, settings.trusted_proxies),
+        # Resolved server-side from the same expression the public proposal page
+        # renders, so the snapshot is the text that was actually on screen -- not
+        # a copy the client posted back, which a signer could rewrite.
+        terms_snapshot=await service.public_terms_text(token),
+    )
+    return await service.approve_public(
         token,
         proposal_version=payload.proposal_version,
         selected_tier=payload.selected_tier,
         payment_option=payload.payment_option,
+        signature=signature,
     )
 
 
@@ -1040,6 +1109,48 @@ async def create_deposit_checkout(token: str, db: DB) -> PublicProposalDepositCh
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return PublicProposalDepositCheckout(
         url=checkout.url, amount=checkout.amount, currency=checkout.currency
+    )
+
+
+@public_router.post("/{token}/payment-checkout", response_model=PublicProposalPaymentCheckout)
+async def create_proposal_payment_checkout(token: str, db: DB) -> PublicProposalPaymentCheckout:
+    """Start hosted checkout for the approved Permanent proposal payment."""
+    from app.services.payments.proposal_payment_service import (
+        ProposalPaymentError,
+        create_proposal_payment_checkout_session,
+    )
+
+    try:
+        checkout = await create_proposal_payment_checkout_session(db, token)
+    except ProposalPaymentError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return PublicProposalPaymentCheckout(
+        url=checkout.url,
+        amount=checkout.amount,
+        currency=checkout.currency,
+        payment_choice=checkout.payment_choice,
+    )
+
+
+@public_router.post("/{token}/payment-status", response_model=PublicProposalPaymentStatus)
+async def reconcile_proposal_payment_status(token: str, db: DB) -> PublicProposalPaymentStatus:
+    """Reconcile the stored Stripe Session as a webhook backstop."""
+    from app.services.payments.proposal_payment_service import (
+        ProposalPaymentError,
+        reconcile_proposal_payment,
+    )
+
+    try:
+        payment = await reconcile_proposal_payment(db, token)
+    except ProposalPaymentError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return PublicProposalPaymentStatus(
+        payment_paid=payment.payment_paid,
+        payment_required=payment.payment_required,
+        payment_amount=payment.payment_amount,
+        completion_balance=payment.completion_balance,
+        currency=payment.currency,
+        payment_choice=payment.payment_choice,
     )
 
 

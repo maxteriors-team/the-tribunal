@@ -26,7 +26,7 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from app.api.crud import get_nested_or_404, get_or_404
 from app.core.config import settings
@@ -40,6 +40,10 @@ from app.models.lighting_project import LightingProject
 from app.models.opportunity import Opportunity
 from app.models.quote import Quote, QuoteLineItem, generate_quote_token
 from app.models.roofline_comparison import RooflineComparison
+from app.models.signed_agreement_document import (
+    AGREEMENT_METADATA_COLUMNS,
+    SignedAgreementDocument,
+)
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.attach_rules import AttachDismissal, AttachDismissalRequest, AttachWarning
@@ -77,11 +81,13 @@ from app.schemas.pricing import (
     PricingSettings,
 )
 from app.schemas.proposal import (
+    ProposalPaymentChoice,
     PublicProposal,
     PublicProposalActionResult,
     PublicProposalBranding,
     PublicProposalLineItem,
     PublicProposalPackage,
+    PublicProposalPaymentAmounts,
     PublicProposalPriceRange,
 )
 from app.schemas.proposal_wizard import (
@@ -109,6 +115,7 @@ from app.schemas.quote import (
     QuoteServiceCreate,
     QuoteServiceResponse,
     QuoteUpdate,
+    SignedAgreementSummary,
 )
 from app.services.automations.events import (
     EVENT_QUOTE_APPROVED,
@@ -132,6 +139,7 @@ from app.services.opportunities.quote_opportunity import (
     mark_quote_approved_on_pipeline,
     place_quote_on_pipeline,
 )
+from app.services.quotes.agreement_document import agreement_attachment, ensure_signed_agreement
 from app.services.quotes.attach_metrics import compute_attach_metrics
 from app.services.quotes.attach_rules import evaluate_attach_rules
 from app.services.quotes.attach_rules_config import get_attach_rules_config
@@ -157,6 +165,7 @@ from app.services.quotes.proposal_pricing import (
 )
 from app.services.quotes.proposal_template import get_proposal_template
 from app.services.quotes.quote_expiry import EXPIRED_STATUS, overdue_sent_predicate
+from app.services.quotes.signature import SignatureCeremony
 from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProvisioner
 from app.services.workspaces.membership import assert_active_workspace_member
 
@@ -758,7 +767,36 @@ class QuoteService:
         self._decorate_wizard_edit_state(response, quote)
         response.financing = self._financing_for_quote(quote)
         response.services = self._services_for(quote)
+        response.signed_agreement = await self._signed_agreement_summary(quote)
         return response
+
+    async def _signed_agreement_summary(self, quote: Quote) -> SignedAgreementSummary | None:
+        """Agreement metadata for the detail page, without touching ``data``.
+
+        Two separate protections against making every quote read expensive:
+
+        1. An unsigned quote cannot have an agreement --
+           :func:`generate_signed_agreement` refuses to write one without a
+           signature, and ``signed_at`` is never cleared -- so the query is
+           skipped outright. Drafts, sent quotes, and every pre-ceremony
+           approval take no extra round trip at all.
+        2. When it does run, ``load_only`` keeps it to the metadata columns.
+           Selecting the row whole would pull an entire PDF out of Postgres just
+           to render a link label.
+        """
+        if quote.signed_at is None:
+            return None
+        row = (
+            await self.db.execute(
+                select(SignedAgreementDocument)
+                .options(load_only(*AGREEMENT_METADATA_COLUMNS, raiseload=True))
+                .where(
+                    SignedAgreementDocument.quote_id == quote.id,
+                    SignedAgreementDocument.workspace_id == quote.workspace_id,
+                )
+            )
+        ).scalar_one_or_none()
+        return SignedAgreementSummary.model_validate(row) if row is not None else None
 
     def _services_for(self, quote: Quote) -> list[QuoteServiceResponse]:
         """Project this quote's operator-addable services into one shape.
@@ -1681,6 +1719,60 @@ class QuoteService:
             )
         quote.payment_option = requested
 
+    @classmethod
+    def _apply_proposal_payment_choice(
+        cls,
+        quote: Quote,
+        requested: ProposalPaymentChoice | None,
+        *,
+        retry: bool,
+    ) -> None:
+        """Persist one server-priced Permanent payment choice, or fail closed."""
+        eligible = (
+            cls._proposal_service(quote) == "permanent"
+            and quote.permanent_pricing_snapshot is not None
+        )
+        if not eligible:
+            if requested is not None:
+                raise ValidationError(
+                    "Card-payment selection is available only for Permanent Lighting proposals."
+                )
+            return
+
+        cls._permanent_snapshot(quote, strict=True)
+        if requested not in {"fifty_percent_down", "pay_in_full"}:
+            if retry:
+                raise ConflictError(
+                    "Repeat approval using the accepted payment choice.",
+                    code="proposal_payment_choice_mismatch",
+                )
+            raise ValidationError("Choose 50% down or pay in full before approval.")
+
+        if retry:
+            if quote.proposal_payment_choice != requested or quote.proposal_payment_amount is None:
+                raise ConflictError(
+                    "An approved proposal's payment choice cannot be changed.",
+                    code="proposal_payment_choice_mismatch",
+                )
+            return
+
+        full = cls._money(quote.total or 0)
+        if full <= 0:
+            raise ValidationError("This proposal has no payable total.")
+        amount = cls._money(full / 2) if requested == "fifty_percent_down" else full
+        if quote.proposal_payment_choice is not None:
+            if (
+                quote.proposal_payment_choice != requested
+                or quote.proposal_payment_amount != amount
+            ):
+                raise ConflictError(
+                    "This proposal already has a different payment choice.",
+                    code="proposal_payment_choice_mismatch",
+                )
+            return
+        quote.proposal_payment_choice = requested
+        quote.proposal_payment_amount = amount
+
     async def approve_quote(
         self,
         workspace_id: uuid.UUID,
@@ -1701,6 +1793,20 @@ class QuoteService:
         quote = result.scalar_one_or_none()
         if quote is None:
             raise NotFoundError("Quote not found")
+        return await self._approve_locked_quote(
+            quote,
+            expected_proposal_version=expected_proposal_version,
+            payment_option=payment_option,
+        )
+
+    async def _approve_locked_quote(
+        self,
+        quote: Quote,
+        *,
+        expected_proposal_version: int | None,
+        payment_option: QuotePaymentOption | None,
+    ) -> QuoteDetailResponse:
+        """Approve a row already locked by this transaction."""
         if (
             expected_proposal_version is not None
             and quote.proposal_version != expected_proposal_version
@@ -1722,7 +1828,7 @@ class QuoteService:
         self._apply_approval_payment_option(quote, payment_option, retry=False)
         quote.status = "approved"
         quote.approved_at = datetime.now(UTC)
-        await mark_quote_approved_on_pipeline(self.db, workspace_id, quote)
+        await mark_quote_approved_on_pipeline(self.db, quote.workspace_id, quote)
         await self._emit_lifecycle_event(quote, EVENT_QUOTE_APPROVED)
         # Approval is the moment the client signed up, so their Care Plan or
         # Christmas season becomes a Service Plan here, *inside* the approval
@@ -1732,7 +1838,11 @@ class QuoteService:
         await ServicePlanProvisioner(self.db).provision_from_quote(quote)
         await self.db.commit()
         await self.db.refresh(quote, ["line_items"])
-        self.log.info("quote_approved", quote_id=str(quote.id), workspace_id=str(workspace_id))
+        self.log.info(
+            "quote_approved",
+            quote_id=str(quote.id),
+            workspace_id=str(quote.workspace_id),
+        )
         await self._notify_fulfillment_parts(quote)
         return await self._detail_response(quote)
 
@@ -2056,6 +2166,23 @@ class QuoteService:
             return None
         return PublicProposalPriceRange(low=total, high=high)
 
+    @classmethod
+    def _public_payment_options(
+        cls, quote: Quote, total: float | Decimal
+    ) -> PublicProposalPaymentAmounts | None:
+        """Return exact server-rounded card amounts for eligible Permanent proposals."""
+        if cls._permanent_snapshot(quote) is None:
+            return None
+        full = cls._money(total)
+        if full <= 0:
+            return None
+        down = cls._money(full / 2)
+        return PublicProposalPaymentAmounts(
+            fifty_percent_down_amount=float(down),
+            completion_balance=float(full - down),
+            pay_in_full_amount=float(full),
+        )
+
     async def get_public_proposal(self, token: str) -> PublicProposal:
         """Return the read-only, safe-fields-only proposal for a public token."""
         quote = await self._load_by_token(token)
@@ -2082,12 +2209,6 @@ class QuoteService:
             number=quote.number,
             title=quote.title,
             status=quote.status,
-            payment_option=cast(
-                QuotePaymentOption | None,
-                quote.payment_option
-                if quote.payment_option in {"cash_check", "financing"}
-                else None,
-            ),
             proposal_version=quote.proposal_version or 1,
             currency=quote.currency,
             subtotal=float(quote.subtotal or 0),
@@ -2095,6 +2216,22 @@ class QuoteService:
             discount_amount=float(quote.discount_amount or 0),
             total=total,
             financing=self._financing_for_quote(quote),
+            payment_options=self._public_payment_options(quote, total),
+            proposal_payment_choice=cast(
+                ProposalPaymentChoice | None,
+                quote.proposal_payment_choice
+                if quote.proposal_payment_choice in {"fifty_percent_down", "pay_in_full"}
+                else None,
+            ),
+            proposal_payment_amount=(
+                float(quote.proposal_payment_amount)
+                if quote.proposal_payment_amount is not None
+                else None
+            ),
+            proposal_payment_paid=quote.proposal_payment_paid_at is not None,
+            proposal_payment_required=(
+                quote.proposal_payment_choice is not None and quote.proposal_payment_paid_at is None
+            ),
             issue_date=quote.issue_date,
             expiry_date=quote.expiry_date,
             is_expired=quote.status == "expired",
@@ -2185,12 +2322,15 @@ class QuoteService:
                     name=view.name,
                     total=selection.grand_financed,
                     deposit_amount=deposit_for_total(quote, selection.grand_financed),
+                    payment_options=self._public_payment_options(quote, selection.grand_financed),
                     is_selected=key == document.selected_tier,
                 )
             )
         return packages
 
-    async def _apply_client_package(self, quote: Quote, tier_key: str) -> None:
+    async def _apply_client_package(
+        self, quote: Quote, tier_key: str, *, commit: bool = True
+    ) -> None:
         """Re-point a quote at the package the client chose, before approval.
 
         The client sends a package *key*; every line and every figure is
@@ -2216,7 +2356,9 @@ class QuoteService:
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 
-        await self._persist_repriced_document(quote, updated, line_items, increment_version=False)
+        await self._persist_repriced_document(
+            quote, updated, line_items, increment_version=False, commit=commit
+        )
         self.log.info(
             "quote_package_selected_by_client",
             quote_id=str(quote.id),
@@ -2232,8 +2374,9 @@ class QuoteService:
         line_items: list[QuoteLineItemCreate],
         *,
         increment_version: bool = True,
+        commit: bool = True,
     ) -> None:
-        """Write a repriced snapshot and the lines it derives, as one commit.
+        """Write a repriced snapshot and its lines in one transaction.
 
         Every line is replaced rather than diffed, because on a wizard quote the
         line items are output, not state: the document is the only thing that is
@@ -2250,8 +2393,9 @@ class QuoteService:
         self._recompute_totals(quote)
         if increment_version:
             quote.proposal_version += 1
-        await self.db.commit()
-        await self.db.refresh(quote, ["line_items"])
+        if commit:
+            await self.db.commit()
+            await self.db.refresh(quote, ["line_items"])
 
     # ------------------------------------------------------------------
     # Services (post-save adds)
@@ -2435,22 +2579,68 @@ class QuoteService:
             raise ValidationError("This quote can no longer be changed.")
         return get_pricing_config(workspace)
 
+    def _record_signature_ceremony(self, quote: Quote, signature: SignatureCeremony | None) -> None:
+        """Freeze the e-signature onto a quote that is about to be approved.
+
+        Written only on the transition into ``approved``. Re-approving an
+        already-signed quote is a no-op here: the customer signed once, and the
+        recorded moment of consent must not drift forward every time a
+        double-clicked accept or a payment retry re-enters this path.
+
+        The terms text is snapshotted from what the customer was actually shown
+        -- ``quote.terms`` falling back to the workspace template default, the
+        same expression the public proposal page renders -- so a later edit to
+        either cannot retroactively change what they agreed to.
+
+        A partial ceremony is refused outright rather than half-stored: a typed
+        name with no affirmations is not consent, and a legal document that
+        prints it as though it were is worse than one that omits it.
+        """
+        if signature is None or quote.status == "approved" or quote.signed_at is not None:
+            return
+        if not signature.is_complete:
+            self.log.info(
+                "quote_signature_incomplete",
+                quote_id=str(quote.id),
+                workspace_id=str(quote.workspace_id),
+                has_name=bool(signature.signed_name),
+                econsent=signature.econsent_accepted,
+                cancellation=signature.cancellation_acknowledged,
+            )
+            return
+
+        now = datetime.now(UTC)
+        quote.signed_name = signature.signed_name
+        quote.signed_at = now
+        quote.signed_ip = signature.ip_address
+        # Both affirmations were made in the same submit, so they share the
+        # server's single observation of "now" rather than inventing an ordering
+        # between two checkboxes that were ticked before the request was sent.
+        quote.econsent_accepted_at = now
+        quote.cancellation_acknowledged_at = now
+        quote.signed_terms_snapshot = signature.terms_snapshot
+
     async def approve_public(
         self,
         token: str,
         *,
         proposal_version: int | None,
         selected_tier: str | None = None,
-        payment_option: QuotePaymentOption | None = None,
+        payment_option: ProposalPaymentChoice | None = None,
+        signature: SignatureCeremony | None = None,
     ) -> PublicProposalActionResult:
         """Client approves their proposal via the public token (idempotent).
 
-        When the client picked a package, the quote is re-pointed at it *before*
-        approval so the approved quote, its line items, and the deposit Stripe
-        charges all describe the package they actually chose.
+        The row remains locked while an optional package is re-priced, the exact
+        server-owned payment amount is persisted, and approval side effects commit.
+        An expired or declined proposal still fails through the shared lifecycle guards.
 
-        Reuses the operator approve path so the same lifecycle guards and
-        automation event fire; an expired/declined proposal is rejected there.
+        ``signature`` carries the e-signature ceremony (typed name, the two
+        affirmations, and the request IP). It is recorded inside the same locked
+        transaction as the approval, so a quote can never be left approved with
+        the signature lost, and only on the transition *into* ``approved`` -- a
+        re-approval of an already-signed quote keeps the original signature
+        rather than restamping it with a later timestamp.
         """
         quote = await self._load_by_token(token, for_update=True)
         expected_version = proposal_version
@@ -2479,25 +2669,53 @@ class QuoteService:
         # Re-pointing an already-decided selectable quote would rewrite a signed
         # agreement, so a late package switch keeps the existing idempotent behavior.
         if selected_tier and customer_can_select_package and quote.status in {"draft", "sent"}:
-            await self._apply_client_package(quote, selected_tier)
-        result = await self.approve_quote(
-            quote.workspace_id,
-            quote.id,
-            expected_proposal_version=expected_version,
-            payment_option=payment_option,
+            await self._apply_client_package(quote, selected_tier, commit=False)
+
+        is_permanent = (
+            self._proposal_service(quote) == "permanent"
+            and quote.permanent_pricing_snapshot is not None
         )
-        # Surface any unpaid deposit so the client page can hand off to checkout.
+        self._apply_proposal_payment_choice(quote, payment_option, retry=quote.status == "approved")
+        # Recorded before the approval call so the signature and the status
+        # change land in one transaction: an approved quote with no signature
+        # would be indistinguishable from a legacy one-click acceptance.
+        self._record_signature_ceremony(quote, signature)
+        result = await self._approve_locked_quote(
+            quote,
+            expected_proposal_version=expected_version,
+            payment_option="cash_check" if is_permanent else None,
+        )
+        # Legacy deposits continue only for non-Permanent proposals.
         from app.services.payments.quote_deposit_service import deposit_amount as resolve_amount
 
-        due = resolve_amount(quote)
+        due = None if is_permanent else resolve_amount(quote)
         unpaid = due is not None and quote.deposit_paid_at is None
         if should_send_receipt:
-            await self._send_acceptance_receipt(quote, deposit_amount=due)
+            # Post-commit and best-effort in both directions: the agreement PDF
+            # is generated first so the receipt can carry it as an attachment,
+            # but a render failure only means the customer gets the same
+            # link-only receipt they got before this feature existed. Neither
+            # call can roll back the approval -- both swallow their own errors.
+            agreement = await ensure_signed_agreement(self.db, quote)
+            await self._send_acceptance_receipt(quote, deposit_amount=due, agreement=agreement)
         return PublicProposalActionResult(
             token=token,
             status=result.status,
             message="Thank you! Your proposal has been approved.",
-            payment_option=result.payment_option,
+            proposal_payment_choice=cast(
+                ProposalPaymentChoice | None,
+                quote.proposal_payment_choice
+                if quote.proposal_payment_choice in {"fifty_percent_down", "pay_in_full"}
+                else None,
+            ),
+            proposal_payment_required=(
+                quote.proposal_payment_choice is not None and quote.proposal_payment_paid_at is None
+            ),
+            proposal_payment_amount=(
+                float(quote.proposal_payment_amount)
+                if quote.proposal_payment_amount is not None
+                else None
+            ),
             deposit_required=unpaid,
             deposit_amount=due,
         )
@@ -2517,8 +2735,20 @@ class QuoteService:
                 return str(warranty) if warranty else None
         return None
 
-    async def _send_acceptance_receipt(self, quote: Quote, *, deposit_amount: float | None) -> None:
-        """Best-effort transactional receipt for the customer who accepted."""
+    async def _send_acceptance_receipt(
+        self,
+        quote: Quote,
+        *,
+        deposit_amount: float | None,
+        agreement: SignedAgreementDocument | None = None,
+    ) -> None:
+        """Best-effort transactional receipt for the customer who accepted.
+
+        ``agreement`` attaches the signed agreement PDF when one exists. When it
+        is ``None`` (render failed, or a legacy unsigned acceptance) the receipt
+        still goes out unattached -- the customer keeps their proof of purchase
+        either way, and the operator can resend the agreement from the CRM.
+        """
         # `_load_by_token` eager-loads contact and workspace, but `approve_quote`
         # re-reads the quote and leaves both relationships unloaded. Touching
         # `quote.contact` or `quote.workspace` here is then a lazy load, and a
@@ -2556,8 +2786,15 @@ class QuoteService:
                 deposit_required=deposit_amount is not None,
                 deposit_amount=deposit_amount,
                 deposit_paid=quote.deposit_paid_at is not None,
+                proposal_payment_choice=quote.proposal_payment_choice,
+                proposal_payment_amount=(
+                    float(quote.proposal_payment_amount)
+                    if quote.proposal_payment_amount is not None
+                    else None
+                ),
                 proposal_url=f"{settings.frontend_url.rstrip('/')}/p/quotes/{quote.public_token}",
                 warranty=self._accepted_tier_warranty(quote),
+                attachments=agreement_attachment(agreement),
             )
         except Exception as exc:  # pragma: no cover - best-effort receipt
             self.log.warning(
@@ -2565,6 +2802,28 @@ class QuoteService:
                 quote_id=str(quote.id),
                 error=str(exc),
             )
+
+    async def public_terms_text(self, token: str) -> str | None:
+        """The terms text a client is being shown for this token, or ``None``.
+
+        Mirrors the ``quote.terms or template.default_terms`` fallback used when
+        building the public proposal, so the snapshot frozen at signing is the
+        text that was on the customer's screen. Resolving it server-side (rather
+        than accepting it back from the client) is the point: a snapshot the
+        signer could edit proves nothing about what they agreed to.
+
+        Returns ``None`` for an unknown or draft token instead of raising -- the
+        approve call immediately after this one owns that error, and failing
+        here would turn a 404 into a confusing 500.
+        """
+        try:
+            quote = await self._load_by_token(token)
+        except NotFoundError:
+            return None
+        workspace = await self.db.get(Workspace, quote.workspace_id)
+        if workspace is None:
+            return quote.terms
+        return quote.terms or get_proposal_template(workspace).default_terms
 
     async def record_public_view(self, token: str) -> None:
         """Record that a client opened their proposal, and alert the operator once.

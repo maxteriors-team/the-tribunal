@@ -42,6 +42,8 @@ import { getApiErrorMessage } from "@/lib/utils/errors";
 import { formatCurrency } from "@/lib/utils/number";
 import type { Quote, UpdateQuoteRequest } from "@/types";
 
+import { SignedAgreementLink } from "./signed-agreement-link";
+
 const moneyString = z
   .string()
   .trim()
@@ -465,6 +467,14 @@ export function QuoteEditDialog({
                   change what the packages cost.
                 </p>
               )}
+
+              {detail?.signed_agreement && workspaceId ? (
+                <SignedAgreementLink
+                  workspaceId={workspaceId}
+                  quoteId={detail.id}
+                  agreement={detail.signed_agreement}
+                />
+              ) : null}
 
               <DialogFooter className="gap-2">
                 <Button

@@ -17,6 +17,7 @@ import type { PublicProposal, PublicProposalPackage } from "@/types/proposal";
 
 import { ClientProposalView } from "./client-proposal-view";
 import { parseProposalDocument } from "./document";
+import { signProposal, SIGNED } from "./signature-test-helper";
 
 function tier(key: string, label: string, name: string, base: number) {
   return {
@@ -89,6 +90,8 @@ function proposal(overrides: Partial<PublicProposal> = {}): PublicProposal {
     tax_amount: 0,
     discount_amount: 0,
     total: 16782,
+    proposal_payment_paid: false,
+    proposal_payment_required: false,
     is_expired: false,
     is_decided: false,
     deposit_percentage: 50,
@@ -187,10 +190,11 @@ describe("ClientProposalView — visual checkout", () => {
         /\$8,391 due today; the remaining balance follows your proposal terms/i,
       ),
     ).toBeVisible();
+    await signProposal(userEvent);
     await userEvent.click(
       within(visualCheckout).getByRole("button", { name: "Accept & Pay $8,391" }),
     );
-    expect(onApprove).toHaveBeenCalledWith("best");
+    expect(onApprove).toHaveBeenCalledWith("best", undefined, SIGNED);
     expect(
       within(visualCheckout).getByText(
         /acceptance is recorded before the existing secure payment checkout opens/i,
@@ -214,10 +218,11 @@ describe("ClientProposalView — visual checkout", () => {
     // acceptance still run on the exact quoted total.
     expect(within(visualCheckout).getByText(/Approving locks in \$16,782/i)).toBeVisible();
     expect(within(visualCheckout).getByText(/\$8,391 due today/i)).toBeVisible();
+    await signProposal(userEvent);
     await userEvent.click(
       within(visualCheckout).getByRole("button", { name: "Accept & Pay $8,391" }),
     );
-    expect(onApprove).toHaveBeenCalledWith("best");
+    expect(onApprove).toHaveBeenCalledWith("best", undefined, SIGNED);
   });
 });
 
@@ -329,8 +334,9 @@ describe("ClientProposalView — measured Bistro pricing", () => {
       screen.queryByRole("radiogroup", { name: /choose your package/i }),
     ).not.toBeInTheDocument();
     const approve = acceptButton();
+    await signProposal(userEvent);
     await userEvent.click(approve);
-    expect(onApprove).toHaveBeenCalledWith("best");
+    expect(onApprove).toHaveBeenCalledWith("best", undefined, SIGNED);
   });
 });
 
@@ -371,17 +377,19 @@ describe("client package selection", () => {
     const { onApprove } = renderView();
 
     await user.click(card(/The Starter/));
+    await signProposal(user);
     await user.click(acceptButton());
 
-    expect(onApprove).toHaveBeenCalledWith("good");
+    expect(onApprove).toHaveBeenCalledWith("good", undefined, SIGNED);
   });
 
   it("accepts the rep's package when the client changes nothing", async () => {
     const user = userEvent.setup();
     const { onApprove } = renderView();
 
+    await signProposal(user);
     await user.click(acceptButton());
-    expect(onApprove).toHaveBeenCalledWith("best");
+    expect(onApprove).toHaveBeenCalledWith("best", undefined, SIGNED);
   });
 
   it("is keyboard-operable as a radiogroup", async () => {
@@ -393,8 +401,9 @@ describe("client package selection", () => {
     await user.keyboard("{ArrowRight}");
     expect(card(/The Starter/)).toBeChecked();
 
+    await signProposal(user);
     await user.click(acceptButton());
-    expect(onApprove).toHaveBeenCalledWith("good");
+    expect(onApprove).toHaveBeenCalledWith("good", undefined, SIGNED);
   });
 
   it("quotes the chosen package in the deposit panel too", async () => {
@@ -408,7 +417,7 @@ describe("client package selection", () => {
     expect(screen.getByText("$4,700.00")).toBeInTheDocument();
   });
 
-  it("requires an accessible Permanent payment choice and submits only its enum", async () => {
+  it("keeps financing informational and submits only the selected card schedule", async () => {
     const user = userEvent.setup();
     const permanentDocument = { ...DOCUMENT, service: "permanent" };
     const { onApprove } = renderView({
@@ -417,38 +426,43 @@ describe("client package selection", () => {
       deposit_required: false,
       packages: [],
       proposal_document: permanentDocument as unknown as Record<string, unknown>,
+      payment_options: {
+        fifty_percent_down_amount: 2600,
+        completion_balance: 2600,
+        pay_in_full_amount: 5200,
+      },
       financing: {
         provider: "GreenSky",
         plan_number: "6124",
         terms: [24],
         default_term: 24,
         apr: 0,
-        monthly_payment: 216.67,
-        monthly_by_term: { "24": 216.67 },
+        monthly_payment: 417,
+        monthly_by_term: { "24": 417 },
         disclaimer: "This client-provided copy must not replace required wording.",
       },
     });
 
     const group = screen.getByRole("radiogroup", { name: /payment options/i });
-    const financing = within(group).getByRole("radio", { name: /0% APR FINANCING/i });
-    const cash = within(group).getByRole("radio", { name: /CASH\/CHECK/i });
-    expect(financing).not.toBeChecked();
-    expect(cash).not.toBeChecked();
+    const down = within(group).getByRole("radio", { name: /50% down, \$2,600/i });
+    const full = within(group).getByRole("radio", { name: /pay in full, \$5,200/i });
+    expect(screen.queryByRole("radio", { name: /financing/i })).toBeNull();
+    expect(down).not.toBeChecked();
+    expect(full).not.toBeChecked();
     expect(acceptButton()).toBeDisabled();
-    expect(within(group).getAllByText("$5,200")).toHaveLength(2);
-    expect(group).toHaveTextContent("Approximately $217/month for 24 months");
-    expect(group).toHaveTextContent("GreenSky plan 6124");
-    expect(group).toHaveTextContent("Estimated payment only. Subject to credit approval.");
-    expect(group).not.toHaveTextContent("client-provided copy");
+    expect(screen.getByText("$417/mo")).toBeVisible();
+    expect(screen.getByText("for 24 months")).toBeVisible();
+    expect(screen.getByText("Balance due at completion")).toBeVisible();
+    expect(screen.getByText("Estimated payment only. Subject to credit approval.")).toBeVisible();
+    expect(document.body).not.toHaveTextContent(/GreenSky|plan 6124|client-provided copy/i);
 
-    financing.focus();
-    await user.keyboard("{ArrowRight}");
-    expect(cash).toBeChecked();
-    await user.click(financing);
-    expect(financing).toBeChecked();
+    await user.click(full);
+    expect(full).toBeChecked();
     expect(acceptButton()).toBeEnabled();
+    expect(acceptButton()).toHaveAccessibleName(/pay \$5,200/i);
+    await signProposal(user);
     await user.click(acceptButton());
-    expect(onApprove).toHaveBeenCalledWith("best", "financing");
+    expect(onApprove).toHaveBeenCalledWith("best", "pay_in_full", SIGNED);
   });
 
   it("hides obsolete financing on every non-Permanent proposal", () => {
@@ -499,8 +513,9 @@ describe("client package selection", () => {
     expect(screen.getByRole("link", { name: "Terms and Conditions" })).toBeVisible();
     expect(acceptButton()).toHaveTextContent("Pay $8,391");
 
+    await signProposal(user);
     await user.click(acceptButton());
-    expect(onApprove).toHaveBeenCalledWith("best");
+    expect(onApprove).toHaveBeenCalledWith("best", undefined, SIGNED);
   });
 });
 

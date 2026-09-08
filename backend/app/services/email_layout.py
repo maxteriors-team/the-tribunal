@@ -251,8 +251,13 @@ def _render_details(block: Details, brand: Brand) -> str:
         return ""
     rows = []
     for label, value in block.rows.items():
+        # The class is inert in email -- clients honour the inline styles and
+        # ignore classes -- and exists for print: the signed agreement PDF uses it
+        # to keep a label on the same page as its value. Without it a page break
+        # can land between "VIEW COUNT" and the number, which reads as a missing
+        # field in a document whose whole job is settling disputes.
         rows.append(
-            "<tr>"
+            '<tr class="detail-label">'
             f'<td style="padding:0 0 4px;font-family:{_FONT_BODY};font-size:12px;'
             f"font-weight:600;letter-spacing:0.04em;text-transform:uppercase;"
             f'color:{brand.muted_foreground};">{html_escape(str(label))}</td>'

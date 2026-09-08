@@ -10,7 +10,9 @@
   --s1: #141414;
   --s2: #1a1a1a;
   --s3: #222222;
-  /* Accent (per-business: swap --gold) */
+  /* Workspace colors: raw values decorate; readable gold values paint UI/text. */
+  --brand-primary: #a08040;
+  --brand-accent: #d4af5a;
   --gold: #d4af5a;
   --gold-l: #edd080;
   --gold-d: #a08040;
@@ -19,7 +21,7 @@
   --t1: #ffffff;
   --t2: #d0d0d0;
   --t3: #999999;
-  --t4: #666666;
+  --t4: #888888;
   /* Borders */
   --bdr: rgba(255, 255, 255, 0.1);
   --bdr-g: rgba(212, 175, 90, 0.3);
@@ -55,6 +57,11 @@
 }
 .proposal-view ::-webkit-scrollbar-thumb {
   background: #2a2a2a;
+}
+
+.proposal-view :where(a, button, input, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -169,7 +176,13 @@
     padding: 13px 10px 12px;
     cursor: pointer;
     text-align: left;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
     display: flex;
     align-items: center;
     gap: 9px;
@@ -201,7 +214,13 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     flex-shrink: 0;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
   }
   .wizard-step-label {
     font-size: 9px;
@@ -287,7 +306,13 @@
     letter-spacing: 0.16em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
   }
   .wizard-nav-btn.primary {
     background: var(--gold);
@@ -453,7 +478,13 @@
     text-transform: uppercase;
     padding: 10px 12px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
   }
   .sales-story-btn:hover {
     border-color: var(--bdr-g);
@@ -714,7 +745,13 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
     text-align: center;
     line-height: 1.4;
     position: relative;
@@ -866,7 +903,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    transition:
+      background-color 0.15s var(--ease),
+      border-color 0.15s var(--ease),
+      color 0.15s var(--ease),
+      opacity 0.15s var(--ease),
+      transform 0.15s var(--ease);
   }
   .step-btn:hover {
     color: var(--gold);
@@ -967,7 +1009,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    transition:
+      background-color 0.15s var(--ease),
+      border-color 0.15s var(--ease),
+      color 0.15s var(--ease),
+      opacity 0.15s var(--ease),
+      transform 0.15s var(--ease);
   }
   .charge-del:hover {
     color: #e0726a;
@@ -986,7 +1033,12 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.15s;
+    transition:
+      background-color 0.15s var(--ease),
+      border-color 0.15s var(--ease),
+      color 0.15s var(--ease),
+      opacity 0.15s var(--ease),
+      transform 0.15s var(--ease);
   }
   .charge-add:hover {
     border-color: var(--bdr-g);
@@ -1163,7 +1215,12 @@
     text-transform: uppercase;
     padding: 7px 9px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition:
+      background-color 0.15s var(--ease),
+      border-color 0.15s var(--ease),
+      color 0.15s var(--ease),
+      opacity 0.15s var(--ease),
+      transform 0.15s var(--ease);
   }
   .care-auto-btn:hover {
     border-color: var(--bdr-g);
@@ -1185,7 +1242,13 @@
     padding: 16px 14px;
     cursor: pointer;
     position: relative;
-    transition: all 0.18s;
+    transition:
+      background-color 0.18s var(--ease),
+      border-color 0.18s var(--ease),
+      color 0.18s var(--ease),
+      box-shadow 0.18s var(--ease),
+      opacity 0.18s var(--ease),
+      transform 0.18s var(--ease);
     text-align: left;
   }
   .care-tier:hover {
@@ -1330,7 +1393,13 @@
     text-transform: uppercase;
     padding: 11px 8px;
     cursor: pointer;
-    transition: all 0.18s;
+    transition:
+      background-color 0.18s var(--ease),
+      border-color 0.18s var(--ease),
+      color 0.18s var(--ease),
+      box-shadow 0.18s var(--ease),
+      opacity 0.18s var(--ease),
+      transform 0.18s var(--ease);
   }
   .bistro-prod-btn:hover {
     border-color: var(--bdr-g);
@@ -1357,7 +1426,13 @@
     padding: 14px 12px;
     cursor: pointer;
     position: relative;
-    transition: all 0.18s;
+    transition:
+      background-color 0.18s var(--ease),
+      border-color 0.18s var(--ease),
+      color 0.18s var(--ease),
+      box-shadow 0.18s var(--ease),
+      opacity 0.18s var(--ease),
+      transform 0.18s var(--ease);
     text-align: left;
   }
   .bistro-tier-btn:hover {
@@ -1517,7 +1592,13 @@
     letter-spacing: 0.2em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
   }
   .present-btn:hover {
     background: var(--gold-l);
@@ -1539,7 +1620,13 @@
     letter-spacing: 0.2em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
   }
   .email-btn:hover {
     border-color: rgba(255, 255, 255, 0.4);
@@ -1572,7 +1659,13 @@
     letter-spacing: 0.12em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
     text-align: center;
   }
   .tool-btn:hover {
@@ -1625,7 +1718,13 @@
     text-transform: uppercase;
     padding: 0 16px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
   }
   .share-link-copy:hover {
     background: var(--gold-l);
@@ -1646,7 +1745,13 @@
     text-transform: uppercase;
     padding: 11px 12px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
   }
   .share-send-btn:hover {
     background: var(--gold-g);
@@ -1671,7 +1776,13 @@
     font-weight: 500;
     letter-spacing: 0.04em;
     opacity: 0;
-    transition: all 0.3s;
+    transition:
+      background-color 0.3s var(--ease),
+      border-color 0.3s var(--ease),
+      color 0.3s var(--ease),
+      box-shadow 0.3s var(--ease),
+      opacity 0.3s var(--ease),
+      transform 0.3s var(--ease);
     pointer-events: none;
     z-index: 999;
     white-space: nowrap;
@@ -1697,7 +1808,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 28px;
+    padding-inline: max(14px, calc((100% - 820px) / 2 + 28px));
+  }
+  .present-nav::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 -1px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--brand-primary) 0 62%, var(--brand-accent) 62% 100%);
   }
   .present-nav-brand {
     font-size: 9px;
@@ -1721,7 +1839,13 @@
     text-transform: uppercase;
     color: var(--t3);
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
   }
   .back-btn:hover {
     color: var(--t1);
@@ -1738,7 +1862,13 @@
     text-transform: uppercase;
     color: var(--gold-d);
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
   }
   .send-email-nav-btn:hover {
     background: var(--gold-g);
@@ -1757,7 +1887,6 @@
   .present-hero {
     text-align: center;
     margin-bottom: 72px;
-    animation: sw-up 0.8s var(--ease) both;
   }
   .present-eyebrow {
     font-size: 9px;
@@ -2403,7 +2532,13 @@
     letter-spacing: 0.2em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.25s;
+    transition:
+      background-color 0.25s var(--ease),
+      border-color 0.25s var(--ease),
+      color 0.25s var(--ease),
+      box-shadow 0.25s var(--ease),
+      opacity 0.25s var(--ease),
+      transform 0.25s var(--ease);
     text-decoration: none;
     display: inline-flex;
     align-items: center;
@@ -2424,7 +2559,13 @@
     letter-spacing: 0.2em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.25s;
+    transition:
+      background-color 0.25s var(--ease),
+      border-color 0.25s var(--ease),
+      color 0.25s var(--ease),
+      box-shadow 0.25s var(--ease),
+      opacity 0.25s var(--ease),
+      transform 0.25s var(--ease);
     text-decoration: none;
     display: inline-flex;
     align-items: center;
@@ -2697,7 +2838,13 @@
     letter-spacing: 0.18em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+      background-color 0.2s var(--ease),
+      border-color 0.2s var(--ease),
+      color 0.2s var(--ease),
+      box-shadow 0.2s var(--ease),
+      opacity 0.2s var(--ease),
+      transform 0.2s var(--ease);
     animation: sw-up 0.6s var(--ease) 0.32s both;
   }
   .night-launch-btn:hover {
@@ -2801,7 +2948,12 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.15s;
+    transition:
+      background-color 0.15s var(--ease),
+      border-color 0.15s var(--ease),
+      color 0.15s var(--ease),
+      opacity 0.15s var(--ease),
+      transform 0.15s var(--ease);
   }
   .night-type-btn.active {
     border-color: var(--gold);
@@ -2831,7 +2983,12 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.15s;
+    transition:
+      background-color 0.15s var(--ease),
+      border-color 0.15s var(--ease),
+      color 0.15s var(--ease),
+      opacity 0.15s var(--ease),
+      transform 0.15s var(--ease);
   }
   .night-mini-btn:hover {
     border-color: var(--bdr-g);
@@ -3129,6 +3286,91 @@
     line-height: 1.75;
     white-space: pre-line;
   }
+
+  /* Signature ceremony (typed name + the two affirmations). */
+  .pp-signature {
+    max-width: 560px;
+    margin: 0 auto 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    text-align: left;
+  }
+  .pp-signature-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .pp-signature-field label {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--t3);
+  }
+  .pp-signature-field input {
+    background: var(--black);
+    border: 1px solid var(--bdr);
+    color: var(--t1);
+    font-family: var(--font-montserrat), sans-serif;
+    font-size: 15px;
+    padding: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .pp-signature-field input::placeholder {
+    color: var(--t4);
+  }
+  .pp-signature-field input:focus {
+    border-color: var(--gold);
+  }
+  .pp-signature-field input[aria-invalid="true"] {
+    border-color: #d98b8b;
+  }
+  .pp-signature-terms {
+    border: 1px solid var(--bdr);
+    padding: 14px;
+    /* Capped and scrollable so long terms cannot push the accept button off
+       screen, while still being shown in full rather than behind a link. */
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .pp-signature-terms p {
+    font-size: 12.5px;
+    color: var(--t3);
+    line-height: 1.75;
+    white-space: pre-line;
+  }
+  .pp-signature-check {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--t2);
+    cursor: pointer;
+  }
+  .pp-signature-check input {
+    /* 18px keeps the tap target usable on a phone, which is where most of
+       these get signed. */
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    flex-shrink: 0;
+    accent-color: var(--gold);
+    cursor: pointer;
+  }
+  .pp-signature-error {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    font-style: normal;
+    color: #d98b8b;
+  }
+  .pp-signature-legal {
+    font-size: 11.5px;
+    line-height: 1.65;
+    color: var(--t4);
+  }
   .pp-decline {
     max-width: 560px;
     margin: 0 auto;
@@ -3173,7 +3415,13 @@
     letter-spacing: 0.2em;
     text-transform: uppercase;
     cursor: pointer;
-    transition: all 0.25s;
+    transition:
+      background-color 0.25s var(--ease),
+      border-color 0.25s var(--ease),
+      color 0.25s var(--ease),
+      box-shadow 0.25s var(--ease),
+      opacity 0.25s var(--ease),
+      transform 0.25s var(--ease);
   }
   .cta-btn-danger:hover {
     border-color: rgba(224, 114, 106, 0.8);
@@ -3258,7 +3506,7 @@
     }
     .present-nav-actions {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 7px;
       width: 100%;
     }
@@ -3455,7 +3703,13 @@
   color: var(--t4);
   font-size: 13px;
   font-weight: 700;
-  transition: all 0.2s;
+  transition:
+    background-color 0.2s var(--ease),
+    border-color 0.2s var(--ease),
+    color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease),
+    opacity 0.2s var(--ease),
+    transform 0.2s var(--ease);
 }
 .proposal-view .cat-chip.selected .cat-chip-check {
   background: var(--gold);
@@ -3563,6 +3817,49 @@
   white-space: pre-line;
 }
 
+.proposal-view .pq-range {
+  margin-bottom: 48px;
+  padding-block: 28px;
+  border-block: 1px solid var(--bdr-g);
+}
+.proposal-view .pq-range-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.proposal-view .pq-range-endpoint {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-inline: 24px;
+  text-align: center;
+}
+.proposal-view .pq-range-endpoint + .pq-range-endpoint {
+  border-inline-start: 1px solid var(--bdr);
+}
+.proposal-view .pq-range-label {
+  color: var(--gold-d);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.proposal-view .pq-range-amount {
+  color: var(--t1);
+  font-family: var(--font-cormorant), sans-serif;
+  font-size: clamp(32px, 6vw, 52px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+.proposal-view .pq-range-note {
+  max-width: 620px;
+  margin: 22px auto 0;
+  color: var(--t2);
+  font-size: 13px;
+  line-height: 1.65;
+  text-align: center;
+}
+
 .proposal-view .pq-table-wrap {
   margin-bottom: 40px;
   overflow-x: auto;
@@ -3635,6 +3932,10 @@
    unit price, and discount into a labelled meta line under the item so the two
    decision-critical columns (item and amount) retain useful width. */
 @media (max-width: 560px) {
+  .proposal-view .pq-range-endpoint {
+    padding-inline: 12px;
+  }
+
   .proposal-view .pq-table thead th.pq-col-detail,
   .proposal-view .pq-table tbody td.pq-col-detail {
     display: none;
@@ -3751,7 +4052,13 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.25s;
+  transition:
+    background-color 0.25s var(--ease),
+    border-color 0.25s var(--ease),
+    color 0.25s var(--ease),
+    box-shadow 0.25s var(--ease),
+    opacity 0.25s var(--ease),
+    transform 0.25s var(--ease);
   white-space: nowrap;
 }
 .proposal-view .dep-pay-btn:hover {
@@ -4109,5 +4416,44 @@
   }
   .proposal-view .xv-item {
     break-inside: avoid;
+  }
+}
+
+@media (max-width: 420px) {
+  .proposal-view .pq-range-values {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .proposal-view .pq-range-endpoint + .pq-range-endpoint {
+    padding-top: 22px;
+    border-block-start: 1px solid var(--bdr);
+    border-inline-start: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proposal-view *,
+  .proposal-view *::before,
+  .proposal-view *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .proposal-view .present-nav::after {
+    background: CanvasText;
+  }
+  .proposal-view .pq-range,
+  .proposal-view .pq-range-endpoint + .pq-range-endpoint,
+  .proposal-view .payment-option,
+  .proposal-view .dep-panel {
+    border-color: CanvasText;
+  }
+  .proposal-view .payment-option.is-selected {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
   }
 }

@@ -12,15 +12,18 @@ import Image from "next/image";
 import { useState } from "react";
 
 import { TermsAndConditionsLink } from "@/components/shared/terms-and-conditions-link";
+import type { ProposalSignature } from "@/lib/api/public-proposals";
 import { formatDate } from "@/lib/utils/date";
 import { formatCurrency } from "@/lib/utils/number";
-import type { PublicProposal, QuotePaymentOption } from "@/types/proposal";
+import type { ProposalPaymentChoice, PublicProposal } from "@/types/proposal";
 
 import { DepositPanel } from "./deposit-panel";
 import { PermanentPaymentOptions } from "./financing-estimate";
 import { renderTextWithLinks } from "./linkify-text";
 import { proposalAccentVars } from "./proposal-brand";
 import { proposalFontVars } from "./proposal-fonts";
+import { ProposalPaymentPanel } from "./proposal-payment-panel";
+import { EMPTY_SIGNATURE, isSignatureComplete, SignatureBlock } from "./signature-block";
 
 import "./proposal-theme.css";
 
@@ -30,7 +33,10 @@ interface PlainQuoteViewProps {
   justDeclined: boolean;
   busy: boolean;
   actionError: boolean;
-  onApprove: (paymentOption?: QuotePaymentOption | null) => void;
+  onApprove: (
+    paymentOption: ProposalPaymentChoice | null | undefined,
+    signature: ProposalSignature,
+  ) => void;
   onDecline: (reason: string) => void;
 }
 
@@ -75,24 +81,48 @@ export function PlainQuoteView({
   const previews = proposalPreviews(data.proposal_document);
   const [showDecline, setShowDecline] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
-  const [paymentOption, setPaymentOption] = useState<QuotePaymentOption | null>(
-    data.payment_option ?? null,
+  const [paymentOption, setPaymentOption] = useState<ProposalPaymentChoice | null>(
+    data.proposal_payment_choice ?? null,
   );
+  const [signature, setSignature] = useState<ProposalSignature>(EMPTY_SIGNATURE);
+  // Errors stay hidden until the first submit attempt, so the form does not
+  // greet the customer with three complaints about fields they have not reached.
+  const [signatureAttempted, setSignatureAttempted] = useState(false);
 
   const decided = data.is_decided || justApproved || justDeclined;
   const approved = justApproved || data.status === "approved";
   const currency = data.currency;
+  const priceRange = data.price_range;
   const paymentFinancing =
-    data.proposal_document?.service === "permanent" && data.financing?.plan_number
-      ? data.financing
-      : null;
-  const paymentOptionRequired = paymentFinancing !== null;
+    data.proposal_document?.service === "permanent" && data.financing ? data.financing : null;
+  const paymentOptions = data.payment_options ?? null;
+  const paymentOptionRequired =
+    data.proposal_document?.service === "permanent" && paymentOptions !== null;
   const paymentOptionMissing = paymentOptionRequired && paymentOption === null;
+  const selectedPaymentAmount =
+    paymentOption === "fifty_percent_down"
+      ? paymentOptions?.fifty_percent_down_amount
+      : paymentOption === "pay_in_full"
+        ? paymentOptions?.pay_in_full_amount
+        : null;
+  const signatureComplete = isSignatureComplete(signature);
   const submitApproval = () => {
     if (paymentOptionMissing) return;
-    if (paymentOptionRequired) onApprove(paymentOption);
-    else onApprove();
+    if (!signatureComplete) {
+      setSignatureAttempted(true);
+      return;
+    }
+    onApprove(paymentOptionRequired ? paymentOption : undefined, signature);
   };
+  const approvalLabel = paymentOptionMissing
+    ? "Choose payment method"
+    : paymentOptionRequired
+      ? "Approve and pay"
+      : "Yes, approve this proposal";
+  const approvalAriaLabel =
+    selectedPaymentAmount && !paymentOptionMissing
+      ? `Approve and pay ${formatCurrency(selectedPaymentAmount, currency)}`
+      : approvalLabel;
 
   const contactLine = [branding.business_phone, branding.business_email]
     .filter(Boolean)
@@ -108,26 +138,28 @@ export function PlainQuoteView({
   return (
     <div
       className={`proposal-view ${proposalFontVars}`}
-      style={proposalAccentVars(branding.brand_color)}
+      style={proposalAccentVars(branding.brand_color, branding.accent_color)}
     >
       <div className="present-nav no-print">
         <div className="present-nav-brand">{`${brandName} \u00b7 Proposal ${data.number}`}</div>
         <div className="present-nav-actions">
           <button type="button" className="send-email-nav-btn" onClick={() => window.print()}>
-            &#9113; Save as PDF
+            Save as PDF
           </button>
         </div>
       </div>
 
       <div className="present-body">
         {justApproved ? (
-          <div className="pp-banner ok">&#10003;&nbsp; You approved this proposal. Thank you!</div>
+          <div className="pp-banner ok" role="status">
+            You approved this proposal. Thank you!
+          </div>
         ) : justDeclined ? (
-          <div className="pp-banner no">
+          <div className="pp-banner no" role="status">
             You declined this proposal. Thanks for letting us know.
           </div>
         ) : data.is_expired ? (
-          <div className="pp-banner">
+          <div className="pp-banner" role="status">
             This proposal has expired. Please contact us for an updated quote.
           </div>
         ) : null}
@@ -146,7 +178,7 @@ export function PlainQuoteView({
               Prepared for <strong>{data.client_name}</strong>
             </div>
           ) : null}
-          <div className="pq-hero-title">{data.title || brandName}</div>
+          <h1 className="pq-hero-title">{data.title || brandName}</h1>
           <div className="present-ornament">
             <div className="present-ornament-line" />
             <div className="present-ornament-diamond" />
@@ -181,118 +213,164 @@ export function PlainQuoteView({
           </section>
         ) : null}
 
-        {/* Line items */}
-        <div className="pq-table-wrap" style={{ marginTop: 48 }}>
-          <div className="section-heading">Investment Summary</div>
+        {!paymentOptionRequired && priceRange ? (
+          <section className="pq-range" aria-labelledby="proposal-price-heading">
+            <h2 className="section-heading" id="proposal-price-heading">
+              Estimated project range
+            </h2>
+            <div className="pq-range-values">
+              <div className="pq-range-endpoint">
+                <span className="pq-range-label">Lower amount</span>
+                <strong className="pq-range-amount">
+                  {formatCurrency(priceRange.low, currency)}
+                </strong>
+              </div>
+              <div className="pq-range-endpoint">
+                <span className="pq-range-label">Higher amount</span>
+                <strong className="pq-range-amount">
+                  {formatCurrency(priceRange.high, currency)}
+                </strong>
+              </div>
+            </div>
+            <p className="pq-range-note">
+              Approving locks in the lower amount of {formatCurrency(priceRange.low, currency)}. Any
+              increase requires separate confirmation.
+            </p>
+          </section>
+        ) : null}
+
+        {/* Scope; permanent payment prices appear only in the three option cards below. */}
+        <section className="pq-table-wrap" aria-labelledby="quote-summary-heading">
+          <h2 className="section-heading" id="quote-summary-heading">
+            {paymentOptionRequired ? "Project scope" : "Investment summary"}
+          </h2>
           <table className="pq-table">
             <thead>
               <tr>
-                <th>Item</th>
-                <th className="pq-col-detail">Qty</th>
-                <th className="pq-col-detail">Unit Price</th>
-                <th className="pq-col-detail">Discount</th>
-                <th>Amount</th>
+                <th>{paymentOptionRequired ? "Included work" : "Item"}</th>
+                {!paymentOptionRequired ? (
+                  <>
+                    <th className="pq-col-detail">Qty</th>
+                    <th className="pq-col-detail">Unit Price</th>
+                    <th className="pq-col-detail">Discount</th>
+                    <th>Amount</th>
+                  </>
+                ) : null}
               </tr>
             </thead>
             <tbody>
               {data.line_items.map((item, idx) => (
-                <tr key={idx}>
+                <tr key={`${item.name}-${idx}`}>
                   <td>
                     <div className="pq-item-name">{item.name}</div>
                     {item.description ? (
                       <div className="pq-item-desc">{item.description}</div>
                     ) : null}
-                    <div className="pq-item-meta">
-                      {item.quantity} × {formatCurrency(item.unit_price, currency)}
-                      {item.discount
-                        ? ` · ${formatCurrency(item.discount, currency)} discount`
-                        : ""}
-                    </div>
+                    {!paymentOptionRequired ? (
+                      <div className="pq-item-meta">
+                        {item.quantity} × {formatCurrency(item.unit_price, currency)}
+                        {item.discount
+                          ? ` · ${formatCurrency(item.discount, currency)} discount`
+                          : ""}
+                      </div>
+                    ) : null}
                   </td>
-                  <td className="pq-num pq-col-detail">{item.quantity}</td>
-                  <td className="pq-num pq-col-detail">
-                    {formatCurrency(item.unit_price, currency)}
-                  </td>
-                  <td className="pq-num pq-col-detail muted">
-                    {item.discount ? `\u2212${formatCurrency(item.discount, currency)}` : "\u2014"}
-                  </td>
-                  <td className="pq-amount">{formatCurrency(item.total, currency)}</td>
+                  {!paymentOptionRequired ? (
+                    <>
+                      <td className="pq-num pq-col-detail">{item.quantity}</td>
+                      <td className="pq-num pq-col-detail">
+                        {formatCurrency(item.unit_price, currency)}
+                      </td>
+                      <td className="pq-num pq-col-detail muted">
+                        {item.discount ? `−${formatCurrency(item.discount, currency)}` : "None"}
+                      </td>
+                      <td className="pq-amount">{formatCurrency(item.total, currency)}</td>
+                    </>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
 
-        {/* Totals */}
-        <div className="pq-totals">
-          <div className="pq-totals-inner">
-            <div className="pq-total-row">
-              <span>Subtotal</span>
-              <strong>{formatCurrency(data.subtotal, currency)}</strong>
-            </div>
-            {data.discount_amount ? (
+        {/* Permanent proposals keep all visible prices in the payment-option cards. */}
+        {!paymentOptionRequired ? (
+          <div className="pq-totals">
+            <div className="pq-totals-inner">
               <div className="pq-total-row">
-                <span>Discount</span>
-                <strong>
-                  {"\u2212"}
-                  {formatCurrency(data.discount_amount, currency)}
-                </strong>
+                <span>Subtotal</span>
+                <strong>{formatCurrency(data.subtotal, currency)}</strong>
               </div>
-            ) : null}
-            {data.tax_amount ? (
-              <div className="pq-total-row">
-                <span>Tax</span>
-                <strong>{formatCurrency(data.tax_amount, currency)}</strong>
+              {data.discount_amount ? (
+                <div className="pq-total-row">
+                  <span>Discount</span>
+                  <strong>
+                    {"−"}
+                    {formatCurrency(data.discount_amount, currency)}
+                  </strong>
+                </div>
+              ) : null}
+              {data.tax_amount ? (
+                <div className="pq-total-row">
+                  <span>Tax</span>
+                  <strong>{formatCurrency(data.tax_amount, currency)}</strong>
+                </div>
+              ) : null}
+              <div className="pq-total-row grand">
+                <span>Total</span>
+                <strong>{formatCurrency(data.total, currency)}</strong>
               </div>
-            ) : null}
-            <div className="pq-total-row grand">
-              <span>Total</span>
-              <strong>{formatCurrency(data.total, currency)}</strong>
             </div>
           </div>
-        </div>
-
-        <PermanentPaymentOptions
-          financing={paymentFinancing}
-          contractPrice={data.total}
-          currency={data.currency}
-          value={paymentOption}
-          onChange={setPaymentOption}
-          disabled={busy || decided}
-        />
-        {paymentOptionMissing ? (
-          <p className="payment-selection-required" role="status">
-            Select a payment method before accepting this proposal.
-          </p>
         ) : null}
 
-        {/* Deposit (pay online) */}
-        <DepositPanel
-          data={data}
-          onPayInstead={paymentOptionRequired ? submitApproval : undefined}
-          payLabel={
-            paymentOptionMissing
-              ? "Select Payment Method First"
-              : paymentOptionRequired
-                ? "Accept & Pay Deposit"
-                : undefined
-          }
-          disabled={paymentOptionMissing}
-          busy={busy}
-        />
+        {!decided && paymentOptionRequired ? (
+          <>
+            <PermanentPaymentOptions
+              financing={paymentFinancing}
+              paymentOptions={paymentOptions}
+              currency={data.currency}
+              value={paymentOption}
+              onChange={setPaymentOption}
+              disabled={busy}
+            />
+            {paymentOptionMissing ? (
+              <p className="payment-selection-required" role="status">
+                Select 50% down or pay in full before accepting this proposal.
+              </p>
+            ) : null}
+          </>
+        ) : null}
+
+        <ProposalPaymentPanel data={data} />
+
+        {/* Permanent payments never reuse the legacy deposit checkout. */}
+        {!paymentOptionRequired ? <DepositPanel data={data} busy={busy} /> : null}
 
         {/* Notes + terms */}
         {data.notes ? (
-          <div className="pp-terms" style={{ marginTop: 48 }}>
-            <div className="section-heading">Notes</div>
+          <section className="pp-terms">
+            <h2 className="section-heading">Notes</h2>
             <p>{data.notes}</p>
-          </div>
+          </section>
         ) : null}
         {data.terms ? (
-          <div className="pp-terms">
-            <div className="section-heading">Terms</div>
+          <section className="pp-terms">
+            <h2 className="section-heading">Terms</h2>
             <p>{data.terms}</p>
-          </div>
+          </section>
+        ) : null}
+
+        {/* The signing ceremony sits directly above the accept button, so the
+            affirmations and the action they authorize are one visual unit. */}
+        {!decided ? (
+          <SignatureBlock
+            value={signature}
+            onChange={setSignature}
+            terms={data.terms}
+            disabled={busy}
+            showErrors={signatureAttempted}
+          />
         ) : null}
 
         {/* Approve / decline */}
@@ -305,20 +383,22 @@ export function PlainQuoteView({
               </div>
               <div className="cta-sub">
                 {contactLine
-                  ? `Questions? Reach us anytime \u2014 ${contactLine}`
+                  ? `Questions? Contact us: ${contactLine}`
                   : "Questions? We\u2019re right here."}
               </div>
             </>
           ) : showDecline ? (
             <>
               <div className="cta-eyebrow">Before You Go</div>
-              <div className="cta-heading">Mind telling us why?</div>
+              <h2 className="cta-heading">Mind telling us why?</h2>
               <div className="pp-decline">
+                <label htmlFor="proposal-decline-reason">Optional reason</label>
                 <textarea
+                  id="proposal-decline-reason"
                   rows={3}
                   value={declineReason}
                   onChange={(e) => setDeclineReason(e.target.value)}
-                  placeholder="Optional: let us know why (helps us improve)…"
+                  placeholder="Let us know why. This helps us improve."
                 />
                 <div className="pp-decline-row">
                   <button
@@ -327,7 +407,7 @@ export function PlainQuoteView({
                     disabled={busy}
                     onClick={() => onDecline(declineReason)}
                   >
-                    {busy ? "Sending…" : "Confirm Decline"}
+                    {busy ? "Sending…" : "Confirm decline"}
                   </button>
                   <button
                     type="button"
@@ -343,10 +423,10 @@ export function PlainQuoteView({
           ) : (
             <>
               <div className="cta-eyebrow">Ready to Move Forward</div>
-              <div className="cta-heading">Let&rsquo;s make it happen.</div>
+              <h2 className="cta-heading">Let&rsquo;s make it happen.</h2>
               <div className="cta-sub">
                 {contactLine
-                  ? `Questions? We\u2019re right here \u2014 ${contactLine}`
+                  ? `Questions? Contact us: ${contactLine}`
                   : "Questions? We\u2019re right here."}
               </div>
               <div className="cta-buttons">
@@ -354,20 +434,10 @@ export function PlainQuoteView({
                   type="button"
                   className="cta-btn-primary"
                   disabled={busy || paymentOptionMissing}
+                  aria-label={busy ? "Approving" : approvalAriaLabel}
                   onClick={submitApproval}
                 >
-                  {busy ? (
-                    "Approving…"
-                  ) : data.deposit_required ? (
-                    <>
-                      &#10003;&nbsp;{" "}
-                      {Number(data.deposit_percentage) >= 100
-                        ? "Approve & Pay Now"
-                        : "Approve & Pay Deposit"}
-                    </>
-                  ) : (
-                    <>&#10003;&nbsp; Approve Proposal</>
-                  )}
+                  {busy ? "Approving…" : approvalLabel}
                 </button>
                 <button
                   type="button"
@@ -375,13 +445,15 @@ export function PlainQuoteView({
                   disabled={busy}
                   onClick={() => setShowDecline(true)}
                 >
-                  Decline
+                  No, decline
                 </button>
               </div>
             </>
           )}
           {actionError ? (
-            <div className="pp-error">Something went wrong. Please refresh and try again.</div>
+            <div className="pp-error" role="alert">
+              Something went wrong. Please refresh and try again.
+            </div>
           ) : null}
         </div>
 

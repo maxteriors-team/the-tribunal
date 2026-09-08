@@ -11,13 +11,18 @@ import { Suspense } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import PublicProposalPage from "@/app/p/quotes/[token]/page";
+import { signProposal, SIGNED } from "@/components/proposal/signature-test-helper";
 import type { PublicProposal } from "@/types/proposal";
 
-const { approveMock, getMock, recordViewMock } = vi.hoisted(() => ({
-  approveMock: vi.fn(),
-  getMock: vi.fn(),
-  recordViewMock: vi.fn(),
-}));
+const { approveMock, getMock, paymentCheckoutMock, paymentStatusMock, recordViewMock } = vi.hoisted(
+  () => ({
+    approveMock: vi.fn(),
+    getMock: vi.fn(),
+    paymentCheckoutMock: vi.fn(),
+    paymentStatusMock: vi.fn(),
+    recordViewMock: vi.fn(),
+  }),
+);
 
 vi.mock("@/lib/api/public-proposals", () => ({
   publicProposalsApi: {
@@ -27,6 +32,8 @@ vi.mock("@/lib/api/public-proposals", () => ({
     decline: vi.fn(),
     depositCheckout: vi.fn(),
     depositStatus: vi.fn(),
+    paymentCheckout: paymentCheckoutMock,
+    paymentStatus: paymentStatusMock,
   },
 }));
 
@@ -42,6 +49,8 @@ function proposal(): PublicProposal {
     tax_amount: 0,
     discount_amount: 0,
     total: 1070,
+    proposal_payment_paid: false,
+    proposal_payment_required: false,
     is_expired: false,
     is_decided: false,
     line_items: [
@@ -85,10 +94,20 @@ beforeEach(() => {
   vi.clearAllMocks();
   getMock.mockResolvedValue(proposal());
   recordViewMock.mockResolvedValue(undefined);
+  paymentCheckoutMock.mockRejectedValue(new Error("checkout unavailable"));
+  paymentStatusMock.mockResolvedValue({
+    payment_paid: false,
+    payment_required: true,
+    payment_amount: 2600,
+    completion_balance: 2600,
+    currency: "USD",
+    payment_choice: "fifty_percent_down",
+  });
   approveMock.mockResolvedValue({
     token: "tok-abc",
     status: "approved",
     message: "Thank you",
+    proposal_payment_required: false,
     deposit_required: false,
   });
   window.history.replaceState({}, "", "/p/quotes/tok-abc");
@@ -116,13 +135,16 @@ describe("public proposal view beacon", () => {
     const user = userEvent.setup();
     await renderPage();
     const approve = await screen.findByRole("button", {
-      name: /Approve Proposal/,
+      name: "Yes, approve this proposal",
     });
 
+    await signProposal(user);
     approve.focus();
     await user.keyboard("{Enter}");
 
-    await waitFor(() => expect(approveMock).toHaveBeenCalledWith("tok-abc", 1, null));
+    await waitFor(() =>
+      expect(approveMock).toHaveBeenCalledWith("tok-abc", 1, null, null, SIGNED),
+    );
   });
 
   it("sends the selected Permanent payment enum with no client-owned terms", async () => {
@@ -131,6 +153,11 @@ describe("public proposal view beacon", () => {
       ...proposal(),
       title: "Permanent Lighting",
       total: 5200,
+      payment_options: {
+        fifty_percent_down_amount: 2600,
+        completion_balance: 2600,
+        pay_in_full_amount: 5200,
+      },
       proposal_document: {
         service: "permanent",
         category_sections: [
@@ -151,18 +178,105 @@ describe("public proposal view beacon", () => {
         terms: [24],
         default_term: 24,
         apr: 0,
-        monthly_payment: 216.67,
-        monthly_by_term: { "24": 216.67 },
+        monthly_payment: 417,
+        monthly_by_term: { "24": 417 },
         disclaimer: "Estimated payment only. Subject to credit approval.",
       },
     });
+    approveMock.mockResolvedValueOnce({
+      token: "tok-abc",
+      status: "approved",
+      message: "Thank you",
+      proposal_payment_choice: "fifty_percent_down",
+      proposal_payment_required: true,
+      proposal_payment_amount: 2600,
+      deposit_required: false,
+    });
     await renderPage();
 
-    const financing = await screen.findByRole("radio", { name: /0% APR FINANCING/i });
-    await user.click(financing);
-    await user.click(screen.getByRole("button", { name: /Approve Proposal/i }));
+    const down = await screen.findByRole("radio", { name: /50% down, \$2,600/i });
+    await user.click(down);
+    await signProposal(user);
+    await user.click(screen.getByRole("button", { name: /accept & pay \$2,600/i }));
 
-    await waitFor(() => expect(approveMock).toHaveBeenCalledWith("tok-abc", 1, null, "financing"));
-    expect(approveMock.mock.calls[0]).toHaveLength(4);
+    await waitFor(() =>
+      expect(approveMock).toHaveBeenCalledWith(
+        "tok-abc",
+        1,
+        null,
+        "fifty_percent_down",
+        SIGNED,
+      ),
+    );
+    // Still nothing client-owned beyond the ceremony: token, version, tier,
+    // payment enum, signature. Prices, terms text, and the signing timestamps
+    // stay server-side.
+    expect(approveMock.mock.calls[0]).toHaveLength(5);
+    await waitFor(() => expect(paymentCheckoutMock).toHaveBeenCalledWith("tok-abc"));
+  });
+
+  it("restores the accepted amount when hosted checkout is cancelled", async () => {
+    const user = userEvent.setup();
+    getMock.mockResolvedValue({
+      ...proposal(),
+      status: "approved",
+      is_decided: true,
+      proposal_document: { service: "permanent" },
+      payment_options: {
+        fifty_percent_down_amount: 2600,
+        completion_balance: 2600,
+        pay_in_full_amount: 5200,
+      },
+      proposal_payment_choice: "fifty_percent_down",
+      proposal_payment_amount: 2600,
+      proposal_payment_paid: false,
+      proposal_payment_required: true,
+    });
+    window.history.replaceState({}, "", "/p/quotes/tok-abc?payment=cancelled");
+
+    await renderPage();
+    expect(await screen.findByRole("heading", { name: /payment due · 50% down/i })).toBeVisible();
+    expect(screen.getByText("$2,600.00")).toBeVisible();
+    expect(screen.getByText(/\$2,600.00 remains due at completion/i)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /continue to secure checkout/i }));
+    await waitFor(() => expect(paymentCheckoutMock).toHaveBeenCalledWith("tok-abc"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not open/i);
+  });
+
+  it("reconciles a delayed Stripe return into the paid state", async () => {
+    const unpaid = {
+      ...proposal(),
+      status: "approved",
+      is_decided: true,
+      proposal_document: { service: "permanent" },
+      payment_options: {
+        fifty_percent_down_amount: 2600,
+        completion_balance: 2600,
+        pay_in_full_amount: 5200,
+      },
+      proposal_payment_choice: "fifty_percent_down",
+      proposal_payment_amount: 2600,
+      proposal_payment_paid: false,
+      proposal_payment_required: true,
+    };
+    getMock.mockResolvedValueOnce(unpaid).mockResolvedValue({
+      ...unpaid,
+      proposal_payment_paid: true,
+      proposal_payment_required: false,
+    });
+    paymentStatusMock.mockResolvedValueOnce({
+      payment_paid: true,
+      payment_required: false,
+      payment_amount: 2600,
+      completion_balance: 2600,
+      currency: "USD",
+      payment_choice: "fifty_percent_down",
+    });
+    window.history.replaceState({}, "", "/p/quotes/tok-abc?payment=paid");
+
+    await renderPage();
+    expect(await screen.findByRole("heading", { name: "Payment received" })).toBeVisible();
+    expect(screen.getByText(/\$2,600.00 remains due at completion/i)).toBeVisible();
+    expect(paymentStatusMock).toHaveBeenCalledWith("tok-abc");
   });
 });

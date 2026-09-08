@@ -150,6 +150,13 @@ dependencies = [
     # feature floor: python-docx 1.1 carries the typing + lxml fixes used for .docx text extraction
     # in app/services/knowledge/text_extraction.py.
     "python-docx>=1.1.2",
+    # HTML->PDF for the signed agreement document (app/services/quotes/agreement_pdf.py).
+    # feature floor: WeasyPrint 66 is the first release whose `@page` running-element
+    # support renders our per-page E-SIGN footer without the pre-66 margin-box bug.
+    # Needs system Pango/HarfBuzz at runtime -- see backend/Dockerfile. Cairo is NOT
+    # required: WeasyPrint dropped its Cairo dependency in v53 (it draws via pydyf now),
+    # so do not add libcairo2 back on the assumption that it is still needed.
+    "weasyprint>=66.0",
 ]
 
 [project.scripts]
@@ -195,6 +202,9 @@ module = [
     "scipy.*",
     "pgvector.*",
     "playwright.*",
+    # WeasyPrint ships no py.typed marker; agreement_pdf.py wraps it behind a
+    # typed function so the untyped surface stops at that module boundary.
+    "weasyprint",
 ]
 ignore_missing_imports = true
 

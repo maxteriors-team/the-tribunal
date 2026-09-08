@@ -43436,20 +43436,15 @@
             "title": "Packages",
             "type": "array"
           },
-          "payment_option": {
+          "payment_options": {
             "anyOf": [
               {
-                "enum": [
-                  "cash_check",
-                  "financing"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/PublicProposalPaymentAmounts"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Payment Option"
+            ]
           },
           "price_range": {
             "anyOf": [
@@ -43472,6 +43467,42 @@
               }
             ],
             "title": "Proposal Document"
+          },
+          "proposal_payment_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Payment Amount"
+          },
+          "proposal_payment_choice": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fifty_percent_down",
+                  "pay_in_full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Payment Choice"
+          },
+          "proposal_payment_paid": {
+            "default": false,
+            "title": "Proposal Payment Paid",
+            "type": "boolean"
+          },
+          "proposal_payment_required": {
+            "default": false,
+            "title": "Proposal Payment Required",
+            "type": "boolean"
           },
           "proposal_version": {
             "default": 1,
@@ -43537,7 +43568,7 @@
         "type": "object"
       },
       "PublicProposalActionResult": {
-        "description": "Result of a client approve/decline on the public proposal page.\n\nOn approval, ``deposit_required``/``deposit_amount`` let the client page chain\nstraight into the Stripe deposit checkout when money is owed.",
+        "description": "Result of a client approve/decline on the public proposal page.",
         "properties": {
           "deposit_amount": {
             "anyOf": [
@@ -43559,12 +43590,23 @@
             "title": "Message",
             "type": "string"
           },
-          "payment_option": {
+          "proposal_payment_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Payment Amount"
+          },
+          "proposal_payment_choice": {
             "anyOf": [
               {
                 "enum": [
-                  "cash_check",
-                  "financing"
+                  "fifty_percent_down",
+                  "pay_in_full"
                 ],
                 "type": "string"
               },
@@ -43572,7 +43614,12 @@
                 "type": "null"
               }
             ],
-            "title": "Payment Option"
+            "title": "Proposal Payment Choice"
+          },
+          "proposal_payment_required": {
+            "default": false,
+            "title": "Proposal Payment Required",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -43593,14 +43640,24 @@
       },
       "PublicProposalApprove": {
         "additionalProperties": false,
-        "description": "The client's acceptance of one exact rendered proposal version.\n\nOnly the package and payment-method enums cross the wire; all money and terms\nremain server-owned. The optional version supports only the brief deployment\noverlap for untouched version-one proposals.",
+        "description": "The client's acceptance of one exact rendered proposal version.\n\nOnly the package and Permanent Lighting card schedule cross the wire; all money\nand terms remain server-owned. The optional version supports only the brief\ndeployment overlap for untouched version-one proposals.",
         "properties": {
+          "cancellation_acknowledged": {
+            "default": false,
+            "title": "Cancellation Acknowledged",
+            "type": "boolean"
+          },
+          "econsent_accepted": {
+            "default": false,
+            "title": "Econsent Accepted",
+            "type": "boolean"
+          },
           "payment_option": {
             "anyOf": [
               {
                 "enum": [
-                  "cash_check",
-                  "financing"
+                  "fifty_percent_down",
+                  "pay_in_full"
                 ],
                 "type": "string"
               },
@@ -43633,6 +43690,19 @@
               }
             ],
             "title": "Selected Tier"
+          },
+          "signed_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed Name"
           }
         },
         "title": "PublicProposalApprove",
@@ -43836,7 +43906,7 @@
         "type": "object"
       },
       "PublicProposalPackage": {
-        "description": "One package the client can choose and buy, priced by the server.\n\nEvery figure here is derived server-side from the saved proposal snapshot so\nthe page can show \"this is the total, this is due today\" per package without\nthe browser doing money math. The client only ever sends ``key`` back.",
+        "description": "One package the client can choose and buy, priced by the server.\n\nEvery figure here is derived server-side from the saved proposal snapshot so\nthe page can show the exact package and card-payment amounts without doing\nbrowser money math. The client only ever sends ``key`` back.",
         "properties": {
           "deposit_amount": {
             "anyOf": [
@@ -43873,6 +43943,16 @@
             ],
             "title": "Name"
           },
+          "payment_options": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicProposalPaymentAmounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "total": {
             "title": "Total",
             "type": "number"
@@ -43884,6 +43964,106 @@
           "total"
         ],
         "title": "PublicProposalPackage",
+        "type": "object"
+      },
+      "PublicProposalPaymentAmounts": {
+        "description": "Server-priced card choices for one exact Permanent Lighting total.",
+        "properties": {
+          "completion_balance": {
+            "title": "Completion Balance",
+            "type": "number"
+          },
+          "fifty_percent_down_amount": {
+            "title": "Fifty Percent Down Amount",
+            "type": "number"
+          },
+          "pay_in_full_amount": {
+            "title": "Pay In Full Amount",
+            "type": "number"
+          }
+        },
+        "required": [
+          "fifty_percent_down_amount",
+          "completion_balance",
+          "pay_in_full_amount"
+        ],
+        "title": "PublicProposalPaymentAmounts",
+        "type": "object"
+      },
+      "PublicProposalPaymentCheckout": {
+        "description": "Hosted Stripe Checkout URL for the accepted Permanent payment choice.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "payment_choice": {
+            "enum": [
+              "fifty_percent_down",
+              "pay_in_full"
+            ],
+            "title": "Payment Choice",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "amount",
+          "currency",
+          "payment_choice"
+        ],
+        "title": "PublicProposalPaymentCheckout",
+        "type": "object"
+      },
+      "PublicProposalPaymentStatus": {
+        "description": "Provider-reconciled Permanent proposal payment state.",
+        "properties": {
+          "completion_balance": {
+            "title": "Completion Balance",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "payment_amount": {
+            "title": "Payment Amount",
+            "type": "number"
+          },
+          "payment_choice": {
+            "enum": [
+              "fifty_percent_down",
+              "pay_in_full"
+            ],
+            "title": "Payment Choice",
+            "type": "string"
+          },
+          "payment_paid": {
+            "title": "Payment Paid",
+            "type": "boolean"
+          },
+          "payment_required": {
+            "title": "Payment Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "payment_paid",
+          "payment_required",
+          "payment_amount",
+          "completion_balance",
+          "currency",
+          "payment_choice"
+        ],
+        "title": "PublicProposalPaymentStatus",
         "type": "object"
       },
       "PublicProposalPriceRange": {
@@ -45575,6 +45755,16 @@
             },
             "title": "Services",
             "type": "array"
+          },
+          "signed_agreement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SignedAgreementSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "enum": [
@@ -53119,6 +53309,47 @@
           }
         },
         "title": "SheetMetadataSchema",
+        "type": "object"
+      },
+      "SignedAgreementSummary": {
+        "description": "What the CRM shows about a stored agreement, without loading it.\n\nDeliberately omits ``data`` (megabytes per row) and the signer's IP address:\nthe IP is personal data whose only legitimate use is settling a dispute, so\nit lives on the document itself, behind the authenticated download, rather\nthan in a payload the dashboard fetches on every page open.",
+        "properties": {
+          "byte_size": {
+            "title": "Byte Size",
+            "type": "integer"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "terms_version": {
+            "title": "Terms Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "generated_at",
+          "filename",
+          "byte_size",
+          "sha256",
+          "terms_version"
+        ],
+        "title": "SignedAgreementSummary",
         "type": "object"
       },
       "SizeRate": {
@@ -61224,7 +61455,7 @@
     },
     "/api/v1/p/quotes/{token}/approve": {
       "post": {
-        "description": "Client approves their proposal (idempotent; expired/declined rejected).\n\nAn optional ``selected_tier`` names the package they chose; the server\nre-derives that package's lines, totals, and deposit from the saved snapshot\nbefore approving. The rendered proposal version is required to prevent accepting stale terms.",
+        "description": "Client approves their proposal (idempotent; expired/declined rejected).\n\nAn optional ``selected_tier`` names the package they chose; the server\nre-derives that package's lines, totals, and deposit from the saved snapshot\nbefore approving. The rendered proposal version is required to prevent accepting stale terms.\n\nThe signer's IP comes from :func:`get_client_ip`, never from the payload:\nthe whole value of an IP as evidence is that the signer did not choose it.",
         "operationId": "approve_public_proposal_api_v1_p_quotes__token__approve_post",
         "parameters": [
           {
@@ -61409,6 +61640,92 @@
           }
         },
         "summary": "Reconcile Deposit Status",
+        "tags": [
+          "Public Proposals"
+        ]
+      }
+    },
+    "/api/v1/p/quotes/{token}/payment-checkout": {
+      "post": {
+        "description": "Start hosted checkout for the approved Permanent proposal payment.",
+        "operationId": "create_proposal_payment_checkout_api_v1_p_quotes__token__payment_checkout_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProposalPaymentCheckout"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Proposal Payment Checkout",
+        "tags": [
+          "Public Proposals"
+        ]
+      }
+    },
+    "/api/v1/p/quotes/{token}/payment-status": {
+      "post": {
+        "description": "Reconcile the stored Stripe Session as a webhook backstop.",
+        "operationId": "reconcile_proposal_payment_status_api_v1_p_quotes__token__payment_status_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProposalPaymentStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Proposal Payment Status",
         "tags": [
           "Public Proposals"
         ]
@@ -95006,6 +95323,63 @@
           }
         ],
         "summary": "Remove Service",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/signed-agreement/download": {
+      "get": {
+        "description": "Serve the stored signed agreement PDF to an authorized operator.\n\n**Deliberately on the authenticated router only.** This document carries the\nsigner's IP address and the full completion certificate, so it is not\nreachable by the public proposal token that the customer's own link uses --\nthat token is emailed, forwardable, and unauthenticated. ``ScopedQuote``\napplies workspace scoping, the quote-read capability, and the owner-scope\npredicate before this body runs, so a member who cannot see the quote cannot\nsee its agreement either.\n\nAlways ``Content-Disposition: attachment``: a PDF rendered inline in the\napp's own origin is an unnecessary script-execution surface, and this file\nis meant to be saved anyway.",
+        "operationId": "download_signed_agreement_api_v1_workspaces__workspace_id__quotes__quote_id__signed_agreement_download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "quote_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Quote Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Download Signed Agreement",
         "tags": [
           "Quotes"
         ]

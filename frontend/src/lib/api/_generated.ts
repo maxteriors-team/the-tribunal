@@ -900,6 +900,9 @@ export interface paths {
          *     An optional ``selected_tier`` names the package they chose; the server
          *     re-derives that package's lines, totals, and deposit from the saved snapshot
          *     before approving. The rendered proposal version is required to prevent accepting stale terms.
+         *
+         *     The signer's IP comes from :func:`get_client_ip`, never from the payload:
+         *     the whole value of an IP as evidence is that the signer did not choose it.
          */
         post: operations["approve_public_proposal_api_v1_p_quotes__token__approve_post"];
         delete?: never;
@@ -970,6 +973,46 @@ export interface paths {
          *     a paid deposit showing unpaid. Idempotent.
          */
         post: operations["reconcile_deposit_status_api_v1_p_quotes__token__deposit_status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/p/quotes/{token}/payment-checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Proposal Payment Checkout
+         * @description Start hosted checkout for the approved Permanent proposal payment.
+         */
+        post: operations["create_proposal_payment_checkout_api_v1_p_quotes__token__payment_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/p/quotes/{token}/payment-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reconcile Proposal Payment Status
+         * @description Reconcile the stored Stripe Session as a webhook backstop.
+         */
+        post: operations["reconcile_proposal_payment_status_api_v1_p_quotes__token__payment_status_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9232,6 +9275,38 @@ export interface paths {
          * @description Remove a service previously added to a quote and reprice it.
          */
         delete: operations["remove_service_api_v1_workspaces__workspace_id__quotes__quote_id__services__service_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/signed-agreement/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Signed Agreement
+         * @description Serve the stored signed agreement PDF to an authorized operator.
+         *
+         *     **Deliberately on the authenticated router only.** This document carries the
+         *     signer's IP address and the full completion certificate, so it is not
+         *     reachable by the public proposal token that the customer's own link uses --
+         *     that token is emailed, forwardable, and unauthenticated. ``ScopedQuote``
+         *     applies workspace scoping, the quote-read capability, and the owner-scope
+         *     predicate before this body runs, so a member who cannot see the quote cannot
+         *     see its agreement either.
+         *
+         *     Always ``Content-Disposition: attachment``: a PDF rendered inline in the
+         *     app's own origin is an unnecessary script-execution surface, and this file
+         *     is meant to be saved anyway.
+         */
+        get: operations["download_signed_agreement_api_v1_workspaces__workspace_id__quotes__quote_id__signed_agreement_download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -28085,13 +28160,26 @@ export interface components {
             number: string;
             /** Packages */
             packages?: components["schemas"]["PublicProposalPackage"][];
-            /** Payment Option */
-            payment_option?: ("cash_check" | "financing") | null;
+            payment_options?: components["schemas"]["PublicProposalPaymentAmounts"] | null;
             price_range?: components["schemas"]["PublicProposalPriceRange"] | null;
             /** Proposal Document */
             proposal_document?: {
                 [key: string]: unknown;
             } | null;
+            /** Proposal Payment Amount */
+            proposal_payment_amount?: number | null;
+            /** Proposal Payment Choice */
+            proposal_payment_choice?: ("fifty_percent_down" | "pay_in_full") | null;
+            /**
+             * Proposal Payment Paid
+             * @default false
+             */
+            proposal_payment_paid: boolean;
+            /**
+             * Proposal Payment Required
+             * @default false
+             */
+            proposal_payment_required: boolean;
             /**
              * Proposal Version
              * @default 1
@@ -28115,9 +28203,6 @@ export interface components {
         /**
          * PublicProposalActionResult
          * @description Result of a client approve/decline on the public proposal page.
-         *
-         *     On approval, ``deposit_required``/``deposit_amount`` let the client page chain
-         *     straight into the Stripe deposit checkout when money is owed.
          */
         PublicProposalActionResult: {
             /** Deposit Amount */
@@ -28129,8 +28214,15 @@ export interface components {
             deposit_required: boolean;
             /** Message */
             message: string;
-            /** Payment Option */
-            payment_option?: ("cash_check" | "financing") | null;
+            /** Proposal Payment Amount */
+            proposal_payment_amount?: number | null;
+            /** Proposal Payment Choice */
+            proposal_payment_choice?: ("fifty_percent_down" | "pay_in_full") | null;
+            /**
+             * Proposal Payment Required
+             * @default false
+             */
+            proposal_payment_required: boolean;
             /** Status */
             status: string;
             /** Token */
@@ -28140,17 +28232,29 @@ export interface components {
          * PublicProposalApprove
          * @description The client's acceptance of one exact rendered proposal version.
          *
-         *     Only the package and payment-method enums cross the wire; all money and terms
-         *     remain server-owned. The optional version supports only the brief deployment
-         *     overlap for untouched version-one proposals.
+         *     Only the package and Permanent Lighting card schedule cross the wire; all money
+         *     and terms remain server-owned. The optional version supports only the brief
+         *     deployment overlap for untouched version-one proposals.
          */
         PublicProposalApprove: {
+            /**
+             * Cancellation Acknowledged
+             * @default false
+             */
+            cancellation_acknowledged: boolean;
+            /**
+             * Econsent Accepted
+             * @default false
+             */
+            econsent_accepted: boolean;
             /** Payment Option */
-            payment_option?: ("cash_check" | "financing") | null;
+            payment_option?: ("fifty_percent_down" | "pay_in_full") | null;
             /** Proposal Version */
             proposal_version?: number | null;
             /** Selected Tier */
             selected_tier?: string | null;
+            /** Signed Name */
+            signed_name?: string | null;
         };
         /**
          * PublicProposalBranding
@@ -28235,8 +28339,8 @@ export interface components {
          * @description One package the client can choose and buy, priced by the server.
          *
          *     Every figure here is derived server-side from the saved proposal snapshot so
-         *     the page can show "this is the total, this is due today" per package without
-         *     the browser doing money math. The client only ever sends ``key`` back.
+         *     the page can show the exact package and card-payment amounts without doing
+         *     browser money math. The client only ever sends ``key`` back.
          */
         PublicProposalPackage: {
             /** Deposit Amount */
@@ -28252,8 +28356,59 @@ export interface components {
             label: string;
             /** Name */
             name?: string | null;
+            payment_options?: components["schemas"]["PublicProposalPaymentAmounts"] | null;
             /** Total */
             total: number;
+        };
+        /**
+         * PublicProposalPaymentAmounts
+         * @description Server-priced card choices for one exact Permanent Lighting total.
+         */
+        PublicProposalPaymentAmounts: {
+            /** Completion Balance */
+            completion_balance: number;
+            /** Fifty Percent Down Amount */
+            fifty_percent_down_amount: number;
+            /** Pay In Full Amount */
+            pay_in_full_amount: number;
+        };
+        /**
+         * PublicProposalPaymentCheckout
+         * @description Hosted Stripe Checkout URL for the accepted Permanent payment choice.
+         */
+        PublicProposalPaymentCheckout: {
+            /** Amount */
+            amount: number;
+            /** Currency */
+            currency: string;
+            /**
+             * Payment Choice
+             * @enum {string}
+             */
+            payment_choice: "fifty_percent_down" | "pay_in_full";
+            /** Url */
+            url: string;
+        };
+        /**
+         * PublicProposalPaymentStatus
+         * @description Provider-reconciled Permanent proposal payment state.
+         */
+        PublicProposalPaymentStatus: {
+            /** Completion Balance */
+            completion_balance: number;
+            /** Currency */
+            currency: string;
+            /** Payment Amount */
+            payment_amount: number;
+            /**
+             * Payment Choice
+             * @enum {string}
+             */
+            payment_choice: "fifty_percent_down" | "pay_in_full";
+            /** Payment Paid */
+            payment_paid: boolean;
+            /** Payment Required */
+            payment_required: boolean;
         };
         /**
          * PublicProposalPriceRange
@@ -28870,6 +29025,7 @@ export interface components {
             service_location_id?: string | null;
             /** Services */
             services?: components["schemas"]["QuoteServiceResponse"][];
+            signed_agreement?: components["schemas"]["SignedAgreementSummary"] | null;
             /**
              * Status
              * @enum {string}
@@ -31843,6 +31999,35 @@ export interface components {
             proposalZoneId?: string | null;
             /** Revisions */
             revisions?: components["schemas"]["RevisionRowSchema"][];
+        };
+        /**
+         * SignedAgreementSummary
+         * @description What the CRM shows about a stored agreement, without loading it.
+         *
+         *     Deliberately omits ``data`` (megabytes per row) and the signer's IP address:
+         *     the IP is personal data whose only legitimate use is settling a dispute, so
+         *     it lives on the document itself, behind the authenticated download, rather
+         *     than in a payload the dashboard fetches on every page open.
+         */
+        SignedAgreementSummary: {
+            /** Byte Size */
+            byte_size: number;
+            /** Filename */
+            filename: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Sha256 */
+            sha256: string;
+            /** Terms Version */
+            terms_version: number;
         };
         /**
          * SizeRate
@@ -35864,6 +36049,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicProposalDepositStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_proposal_payment_checkout_api_v1_p_quotes__token__payment_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProposalPaymentCheckout"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reconcile_proposal_payment_status_api_v1_p_quotes__token__payment_status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicProposalPaymentStatus"];
                 };
             };
             /** @description Validation Error */
@@ -53214,6 +53461,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_signed_agreement_api_v1_workspaces__workspace_id__quotes__quote_id__signed_agreement_download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                quote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

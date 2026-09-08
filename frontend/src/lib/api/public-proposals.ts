@@ -1,11 +1,20 @@
 import { apiGet, apiPost } from "@/lib/api";
 import type {
+  ProposalPaymentChoice,
   PublicProposal,
   PublicProposalActionResult,
   PublicProposalDepositCheckout,
   PublicProposalDepositStatus,
-  QuotePaymentOption,
+  PublicProposalPaymentCheckout,
+  PublicProposalPaymentStatus,
 } from "@/types/proposal";
+
+/** The customer's act of signing, as collected by the accept form. */
+export type ProposalSignature = {
+  signedName: string;
+  econsentAccepted: boolean;
+  cancellationAcknowledged: boolean;
+};
 
 // Public client proposal API (no auth required — keyed on the share token).
 export const publicProposalsApi = {
@@ -15,17 +24,25 @@ export const publicProposalsApi = {
   /**
    * Accept the exact rendered proposal version. `selectedTier` only names a
    * package; the server still re-derives every line and amount.
+   *
+   * `signature` carries the e-signature ceremony. Only the typed name and the
+   * two affirmations are sent: the timestamps and the signer's IP are recorded
+   * by the server, because evidence the signer could choose is not evidence.
    */
   approve: (
     token: PublicProposal["token"],
     proposalVersion: number,
     selectedTier?: string | null,
-    paymentOption?: QuotePaymentOption | null,
+    paymentOption?: ProposalPaymentChoice | null,
+    signature?: ProposalSignature | null,
   ): Promise<PublicProposalActionResult> =>
     apiPost<PublicProposalActionResult>(`/api/v1/p/quotes/${token}/approve`, {
       proposal_version: proposalVersion,
       selected_tier: selectedTier ?? null,
       payment_option: paymentOption ?? null,
+      signed_name: signature?.signedName ?? null,
+      econsent_accepted: signature?.econsentAccepted ?? false,
+      cancellation_acknowledged: signature?.cancellationAcknowledged ?? false,
     }),
 
   /**
@@ -58,6 +75,14 @@ export const publicProposalsApi = {
 
   // Reconcile the deposit against Stripe on return from checkout (webhook
   // backstop). Marks paid if Stripe confirms it; safe to call repeatedly.
-  depositStatus: (token: string): Promise<PublicProposalDepositStatus> =>
+  depositStatus: (token: PublicProposal["token"]): Promise<PublicProposalDepositStatus> =>
     apiPost<PublicProposalDepositStatus>(`/api/v1/p/quotes/${token}/deposit-status`),
+
+  // Start or reuse the one active Stripe Session for the accepted Permanent payment.
+  paymentCheckout: (token: PublicProposal["token"]): Promise<PublicProposalPaymentCheckout> =>
+    apiPost<PublicProposalPaymentCheckout>(`/api/v1/p/quotes/${token}/payment-checkout`),
+
+  // Reconcile a Permanent proposal payment on hosted-checkout return.
+  paymentStatus: (token: PublicProposal["token"]): Promise<PublicProposalPaymentStatus> =>
+    apiPost<PublicProposalPaymentStatus>(`/api/v1/p/quotes/${token}/payment-status`),
 };
