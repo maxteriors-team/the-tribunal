@@ -13,6 +13,7 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING, Any
 
 import stripe
@@ -88,6 +89,7 @@ class CheckoutSessionDetails:
     metadata: dict[str, str]
     amount_total: int | None
     currency: str | None
+    url: str | None = None
 
 
 def is_payment_configured() -> bool:
@@ -95,11 +97,11 @@ def is_payment_configured() -> bool:
     return bool(settings.stripe_secret_key)
 
 
-def to_minor_units(amount: float, currency: str) -> int:
-    """Convert a major-unit amount (e.g. dollars) to Stripe's minor units."""
-    if currency.lower() in _ZERO_DECIMAL_CURRENCIES:
-        return int(round(amount))
-    return int(round(amount * 100))
+def to_minor_units(amount: float | Decimal, currency: str) -> int:
+    """Convert a major-unit amount to Stripe units with decimal currency rounding."""
+    value = Decimal(str(amount))
+    factor = Decimal("1") if currency.lower() in _ZERO_DECIMAL_CURRENCIES else Decimal("100")
+    return int((value * factor).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def from_minor_units(amount: int, currency: str) -> float:
@@ -115,7 +117,7 @@ def _stripe_client() -> stripe.StripeClient:
 
 async def create_payment_checkout_session(
     *,
-    amount: float,
+    amount: float | Decimal,
     currency: str,
     product_name: str,
     metadata: dict[str, str],
@@ -184,6 +186,7 @@ async def retrieve_checkout_session_details(session_id: str) -> CheckoutSessionD
     raw_amount_total = getattr(session, "amount_total", None)
     amount_total = int(raw_amount_total) if isinstance(raw_amount_total, int | float) else None
     raw_currency = getattr(session, "currency", None)
+    raw_url = getattr(session, "url", None)
     return CheckoutSessionDetails(
         payment_status=str(getattr(session, "payment_status", "unpaid")),
         status=str(getattr(session, "status", "open")),
@@ -192,6 +195,7 @@ async def retrieve_checkout_session_details(session_id: str) -> CheckoutSessionD
         metadata=metadata,
         amount_total=amount_total,
         currency=str(raw_currency).lower() if raw_currency else None,
+        url=raw_url if isinstance(raw_url, str) else None,
     )
 
 
