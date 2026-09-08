@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import stripe
 import structlog
+from stripe.params.checkout import SessionCreateParams
 
 from app.core.config import settings
 
@@ -137,7 +138,7 @@ async def create_payment_checkout_session(
     friendly message without persisting a dangling row.
     """
     client = _stripe_client()
-    params: dict[str, Any] = {
+    params: SessionCreateParams = {
         "mode": "payment",
         "line_items": [
             {
@@ -162,7 +163,7 @@ async def create_payment_checkout_session(
     if idempotency_key:
         options["idempotency_key"] = idempotency_key
     session = client.checkout.sessions.create(
-        params=params,  # type: ignore[arg-type]
+        params=params,
         options=options,
     )
     payment_intent = getattr(session, "payment_intent", None)
