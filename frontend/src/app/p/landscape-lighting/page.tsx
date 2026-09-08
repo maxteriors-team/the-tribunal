@@ -41,6 +41,13 @@ const APPLICATIONS = [
 
 const REASONS = [
   {
+    // Honest social proof: this describes what the reader already sees on their
+    // own street. Deliberately no invented count of "homes on your block" —
+    // a number nobody can verify is the fastest way to lose a skeptical buyer.
+    title: "You have already noticed it on your street",
+    body: "One house on the block is lit and the rest go flat at dusk. You notice that house every time you drive past it, and so does everyone else on the street. Your neighbors have it. There is no reason your home should be the dark one.",
+  },
+  {
     title: "Lighting is all we do",
     body: `${BUSINESS.name} is a lighting specialist. Not a landscaper who also sells fixtures, not an electrician fitting it between service calls. Exterior lighting is the entire business, so it gets the whole of our attention.`,
   },
