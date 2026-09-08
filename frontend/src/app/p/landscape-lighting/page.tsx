@@ -83,7 +83,7 @@ const INCLUDED = [
 const FAQS = [
   {
     q: "How much does landscape lighting cost?",
-    a: "It depends on the property: how many trees, how much frontage, how far the runs have to reach. That is exactly what the design consultation answers. You get a custom scope and a price for your yard, with no obligation to move forward.",
+    a: "Most projects land between $5,000 and $15,000, and more elaborate designs are a bigger investment. Where yours falls depends on the property: how many trees, how much frontage, how far the runs have to reach. That is exactly what the design consultation answers. You get a custom scope and a price for your yard, with no obligation to move forward.",
   },
   {
     q: "How long does installation take?",
