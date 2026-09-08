@@ -274,6 +274,13 @@ async def test_job_get_refuses_untagged_deep_link() -> None:
         # Same 404 as a missing job, so existence never leaks.
         assert excinfo.value.detail == "Job not found"
 
+        with pytest.raises(HTTPException) as reminder_exc:
+            await service.send_reminder(
+                theirs.id, ws.id, ws, visible_to_user_id=user.id, sender_user_id=user.id
+            )
+        assert reminder_exc.value.status_code == 404
+        assert reminder_exc.value.detail == "Job not found"
+
 
 async def test_job_get_allows_own_deep_link() -> None:
     """The scope does not block the caller's own job."""

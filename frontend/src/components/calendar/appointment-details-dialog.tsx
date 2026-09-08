@@ -8,7 +8,16 @@
  * no duplicated 100-line dialog body, one place to evolve the detail view.
  */
 import { useMutation } from "@tanstack/react-query";
-import { CalendarDays, Clock, ExternalLink, Pencil, Phone, Trash2, Video } from "lucide-react";
+import {
+  CalendarDays,
+  Clock,
+  ExternalLink,
+  MapPin,
+  Pencil,
+  Phone,
+  Trash2,
+  Video,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -128,6 +137,15 @@ export function AppointmentDetailsDialog({
       statusMutation.mutate(value);
     }
   };
+  const customerAddress = [
+    apt?.contact?.address_line1,
+    apt?.contact?.address_line2,
+    apt?.contact?.address_city,
+    apt?.contact?.address_state,
+    apt?.contact?.address_zip,
+  ]
+    .filter((part): part is string => Boolean(part?.trim()))
+    .join(", ");
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -168,6 +186,19 @@ export function AppointmentDetailsDialog({
                       <Badge variant="outline" className={appointmentStatusColors[apt.status]}>
                         {statusLabels[apt.status] ?? apt.status}
                       </Badge>
+                      {customerAddress && (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customerAddress)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Open ${customerAddress} in Google Maps (new tab)`}
+                          className="mt-1 flex w-fit items-start gap-1 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <MapPin className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                          <span>{customerAddress}</span>
+                          <ExternalLink className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                        </a>
+                      )}
                       <ReminderBadges
                         reminderSentAt={apt.reminder_sent_at}
                         remindersSent={apt.reminders_sent}

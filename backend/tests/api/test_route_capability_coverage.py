@@ -59,14 +59,13 @@ JUSTIFIED_UNGATED_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/api/v1/workspaces/{workspace_id}"),
         ("DELETE", "/api/v1/workspaces/{workspace_id}"),
         ("POST", "/api/v1/workspaces/{workspace_id}/set-default"),
-        # ── Appointments: scoped by _calendar_scope_user_id, not a gate ────
+        # ── Appointments: existing rows use object scope, not a gate ───────
         # Sales and below see only their own rows; dispatchers and up see the
-        # team. Reads and writes both run through that helper, so a capability
-        # gate would be redundant and would break the field tier's schedule.
+        # team. Creation is separately CRM-read gated because its contact ID
+        # would otherwise let field-only callers select arbitrary customers.
         # send-reminder is covered by its own invariant test (it takes no
         # request body, so it cannot be used to send arbitrary content).
         ("GET", "/api/v1/workspaces/{workspace_id}/appointments"),
-        ("POST", "/api/v1/workspaces/{workspace_id}/appointments"),
         ("GET", "/api/v1/workspaces/{workspace_id}/appointments/stats"),
         ("GET", "/api/v1/workspaces/{workspace_id}/appointments/{appointment_id}"),
         ("PUT", "/api/v1/workspaces/{workspace_id}/appointments/{appointment_id}"),
@@ -84,6 +83,7 @@ JUSTIFIED_UNGATED_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/api/v1/workspaces/{workspace_id}/jobs"),
         ("GET", "/api/v1/workspaces/{workspace_id}/jobs/calendar/mine"),
         ("GET", "/api/v1/workspaces/{workspace_id}/jobs/{job_id}"),
+        ("POST", "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/send-reminder"),
         ("GET", "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/visits"),
         ("GET", "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/materials"),
         ("GET", "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/installation-plan"),

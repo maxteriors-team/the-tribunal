@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Loader2, Trash2, Users } from "lucide-react";
+import { Bell, CalendarClock, Check, Loader2, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -73,6 +73,8 @@ interface JobDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Read-only view for workers looking at their own calendar (no dispatch edits). */
   readOnly?: boolean;
+  /** Calendar-only operations shared by dispatchers and assigned field staff. */
+  calendarOperations?: boolean;
 }
 
 /**
@@ -86,6 +88,7 @@ export function JobDetailDialog({
   open,
   onOpenChange,
   readOnly = false,
+  calendarOperations = false,
 }: JobDetailDialogProps) {
   const { can } = useCapabilities();
   const canViewPricing = can("billing:read");
@@ -100,7 +103,7 @@ export function JobDetailDialog({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [inventoryPlan, setInventoryPlan] = useState<JobInventoryPlan | null>(null);
   const [inventoryPlanPending, setInventoryPlanPending] = useState(false);
-
+  const [reminderState, setReminderState] = useState<"idle" | "sending" | "sent">("idle");
   const { data: techData } = useWorkspaceTechnicians(workspaceId, open && !readOnly);
   const technicians = useMemo(() => techData?.items ?? [], [techData?.items]);
 
@@ -146,6 +149,14 @@ export function JobDetailDialog({
     unassignTech.isPending ||
     deleteJob.isPending ||
     inventoryPlanPending;
+  const reminderDisabledReason =
+    job.status !== "scheduled"
+      ? "Only scheduled jobs can receive reminders"
+      : !job.scheduled_start
+        ? "Only jobs with a scheduled time can receive reminders"
+        : !job.customer?.phone_number?.trim()
+          ? "No customer phone number on file"
+          : null;
 
   const toggleTech = (id: string) =>
     setSelectedTechs((prev) =>
@@ -181,6 +192,24 @@ export function JobDetailDialog({
         onError: () => toast.error("Failed to update job details"),
       },
     );
+  };
+
+  const handleReminder = async () => {
+    if (reminderDisabledReason || reminderState !== "idle") return;
+    setReminderState("sending");
+    try {
+      const result = await jobsApi.sendReminder(workspaceId, job.id);
+      if (!result.success) {
+        setReminderState("idle");
+        toast.error(result.message);
+        return;
+      }
+      setReminderState("sent");
+      toast.success(`${result.message}${result.sent_to ? ` to ${result.sent_to}` : ""}`);
+    } catch {
+      setReminderState("idle");
+      toast.error("Failed to send customer reminder");
+    }
   };
 
   const applyStatus = (status: JobStatus) =>
@@ -281,7 +310,10 @@ export function JobDetailDialog({
             </TabsList>
             <TabsContent value="details" className="space-y-5 pt-2">
               {!readOnly ? (
-                <section aria-labelledby="job-brief-editor-heading" className="space-y-3 rounded-lg border p-3">
+                <section
+                  aria-labelledby="job-brief-editor-heading"
+                  className="space-y-3 rounded-lg border p-3"
+                >
                   <h3 id="job-brief-editor-heading" className="text-sm font-medium">
                     Job brief
                   </h3>
@@ -305,7 +337,10 @@ export function JobDetailDialog({
                       onChange={(event) => setJobNotes(event.target.value)}
                     />
                     <div className="flex items-center justify-between gap-3">
-                      <span id="job-detail-notes-count" className="text-xs text-muted-foreground">
+                      <span
+                        id="job-detail-notes-count"
+                        className="text-xs text-muted-foreground"
+                      >
                         {jobNotes.length}/5000
                       </span>
                       <Button
@@ -324,7 +359,36 @@ export function JobDetailDialog({
                 </section>
               ) : null}
               {/* Site, customer, access notes and price-free scope stay readable to both roles. */}
-              <JobBrief job={job} showNotes={readOnly} />
+              <JobBrief
+                job={job}
+                showNotes={readOnly}
+                linkSiteAddress={calendarOperations}
+                customerAction={
+                  calendarOperations ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 w-full justify-start sm:h-9 sm:w-auto"
+                      onClick={() => void handleReminder()}
+                      disabled={Boolean(reminderDisabledReason) || reminderState !== "idle"}
+                      title={reminderDisabledReason ?? undefined}
+                    >
+                      {reminderState === "sending" ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                      ) : reminderState === "sent" ? (
+                        <Check className="mr-2 size-4" aria-hidden="true" />
+                      ) : (
+                        <Bell className="mr-2 size-4" aria-hidden="true" />
+                      )}
+                      {reminderState === "sending"
+                        ? "Sending…"
+                        : reminderState === "sent"
+                          ? "Reminder sent"
+                          : "Customer reminder"}
+                    </Button>
+                  ) : undefined
+                }
+              />
               <HandoffImages
                 mode={readOnly ? "technician-read" : "job-edit"}
                 workspaceId={workspaceId}

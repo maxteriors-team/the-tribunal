@@ -1,8 +1,7 @@
-"""Shared reminder-sending logic for appointments.
+"""Shared reminder-sending logic for calendar appointments and field jobs.
 
-Extracted from ReminderWorker so that both the background worker and the
-manual "send reminder" API endpoint can call the same SMS dispatch path
-without duplicating code.
+Both manual calendar actions and future workers use these stock, opt-out-checked
+SMS paths instead of accepting caller-supplied message content.
 """
 
 import re
@@ -18,11 +17,12 @@ from app.core.config import settings
 from app.models.agent import Agent
 from app.models.appointment import Appointment
 from app.models.contact import Contact
-from app.models.conversation import Conversation
+from app.models.conversation import Conversation, Message, MessageStatus
+from app.models.field_service import Job
 from app.models.phone_number import PhoneNumber
 from app.models.workspace import Workspace
 from app.services.email import send_appointment_reminder_email
-from app.services.idempotency import derive_outbound_key
+from app.services.idempotency import derive_outbound_key, resolve_message_idempotency
 from app.services.rate_limiting.opt_out_manager import OptOutManager
 from app.services.telephony.telnyx import TelnyxSMSService
 from app.utils.timezones import resolve_workspace_timezone, workspace_timezone_name
@@ -42,6 +42,13 @@ def mask_phone(phone: str) -> str:
     digits = re.sub(r"\D", "", phone)
     last4 = digits[-4:] if len(digits) >= 4 else digits
     return f"***-***-{last4}"
+
+
+def _schedule_revision(value: datetime) -> str:
+    """Normalize a scheduled instant for stable, reschedule-aware idempotency."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +186,26 @@ def render_reminder_body(
     return message
 
 
+def render_job_reminder_body(job: Job, contact: Contact, workspace: Workspace) -> str:
+    """Render the stock customer reminder used by manual and automated job sends."""
+    if job.scheduled_start is None:
+        raise ValueError("Cannot render a reminder for an unscheduled job")
+
+    scheduled_start = job.scheduled_start
+    if scheduled_start.tzinfo is None:
+        scheduled_start = scheduled_start.replace(tzinfo=UTC)
+    local_dt = scheduled_start.astimezone(resolve_workspace_timezone(workspace))
+    date_str = local_dt.strftime("%A, %B %-d")
+    time_str = local_dt.strftime("%-I:%M %p")
+    first_name = contact.first_name or "there"
+    business_name = workspace.name or "our team"
+    return (
+        f"Hi {first_name}, this is a reminder of your scheduled visit with "
+        f"{business_name} on {date_str} at {time_str}. "
+        "Reply here if you need to make changes."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Email reminder
 # ---------------------------------------------------------------------------
@@ -219,26 +246,63 @@ async def send_appointment_reminder_email_for(
 
 
 # ---------------------------------------------------------------------------
-# Core send function
+# Core send functions
 # ---------------------------------------------------------------------------
 
 
-async def send_appointment_reminder(
+async def _existing_reminder_result(
     db: AsyncSession,
-    appointment: Appointment,
+    idempotency_key: uuid.UUID,
+    contact_phone: str,
+    log: Any,
+) -> dict[str, Any] | None:
+    """Return the truthful result of replaying an already-applied reminder."""
+    idempotency = await resolve_message_idempotency(db, idempotency_key)
+    if not idempotency.should_skip or idempotency.existing_message is None:
+        return None
+
+    existing = idempotency.existing_message
+    if existing.status in {MessageStatus.FAILED, MessageStatus.FAILED.value}:
+        log.warning("previous_reminder_failed", message_id=str(existing.id))
+        return {"success": False, "message": "Previous reminder attempt failed", "sent_to": None}
+
+    log.info("reminder_already_sent", message_id=str(existing.id))
+    return {
+        "success": True,
+        "message": "Reminder already sent for this schedule",
+        "sent_to": mask_phone(contact_phone),
+        "already_sent": True,
+    }
+
+
+def _delivery_result(message: Message, contact_phone: str, log: Any) -> dict[str, Any]:
+    """Translate the persisted provider result without claiming a failed send succeeded."""
+    if message.status in {MessageStatus.FAILED, MessageStatus.FAILED.value}:
+        log.warning("reminder_provider_failed", message_id=str(message.id))
+        return {"success": False, "message": "Reminder could not be sent", "sent_to": None}
+
+    log.info("reminder_sent", message_id=str(message.id))
+    return {
+        "success": True,
+        "message": "Reminder sent",
+        "sent_to": mask_phone(contact_phone),
+        "already_sent": False,
+    }
+
+
+async def _send_sms_reminder(
+    *,
+    db: AsyncSession,
     workspace: Workspace,
     contact: Contact,
-    agent: Agent | None,
+    agent_id: uuid.UUID | None,
+    body: str,
+    idempotency_key: uuid.UUID,
+    sender_user_id: int | None,
+    sender_display_name: str | None,
+    log: Any,
 ) -> dict[str, Any]:
-    """Send a manual SMS reminder for an appointment.
-
-    Returns a dict with:
-      - ``success``: bool
-      - ``message``: human-readable description
-      - ``sent_to``: masked phone string on success, None on failure
-    """
-    log = logger.bind(appointment_id=appointment.id, trigger="manual")
-
+    """Apply the shared SMS safety gates and send one stock reminder."""
     telnyx_key = settings.telnyx_api_key
     if not telnyx_key:
         log.warning("no_telnyx_api_key")
@@ -249,13 +313,15 @@ async def send_appointment_reminder(
         log.warning("contact_has_no_phone", contact_id=contact.id)
         return {"success": False, "message": "Contact has no phone number", "sent_to": None}
 
-    # TCPA compliance — skip opted-out contacts
-    is_opted_out = await _opt_out_manager.check_opt_out(workspace.id, contact_phone, db)
-    if is_opted_out:
+    if contact.sms_consent_status == "opted_out" or await _opt_out_manager.check_opt_out(
+        workspace.id, contact_phone, db
+    ):
         log.info("contact_opted_out", contact_id=contact.id)
         return {"success": False, "message": "Contact has opted out of SMS", "sent_to": None}
 
-    agent_id = agent.id if agent is not None else None
+    existing_result = await _existing_reminder_result(db, idempotency_key, contact_phone, log)
+    if existing_result is not None:
+        return existing_result
 
     from_number = await resolve_from_number(db, contact.id, workspace.id, agent_id)
     if not from_number:
@@ -266,17 +332,8 @@ async def send_appointment_reminder(
             "sent_to": None,
         }
 
-    body = render_reminder_body(
-        template=agent.reminder_template if agent is not None else None,
-        contact=contact,
-        appointment=appointment,
-        workspace=workspace,
-        agent=agent,
-    )
-
     sms_service = TelnyxSMSService(telnyx_key)
     try:
-        idempotency_key = derive_outbound_key("manual_appointment_reminder", appointment.id)
         message = await sms_service.send_message(
             to_number=contact_phone,
             from_number=from_number,
@@ -285,26 +342,95 @@ async def send_appointment_reminder(
             workspace_id=workspace.id,
             agent_id=agent_id,
             idempotency_key=idempotency_key,
+            sender_user_id=sender_user_id,
+            sender_display_name=sender_display_name,
         )
-        log.info("manual_reminder_sent", message_id=str(message.id))
-
-        # Update reminder_sent_at without touching reminders_sent (offset tracking)
-        now = datetime.now(UTC)
-        await db.execute(
-            text("UPDATE appointments SET reminder_sent_at = :now WHERE id = :appt_id"),
-            {"now": now, "appt_id": appointment.id},
-        )
-        appointment.reminder_sent_at = now
-        await db.commit()
-
-        return {
-            "success": True,
-            "message": "Reminder sent",
-            "sent_to": mask_phone(contact_phone),
-        }
-
     except Exception as exc:
-        log.exception("failed_to_send_manual_reminder", error=str(exc))
+        log.exception("failed_to_send_reminder", error=str(exc))
         raise
     finally:
         await sms_service.close()
+
+    return _delivery_result(message, contact_phone, log)
+
+
+async def send_appointment_reminder(
+    db: AsyncSession,
+    appointment: Appointment,
+    workspace: Workspace,
+    contact: Contact,
+    agent: Agent | None,
+    *,
+    sender_user_id: int | None = None,
+    sender_display_name: str | None = None,
+) -> dict[str, Any]:
+    """Send a manual SMS reminder for an appointment."""
+    log = logger.bind(appointment_id=appointment.id, trigger="manual")
+    body = render_reminder_body(
+        template=agent.reminder_template if agent is not None else None,
+        contact=contact,
+        appointment=appointment,
+        workspace=workspace,
+        agent=agent,
+    )
+    result = await _send_sms_reminder(
+        db=db,
+        workspace=workspace,
+        contact=contact,
+        agent_id=agent.id if agent is not None else None,
+        body=body,
+        idempotency_key=derive_outbound_key(
+            "manual_appointment_reminder",
+            appointment.id,
+            _schedule_revision(appointment.scheduled_at),
+            appointment.anytime,
+        ),
+        sender_user_id=sender_user_id,
+        sender_display_name=sender_display_name,
+        log=log,
+    )
+    if not result["success"] or result.get("already_sent"):
+        return result
+
+    # Update manual-send state without touching automatic offset tracking.
+    now = datetime.now(UTC)
+    await db.execute(
+        text("UPDATE appointments SET reminder_sent_at = :now WHERE id = :appt_id"),
+        {"now": now, "appt_id": appointment.id},
+    )
+    appointment.reminder_sent_at = now
+    await db.commit()
+    return result
+
+
+async def send_job_reminder(
+    db: AsyncSession,
+    job: Job,
+    workspace: Workspace,
+    contact: Contact,
+    *,
+    action_type: str = "manual_job_reminder",
+    offset_minutes: int | None = None,
+    sender_user_id: int | None = None,
+    sender_display_name: str | None = None,
+) -> dict[str, Any]:
+    """Send a stock job reminder; workers can reuse this with a distinct action key."""
+    if job.scheduled_start is None:
+        return {"success": False, "message": "Job is not scheduled", "sent_to": None}
+
+    return await _send_sms_reminder(
+        db=db,
+        workspace=workspace,
+        contact=contact,
+        agent_id=None,
+        body=render_job_reminder_body(job, contact, workspace),
+        idempotency_key=derive_outbound_key(
+            action_type,
+            job.id,
+            _schedule_revision(job.scheduled_start),
+            offset_minutes,
+        ),
+        sender_user_id=sender_user_id,
+        sender_display_name=sender_display_name,
+        log=logger.bind(job_id=str(job.id), trigger=action_type, offset_minutes=offset_minutes),
+    )

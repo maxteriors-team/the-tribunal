@@ -13805,8 +13805,63 @@
         "type": "object"
       },
       "ContactSummary": {
-        "description": "Minimal contact info for appointments.",
+        "description": "Contact details needed by calendar staff and assigned field technicians.",
         "properties": {
+          "address_city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address City"
+          },
+          "address_line1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line1"
+          },
+          "address_line2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Line2"
+          },
+          "address_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address State"
+          },
+          "address_zip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Zip"
+          },
           "email": {
             "anyOf": [
               {
@@ -13838,8 +13893,15 @@
             "title": "Last Name"
           },
           "phone_number": {
-            "title": "Phone Number",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone Number"
           }
         },
         "required": [
@@ -15576,6 +15638,41 @@
           }
         },
         "title": "CrewUpdate",
+        "type": "object"
+      },
+      "CustomerReminderResponse": {
+        "description": "Result of attempting to send a stock customer reminder.",
+        "properties": {
+          "already_sent": {
+            "default": false,
+            "title": "Already Sent",
+            "type": "boolean"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "sent_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent To"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "CustomerReminderResponse",
         "type": "object"
       },
       "DailyLeadCount": {
@@ -68253,7 +68350,7 @@
         ]
       },
       "post": {
-        "description": "Create a new appointment.\n\nDispatch-tier callers may leave it unassigned or tag a booking-enabled user.\nRestricted callers are assigned to their active linked booking resource so\nthe row remains visible on their scoped calendar; an admin must enable that\nresource in Settings → Team first.",
+        "description": "Create a new appointment for a contact the caller may already access.\n\nRequiring CRM read prevents field-only callers from selecting arbitrary\nworkspace contacts through the API. Lower CRM-capable roles remain assigned\nto their active linked booking resource.",
         "operationId": "create_appointment_api_v1_workspaces__workspace_id__appointments_post",
         "parameters": [
           {
@@ -68562,9 +68659,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Send Appointment Reminder Api V1 Workspaces  Workspace Id  Appointments  Appointment Id  Send Reminder Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CustomerReminderResponse"
                 }
               }
             },
@@ -83823,6 +83918,65 @@
           }
         ],
         "summary": "Schedule Job",
+        "tags": [
+          "Field Service"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/jobs/{job_id}/send-reminder": {
+      "post": {
+        "description": "Send a rate-limited stock reminder for an upcoming visible job.\n\nField staff may trigger this calendar operation because neither message\ncontent nor recipient is caller-controlled. Global SMS opt-outs still apply.",
+        "operationId": "send_job_reminder_api_v1_workspaces__workspace_id__jobs__job_id__send_reminder_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerReminderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Send Job Reminder",
         "tags": [
           "Field Service"
         ]

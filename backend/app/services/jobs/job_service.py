@@ -53,7 +53,7 @@ from app.models.invoice import Invoice, InvoiceLineItem
 from app.models.lighting_project import LightingProject
 from app.models.quote import Quote, QuoteLineItem
 from app.models.user import User
-from app.models.workspace import WorkspaceMembership
+from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.job import (
     InstallationPlanFixture,
     JobCustomerSummary,
@@ -846,6 +846,49 @@ class JobService:
             criteria.append(await self.assigned_job_predicate(workspace_id, visible_to_user_id))
         job = await self._load(job_id, workspace_id, *criteria)
         return await self._one_response(job, workspace_id)
+
+    async def send_reminder(
+        self,
+        job_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        workspace: Workspace,
+        *,
+        visible_to_user_id: int | None = None,
+        sender_user_id: int | None = None,
+        sender_display_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Send the stock reminder for an upcoming job visible to the caller."""
+        criteria: list[Any] = []
+        if visible_to_user_id is not None:
+            criteria.append(await self.assigned_job_predicate(workspace_id, visible_to_user_id))
+        job = await self._load(job_id, workspace_id, *criteria)
+
+        if job.status != JobStatus.SCHEDULED or job.scheduled_start is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reminders can only be sent for scheduled jobs",
+            )
+        scheduled_start = job.scheduled_start
+        if scheduled_start.tzinfo is None:
+            scheduled_start = scheduled_start.replace(tzinfo=UTC)
+        if scheduled_start <= datetime.now(UTC):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Reminders can only be sent for upcoming jobs",
+            )
+        if job.contact is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+
+        from app.services.calendar.reminder_service import send_job_reminder
+
+        return await send_job_reminder(
+            db=self.db,
+            job=job,
+            workspace=workspace,
+            contact=job.contact,
+            sender_user_id=sender_user_id,
+            sender_display_name=sender_display_name,
+        )
 
     async def list_for_user(
         self,

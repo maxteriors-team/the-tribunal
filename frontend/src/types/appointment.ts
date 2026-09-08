@@ -2,10 +2,24 @@
 
 import type { Contact } from "./contact";
 
+export type AppointmentContact = Pick<
+  Contact,
+  | "id"
+  | "first_name"
+  | "last_name"
+  | "email"
+  | "phone_number"
+  | "address_line1"
+  | "address_line2"
+  | "address_city"
+  | "address_state"
+  | "address_zip"
+>;
+
 export interface Appointment {
   id: number;
   contact_id: number;
-  contact?: Contact;
+  contact?: AppointmentContact | null;
   workspace_id?: string;
   agent_id?: string;
   message_id?: string;
