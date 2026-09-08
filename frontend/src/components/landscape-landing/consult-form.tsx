@@ -170,7 +170,7 @@ export function ConsultForm({ publicKey, businessPhone, businessPhoneHref }: Con
       <div className="rounded-2xl border border-brand-gold/25 bg-white/[0.04] p-6 sm:p-8" aria-live="polite">
         <CheckCircle2 className="size-10 text-brand-gold" aria-hidden="true" />
         <h3 ref={headingRef} tabIndex={-1} className="mt-4 text-2xl font-semibold text-white outline-none">
-          Your design visit request is in
+          Your consultation request is in
         </h3>
         <p className="mt-2 text-zinc-300">
           We will text you shortly to confirm a time that works. Prefer to talk right now?
@@ -195,7 +195,7 @@ export function ConsultForm({ publicKey, businessPhone, businessPhoneHref }: Con
           <h3 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold text-white outline-none">
             What would you like to light?
           </h3>
-          <p className="mt-2 text-zinc-300">A quick answer lets us plan the right visit for your property.</p>
+          <p className="mt-2 text-zinc-300">A quick answer lets us plan the right consultation for your property.</p>
           <div className="mt-6 space-y-3">
             {SCOPE_OPTIONS.map((option) => (
               <button
@@ -251,7 +251,7 @@ export function ConsultForm({ publicKey, businessPhone, businessPhoneHref }: Con
             Where should we reach you?
           </h3>
           <p className="mt-2 text-zinc-300">
-            We will text you to confirm a time for your design visit. No obligation.
+            We will text you to confirm a time for your design consultation. No obligation.
           </p>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -332,7 +332,7 @@ export function ConsultForm({ publicKey, businessPhone, businessPhoneHref }: Con
               className="mt-0.5 border-white/30 data-[state=checked]:border-brand-gold data-[state=checked]:bg-brand-gold data-[state=checked]:text-zinc-950"
             />
             <Label htmlFor="lead-sms-consent" className="text-sm font-normal leading-snug text-zinc-400">
-              Text me about my design visit and quote. Message and data rates may apply. Reply STOP to opt out.
+              Text me about my design consultation and quote. Message and data rates may apply. Reply STOP to opt out.
             </Label>
           </div>
 
@@ -358,7 +358,7 @@ export function ConsultForm({ publicKey, businessPhone, businessPhoneHref }: Con
               </>
             ) : (
               <>
-                Request my design visit
+                Request my design consultation
                 <ArrowRight className="size-4" aria-hidden="true" />
               </>
             )}

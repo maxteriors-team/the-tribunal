@@ -68,7 +68,7 @@ const REASONS = [
     body: "Freeze, thaw, mowers, snow blowers, and mulch turnover all get considered before a single fixture goes in the ground. Materials and wiring are chosen for that reality, not for a showroom floor.",
   },
   {
-    title: "One visit tells you where you stand",
+    title: "One consultation tells you where you stand",
     body: "You get a custom design for the property, an honest scope, and the numbers to go with it. No pressure and no obligation. What happens next is your call.",
   },
 ];
@@ -83,7 +83,7 @@ const INCLUDED = [
 const FAQS = [
   {
     q: "How much does landscape lighting cost?",
-    a: "It depends on the property: how many trees, how much frontage, how far the runs have to reach. That is exactly what the design visit answers. You get a custom scope and a price for your yard, with no obligation to move forward.",
+    a: "It depends on the property: how many trees, how much frontage, how far the runs have to reach. That is exactly what the design consultation answers. You get a custom scope and a price for your yard, with no obligation to move forward.",
   },
   {
     q: "How long does installation take?",
@@ -99,7 +99,7 @@ const FAQS = [
   },
   {
     q: "Do you service the system later?",
-    a: "We do. Aiming drifts as plantings grow and bulbs eventually age out, so we come back to re-aim, adjust, and repair. Ask about coverage and service options on your visit.",
+    a: "We do. Aiming drifts as plantings grow and bulbs eventually age out, so we come back to re-aim, adjust, and repair. Ask about coverage and service options at your consultation.",
   },
 ];
 
@@ -153,7 +153,7 @@ export default function LandscapeLightingLandingPage() {
               href="#design-visit"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-brand-gold px-6 font-semibold text-zinc-950 transition-colors duration-150 hover:bg-brand-gold-bright focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-gold"
             >
-              Book your design visit
+              Book your design consultation
               <ArrowRight className="size-4" aria-hidden="true" />
             </a>
             <p className="text-sm text-zinc-400">
@@ -204,7 +204,7 @@ export default function LandscapeLightingLandingPage() {
         <div className="mx-auto grid w-full max-w-5xl gap-10 px-5 py-16 lg:grid-cols-2 lg:gap-16">
           <div>
             <h2 id="visit-heading" className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-              Book your design visit
+              Book your design consultation
             </h2>
             <p className="mt-4 text-zinc-300">
               Three quick questions, then we text you to lock in a time. Here is what comes with the work if
@@ -230,7 +230,7 @@ export default function LandscapeLightingLandingPage() {
             // No lead source configured: send the homeowner to the phone rather
             // than collect details this page cannot deliver anywhere.
             <div className="rounded-2xl border border-white/12 bg-white/[0.04] p-6 sm:p-8">
-              <h3 className="text-2xl font-semibold text-white">Call to book your visit</h3>
+              <h3 className="text-2xl font-semibold text-white">Call to book your consultation</h3>
               <p className="mt-2 text-zinc-300">
                 Reach {BUSINESS.name} directly and we will find a time that works for your property.
               </p>
