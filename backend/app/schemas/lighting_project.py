@@ -156,6 +156,60 @@ class RunSchema(DocumentSchema):
     )
 
 
+class WrapSpecSchema(DocumentSchema):
+    """Exact wrap measurements for one placed tree or bush.
+
+    Present only when the rep opted this item out of size-band pricing. The
+    document stores the rep's *measurements*, never the resulting price: the
+    geometry is what was true about the tree, while the price is recomputed from
+    it so a re-opened design cannot carry a stale total.
+
+    Bounds mirror the client's, so a hand-built payload cannot bill a
+    thousand-foot tree that the UI would have refused.
+    """
+
+    shape: Literal["evergreen", "deciduous", "trunk", "branch", "bush"]
+    light_type: Literal["mini", "c7", "c9", "garland"] = Field(
+        validation_alias=AliasChoices("lightType", "light_type")
+    )
+    height_ft: Annotated[float, Field(gt=0, le=300)] = Field(
+        validation_alias=AliasChoices("heightFt", "height_ft")
+    )
+    row_spacing_in: Annotated[float, Field(gt=0, le=120)] = Field(
+        validation_alias=AliasChoices("rowSpacingIn", "row_spacing_in")
+    )
+    radius_ft: Annotated[float, Field(gt=0, le=100)] | None = Field(
+        default=None, validation_alias=AliasChoices("radiusFt", "radius_ft")
+    )
+    trunk_width_in: Annotated[float, Field(gt=0, le=600)] | None = Field(
+        default=None, validation_alias=AliasChoices("trunkWidthIn", "trunk_width_in")
+    )
+    branch_width_in: Annotated[float, Field(gt=0, le=120)] | None = Field(
+        default=None, validation_alias=AliasChoices("branchWidthIn", "branch_width_in")
+    )
+    branch_count: Annotated[int, Field(gt=0, le=500)] | None = Field(
+        default=None, validation_alias=AliasChoices("branchCount", "branch_count")
+    )
+    width_ft: Annotated[float, Field(gt=0, le=300)] | None = Field(
+        default=None, validation_alias=AliasChoices("widthFt", "width_ft")
+    )
+    depth_ft: Annotated[float, Field(gt=0, le=300)] | None = Field(
+        default=None, validation_alias=AliasChoices("depthFt", "depth_ft")
+    )
+    feet_per_unit: Annotated[float, Field(gt=0, le=1000)] | None = Field(
+        default=None, validation_alias=AliasChoices("feetPerUnit", "feet_per_unit")
+    )
+    bulb_spacing_in: Annotated[float, Field(gt=0, le=120)] | None = Field(
+        default=None, validation_alias=AliasChoices("bulbSpacingIn", "bulb_spacing_in")
+    )
+    pricing_mode: Literal["unit", "foot"] = Field(
+        validation_alias=AliasChoices("pricingMode", "pricing_mode")
+    )
+    unit_price: Annotated[float, Field(ge=0, le=1_000_000)] | None = Field(
+        default=None, validation_alias=AliasChoices("unitPrice", "unit_price")
+    )
+
+
 class PlacedItemSchema(DocumentSchema):
     id: ShortText
     product_id: ShortText = Field(validation_alias=AliasChoices("productId", "product_id"))
@@ -206,6 +260,10 @@ class PlacedItemSchema(DocumentSchema):
         default=None,
         validation_alias=AliasChoices("transformerZoneId", "transformer_zone_id"),
     )
+    # Set when the rep measured this tree instead of accepting its size band.
+    # Absent on every design drawn before exact measuring existed, which is
+    # exactly what keeps those designs pricing the way they always have.
+    wrap: WrapSpecSchema | None = None
 
 
 class PlanImageSchema(DocumentSchema):

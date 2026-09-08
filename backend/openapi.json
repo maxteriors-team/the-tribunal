@@ -38751,6 +38751,16 @@
               }
             ],
             "title": "Transformerzoneid"
+          },
+          "wrap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WrapSpecSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -59325,6 +59335,179 @@
           "is_default"
         ],
         "title": "WorkspaceWithMembership",
+        "type": "object"
+      },
+      "WrapSpecSchema": {
+        "additionalProperties": false,
+        "description": "Exact wrap measurements for one placed tree or bush.\n\nPresent only when the rep opted this item out of size-band pricing. The\ndocument stores the rep's *measurements*, never the resulting price: the\ngeometry is what was true about the tree, while the price is recomputed from\nit so a re-opened design cannot carry a stale total.\n\nBounds mirror the client's, so a hand-built payload cannot bill a\nthousand-foot tree that the UI would have refused.",
+        "properties": {
+          "branchCount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 500.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchcount"
+          },
+          "branchWidthIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 120.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchwidthin"
+          },
+          "bulbSpacingIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 120.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bulbspacingin"
+          },
+          "depthFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 300.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depthft"
+          },
+          "feetPerUnit": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feetperunit"
+          },
+          "heightFt": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 300.0,
+            "title": "Heightft",
+            "type": "number"
+          },
+          "lightType": {
+            "enum": [
+              "mini",
+              "c7",
+              "c9",
+              "garland"
+            ],
+            "title": "Lighttype",
+            "type": "string"
+          },
+          "pricingMode": {
+            "enum": [
+              "unit",
+              "foot"
+            ],
+            "title": "Pricingmode",
+            "type": "string"
+          },
+          "radiusFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Radiusft"
+          },
+          "rowSpacingIn": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 120.0,
+            "title": "Rowspacingin",
+            "type": "number"
+          },
+          "shape": {
+            "enum": [
+              "evergreen",
+              "deciduous",
+              "trunk",
+              "branch",
+              "bush"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "trunkWidthIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 600.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trunkwidthin"
+          },
+          "unitPrice": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unitprice"
+          },
+          "widthFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 300.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widthft"
+          }
+        },
+        "required": [
+          "shape",
+          "lightType",
+          "heightFt",
+          "rowSpacingIn",
+          "pricingMode"
+        ],
+        "title": "WrapSpecSchema",
         "type": "object"
       },
       "app__schemas__contact__MessageResponse": {
@@ -94524,6 +94707,64 @@
           }
         ],
         "summary": "Share Comparison",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/renewals/{contact_id}": {
+      "post": {
+        "description": "Rebuild a returning customer's last holiday-lighting sale as a draft.\n\nCreates a quote, hence ``quotes:write``. 404s when the customer has no sold\nholiday-lighting job on file, rather than creating an empty draft.",
+        "operationId": "renew_last_season_quote_api_v1_workspaces__workspace_id__quotes_renewals__contact_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Renew Last Season Quote",
         "tags": [
           "Quotes"
         ]

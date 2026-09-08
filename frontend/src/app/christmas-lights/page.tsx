@@ -28,9 +28,12 @@ const HUB_ACTIONS: HubAction[] = [
     Icon: History,
   },
   {
-    title: "Design & Night Render",
+    // Names measuring alongside design: it is the same screen, and a rep who
+    // only reads "design and night render" has no way to learn that a tree can
+    // be priced from its real wrap instead of a size band.
+    title: "Design, Measure & Night Render",
     description:
-      "Trace roofline and place decor on a customer photo, then generate a realistic after-dark preview.",
+      "Trace roofline and place decor on a customer photo, measure a tree or bush to price its real wrap, then generate a realistic after-dark preview.",
     href: "/estimator",
     Icon: Sparkles,
   },

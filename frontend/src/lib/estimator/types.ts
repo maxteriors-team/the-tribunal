@@ -11,6 +11,7 @@
  * new designer and the existing measurement math never diverge.
  */
 import type { Point } from "./measure";
+import type { WrapSpec } from "./tree-wrap";
 
 export type { Point };
 
@@ -283,6 +284,13 @@ export interface PlacedItem {
   sizePx: number;
   /** Drawing-sheet symbol scale; independent from beam throw. */
   iconScale?: number;
+  /**
+   * Exact wrap measurements, when the rep chose to measure this tree or bush
+   * rather than accept its size band. Present means the item is priced from
+   * real geometry as its own estimate line and is deliberately *not* counted
+   * into its decor category; absent means today's band pricing, unchanged.
+   */
+  wrap?: WrapSpec;
   /** Per-fixture beam-spread override. Missing means the fixture type's default lamp. */
   beamAngleDeg?: number;
   /** Clockwise aim from the fixture type's natural axis; independent from beam spread. */

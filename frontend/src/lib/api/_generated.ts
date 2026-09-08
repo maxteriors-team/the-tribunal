@@ -8937,6 +8937,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/renewals/{contact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Renew Last Season Quote
+         * @description Rebuild a returning customer's last holiday-lighting sale as a draft.
+         *
+         *     Creates a quote, hence ``quotes:write``. 404s when the customer has no sold
+         *     holiday-lighting job on file, rather than creating an empty draft.
+         */
+        post: operations["renew_last_season_quote_api_v1_workspaces__workspace_id__quotes_renewals__contact_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/wizard": {
         parameters: {
             query?: never;
@@ -26482,6 +26505,7 @@ export interface components {
             sizePx: number;
             /** Transformerzoneid */
             transformerZoneId?: string | null;
+            wrap?: components["schemas"]["WrapSpecSchema"] | null;
         };
         /** PlanImageSchema */
         PlanImageSchema: {
@@ -34582,6 +34606,57 @@ export interface components {
             /** Role */
             role: string;
             workspace: components["schemas"]["WorkspaceResponse"];
+        };
+        /**
+         * WrapSpecSchema
+         * @description Exact wrap measurements for one placed tree or bush.
+         *
+         *     Present only when the rep opted this item out of size-band pricing. The
+         *     document stores the rep's *measurements*, never the resulting price: the
+         *     geometry is what was true about the tree, while the price is recomputed from
+         *     it so a re-opened design cannot carry a stale total.
+         *
+         *     Bounds mirror the client's, so a hand-built payload cannot bill a
+         *     thousand-foot tree that the UI would have refused.
+         */
+        WrapSpecSchema: {
+            /** Branchcount */
+            branchCount?: number | null;
+            /** Branchwidthin */
+            branchWidthIn?: number | null;
+            /** Bulbspacingin */
+            bulbSpacingIn?: number | null;
+            /** Depthft */
+            depthFt?: number | null;
+            /** Feetperunit */
+            feetPerUnit?: number | null;
+            /** Heightft */
+            heightFt: number;
+            /**
+             * Lighttype
+             * @enum {string}
+             */
+            lightType: "mini" | "c7" | "c9" | "garland";
+            /**
+             * Pricingmode
+             * @enum {string}
+             */
+            pricingMode: "unit" | "foot";
+            /** Radiusft */
+            radiusFt?: number | null;
+            /** Rowspacingin */
+            rowSpacingIn: number;
+            /**
+             * Shape
+             * @enum {string}
+             */
+            shape: "evergreen" | "deciduous" | "trunk" | "branch" | "bush";
+            /** Trunkwidthin */
+            trunkWidthIn?: number | null;
+            /** Unitprice */
+            unitPrice?: number | null;
+            /** Widthft */
+            widthFt?: number | null;
         };
         /**
          * MessageResponse
@@ -53047,6 +53122,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComparisonShareResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renew_last_season_quote_api_v1_workspaces__workspace_id__quotes_renewals__contact_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                contact_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
                 };
             };
             /** @description Validation Error */

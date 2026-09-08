@@ -10,6 +10,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { calculateWrap } from "@/lib/estimator/tree-wrap";
 import {
   MAX_BEAM_ANGLE_DEG,
   MIN_BEAM_ANGLE_DEG,
@@ -409,6 +410,241 @@ describe("landscape wire circuit controls", () => {
       type: "UPDATE_RUN",
       id: "circuit-1",
       patch: { sourceVoltage: 13 },
+    });
+  });
+});
+
+/**
+ * Exact tree measuring.
+ *
+ * A rep can price a tree two ways: the size band the price book quotes, or the
+ * real wrap they measured. These pin the switch between the two, because the
+ * whole point of the feature is that a tree is billed once, on one basis, and
+ * the rep can always see which.
+ */
+const TREE: Product = {
+  id: "cat-trees-medium",
+  name: "Front spruce",
+  category: "seasonal",
+  kind: "each",
+  price: 250,
+  style: "treewrap",
+  colors: ["#ffd98a"],
+  spacingIn: 0,
+  sizeFt: 12,
+  target: { field: "christmas", category: "trees", option: "medium" },
+};
+
+const WREATH: Product = {
+  ...TREE,
+  id: "cat-wreaths-standard",
+  name: "Wreath",
+  style: "wreath",
+  target: { field: "christmas", category: "wreaths", option: "standard" },
+};
+
+const tree = (over: Partial<PlacedItem> = {}): PlacedItem => ({
+  id: "tree-1",
+  productId: TREE.id,
+  at: { x: 100, y: 100 },
+  sizePx: 120,
+  ...over,
+});
+
+const MEASURED = {
+  shape: "evergreen",
+  lightType: "mini",
+  heightFt: 20,
+  radiusFt: 6,
+  rowSpacingIn: 12,
+  feetPerUnit: 25,
+  pricingMode: "unit",
+  unitPrice: 39.99,
+} as const;
+
+function renderTree(item: PlacedItem, photoWidth?: number) {
+  const dispatch = vi.fn();
+  render(
+    <ToolPalette
+      products={[TREE, WREATH]}
+      state={stateWith(item)}
+      dispatch={dispatch}
+      photoWidth={photoWidth}
+    />,
+  );
+  return dispatch;
+}
+
+describe("exact tree measuring", () => {
+  it("offers measuring on an unmeasured tree, still on band pricing", () => {
+    const dispatch = renderTree(tree());
+    expect(screen.getByText(/Priced by size band/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Measure exactly/ }));
+    const call = dispatch.mock.calls[0][0];
+    expect(call.type).toBe("UPDATE_ITEM");
+    expect(call.patch.wrap).toMatchObject({ shape: "evergreen", rowSpacingIn: 12 });
+  });
+
+  it("never offers measuring on decor that is counted, not wrapped", () => {
+    renderTree(tree({ productId: WREATH.id }));
+    expect(screen.queryByRole("button", { name: /Measure exactly/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the wrap footage, rows and strands once measured", () => {
+    renderTree(tree({ wrap: MEASURED }));
+    const readout = screen.getByText(/of wrap/).closest("div");
+    expect(readout).toHaveTextContent("379 ft");
+    expect(readout).toHaveTextContent("16 strands");
+    expect(readout).toHaveTextContent("$639.84");
+    // The row count reads off the drawing, which is where it means something.
+    expect(screen.getByText("20 rows")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /Evergreen tree, 20 wrap rows/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("says the tree is unpriced rather than showing a zero", () => {
+    renderTree(tree({ wrap: { ...MEASURED, unitPrice: undefined } }));
+    // And says what the customer is charged meanwhile, so a rep who walks away
+    // mid-measurement is not left thinking the tree is now free.
+    expect(screen.getByText(/Enter a price/)).toBeInTheDocument();
+    expect(screen.getByText(/stays on size-band pricing/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$0/)).not.toBeInTheDocument();
+  });
+
+  it("warns when a measurement is too big to bill as one line", () => {
+    renderTree(
+      tree({
+        wrap: {
+          ...MEASURED,
+          shape: "branch",
+          branchWidthIn: 6,
+          branchCount: 500,
+          rowSpacingIn: 3,
+          pricingMode: "foot",
+          unitPrice: 2,
+        },
+      }),
+    );
+    expect(screen.getByText(/Too big for one line/)).toBeInTheDocument();
+  });
+
+  it("edits a dimension without discarding the rest of the measurement", () => {
+    const dispatch = renderTree(tree({ wrap: MEASURED }));
+    fireEvent.change(screen.getByLabelText("Radius in feet"), { target: { value: "8" } });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_ITEM",
+      id: "tree-1",
+      patch: { wrap: { ...MEASURED, radiusFt: 8 } },
+    });
+  });
+
+  it("clears a field instead of pricing a half-typed number as zero", () => {
+    const dispatch = renderTree(tree({ wrap: MEASURED }));
+    fireEvent.change(screen.getByLabelText("Radius in feet"), { target: { value: "" } });
+    expect(dispatch.mock.calls[0][0].patch.wrap.radiusFt).toBeUndefined();
+  });
+
+  it("only offers whole limbs, which is all the math accepts", () => {
+    renderTree(tree({ wrap: { ...MEASURED, shape: "branch", branchWidthIn: 4, branchCount: 12 } }));
+    expect(screen.getByLabelText("Branches")).toHaveAttribute("step", "1");
+    // Dimensions stay continuous — a 6.5 ft tree is real, 2.5 limbs is not.
+    expect(screen.getByLabelText("Lit height in feet")).toHaveAttribute("step", "any");
+  });
+
+  it("spells out each field's unit for a screen reader", () => {
+    // The visible "ft" chip is decorative; alone it would leave a non-sighted
+    // rep guessing whether a field wants feet or inches.
+    renderTree(tree({ wrap: MEASURED }));
+    expect(screen.getByLabelText("Lit height in feet")).toBeInTheDocument();
+    expect(screen.getByLabelText("Row gap in inches")).toBeInTheDocument();
+    expect(screen.getByLabelText("Each in dollars")).toBeInTheDocument();
+  });
+
+  it("asks only for the dimensions the chosen shape actually uses", () => {
+    renderTree(tree({ wrap: { ...MEASURED, shape: "bush", widthFt: 8, depthFt: 4 } }));
+    expect(screen.getByLabelText("Width in feet")).toBeInTheDocument();
+    expect(screen.getByLabelText("Depth in feet")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Radius in feet")).not.toBeInTheDocument();
+  });
+
+  it("picks a shape from the pictures, showing which one is chosen", () => {
+    const dispatch = renderTree(tree({ wrap: MEASURED }));
+    const evergreen = screen.getByRole("button", { name: "Evergreen tree" });
+    expect(evergreen).toHaveAttribute("aria-pressed", "true");
+
+    const bush = screen.getByRole("button", { name: "Bush" });
+    expect(bush).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(bush);
+    expect(dispatch.mock.calls[0][0].patch.wrap).toMatchObject({ shape: "bush" });
+  });
+
+  it("keeps the tree priced when the rep changes its shape", () => {
+    // "Actually that one's more of a bush" is said mid-conversation, in front
+    // of the customer. If the new shape arrived with empty dimensions, the
+    // price would vanish and their photo would drop back to a generic cone.
+    const dispatch = renderTree(tree({ wrap: MEASURED }));
+    fireEvent.click(screen.getByRole("button", { name: "Bush" }));
+
+    const next = dispatch.mock.calls[0][0].patch.wrap;
+    // The 6 ft canopy radius carries over as a 12 ft footprint.
+    expect(next).toMatchObject({ shape: "bush", widthFt: 12, depthFt: 12 });
+    expect(calculateWrap(next)?.price).toBeGreaterThan(0);
+  });
+
+  it("moves a hand-wrapped shape off bulb cord it cannot be installed with", () => {
+    const dispatch = renderTree(tree({ wrap: { ...MEASURED, lightType: "c9", bulbSpacingIn: 12 } }));
+    fireEvent.click(screen.getByRole("button", { name: "Bush" }));
+    expect(dispatch.mock.calls[0][0].patch.wrap).toMatchObject({
+      shape: "bush",
+      lightType: "mini",
+    });
+  });
+
+  it("switches the charge basis without a dropdown, and shows which is on", () => {
+    const dispatch = renderTree(tree({ wrap: MEASURED }));
+    // The selected chip must carry the shared `.on` class, or it looks unset:
+    // an invented class name styles nothing and silently loses the highlight.
+    const perStrand = screen.getByRole("button", { name: "Per strand" });
+    expect(perStrand).toHaveAttribute("aria-pressed", "true");
+    expect(perStrand.className).toContain("on");
+
+    const perFoot = screen.getByRole("button", { name: "Per foot" });
+    expect(perFoot).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(perFoot);
+    expect(dispatch.mock.calls[0][0].patch.wrap.pricingMode).toBe("foot");
+  });
+
+  it("offers the drawn height from the photo scale, and only when it differs", () => {
+    // 100px == 10ft, so a 120px tree reads 12ft on the photo.
+    const dispatch = vi.fn();
+    const state = stateWith(tree({ wrap: MEASURED }));
+    render(
+      <ToolPalette
+        products={[TREE]}
+        state={{
+          ...state,
+          design: {
+            ...state.design,
+            calibration: { a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, feet: 10 },
+          },
+        }}
+        dispatch={dispatch}
+        photoWidth={1200}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Photo says 12 ft tall/ }));
+    expect(dispatch.mock.calls[0][0].patch.wrap.heightFt).toBe(12);
+  });
+
+  it("puts a tree back on band pricing without a trace", () => {
+    const dispatch = renderTree(tree({ wrap: MEASURED }));
+    fireEvent.click(screen.getByRole("button", { name: /Use size band instead/ }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "UPDATE_ITEM",
+      id: "tree-1",
+      patch: { wrap: undefined },
     });
   });
 });

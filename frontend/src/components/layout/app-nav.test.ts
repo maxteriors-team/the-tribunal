@@ -11,6 +11,7 @@ import {
   findNavItemForPath,
   findNavSectionIdForPath,
   isFieldOperationalPath,
+  salesNavItems,
   setupNavItem,
   type AppNavItem,
 } from "./app-nav";
@@ -288,10 +289,11 @@ describe("Christmas Lights seasonal hub nav item", () => {
     expect(christmas!.accent).toBe("christmas");
     // Gated like the other quoting surfaces without exposing invoices.
     expect(christmas!.requires).toBe("quotes:read");
-    // Folded into the unified Quotes & Estimates hub: out of the sidebar, but
-    // still reachable via the command palette (and by URL).
-    expect(christmas!.sidebar).toBe(false);
+    // Visible in the Sales group beside Quotes: reps run this daily in season,
+    // so it must not be reachable only by URL or command palette.
+    expect(christmas!.sidebar).toBe(true);
     expect(christmas!.commandPalette).toBe(true);
+    expect(salesNavItems).toContain(christmas);
   });
 
   it("follows the capability gate for non-field tiers", () => {
