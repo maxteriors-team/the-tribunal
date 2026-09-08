@@ -5,7 +5,8 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from datetime import date
+from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +39,25 @@ def parse_uuid(raw_value: Any) -> uuid.UUID | None:
         return uuid.UUID(str(raw_value))
     except (TypeError, ValueError):
         return None
+
+
+def parse_date(raw_value: Any) -> date | None | Literal[False]:
+    """Parse an ISO ``YYYY-MM-DD`` argument from model output.
+
+    Three outcomes, because "absent" and "malformed" must not collapse into one:
+    the date, ``None`` when the argument was omitted, and ``False`` when it was
+    supplied but unusable. Callers turn ``False`` into an explicit error instead
+    of silently reporting on a default window the operator never asked for.
+    """
+
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, str):
+        return False
+    try:
+        return date.fromisoformat(raw_value)
+    except ValueError:
+        return False
 
 
 def without_confirmation(args: ToolArguments) -> ToolArguments:

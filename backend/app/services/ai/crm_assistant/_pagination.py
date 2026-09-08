@@ -76,3 +76,18 @@ def local_listing(items: list[Any], extra: dict[str, Any] | None = None) -> dict
     """Envelope for lists already computed in full in memory (no COUNT needed)."""
 
     return listing(items, total=len(items), extra=extra)
+
+
+def parse_limit(raw_value: Any, *, default: int, maximum: int) -> int | None:
+    """Validate a model-supplied page size, or return ``None`` if unusable.
+
+    ``bool`` is rejected explicitly because it is an ``int`` subclass in Python,
+    so ``limit: true`` would otherwise silently page one row. Callers turn
+    ``None`` into :func:`invalid_argument` with their own bounds in the message.
+    """
+
+    if raw_value is None:
+        return default
+    if isinstance(raw_value, bool) or not isinstance(raw_value, int):
+        return None
+    return raw_value if 1 <= raw_value <= maximum else None

@@ -226,6 +226,36 @@ _TOOL_CAPABILITIES: dict[str, Capability] = {
     "list_appointments": Capability.CRM_READ,
     "get_appointment": Capability.CRM_READ,
     "get_today_queue": Capability.CRM_READ,
+    "list_reviews": Capability.CRM_READ,
+    # ── voice call history: crm:read, matching CanReadCRM on /calls ─────
+    "list_calls": Capability.CRM_READ,
+    "get_call": Capability.CRM_READ,
+    # ── work queues: crm:read; nudges are additionally per-user scoped ────
+    "list_pending_actions": Capability.CRM_READ,
+    "list_nudges": Capability.CRM_READ,
+    # ── referral roster: crm:read, matching /referral-partners ────────────
+    "list_referral_partners": Capability.CRM_READ,
+    # ── price book: billing:read, matching /catalog ──────────────────────
+    "list_catalog_items": Capability.BILLING_READ,
+    # ── stock: jobs:read to see levels; unit costs need billing:read and ──
+    #    are dropped inside the tool for anyone below that tier.
+    "list_inventory_items": Capability.JOBS_READ,
+    # ── upsell board: upsell:sell, and personal to the caller ─────────────
+    "list_upsell_jobs": Capability.UPSELL_SELL,
+    # ── lead magnets: outreach:write, matching /lead-magnets ─────────────
+    "list_lead_magnets": Capability.OUTREACH_WRITE,
+    # ── management reporting + scorecards: reports:view (admin tier) ──────
+    "get_report": Capability.REPORTS_VIEW,
+    "get_scorecard": Capability.REPORTS_VIEW,
+    # ── quote reads: quotes:read (owner-scoped for the sales tier) ─────
+    "list_quotes": Capability.QUOTES_READ,
+    "get_quote": Capability.QUOTES_READ,
+    # ── invoice reads: billing:read ────────────────────────────────────
+    "list_invoices": Capability.BILLING_READ,
+    "get_invoice": Capability.BILLING_READ,
+    # ── job/work-order reads: jobs:read (own jobs below dispatch) ──────
+    "list_jobs": Capability.JOBS_READ,
+    "get_job": Capability.JOBS_READ,
     # ── revenue/performance metrics: reports:view (admin tier) ─────────
     "get_dashboard_stats": Capability.REPORTS_VIEW,
     # ── contact writes: crm:write ──────────────────────────────────────
@@ -278,6 +308,96 @@ _DEFAULT_TOOL_POLICY = CRMToolMetadata(
 
 
 _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
+    "get_report": CRMToolMetadata(
+        name="get_report",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "get_scorecard": CRMToolMetadata(
+        name="get_scorecard",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_catalog_items": CRMToolMetadata(
+        name="list_catalog_items",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_inventory_items": CRMToolMetadata(
+        name="list_inventory_items",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_pending_actions": CRMToolMetadata(
+        name="list_pending_actions",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_nudges": CRMToolMetadata(
+        name="list_nudges",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_upsell_jobs": CRMToolMetadata(
+        name="list_upsell_jobs",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_referral_partners": CRMToolMetadata(
+        name="list_referral_partners",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_lead_magnets": CRMToolMetadata(
+        name="list_lead_magnets",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_calls": CRMToolMetadata(
+        name="list_calls",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "get_call": CRMToolMetadata(
+        name="get_call",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_quotes": CRMToolMetadata(
+        name="list_quotes",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "get_quote": CRMToolMetadata(
+        name="get_quote",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_invoices": CRMToolMetadata(
+        name="list_invoices",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "get_invoice": CRMToolMetadata(
+        name="get_invoice",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_jobs": CRMToolMetadata(
+        name="list_jobs",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "get_job": CRMToolMetadata(
+        name="get_job",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
+    "list_reviews": CRMToolMetadata(
+        name="list_reviews",
+        handler=_missing_handler,
+        risk_level=ToolRiskLevel.LOW,
+    ),
     "get_contact": CRMToolMetadata(
         name="get_contact",
         handler=_missing_handler,
