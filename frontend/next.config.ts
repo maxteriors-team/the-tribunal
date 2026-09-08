@@ -27,6 +27,16 @@ const SECURITY_HEADERS = [
   },
 ];
 
+// Public marketing routes are the one exception to the sitewide noindex: they
+// exist to be found in search. Every other security header still applies, and
+// the route must stay free of customer data. Keep this list tiny and explicit;
+// a path added here becomes publicly indexable.
+const INDEXABLE_MARKETING_PATHS = ["p/landscape-lighting"];
+
+const MARKETING_HEADERS = SECURITY_HEADERS.filter(
+  (header) => header.key !== "X-Robots-Tag",
+);
+
 // Voice embeds need microphone access within their own document. The host
 // iframe still has to delegate it explicitly with `allow="microphone"`.
 const EMBED_SECURITY_HEADERS = SECURITY_HEADERS.map((header) =>
@@ -43,7 +53,6 @@ const EMBED_FRAME_ANCESTORS =
     : "frame-ancestors https:";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["@prestyj/pixel"],
   turbopack: { root: __dirname },
   // Avatar image sources. Any host that may legitimately serve a user-supplied
   // avatar URL needs to be allow-listed for next/image. Add new hosts here
@@ -98,10 +107,20 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Everything except /embed/* : the dashboard must never be framable,
-        // so we send both the legacy X-Frame-Options and the modern CSP
-        // `frame-ancestors` directive.
-        source: "/((?!embed).*)",
+        // Public marketing pages: indexable, but still unframable and locked
+        // down otherwise. Listed before the catch-all so it wins the match.
+        source: `/:path(${INDEXABLE_MARKETING_PATHS.join("|")})`,
+        headers: [
+          ...MARKETING_HEADERS,
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+      {
+        // Everything except /embed/* and the marketing pages above: the
+        // dashboard must never be framable, so we send both the legacy
+        // X-Frame-Options and the modern CSP `frame-ancestors` directive.
+        source: `/((?!embed|${INDEXABLE_MARKETING_PATHS.join("|")}).*)`,
         headers: [
           ...SECURITY_HEADERS,
           { key: "X-Frame-Options", value: "DENY" },

@@ -173,3 +173,6 @@ backend/backups/
 .local-bundles/
 .worktrees/
 .ezcoder/worktrees/
+
+# Local Netlify folder
+.netlify

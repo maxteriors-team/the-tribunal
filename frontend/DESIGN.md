@@ -1015,3 +1015,159 @@ revision removed the redundant SMS panel heading and kept the composer visible a
 Screen-reader output, physical touch drag, 200% text-only zoom, forced colors, and a complete WCAG
 2.2 criterion audit remain unverified; no accessibility or legal-conformance claim follows from
 automated checks or rendered fixtures alone.
+
+## Permanent-lighting client quote (2026-09-04)
+
+### Design read and evidence
+
+- **Surface:** a high-consideration residential-service proposal led by commerce and supported by
+  visual proof.
+- **Audience:** a homeowner opening an email or text link, commonly on a phone and without lighting
+  product expertise.
+- **Single job:** recognize the home and contractor, compare cash/check with monthly financing, then
+  give an explicit yes or no answer.
+- **Risk:** a wrong amount, accidental approval, unclear financing, missing contractor identity, or
+  another customer's mockup would break trust. Server-owned quote data therefore remains authoritative.
+- **Platform:** the public Next.js route supports keyboard, pointer, and touch without login from
+  narrow phones through wide desktop viewports.
+
+Local proposal components and tokens lead. The selected `nike` observation supports making the
+customer's own house mockup the dominant product proof. The selected `airbnb` observation supports
+familiar selection controls and explicit pricing. `binance` is the contrast: a homeowner proposal
+must not become a dense financial dashboard. These are conditional observations, not copied brand
+systems or universal rules.
+
+### Thesis, hierarchy, and semantic system
+
+The thesis is **one proposal, not two**. One 820 px content rail aligns the branded header, house
+mockup, price summary, scope, payment choices, decision controls, and footer. The saved mockup is the
+memorable device because it shows the customer's real project rather than decorative marketing.
+Cards, gradients, fake metrics, hover lift, emoji icons, and invented claims do not compete with it.
+
+The first glance is workspace identity and the customer's house. The second is a three-price payment
+summary: the informational monthly estimate, exact 50%-down amount, and exact pay-in-full amount.
+Permanent proposals with these options suppress the project range and repeated line-item, subtotal, and
+total amounts; an unpriced project scope remains. The down-payment card states that the balance is due
+at completion without introducing a fourth visible price. Financing omits provider and plan copy; one
+generic credit-approval disclosure stays immediately below the choices. The final controls require a
+payment choice before approval or allow an explicit decline.
+
+Workspace `brand_color` and `accent_color` remain tenant data. Raw validated colors draw only the
+restrained two-color header rule. A contrast-checked accent paints text, focus, and controls; missing,
+dark, or malformed values retain safe defaults. Shared typography, spacing, borders, financing
+terms, Stripe checkout, and proposal state components remain reused.
+
+### Flow, states, and responsive contract
+
+Permanent operator actions are `Save draft quote`, `Save & email client quote`, and `Save & text
+client quote`. Linked customer identity stays fixed; one-send email and phone destinations remain
+editable and never silently update the customer profile. Visible live blockers cover the selected
+photo, deposit, range, and channel destination. Permanent delivery creates and sends `/p/quotes/`
+records only. Existing `/p/compare/` records remain read-only `Estimate preview` links because they
+lack mockups, range highs, payments, and decision state.
+
+The public flow preserves loading, dead-link, expired, pending, approved, declined, payment-required,
+checkout-failure, and already-decided states. Native radios keep arrow-key behavior; focus-visible
+rings do not stick after pointer use. Named transitions have a reduced-motion path, forced colors
+retain boundaries and selection, and long values wrap instead of expanding the page.
+
+At 390 px, the three payment cards stack below 420 px; controls retain their order and the document
+has no horizontal overflow. The route-mocked Chromium proof covers desktop and 390 px, logo and
+mockup visibility, exactly three visible prices, arrow-key payment selection, exact approval and
+decline payloads, and the Stripe checkout redirect. Screen-reader speech, physical devices, 200%
+text-only zoom, and a full WCAG 2.2 criterion audit remain unverified, so no conformance claim is made.
+zoom, and a full WCAG 2.2 criterion audit remain unverified, so no conformance claim is made.
+
+### Rendered critique and revision
+
+The representative captures are `.ezcoder/screenshots/permanent-client-quote-desktop.png` at 1280 px
+and `.ezcoder/screenshots/permanent-client-quote-mobile.png` at 390 px. The latest revision lets the
+three payment cards own every visible price, retains the unpriced project scope, and removes duplicated
+range, line-item, subtotal, total, completion-balance, and approval-button amounts. A container-relative
+sticky-header gutter prevents stale viewport units from widening the page after a desktop-to-mobile
+resize. Both captures keep the house, scope, three prices, terms, and decision controls clear without
+horizontal overflow.
+
+Final rubric: **22/24**.
+
+1. Brief specificity **2**: house mockup, price summary, contractor identity, payment, and decision read as a
+   residential permanent-lighting proposal without the logo.
+2. Information hierarchy **2**: mockup, cash/monthly summary, payment, and decision lead; scope and legal text recede.
+3. Composition **2**: header, 820 px body, section rules, totals, payment cards, and footer share keys.
+4. Consistency and flow **2**: existing proposal anatomy, radios, status states, and checkout remain reused.
+5. Typography **2**: display, utility, amount, and body roles stay legible and wrap at both captures.
+6. Material logic **2**: borders separate evidence and choices; the only brand gradient is one rule.
+7. State completeness **2**: tests cover blocked, pending, declined, approved, decided, dead-link, and
+   checkout outcomes without changing server payloads.
+8. Responsive behavior **1**: desktop and 390 px reflow pass, but 320/768 px, RTL, and 200% text remain
+   unverified.
+9. Accessibility floor **1**: axe reports no tagged A/AA violations at both captures and the full flow
+   passes by keyboard, but screen-reader, forced-colors rendering, physical touch, and criterion-by-
+   criterion manual evidence remain unverified.
+10. Motion purpose **2**: active transitions name properties; decorative entry motion is removed and
+    reduced motion has an equivalent resting state.
+11. Content authenticity **2**: production UI renders only server quote/workspace data; tests clearly use
+    synthetic fixtures and fake tokens.
+12. Visual distinctiveness **2**: the customer's illuminated-house mockup is the specific signature.
+
+Applicable automated production checks pass: branded media alternatives, semantic radio/decision
+controls, live validation/status text, desktop/mobile no-overflow, keyboard payment and approval,
+exact API payloads, decline recovery, checkout redirect, reduced-motion CSS, and axe A/AA scans.
+Forced-colors visual inspection, assistive-technology speech, physical devices, offline recovery,
+320/768 px, RTL/localization stress, and 200% text-only zoom remain explicitly unverified.
+
+## Landscape lighting landing page (2026-09-08)
+
+### Design read and evidence
+
+- **Surface:** a marketing lead-capture page at `/p/landscape-lighting`, public and unauthenticated.
+- **Audience:** a homeowner arriving from a paid ad or a texted link, often on a phone at night,
+  with no lighting product vocabulary and no relationship with the company yet.
+- **Single job:** book a free on-site design visit. Everything else on the page exists to make that
+  one action feel low-risk.
+- **Risk:** the visitor has not agreed to anything. Overstated claims, invented reviews, or a form
+  that loses their details would cost the lead and the trust behind it.
+- **Platform:** Next.js server component with one client island for the form; keyboard, pointer, and
+  touch from 390 px through wide desktop.
+
+Local `p/*` public routes and the existing `landing/` components lead. The reference the work was
+modeled on is a home-services seasonal-lighting page: it earns its conversion from a short staged
+question flow and plain-spoken scope copy, not from decoration. That structure transfers; its
+holiday framing does not.
+
+### Thesis, hierarchy, and semantic system
+
+The thesis is **the yard after dark**. The page is dark because the product only exists at night,
+and the single decorative device is a warm wash rising from the bottom edge of the hero, the way
+uplights actually land on a facade. There are no glass cards, no gradient text, no hover lift, no
+fake metrics, and no invented testimonials or ratings.
+
+First glance is the headline and the free design visit. Second glance is the four lighting
+applications, which teach scope in one row. The amber accent is reserved: it marks the primary
+action, the step counter, and inline affordances, and nothing else competes for it. Type, spacing,
+borders, `Button`, `Input`, `Label`, `Checkbox`, `Alert`, and `lucide-react` icons are reused from
+the existing system; no new dependency was added.
+
+### Flow, states, and responsive contract
+
+The form is three steps: scope, timeline, then contact details. The first two steps commit on a
+single click so the visitor never faces an empty text field first. Each step advance moves focus to
+the new heading, and `Step N of 3` is announced. Covered states: idle, per-step selection, invalid
+phone (submit stays disabled), pending, server error via `Alert` with `role="alert"`, success with a
+`Call` fallback, and a no-key configuration fallback that shows the phone number instead of a form
+that would silently drop a submission.
+
+SMS consent is a separate, optional, unchecked checkbox and is never required to submit, matching the
+10DLC/TCR rule already enforced on `POST /api/v1/p/leads/{public_key}`. The page inherits the app's
+`noindex` robots policy.
+
+### Verification
+
+Attribution is captured on arrival and held in `sessionStorage`, so a homeowner who refreshes,
+bookmarks, or returns on a clean URL is still credited to the ad that earned them. The current URL
+wins over the stored first touch; storage failures degrade to URL-only rather than blocking the lead.
+
+Verified locally against a temporary lead source: the browser flow submits, the backend returns 200,
+and the contact lands in the CRM with the parsed address, UTM attribution, scope/timeline notes, and
+consent left at `unknown` when the box is unticked. Desktop 1280 px and 390 px captures reviewed.
+Screen-reader speech, forced colors, 200% text zoom, and physical devices remain **unverified**.

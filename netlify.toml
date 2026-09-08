@@ -1,0 +1,39 @@
+# Netlify build config for the Next.js frontend.
+#
+# Netlify supports Next.js natively through its OpenNext adapter, so the
+# framework, plugin, and output directory are detected automatically and are
+# deliberately not pinned here. `base` is the one thing Netlify cannot infer:
+# there is no package.json at the repo root, so without it the build runs
+# `npm ci` at the root and fails. This mirrors the Root Directory = `frontend`
+# setting the Vercel deployment already relies on.
+#
+# The site serves the whole app, not just the marketing page. Anything set as
+# an environment variable in the Netlify UI (`NEXT_PUBLIC_API_URL`,
+# `NEXT_PUBLIC_LANDSCAPE_LEAD_FORM_KEY`) is what the build reads; `.env.local`
+# never leaves the developer machine.
+#
+# Backend work is required before leads submit from a Netlify domain: add that
+# origin to the lead source's allowed domains and to `CORS_ORIGINS`, or the
+# public lead endpoint rejects the submission with 403 Origin not allowed.
+
+[build]
+  base = "frontend"
+  command = "npm run build"
+  # Resolved from the REPO ROOT, not from `base` (verified: `publish = ".next"`
+  # resolved to <root>/.next and the build failed). Without it the CLI defaults
+  # publish to the repo root, which ships raw repo files, skips the Next.js
+  # runtime, and 404s every route.
+  publish = "frontend/.next"
+
+# Git-connected builds detect Next.js on their own, but `netlify deploy --build`
+# from this monorepo reported `framework: unknown` and produced a static upload.
+# Declaring the runtime makes both paths behave the same. Intentionally
+# unpinned: Netlify maintains it against each Next.js release.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[build.environment]
+  # Match frontend/.nvmrc so Netlify builds on the same Node as Vercel and CI.
+  NODE_VERSION = "24.18.0"
+  # `npm ci` needs devDependencies to build; Netlify prunes them by default.
+  NPM_FLAGS = "--include=dev"

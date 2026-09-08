@@ -57,6 +57,11 @@
   --color-brand-bg-2: var(--brand-bg-2);
   --color-brand-line: var(--brand-line);
   --color-brand-body: var(--brand-body);
+  /* Maxteriors logo gold, sampled from the wordmark artwork. Fixed in both
+     themes because it is the brand mark's own color, not a themed surface.
+     11.6:1 on black, so it is safe for body text and for black-on-gold buttons. */
+  --color-brand-gold: #fbb505;
+  --color-brand-gold-bright: #ffc633;
 }
 
 /* ── Black & Yellow Light Theme ──────────────────────────────── */
