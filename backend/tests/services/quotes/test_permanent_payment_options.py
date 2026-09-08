@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from pydantic import ValidationError as PydanticValidationError
 
 from app.models.quote import Quote
 from app.schemas.pricing import PricingSettings
+from app.schemas.proposal import PublicProposalApprove
 from app.services.exceptions import ConflictError, ValidationError
 from app.services.quotes import quote_service as quote_service_module
 from app.services.quotes.quote_service import QuoteService
@@ -81,6 +84,26 @@ def test_new_snapshot_requires_one_option_and_retry_cannot_switch_it() -> None:
     assert quote.payment_option == "financing"
     with pytest.raises(ConflictError, match="cannot be changed"):
         QuoteService._apply_approval_payment_option(quote, "cash_check", retry=True)
+
+
+def test_proposal_payment_choice_rounds_once_and_cannot_change() -> None:
+    quote = _quote(service="permanent", total=5200.01)
+    _snapshot(quote)
+
+    with pytest.raises(ValidationError, match="Choose 50% down"):
+        QuoteService._apply_proposal_payment_choice(quote, None, retry=False)
+    QuoteService._apply_proposal_payment_choice(quote, "fifty_percent_down", retry=False)
+    assert quote.proposal_payment_amount == Decimal("2600.01")
+    quote.status = "approved"
+    QuoteService._apply_proposal_payment_choice(quote, "fifty_percent_down", retry=True)
+    with pytest.raises(ConflictError, match="cannot be changed"):
+        QuoteService._apply_proposal_payment_choice(quote, "pay_in_full", retry=True)
+
+
+@pytest.mark.parametrize("choice", ["financing", "cash_check", "unknown"])
+def test_public_approval_schema_rejects_non_customer_payment_choices(choice: str) -> None:
+    with pytest.raises(PydanticValidationError):
+        PublicProposalApprove.model_validate({"payment_option": choice})
 
 
 def test_legacy_and_non_permanent_quotes_keep_old_approval_flow() -> None:

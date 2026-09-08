@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import type { FinancingEstimate as FinancingEstimateData } from "@/types/financing";
-import type { QuotePaymentOption } from "@/types/proposal";
+import type { ProposalPaymentChoice, PublicProposalPaymentAmounts } from "@/types/proposal";
 
 import "./financing-estimate.css";
 
@@ -82,10 +82,10 @@ function formatApr(apr: number | null | undefined): string | null {
 
 interface PermanentPaymentOptionsProps {
   financing: FinancingEstimateData | null | undefined;
-  contractPrice: number;
+  paymentOptions: PublicProposalPaymentAmounts | null | undefined;
   currency?: string;
-  value: QuotePaymentOption | null;
-  onChange: (value: QuotePaymentOption) => void;
+  value: ProposalPaymentChoice | null;
+  onChange: (value: ProposalPaymentChoice) => void;
   disabled?: boolean;
 }
 
@@ -98,25 +98,25 @@ function formatContractPrice(value: number, currency: string): string {
   }).format(value);
 }
 
-/** Exact Permanent Lighting payment methods; prices and estimates remain server-owned. */
+/** Informational financing beside two exact, server-priced approval choices. */
 export function PermanentPaymentOptions({
   financing,
-  contractPrice,
+  paymentOptions,
   currency = "USD",
   value,
   onChange,
   disabled = false,
 }: PermanentPaymentOptionsProps) {
-  if (!financing?.plan_number || financing.monthly_payment <= 0) return null;
-  const term = financing.default_term;
-  const apr = new Intl.NumberFormat("en-US", {
-    style: "percent",
-    maximumFractionDigits: 2,
-  }).format(financing.apr);
-  const price = formatContractPrice(contractPrice, currency);
-  const optionCard = (option: QuotePaymentOption, title: string) => {
+  if (!paymentOptions) return null;
+  const optionCard = (
+    option: ProposalPaymentChoice,
+    title: string,
+    amount: number,
+    schedule: string,
+  ) => {
     const selected = value === option;
-    const detailsId = `payment-option-${option}-details`;
+    const price = formatContractPrice(amount, currency);
+    const scheduleId = `payment-option-${option}-schedule`;
     return (
       <label className={`payment-option${selected ? " is-selected" : ""}`}>
         <span className="payment-option__heading">
@@ -125,41 +125,58 @@ export function PermanentPaymentOptions({
             name="proposal-payment-option"
             value={option}
             checked={selected}
-            aria-describedby={detailsId}
+            aria-label={`${title}, ${price}`}
+            aria-describedby={scheduleId}
             onChange={() => onChange(option)}
           />
           <strong>{title}</strong>
           <span className="payment-option__state">{selected ? "Selected" : "Select"}</span>
         </span>
         <span className="payment-option__price">{price}</span>
-        <span className="payment-option__details" id={detailsId}>
-          {option === "financing" ? (
-            <>
-              {`Approximately $${Math.round(financing.monthly_payment).toLocaleString("en-US")}/month for ${term} months`}
-              <br />
-              GreenSky plan {financing.plan_number}
-              <br />
-              {GREEN_SKY_REQUIRED_DISCLOSURE}
-            </>
-          ) : (
-            "Same contracted customer price."
-          )}
+        <span className="payment-option__schedule" id={scheduleId}>
+          {schedule}
         </span>
       </label>
     );
   };
+  const showFinancing = Boolean(financing && financing.monthly_payment > 0);
 
   return (
     <fieldset className="payment-options" id="payment-options" disabled={disabled}>
-      <legend id="payment-options-label">PAYMENT OPTIONS</legend>
-      <div
-        className="payment-options__grid"
-        role="radiogroup"
-        aria-labelledby="payment-options-label"
-      >
-        {optionCard("financing", `${apr} APR FINANCING`)}
-        {optionCard("cash_check", "CASH/CHECK")}
+      <legend>PAYMENT OPTIONS</legend>
+      <div className="payment-options__grid">
+        {showFinancing && financing ? (
+          <article
+            className="payment-option payment-option--estimate"
+            aria-label="Financing estimate"
+          >
+            <span className="payment-option__heading">
+              <strong>Financing estimate</strong>
+            </span>
+            <span className="payment-option__price">
+              ${Math.round(financing.monthly_payment).toLocaleString("en-US")}/mo
+            </span>
+            <span className="payment-option__schedule">for {financing.default_term} months</span>
+          </article>
+        ) : null}
+        <div className="payment-options__choices" role="radiogroup" aria-label="Payment options">
+          {optionCard(
+            "fifty_percent_down",
+            "50% down",
+            paymentOptions.fifty_percent_down_amount,
+            "Balance due at completion",
+          )}
+          {optionCard(
+            "pay_in_full",
+            "Pay in full",
+            paymentOptions.pay_in_full_amount,
+            "One payment today",
+          )}
+        </div>
       </div>
+      {showFinancing ? (
+        <p className="payment-options__disclosure">{GREEN_SKY_REQUIRED_DISCLOSURE}</p>
+      ) : null}
     </fieldset>
   );
 }

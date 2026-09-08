@@ -130,8 +130,7 @@ async def test_approve_requires_and_forwards_rendered_version(
 async def test_approve_forwards_the_clients_package_choice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The package key the client picked must reach the service — it's what
-    re-derives the totals and the deposit they're about to be charged."""
+    """The package and schedule enums reach the service; money never does."""
     seen: dict[str, str | int | None] = {}
 
     async def _approve(
@@ -149,8 +148,9 @@ async def test_approve_forwards_the_clients_package_choice(
             token="tok",
             status="approved",
             message="Thank you!",
-            deposit_required=True,
-            deposit_amount=1055.0,
+            proposal_payment_choice="pay_in_full",
+            proposal_payment_required=True,
+            proposal_payment_amount=2110.0,
         )
 
     monkeypatch.setattr(quotes_module.QuoteService, "approve_public", _approve)
@@ -160,7 +160,7 @@ async def test_approve_forwards_the_clients_package_choice(
             json={
                 "proposal_version": 4,
                 "selected_tier": "good",
-                "payment_option": "financing",
+                "payment_option": "pay_in_full",
             },
         )
 
@@ -168,9 +168,9 @@ async def test_approve_forwards_the_clients_package_choice(
     assert seen == {
         "proposal_version": 4,
         "selected_tier": "good",
-        "payment_option": "financing",
+        "payment_option": "pay_in_full",
     }
-    assert resp.json()["deposit_amount"] == 1055.0
+    assert resp.json()["proposal_payment_amount"] == 2110.0
 
 
 async def test_approve_rejects_customer_supplied_financial_terms() -> None:
@@ -179,7 +179,7 @@ async def test_approve_rejects_customer_supplied_financial_terms() -> None:
             "/api/v1/p/quotes/tok/approve",
             json={
                 "proposal_version": 1,
-                "payment_option": "financing",
+                "payment_option": "pay_in_full",
                 "total": 1,
                 "apr": 0,
                 "merchant_fee_rate": 0,

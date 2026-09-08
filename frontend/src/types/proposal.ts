@@ -25,7 +25,13 @@ export interface PublicProposalBranding {
 
 export type PublicProposalStatus = "sent" | "approved" | "declined" | "expired";
 
-export type QuotePaymentOption = "cash_check" | "financing";
+export type ProposalPaymentChoice = "fifty_percent_down" | "pay_in_full";
+
+export interface PublicProposalPaymentAmounts {
+  fifty_percent_down_amount: number;
+  completion_balance: number;
+  pay_in_full_amount: number;
+}
 
 /**
  * One package the client can choose between before accepting. Every figure is
@@ -38,8 +44,10 @@ export interface PublicProposalPackage {
   name?: string | null;
   /** All-in total for this package, including charges that ride along. */
   total: number;
-  /** Money due today if this package is accepted; null when none is due. */
+  /** Legacy deposit amount for non-Permanent proposals. */
   deposit_amount?: number | null;
+  /** Exact server-priced Permanent payment choices for this package. */
+  payment_options?: PublicProposalPaymentAmounts | null;
   /** The package the quote currently sits on (the rep's pick). */
   is_selected: boolean;
 }
@@ -56,7 +64,6 @@ export interface PublicProposal {
   number: string;
   title?: string | null;
   status: PublicProposalStatus;
-  payment_option?: QuotePaymentOption | null;
   /** Monotonic customer-facing terms version submitted with acceptance. */
   proposal_version: number;
   currency: string;
@@ -64,8 +71,13 @@ export interface PublicProposal {
   tax_amount: number;
   discount_amount: number;
   total: number;
-  /** Present only when a categorized core quote meets its configured minimum. */
+  /** Informational financing estimate; never an approval choice. */
   financing?: FinancingEstimate | null;
+  payment_options?: PublicProposalPaymentAmounts | null;
+  proposal_payment_choice?: ProposalPaymentChoice | null;
+  proposal_payment_amount?: number | null;
+  proposal_payment_paid: boolean;
+  proposal_payment_required: boolean;
   issue_date?: string | null;
   expiry_date?: string | null;
   is_expired: boolean;
@@ -99,11 +111,20 @@ export interface PublicProposalDepositCheckout {
   currency: string;
 }
 
+export interface PublicProposalPaymentCheckout {
+  url: string;
+  amount: number;
+  currency: string;
+  payment_choice: ProposalPaymentChoice;
+}
+
 export interface PublicProposalActionResult {
   token: PublicProposal["token"];
   status: PublicProposalStatus;
   message: string;
-  payment_option?: QuotePaymentOption | null;
+  proposal_payment_choice?: ProposalPaymentChoice | null;
+  proposal_payment_required: boolean;
+  proposal_payment_amount?: number | null;
   deposit_required?: boolean;
   deposit_amount?: number | null;
 }
@@ -112,4 +133,13 @@ export interface PublicProposalDepositStatus {
   deposit_paid: boolean;
   deposit_amount?: number | null;
   currency: string;
+}
+
+export interface PublicProposalPaymentStatus {
+  payment_paid: boolean;
+  payment_required: boolean;
+  payment_amount: number;
+  completion_balance: number;
+  currency: string;
+  payment_choice: ProposalPaymentChoice;
 }

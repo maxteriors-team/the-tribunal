@@ -24,9 +24,14 @@ from app.models.contact import Contact
 from app.models.quote import Quote
 from app.models.workspace import Workspace
 from app.schemas.pricing import PricingSettings
-from app.schemas.proposal import PublicProposal, PublicProposalLineItem
+from app.schemas.proposal import (
+    ProposalPaymentChoice,
+    PublicProposal,
+    PublicProposalLineItem,
+)
 from app.schemas.quote import QuoteCreate, QuoteLineItemCreate
 from app.services.exceptions import ConflictError, NotFoundError, ValidationError
+from app.services.payments.proposal_payment_service import mark_proposal_payment_paid
 from app.services.quotes import QuoteService
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -236,8 +241,14 @@ async def test_public_approve_flips_status_and_is_idempotent(
         assert proposal.is_decided is True
 
 
-async def test_permanent_public_approval_requires_and_locks_one_payment_method(
+@pytest.mark.parametrize(
+    ("payment_choice", "expected_amount"),
+    [("fifty_percent_down", 535.0), ("pay_in_full", 1070.0)],
+)
+async def test_permanent_public_approval_persists_server_owned_payment(
     monkeypatch: pytest.MonkeyPatch,
+    payment_choice: ProposalPaymentChoice,
+    expected_amount: float,
 ) -> None:
     receipt = AsyncMock(return_value=True)
     monkeypatch.setattr(
@@ -259,22 +270,59 @@ async def test_permanent_public_approval_requires_and_locks_one_payment_method(
 
         proposal = await service.get_public_proposal(token)
         assert proposal.financing is not None
-        assert proposal.financing.plan_number == "6124"
+        assert proposal.payment_options is not None
+        assert proposal.payment_options.fifty_percent_down_amount == 535.0
+        assert proposal.payment_options.completion_balance == 535.0
+        assert proposal.payment_options.pay_in_full_amount == 1070.0
         assert "permanent_pricing_snapshot" not in proposal.model_dump()
 
-        with pytest.raises(ValidationError, match="Choose cash/check"):
+        with pytest.raises(ValidationError, match="Choose 50% down"):
             await service.approve_public(token, proposal_version=1)
         approved = await service.approve_public(
-            token, proposal_version=1, payment_option="financing"
+            token, proposal_version=1, payment_option=payment_choice
         )
-        assert approved.payment_option == "financing"
+        assert approved.proposal_payment_choice == payment_choice
+        assert approved.proposal_payment_amount == expected_amount
+        assert approved.proposal_payment_required is True
+        assert approved.deposit_required is False
+
+        await db.refresh(quote)
+        assert quote.proposal_payment_choice == payment_choice
+        assert float(quote.proposal_payment_amount or 0) == expected_amount
+        assert quote.payment_option == "cash_check"
         repeated = await service.approve_public(
-            token, proposal_version=1, payment_option="financing"
+            token, proposal_version=1, payment_option=payment_choice
         )
         assert repeated.status == "approved"
+        changed = "pay_in_full" if payment_choice == "fifty_percent_down" else "fifty_percent_down"
         with pytest.raises(ConflictError, match="cannot be changed"):
-            await service.approve_public(token, proposal_version=1, payment_option="cash_check")
+            await service.approve_public(token, proposal_version=1, payment_option=changed)
         receipt.assert_awaited_once()
+        assert receipt.await_args.kwargs["proposal_payment_choice"] == payment_choice
+        assert receipt.await_args.kwargs["proposal_payment_amount"] == expected_amount
+
+        notify = AsyncMock()
+        monkeypatch.setattr(
+            "app.services.payments.proposal_payment_service._notify_proposal_payment_paid",
+            notify,
+        )
+        quote.proposal_payment_checkout_session_id = f"cs_{payment_choice}"
+        await db.commit()
+        assert await mark_proposal_payment_paid(
+            db,
+            quote,
+            session_id=f"cs_{payment_choice}",
+            payment_intent_id=f"pi_{payment_choice}",
+        )
+        assert not await mark_proposal_payment_paid(
+            db,
+            quote,
+            session_id=f"cs_{payment_choice}",
+            payment_intent_id=f"pi_{payment_choice}",
+        )
+        assert quote.proposal_payment_paid_at is not None
+        assert quote.proposal_payment_intent_id == f"pi_{payment_choice}"
+        notify.assert_awaited_once()
 
 
 async def test_acceptance_receipt_carries_brand_logo_and_accepted_warranty(
