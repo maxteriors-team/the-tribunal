@@ -26,6 +26,17 @@ vi.mock("@/lib/api/appointments", async (importOriginal) => {
 const appointment: Appointment = {
   id: 42,
   contact_id: 7,
+  contact: {
+    id: 7,
+    first_name: "Helen",
+    last_name: "Vasquez",
+    email: "helen@example.com",
+    phone_number: "+15125550142",
+    address_line1: "4412 Ridgeview Dr",
+    address_city: "Austin",
+    address_state: "TX",
+    address_zip: "78731",
+  },
   workspace_id: "workspace-1",
   scheduled_at: "2026-09-10T14:00:00.000Z",
   anytime: false,
@@ -58,6 +69,13 @@ describe("AppointmentDetailsDialog", () => {
           deleting={false}
         />
       </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /Open 4412 Ridgeview Dr, Austin, TX, 78731/i }),
+    ).toHaveAttribute(
+      "href",
+      "https://www.google.com/maps/search/?api=1&query=4412%20Ridgeview%20Dr%2C%20Austin%2C%20TX%2C%2078731",
     );
 
     await user.click(screen.getByRole("combobox", { name: "Update appointment status" }));

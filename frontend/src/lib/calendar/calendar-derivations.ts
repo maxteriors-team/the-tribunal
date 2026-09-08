@@ -45,7 +45,9 @@ export function getInitials(firstName: string, lastName?: string): string {
 }
 
 /** Human-readable contact name, falling back to "Unknown". */
-export function getContactName(contact: Contact | null | undefined): string {
+export function getContactName(
+  contact: Pick<Contact, "first_name" | "last_name"> | null | undefined,
+): string {
   if (!contact) return "Unknown";
   return [contact.first_name, contact.last_name].filter(Boolean).join(" ");
 }

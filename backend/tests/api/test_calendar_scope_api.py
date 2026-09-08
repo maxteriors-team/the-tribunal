@@ -96,7 +96,18 @@ def _appointment_response() -> dict[str, object]:
         "id": APPOINTMENT_ID,
         "workspace_id": str(WS_ID),
         "contact_id": 42,
-        "contact": None,
+        "contact": {
+            "id": 42,
+            "first_name": "Helen",
+            "last_name": "Vasquez",
+            "email": "helen@example.com",
+            "phone_number": "+15125550142",
+            "address_line1": "4412 Ridgeview Dr",
+            "address_line2": None,
+            "address_city": "Austin",
+            "address_state": "TX",
+            "address_zip": "78731",
+        },
         "agent_id": None,
         "message_id": None,
         "campaign_id": None,
@@ -135,7 +146,7 @@ async def _client(module, service: AsyncMock, role: str, prefix: str) -> AsyncIt
     service_name = "JobService" if module is jobs_module else "AppointmentService"
     with ExitStack() as stack:
         stack.enter_context(patch.object(module, service_name, return_value=service))
-        if module is appointments_module:
+        if module in {appointments_module, jobs_module}:
             stack.enter_context(
                 patch.object(module, "enforce_appointment_reminder_rate_limit", AsyncMock())
             )
@@ -149,6 +160,7 @@ def _job_service() -> AsyncMock:
     service = AsyncMock()
     service.list.return_value = {"items": [_job_response()], "total": 1}
     service.get.return_value = _job_response()
+    service.send_reminder.return_value = {"success": True, "message": "sent", "sent_to": "***1234"}
     return service
 
 
@@ -247,10 +259,26 @@ class TestJobReadScope:
         assert response.status_code == 200
         assert service.get.await_args.kwargs["visible_to_user_id"] is None
 
+    async def test_reminder_carries_field_visibility_scope(self) -> None:
+        service = _job_service()
+        async with _client(jobs_module, service, "technician", JOBS_PREFIX) as client:
+            response = await client.post(f"/api/v1/workspaces/{WS_ID}/jobs/{JOB_ID}/send-reminder")
+        assert response.status_code == 200
+        kwargs = service.send_reminder.await_args.kwargs
+        assert kwargs["visible_to_user_id"] == USER_ID
+        assert kwargs["sender_user_id"] == USER_ID
+
+    async def test_reminder_is_unscoped_for_dispatch(self) -> None:
+        service = _job_service()
+        async with _client(jobs_module, service, "dispatcher", JOBS_PREFIX) as client:
+            response = await client.post(f"/api/v1/workspaces/{WS_ID}/jobs/{JOB_ID}/send-reminder")
+        assert response.status_code == 200
+        assert service.send_reminder.await_args.kwargs["visible_to_user_id"] is None
+
 
 class TestAppointmentCreateScope:
-    async def test_restricted_create_assigns_to_the_caller(self) -> None:
-        """A technician's new appointment remains visible on their own calendar."""
+    async def test_field_create_cannot_select_an_arbitrary_workspace_contact(self) -> None:
+        """Field-only callers cannot turn appointment creation into a contact oracle."""
         service = _appointment_service()
         async with _client(
             appointments_module, service, "technician", APPOINTMENTS_PREFIX
@@ -263,9 +291,9 @@ class TestAppointmentCreateScope:
                     "duration_minutes": 30,
                 },
             )
-        assert response.status_code == 201
-        assert response.status_code == 201
-        assert service.create_appointment.await_args.kwargs["booked_for_user_id"] == USER_ID
+
+        assert response.status_code == 403
+        service.create_appointment.assert_not_awaited()
 
     async def test_restricted_create_cannot_choose_another_calendar_user(self) -> None:
         service = _appointment_service()
@@ -284,6 +312,7 @@ class TestAppointmentCreateScope:
 
         assert response.status_code == 403
         service.create_appointment.assert_not_awaited()
+
     async def test_dispatch_create_stays_unassigned(self) -> None:
         """Dispatch can still create a board appointment for later routing."""
         service = _appointment_service()
@@ -330,6 +359,7 @@ class TestAppointmentReadScope:
         async with _client(appointments_module, service, role, APPOINTMENTS_PREFIX) as client:
             response = await client.get(f"/api/v1/workspaces/{WS_ID}/appointments")
         assert response.status_code == 200
+        assert response.json()["items"][0]["contact"]["address_line1"] == "4412 Ridgeview Dr"
         assert service.list_appointments.await_args.kwargs["visible_to_user_id"] == USER_ID
 
     @pytest.mark.parametrize("role", PRIVILEGED_ROLES)
