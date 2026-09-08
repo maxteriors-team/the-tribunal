@@ -13,13 +13,22 @@ from app.core.permissions import role_can
 from app.services.ai.crm_assistant._agent_tools import AgentAssistantTools
 from app.services.ai.crm_assistant._appointment_tools import AppointmentAssistantTools
 from app.services.ai.crm_assistant._automation_tools import AutomationAssistantTools
+from app.services.ai.crm_assistant._call_tools import CallAssistantTools
 from app.services.ai.crm_assistant._campaign_tools import CampaignAssistantTools
+from app.services.ai.crm_assistant._catalog_tools import CatalogAssistantTools
 from app.services.ai.crm_assistant._contact_tools import ContactAssistantTools
 from app.services.ai.crm_assistant._conversation_tools import ConversationAssistantTools
+from app.services.ai.crm_assistant._growth_tools import GrowthAssistantTools
 from app.services.ai.crm_assistant._help_tools import HelpAssistantTools
+from app.services.ai.crm_assistant._invoice_tools import InvoiceAssistantTools
+from app.services.ai.crm_assistant._job_tools import JobAssistantTools
 from app.services.ai.crm_assistant._offer_tools import OfferAssistantTools
 from app.services.ai.crm_assistant._opportunity_tools import OpportunityAssistantTools
 from app.services.ai.crm_assistant._outbound_tools import OutboundAssistantTools
+from app.services.ai.crm_assistant._queue_tools import QueueAssistantTools
+from app.services.ai.crm_assistant._quote_tools import QuoteAssistantTools
+from app.services.ai.crm_assistant._reporting_tools import ReportingAssistantTools
+from app.services.ai.crm_assistant._review_tools import ReviewAssistantTools
 from app.services.ai.crm_assistant._segment_tools import SegmentAssistantTools
 from app.services.ai.crm_assistant._tool_context import CRMToolContext, ToolArguments, ToolHandler
 from app.services.ai.crm_assistant._tool_errors import (
@@ -100,10 +109,19 @@ class CRMToolExecutor:
             AutomationAssistantTools(self.context),
             AgentAssistantTools(self.context),
             ConversationAssistantTools(self.context),
+            CallAssistantTools(self.context),
             AppointmentAssistantTools(self.context),
             OpportunityAssistantTools(self.context),
             OfferAssistantTools(self.context),
             OutboundAssistantTools(self.context),
+            QuoteAssistantTools(self.context),
+            InvoiceAssistantTools(self.context),
+            JobAssistantTools(self.context),
+            ReviewAssistantTools(self.context),
+            ReportingAssistantTools(self.context),
+            CatalogAssistantTools(self.context),
+            QueueAssistantTools(self.context),
+            GrowthAssistantTools(self.context),
             HelpAssistantTools(self.context),
         )
         for module in modules:
