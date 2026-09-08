@@ -647,50 +647,41 @@ async def test_technician_cannot_read_referral_partners(
         assert await _status(client, "GET", suffix) == 403
 
 
-async def test_appointment_reminder_stays_open_to_the_field_tier(
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "/appointments/999999/send-reminder",
+        f"/jobs/{OTHER_ID}/send-reminder",
+    ],
+)
+async def test_calendar_reminder_stays_open_to_the_field_tier(
     technician_client: AsyncClient,
+    suffix: str,
 ) -> None:
-    """Considered for a ``comms:send`` gate and deliberately left open.
+    """Stock reminders stay available for calendar entries the field user can see.
 
-    The sweep flagged this as an unguarded send, and gating it broke
-    ``tests/api/test_calendar_scope_api.py``, which pins the opposite intent. The
-    payload is a *templated* reminder for an appointment the caller can already
-    see, rate-limited per user — a technician reminding their own customer about
-    today's job. That is the field workflow, not an escape from it.
-
-    This test exists so the decision is deliberate: if someone gates the route
-    later, they have to come here and argue with the reasoning rather than
-    discovering the regression from a support ticket.
+    The recipient and content are server-selected, visibility is owner-scoped, and
+    the operation is rate-limited. A capability gate would break the field workflow.
     """
     async with technician_client as client:
-        suffix = f"/appointments/{OTHER_ID}/send-reminder"
         assert await _status(client, "POST", suffix) != 403
-        # The schedule itself stays readable too.
         assert await _status(client, "GET", "/appointments") != 403
 
 
-def test_appointment_reminder_takes_no_request_body() -> None:
-    """The invariant the decision above rests on: the caller supplies no content.
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "/appointments/{appointment_id}/send-reminder",
+        "/jobs/{job_id}/send-reminder",
+    ],
+)
+def test_calendar_reminder_takes_no_request_body(suffix: str) -> None:
+    """The invariant the field-tier decision rests on: callers supply no content.
 
-    Leaving this route open is only defensible because a caller cannot say
-    anything through it. They pick one of their own appointments and the server
-    sends a stock reminder; there is no field to put arbitrary text in, so it
-    cannot be used to message a customer freely. Owner scoping and the rate limit
-    then cap who and how often.
-
-    **A request body would end that.** The moment this route accepts one — a
-    custom message, a different recipient, an override — it becomes a general
-    send and needs ``Capability.COMMS_SEND``, which the matrix withholds from the
-    field tier. A prose comment would not survive that change; this fails.
-
-    Asserted on FastAPI's own resolved ``body_params`` rather than
-    ``inspect.signature``, because that is what actually decides whether a field
-    is read from the request body: a Pydantic model, an explicit ``Body(...)``,
-    or a bare non-scalar annotation all land here, while ``Query``/``Path``/
-    ``Depends`` params correctly do not. Reading the signature by hand would have
-    to re-implement that resolution and would get it subtly wrong.
+    A custom message, recipient, or override would turn this into a general send
+    and require ``Capability.COMMS_SEND``. FastAPI's resolved body parameters pin
+    that boundary more reliably than inspecting the Python signature by hand.
     """
-    suffix = "/appointments/{appointment_id}/send-reminder"
     route = next(r for r in app.routes if isinstance(r, APIRoute) and r.path.endswith(suffix))
 
     body_params = [p.name for p in route.dependant.body_params]
@@ -698,11 +689,8 @@ def test_appointment_reminder_takes_no_request_body() -> None:
         "send-reminder now accepts a request body "
         f"({', '.join(body_params)}). It is ungated on purpose because a caller "
         "cannot supply content through it — that is no longer true. Gate the "
-        "route on Capability.COMMS_SEND and update the test above, or drop the "
-        "body."
+        "route on Capability.COMMS_SEND, or drop the body."
     )
-
-
 
 
 def test_job_expense_deletes_are_scoped_to_their_author() -> None:

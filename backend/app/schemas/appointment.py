@@ -38,13 +38,18 @@ class AppointmentUpdate(BaseModel):
 
 
 class ContactSummary(BaseModel):
-    """Minimal contact info for appointments."""
+    """Contact details needed by calendar staff and assigned field technicians."""
 
     id: int
     first_name: str
     last_name: str | None
     email: str | None
-    phone_number: str
+    phone_number: str | None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    address_city: str | None = None
+    address_state: str | None = None
+    address_zip: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

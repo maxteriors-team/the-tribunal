@@ -595,6 +595,8 @@ class AppointmentService:
         workspace: Workspace,
         *,
         visible_to_user_id: int | None = None,
+        sender_user_id: int | None = None,
+        sender_display_name: str | None = None,
     ) -> dict[str, Any]:
         """Send an SMS reminder for an appointment visible to the caller."""
         from app.services.calendar import reminder_service
@@ -634,4 +636,6 @@ class AppointmentService:
             workspace=workspace,
             contact=contact,
             agent=agent,
+            sender_user_id=sender_user_id,
+            sender_display_name=sender_display_name,
         )
