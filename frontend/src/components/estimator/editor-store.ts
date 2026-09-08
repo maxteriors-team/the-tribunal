@@ -103,6 +103,7 @@ export type EditorAction =
           | "catalogSku"
           | "lampCatalogItemId"
           | "accessoryCatalogItemIds"
+          | "wrap"
         >
       >;
       transient?: boolean;

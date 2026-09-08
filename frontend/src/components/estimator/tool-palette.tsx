@@ -25,9 +25,24 @@ import {
   bulbSizeNameFor,
   presetNameFor,
 } from "@/lib/estimator/catalog";
+import { designScale } from "@/lib/estimator/design";
 import { LANDSCAPE_WIRE_GAUGES, landscapeWireLabel } from "@/lib/estimator/fixtures";
 import { FIXTURE_MARKER_COLORS } from "@/lib/estimator/marker-colors";
 import { seasonalIconForStyle, tintSurface } from "@/lib/estimator/seasonal-icons";
+import {
+  MAX_BILLABLE_QUANTITY,
+  MINI_ONLY_SHAPES,
+  WRAP_LIGHT_TYPES,
+  WRAP_LIGHT_TYPE_LABELS,
+  WRAP_SHAPES,
+  WRAP_SHAPE_FIELDS,
+  WRAP_SHAPE_LABELS,
+  calculateWrap,
+  isWrappable,
+  switchWrapShape,
+  type WrapLightType,
+  type WrapSpec,
+} from "@/lib/estimator/tree-wrap";
 import {
   FIXTURE_ICON_SCALE_STEP,
   MAX_BEAM_ANGLE_DEG,
@@ -45,6 +60,7 @@ import type { Design, PlacedItem, Product, Run } from "@/lib/estimator/types";
 import { formatCurrency } from "@/lib/utils/number";
 
 import type { EditorAction, EditorState } from "./editor-store";
+import { WrapDiagram } from "./wrap-diagram";
 
 function newPlacedItemId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -57,6 +73,8 @@ interface ToolPaletteProps {
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
   enableSecondaryScale?: boolean;
+  /** Photo width in pixels, so a measured tree can prefill its height from the scale. */
+  photoWidth?: number;
 }
 
 /**
@@ -79,6 +97,7 @@ export function ToolPalette({
   state,
   dispatch,
   enableSecondaryScale = false,
+  photoWidth,
 }: ToolPaletteProps) {
   const { tool, selection, design } = state;
 
@@ -207,6 +226,16 @@ export function ToolPalette({
             product={selectedItemProduct}
             products={products}
             design={design}
+            dispatch={dispatch}
+          />
+        ) : null}
+
+        {selectedItem && selectedItemProduct ? (
+          <WrapOptions
+            item={selectedItem}
+            product={selectedItemProduct}
+            design={design}
+            photoWidth={photoWidth}
             dispatch={dispatch}
           />
         ) : null}
@@ -883,6 +912,274 @@ function WireCircuitOptions({
         Select fixtures on the plan to assign them to this circuit. Drag the circuit or its points
         to refine the route.
       </p>
+    </div>
+  );
+}
+
+/** Unit abbreviations shown on screen, spelled out for screen readers. */
+const SPOKEN_UNIT = { ft: "feet", in: "inches", $: "dollars" } as const;
+
+/** A number the rep is mid-typing: blank clears the field rather than pricing as 0. */
+function numberOrUndefined(raw: string): number | undefined {
+  const text = raw.trim();
+  if (text === "") return undefined;
+  const value = Number(text);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Exact wrap measuring for a selected tree or bush.
+ *
+ * The price book quotes these by size band, which is fast and right most of the
+ * time. This is the escape hatch for when it is not: the rep measures the tree
+ * in front of them and the quote prices the real wrap instead of the nearest
+ * band. Opting in is per item and reversible — "Use size band" puts the item
+ * straight back on today's pricing, losing nothing but the typed dimensions.
+ *
+ * Height prefills from the drawn size and the photo scale the rep already set,
+ * so the common case is one glance and a confirmation. It stays editable,
+ * because photo scale is only true in the plane of the reference object: a tree
+ * standing well in front of the house measures short, and the rep on site knows
+ * better than the photo does.
+ */
+function WrapOptions({
+  item,
+  product,
+  design,
+  photoWidth,
+  dispatch,
+}: {
+  item: PlacedItem;
+  product: Product;
+  design: Design;
+  photoWidth?: number;
+  dispatch: Dispatch<EditorAction>;
+}) {
+  // Wreaths and stakes are counted, not wrapped; only wrap-style decor measures.
+  if (!isWrappable(product)) return null;
+
+  const spec = item.wrap;
+  const result = spec ? calculateWrap(spec) : null;
+
+  const scale = photoWidth ? designScale(design, photoWidth) : null;
+  const drawnHeightFt =
+    scale?.calibrated && item.sizePx > 0
+      ? Math.round(item.sizePx * scale.ftPerPx * 10) / 10
+      : undefined;
+
+  const patch = (changes: Partial<WrapSpec>) => {
+    if (!spec) return;
+    dispatch({ type: "UPDATE_ITEM", id: item.id, patch: { wrap: { ...spec, ...changes } } });
+  };
+
+  if (!spec) {
+    return (
+      <div className="tp-run-options">
+        <h2 className="tp-mt">Selected {product.name.toLowerCase()}</h2>
+        <p className="tp-opt-readout">
+          Priced by size band. Measure it to quote the real wrap instead.
+        </p>
+        <button
+          type="button"
+          className="est-btn"
+          onClick={() =>
+            dispatch({
+              type: "UPDATE_ITEM",
+              id: item.id,
+              patch: {
+                wrap: {
+                  shape: "evergreen",
+                  lightType: "mini",
+                  // Defaults a crew actually installs: one row per foot, 25ft
+                  // strands. Wrong for some jobs, but never zero — the rep
+                  // adjusts rather than starting from an empty form.
+                  heightFt: drawnHeightFt ?? 12,
+                  rowSpacingIn: 12,
+                  feetPerUnit: 25,
+                  pricingMode: "unit",
+                },
+              },
+            })
+          }
+        >
+          <Ruler className="tp-glyph" aria-hidden="true" /> Measure exactly
+        </button>
+      </div>
+    );
+  }
+
+  const fields = WRAP_SHAPE_FIELDS[spec.shape];
+  const billsByBulb = spec.lightType === "c7" || spec.lightType === "c9";
+  const lightTypes = MINI_ONLY_SHAPES.includes(spec.shape)
+    ? WRAP_LIGHT_TYPES.filter((type) => type === "mini" || type === "garland")
+    : WRAP_LIGHT_TYPES;
+
+  // Units live beside the number, not inside the label, so the rep reads
+  // "Radius 6 ft" as one thing rather than parsing a parenthesis mid-scan. The
+  // abbreviation is shown but never announced alone: the input carries a spoken
+  // name ("Radius in feet"), because a screen-reader user who hears only
+  // "Radius" would have no idea whether the field wants feet or inches.
+  const numberField = (
+    key: keyof WrapSpec,
+    label: string,
+    unit: "ft" | "in" | "$" | "",
+    step: number | "any" = "any",
+  ) => (
+    <label className="tp-dim" key={key}>
+      <span className="tp-dim-label">{label}</span>
+      <span className="tp-dim-input">
+        <input
+          className="est-input"
+          type="number"
+          min={0}
+          step={step}
+          inputMode="decimal"
+          aria-label={unit ? `${label} in ${SPOKEN_UNIT[unit]}` : label}
+          value={(spec[key] as number | undefined) ?? ""}
+          onChange={(event) =>
+            patch({ [key]: numberOrUndefined(event.target.value) } as Partial<WrapSpec>)
+          }
+        />
+        <span className="tp-dim-unit" aria-hidden="true">
+          {unit}
+        </span>
+      </span>
+    </label>
+  );
+
+  return (
+    <div className="tp-run-options tp-wrap-options">
+      <h2 className="tp-mt">Measuring {product.name.toLowerCase()}</h2>
+
+      {/* Shape first, as pictures. Choosing is recognition — the rep looks up at
+          the tree, then picks the one that matches — and the tile they press is
+          the drawing they get below, so the panel never changes vocabulary. */}
+      <div className="tp-shape-grid" role="group" aria-label="Shape">
+        {WRAP_SHAPES.map((shape) => (
+          <button
+            key={shape}
+            type="button"
+            aria-pressed={shape === spec.shape}
+            className={`tp-shape${shape === spec.shape ? " on" : ""}`}
+            onClick={() => patch(switchWrapShape(spec, shape))}
+          >
+            <WrapDiagram shape={shape} width={40} height={44} />
+            <span className="tp-shape-name">{WRAP_SHAPE_LABELS[shape]}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* The drawing leads, with the numbers that change it underneath, so
+          tightening row spacing visibly packs the rows in front of the rep
+          instead of only moving a digit. */}
+      <div className="tp-wrap-stage">
+        <div className="tp-wrap-figure">
+          <WrapDiagram
+            shape={spec.shape}
+            rowCount={result?.rowCount}
+            title={
+              result
+                ? `${WRAP_SHAPE_LABELS[spec.shape]}, ${result.rowCount} wrap rows`
+                : WRAP_SHAPE_LABELS[spec.shape]
+            }
+          />
+          {result ? <span className="tp-wrap-rows">{result.rowCount} rows</span> : null}
+        </div>
+
+        <div className="tp-dims">
+          {numberField("heightFt", "Lit height", "ft")}
+          {fields.includes("radiusFt") ? numberField("radiusFt", "Radius", "ft") : null}
+          {fields.includes("trunkWidthIn") ? numberField("trunkWidthIn", "Trunk", "in") : null}
+          {fields.includes("branchWidthIn")
+            ? numberField("branchWidthIn", "Branch", "in")
+            : null}
+          {/* Limbs are whole things: a fractional count is a typo the math
+              refuses, so the field never offers one in the first place. */}
+          {fields.includes("branchCount") ? numberField("branchCount", "Branches", "", 1) : null}
+          {fields.includes("widthFt") ? numberField("widthFt", "Width", "ft") : null}
+          {fields.includes("depthFt") ? numberField("depthFt", "Depth", "ft") : null}
+          {numberField("rowSpacingIn", "Row gap", "in")}
+        </div>
+      </div>
+
+      {drawnHeightFt !== undefined && drawnHeightFt !== spec.heightFt ? (
+        <button
+          type="button"
+          className="tp-wrap-suggest"
+          onClick={() => patch({ heightFt: drawnHeightFt })}
+        >
+          Photo says {drawnHeightFt} ft tall — use that
+        </button>
+      ) : null}
+
+      <label className="tp-field-label">
+        Lights
+        <select
+          className="est-select"
+          value={spec.lightType}
+          onChange={(event) => patch({ lightType: event.target.value as WrapLightType })}
+        >
+          {lightTypes.map((type) => (
+            <option key={type} value={type}>
+              {WRAP_LIGHT_TYPE_LABELS[type]}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="tp-dims">
+        {billsByBulb
+          ? numberField("bulbSpacingIn", "Bulb gap", "in")
+          : numberField("feetPerUnit", "Strand", "ft")}
+        {numberField("unitPrice", spec.pricingMode === "foot" ? "Per foot" : "Each", "$")}
+      </div>
+
+      <div className="tp-chip-row" role="group" aria-label="Charge by">
+        {(["unit", "foot"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            aria-pressed={spec.pricingMode === mode}
+            className={`tp-spacing-chip ${spec.pricingMode === mode ? "on" : ""}`}
+            onClick={() => patch({ pricingMode: mode })}
+          >
+            {mode === "foot" ? "Per foot" : `Per ${result?.unitKind ?? "strand"}`}
+          </button>
+        ))}
+      </div>
+
+      {/* The answer the rep opened this panel for, at the weight of a number
+          being quoted — never quieter than the button that discards it. */}
+      {result ? (
+        <div className={`tp-wrap-result${result.price === null ? " pending" : ""}`}>
+          {result.price !== null ? (
+            <span className="tp-wrap-total">{formatCurrency(result.price)}</span>
+          ) : null}
+          <span className="tp-wrap-basis">
+            {result.plannedFeet} ft of wrap
+            {result.unitCount !== null
+              ? ` · ${result.unitCount} ${result.unitKind}${result.unitCount === 1 ? "" : "s"}`
+              : ""}
+          </span>
+          <span className="tp-wrap-note">
+            {result.price !== null
+              ? "Added as its own quote line."
+              : result.billedQuantity !== null && result.billedQuantity > MAX_BILLABLE_QUANTITY
+                ? "Too big for one line — split it up, or it stays on size-band pricing."
+                : "Enter a price to bill this measurement. Until then it stays on size-band pricing."}
+          </span>
+        </div>
+      ) : (
+        <p className="tp-opt-readout">Fill in the sizes to measure this one exactly.</p>
+      )}
+
+      <button
+        type="button"
+        className="tp-wrap-revert"
+        onClick={() => dispatch({ type: "UPDATE_ITEM", id: item.id, patch: { wrap: undefined } })}
+      >
+        Use size band instead
+      </button>
     </div>
   );
 }

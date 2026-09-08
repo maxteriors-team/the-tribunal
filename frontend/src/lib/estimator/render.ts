@@ -15,6 +15,7 @@
 import { runScale } from "./design";
 import { distance, jitter, pointsAlongPath } from "./geometry";
 import type { Point } from "./measure";
+import { WRAP_PROFILE, WRAP_TOP_INSET, calculateWrap, wrapAspect } from "./tree-wrap";
 import {
   beamAngleFor,
   beamRotationFor,
@@ -587,31 +588,67 @@ export function drawPlacedItem(
 
   if (product.style === "treewrap") {
     const h = item.sizePx;
-    const topW = h * 0.09;
-    const botW = h * 0.13;
     const top = { x: item.at.x, y: item.at.y - h / 2 };
+    // simplification: fixed draw ceilings rather than a real level-of-detail
+    // pass. Beyond these counts the bulbs overlap into a solid mass anyway, so
+    // the extra draws cost frames and add nothing the customer can see.
+    const MAX_WRAP_ROWS = 200;
+    const MAX_WRAP_COLS = 200;
+
+    // An exactly-measured item paints its own silhouette at its own row
+    // spacing, so the picture the customer approves is the wrap being quoted:
+    // a bush reads wide and low, and a 6 in wrap reads twice as dense as a
+    // 12 in one. Unmeasured decor keeps the original generic cone.
+    const measured = item.wrap ? calculateWrap(item.wrap) : null;
+    const aspect = item.wrap && measured ? wrapAspect(item.wrap) : null;
+    const shape = item.wrap && measured && aspect !== null ? item.wrap.shape : null;
+
+    // The rep's placed icon governs how big the wrap is on the photo; the
+    // measurement governs its proportions. A wide-and-low item is exactly what
+    // this feature exists to show, so the item grows sideways to fit its shape
+    // rather than being squashed — but only up to a ceiling. Past it, a 20 ft
+    // wide, 3 ft tall hedge would paint a 3.3x half-width: bulbs sprayed across
+    // the photo, and ~444k draws on every redraw.
+    const drawnAspect = Math.min(aspect ?? 0, 1.6);
+    const halfWidthAt = (t: number) =>
+      shape === null ? h * (0.09 + 0.04 * t) : WRAP_PROFILE[shape](t) * h * drawnAspect;
+    const topInset = shape === null ? 0 : WRAP_TOP_INSET[shape] * h;
+    const litHeight = Math.max(h - topInset, 1);
+    const widest = Math.max(halfWidthAt(1), halfWidthAt(0.5), h * 0.08);
+
     // soft ambient glow
     const g = ctx.createRadialGradient(item.at.x, item.at.y, 0, item.at.x, item.at.y, h * 0.5);
     g.addColorStop(0, rgba(colors[0], 0.25));
     g.addColorStop(1, rgba(colors[0], 0));
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(item.at.x, item.at.y, botW * 3, h * 0.55, 0, 0, Math.PI * 2);
+    ctx.ellipse(item.at.x, item.at.y, widest * 2.2, h * 0.55, 0, 0, Math.PI * 2);
     ctx.fill();
-    // wrapped rows of minis
-    const rowStep = Math.max(inch * 4, 2);
+
+    // Rows land at the measured count when there is one. The floor stops a very
+    // tight wrap on a small photo from collapsing into a solid block of light.
+    //
+    // Both steps are also floored so the whole shape can never exceed
+    // MAX_WRAP_ROWS x MAX_WRAP_COLS bulbs. This canvas repaints on every drag,
+    // and a big icon on a zoomed-out photo would otherwise reach ~450k draws
+    // per frame. At normal scales the measured spacing is far coarser, so these
+    // caps are inactive and the picture is unchanged.
+    const rowStep =
+      measured && measured.rowCount > 0
+        ? Math.max(litHeight / measured.rowCount, 1.5, litHeight / MAX_WRAP_ROWS)
+        : Math.max(inch * 4, 2);
     const r = Math.max(inch * 0.65, minR * 0.5, 0.8);
     let i = 0;
-    for (let y = 0; y <= h; y += rowStep) {
-      const w = topW + (botW - topW) * (y / h);
-      const colStep = Math.max(inch * 3, 1.6);
+    for (let y = 0; y <= litHeight; y += rowStep) {
+      const w = halfWidthAt(y / litHeight);
+      const colStep = Math.max(inch * 3, 1.6, (w * 2) / MAX_WRAP_COLS);
       const phase = (i % 2) * (colStep / 2);
       for (let x = -w + phase; x <= w; x += colStep) {
         drawBulb(
           ctx,
           {
             x: top.x + x + jitter(i * 31 + x) * inch * 0.8,
-            y: top.y + y + jitter(i * 7 + x * 3) * inch * 0.8,
+            y: top.y + topInset + y + jitter(i * 7 + x * 3) * inch * 0.8,
           },
           r,
           colors[i % colors.length],

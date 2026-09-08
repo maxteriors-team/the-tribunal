@@ -194,13 +194,13 @@ export const salesNavItems: AppNavItem[] = [
     requires: "quotes:read",
   },
   {
-    // Seasonal launcher folded into the unified Quotes & Estimates hub; kept in
-    // the command palette (and reachable by URL) but out of the sidebar so there
-    // is one obvious quoting/estimates home instead of competing estimator tabs.
+    // Sits in Sales beside Quotes: reps quote Christmas work daily in season,
+    // and leaving the launcher out of the sidebar meant the only way in was
+    // already knowing the URL or the command palette.
     title: "Christmas Light Estimator",
     url: "/christmas-lights",
     icon: TreePine,
-    sidebar: false,
+    sidebar: true,
     commandPalette: true,
     accent: "christmas",
     requires: "quotes:read",

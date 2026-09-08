@@ -12,6 +12,7 @@ import {
   rotateHandlePos,
   withRunOverrides,
 } from "./render";
+import { isMeasured } from "./tree-wrap";
 import { DEFAULT_BEAM_ANGLE_DEG, MAX_BEAM_ANGLE_DEG, MIN_BEAM_ANGLE_DEG } from "./types";
 import type { Design, PlacedItem, Product, Run } from "./types";
 
@@ -313,6 +314,118 @@ describe("drawRunLights / drawPlacedItem styles", () => {
       sizePx: 120,
     };
     expect(() => drawPlacedItem(ctx, tree, { ...wreath, style: "treewrap" }, 40, 2)).not.toThrow();
+  });
+
+  /**
+   * The photo the customer approves has to be the wrap they are quoted. These
+   * count painted bulbs (`drawImage` calls) because that is what a customer
+   * actually sees: more light, wider light, or the same light as before.
+   */
+  describe("a measured tree paints what it is quoted as", () => {
+    const treewrap = { ...wreath, style: "treewrap" as const };
+    const base: PlacedItem = { id: "t", productId: "x", at: { x: 300, y: 300 }, sizePx: 200 };
+    const measured = {
+      shape: "evergreen",
+      lightType: "mini",
+      heightFt: 20,
+      radiusFt: 6,
+      rowSpacingIn: 12,
+      feetPerUnit: 25,
+      pricingMode: "unit",
+      unitPrice: 39.99,
+    } as const;
+
+    const bulbsFor = (item: PlacedItem) => {
+      stubSpriteCanvas();
+      const ctx = fakeCtx();
+      drawPlacedItem(ctx, item, treewrap, 40, 2);
+      return vi.mocked(ctx.drawImage).mock.calls.length;
+    };
+
+    it("paints a tighter wrap denser than a loose one", () => {
+      const loose = bulbsFor({ ...base, wrap: { ...measured, rowSpacingIn: 24 } });
+      const tight = bulbsFor({ ...base, wrap: { ...measured, rowSpacingIn: 6 } });
+      expect(tight).toBeGreaterThan(loose);
+    });
+
+    it("paints a wide bush wider than a narrow trunk", () => {
+      const bush = bulbsFor({
+        ...base,
+        wrap: { ...measured, shape: "bush", widthFt: 8, depthFt: 4, rowSpacingIn: 8 },
+      });
+      const trunk = bulbsFor({
+        ...base,
+        wrap: { ...measured, shape: "trunk", trunkWidthIn: 18, rowSpacingIn: 8 },
+      });
+      expect(bush).toBeGreaterThan(trunk);
+    });
+
+    it("leaves an unmeasured tree looking exactly as it always has", () => {
+      const plain = bulbsFor(base);
+      // A half-typed measurement is not a silhouette; it must not change the
+      // customer's picture until it is complete enough to price.
+      const halfTyped = bulbsFor({ ...base, wrap: { ...measured, radiusFt: undefined } });
+      expect(halfTyped).toBe(plain);
+      expect(plain).toBeGreaterThan(0);
+    });
+
+    it("paints a broad bush broader than a squat one", () => {
+      // Wide-and-low is the whole point of measuring a bush, so a wider one has
+      // to actually read wider on the customer's photo.
+      const broad = bulbsFor({
+        ...base,
+        wrap: { ...measured, shape: "bush", heightFt: 4, widthFt: 8, depthFt: 4 },
+      });
+      const squat = bulbsFor({
+        ...base,
+        wrap: { ...measured, shape: "bush", heightFt: 4, widthFt: 4, depthFt: 4 },
+      });
+      expect(broad).toBeGreaterThan(squat);
+    });
+
+    it("stops an extreme hedge from spraying the whole photo", () => {
+      // A 20 ft wide, 3 ft tall hedge is an ordinary measurement, but its raw
+      // proportions would paint 3.3x the item's half-width: bulbs across the
+      // photo and a redraw heavy enough to stall the designer. It is drawn at
+      // the ceiling instead — wide, but bounded.
+      const hedge = bulbsFor({
+        ...base,
+        wrap: { ...measured, shape: "bush", heightFt: 3, widthFt: 20, depthFt: 3 },
+      });
+      const atCeiling = bulbsFor({
+        ...base,
+        wrap: { ...measured, shape: "bush", heightFt: 3, widthFt: 40, depthFt: 3 },
+      });
+      expect(hedge).toBe(atCeiling);
+      expect(hedge).toBeLessThan(40_000);
+    });
+
+    it("stays cheap to repaint when an icon is dragged large", () => {
+      // This canvas repaints on every drag. A big icon on a zoomed-out photo
+      // (small pxPerFt) is the worst case a rep can produce by hand, and it
+      // used to reach ~450k bulb draws per frame.
+      stubSpriteCanvas();
+      const ctx = fakeCtx();
+      const item: PlacedItem = {
+        ...base,
+        sizePx: 800,
+        wrap: {
+          ...measured,
+          shape: "bush",
+          heightFt: 3,
+          widthFt: 40,
+          depthFt: 3,
+          rowSpacingIn: 0.5,
+        },
+      };
+      // Guard the guard: a bush without depthFt does not measure at all and
+      // would quietly fall back to the cheap generic cone, passing this test
+      // while proving nothing.
+      expect(isMeasured(item)).toBe(true);
+
+      drawPlacedItem(ctx, item, treewrap, 10, 1);
+      expect(vi.mocked(ctx.drawImage).mock.calls.length).toBeLessThan(45_000);
+    });
   });
 
   it("renders a scaled (jumbo) bulb without throwing", () => {

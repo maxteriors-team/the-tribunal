@@ -860,6 +860,30 @@ async def remove_service(
     return await service.remove_service(workspace_id, quote_id, service_id)
 
 
+# Seasonal renewal: rebuild a returning customer's last sale as this year's
+# draft. Keyed by contact, not quote, because the rep starts from the customer.
+@router.post(
+    "/renewals/{contact_id}",
+    response_model=QuoteDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def renew_last_season_quote(
+    workspace_id: uuid.UUID,
+    contact_id: int,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanWriteQuotes,
+) -> QuoteDetailResponse:
+    """Rebuild a returning customer's last holiday-lighting sale as a draft.
+
+    Creates a quote, hence ``quotes:write``. 404s when the customer has no sold
+    holiday-lighting job on file, rather than creating an empty draft.
+    """
+    return await QuoteService(db).renew_last_season(
+        workspace_id, contact_id, created_by_id=current_user.id
+    )
+
+
 # Line-item sub-resource. Mutations return the full quote because totals change.
 @router.post(
     "/{quote_id}/line-items",

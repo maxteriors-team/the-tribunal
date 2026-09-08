@@ -3009,6 +3009,55 @@ class QuoteService:
         response.attach_warning = attach_warning
         return response
 
+    async def renew_last_season(
+        self,
+        workspace_id: uuid.UUID,
+        contact_id: int,
+        *,
+        created_by_id: int | None = None,
+    ) -> QuoteDetailResponse:
+        """Rebuild a returning customer's last holiday-lighting sale as a draft.
+
+        The crew already knows this roof and the measurements are on file, so a
+        renewal should be a confirmation rather than a re-measure. Raises rather
+        than inventing an empty quote when there is nothing sold to rebuild.
+        """
+        # Imported here, not at module scope: the seasonal package reaches back
+        # into this service for pricing config, so a top-level import would
+        # close an import cycle.
+        from app.services.seasonal.christmas_renewal_quote import renew_last_season_quote
+
+        workspace = await get_or_404(self.db, Workspace, workspace_id)
+        # Workspace-scoped fetch: a contact id from another tenant must 404,
+        # never quietly renew someone else's customer into this workspace.
+        contact = await get_nested_or_404(
+            self.db,
+            Contact,
+            contact_id,
+            parent_field="workspace_id",
+            parent_id=workspace_id,
+        )
+        renewal = await renew_last_season_quote(
+            self.db,
+            workspace,
+            contact,
+            allocate_number=self._next_quote_number,
+            created_by_id=created_by_id,
+        )
+        if renewal is None:
+            raise NotFoundError(
+                "No holiday-lighting job on file to renew for this customer",
+                code="no_renewable_quote",
+            )
+        self.log.info(
+            "quote_renewed_from_last_season",
+            renewal_quote_id=str(renewal.id),
+            contact_id=contact_id,
+            workspace_id=str(workspace_id),
+            line_items=len(renewal.line_items),
+        )
+        return await self._detail_response(renewal)
+
     async def revise_from_wizard(
         self,
         workspace_id: uuid.UUID,

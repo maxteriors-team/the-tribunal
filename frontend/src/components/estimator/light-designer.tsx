@@ -98,7 +98,11 @@ import {
   buildSavedBistroFallbacks,
   indexProducts,
 } from "@/lib/estimator/catalog";
-import { toEstimateCustomLines, type CustomLineDraft } from "@/lib/estimator/custom-lines";
+import {
+  MAX_CUSTOM_LINES,
+  toEstimateCustomLines,
+  type CustomLineDraft,
+} from "@/lib/estimator/custom-lines";
 import {
   COVERAGE_OPTIONS,
   type CoverageKey,
@@ -177,6 +181,7 @@ import {
   type SupplierCsvRow,
   type SupplierFixtureInput,
 } from "@/lib/estimator/supplier-csv";
+import { wrapEstimateLines } from "@/lib/estimator/tree-wrap";
 import {
   beamAngleFor,
   type Design,
@@ -3727,7 +3732,25 @@ export function LightDesigner({
     };
   }, [landscapeOnly, landscapeTab, liveShots, productById]);
 
-  const customLineInputs = useMemo(() => toEstimateCustomLines(customLines), [customLines]);
+  /**
+   * Hand-typed lines plus every exactly-measured tree in the design.
+   *
+   * Measured trees are billed here rather than as a decor count (see
+   * `designToEstimateInputs`, which skips a tree only once it bills as a line),
+   * so this is the only place they reach a total. They lead the list because the
+   * rep measured them against a real tree: if the server's 20-line cap bites, an
+   * optional add-on should be what falls off, not the tree the customer is
+   * standing next to.
+   *
+   * simplification: past 20 measured trees on one estimate the extras are
+   * dropped here while still being skipped from band counting, so they would go
+   * unbilled. A yard that large is outside what this tool is for; if it ever
+   * comes up, group the surplus onto one line rather than raising the cap.
+   */
+  const customLineInputs = [
+    ...liveShots.flatMap((shot) => wrapEstimateLines(shot.design, productById)),
+    ...toEstimateCustomLines(customLines),
+  ].slice(0, MAX_CUSTOM_LINES);
   const proposalSide: LinearFeetEstimateRequest["proposal_side"] = sells("permanent")
     ? sells("christmas")
       ? "comparison"
@@ -4948,6 +4971,7 @@ export function LightDesigner({
                     state={state}
                     dispatch={dispatch}
                     enableSecondaryScale
+                    photoWidth={photo?.width}
                   />
                   <LightCanvas
                     // Remount per shot: zoom, pan and any half-drawn run belong to the

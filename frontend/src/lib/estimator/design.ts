@@ -21,6 +21,7 @@
 import type { ChristmasItemsSelection } from "@/types/estimate";
 
 import { distance, polylineLength } from "./geometry";
+import { isBilledByWrap } from "./tree-wrap";
 import type { Design, Product, Run, RunElevation, ScaleSlot } from "./types";
 
 type PermanentComplexity = NonNullable<Run["permanentComplexity"]>;
@@ -141,6 +142,12 @@ export function designToEstimateInputs(
   for (const item of design.items) {
     const product = productById.get(item.productId);
     if (!product) continue;
+    // A tree that will bill from its own wrap geometry must not also add a count
+    // to its decor category — that charges the customer twice. One measured but
+    // not yet billable (no rate, or past the server's line cap) deliberately
+    // keeps its band count, so it can never fall between the two paths and ride
+    // along free.
+    if (isBilledByWrap(item, product)) continue;
     if (product.target.field === "christmas") {
       addChristmas(product.target.category, product.target.option, 1);
     } else if (product.target.field === "landscape") {

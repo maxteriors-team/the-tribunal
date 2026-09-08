@@ -1088,6 +1088,257 @@
   color: var(--t4);
 }
 
+/*
+ * Tree wrap measuring.
+ *
+ * A rep prices a wrap by holding four numbers at once — height, width, row
+ * tightness, row count — so this panel leads with pictures instead of a stack
+ * of inputs: pick the silhouette, watch the rows redraw, read the price. The
+ * tile you press is the drawing you get, so the vocabulary never changes.
+ */
+.tp-shape-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.tp-shape {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 3px 6px;
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--bdr);
+  border-radius: 9px;
+  background: var(--s3);
+  color: var(--t3);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.tp-shape:hover:not(.on) {
+  border-color: var(--bdr-g);
+  color: var(--t2);
+}
+
+.tp-shape.on {
+  border-color: var(--gold);
+  background: #1f1c14;
+  color: var(--t1);
+}
+
+.tp-shape-name {
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+/* The tile silhouettes read as one family: filled body, lit rows on top. */
+.tp-wrap-diagram-body {
+  fill: rgba(255, 255, 255, 0.07);
+  stroke: var(--bdr);
+  stroke-width: 1;
+}
+
+.tp-wrap-diagram-trunk {
+  stroke: rgba(255, 255, 255, 0.14);
+}
+
+.tp-wrap-diagram-row {
+  stroke: var(--gold);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.tp-shape.on .tp-wrap-diagram-body {
+  fill: rgba(212, 175, 90, 0.1);
+  stroke: var(--bdr-g);
+}
+
+/*
+ * The drawing leads, full width, with the numbers that drive it underneath.
+ * Side by side was tried first and lost: in a 300px rail it squeezed the labels
+ * to "Lit heig…", and a dimension a rep cannot read is worse than one they
+ * scroll to.
+ */
+.tp-wrap-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.tp-wrap-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 6px 8px;
+  border: 1px solid var(--bdr);
+  border-radius: 10px;
+  background: var(--s2);
+}
+
+/*
+ * Row count, field labels, units and the billing note all use --t3, not the
+ * fainter --t4 this file uses for incidental hints. Measured on these surfaces
+ * --t4 lands at ~3:1, under the 4.5:1 floor, and none of these are decoration:
+ * a rep who cannot read "in" versus "ft" mis-measures the tree.
+ */
+.tp-wrap-rows {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-dims {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tp-dim {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tp-dim-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+
+/* Unit sits inside the field's trailing inset, never against its edge. */
+.tp-dim-input {
+  position: relative;
+  display: block;
+}
+
+.tp-dim-input .est-input {
+  width: 100%;
+  padding-inline-end: 26px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-dim-unit {
+  position: absolute;
+  inset-inline-end: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--t3);
+  pointer-events: none;
+}
+
+/* A measurement the photo already knows: offered, never applied behind the rep. */
+.tp-wrap-suggest {
+  margin-top: 8px;
+  width: 100%;
+  appearance: none;
+  cursor: pointer;
+  border: 1px dashed var(--bdr-g);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--gold);
+  padding: 7px 10px;
+  font-size: 11px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.tp-wrap-suggest:hover {
+  background: rgba(212, 175, 90, 0.08);
+  border-color: var(--gold);
+}
+
+/*
+ * The measured result is the answer the rep opened this panel for, so it reads
+ * at the weight of a number being quoted rather than as helper text under a
+ * form. It sits directly above "Use size band instead", which stays quiet:
+ * discarding a measurement must never be the loudest thing here.
+ */
+.tp-wrap-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--bdr-g);
+  border-radius: 10px;
+  background: rgba(212, 175, 90, 0.06);
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-wrap-total {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1.15;
+}
+
+.tp-wrap-basis {
+  font-size: 12px;
+  color: var(--t2);
+}
+
+.tp-wrap-note {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--t3);
+}
+
+/* Not yet billable: stated plainly, never dressed up as a price. */
+.tp-wrap-result.pending {
+  border-color: var(--bdr);
+  background: transparent;
+}
+
+.tp-wrap-result.pending .tp-wrap-note {
+  color: #e8a17a;
+}
+
+/* Reverting is a real choice, so it stays reachable — and visually last. */
+.tp-wrap-revert {
+  margin-top: 8px;
+  width: 100%;
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--t3);
+  padding: 7px 10px;
+  font-size: 11px;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.tp-wrap-revert:hover {
+  color: var(--t1);
+  border-color: var(--bdr);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-shape,
+  .tp-wrap-suggest,
+  .tp-wrap-revert {
+    transition: none;
+  }
+}
+
 .tp-spacing-chip {
   flex: 1;
   min-width: 40px;
