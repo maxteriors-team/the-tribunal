@@ -2579,7 +2579,9 @@ class QuoteService:
             raise ValidationError("This quote can no longer be changed.")
         return get_pricing_config(workspace)
 
-    def _record_signature_ceremony(self, quote: Quote, signature: SignatureCeremony | None) -> None:
+    async def _record_signature_ceremony(
+        self, quote: Quote, signature: SignatureCeremony | None
+    ) -> None:
         """Freeze the e-signature onto a quote that is about to be approved.
 
         Written only on the transition into ``approved``. Re-approving an
@@ -2587,10 +2589,13 @@ class QuoteService:
         recorded moment of consent must not drift forward every time a
         double-clicked accept or a payment retry re-enters this path.
 
-        The terms text is snapshotted from what the customer was actually shown
-        -- ``quote.terms`` falling back to the workspace template default, the
-        same expression the public proposal page renders -- so a later edit to
-        either cannot retroactively change what they agreed to.
+        The terms text is snapshotted here, from the **locked** quote row, using
+        the same ``quote.terms or template.default_terms`` expression the public
+        proposal page renders. Resolving it inside the lock rather than in the
+        route matters twice over: it costs no extra round trip on the approve
+        path, and it closes the window in which an operator edit between an
+        unlocked read and the locked write would record a snapshot that never
+        appeared on anyone's screen.
 
         A partial ceremony is refused outright rather than half-stored: a typed
         name with no affirmations is not consent, and a legal document that
@@ -2618,7 +2623,10 @@ class QuoteService:
         # between two checkboxes that were ticked before the request was sent.
         quote.econsent_accepted_at = now
         quote.cancellation_acknowledged_at = now
-        quote.signed_terms_snapshot = signature.terms_snapshot
+        workspace = await self.db.get(Workspace, quote.workspace_id)
+        quote.signed_terms_snapshot = quote.terms or (
+            get_proposal_template(workspace).default_terms if workspace is not None else None
+        )
 
     async def approve_public(
         self,
@@ -2679,7 +2687,7 @@ class QuoteService:
         # Recorded before the approval call so the signature and the status
         # change land in one transaction: an approved quote with no signature
         # would be indistinguishable from a legacy one-click acceptance.
-        self._record_signature_ceremony(quote, signature)
+        await self._record_signature_ceremony(quote, signature)
         result = await self._approve_locked_quote(
             quote,
             expected_proposal_version=expected_version,
@@ -2802,28 +2810,6 @@ class QuoteService:
                 quote_id=str(quote.id),
                 error=str(exc),
             )
-
-    async def public_terms_text(self, token: str) -> str | None:
-        """The terms text a client is being shown for this token, or ``None``.
-
-        Mirrors the ``quote.terms or template.default_terms`` fallback used when
-        building the public proposal, so the snapshot frozen at signing is the
-        text that was on the customer's screen. Resolving it server-side (rather
-        than accepting it back from the client) is the point: a snapshot the
-        signer could edit proves nothing about what they agreed to.
-
-        Returns ``None`` for an unknown or draft token instead of raising -- the
-        approve call immediately after this one owns that error, and failing
-        here would turn a 404 into a confusing 500.
-        """
-        try:
-            quote = await self._load_by_token(token)
-        except NotFoundError:
-            return None
-        workspace = await self.db.get(Workspace, quote.workspace_id)
-        if workspace is None:
-            return quote.terms
-        return quote.terms or get_proposal_template(workspace).default_terms
 
     async def record_public_view(self, token: str) -> None:
         """Record that a client opened their proposal, and alert the operator once.

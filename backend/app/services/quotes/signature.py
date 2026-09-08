@@ -25,16 +25,13 @@ class SignatureCeremony:
     econsent_accepted: bool
     cancellation_acknowledged: bool
     ip_address: str
-    # The terms text exactly as the customer was shown it, resolved by the route
-    # from the same expression the public proposal page renders.
-    terms_snapshot: str | None
 
     @property
     def is_complete(self) -> bool:
         """True when this is a signature rather than a partial submission.
 
-        The terms snapshot is intentionally *not* required: a workspace that has
-        written no terms at all still produces a valid signature, and the
-        document says so explicitly instead of implying terms existed.
+        The terms text is not carried here: it is snapshotted inside the locked
+        approval transaction from the quote itself, so a signer cannot post back
+        an edited copy of what they claim to have agreed to.
         """
         return bool(self.signed_name and self.econsent_accepted and self.cancellation_acknowledged)

@@ -116,7 +116,6 @@ def _ceremony(name: str = "Dana Homeowner") -> SignatureCeremony:
         econsent_accepted=True,
         cancellation_acknowledged=True,
         ip_address=SIGNER_IP,
-        terms_snapshot="Cancel within 3 business days for a full refund.",
     )
 
 
@@ -259,7 +258,6 @@ async def test_partial_ceremony_is_refused_rather_than_half_recorded() -> None:
                 econsent_accepted=True,
                 cancellation_acknowledged=False,  # never ticked
                 ip_address=SIGNER_IP,
-                terms_snapshot="Cancel within 3 business days.",
             ),
         )
 

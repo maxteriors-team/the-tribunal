@@ -161,6 +161,7 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
     from app.models.message_attachment import MessageAttachment
     from app.models.opt_out import GlobalOptOut
     from app.models.phone_message import PhoneMessage
+    from app.models.quote import Quote
     from app.models.referral_partner import ReferralPartner
     from app.models.referral_partner_intake import ReferralPartnerIntakeLink
     from app.models.user import User
@@ -208,6 +209,11 @@ def rotation_targets() -> tuple[RotationTarget, ...]:
             {"email": "email_hash", "phone_number": "phone_hash"},
         ),
         RotationTarget(LinkClick, ("ip_address",)),
+        # The signer's IP on an e-signed quote. Encrypted because its only
+        # legitimate use is dispute evidence, and it must rotate with everything
+        # else -- a signed agreement whose IP is stranded under a discarded key
+        # loses part of what authenticates it.
+        RotationTarget(Quote, ("signed_ip",)),
         RotationTarget(MessageAttachment, ("source_url",)),
         RotationTarget(GoogleCalendarConnection, ("access_token", "refresh_token")),
         # Conversation/message payloads. These carry the bulk of the customer

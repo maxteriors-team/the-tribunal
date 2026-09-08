@@ -1053,10 +1053,6 @@ async def approve_public_proposal(
         econsent_accepted=payload.econsent_accepted,
         cancellation_acknowledged=payload.cancellation_acknowledged,
         ip_address=get_client_ip(request, settings.trusted_proxies),
-        # Resolved server-side from the same expression the public proposal page
-        # renders, so the snapshot is the text that was actually on screen -- not
-        # a copy the client posted back, which a signer could rewrite.
-        terms_snapshot=await service.public_terms_text(token),
     )
     return await service.approve_public(
         token,

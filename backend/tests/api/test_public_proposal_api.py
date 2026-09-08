@@ -23,6 +23,7 @@ from app.schemas.proposal import (
     PublicProposalLineItem,
 )
 from app.services.exceptions import NotFoundError
+from app.services.quotes.signature import SignatureCeremony
 
 
 @asynccontextmanager
@@ -95,7 +96,7 @@ async def test_sent_proposal_returns_safe_payload(monkeypatch: pytest.MonkeyPatc
 async def test_approve_requires_and_forwards_rendered_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    seen: dict[str, str | int | None] = {}
+    seen: dict[str, object] = {}
 
     async def _approve(
         self: object,
@@ -104,11 +105,13 @@ async def test_approve_requires_and_forwards_rendered_version(
         proposal_version: int,
         selected_tier: str | None = None,
         payment_option: str | None = None,
+        signature: SignatureCeremony | None = None,
     ) -> PublicProposalActionResult:
         seen["token"] = token
         seen["proposal_version"] = proposal_version
         seen["selected_tier"] = selected_tier
         seen["payment_option"] = payment_option
+        seen["signature"] = signature
         return PublicProposalActionResult(token="tok", status="approved", message="Thank you!")
 
     monkeypatch.setattr(quotes_module.QuoteService, "approve_public", _approve)
@@ -119,19 +122,24 @@ async def test_approve_requires_and_forwards_rendered_version(
     assert missing.status_code == 422
     assert resp.status_code == 200
     assert resp.json()["status"] == "approved"
-    assert seen == {
-        "token": "tok",
-        "proposal_version": 7,
-        "selected_tier": None,
-        "payment_option": None,
-    }
+    assert seen["token"] == "tok"
+    assert seen["proposal_version"] == 7
+    assert seen["selected_tier"] is None
+    assert seen["payment_option"] is None
+    # The ceremony reaches the service, and the signer's IP is supplied by the
+    # server rather than the request body -- a signature the client could stamp
+    # with its own address would prove nothing.
+    ceremony = seen["signature"]
+    assert isinstance(ceremony, SignatureCeremony)
+    assert ceremony.signed_name is None  # none was posted in this request
+    assert ceremony.ip_address
 
 
 async def test_approve_forwards_the_clients_package_choice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The package and schedule enums reach the service; money never does."""
-    seen: dict[str, str | int | None] = {}
+    seen: dict[str, object] = {}
 
     async def _approve(
         self: object,
@@ -140,10 +148,12 @@ async def test_approve_forwards_the_clients_package_choice(
         proposal_version: int,
         selected_tier: str | None = None,
         payment_option: str | None = None,
+        signature: SignatureCeremony | None = None,
     ) -> PublicProposalActionResult:
         seen["proposal_version"] = proposal_version
         seen["selected_tier"] = selected_tier
         seen["payment_option"] = payment_option
+        seen["signature"] = signature
         return PublicProposalActionResult(
             token="tok",
             status="approved",
@@ -165,11 +175,11 @@ async def test_approve_forwards_the_clients_package_choice(
         )
 
     assert resp.status_code == 200
-    assert seen == {
-        "proposal_version": 4,
-        "selected_tier": "good",
-        "payment_option": "pay_in_full",
-    }
+    assert seen["proposal_version"] == 4
+    assert seen["selected_tier"] == "good"
+    assert seen["payment_option"] == "pay_in_full"
+    # Money still never comes from the client; the ceremony rides alongside it.
+    assert isinstance(seen["signature"], SignatureCeremony)
     assert resp.json()["proposal_payment_amount"] == 2110.0
 
 
