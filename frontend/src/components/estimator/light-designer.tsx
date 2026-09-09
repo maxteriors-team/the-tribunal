@@ -4912,6 +4912,7 @@ export function LightDesigner({
                     state={state}
                     dispatch={dispatch}
                     enableSecondaryScale
+                    photoWidth={photo?.width ?? 0}
                   />
                   <LightCanvas
                     // Remount per shot: zoom, pan and any half-drawn run belong to the
@@ -4936,7 +4937,6 @@ export function LightDesigner({
                                     ? `${line.productName} · ${line.sku}`
                                     : `Not sold in ${tierLabel}`}
                                 </span>
-                    photoWidth={photo?.width ?? 0}
                               </span>
                               <span className="ep-line-amount">×{line.count}</span>
                             </div>
