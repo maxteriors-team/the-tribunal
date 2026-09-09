@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.models.device_token import DeviceToken
 from app.models.user import User
 from app.models.workspace import WorkspaceMembership
+from app.services.notification_policy import role_receives
 
 logger = logging.getLogger(__name__)
 
@@ -92,14 +93,22 @@ class PushNotificationService:
         notification_type: str | None = None,
         channel_id: str | None = None,
     ) -> bool:
-        """Send a push notification to all members of a workspace."""
-        # Get all workspace member user IDs
+        """Push to the workspace members this event is actually for.
+
+        Role-filtered through :mod:`app.services.notification_policy`: without
+        it this notified every membership row, so a field technician's phone
+        buzzed for every customer deposit. Filtering happens in Python rather
+        than SQL so an unknown role string still resolves through the
+        fail-closed tier mapping instead of being dropped by an ``IN`` clause.
+        """
         result = await db.execute(
-            select(WorkspaceMembership.user_id).where(
+            select(WorkspaceMembership.user_id, WorkspaceMembership.role).where(
                 WorkspaceMembership.workspace_id == workspace_id
             )
         )
-        user_ids = [row[0] for row in result.all()]
+        user_ids = [
+            user_id for user_id, role in result.all() if role_receives(role, notification_type)
+        ]
 
         any_sent = False
         for user_id in user_ids:
