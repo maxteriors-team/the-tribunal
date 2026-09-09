@@ -187,6 +187,11 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    // Netlify build output. Gitignored, so CI never sees it, but a local build
+    // leaves vendored `.cjs` bundles here — and `.cjs` sits outside the glob
+    // eslint-config-next scopes its plugins to, so linting one aborts the whole
+    // run with "could not find plugin jsx-a11y".
+    ".netlify/**",
     "playwright-report/**",
     "test-results/**",
     "next-env.d.ts",
