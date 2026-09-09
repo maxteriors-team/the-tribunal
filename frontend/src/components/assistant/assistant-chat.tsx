@@ -15,7 +15,12 @@ import { useWorkspace } from "@/providers/workspace-provider";
 
 const BRIEFING_PROMPT = "Give me my morning briefing";
 
-export function AssistantChat({ className }: { className?: string }) {
+/**
+ * @param compact - Dock mode: drops the chat list rail so the panel fits a
+ *   narrow floating window, and ignores `?briefing=1` (that param belongs to
+ *   the /assistant page, and stripping it here would rewrite another page's URL).
+ */
+export function AssistantChat({ className, compact }: { className?: string; compact?: boolean }) {
   const {
     workspaceId,
     conversations,
@@ -52,7 +57,7 @@ export function AssistantChat({ className }: { className?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const briefingRequested = searchParams.get("briefing") === "1";
+  const briefingRequested = !compact && searchParams.get("briefing") === "1";
   const briefingSentRef = useRef(false);
   useEffect(() => {
     if (!briefingRequested || briefingSentRef.current || !workspaceId) return;
@@ -63,15 +68,17 @@ export function AssistantChat({ className }: { className?: string }) {
 
   return (
     <div className={cn("flex h-full min-h-0 overflow-hidden", className)}>
-      <ConversationSidebar
-        conversations={conversations}
-        activeConversationId={resolvedActiveConversationId}
-        runtimes={runtimes}
-        isLoading={conversationsLoading}
-        onNewConversation={handleNewConversation}
-        onSelectConversation={handleSelectConversation}
-        onDeleteConversation={handleDeleteConversation}
-      />
+      {compact ? null : (
+        <ConversationSidebar
+          conversations={conversations}
+          activeConversationId={resolvedActiveConversationId}
+          runtimes={runtimes}
+          isLoading={conversationsLoading}
+          onNewConversation={handleNewConversation}
+          onSelectConversation={handleSelectConversation}
+          onDeleteConversation={handleDeleteConversation}
+        />
+      )}
 
       <section className="flex min-w-0 flex-1 flex-col bg-background">
         <ChatHeader

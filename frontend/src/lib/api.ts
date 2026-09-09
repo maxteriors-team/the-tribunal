@@ -1,5 +1,6 @@
 import axios, { type AxiosRequestConfig } from "axios";
 
+import { recordApiFailure } from "@/lib/assistant/diagnostics";
 import { getBackendUrl } from "@/lib/utils/backend-url";
 
 // Use relative URL so requests are proxied through Next.js rewrites (no CORS issues)
@@ -87,6 +88,15 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+
+    // Keep a shape-only trace (method, path, status) so the CRM Assistant can
+    // explain a broken screen instead of guessing from a screenshot alone.
+    recordApiFailure({
+      method: originalRequest?.method,
+      url: originalRequest?.url,
+      status: error.response?.status,
+      message: error.message,
+    });
 
     // Never refresh a failed login: the caller needs the original 401 detail,
     // and an anonymous login attempt has no session to refresh.

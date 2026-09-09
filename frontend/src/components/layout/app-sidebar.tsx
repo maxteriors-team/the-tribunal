@@ -88,6 +88,11 @@ const CommandPalette = dynamic(() => import("./command-palette").then((m) => m.C
   ssr: false,
 });
 
+const AssistantDock = dynamic(
+  () => import("@/components/assistant/assistant-dock").then((m) => m.AssistantDock),
+  { ssr: false },
+);
+
 interface BreadcrumbSegment {
   label: string;
   href: string;
@@ -556,6 +561,13 @@ export function AppSidebar({ children }: AppSidebarProps) {
           </Button>
         </header>
         {commandMounted && <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />}
+        {/* Floating assistant everywhere it is allowed — except the full-page
+            assistant (duplicate chat) and focused studio views. */}
+        {pathname !== "/assistant" &&
+        !focusedLightingProject &&
+        canAccessAppPath("/assistant", tier, can) ? (
+          <AssistantDock />
+        ) : null}
         <main className="app-scrollbar min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto">
           <SalesRepOnboardingGate />
           <SetupGate />

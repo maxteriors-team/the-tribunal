@@ -8,6 +8,7 @@ import {
   Loader2,
   MessageSquare,
   Plus,
+  ScreenShare,
   Send,
   Sparkles,
   Square,
@@ -25,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { IMAGE_ACCEPT_ATTR, readImageFile } from "@/lib/ai/image-upload";
+import { captureScreenFrame } from "@/lib/ai/screen-capture";
 import type {
   AssistantActionSummary,
   AssistantConversationMetaResponse,
@@ -37,6 +39,7 @@ import {
   type PendingActionReviewState,
   type RuntimeTool,
 } from "@/lib/assistant/conversation-runtime";
+import { buildScreenTroubleshootPrompt } from "@/lib/assistant/diagnostics";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/utils/date";
 
@@ -322,6 +325,7 @@ export function MessageComposer({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -334,6 +338,31 @@ export function MessageComposer({
     }
     setImageError(null);
     onImageChange(dataUrl);
+  };
+
+  const handleReadScreen = async () => {
+    setIsCapturing(true);
+    try {
+      const { dataUrl, error, cancelled } = await captureScreenFrame();
+      if (cancelled) return;
+      if (error || !dataUrl) {
+        setImageError(error ?? "Could not capture the screen.");
+        return;
+      }
+      setImageError(null);
+      onImageChange(dataUrl);
+      // Prefilled, not auto-sent: the screenshot and the exact wording stay
+      // on screen so the user can edit or drop them before anything is sent.
+      if (!input.trim()) {
+        onInputChange(
+          buildScreenTroubleshootPrompt(
+            typeof window === "undefined" ? "" : window.location.pathname,
+          ),
+        );
+      }
+    } finally {
+      setIsCapturing(false);
+    }
   };
 
   return (
@@ -379,6 +408,21 @@ export function MessageComposer({
           aria-label="Attach image"
         >
           <ImagePlus className="size-4" />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          onClick={() => void handleReadScreen()}
+          disabled={!canSend || isStreaming || isCapturing}
+          aria-label="Read my screen"
+          title="Share a screenshot so the assistant can troubleshoot it"
+        >
+          {isCapturing ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <ScreenShare className="size-4" />
+          )}
         </Button>
         <Textarea
           value={input}
