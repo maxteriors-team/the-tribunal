@@ -219,6 +219,17 @@ export interface Product {
   /** Keeps legacy/fallback products resolvable without duplicating palette choices. */
   paletteHidden?: boolean;
   target: DrawTarget;
+  /**
+   * Where a *measured* wrap on this product bills — the workspace's per-foot
+   * wrap category, resolved when the palette is built.
+   *
+   * A tree the rep measured on the photo is priced by the feet of strand it
+   * needs, which only its per-foot rate can express; the flat per-tree option is
+   * what it falls back to. Absent when the workspace sells no per-foot wrap
+   * rate at all, so measuring can never silently bill against a rate the
+   * operator never set.
+   */
+  wrapTarget?: { category: string; option: string };
 }
 
 export type ScaleSlot = 1 | 2;
@@ -265,8 +276,19 @@ export interface PlacedItem {
   id: string;
   productId: string;
   at: Point;
-  /** Beam throw or pool diameter in image pixels. */
+  /** Beam throw or pool diameter in image pixels. For a wrapped tree, its height. */
   sizePx: number;
+  /**
+   * Canopy width in image pixels, for a tree the rep measured on the photo.
+   *
+   * Its presence is what makes a tree *measured*: with it the wrap is priced by
+   * the foot of strand it actually needs, without it the tree falls back to the
+   * workspace's flat per-tree rate. Optional so every tree drawn before this
+   * existed keeps pricing exactly as it did.
+   */
+  canopyWidthPx?: number;
+  /** Vertical gap between spirals, in inches. Falls back to the standard wrap. */
+  wrapSpacingIn?: number;
   /** Drawing-sheet symbol scale; independent from beam throw. */
   iconScale?: number;
   /** Per-fixture beam-spread override. Missing means the fixture type's default lamp. */

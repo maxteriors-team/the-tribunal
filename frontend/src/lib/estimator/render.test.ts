@@ -4,6 +4,7 @@ import {
   beamAngleAt,
   beamHandlePos,
   beamRotationAt,
+  canopyHandlePos,
   drawPlacedItem,
   drawRunLights,
   drawScene,
@@ -375,6 +376,36 @@ describe("itemHit / resizeHandlePos", () => {
     const h = resizeHandlePos(item);
     expect(h.x).toBeGreaterThan(item.at.x);
     expect(h.y).toBeGreaterThan(item.at.y);
+  });
+});
+
+describe("canopyHandlePos", () => {
+  const treeProduct: Product = { ...wreath, id: "cat-trees-medium", style: "treewrap" };
+  const tree: PlacedItem = {
+    id: "t",
+    productId: treeProduct.id,
+    at: { x: 100, y: 100 },
+    sizePx: 200,
+  };
+
+  it("sits at the measured canopy edge, at the base of the tree", () => {
+    expect(canopyHandlePos({ ...tree, canopyWidthPx: 60 }, treeProduct)).toEqual({
+      x: 130,
+      y: 200,
+    });
+  });
+
+  it("starts on the drawn silhouette so an unmeasured tree has a grip to grab", () => {
+    // Without a grip on the default shape there is no gesture that starts a
+    // measurement at all.
+    expect(canopyHandlePos(tree, treeProduct)).toEqual({ x: 100 + 200 * 0.13, y: 200 });
+  });
+
+  it("offers no canopy grip on anything that isn't a wrap", () => {
+    // A wreath has no canopy; a grip would imply a measurement that changes
+    // nothing about its price.
+    expect(canopyHandlePos(tree, wreath)).toBeNull();
+    expect(canopyHandlePos(tree, undefined)).toBeNull();
   });
 });
 

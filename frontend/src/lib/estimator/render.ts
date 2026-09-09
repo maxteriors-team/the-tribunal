@@ -15,6 +15,7 @@
 import { runScale } from "./design";
 import { distance, jitter, pointsAlongPath } from "./geometry";
 import type { Point } from "./measure";
+import { TAPER } from "./tree-wrap";
 import {
   beamAngleFor,
   beamRotationFor,
@@ -587,8 +588,11 @@ export function drawPlacedItem(
 
   if (product.style === "treewrap") {
     const h = item.sizePx;
-    const topW = h * 0.09;
-    const botW = h * 0.13;
+    // A measured canopy drives the shape, so the tree the customer sees lit is
+    // the same tree the quote was priced from. Unmeasured trees keep the width
+    // this has always drawn (0.26 × height); TAPER is that drawing's own taper.
+    const botW = item.canopyWidthPx && item.canopyWidthPx > 0 ? item.canopyWidthPx / 2 : h * 0.13;
+    const topW = botW * TAPER;
     const top = { x: item.at.x, y: item.at.y - h / 2 };
     // soft ambient glow
     const g = ctx.createRadialGradient(item.at.x, item.at.y, 0, item.at.x, item.at.y, h * 0.5);
@@ -598,8 +602,9 @@ export function drawPlacedItem(
     ctx.beginPath();
     ctx.ellipse(item.at.x, item.at.y, botW * 3, h * 0.55, 0, 0, Math.PI * 2);
     ctx.fill();
-    // wrapped rows of minis
-    const rowStep = Math.max(inch * 4, 2);
+    // Rows sit at the spacing the strand footage was priced on, so a denser
+    // wrap visibly costs more rather than just costing more.
+    const rowStep = Math.max(inch * (item.wrapSpacingIn ?? 4), 2);
     const r = Math.max(inch * 0.65, minR * 0.5, 0.8);
     let i = 0;
     for (let y = 0; y <= h; y += rowStep) {
@@ -895,6 +900,10 @@ export function drawScene(
       ctx.stroke();
       ctx.restore();
       handleSquare(ctx, resizeHandlePos(item), 5 / vs);
+      // Gold, like the landscape spread grip: a second grip that changes what
+      // the item costs rather than how big it looks.
+      const canopyGrip = canopyHandlePos(item, product);
+      if (canopyGrip) handleSquare(ctx, canopyGrip, 5 / vs, "#f5c842");
     }
   } else if (opts.selection?.kind === "planImage") {
     const image = (design.planImages ?? []).find(
@@ -948,6 +957,22 @@ export function withRunOverrides(product: Product, run: Run): Product {
  * lower-right corner; a landscape fixture is resized by its throw, so the grip
  * rides at the end of the beam (or the edge of the pool) it actually controls.
  */
+/**
+ * Where the canopy-width grip sits: the bottom-right edge of the wrap, so it
+ * reads as "how wide is this tree" against the photo behind it.
+ *
+ * `null` for anything that isn't a wrap — a wreath has no canopy, and offering
+ * the grip would imply a measurement that changes nothing. Dragging it is what
+ * turns a flat per-tree price into feet of strand, so it is deliberately a
+ * separate gesture from the resize grip that sets the tree's height.
+ */
+export function canopyHandlePos(item: PlacedItem, product?: Product): Point | null {
+  if (product?.style !== "treewrap") return null;
+  const halfWidth =
+    item.canopyWidthPx && item.canopyWidthPx > 0 ? item.canopyWidthPx / 2 : item.sizePx * 0.13;
+  return { x: item.at.x + halfWidth, y: item.at.y + item.sizePx / 2 };
+}
+
 export function resizeHandlePos(item: PlacedItem, product?: Product): Point {
   if (product && isLandscapeStyle(product.style)) {
     const beam = beamGeometry(product.style, item.sizePx, item.beamAngleDeg, item.beamRotationDeg);

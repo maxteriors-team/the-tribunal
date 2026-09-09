@@ -10,7 +10,10 @@
  * - A run of a `christmas` `per_ft` product (mini-lights, garland) →
  *   `christmas_items[category][option]` in linear feet.
  * - A placed `christmas` `each` item (tree, bush, wreath) →
- *   `christmas_items[category][option]` as a +1 count.
+ *   `christmas_items[category][option]` as a +1 count. A tree whose canopy the
+ *   rep measured instead bills the feet of strand its wrap needs, through the
+ *   workspace's per-foot wrap rate — so a 30 ft oak no longer costs what a 6 ft
+ *   shrub does.
  * - A placed `landscape` fixture → a +1 count for that fixture *type*. The
  *   chosen package resolves the type to a real price-book product for server pricing.
  * - A `bistro` run → linear feet for the string-lighting add-on.
@@ -21,7 +24,8 @@
 import type { ChristmasItemsSelection } from "@/types/estimate";
 
 import { distance, polylineLength } from "./geometry";
-import type { Design, Product, Run, RunElevation, ScaleSlot } from "./types";
+import { treeWrapStrand } from "./tree-wrap";
+import type { Design, PlacedItem, Product, Run, RunElevation, ScaleSlot } from "./types";
 
 type PermanentComplexity = NonNullable<Run["permanentComplexity"]>;
 
@@ -104,9 +108,34 @@ export interface DesignEstimateInputs {
 }
 
 /**
+ * Feet of strand for a placed item the rep measured as a wrap, or 0.
+ *
+ * The tree's height and canopy are stored in image pixels so they survive a
+ * zoom; the photo's own scale turns them into the feet the price is built from.
+ * Exported because the canvas and the palette readout must show the rep the
+ * exact number that gets billed.
+ */
+export function itemWrapStrandFt(
+  design: Design,
+  item: PlacedItem,
+  product: Product,
+  photoWidth: number,
+): number {
+  if (!product.wrapTarget || !item.canopyWidthPx || item.canopyWidthPx <= 0) return 0;
+  const { ftPerPx } = designScale(design, photoWidth, 1);
+  if (ftPerPx <= 0) return 0;
+  return treeWrapStrand({
+    heightFt: item.sizePx * ftPerPx,
+    canopyWidthFt: item.canopyWidthPx * ftPerPx,
+    spacingIn: item.wrapSpacingIn,
+  }).strandFt;
+}
+
+/**
  * Tally a design into the estimate request's measured inputs. Linear runs are
  * converted to feet via each run's scale and rounded to whole feet (rooflines
- * and garland are quoted in whole feet); placed items count as one each.
+ * and garland are quoted in whole feet); placed items count as one each, unless
+ * they are a tree measured for its wrap.
  */
 export function designToEstimateInputs(
   design: Design,
@@ -142,7 +171,16 @@ export function designToEstimateInputs(
     const product = productById.get(item.productId);
     if (!product) continue;
     if (product.target.field === "christmas") {
-      addChristmas(product.target.category, product.target.option, 1);
+      // A tree the rep measured on the photo bills the strand it actually needs,
+      // through the workspace's per-foot wrap rate. Without a measured canopy
+      // (or without such a rate configured) it stays on the flat per-tree price,
+      // so every tree drawn before measuring existed prices exactly as it did.
+      const wrap = itemWrapStrandFt(design, item, product, photoWidth);
+      if (wrap && product.wrapTarget) {
+        addChristmas(product.wrapTarget.category, product.wrapTarget.option, wrap);
+      } else {
+        addChristmas(product.target.category, product.target.option, 1);
+      }
     } else if (product.target.field === "landscape") {
       const type = product.target.fixtureType;
       landscape[type] = (landscape[type] ?? 0) + 1;

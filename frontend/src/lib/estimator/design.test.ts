@@ -57,7 +57,22 @@ const wreath: Product = {
   target: { field: "christmas", category: "wreaths", option: "standard" },
 };
 
+const tree: Product = {
+  id: "cat-trees-medium",
+  name: "Medium tree (8–15 ft)",
+  category: "seasonal",
+  kind: "each",
+  price: 260,
+  style: "treewrap",
+  colors: ["#ffd98a"],
+  spacingIn: 0,
+  sizeFt: 12,
+  target: { field: "christmas", category: "trees", option: "medium" },
+  wrapTarget: { category: "mini_lights", option: "standard" },
+};
+
 const productById = indexProducts([roofline, mini, wreath]);
+const treeIndex = indexProducts([tree]);
 
 function run(id: string, productId: string, points: Run["points"]): Run {
   return { id, productId, points };
@@ -290,6 +305,120 @@ describe("designToEstimateInputs", () => {
     const out = designToEstimateInputs(design, productById, PHOTO_W);
     expect(out.feet).toBe(0);
     expect(out.christmas_items).toEqual({});
+  });
+});
+
+describe("designToEstimateInputs — measured tree wraps", () => {
+  // 10 px/ft from `cal`, so a 150px tree is 15 ft with a 70px (7 ft) canopy —
+  // the same tree the tree-wrap unit tests pin at 1,227 ft of strand.
+  const treeItem = (over: Partial<PlacedItem> = {}): PlacedItem => ({
+    id: "t1",
+    productId: tree.id,
+    at: { x: 300, y: 300 },
+    sizePx: 150,
+    ...over,
+  });
+
+  it("bills a measured tree as strand feet on the per-foot wrap rate", () => {
+    const out = designToEstimateInputs(
+      { calibration: cal, runs: [], items: [treeItem({ canopyWidthPx: 70 })] },
+      treeIndex,
+      PHOTO_W,
+    );
+
+    expect(out.christmas_items).toEqual({ mini_lights: { standard: 1227 } });
+    // The flat per-tree line must be gone, or the customer pays for both.
+    expect(out.christmas_items.trees).toBeUndefined();
+  });
+
+  it("keeps the flat per-tree rate for a tree nobody measured", () => {
+    const out = designToEstimateInputs(
+      { calibration: cal, runs: [], items: [treeItem()] },
+      treeIndex,
+      PHOTO_W,
+    );
+
+    expect(out.christmas_items).toEqual({ trees: { medium: 1 } });
+  });
+
+  it("prices a big tree far above a small one, which was the whole point", () => {
+    const small = designToEstimateInputs(
+      { calibration: cal, runs: [], items: [treeItem({ sizePx: 60, canopyWidthPx: 30 })] },
+      treeIndex,
+      PHOTO_W,
+    );
+    const big = designToEstimateInputs(
+      { calibration: cal, runs: [], items: [treeItem({ sizePx: 300, canopyWidthPx: 140 })] },
+      treeIndex,
+      PHOTO_W,
+    );
+
+    expect(big.christmas_items.mini_lights.standard).toBeGreaterThan(
+      small.christmas_items.mini_lights.standard * 10,
+    );
+  });
+
+  it("a tighter wrap spacing bills more strand", () => {
+    const feetAt = (spacing: number) =>
+      designToEstimateInputs(
+        {
+          calibration: cal,
+          runs: [],
+          items: [treeItem({ canopyWidthPx: 70, wrapSpacingIn: spacing })],
+        },
+        treeIndex,
+        PHOTO_W,
+      ).christmas_items.mini_lights.standard;
+
+    expect(feetAt(2)).toBeGreaterThan(feetAt(6));
+  });
+
+  it("falls back to the flat rate when the workspace sells no per-foot wrap", () => {
+    // `wrapTarget` is absent when the pricing config has no per-foot category,
+    // so measuring must not invent a rate the operator never set.
+    const noWrapRate = indexProducts([{ ...tree, wrapTarget: undefined }]);
+
+    const out = designToEstimateInputs(
+      { calibration: cal, runs: [], items: [treeItem({ canopyWidthPx: 70 })] },
+      noWrapRate,
+      PHOTO_W,
+    );
+
+    expect(out.christmas_items).toEqual({ trees: { medium: 1 } });
+  });
+
+  it("totals several measured trees into one per-foot line", () => {
+    const out = designToEstimateInputs(
+      {
+        calibration: cal,
+        runs: [],
+        items: [
+          treeItem({ id: "t1", canopyWidthPx: 70 }),
+          treeItem({ id: "t2", canopyWidthPx: 70 }),
+        ],
+      },
+      treeIndex,
+      PHOTO_W,
+    );
+
+    expect(out.christmas_items.mini_lights.standard).toBe(1227 * 2);
+  });
+
+  it("mixes a measured and an unmeasured tree onto their own lines", () => {
+    const out = designToEstimateInputs(
+      {
+        calibration: cal,
+        runs: [],
+        items: [treeItem({ id: "t1", canopyWidthPx: 70 }), treeItem({ id: "t2" })],
+      },
+      treeIndex,
+      PHOTO_W,
+    );
+
+    expect(out.christmas_items).toEqual({
+      mini_lights: { standard: 1227 },
+      trees: { medium: 1 },
+    });
   });
 });
 

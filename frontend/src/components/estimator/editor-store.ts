@@ -93,6 +93,8 @@ export type EditorAction =
           PlacedItem,
           | "at"
           | "sizePx"
+          | "canopyWidthPx"
+          | "wrapSpacingIn"
           | "iconScale"
           | "productId"
           | "beamAngleDeg"

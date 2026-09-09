@@ -911,6 +911,7 @@ def price_christmas_packages(
                 value_tag=package.value_tag,
                 popular=package.popular,
                 includes_roofline=package.includes_roofline,
+                item_keys=list(package.item_keys),
                 pricing=pricing,
             )
         )

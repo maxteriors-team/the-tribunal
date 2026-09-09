@@ -36,6 +36,7 @@ import {
   beamAngleAt,
   beamHandlePos,
   beamRotationAt,
+  canopyHandlePos,
   drawScene,
   itemHit,
   planImageHit,
@@ -104,6 +105,7 @@ type Drag =
   | { mode: "run"; runId: string; start: Point; points: Point[]; before: Design }
   | { mode: "item"; itemId: string; offset: Point; before: Design }
   | { mode: "resize"; itemId: string; before: Design }
+  | { mode: "canopy"; itemId: string; before: Design }
   | { mode: "beam"; itemId: string; before: Design }
   | { mode: "aim"; itemId: string; before: Design }
   | { mode: "plan-image"; imageId: string; offset: Point; before: Design }
@@ -1004,6 +1006,13 @@ export function LightCanvas({
             dragRef.current = { mode: "resize", itemId: item.id, before: design };
             return;
           }
+          // Canopy width — the grip that turns a flat per-tree price into the
+          // feet of strand the wrap actually needs.
+          const canopyGrip = item ? canopyHandlePos(item, itemProduct) : null;
+          if (item && canopyGrip && distance(canopyGrip, p) < slack * 1.6) {
+            dragRef.current = { mode: "canopy", itemId: item.id, before: design };
+            return;
+          }
           // Throw first, then spread: on a tight beam the two grips crowd each
           // other, and resizing the throw is the gesture a rep reaches for more.
           const spreadGrip = item ? beamHandlePos(item, itemProduct) : null;
@@ -1253,6 +1262,21 @@ export function LightCanvas({
           type: "UPDATE_ITEM",
           id: drag.itemId,
           patch: { sizePx },
+          transient: true,
+        });
+        return;
+      }
+      case "canopy": {
+        const item = design.items.find((i) => i.id === drag.itemId);
+        if (!item) return;
+        // Horizontal distance only: the grip sits at the tree's base, so a rep
+        // drags out to the edge of the canopy without the vertical wobble of
+        // their hand narrowing or widening the measurement.
+        const canopyWidthPx = Math.max(6, Math.abs(p.x - item.at.x) * 2);
+        dispatch({
+          type: "UPDATE_ITEM",
+          id: drag.itemId,
+          patch: { canopyWidthPx },
           transient: true,
         });
         return;

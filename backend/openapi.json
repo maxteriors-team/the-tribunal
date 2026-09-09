@@ -11555,6 +11555,13 @@
             "title": "Includes Roofline",
             "type": "boolean"
           },
+          "item_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Item Keys",
+            "type": "array"
+          },
           "key": {
             "title": "Key",
             "type": "string"
@@ -49687,13 +49694,6 @@
         "title": "RejectSuggestionRequest",
         "type": "object"
       },
-      "ReorderReport": {
-        "description": "Items needing a purchase, most urgent first.",
-        "properties": {
-          "generated_at": {
-            "format": "date-time",
-            "title": "Generated At",
-            "type": "string"
       "RenewalCandidateList": {
         "description": "A page of renewal candidates plus the season the operator is selling.",
         "properties": {
@@ -49766,6 +49766,13 @@
         "title": "RenewalCandidateResponse",
         "type": "object"
       },
+      "ReorderReport": {
+        "description": "Items needing a purchase, most urgent first.",
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
           },
           "items": {
             "items": {
@@ -73159,13 +73166,6 @@
         ]
       }
     },
-    "/api/v1/workspaces/{workspace_id}/contacts": {
-      "get": {
-        "description": "List contacts in a workspace.",
-        "operationId": "list_contacts_api_v1_workspaces__workspace_id__contacts_get",
-        "parameters": [
-          {
-            "in": "path",
     "/api/v1/workspaces/{workspace_id}/christmas/renewals": {
       "get": {
         "description": "Houses this workspace lit in an earlier season, newest signup first.",
@@ -73313,6 +73313,13 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/contacts": {
+      "get": {
+        "description": "List contacts in a workspace.",
+        "operationId": "list_contacts_api_v1_workspaces__workspace_id__contacts_get",
+        "parameters": [
+          {
+            "in": "path",
             "name": "workspace_id",
             "required": true,
             "schema": {

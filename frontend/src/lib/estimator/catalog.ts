@@ -225,6 +225,48 @@ function sizeFtFor(categoryKey: string, optionKey: string, optionName: string): 
 }
 
 /**
+ * The per-foot rate a measured tree wrap bills against.
+ *
+ * A wrap measured on the photo comes out in feet of strand, so it needs a
+ * per-foot category to bill into — the flat per-tree options cannot express it.
+ * Prefers the workspace's mini-lights category, which the pricing config already
+ * describes as "mini lights wrapped on bushes & trees"; otherwise the first
+ * per-foot category that isn't garland, since garland is a different product
+ * that happens to share the unit.
+ *
+ * Returns null in the two cases where measuring would cost the operator money:
+ *
+ * 1. **No per-foot rate configured** — measuring would bill against a rate the
+ *    operator never set.
+ * 2. **A package covers trees but not the wrap rate** — a package prices only the
+ *    categories it lists, so the measured wrap would be dropped from that card's
+ *    total silently, and a carefully measured 30 ft oak would quietly cost
+ *    nothing. Falling back to the flat per-tree rate keeps the tree on the
+ *    quote, which is strictly better than a tidier number that is wrong.
+ */
+function wrapTargetFor(
+  estimate: LinearFeetEstimateResult | null | undefined,
+): { category: string; option: string } | null {
+  const categories = estimate?.christmas_catalog ?? [];
+  const perFt = categories.filter((cat) => cat.unit === "per_ft" && (cat.options ?? []).length > 0);
+  const chosen =
+    perFt.find((cat) => cat.key === "mini_lights") ??
+    perFt.find((cat) => cat.key !== "garland") ??
+    null;
+  const option = chosen?.options?.[0];
+  if (!chosen || !option) return null;
+
+  const coveredEverywhereTreesAre = (estimate?.christmas_packages ?? []).every((pkg) => {
+    const keys = pkg.item_keys ?? [];
+    const sellsWraps = keys.includes("trees") || keys.includes("bushes");
+    return !sellsWraps || keys.includes(chosen.key);
+  });
+  if (!coveredEverywhereTreesAre) return null;
+
+  return { category: chosen.key, option: option.key };
+}
+
+/**
  * Build the drawable palette from the current server estimate. Works with a
  * feet=0 estimate (no design yet) since `christmas_catalog` is returned
  * regardless of measured footage.
@@ -256,6 +298,7 @@ export function buildCatalog(estimate: LinearFeetEstimateResult | null | undefin
     });
   }
 
+  const wrapTarget = wrapTargetFor(estimate);
   for (const cat of estimate?.christmas_catalog ?? []) {
     const style = styleForCategory(cat.key, cat.unit);
     const kind = cat.unit === "per_ft" ? "linear" : "each";
@@ -272,6 +315,9 @@ export function buildCatalog(estimate: LinearFeetEstimateResult | null | undefin
         sizeFt: kind === "each" ? sizeFtFor(cat.key, opt.key, opt.name) : 0,
         bulbScale: DEFAULT_BULB_SCALE,
         target: { field: "christmas", category: cat.key, option: opt.key },
+        // Only a placed wrap can be measured: a traced run is already in feet,
+        // and a wreath has nothing to spiral.
+        ...(kind === "each" && style === "treewrap" && wrapTarget ? { wrapTarget } : {}),
       });
     }
   }

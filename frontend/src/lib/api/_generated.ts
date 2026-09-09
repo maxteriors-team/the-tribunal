@@ -16181,6 +16181,8 @@ export interface components {
              * @default false
              */
             includes_roofline: boolean;
+            /** Item Keys */
+            item_keys?: string[];
             /** Key */
             key: string;
             /** Label */
@@ -30451,8 +30453,6 @@ export interface components {
             reason?: string | null;
         };
         /**
-         * ReorderReport
-        /**
          * RenewalCandidateList
          * @description A page of renewal candidates plus the season the operator is selling.
          */
@@ -30493,6 +30493,8 @@ export interface components {
              */
             signed_up_at: string;
         };
+        /**
+         * ReorderReport
          * @description Items needing a purchase, most urgent first.
          */
         ReorderReport: {
@@ -42323,8 +42325,6 @@ export interface operations {
             };
         };
     };
-    list_contacts_api_v1_workspaces__workspace_id__contacts_get: {
-        parameters: {
     list_renewal_candidates_api_v1_workspaces__workspace_id__christmas_renewals_get: {
         parameters: {
             query?: {
@@ -42392,6 +42392,8 @@ export interface operations {
             };
         };
     };
+    list_contacts_api_v1_workspaces__workspace_id__contacts_get: {
+        parameters: {
             query?: {
                 page?: number;
                 page_size?: number;

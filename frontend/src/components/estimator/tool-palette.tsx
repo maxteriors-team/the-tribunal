@@ -25,9 +25,15 @@ import {
   bulbSizeNameFor,
   presetNameFor,
 } from "@/lib/estimator/catalog";
+import { designScale } from "@/lib/estimator/design";
 import { LANDSCAPE_WIRE_GAUGES, landscapeWireLabel } from "@/lib/estimator/fixtures";
 import { FIXTURE_MARKER_COLORS } from "@/lib/estimator/marker-colors";
 import { seasonalIconForStyle, tintSurface } from "@/lib/estimator/seasonal-icons";
+import {
+  DEFAULT_WRAP_SPACING_IN,
+  WRAP_SPACING_OPTIONS,
+  treeWrapStrand,
+} from "@/lib/estimator/tree-wrap";
 import {
   FIXTURE_ICON_SCALE_STEP,
   MAX_BEAM_ANGLE_DEG,
@@ -57,6 +63,12 @@ interface ToolPaletteProps {
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
   enableSecondaryScale?: boolean;
+  /**
+   * Width of the photo in pixels, needed to turn a tree's measured pixels into
+   * the feet it bills. Optional: without it the wrap readout declines to claim a
+   * footage rather than showing one built on a guessed scale.
+   */
+  photoWidth?: number;
 }
 
 /**
@@ -79,6 +91,7 @@ export function ToolPalette({
   state,
   dispatch,
   enableSecondaryScale = false,
+  photoWidth = 0,
 }: ToolPaletteProps) {
   const { tool, selection, design } = state;
 
@@ -210,6 +223,16 @@ export function ToolPalette({
             dispatch={dispatch}
           />
         ) : null}
+
+        {selectedItem && selectedItemProduct ? (
+          <TreeWrapOptions
+            item={selectedItem}
+            product={selectedItemProduct}
+            design={design}
+            dispatch={dispatch}
+            photoWidth={photoWidth}
+          />
+        ) : null}
       </div>
 
       <div className="tp-section tp-actions">
@@ -300,6 +323,78 @@ function ProductButton({
       <span className="tp-product-name">{product.name}</span>
       <span className="tp-product-price">{price}</span>
     </button>
+  );
+}
+
+/**
+ * Wrap measurement for one selected tree.
+ *
+ * The rep drags the tree's height and its canopy grip on the photo; this is
+ * where they see what those two measurements actually buy — the feet of strand
+ * being billed, and the wrap spacing that drives it. Shown only for wraps the
+ * workspace can price by the foot, because everywhere else the measurement
+ * would change nothing and saying so would be a lie.
+ */
+function TreeWrapOptions({
+  item,
+  product,
+  design,
+  dispatch,
+  photoWidth,
+}: {
+  item: PlacedItem;
+  product: Product;
+  design: Design;
+  dispatch: Dispatch<EditorAction>;
+  photoWidth: number;
+}) {
+  if (product.style !== "treewrap" || !product.wrapTarget) return null;
+
+  const { ftPerPx } = designScale(design, photoWidth, 1);
+  const measured = Boolean(item.canopyWidthPx && item.canopyWidthPx > 0) && ftPerPx > 0;
+  const heightFt = item.sizePx * ftPerPx;
+  const canopyFt = (item.canopyWidthPx ?? 0) * ftPerPx;
+  const wrap = treeWrapStrand({
+    heightFt,
+    canopyWidthFt: canopyFt,
+    spacingIn: item.wrapSpacingIn,
+  });
+
+  return (
+    <div className="tp-run-options">
+      <h2 className="tp-mt">Tree wrap</h2>
+      {measured ? (
+        <p className="tp-opt-readout">
+          {heightFt.toFixed(0)} ft tall &middot; {canopyFt.toFixed(0)} ft canopy &rarr;{" "}
+          <strong>{wrap.strandFt.toLocaleString()} ft</strong> of strand ({wrap.turns} wraps)
+        </p>
+      ) : (
+        <p className="tp-opt-readout">
+          Drag the gold grip at the base of the tree out to the edge of its canopy to price the real
+          wrap. Until then it bills at the flat per-tree rate.
+        </p>
+      )}
+      <label className="tp-field-label">
+        <span>Wrap spacing</span>
+        <select
+          className="est-select"
+          value={item.wrapSpacingIn ?? DEFAULT_WRAP_SPACING_IN}
+          onChange={(event) =>
+            dispatch({
+              type: "UPDATE_ITEM",
+              id: item.id,
+              patch: { wrapSpacingIn: Number(event.target.value) },
+            })
+          }
+        >
+          {Object.entries(WRAP_SPACING_OPTIONS).map(([label, inches]) => (
+            <option key={label} value={inches}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
   );
 }
 

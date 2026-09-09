@@ -186,7 +186,12 @@ def test_christmas_package_pricing_breakdown_is_frozen() -> None:
 
 
 def test_christmas_pricing_model_dump_key_order_is_frozen() -> None:
-    """Serialized field order is part of the wire contract for saved links."""
+    """Serialized field order is part of the wire contract for saved links.
+
+    ``item_keys`` is appended *after* ``pricing`` rather than slotted in beside
+    the other card fields, so every key that existed when links were shared keeps
+    its exact position. New keys may only ever land at the end.
+    """
     essential = next(p for p in _priced() if p.key == "essential")
 
     assert list(essential.model_dump().keys()) == [
@@ -200,6 +205,7 @@ def test_christmas_pricing_model_dump_key_order_is_frozen() -> None:
         "popular",
         "includes_roofline",
         "pricing",
+        "item_keys",
     ]
 
 
@@ -562,3 +568,43 @@ def test_service_packages_do_not_disturb_the_seasonal_ladder() -> None:
     with_roof = price_christmas_packages(_roof_config(), **_MEASUREMENT)
 
     assert [p.model_dump() for p in with_roof] == [p.model_dump() for p in _priced()]
+
+
+# --------------------------------------------------------------------------- #
+# Measured tree wraps must survive package scoping
+# --------------------------------------------------------------------------- #
+def test_a_measured_tree_wrap_is_priced_by_every_tier_that_sells_trees() -> None:
+    """A wrap measured on the photo bills per foot; a package must not drop it.
+
+    The designer prices a tree the rep measured through the workspace's per-foot
+    wrap rate (``mini_lights``) instead of the flat per-tree option. A package
+    prices *only* the categories in its ``item_keys``, so if a tier sells trees
+    but omits that rate, a carefully measured 30 ft oak silently costs nothing —
+    the tier promises "trees and bushes wrapped and glowing" and then bills zero
+    for the wrapping.
+    """
+    priced = price_christmas_packages(
+        _config(),
+        roofline_feet=100.0,
+        items={"mini_lights": {"standard": 1227}},
+    )
+
+    for card in priced:
+        if "trees" in card.item_keys or "bushes" in card.item_keys:
+            assert "mini_lights" in card.item_keys, (
+                f"tier {card.key!r} sells wraps but cannot price a measured one"
+            )
+            wrap_line = next(
+                (item for item in card.pricing.items if item.key == "mini_lights"), None
+            )
+            assert wrap_line is not None, f"tier {card.key!r} dropped the measured wrap"
+            assert wrap_line.cost > 0
+
+
+def test_package_cards_carry_their_coverage_to_the_client() -> None:
+    """``item_keys`` crosses the wire: the designer needs it to avoid the trap above."""
+    assert [card.item_keys for card in _priced()] == [
+        ["trees", "bushes", "mini_lights"],
+        ["trees", "bushes", "mini_lights"],
+        ["trees", "bushes", "mini_lights", "wreaths", "garland"],
+    ]

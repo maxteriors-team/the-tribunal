@@ -243,3 +243,117 @@ describe("buildBistroCatalog landscape variants", () => {
     expect(buildSavedBistroFallbacks(["bistro-permanent-BISTRO-CLASSIC"], configured)).toEqual([]);
   });
 });
+
+describe("buildCatalog measured tree wraps", () => {
+  const CATALOG = [
+    {
+      key: "trees",
+      label: "Trees",
+      unit: "each" as const,
+      options: [{ key: "medium", name: "Medium tree (8–15 ft)", price: 260 }],
+    },
+    {
+      key: "mini_lights",
+      label: "Mini Lights",
+      unit: "per_ft" as const,
+      options: [{ key: "standard", name: "Mini lights", price: 5 }],
+    },
+  ];
+
+  const pkg = (key: string, itemKeys: string[]) => ({
+    key,
+    label: key,
+    name: key,
+    marker: null,
+    experience: null,
+    points: [],
+    value_tag: null,
+    popular: false,
+    includes_roofline: false,
+    item_keys: itemKeys,
+    pricing: {
+      roofline_feet: 0,
+      roofline_cost: 0,
+      items: [],
+      takedown_cost: 0,
+      storage_cost: 0,
+      minimum: 0,
+      raw_total: 0,
+      total: 0,
+      min_applied: false,
+      lines: [],
+    },
+  });
+
+  const treeFrom = (over: Partial<LinearFeetEstimateResult> = {}) =>
+    buildCatalog(estimate({ christmas_catalog: CATALOG, ...over })).find(
+      (p) => p.id === "cat-trees-medium",
+    );
+
+  it("points a tree at the per-foot wrap rate so measuring can price it", () => {
+    expect(treeFrom()?.wrapTarget).toEqual({ category: "mini_lights", option: "standard" });
+  });
+
+  it("does not offer wrap pricing when no per-foot rate is configured", () => {
+    // Measuring must never bill against a rate the operator never set.
+    const trees = buildCatalog(
+      estimate({ christmas_catalog: [CATALOG[0]] }),
+    ).find((p) => p.id === "cat-trees-medium");
+
+    expect(trees?.wrapTarget).toBeUndefined();
+  });
+
+  it("keeps wrap pricing when every tree package also covers the wrap rate", () => {
+    const trees = treeFrom({
+      christmas_packages: [
+        pkg("essential", ["trees", "bushes", "mini_lights"]),
+        pkg("premier", ["trees", "bushes", "mini_lights", "wreaths"]),
+      ],
+    });
+
+    expect(trees?.wrapTarget).toEqual({ category: "mini_lights", option: "standard" });
+  });
+
+  it("refuses wrap pricing when a package sells trees but not the wrap rate", () => {
+    // That package prices only the categories it lists, so a measured wrap would
+    // be dropped from its total and the tree would silently cost nothing. The
+    // flat per-tree rate is less precise but keeps the tree on the quote.
+    const trees = treeFrom({
+      christmas_packages: [
+        pkg("essential", ["trees", "bushes"]),
+        pkg("premier", ["trees", "bushes", "mini_lights"]),
+      ],
+    });
+
+    expect(trees?.wrapTarget).toBeUndefined();
+  });
+
+  it("ignores packages that sell no wraps at all", () => {
+    // A wreath-only tier cannot drop a tree it never covered.
+    const trees = treeFrom({
+      christmas_packages: [
+        pkg("wreaths-only", ["wreaths"]),
+        pkg("premier", ["trees", "mini_lights"]),
+      ],
+    });
+
+    expect(trees?.wrapTarget).toEqual({ category: "mini_lights", option: "standard" });
+  });
+
+  it("never offers wrap pricing on a wreath", () => {
+    const wreathCatalog = [
+      {
+        key: "wreaths",
+        label: "Wreaths",
+        unit: "each" as const,
+        options: [{ key: "standard", name: "Wreath (36 in)", price: 85 }],
+      },
+      CATALOG[1],
+    ];
+    const wreath = buildCatalog(estimate({ christmas_catalog: wreathCatalog })).find(
+      (p) => p.id === "cat-wreaths-standard",
+    );
+
+    expect(wreath?.wrapTarget).toBeUndefined();
+  });
+});

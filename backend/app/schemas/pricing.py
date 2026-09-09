@@ -626,6 +626,12 @@ def _default_christmas_packages() -> list[ChristmasPackage]:
       * Middle    — roofline plus trees + bushes.
       * Premier   — roofline plus trees, bushes, wreaths, and garland.
     Keys reference the default decor categories in ``_default_seasonal_items``.
+
+    Every tier that covers trees or bushes also covers ``mini_lights``, the
+    per-foot rate a *wrap* on them bills against. A package prices only the
+    categories it lists, so omitting it would drop wrapped trees — the thing
+    these cards literally promise ("trees and bushes wrapped and glowing") — out
+    of the total without any visible sign.
     """
     return [
         ChristmasPackage(
@@ -644,7 +650,7 @@ def _default_christmas_packages() -> list[ChristmasPackage]:
                 "Lowest-cost way to get a holiday look",
             ],
             includes_roofline=False,
-            item_keys=["trees", "bushes"],
+            item_keys=["trees", "bushes", "mini_lights"],
         ),
         ChristmasPackage(
             key="middle",
@@ -663,7 +669,7 @@ def _default_christmas_packages() -> list[ChristmasPackage]:
             ],
             popular=True,
             includes_roofline=True,
-            item_keys=["trees", "bushes"],
+            item_keys=["trees", "bushes", "mini_lights"],
         ),
         ChristmasPackage(
             key="premier",
@@ -682,7 +688,7 @@ def _default_christmas_packages() -> list[ChristmasPackage]:
             ],
             value_tag="\u2605 The Full Display",
             includes_roofline=True,
-            item_keys=["trees", "bushes", "wreaths", "garland"],
+            item_keys=["trees", "bushes", "mini_lights", "wreaths", "garland"],
         ),
     ]
 
@@ -1242,6 +1248,15 @@ class ChristmasPackagePricing(BaseModel):
     popular: bool = False
     includes_roofline: bool = False
     pricing: ChristmasPricing
+    # Decor categories this package covers, mirrored from
+    # :attr:`ChristmasPackage.item_keys`. The designer needs it to tell whether a
+    # measurement it is about to bill under one category would fall outside a
+    # package and vanish from that card's total.
+    #
+    # Declared *last* deliberately: serialized field order is a wire contract for
+    # already-shared links, so this appends rather than shifting any existing
+    # key's position.
+    item_keys: list[str] = Field(default_factory=list)
 
     @property
     def total(self) -> float:

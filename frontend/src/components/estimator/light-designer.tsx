@@ -4896,7 +4896,12 @@ export function LightDesigner({
                           <X aria-hidden="true" />
                         </button>
                       </header>
-                      <ToolPalette products={products} state={state} dispatch={dispatch} />
+                      <ToolPalette
+                        products={products}
+                        state={state}
+                        dispatch={dispatch}
+                        photoWidth={photo?.width ?? 0}
+                      />
                     </aside>
                   ) : null}
                 </div>
@@ -4931,6 +4936,7 @@ export function LightDesigner({
                                     ? `${line.productName} · ${line.sku}`
                                     : `Not sold in ${tierLabel}`}
                                 </span>
+                    photoWidth={photo?.width ?? 0}
                               </span>
                               <span className="ep-line-amount">×{line.count}</span>
                             </div>

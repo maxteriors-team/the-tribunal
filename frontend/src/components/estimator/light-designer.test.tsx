@@ -111,6 +111,8 @@ vi.mock("@/lib/estimator/render", () => ({
   resizeHandlePos: vi.fn(() => ({ x: 0, y: 0 })),
   beamHandlePos: vi.fn(() => null),
   beamAngleAt: vi.fn(() => 30),
+  // null = "not a wrapped tree", which is every fixture these tests drive.
+  canopyHandlePos: vi.fn(() => null),
   DEFAULT_DUSK: 0.52,
   MAX_DUSK: 0.92,
 }));
