@@ -1155,6 +1155,34 @@ async def test_create_quote_from_estimate_persists_priced_lines_and_contact() ->
         ]
 
 
+async def test_create_quote_from_estimate_applies_a_percentage_discount() -> None:
+    """A percentage discount must reach the customer's quote, not just the preview.
+
+    The estimator resolves ``discount_percent`` into dollars, so the rep watches
+    the price drop on screen. Quoting read only ``discount_amount``, which stays
+    zero for a percentage — and the customer was sent the undiscounted total.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        await _enable_lighting_pricing(db, ws)
+
+        quote = await QuoteService(db).create_quote_from_estimate(
+            ws.id,
+            EstimateQuoteRequest(
+                side="permanent",
+                proposal_side="permanent",
+                feet=100,
+                discount_percent=10,
+                client_name="Dana Rivers",
+                client_phone="+15551230001",
+            ),
+        )
+
+        # 10% of the $3,747 permanent side, resolved to dollars before it is stored.
+        assert quote.discount_amount == 374.7
+        assert quote.total == 3372.3
+
+
 async def test_create_quote_from_estimate_links_workspace_project_and_contact() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)

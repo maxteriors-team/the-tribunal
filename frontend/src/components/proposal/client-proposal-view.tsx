@@ -215,6 +215,12 @@ export function ClientProposalView({
   // Sent as a ballpark instead of one firm number. Only the headline reads as a
   // range; every selectable payment amount remains exact and server-owned.
   const priceRange = chosenPackage ? null : data.price_range;
+  // A discount the customer never sees is a discount they were never given
+  // credit for. Only `data.total` carries it: a package total is priced from the
+  // tier snapshot, and a range headline is already an approximation, so striking
+  // a "was" price through either one would be inventing a saving.
+  const savings =
+    !chosenPackage && !priceRange && data.discount_amount > 0 ? data.discount_amount : 0;
   const selectedPaymentAmount =
     paymentOption === "fifty_percent_down"
       ? paymentOptions?.fifty_percent_down_amount
@@ -366,6 +372,12 @@ export function ClientProposalView({
                   ? `${fmt(priceRange.low)}\u2009\u2013\u2009${fmt(priceRange.high)}`
                   : fmt(visualPrice)}
               </div>
+              {savings > 0 ? (
+                <div className="pmock-purchase-save">
+                  <s>{fmt(visualPrice + savings)}</s>
+                  <span>You save {fmt(savings)}</span>
+                </div>
+              ) : null}
               <div className="pmock-purchase-meta">
                 {priceRange
                   ? `Approving locks in ${fmt(priceRange.low)}; anything above that is quoted to you first.`

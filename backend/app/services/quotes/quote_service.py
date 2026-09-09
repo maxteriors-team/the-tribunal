@@ -3601,7 +3601,12 @@ class QuoteService:
         config = get_pricing_config(workspace)
 
         title, pricing = self._price_estimate_side(config, req)
-        discount = round(float(req.discount_amount), 2)
+        # Take the *resolved* discount, exactly like :meth:`share_comparison`: the
+        # rep can type the proposal discount as a percentage, and only the estimate
+        # turns that into dollars. Reading ``discount_amount`` straight off the
+        # request meant a percentage arrived here as zero, so the estimator showed
+        # the rep a discounted price and the customer was sent the full one.
+        discount = round(float(self._compute_comparison(config, req).discount_amount), 2)
         if discount > float(pricing.total):
             raise ValidationError("Discount cannot exceed the selected proposal total")
         quoted_total = round(float(pricing.total) - discount, 2)
