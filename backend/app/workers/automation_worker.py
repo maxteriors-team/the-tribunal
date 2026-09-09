@@ -55,11 +55,12 @@ Actions that target a contact (SMS/email/call/tag/enroll) are skipped with a
 warning when an event has no associated contact (e.g. roleplay/knowledge).
 """
 
+import contextlib
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, exists, func, not_, select
+from sqlalchemy import and_, exists, func, not_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,6 +68,7 @@ from app.core.config import settings
 from app.db.session import system_session
 from app.models.automation import Automation
 from app.models.automation_event import (
+    EVENT_STATUS_FAILED,
     EVENT_STATUS_PENDING,
     EVENT_STATUS_PROCESSED,
     AutomationEvent,
@@ -341,14 +343,27 @@ class AutomationWorker(RetryableWorker, BaseWorker):
 
         self.logger.info("Draining automation events", count=len(events))
         for event in events:
-            await self.execute_with_retry(
+            event_id = event.id
+            ok = await self.execute_with_retry(
                 self._process_event,
                 event,
                 db,
-                item_key=derive_worker_retry_key("automation_event", event.id),
+                item_key=derive_worker_retry_key("automation_event", event_id),
             )
+            if ok:
+                continue
+            # Terminal failure. Two things must happen or the queue stalls
+            # permanently: this batch drains oldest-first through one shared
+            # session, so (1) that session is left in pending-rollback and
+            # would fail every remaining event, and (2) an event left
+            # ``pending`` is re-selected first on every future cycle, starving
+            # everything queued behind it. Reset the session, then retire the
+            # event on its own. The failure detail is already in the DLQ.
+            with contextlib.suppress(Exception):
+                await db.rollback()
+            await self._retire_failed_event(event_id)
 
-    async def _process_event(self, event: AutomationEvent, db: AsyncSession) -> None:
+    async def _process_event(self, event: AutomationEvent, db: AsyncSession) -> bool:
         """Run every active automation listening for ``event``'s type.
 
         The event is marked ``processed`` once all matching automations have
@@ -389,6 +404,34 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         event.status = EVENT_STATUS_PROCESSED
         event.processed_at = datetime.now(UTC)
         log.info("Automation event processed", matched=len(automations))
+        # Truthy sentinel: the caller distinguishes success from the ``None``
+        # that ``execute_with_retry`` returns once retries are exhausted.
+        return True
+
+    async def _retire_failed_event(self, event_id: uuid.UUID) -> None:
+        """Mark an event ``failed`` so it stops blocking the ordered drain.
+
+        Uses its own session: the batch session is in pending-rollback state
+        when this runs, so writing through it would raise instead of retiring
+        the event.
+        """
+        try:
+            async with system_session("automation_worker retires a failed event") as db:
+                await db.execute(
+                    update(AutomationEvent)
+                    .where(AutomationEvent.id == event_id)
+                    .values(
+                        status=EVENT_STATUS_FAILED,
+                        processed_at=datetime.now(UTC),
+                        error="Retries exhausted; see failed_jobs for the traceback",
+                    )
+                )
+                await db.commit()
+        except Exception:
+            # Best-effort: the event stays pending and is retried next cycle.
+            self.logger.exception("Failed to retire automation event", event_id=str(event_id))
+        else:
+            self.logger.error("Automation event retired after retries", event_id=str(event_id))
 
     # ------------------------------------------------------------------ #
     # Automation evaluation                                                #

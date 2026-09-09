@@ -137,13 +137,30 @@ class Conversation(Base, WorkspaceScoped):
         # threads have no phone at all: in Postgres every NULL is distinct, so
         # a full constraint would not actually reject anything for those rows,
         # and the index would still carry them for nothing.
+        #
+        # Split by origin, the same way ``messages`` splits provider identity.
+        # Native send paths deliberately refuse to reuse an imported thread
+        # (they filter ``source_provider IS NULL``), so a single shared arbiter
+        # made those contacts permanently unreachable: the lookup skipped the
+        # imported row, and the INSERT that followed collided with it, poisoning
+        # the session and wedging the worker that issued it. Two partial
+        # arbiters let a native thread exist alongside an imported one.
         Index(
-            "uq_conversation_phones",
+            "uq_conversation_phones_native",
             "workspace_id",
             "workspace_phone_hash",
             "contact_phone_hash",
             unique=True,
-            postgresql_where=text("contact_phone_hash IS NOT NULL"),
+            postgresql_where=text("contact_phone_hash IS NOT NULL AND source_provider IS NULL"),
+        ),
+        Index(
+            "uq_conversation_phones_provider",
+            "workspace_id",
+            "source_provider",
+            "workspace_phone_hash",
+            "contact_phone_hash",
+            unique=True,
+            postgresql_where=text("contact_phone_hash IS NOT NULL AND source_provider IS NOT NULL"),
         ),
         Index(
             "uq_conversation_messenger_psid",
