@@ -918,7 +918,10 @@ async def test_convert_credits_paid_deposit_to_invoice() -> None:
         assert quote is not None
         await svc.approve_quote(ws.id, quote.id)
         # Client paid 25% of 2000 = 500 on the public proposal page.
-        await mark_deposit_paid(db, quote, payment_intent_id="pi_deposit_test")
+        # Unique per run: `external_event_id` is globally unique (that is what makes
+        # a replayed Stripe event harmless), so a fixed literal here passes once and
+        # then fails forever against the same database, which reads as a code defect.
+        await mark_deposit_paid(db, quote, payment_intent_id=f"pi_deposit_{uuid.uuid4().hex}")
 
         result = await svc.convert_quote(ws.id, quote.id, create_job=False, create_invoice=True)
         assert result.invoice_id is not None

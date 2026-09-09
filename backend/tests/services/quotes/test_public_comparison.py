@@ -86,14 +86,18 @@ async def _make_workspace(db: AsyncSession) -> Workspace:
     return ws
 
 
-async def _use_legacy_reversed_complexity_package(db: AsyncSession, workspace: Workspace) -> None:
+async def _use_descending_complexity_package(db: AsyncSession, workspace: Workspace) -> None:
     settings = dict(workspace.settings or {})
     pricing = dict(settings.get("pricing", {}))
     pricing["permanent"] = {
         "enabled": True,
         "packages": [{"feet": 100, "cost": 1000}],
-        # Legacy settings could be stored in reverse order; runtime normalization
-        # still guarantees the semantic Easy/Standard/Complex ordering.
+        # Deliberately descending, and deliberately left that way: an operator
+        # may price an Easy run above a Complex one, so `price_permanent` uses
+        # each configured value under the name it was saved under rather than
+        # sorting them into Easy/Standard/Complex order. Reordering here would
+        # quietly charge one tier's markup for another, so these totals are
+        # what pins that promise — a sorting implementation inverts them.
         "easy_markup": 4,
         "standard_markup": 3,
         "complex_markup": 2,
@@ -225,20 +229,22 @@ async def test_percent_discount_survives_sharing_as_dollars() -> None:
 @pytest.mark.parametrize(
     ("scalar_complexity", "measured_complexity", "expected_total"),
     [
-        ("easy", "complex", 4000),
-        ("easy", "aerial", 1500),
-        ("aerial", "complex", 4000),
+        # Each row's total is the *measured* tier's markup on $1,000 of COGS, and
+        # is never the scalar's — so a public view that reprices the scalar fails
+        # in either direction rather than only when the map happens to cost more.
+        ("easy", "complex", 2000),
+        ("complex", "easy", 4000),
     ],
-    ids=["complex-map", "aerial-pics-map", "aerial-pics-scalar"],
+    ids=["complex-map", "easy-map"],
 )
 async def test_share_then_public_view_preserves_measured_complexity(
-    scalar_complexity: Literal["easy", "aerial"],
-    measured_complexity: Literal["complex", "aerial"],
+    scalar_complexity: Literal["easy", "complex"],
+    measured_complexity: Literal["easy", "complex"],
     expected_total: float,
 ) -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
-        await _use_legacy_reversed_complexity_package(db, ws)
+        await _use_descending_complexity_package(db, ws)
         svc = QuoteService(db)
 
         # Opposing scalar and measured values catches either persistence bug: the
@@ -265,7 +271,7 @@ async def test_share_then_public_view_preserves_measured_complexity(
 async def test_legacy_shared_comparison_defaults_to_standard_complexity() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)
-        await _use_legacy_reversed_complexity_package(db, ws)
+        await _use_descending_complexity_package(db, ws)
 
         # This is the post-migration shape of an old row: the NOT NULL default
         # supplies Standard and the nullable map remains NULL (no unbounded backfill).
