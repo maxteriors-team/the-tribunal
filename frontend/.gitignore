@@ -1,3 +1,7 @@
 .vercel
+# Netlify build output. Untracked *and* unscanned matters: check_env_drift.py
+# skips .next/ but not this, so a local `netlify build` leaves platform vars
+# (URL, DEPLOY_ID, USE_REGIONAL_BLOBS...) lying around that fail `make ci.env`.
+.netlify
 .env*.local
 .env*

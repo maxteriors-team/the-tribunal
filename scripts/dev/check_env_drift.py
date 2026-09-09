@@ -23,6 +23,7 @@ PROCESS_ENV_BRACKET_RE = re.compile(r"\bprocess\.env\[\s*['\"]([A-Za-z_][A-Za-z0
 
 FRONTEND_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
 FRONTEND_SKIP_DIRS = {
+    ".netlify",  # build output: ships platform vars (URL, DEPLOY_ID) we do not own
     ".next",
     ".turbo",
     "coverage",
