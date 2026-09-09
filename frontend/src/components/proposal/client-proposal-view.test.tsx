@@ -236,6 +236,39 @@ describe("ClientProposalView — visual checkout", () => {
     );
     expect(onApprove).toHaveBeenCalledWith("best");
   });
+
+  it("credits the customer for a discount the rep gave them", () => {
+    renderView({
+      packages: [],
+      subtotal: 16782,
+      discount_amount: 1678.2,
+      total: 15103.8,
+      deposit_amount: 7551.9,
+      proposal_document: {
+        ...DOCUMENT,
+        mockups: [{ image: "data:image/png;base64,AAAA", caption: "Front elevation" }],
+      } as unknown as Record<string, unknown>,
+    });
+
+    const visualCheckout = screen.getByRole("region", { name: "Your lighting proposal" });
+    expect(within(visualCheckout).getByText("$15,104")).toBeVisible();
+    // What it would have cost, struck through, beside what they kept.
+    expect(within(visualCheckout).getByText("$16,782")).toBeVisible();
+    expect(within(visualCheckout).getByText(/You save \$1,678/)).toBeVisible();
+  });
+
+  it("never invents a saving on a package or a range headline", () => {
+    renderView({
+      discount_amount: 1678.2,
+      price_range: { low: 15103.8, high: 19300 },
+      proposal_document: {
+        ...DOCUMENT,
+        mockups: [{ image: "data:image/png;base64,AAAA", caption: "Front elevation" }],
+      } as unknown as Record<string, unknown>,
+    });
+
+    expect(screen.queryByText(/You save/)).toBeNull();
+  });
 });
 
 describe("ClientProposalView — measured Bistro pricing", () => {
