@@ -33,6 +33,9 @@ const SECURITY_HEADERS = [
 // a path added here becomes publicly indexable.
 const INDEXABLE_MARKETING_PATHS = ["p/landscape-lighting"];
 
+// Set only on the standalone marketing deployment. See `redirects()` below.
+const LANDING_ONLY_SITE = process.env.LANDING_ONLY_SITE === "1";
+
 const MARKETING_HEADERS = SECURITY_HEADERS.filter(
   (header) => header.key !== "X-Robots-Tag",
 );
@@ -74,6 +77,29 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // Landing-only deployments (the Netlify marketing site) serve exactly one
+      // public page. Without this, the whole CRM ships to that domain: the bare
+      // hostname lands a homeowner on a Tribunal login screen, and /contacts,
+      // /login and friends are all reachable. This is a deployment mode, not a
+      // route change, so it is env-gated and never applies to the real CRM.
+      //
+      // The negative lookahead is the allowlist. `api` must stay open or the
+      // lead form (same-origin POST proxied to the backend) breaks; `_next`
+      // carries the JS/CSS and the image optimizer; `landscape-lighting` is the
+      // photo/logo folder in public/.
+      ...(LANDING_ONLY_SITE
+        ? [
+            {
+              source:
+                "/((?!p/landscape-lighting|api|_next|landscape-lighting|robots.txt|favicon.ico|sitemap.xml).*)",
+              destination: "/p/landscape-lighting",
+              // 307, not 308: browsers cache a permanent redirect nearly
+              // forever, which would strand this hostname on the landing page
+              // if it is ever repurposed.
+              permanent: false,
+            },
+          ]
+        : []),
       {
         // /recurring-jobs was renamed to /service-plans. Reps keep the old URL
         // bookmarked and it is linked from older emails, so without this the
