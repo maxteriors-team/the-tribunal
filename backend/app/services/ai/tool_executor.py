@@ -1425,7 +1425,9 @@ class VoiceToolExecutor(BaseToolExecutor):
             self.log.exception("take_message_push_failed", error=str(exc))
 
         try:
-            members = await workspace_notification_email_users(db, workspace_id)
+            members = await workspace_notification_email_users(
+                db, workspace_id, notification_type="message"
+            )
             sent = 0
             for user in members:
                 if not user.notification_email or not user.email:

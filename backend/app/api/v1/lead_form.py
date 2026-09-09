@@ -37,6 +37,7 @@ from app.services.lead_sources.attribution_service import (
     apply_web_attribution,
     resolve_web_attribution,
 )
+from app.services.notification_policy import role_receives
 from app.services.notifications import notify_workspace_event
 from app.services.sla.speed_to_lead import (
     MIN_LEADS_FOR_PUBLIC_BADGE,
@@ -248,7 +249,8 @@ async def _notify_new_lead(lead_source: LeadSource, contact: Contact, db: DB) ->
     except Exception:
         logger.exception("lead_event_notification_failed", contact_id=contact.id)
 
-    # Send SMS notification to workspace members who have SMS notifications enabled
+    # SMS the same audience push and email use: a new lead is sales news, so the
+    # crew is not texted about it (see app.services.notification_policy).
     if not settings.telnyx_api_key or not from_number:
         return
 
@@ -264,6 +266,8 @@ async def _notify_new_lead(lead_source: LeadSource, contact: Contact, db: DB) ->
     async with httpx.AsyncClient(timeout=15.0) as client:
         for member in members:
             user = member.user
+            if not role_receives(member.role, "new_lead"):
+                continue
             if not user.notification_sms or not user.phone_number:
                 continue
             try:
