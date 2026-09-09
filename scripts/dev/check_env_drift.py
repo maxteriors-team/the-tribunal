@@ -22,7 +22,13 @@ PROCESS_ENV_DOT_RE = re.compile(r"\bprocess\.env\.([A-Za-z_][A-Za-z0-9_]*)\b")
 PROCESS_ENV_BRACKET_RE = re.compile(r"\bprocess\.env\[\s*['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]\s*\]")
 
 FRONTEND_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
+# Generated output, never hand-written source. Scanning these finds env vars a
+# build tool injects at runtime rather than ones this app reads, which reports
+# drift that no template edit can fix. Every entry is also gitignored, so the
+# failure only ever appears on a machine that ran that build -- CI, on a clean
+# checkout, stays green and the drift looks unreproducible.
 FRONTEND_SKIP_DIRS = {
+    ".netlify",
     ".next",
     ".turbo",
     "coverage",

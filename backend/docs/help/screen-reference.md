@@ -112,6 +112,9 @@ These customer routes require a valid public token or slug and do not expose the
 - Offer: `/p/offers/{slug}`
 - Review request: `/p/reviews/{token}`
 - Public landing page: `/p/landing`
+- Landscape lighting marketing page: `/p/landscape-lighting`
 - Embedded agent: `/embed/{public_id}`, `/embed/{public_id}/chat`, `/embed/{public_id}/both`, or `/embed/{public_id}/fullpage`
+
+`/p/landing` and `/p/landscape-lighting` are the exceptions to the token rule: they are open marketing pages anyone can reach. The landscape lighting page captures consult requests through a lead source, so its Lead Source allowed domains must include the site's origin or submissions are rejected; without that key configured the page asks homeowners to call instead of showing a form.
 
 The standalone estimator is `/estimator`. Authentication and invite routes are `/login`, `/register`, and `/invite/{token}`. Hosted payment returns use `/payment-complete` and `/payment-cancelled`. These are not signed-in CRM workflow destinations unless the question is specifically about that flow.
