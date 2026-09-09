@@ -67,6 +67,7 @@ from app.api.v1 import (
     roleplay,
     scorecard,
     scraping,
+    seasonal_renewals,
     segments,
     settings,
     tags,
@@ -170,6 +171,14 @@ api_router.include_router(
     prebooking.workspace_router,
     prefix="/workspaces/{workspace_id}/pre-booking",
     tags=["Pre-Booking Campaigns"],
+)
+# Renewing one house is a quoting action, not outreach: it produces a draft quote
+# copied from last season's, so it sits under the workspace beside quotes rather
+# than under a campaign.
+api_router.include_router(
+    seasonal_renewals.router,
+    prefix="/workspaces/{workspace_id}/christmas/renewals",
+    tags=["Christmas Renewals"],
 )
 api_router.include_router(
     voice_campaigns.router,

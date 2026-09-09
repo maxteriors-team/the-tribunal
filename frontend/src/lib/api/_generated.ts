@@ -3849,6 +3849,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/christmas/renewals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Renewal Candidates
+         * @description Houses this workspace lit in an earlier season, newest signup first.
+         */
+        get: operations["list_renewal_candidates_api_v1_workspaces__workspace_id__christmas_renewals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/christmas/renewals/{contact_id}/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Renewal Quote
+         * @description Draft this season's quote from the customer's last holiday quote.
+         */
+        post: operations["create_renewal_quote_api_v1_workspaces__workspace_id__christmas_renewals__contact_id__quote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/contacts": {
         parameters: {
             query?: never;
@@ -30412,6 +30452,47 @@ export interface components {
         };
         /**
          * ReorderReport
+        /**
+         * RenewalCandidateList
+         * @description A page of renewal candidates plus the season the operator is selling.
+         */
+        RenewalCandidateList: {
+            /** Items */
+            items?: components["schemas"]["RenewalCandidateResponse"][];
+            /** Season Year */
+            season_year: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /**
+         * RenewalCandidateResponse
+         * @description One house lit in an earlier season, with the quote a renewal would copy.
+         */
+        RenewalCandidateResponse: {
+            /** Contact Id */
+            contact_id: number;
+            /** Contact Name */
+            contact_name: string;
+            /** Line Item Count */
+            line_item_count: number;
+            /**
+             * Quote Id
+             * Format: uuid
+             */
+            quote_id: string;
+            /** Quote Number */
+            quote_number: string;
+            /** Quote Total */
+            quote_total: number;
+            /**
+             * Signed Up At
+             * Format: date-time
+             */
+            signed_up_at: string;
+        };
          * @description Items needing a purchase, most urgent first.
          */
         ReorderReport: {
@@ -42244,6 +42325,73 @@ export interface operations {
     };
     list_contacts_api_v1_workspaces__workspace_id__contacts_get: {
         parameters: {
+    list_renewal_candidates_api_v1_workspaces__workspace_id__christmas_renewals_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewalCandidateList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_renewal_quote_api_v1_workspaces__workspace_id__christmas_renewals__contact_id__quote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contact_id: number;
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
             query?: {
                 page?: number;
                 page_size?: number;

@@ -49694,6 +49694,78 @@
             "format": "date-time",
             "title": "Generated At",
             "type": "string"
+      "RenewalCandidateList": {
+        "description": "A page of renewal candidates plus the season the operator is selling.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RenewalCandidateResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "season_year": {
+            "title": "Season Year",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "season_year"
+        ],
+        "title": "RenewalCandidateList",
+        "type": "object"
+      },
+      "RenewalCandidateResponse": {
+        "description": "One house lit in an earlier season, with the quote a renewal would copy.",
+        "properties": {
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "contact_name": {
+            "title": "Contact Name",
+            "type": "string"
+          },
+          "line_item_count": {
+            "title": "Line Item Count",
+            "type": "integer"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "quote_number": {
+            "title": "Quote Number",
+            "type": "string"
+          },
+          "quote_total": {
+            "title": "Quote Total",
+            "type": "number"
+          },
+          "signed_up_at": {
+            "format": "date-time",
+            "title": "Signed Up At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contact_id",
+          "contact_name",
+          "quote_id",
+          "quote_number",
+          "quote_total",
+          "line_item_count",
+          "signed_up_at"
+        ],
+        "title": "RenewalCandidateResponse",
+        "type": "object"
+      },
           },
           "items": {
             "items": {
@@ -73094,6 +73166,153 @@
         "parameters": [
           {
             "in": "path",
+    "/api/v1/workspaces/{workspace_id}/christmas/renewals": {
+      "get": {
+        "description": "Houses this workspace lit in an earlier season, newest signup first.",
+        "operationId": "list_renewal_candidates_api_v1_workspaces__workspace_id__christmas_renewals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewalCandidateList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Renewal Candidates",
+        "tags": [
+          "Christmas Renewals"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/christmas/renewals/{contact_id}/quote": {
+      "post": {
+        "description": "Draft this season's quote from the customer's last holiday quote.",
+        "operationId": "create_renewal_quote_api_v1_workspaces__workspace_id__christmas_renewals__contact_id__quote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contact_id",
+            "required": true,
+            "schema": {
+              "title": "Contact Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Create Renewal Quote",
+        "tags": [
+          "Christmas Renewals"
+        ]
+      }
+    },
             "name": "workspace_id",
             "required": true,
             "schema": {

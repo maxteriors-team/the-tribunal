@@ -153,6 +153,14 @@ const estimator = {
     ["estimator", workspaceId, normalizeQueryKeyParams(params)] as const,
 };
 
+// Christmas renewals: last season's houses, searchable. Workspace-level and
+// list-only — renewing writes a *quote*, so the created draft is invalidated
+// under the quotes key rather than cached here.
+const christmasRenewals = {
+  list: (workspaceId: string, params?: QueryKeyParams | null) =>
+    ["christmas-renewals", workspaceId, normalizeQueryKeyParams(params)] as const,
+};
+
 // Pre-booking: an offer attached to an existing campaign, so the offer and its
 // reservations nest under the campaign detail key and a campaign invalidate
 // cascades to them. The audience preview is workspace-level on purpose — the
@@ -464,6 +472,7 @@ export const queryKeys = {
     stats: (workspaceId: string) => [...pendingActions.all(workspaceId), "stats"] as const,
   },
   preBooking,
+  christmasRenewals,
   phoneNumbers: {
     ...phoneNumbers,
     smsEnabled: (workspaceId: string) => phoneNumbers.list(workspaceId, { sms_enabled: true }),
