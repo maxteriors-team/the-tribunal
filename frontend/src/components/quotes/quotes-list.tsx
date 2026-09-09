@@ -306,7 +306,7 @@ export function QuotesList() {
           <TableHeader>
             <TableRow>
               <TableHead>Number</TableHead>
-              <TableHead>For</TableHead>
+              <TableHead>Client</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Owner</TableHead>
               <TableHead className="text-right">Total</TableHead>
@@ -330,8 +330,17 @@ export function QuotesList() {
                     quote.number
                   )}
                 </TableCell>
-                <TableCell className="max-w-[16rem] truncate text-muted-foreground">
-                  {quote.title || "—"}
+                {/* Whose quote it is comes first — the project title alone made
+                    every roofline row read "Permanent Holiday Lighting". */}
+                <TableCell className="max-w-[16rem]">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">
+                      {quote.contact_name || quote.title || "—"}
+                    </div>
+                    {quote.contact_name && quote.title ? (
+                      <div className="truncate text-xs text-muted-foreground">{quote.title}</div>
+                    ) : null}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5">

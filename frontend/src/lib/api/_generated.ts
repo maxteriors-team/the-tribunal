@@ -28919,6 +28919,8 @@ export interface components {
             attach_warning?: components["schemas"]["AttachWarning"] | null;
             /** Contact Id */
             contact_id?: number | null;
+            /** Contact Name */
+            contact_name?: string | null;
             /** Converted Invoice Id */
             converted_invoice_id?: string | null;
             /** Converted Job Id */
@@ -29312,6 +29314,8 @@ export interface components {
             attach_value: number;
             /** Contact Id */
             contact_id?: number | null;
+            /** Contact Name */
+            contact_name?: string | null;
             /** Converted Invoice Id */
             converted_invoice_id?: string | null;
             /** Converted Job Id */

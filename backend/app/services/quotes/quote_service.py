@@ -844,6 +844,10 @@ class QuoteService:
         response = QuoteResponse.model_validate(quote)
         cls._decorate_wizard_edit_state(response, quote)
         response.financing = cls._financing_for_quote(quote)
+        # Only when the caller eager loaded it: touching an unloaded relationship
+        # here would lazy-load inside async serialization and blow up.
+        if "contact" in quote.__dict__:
+            response.contact_name = quote.contact.full_name if quote.contact else None
         return response
 
     @staticmethod
@@ -1204,7 +1208,7 @@ class QuoteService:
         query = (
             select(Quote)
             .where(Quote.workspace_id == workspace_id)
-            .options(selectinload(Quote.assignee))
+            .options(selectinload(Quote.assignee), selectinload(Quote.contact))
         )
         if status:
             query = query.where(Quote.status == status)

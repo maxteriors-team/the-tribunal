@@ -45351,6 +45351,17 @@
             ],
             "title": "Contact Id"
           },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
+          },
           "converted_invoice_id": {
             "anyOf": [
               {
@@ -46479,6 +46490,17 @@
               }
             ],
             "title": "Contact Id"
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Name"
           },
           "converted_invoice_id": {
             "anyOf": [

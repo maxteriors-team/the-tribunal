@@ -211,6 +211,28 @@ async def test_create_computes_totals_and_allocates_number() -> None:
         assert second.number == "QUO-000002"
 
 
+async def test_list_quotes_labels_rows_with_the_client_name() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id)
+        svc = QuoteService(db)
+        await svc.create_quote(
+            ws.id,
+            QuoteCreate(contact_id=contact.id, title="Permanent Holiday Lighting", line_items=[]),
+            created_by_id=None,
+        )
+        await svc.create_quote(
+            ws.id, QuoteCreate(title="No client", line_items=[]), created_by_id=None
+        )
+
+        listed = await svc.list_quotes(ws.id)
+
+        by_title = {item.title: item for item in listed.items}
+        assert by_title["Permanent Holiday Lighting"].contact_name == contact.full_name
+        # An unlinked quote reports no name rather than an empty-string label.
+        assert by_title["No client"].contact_name is None
+
+
 async def test_quote_defaults_to_creator_and_can_reassign_after_decision() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _make_workspace(db)

@@ -178,6 +178,34 @@ describe("QuotesList client-view signal", () => {
   });
 });
 
+describe("QuotesList client column", () => {
+  const listOne = (overrides: Partial<Quote> = {}) =>
+    listMock.mockResolvedValue({
+      items: [quote(overrides)],
+      total: 1,
+      page: 1,
+      page_size: 100,
+      pages: 1,
+    });
+
+  it("names the client above the project title", async () => {
+    listOne({ contact_name: "Dana Reyes", title: "Permanent Holiday Lighting" });
+
+    renderList();
+
+    expect(await screen.findByText("Dana Reyes")).toBeInTheDocument();
+    expect(screen.getByText("Permanent Holiday Lighting")).toBeInTheDocument();
+  });
+
+  it("falls back to the project title when no client is linked", async () => {
+    listOne({ contact_name: null, title: "Permanent Holiday Lighting" });
+
+    renderList();
+
+    expect(await screen.findByText("Permanent Holiday Lighting")).toBeInTheDocument();
+  });
+});
+
 describe("QuotesList deposits", () => {
   const listOne = (overrides: Partial<Quote> = {}) =>
     listMock.mockResolvedValue({

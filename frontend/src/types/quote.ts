@@ -29,6 +29,8 @@ export interface Quote {
   id: string;
   workspace_id: string;
   contact_id?: number | null;
+  /** Linked client's display name on list responses; null when none is linked. */
+  contact_name?: string | null;
   service_location_id?: string | null;
   opportunity_id?: string | null;
   assigned_user_id?: number | null;

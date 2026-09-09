@@ -318,6 +318,11 @@ class QuoteResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     contact_id: int | None = None
+    # Display label for the linked client, so a list can say whose quote this is
+    # instead of only its project title. Populated when the ``contact``
+    # relationship is eager loaded; ``None`` means either no linked contact or a
+    # caller that did not load one -- never a failed lookup.
+    contact_name: str | None = None
     service_location_id: uuid.UUID | None = None
     opportunity_id: uuid.UUID | None = None
     assigned_user_id: int | None = None
