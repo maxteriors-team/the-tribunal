@@ -453,7 +453,9 @@ async def _notify_workspace(
     attachment: EmailAttachment,
 ) -> None:
     """Send the internal copy to the workspace's notification recipients."""
-    users = await workspace_notification_email_users(db, quote.workspace_id)
+    users = await workspace_notification_email_users(
+        db, quote.workspace_id, notification_type="quote_accepted"
+    )
     download_url = (
         f"{settings.frontend_url.rstrip('/')}/quotes/{quote.id}"  # operator-facing detail page
     )

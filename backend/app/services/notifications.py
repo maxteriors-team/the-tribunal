@@ -60,9 +60,10 @@ async def notify_workspace_event(
 ) -> NotificationDispatchResult:
     """Send an actionable-event notification for a workspace.
 
-    Push remains workspace-wide. Email goes only to active admins unless callers
-    explicitly target member IDs for operational work; preferences and per-event
-    idempotency still apply.
+    Both channels are scoped to the tiers ``notification_type`` is for (see
+    :mod:`app.services.notification_policy`) unless callers explicitly target
+    member IDs for operational work; per-user preferences and per-event
+    idempotency still apply on top.
     """
     workspace_id_str = str(workspace_id)
     recipients = tuple(dict.fromkeys(recipient_user_ids or ()))
@@ -169,11 +170,12 @@ async def _send_emails(
     dedupe_key: str | uuid.UUID | None,
     recipient_user_ids: Sequence[int] | None,
 ) -> tuple[tuple[int, ...], tuple[int, ...]]:
-    """Email opted-in active admins, or active members explicitly targeted for work."""
+    """Email the tiers this event is for, or active members explicitly targeted."""
     pref_attr = NOTIFICATION_TYPE_PREFS.get(notification_type)
     members = await workspace_notification_email_users(
         db,
         workspace_id,
+        notification_type=notification_type,
         recipient_user_ids=recipient_user_ids,
     )
 

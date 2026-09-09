@@ -360,7 +360,7 @@ async def _email_workspace_members(
     analysis: VoicemailAnalysis,
     log: Any,
 ) -> None:
-    """Email opted-in active workspace admins about the voicemail."""
+    """Email the workspace's customer-facing tiers about the voicemail."""
     from app.services.email import send_voicemail_notification
     from app.services.notification_recipients import workspace_notification_email_users
 
@@ -372,7 +372,9 @@ async def _email_workspace_members(
         except (ValueError, TypeError):
             transcript_text = ""
 
-    members = await workspace_notification_email_users(db, workspace.id)
+    members = await workspace_notification_email_users(
+        db, workspace.id, notification_type="voicemail"
+    )
     sent = 0
     for user in members:
         if not user.notification_email or not user.email:

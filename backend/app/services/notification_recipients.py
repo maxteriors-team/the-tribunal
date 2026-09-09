@@ -6,23 +6,25 @@ from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.roles import WorkspaceRole
 from app.models.user import User
 from app.models.workspace import WorkspaceMembership
-
-_ADMIN_EMAIL_ROLES = (
-    WorkspaceRole.OWNER.value,
-    WorkspaceRole.ADMIN.value,
-)
+from app.services.notification_policy import roles_for
 
 
 async def workspace_notification_email_users(
     db: AsyncSession,
     workspace_id: uuid.UUID | str,
     *,
+    notification_type: str | None = None,
     recipient_user_ids: Sequence[int] | None = None,
 ) -> list[User]:
-    """Return active admins, or active members explicitly targeted for operational work."""
+    """Return the active members this event is for, or explicitly targeted ones.
+
+    ``notification_type`` selects the audience via
+    :mod:`app.services.notification_policy` — a deposit reaches sales, a failed
+    automation does not. Omitting it stays admin-only, so a caller that has not
+    declared what it is sending cannot widen its own blast radius.
+    """
     workspace_uuid = uuid.UUID(str(workspace_id))
     query = (
         select(User)
@@ -33,7 +35,7 @@ async def workspace_notification_email_users(
         )
     )
     if recipient_user_ids is None:
-        query = query.where(WorkspaceMembership.role.in_(_ADMIN_EMAIL_ROLES))
+        query = query.where(WorkspaceMembership.role.in_(roles_for(notification_type)))
     else:
         query = query.where(User.id.in_(recipient_user_ids))
 

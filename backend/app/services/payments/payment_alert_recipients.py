@@ -30,7 +30,12 @@ async def payment_alert_email_recipients(
     workspace_id: uuid.UUID,
     workspace: Workspace | None,
 ) -> list[PaymentAlertRecipient]:
-    """Return the configured payment inbox, otherwise opted-in active admins."""
+    """Return the configured payment inbox, otherwise the workspace's revenue tiers.
+
+    Falling back to ``payment`` recipients rather than admins is what puts a paid
+    deposit in front of the sales rep who sold the job, without also putting it
+    in front of the crew installing it.
+    """
     workspace_settings = getattr(workspace, "settings", None)
     raw = workspace_settings.get(SETTINGS_KEY) if isinstance(workspace_settings, dict) else None
     if raw is not None:
@@ -45,7 +50,9 @@ async def payment_alert_email_recipients(
         email = str(configured.recipient_email).lower()
         return [PaymentAlertRecipient(email=email, dedupe_identity=f"configured:{email}")]
 
-    users = await notification_recipients.workspace_notification_email_users(db, workspace_id)
+    users = await notification_recipients.workspace_notification_email_users(
+        db, workspace_id, notification_type="payment"
+    )
     recipients: list[PaymentAlertRecipient] = []
     seen_emails: set[str] = set()
     for user in users:
