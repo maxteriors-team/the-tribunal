@@ -1,7 +1,7 @@
 """Organize inventory items by service category.
 
 Revision ID: 20260903_inventory_services
-Revises: 20260903_technician_scoreboard
+Revises: 20260909_conv_arbiters
 Create Date: 2026-09-03
 
 The column is additive and nullable. Existing operator categories are never
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260903_inventory_services"
-down_revision: str | None = "20260903_technician_scoreboard"
+down_revision: str | None = "20260909_conv_arbiters"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
