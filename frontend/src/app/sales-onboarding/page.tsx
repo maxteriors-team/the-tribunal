@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { SalesRepOnboarding } from "@/components/onboarding/sales-rep-onboarding";
 
 export const metadata: Metadata = {
-  title: "Sales Rep Setup | The Tribunal",
+  title: "Sales Rep Setup | BEAM",
 };
 
 export default function SalesOnboardingPage() {

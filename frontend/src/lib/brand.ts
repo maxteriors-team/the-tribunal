@@ -1,7 +1,9 @@
 export const PRODUCT_BRAND = {
-  name: "The Tribunal",
-  shortName: "Tribunal",
-  description: "AI-powered CRM for lead capture, follow-up, booking, and customer communications.",
+  name: "BEAM",
+  shortName: "BEAM",
+  tagline: "Every lead, lit up.",
+  description:
+    "AI-powered CRM that captures every lead, follows up by voice and text, and books the job.",
 } as const;
 
 export const DEFAULT_WORKSPACE_BRAND_NAME = "Your business";

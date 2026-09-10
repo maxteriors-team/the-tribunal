@@ -108,7 +108,7 @@ export function buildSupplierCsvRows(
         unit: "each",
         planSource: fixture.label,
         status: sku ? "Ready" : "Needs SKU",
-        notes: sku ? "" : "Assign a supplier SKU in the Tribunal catalog before ordering.",
+        notes: sku ? "" : "Assign a supplier SKU in the BEAM catalog before ordering.",
         needed: roundQuantity(fixture.quantity * component.qty),
         ordered: 0,
         received: 0,
@@ -145,7 +145,7 @@ export function buildSupplierCsvRows(
           ? "Set the drawing scale before ordering wire."
           : sku
             ? "Traced one-way route rounded up to a whole foot; add field allowance before ordering."
-            : "Assign a supplier SKU in the Tribunal catalog before ordering. Traced route is rounded to a whole foot; add field allowance before ordering.",
+            : "Assign a supplier SKU in the BEAM catalog before ordering. Traced route is rounded to a whole foot; add field allowance before ordering.",
     });
   }
 

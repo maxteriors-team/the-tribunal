@@ -33,9 +33,9 @@ export type LightingProjectSaveStatus =
 
 export const LIGHTING_PROJECT_SAVE_LABELS: Record<LightingProjectSaveStatus, string> = {
   loading: "Checking this device...",
-  saved: "Saved to Tribunal",
+  saved: "Saved to BEAM",
   pending: "Saved on this device; sync pending",
-  saving: "Syncing to Tribunal...",
+  saving: "Syncing to BEAM...",
   error: "Saved on this device; sync pending",
   conflict: "Save conflict needs review",
 };
@@ -67,7 +67,7 @@ interface UseLightingProjectAutosaveResult {
   retry: () => void;
   /** Resolves only after all browser/server writes settle; rejects on conflict/error. */
   saveNow: () => Promise<LightingProjectDetail>;
-  loadTribunalVersion: () => Promise<void>;
+  loadBeamVersion: () => Promise<void>;
   saveWorkAsCopy: () => Promise<void>;
   updateProjectName: (name: string) => Promise<void>;
 }
@@ -81,7 +81,7 @@ interface ConflictResponseDetails {
 export function normalizeLandscapeDocument(document: LandscapeDraftDocument): LandscapeDraft {
   const normalized = normalizeDomainDocument(document);
   if (!normalized) {
-    throw new Error("Tribunal returned an invalid landscape project document");
+    throw new Error("BEAM returned an invalid landscape project document");
   }
   return normalized;
 }
@@ -104,17 +104,17 @@ function retryableRequestError(error: unknown): boolean {
 
 /** What the rep sees when a proposal is blocked because the drawing never synced. */
 function syncFailureMessage(detail: string | null): string {
-  const reason = detail ?? "Tribunal could not sync this draft.";
+  const reason = detail ?? "BEAM could not sync this draft.";
   return `The drawing did not sync, so the proposal was not created. ${reason}`;
 }
 
 function requestErrorMessage(error: unknown): string {
-  if (!isAxiosError(error)) return "Tribunal could not sync this draft.";
+  if (!isAxiosError(error)) return "BEAM could not sync this draft.";
   const body = error.response?.data as
     | { detail?: unknown; message?: unknown; error?: { message?: unknown } }
     | undefined;
   const detail = body?.message ?? body?.error?.message ?? body?.detail;
-  return typeof detail === "string" ? detail : "Tribunal could not sync this draft.";
+  return typeof detail === "string" ? detail : "BEAM could not sync this draft.";
 }
 
 export function useLightingProjectAutosave({
@@ -402,7 +402,7 @@ export function useLightingProjectAutosave({
     return projectRef.current;
   }, [clearDebounceTimer, clearRetryTimer]);
 
-  const loadTribunalVersion = useCallback(async () => {
+  const loadBeamVersion = useCallback(async () => {
     if (!conflictRef.current) return;
     if (mountedRef.current) setErrorMessage(null);
     try {
@@ -639,7 +639,7 @@ export function useLightingProjectAutosave({
     onDraftChange,
     retry,
     saveNow,
-    loadTribunalVersion,
+    loadBeamVersion,
     saveWorkAsCopy,
     updateProjectName,
   };

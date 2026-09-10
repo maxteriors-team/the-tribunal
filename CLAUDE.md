@@ -1,6 +1,8 @@
-# The Tribunal
+# BEAM
 
-The Tribunal is a proprietary AI-powered CRM command center for capturing leads, running AI voice/SMS follow-up, booking appointments, and giving operators a Next.js dashboard for human-in-the-loop decisions.
+BEAM is a proprietary AI-powered CRM command center for capturing leads, running AI voice/SMS follow-up, booking appointments, and giving operators a Next.js dashboard for human-in-the-loop decisions. It is built to be sold as multi-tenant SaaS.
+
+**Two brands, never merged.** *BEAM* is the product: app chrome, the auth screens, the "via BEAM" line in mail, `PRODUCT_BRAND` in `frontend/src/lib/brand.ts`. *Maxteriors* is a customer — the first workspace, currently running BEAM as a trial — so it belongs in workspace data, seeds and env, never in shared product copy. Customer-facing output leads with the **workspace's** business name (`resolveWorkspaceBrand`, `RESEND_FROM_NAME`), because a Maxteriors homeowner must never see another tenant's name, or the platform's, where their contractor's should be. It was formerly called *The Tribunal*; lowercase `tribunal` survives only in machine identifiers (calendar UIDs, idempotency namespaces, Telnyx tags, IndexedDB names) where renaming would orphan live records.
 
 ## Apps and stable structure
 

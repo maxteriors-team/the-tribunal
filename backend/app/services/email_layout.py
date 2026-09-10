@@ -77,7 +77,7 @@ class Brand:
     effectively white.
     """
 
-    business_name: str = "Maxteriors"
+    business_name: str = "BEAM"
     # --primary / --primary-foreground. The amber is sampled from the logo
     # (maxteriorslighting.com), so mail, the proposal page and the mark agree.
     primary: str = "#fcb400"

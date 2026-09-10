@@ -161,7 +161,7 @@ describe("landscape domain modules", () => {
         catalogItemId: "fixture",
         catalogSku: "CUSTOM-UP",
         description: "Patina uplight",
-        manufacturer: "Tribunal Lighting",
+        manufacturer: "BEAM Lighting",
         supplier: "Regional Supply",
         neededQuantity: 4,
         orderedQuantity: 3,
@@ -175,7 +175,7 @@ describe("landscape domain modules", () => {
     expect(fixture).toMatchObject({
       name: "Patina uplight",
       sku: "CUSTOM-UP",
-      manufacturer: "Tribunal Lighting",
+      manufacturer: "BEAM Lighting",
       supplier: "Regional Supply",
       needed: 4,
       ordered: 3,

@@ -209,6 +209,44 @@
   }
 }
 
+/* ── Auth artwork: the beam and the leads it lights ──────────── */
+/* One reveal on load, then it rests — the light finding the leads is the
+   point, ambient looping is not. Resting state is the finished state, so
+   reduced motion and no-JS both get the whole picture. */
+@media (prefers-reduced-motion: no-preference) {
+  .beam-reveal {
+    animation: beam-fade-in 900ms ease-out backwards;
+  }
+  .beam-lead {
+    animation: beam-fade-in 600ms ease-out backwards;
+  }
+  /* The one loop that stays: the beam hunting across the field. Pivots at the
+     fixture, in viewBox units, so it swings rather than slides. */
+  .beam-sweep {
+    transform-box: view-box;
+    transform-origin: 300px 84px;
+    animation: beam-sweep 18s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes beam-sweep {
+  from {
+    transform: rotate(-7deg);
+  }
+  to {
+    transform: rotate(7deg);
+  }
+}
+
+@keyframes beam-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Hero fade-up (starts at 0.7 so LCP element is always "visible") */
 @keyframes fade-up {
   from {

@@ -139,7 +139,7 @@ function catalogLine(
     unitCost: numericAttribute(item, "unit_cost") ?? item?.unit_price ?? null,
     planSources: new Set([planSource]),
     sourceStatus: sku ? "Ready" : "Needs SKU",
-    supplierNote: sku ? "" : "Assign a supplier SKU in the Tribunal catalog before ordering.",
+    supplierNote: sku ? "" : "Assign a supplier SKU in the BEAM catalog before ordering.",
   };
 }
 

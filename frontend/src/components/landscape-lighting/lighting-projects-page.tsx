@@ -136,7 +136,7 @@ function DraftCreateDialog({
           </DialogTitle>
           <DialogDescription>
             {mode === "recover"
-              ? "Link the drawing saved in this browser to a customer project in Tribunal. The local draft is removed only after the project is created."
+              ? "Link the drawing saved in this browser to a customer project in BEAM. The local draft is removed only after the project is created."
               : "Name the lighting plan and link it to the customer who owns the work."}
           </DialogDescription>
         </DialogHeader>
@@ -439,8 +439,8 @@ export function LightingProjectsPage({
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {projectType === "permanent"
-                ? "Open a customer project, draw permanent track on property photos, and keep every edit synced to Tribunal."
-                : "Open a customer plan, design from a top-down aerial, and keep the current drawing synced to Tribunal."}
+                ? "Open a customer project, draw permanent track on property photos, and keep every edit synced to BEAM."
+                : "Open a customer plan, design from a top-down aerial, and keep the current drawing synced to BEAM."}
             </p>
           </div>
           <Button type="button" onClick={() => setCreateMode("create")}>
