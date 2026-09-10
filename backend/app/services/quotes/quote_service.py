@@ -3049,6 +3049,12 @@ class QuoteService:
                 "No holiday-lighting job on file to renew for this customer",
                 code="no_renewable_quote",
             )
+        # The builder copies line items but is pure, so nothing has derived the
+        # quote-level fields from them yet. Without this the renewal is sent to
+        # the customer showing $0, and its `primary_service` stays null — which
+        # makes *next* season's renewal fail to recognise it as holiday work.
+        self._recompute_totals(renewal)
+        await self.db.flush()
         self.log.info(
             "quote_renewed_from_last_season",
             renewal_quote_id=str(renewal.id),

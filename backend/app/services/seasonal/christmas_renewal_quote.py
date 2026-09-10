@@ -42,7 +42,16 @@ from app.services.seasonal.christmas_renewal import ChristmasSeason, resolve_chr
 
 # Only a quote that actually became work is worth rebuilding. A draft the rep
 # abandoned, or one the customer declined, is not "what we did for them".
-RENEWABLE_STATUSES = ("approved", "accepted", "converted")
+#
+# Must stay a subset of QUOTE_STATUSES: `status` is a Postgres enum, so a value
+# outside it is not an empty match but a hard InvalidTextRepresentation error
+# that fails the whole query. "accepted" and "converted" were never members,
+# which made every renewal lookup raise. `test_renewable_statuses_are_real`
+# pins the subset rule so it cannot regress.
+#
+# A quote that became a job keeps status "approved" (the job is recorded in
+# `converted_job_id`), so approval is the single signal that it sold.
+RENEWABLE_STATUSES = ("approved",)
 
 # Signals that a quote was holiday-lighting work rather than another service.
 _CHRISTMAS_SERVICES = ("christmas", "christmas_lights", "holiday_lighting", "seasonal")
