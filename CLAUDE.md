@@ -124,3 +124,33 @@ For minor friction (worked around it but wished it were better), don't interrupt
 - `ezcoder eyes log blocked "<reason>"` — call this AFTER the user approves an inline-escalation fix, for the audit trail
 
 These accumulate quietly. The user reviews them periodically. Open signals will appear in your context on future turns until they're acked.
+
+## Local corpus of real open-source code
+
+There is a local corpus of real, current open-source code at `~/.steroids`. **Search it before writing anything non-trivial**, to see how other projects solved the same problem. This repo runs versions newer than most model training data (Next 16.3, React 19.2, SQLAlchemy 2.0.49, Pydantic 2.13, redis-py 7.4), so recall is an unreliable guide — read the real source instead of remembering an older API.
+
+```
+steroids search '<regex>' [--tag T] [--repo a/b,c/d] [--language L] [--path src] [--limit N]
+steroids search -F '$HOME'      literal text instead of a regex
+steroids define <Symbol>        where something is defined
+steroids show <repo> <path> [--from N --to N]   read a file, or one region
+steroids files <repo>           what is indexed for one repo (tab separated)
+steroids repos                  what is indexed
+steroids recent --tag X         what changed upstream in the last 72 hours
+```
+
+Repository names and languages are case-insensitive; any form `add` takes (URL, owner/name) works for `--repo`. A `--path` without glob characters is a prefix: `src` means `src/**`. Add `--json` for structured output. Output stops at `--max-tokens` (default 6000); text says "N of M shown", JSON reports the cut as `omitted`, separate from `more_available`.
+
+Tags in this corpus, and when to reach for each:
+
+| Tag | Use it for |
+| --- | --- |
+| `backend` | FastAPI routing/deps, SQLAlchemy 2.x async sessions, Alembic migrations, queue/worker loops |
+| `voice-ai` | Realtime voice: barge-in, VAD, turn-taking, transcript handling, RAG/agent orchestration |
+| `crm-domain` | Pipelines, records, stages, kanban/dnd, notifications, multi-tenant admin CRUD |
+| `frontend` | shadcn/Radix component patterns, Next App Router internals, Zustand, Playwright |
+| `payments` | Webhook signature verification, idempotency, payment/subscription state machines |
+
+Adapt what you read; do not transplant it. Corpus repos make different stack assumptions than this one — for example, pipecat's Realtime audio math assumes PCM16 at 24 kHz, while this backend defaults to `g711_ulaw` at 8 kHz (`DEFAULT_AUDIO_FORMAT`), a 6x difference in bytes per millisecond. Copying such a calculation verbatim silently produces wrong numbers.
+
+If a search says the topic is not covered, that is a gap in the corpus, not a bad query. Do not retry variations. Instead run `steroids discover` to find well starred, actively maintained repos that solve the problem, say what you found and why it fits, and add them once the user agrees.
