@@ -30,7 +30,7 @@ class _CredentialNotFoundError(TelnyxWebRTCError):
 
 @dataclass(frozen=True, slots=True)
 class BrowserCredential:
-    """Non-secret provider identity for one Tribunal user."""
+    """Non-secret provider identity for one BEAM user."""
 
     credential_id: str
     sip_username: str

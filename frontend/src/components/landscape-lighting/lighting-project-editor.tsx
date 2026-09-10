@@ -324,13 +324,13 @@ function ActiveProjectEditor({
                 <DialogHeader>
                   <DialogTitle>Choose which lighting plan to keep</DialogTitle>
                   <DialogDescription>
-                    Another save reached Tribunal before this device. Nothing was overwritten. Load
-                    the current Tribunal plan, or preserve this device&apos;s drawing as a separate
+                    Another save reached BEAM before this device. Nothing was overwritten. Load
+                    the current BEAM plan, or preserve this device&apos;s drawing as a separate
                     customer project.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="rounded-md border p-3 text-sm">
-                  <p className="font-medium">Tribunal version {autosave.conflict.currentVersion}</p>
+                  <p className="font-medium">BEAM version {autosave.conflict.currentVersion}</p>
                   <p className="mt-1 text-muted-foreground">
                     Updated {projectTimeFormatter.format(new Date(autosave.conflict.updatedAt))}
                     {autosave.conflict.updaterName ? ` by ${autosave.conflict.updaterName}` : ""}
@@ -348,13 +348,13 @@ function ActiveProjectEditor({
                     disabled={resolvingConflict !== null}
                     onClick={() => {
                       setResolvingConflict("load");
-                      void autosave.loadTribunalVersion().finally(() => setResolvingConflict(null));
+                      void autosave.loadBeamVersion().finally(() => setResolvingConflict(null));
                     }}
                   >
                     {resolvingConflict === "load" ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                     ) : null}
-                    Load Tribunal version
+                    Load BEAM version
                   </Button>
                   <Button
                     type="button"

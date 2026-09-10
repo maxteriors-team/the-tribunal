@@ -31,7 +31,7 @@ const item = (
   }) as CatalogItemResponse;
 
 describe("landscape electrical load", () => {
-  it("resolves the FX fixtures and transformers already in the Tribunal catalog", () => {
+  it("resolves the FX fixtures and transformers already in the BEAM catalog", () => {
     expect(resolveCatalogElectricalSpec(item("best-zdc-up", "ZDC Color Uplight"))).toMatchObject({
       watts: 9.1,
       inputVoltage: 12,

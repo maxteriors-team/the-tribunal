@@ -1502,7 +1502,7 @@ function LandscapeElectricalSummary({
       )}
 
       <p className="ll-panel-footnote">
-        Connected load uses fixture watts carried in the current Tribunal price book. Where
+        Connected load uses fixture watts carried in the current BEAM price book. Where
         explicitly configured, unresolved fixtures use the shown planning default and remain
         labeled. Voltage drop is a planning estimate, not field-verified; confirm installed route
         and voltage before closeout.
@@ -2741,7 +2741,7 @@ export function LightDesigner({
         link.download = `${landscapeProjectName.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "landscape-project"}.tribunal.json`;
         link.click();
         URL.revokeObjectURL(href);
-        setStudioNotice("Editable Tribunal project downloaded.");
+        setStudioNotice("Editable BEAM project downloaded.");
         return;
       }
       case "fullscreen": {
@@ -3011,7 +3011,7 @@ export function LightDesigner({
 
   // A conflict resolution can replace the entire authoritative project draft.
   // Resetting the reducer also resets its undo history, so undo cannot resurrect
-  // the discarded version after the operator deliberately loads Tribunal's copy.
+  // the discarded version after the operator deliberately loads BEAM's copy.
   useEffect(() => {
     if (!serverBacked || !projectInitialDraft) return;
     let cancelled = false;
@@ -4629,10 +4629,10 @@ export function LightDesigner({
               setPreconState(restoredState.precon);
               dispatch({ type: "RESET", design: first?.design ?? EMPTY_DESIGN });
               if (first) dispatch({ type: "SET_DUSK", dusk: first.dusk });
-              setStudioNotice("Editable Tribunal project imported.");
+              setStudioNotice("Editable BEAM project imported.");
             } catch {
               setStudioNotice(
-                "Project import failed. Choose a valid Tribunal version 2 JSON file.",
+                "Project import failed. Choose a valid BEAM version 2 JSON file.",
               );
             }
           });

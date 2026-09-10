@@ -581,7 +581,7 @@ async def _notify_job_assignment(
             workspace_id=workspace_id,
             notification_type="job_assignment",
             title=title,
-            body=f"Your {plan_label} plan is available in Tribunal.",
+            body=f"Your {plan_label} plan is available in BEAM.",
             data={
                 "type": "job_assignment",
                 "phase": phase,
@@ -591,7 +591,7 @@ async def _notify_job_assignment(
             channel_id="jobs",
             email_subject=title,
             email_heading=heading,
-            email_intro=f"Your {plan_label} plan is available in Tribunal.",
+            email_intro=f"Your {plan_label} plan is available in BEAM.",
             email_details={
                 "Scheduled": scheduled_start.astimezone(UTC).strftime("%b %d, %Y at %I:%M %p UTC"),
                 "Job": str(job_id),

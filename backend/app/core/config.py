@@ -164,7 +164,9 @@ class Settings(BaseSettings):
     # Resend
     resend_api_key: str = ""
     resend_from_email: str = "noreply@example.com"
-    resend_from_name: str = "Maxteriors"
+    # The business customers see in their inbox, which is the deployment's
+    # operator (e.g. Maxteriors), not the product. BEAM is only the fallback.
+    resend_from_name: str = "BEAM"
     resend_webhook_secret: str = ""
 
     # Expo Push Notifications

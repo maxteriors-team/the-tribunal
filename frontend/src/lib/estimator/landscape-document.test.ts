@@ -118,7 +118,7 @@ describe("landscape document v2", () => {
       procurement: {
         "fixture:fixture-1": {
           description: "Patina uplight",
-          manufacturer: "Tribunal Lighting",
+          manufacturer: "BEAM Lighting",
           supplier: "Regional Supply",
           neededQuantity: 4,
           orderedQuantity: 3,
@@ -132,7 +132,7 @@ describe("landscape document v2", () => {
     expect(document?.shots[0]?.design.items[0]?.iconScale).toBe(1.8);
     expect(document?.procurement?.["fixture:fixture-1"]).toMatchObject({
       description: "Patina uplight",
-      manufacturer: "Tribunal Lighting",
+      manufacturer: "BEAM Lighting",
       supplier: "Regional Supply",
       neededQuantity: 4,
       unitCost: 82.5,

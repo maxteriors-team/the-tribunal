@@ -50,7 +50,7 @@ const MODE_OPTIONS: {
   {
     value: "browser",
     label: "Browser headset",
-    description: "Talk inside Tribunal without a separate phone line.",
+    description: "Talk inside BEAM without a separate phone line.",
     Icon: Headphones,
   },
   {
@@ -274,7 +274,7 @@ export function OutboundCallDialog({
             <div className="rounded-lg border p-3">
               <p className="text-sm font-medium">Desktop Chrome and a headset</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Tribunal will ask for microphone access, ring this browser, then dial the contact
+                BEAM will ask for microphone access, ring this browser, then dial the contact
                 after you answer.
               </p>
             </div>

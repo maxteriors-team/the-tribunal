@@ -463,7 +463,7 @@ export function PermanentPricingSettingsCard() {
               <li>Maxteriors absorbs GreenSky&apos;s 15.25% merchant fee.</li>
               <li>Never add that fee to the borrower&apos;s price or as a surcharge.</li>
               <li>Customers submit financial information directly to GreenSky.</li>
-              <li>Tribunal does not receive or infer GreenSky lending decisions.</li>
+              <li>BEAM does not receive or infer GreenSky lending decisions.</li>
             </ul>
           </div>
 

@@ -16,8 +16,8 @@ const golos = Golos_Text({
 });
 
 export const metadata: Metadata = {
-  title: "AI CRM - Unified Customer Communications",
-  description: "AI-powered CRM for managing customer relationships through voice, SMS, and email",
+  title: `${PRODUCT_BRAND.name} \u2014 ${PRODUCT_BRAND.tagline}`,
+  description: PRODUCT_BRAND.description,
   // This is a private CRM: nothing here should ever land in a search index.
   // Every route inherits this unless it explicitly overrides `robots`.
   robots: { index: false, follow: false, nocache: true },

@@ -33,7 +33,7 @@ class CallCreate(BaseModel):
     - ``"user"``: the operator's own phone rings first, then the contact is
       dialed and the two legs are bridged. ``agent_id`` is ignored.
       ``user_phone_number`` picks which allowlisted number to ring.
-    - ``"browser"``: the operator's authenticated Tribunal browser rings first;
+    - ``"browser"``: the operator's authenticated BEAM browser rings first;
       the server then dials and bridges the contact. Client-supplied SIP targets
       are never accepted.
     """
