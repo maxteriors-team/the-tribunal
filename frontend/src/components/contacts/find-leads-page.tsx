@@ -32,7 +32,6 @@ import { messages } from "@/lib/messages";
 import {
   getApiErrorMessage,
   isProviderConfigurationError,
-  shouldThrowProviderError,
 } from "@/lib/utils/errors";
 
 export function FindLeadsPage() {
@@ -58,7 +57,7 @@ export function FindLeadsPage() {
       if (!workspaceId) throw new Error("No workspace");
       return scrapingApi.search(workspaceId, query, maxResults);
     },
-    throwOnError: shouldThrowProviderError,
+    throwOnError: false,
     onMutate: () => setNotConfigured(false),
     onSuccess: (data) => {
       setNotConfigured(false);
@@ -70,8 +69,7 @@ export function FindLeadsPage() {
       toast.success(messages.findLeads.found(data.results.length));
     },
     onError: (error) => {
-      // Setup failures stay in this feature; transient 5xx failures keep the
-      // route-level retry state configured above.
+      // Keep failures here so retrying preserves the search and selected leads.
       if (isProviderConfigurationError(error)) {
         setNotConfigured(true);
         return;

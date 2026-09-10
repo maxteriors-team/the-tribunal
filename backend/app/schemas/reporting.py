@@ -62,17 +62,30 @@ class ARAgingReport(BaseModel):
 class JobPnLSummary(BaseModel):
     """Aggregate job profitability over a period.
 
-    Revenue is the sum of the distinct invoices linked to the jobs in range
-    (so two jobs sharing one invoice are not double-counted); cost is tracked
-    labor (hours x rate) plus logged expenses plus materials consumed.
+    Revenue includes linked sent/partial/paid/overdue invoice totals, counted
+    once per invoice. Draft/void invoices contribute zero. Billable count is
+    jobs with a same-workspace invoice of any status, not distinct invoices.
+    All jobs contribute tracked labor, logged expenses, and consumed materials.
     """
 
     date_from: date | None
     date_to: date | None
     currency: str
     job_count: int = Field(..., description="Jobs considered in the period")
-    billable_job_count: int = Field(..., description="Jobs with a linked invoice")
-    revenue: float
+    billable_job_count: int = Field(
+        ...,
+        description=(
+            "Jobs with a linked same-workspace invoice of any status, including draft/void; "
+            "each job counts even when multiple jobs share an invoice"
+        ),
+    )
+    revenue: float = Field(
+        ...,
+        description=(
+            "Total of linked sent/partial/paid/overdue invoices, counted once per invoice; "
+            "draft and void invoices contribute zero, regardless of payments"
+        ),
+    )
     labor_cost: float
     expense_cost: float
     # Stock consumed on the period's jobs, from the inventory ledger. Distinct

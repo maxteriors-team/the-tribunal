@@ -20,10 +20,13 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Protocol, cast
 
-from sqlalchemy import Select, and_, or_
+from sqlalchemy import DateTime, Select, and_, or_
 from sqlalchemy.sql.elements import ColumnElement
+
+from app.services.exceptions import ValidationError
 
 
 class ExtraResolver(Protocol):
@@ -225,6 +228,18 @@ def build_condition(
     op_fn = comparison_ops.get(operator)
     if op_fn is None:
         return None
+    # JSON dates must bind as timestamps, not VARCHAR (asyncpg rejects the latter).
+    if (
+        operator in {"equals", "not_equals", "gte", "lte", "gt", "lt", "after", "before"}
+        and isinstance(value, str)
+        and isinstance(column.type, DateTime)
+    ):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise ValidationError("Date filters require an ISO 8601 date or timestamp") from exc
+        if column.type.timezone and value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
     return cast("ColumnElement[bool]", op_fn(column, value))
 
 

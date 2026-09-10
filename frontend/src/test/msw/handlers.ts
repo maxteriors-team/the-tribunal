@@ -49,6 +49,7 @@ export const stubContactsList: ContactsListResponse = {
   page: 1,
   page_size: 50,
   pages: 0,
+  status_counts: { all: 0, new: 0, contacted: 0, qualified: 0, converted: 0, lost: 0 },
 };
 
 export const stubAgentsList: AgentsListResponse = {

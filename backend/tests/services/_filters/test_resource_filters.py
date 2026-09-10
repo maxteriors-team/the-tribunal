@@ -14,6 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 
@@ -23,9 +24,10 @@ from app.models.lead_discovery_job import DiscoveryJobStatus, DiscoverySourceTyp
 from app.models.lead_prospect import LeadProspect, ProspectIdentityKind, ProspectStatus
 from app.models.opportunity import Opportunity
 from app.models.outbound_mission import MissionStatus, OutboundMission
-from app.services._filters import apply_filter_specs
+from app.services._filters import apply_filter_specs, build_condition
 from app.services.campaigns.campaign_filters import apply_campaign_filters
 from app.services.contacts.contact_filters import apply_contact_filters, apply_contact_list_filters
+from app.services.exceptions import ValidationError
 from app.services.opportunities.opportunity_filters import apply_opportunity_filters
 from app.services.outbound.mission_service import (
     _DISCOVERY_JOB_FILTER_SPECS,
@@ -51,6 +53,34 @@ def _sql(stmt: Any) -> str:
 
 
 class TestContactFiltersBehaviorPreserved:
+    @pytest.mark.parametrize(
+        "operator", ["equals", "not_equals", "gte", "lte", "gt", "lt", "after", "before"]
+    )
+    @pytest.mark.parametrize(
+        "value", ["2026-09-10T12:00:00Z", "2026-09-10T14:00:00+02:00", "2026-09-10"]
+    )
+    def test_json_dates_bind_as_timestamps(self, operator: str, value: str) -> None:
+        stmt = select(Contact.id).where(build_condition(operator, Contact.created_at, value))
+        params = stmt.compile(dialect=postgresql.dialect()).params
+        bound = next(iter(params.values()))
+        assert isinstance(bound, datetime)
+        assert bound.tzinfo is not None
+        assert bound == datetime.fromisoformat(value).replace(
+            tzinfo=datetime.fromisoformat(value).tzinfo or UTC
+        )
+
+    def test_invalid_json_date_is_rejected_without_broadening_query(self) -> None:
+        with pytest.raises(ValidationError, match="ISO 8601"):
+            apply_contact_filters(
+                select(Contact),
+                _WORKSPACE_ID,
+                filter_rules=[{"field": "created_at", "operator": "gte", "value": "not-a-date"}],
+            )
+
+    def test_date_null_filter_does_not_parse_ignored_empty_value(self) -> None:
+        condition = build_condition("is_null", Contact.created_at, "")
+        assert "contacts.created_at IS NULL" in _sql(select(Contact).where(condition))
+
     def test_base_list_filters_are_shared(self) -> None:
         stmt = apply_contact_list_filters(
             select(Contact),
