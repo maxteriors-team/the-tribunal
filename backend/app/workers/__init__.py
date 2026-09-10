@@ -62,6 +62,7 @@ from app.workers.recurring_job_worker import _registry as recurring_job_registry
 from app.workers.reminder_worker import _registry as reminder_registry
 from app.workers.reputation_worker import _registry as reputation_registry
 from app.workers.review_request_worker import _registry as review_request_registry
+from app.workers.roleplay_worker import registry as roleplay_registry
 from app.workers.transcript_analysis_worker import _registry as transcript_analysis_registry
 from app.workers.unsold_quote_worker import _registry as unsold_quote_registry
 from app.workers.voice_campaign_worker import _registry as voice_campaign_registry
@@ -353,6 +354,11 @@ WORKER_SPECS: tuple[WorkerSpec, ...] = (
         name="deal_lifecycle_worker",
         registry=deal_lifecycle_registry,
         dependencies=("postgres",),
+    ),
+    WorkerSpec(
+        name="roleplay_worker",
+        registry=roleplay_registry,
+        dependencies=("postgres", "openai"),
     ),
 )
 
