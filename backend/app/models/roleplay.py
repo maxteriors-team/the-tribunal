@@ -28,6 +28,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy import (
     Enum as SAEnum,
@@ -134,6 +135,20 @@ class RehearsalRun(Base, WorkspaceScoped):
     """One scored rehearsal of an agent (or human rep) vs a synthetic prospect."""
 
     __tablename__ = "rehearsal_runs"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "idempotency_key", name="uq_rehearsal_request"),
+    )
+
+    # Null keys/context belong to legacy runs; never enqueue them implicitly.
+    idempotency_key: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    execution_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    pending_action: Mapped[str | None] = mapped_column(String(20))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processing_token: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    processing_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    retryable: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(

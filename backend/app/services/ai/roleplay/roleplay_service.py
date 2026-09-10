@@ -6,13 +6,15 @@ prospect against an agent's real prompt and scores the result.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from openai import AsyncOpenAI
 from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import Agent
@@ -24,14 +26,8 @@ from app.models.roleplay import (
     RehearseeType,
 )
 from app.services.ai.message_context_builder import get_workspace_timezone
-from app.services.ai.openai_credentials import get_workspace_openai_bearer_token
-from app.services.ai.roleplay.agent_responder import (
-    build_agent_system_prompt,
-    generate_agent_reply,
-)
+from app.services.ai.roleplay.agent_responder import build_agent_system_prompt
 from app.services.ai.roleplay.default_personas import DEFAULT_PERSONAS
-from app.services.ai.roleplay.prospect_simulator import generate_prospect_reply
-from app.services.ai.roleplay.report_scorer import score_rehearsal
 from app.services.automations.events import EVENT_ROLEPLAY_COMPLETED, emit_automation_event
 from app.services.exceptions import NotFoundError, ValidationError
 
@@ -169,30 +165,48 @@ class RoleplayService:
         self, workspace_id: uuid.UUID, *, agent_id: uuid.UUID | None = None, limit: int = 50
     ) -> list[RehearsalRun]:
         """List rehearsal runs for a workspace, newest first."""
-        stmt = select(RehearsalRun).where(RehearsalRun.workspace_id == workspace_id)
+        stmt = select(RehearsalRun).where(
+            RehearsalRun.workspace_id == workspace_id, RehearsalRun.deleted_at.is_(None)
+        )
         if agent_id is not None:
             stmt = stmt.where(RehearsalRun.agent_id == agent_id)
         stmt = stmt.order_by(RehearsalRun.created_at.desc()).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_run(self, run_id: uuid.UUID, workspace_id: uuid.UUID) -> RehearsalRun:
-        """Fetch a rehearsal run scoped to the workspace."""
-        result = await self.db.execute(
-            select(RehearsalRun).where(
+    async def get_run(
+        self,
+        run_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        *,
+        for_update: bool = False,
+    ) -> RehearsalRun:
+        """Fetch a rehearsal run scoped to the workspace; serialize mutations."""
+        stmt = (
+            select(RehearsalRun)
+            .where(
                 RehearsalRun.id == run_id,
                 RehearsalRun.workspace_id == workspace_id,
+                RehearsalRun.deleted_at.is_(None),
             )
+            .execution_options(populate_existing=True)
         )
+        if for_update:
+            stmt = stmt.with_for_update()
+        result = await self.db.execute(stmt)
         run = result.scalar_one_or_none()
         if run is None:
             raise NotFoundError("Rehearsal run not found")
         return run
 
     async def delete_run(self, run_id: uuid.UUID, workspace_id: uuid.UUID) -> None:
-        """Delete a rehearsal run."""
-        run = await self.get_run(run_id, workspace_id)
-        await self.db.delete(run)
+        """Hide the report but retain its deduplication identity."""
+        run = await self.get_run(run_id, workspace_id, for_update=True)
+        if run.status == RehearsalStatus.PENDING or (
+            run.status == RehearsalStatus.RUNNING and run.pending_action is not None
+        ):
+            raise ValidationError("An executing rehearsal cannot be deleted")
+        run.deleted_at = datetime.now(UTC)
         await self.db.commit()
 
     # === Rehearsal engine ===
@@ -209,156 +223,190 @@ class RoleplayService:
             raise NotFoundError("Agent not found")
         return agent
 
-    async def _client(self, workspace_id: uuid.UUID) -> AsyncOpenAI:
-        token = await get_workspace_openai_bearer_token(self.db, workspace_id)
-        if not token:
-            raise ValidationError("No OpenAI credential is configured for this workspace")
-        return AsyncOpenAI(api_key=token)
-
     async def create_run(
         self,
         workspace_id: uuid.UUID,
         *,
+        idempotency_key: uuid.UUID,
         agent_id: uuid.UUID,
         persona_id: uuid.UUID,
         rehearsee: str = RehearseeType.AI.value,
         channel: str | None = None,
         max_turns: int = 6,
     ) -> RehearsalRun:
-        """Create a rehearsal run and, for AI rehearsees, run + score it inline.
-
-        For ``rehearsee == "human"`` the run is left ``running`` with only the
-        prospect's opening message so a human rep can reply turn-by-turn via
-        :meth:`advance_human_turn`, then finalize with :meth:`score_run`.
-        """
+        """Commit an identity and immutable inputs. Never call a provider in a request."""
         rehearsee_type = RehearseeType(rehearsee)
+        if not 1 <= max_turns <= _MAX_TURNS_CAP:
+            raise ValidationError("Rehearsals must have between 1 and 12 turns")
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "agent_id": str(agent_id),
+                    "persona_id": str(persona_id),
+                    "rehearsee": rehearsee,
+                    "channel": channel,
+                    "max_turns": max_turns,
+                },
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+        existing = await self.db.scalar(
+            select(RehearsalRun).where(
+                RehearsalRun.workspace_id == workspace_id,
+                RehearsalRun.idempotency_key == idempotency_key,
+            )
+        )
+        if existing is not None:
+            return self._check_request(existing, fingerprint)
+
         agent = await self._load_agent(agent_id, workspace_id)
         persona = await self.get_persona(persona_id, workspace_id)
-        turns = max(1, min(_MAX_TURNS_CAP, max_turns))
-        run_channel = channel or persona.channel or "sms"
-
-        client = await self._client(workspace_id)
-
-        # Seed the transcript with the prospect's opening line.
+        timezone = await get_workspace_timezone(workspace_id, self.db)
+        context = {
+            "system_prompt": await build_agent_system_prompt(self.db, agent, timezone=timezone),
+            "temperature": agent.temperature,
+            "persona_prompt": persona.persona_prompt,
+            "objections": list(persona.objections),
+            "goal": persona.goal,
+        }
         opening = (persona.opening_message or "").strip()
-        if not opening:
-            opening = await generate_prospect_reply(
-                client=client,
-                persona_prompt=persona.persona_prompt,
-                transcript=[],
-            )
-        transcript: list[dict[str, Any]] = [{"role": "prospect", "content": opening}]
-
-        run = RehearsalRun(
-            workspace_id=workspace_id,
-            agent_id=agent.id,
-            persona_id=persona.id,
-            agent_name=agent.name,
-            persona_name=persona.name,
-            rehearsee=rehearsee_type,
-            channel=run_channel,
-            max_turns=turns,
-            status=RehearsalStatus.RUNNING,
-            transcript=transcript,
+        transcript = [{"role": "prospect", "content": opening}] if opening else []
+        action = (
+            "prospect" if not opening else ("agent" if rehearsee_type == RehearseeType.AI else None)
         )
-        self.db.add(run)
-        await self.db.commit()
-        await self.db.refresh(run)
-
-        if rehearsee_type == RehearseeType.HUMAN:
-            # Wait for the human to drive the conversation.
-            return run
-
-        # AI rehearsee: simulate the full conversation, then score it.
-        try:
-            timezone = await get_workspace_timezone(workspace_id, self.db)
-            system_prompt = await build_agent_system_prompt(self.db, agent, timezone=timezone)
-            for _ in range(turns):
-                agent_text = await generate_agent_reply(
-                    client=client,
-                    system_prompt=system_prompt,
-                    transcript=transcript,
-                    temperature=agent.temperature,
+        # The unique workspace/key constraint arbitrates concurrent HTTP retries.
+        result = await self.db.execute(
+            insert(RehearsalRun)
+            .values(
+                workspace_id=workspace_id,
+                idempotency_key=idempotency_key,
+                request_fingerprint=fingerprint,
+                execution_context=context,
+                agent_id=agent.id,
+                persona_id=persona.id,
+                agent_name=agent.name,
+                persona_name=persona.name,
+                rehearsee=rehearsee_type,
+                channel=channel or persona.channel or "sms",
+                max_turns=max_turns,
+                transcript=transcript,
+                pending_action=action,
+                status=RehearsalStatus.PENDING if action else RehearsalStatus.RUNNING,
+            )
+            .on_conflict_do_nothing(constraint="uq_rehearsal_request")
+            .returning(RehearsalRun)
+        )
+        run = result.scalar_one_or_none()
+        if run is None:
+            run = (
+                await self.db.execute(
+                    select(RehearsalRun).where(
+                        RehearsalRun.workspace_id == workspace_id,
+                        RehearsalRun.idempotency_key == idempotency_key,
+                    )
                 )
-                transcript.append({"role": "agent", "content": agent_text})
-                prospect_text = await generate_prospect_reply(
-                    client=client,
-                    persona_prompt=persona.persona_prompt,
-                    transcript=transcript,
-                )
-                transcript.append({"role": "prospect", "content": prospect_text})
-
-            run.transcript = list(transcript)
-            await self._apply_report(run, client, persona)
-            run.status = RehearsalStatus.COMPLETED
-            run.completed_at = datetime.now(UTC)
-            await self._emit_completed_event(run)
-        except Exception as exc:  # noqa: BLE001 - persist failure, never 500 silently
-            logger.exception("rehearsal_run_failed", run_id=str(run.id))
-            run.status = RehearsalStatus.FAILED
-            run.error = str(exc)
-
+            ).scalar_one()
+            self._check_request(run, fingerprint)
         await self.db.commit()
-        await self.db.refresh(run)
+        return run
+
+    @staticmethod
+    def _check_request(run: RehearsalRun, fingerprint: str) -> RehearsalRun:
+        if run.request_fingerprint != fingerprint:
+            raise ValidationError(
+                "This request key was already used for different rehearsal settings"
+            )
+        if run.deleted_at is not None:
+            raise ValidationError("This rehearsal was deleted. Start a new rehearsal instead")
         return run
 
     async def advance_human_turn(
-        self, run_id: uuid.UUID, workspace_id: uuid.UUID, message: str
+        self,
+        run_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        message: str,
+        expected_turn_count: int,
     ) -> RehearsalRun:
-        """Append a human rep's message and return the prospect's reply."""
-        run = await self.get_run(run_id, workspace_id)
+        """Checkpoint the human message once, then queue the prospect's reply."""
+        run = await self.get_run(run_id, workspace_id, for_update=True)
         if run.rehearsee != RehearseeType.HUMAN:
             raise ValidationError("Only human-rehearsee runs accept manual turns")
-        if run.status != RehearsalStatus.RUNNING:
-            raise ValidationError("This rehearsal is no longer running")
-        text = (message or "").strip()
-        if not text:
-            raise ValidationError("Message cannot be empty")
-
-        persona = await self.get_persona(run.persona_id, workspace_id) if run.persona_id else None
-        if persona is None:
-            raise ValidationError("Persona for this rehearsal no longer exists")
-
-        client = await self._client(workspace_id)
+        text = message.strip()
+        if not text or len(text) > 4000:
+            raise ValidationError("Message must contain between 1 and 4000 characters")
         transcript = list(run.transcript or [])
-        transcript.append({"role": "agent", "content": text})
-        prospect_text = await generate_prospect_reply(
-            client=client,
-            persona_prompt=persona.persona_prompt,
-            transcript=transcript,
-        )
-        transcript.append({"role": "prospect", "content": prospect_text})
-
-        run.transcript = transcript
+        if 0 <= expected_turn_count < len(transcript):
+            if transcript[expected_turn_count] == {"role": "agent", "content": text}:
+                return run  # A lost response must not append or pay for another turn.
+            raise ValidationError("This turn was already submitted with a different message")
+        if expected_turn_count != len(transcript):
+            raise ValidationError("Refresh the rehearsal before sending another message")
+        if run.status != RehearsalStatus.RUNNING or run.pending_action is not None:
+            raise ValidationError("Wait for the current rehearsal step to finish")
+        if sum(t["role"] == "agent" for t in transcript) >= run.max_turns:
+            raise ValidationError("Turn limit reached; finish and score this rehearsal")
+        await self._ensure_execution_context(run)
+        run.transcript = [*transcript, {"role": "agent", "content": text}]
+        run.pending_action = "prospect"
+        run.status = RehearsalStatus.PENDING
         await self.db.commit()
-        await self.db.refresh(run)
         return run
 
     async def score_run(self, run_id: uuid.UUID, workspace_id: uuid.UUID) -> RehearsalRun:
-        """Score a (typically human) rehearsal and mark it completed."""
-        run = await self.get_run(run_id, workspace_id)
-        if run.status == RehearsalStatus.COMPLETED:
+        """Queue scoring once; repeated requests return the same execution status."""
+        run = await self.get_run(run_id, workspace_id, for_update=True)
+        if run.status in (RehearsalStatus.COMPLETED, RehearsalStatus.FAILED):
             return run
-        if not run.transcript:
+        if run.pending_action == "score":
+            return run
+        if run.pending_action is not None or run.status == RehearsalStatus.PENDING:
+            raise ValidationError("Wait for the current rehearsal step to finish")
+        if not any(t.get("role") == "agent" for t in run.transcript):
             raise ValidationError("Nothing to score yet")
-
-        persona = await self.get_persona(run.persona_id, workspace_id) if run.persona_id else None
-        client = await self._client(workspace_id)
-        try:
-            await self._apply_report(run, client, persona)
-            run.status = RehearsalStatus.COMPLETED
-            run.completed_at = datetime.now(UTC)
-            await self._emit_completed_event(run)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("rehearsal_score_failed", run_id=str(run.id))
-            run.status = RehearsalStatus.FAILED
-            run.error = str(exc)
+        await self._ensure_execution_context(run)
+        run.pending_action = "score"
+        run.status = RehearsalStatus.PENDING
         await self.db.commit()
-        await self.db.refresh(run)
         return run
 
+    async def retry_run(
+        self,
+        run_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        expected_attempt_count: int,
+    ) -> RehearsalRun:
+        """Resume only a known failed step, without replaying saved paid turns."""
+        run = await self.get_run(run_id, workspace_id, for_update=True)
+        if run.attempt_count != expected_attempt_count or run.status != RehearsalStatus.FAILED:
+            return run
+        if not run.retryable or not run.pending_action:
+            raise ValidationError(
+                "This step cannot be retried without risking duplicate provider work"
+            )
+        run.status = RehearsalStatus.PENDING
+        run.error = None
+        run.retryable = False
+        run.completed_at = None
+        await self.db.commit()
+        return run
+
+    async def _ensure_execution_context(self, run: RehearsalRun) -> None:
+        """Allow existing idle human rehearsals to use the durable engine too."""
+        if run.execution_context is not None:
+            return
+        if run.persona_id is None:
+            raise ValidationError("Persona for this rehearsal no longer exists")
+        persona = await self.get_persona(run.persona_id, run.workspace_id)
+        run.execution_context = {
+            "persona_prompt": persona.persona_prompt,
+            "objections": list(persona.objections),
+            "goal": persona.goal,
+        }
+
     async def _emit_completed_event(self, run: RehearsalRun) -> None:
-        """Queue the ``roleplay_completed`` automation trigger for a scored run."""
+        """Queue the completion event in the same transaction as the genuine report."""
+        if run.status != RehearsalStatus.COMPLETED or run.overall_score is None:
+            return
         await emit_automation_event(
             self.db,
             workspace_id=run.workspace_id,
@@ -375,12 +423,13 @@ class RoleplayService:
                 else str(run.rehearsee),
             },
         )
-        await self._notify_roleplay_completed(run)
 
     async def _notify_roleplay_completed(self, run: RehearsalRun) -> None:
         """Push + email workspace members about a completed rehearsal (best-effort)."""
         from app.services.notifications import notify_workspace_event
 
+        if run.status != RehearsalStatus.COMPLETED or run.overall_score is None:
+            return
         agent = run.agent_name or "an agent"
         persona = run.persona_name or "a persona"
         score = run.overall_score
@@ -412,27 +461,3 @@ class RoleplayService:
             )
         except Exception:
             logger.warning("roleplay_notification_failed", run_id=str(run.id))
-
-    async def _apply_report(
-        self,
-        run: RehearsalRun,
-        client: AsyncOpenAI,
-        persona: ProspectPersona | None,
-    ) -> None:
-        """Score the run's transcript and write report fields in place."""
-        report = await score_rehearsal(
-            client=client,
-            transcript=list(run.transcript or []),
-            persona_name=run.persona_name or (persona.name if persona else "Prospect"),
-            objections=list(persona.objections) if persona else [],
-            goal=persona.goal if persona else None,
-        )
-        run.overall_score = report.overall_score
-        run.objection_coverage = report.objection_coverage
-        run.booking_attempted = report.booking_attempted
-        run.tone_score = report.tone_score
-        run.strengths = report.strengths
-        run.gaps = report.gaps
-        run.suggestions = report.suggestions
-        run.summary = report.summary
-        run.scores = report.scores

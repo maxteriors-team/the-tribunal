@@ -146,7 +146,9 @@ class TestRoleplayHappyPath:
         assert body[0]["is_builtin"] is True
         assert body[0]["objections"] == ["distrust"]
 
-    async def test_create_run_returns_scored_report(self, client: AsyncClient) -> None:
+    async def test_create_run_returns_existing_scored_report_on_replay(
+        self, client: AsyncClient
+    ) -> None:
         with pytest.MonkeyPatch().context() as mp:
             mp.setattr(
                 roleplay_module.RoleplayService,
@@ -156,13 +158,14 @@ class TestRoleplayHappyPath:
             resp = await client.post(
                 f"/api/v1/workspaces/{WS_ID}/roleplay/runs",
                 json={
+                    "idempotency_key": str(uuid.uuid4()),
                     "agent_id": str(uuid.uuid4()),
                     "persona_id": str(uuid.uuid4()),
                     "rehearsee": "ai",
                     "max_turns": 6,
                 },
             )
-        assert resp.status_code == 201
+        assert resp.status_code == 202
         body = resp.json()
         assert body["status"] == "completed"
         assert body["overall_score"] == 82.0
@@ -176,6 +179,7 @@ class TestRoleplayHappyPath:
             json={
                 "agent_id": str(uuid.uuid4()),
                 "persona_id": str(uuid.uuid4()),
+                "idempotency_key": str(uuid.uuid4()),
                 "max_turns": 99,
             },
         )
