@@ -1,12 +1,13 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, QueryErrorResetBoundary } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { useState, type ReactNode } from "react";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 
 import { PageErrorBoundary } from "@/components/ui/error-boundary";
 import { POLL_60S } from "@/lib/query-options";
+import { getApiErrorMessage } from "@/lib/utils/errors";
 
 import { AuthProvider } from "./auth-provider";
 import { SoftphoneProvider } from "./softphone-provider";
@@ -24,17 +25,19 @@ export function Providers({ children }: ProvidersProps) {
           queries: {
             staleTime: POLL_60S.staleTime,
             refetchOnWindowFocus: false,
-            throwOnError: (error) => {
-              // Propagate server errors to the nearest error boundary (error.tsx)
-              // so unexpected failures surface visibly instead of silently failing.
+            throwOnError: (error, query) => {
+              // Only initial-load failures need the route boundary. A failed
+              // background refresh must not unmount forms using cached data.
               const status = (error as { status?: number }).status;
-              return typeof status === "number" && status >= 500;
+              return query.state.data === undefined && typeof status === "number" && status >= 500;
             },
           },
           mutations: {
-            throwOnError: (error) => {
-              const status = (error as { status?: number }).status;
-              return typeof status === "number" && status >= 500;
+            // Keep handled submit errors and unsaved input inside their forms.
+            throwOnError: false,
+            // Features can override this with more specific inline feedback.
+            onError: (error) => {
+              toast.error(getApiErrorMessage(error, "The request failed. Please try again."));
             },
           },
         },
@@ -47,7 +50,9 @@ export function Providers({ children }: ProvidersProps) {
         <AuthProvider>
           <WorkspaceProvider>
             <SoftphoneProvider>
-              <PageErrorBoundary>{children}</PageErrorBoundary>
+              <QueryErrorResetBoundary>
+                <PageErrorBoundary>{children}</PageErrorBoundary>
+              </QueryErrorResetBoundary>
               <Toaster
               position="bottom-right"
               visibleToasts={1}

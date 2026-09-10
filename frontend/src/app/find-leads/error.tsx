@@ -8,10 +8,10 @@ import { isProviderConfigurationError } from "@/lib/utils/errors";
 
 export default function FindLeadsError({
   error,
-  unstable_retry,
+  reset,
 }: {
   error: Error & { digest?: string };
-  unstable_retry: () => void;
+  reset: () => void;
 }) {
   useEffect(() => {
     if (!isProviderConfigurationError(error)) {
@@ -25,7 +25,7 @@ export default function FindLeadsError({
       provider="scraping"
       transientTitle="Lead search is temporarily unavailable"
       transientMessage="The scraping provider didn't respond. Retry your lead search."
-      onRetry={unstable_retry}
+      reset={reset}
     />
   );
 }

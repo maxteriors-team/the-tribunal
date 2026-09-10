@@ -2,6 +2,7 @@ import { AlertCircle, Inbox, Loader2 } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { RouteErrorActions } from "@/components/ui/route-error-actions";
 import { cn } from "@/lib/utils";
 
 type PageStateWrapperProps = React.HTMLAttributes<HTMLDivElement>;
@@ -37,6 +38,8 @@ export interface PageErrorStateProps extends PageStateWrapperProps {
   message?: string;
   onRetry?: () => void;
   retryLabel?: string;
+  /** Next route recovery, including query reset and safe navigation. */
+  reset?: () => void;
 }
 
 export function PageErrorState({
@@ -44,6 +47,7 @@ export function PageErrorState({
   message = "Something went wrong.",
   onRetry,
   retryLabel = "Try again",
+  reset,
   ...props
 }: PageErrorStateProps) {
   return (
@@ -51,7 +55,9 @@ export function PageErrorState({
       <AlertCircle className="size-8 text-destructive" />
       {title ? <h2 className="text-base font-medium">{title}</h2> : null}
       <p className="text-sm text-muted-foreground">{message}</p>
-      {onRetry ? (
+      {reset ? (
+        <RouteErrorActions reset={reset} />
+      ) : onRetry ? (
         <Button
           variant="outline"
           className="min-h-11 hover:scale-100 active:scale-100"

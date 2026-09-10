@@ -7,10 +7,10 @@ import { PageErrorState } from "@/components/ui/page-state";
 
 export default function Error({
   error,
-  unstable_retry,
+  reset,
 }: {
   error: Error & { digest?: string };
-  unstable_retry: () => void;
+  reset: () => void;
 }) {
   useEffect(() => {
     Sentry.captureException(error);
@@ -24,7 +24,7 @@ export default function Error({
           ? `An unexpected error occurred. Please try again or refresh the page. (Error ID: ${error.digest})`
           : "An unexpected error occurred. Please try again or refresh the page."
       }
-      onRetry={unstable_retry}
+      reset={reset}
     />
   );
 }
