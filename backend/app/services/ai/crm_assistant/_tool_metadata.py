@@ -250,6 +250,7 @@ _TOOL_CAPABILITIES: dict[str, Capability] = {
     # ── quote reads: quotes:read (owner-scoped for the sales tier) ─────
     "list_quotes": Capability.QUOTES_READ,
     "get_quote": Capability.QUOTES_READ,
+    "create_quote": Capability.QUOTES_WRITE,
     # ── invoice reads: billing:read ────────────────────────────────────
     "list_invoices": Capability.BILLING_READ,
     "get_invoice": Capability.BILLING_READ,
@@ -372,6 +373,22 @@ _TOOL_POLICY_OVERRIDES: dict[str, CRMToolMetadata] = {
         name="get_quote",
         handler=_missing_handler,
         risk_level=ToolRiskLevel.LOW,
+    ),
+    "create_quote": CRMToolMetadata(
+        name="create_quote",
+        handler=_missing_handler,
+        # HIGH, not MEDIUM: a quote is the number a customer is asked to pay. It
+        # does not reach them from here, but a wrong draft that a rushed rep
+        # forwards is exactly the failure this gate exists to catch.
+        risk_level=ToolRiskLevel.HIGH,
+        approval=ApprovalPolicy(
+            required=True,
+            requires_confirmation=True,
+            urgency="high",
+            pending_message="Approval required before I can draft this quote.",
+        ),
+        description_template="Draft a quote for contact {contact_id}",
+        required_capability=Capability.QUOTES_WRITE,
     ),
     "list_invoices": CRMToolMetadata(
         name="list_invoices",
