@@ -11,34 +11,34 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import structlog
 from openai import AsyncOpenAI
-
-logger = structlog.get_logger()
+from openai.types.chat import ChatCompletionMessageParam
 
 # Match the model family used by the production text agent so rehearsals are
 # representative without pulling in a heavier reasoning model.
 _MODEL = "gpt-5.4-nano"
-_TIMEOUT_SECONDS = 30.0
+_TIMEOUT_SECONDS = 60.0
 _MAX_TOKENS = 220
 
 
 def _build_messages(
     persona_prompt: str,
     transcript: list[dict[str, Any]],
-) -> list[dict[str, str]]:
+) -> list[ChatCompletionMessageParam]:
     """Map a roleplay transcript into prospect-perspective chat messages.
 
     ``transcript`` entries are ``{"role": "prospect"|"agent", "content": str}``.
     From the prospect's point of view, its own lines are ``assistant`` and the
     agent's lines are ``user``.
     """
-    messages: list[dict[str, str]] = [{"role": "system", "content": persona_prompt}]
+    messages: list[ChatCompletionMessageParam] = [{"role": "system", "content": persona_prompt}]
     for turn in transcript:
-        role = "assistant" if turn.get("role") == "prospect" else "user"
         content = str(turn.get("content", ""))
         if content:
-            messages.append({"role": role, "content": content})
+            if turn.get("role") == "prospect":
+                messages.append({"role": "assistant", "content": content})
+            else:
+                messages.append({"role": "user", "content": content})
     return messages
 
 
@@ -58,26 +58,19 @@ async def generate_prospect_reply(
         temperature: Sampling temperature; prospects are a bit unpredictable.
 
     Returns:
-        The prospect's next utterance. Falls back to a short neutral line on
-        failure so a single transient error doesn't abort the rehearsal.
+        A genuine provider utterance. Errors propagate; no dialogue is fabricated.
     """
     messages = _build_messages(persona_prompt, transcript)
-    try:
-        response = await asyncio.wait_for(
-            client.chat.completions.create(
-                model=_MODEL,
-                messages=messages,  # type: ignore[arg-type]
-                temperature=temperature,
-                max_completion_tokens=_MAX_TOKENS,
-            ),
-            timeout=_TIMEOUT_SECONDS,
-        )
-        text = (response.choices[0].message.content or "").strip()
-        if text:
-            return text
-        logger.warning("prospect_reply_empty")
-    except TimeoutError:
-        logger.error("prospect_reply_timeout")
-    except Exception:
-        logger.exception("prospect_reply_failed")
-    return "Sorry, I'm not sure about this. Can you tell me more?"
+    response = await asyncio.wait_for(
+        client.chat.completions.create(
+            model=_MODEL,
+            messages=messages,
+            temperature=temperature,
+            max_completion_tokens=_MAX_TOKENS,
+        ),
+        timeout=_TIMEOUT_SECONDS,
+    )
+    text = (response.choices[0].message.content or "").strip() if response.choices else ""
+    if not text:
+        raise ValueError("Prospect provider returned an empty reply")
+    return text

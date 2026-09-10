@@ -3,7 +3,7 @@
 These cover the pure / LLM-boundary pieces (prospect simulator, agent responder,
 report scorer, default personas) with mocked OpenAI clients — no real DB or
 network. They prove transcript mapping, JSON score parsing/clamping, and
-graceful fallbacks.
+explicit unscored failures.
 """
 
 import json
@@ -67,13 +67,19 @@ class TestProspectSimulator:
         )
         assert reply == "I'm not interested, sorry."
 
-    async def test_falls_back_on_error(self) -> None:
+    async def test_failure_never_fabricates_dialogue(self) -> None:
         client = MagicMock()
         client.chat.completions.create = AsyncMock(side_effect=RuntimeError("boom"))
-        reply = await generate_prospect_reply(
-            client=client, persona_prompt="be skeptical", transcript=[]
-        )
-        assert reply  # non-empty fallback, no exception raised
+        with pytest.raises(RuntimeError, match="boom"):
+            await generate_prospect_reply(
+                client=client, persona_prompt="be skeptical", transcript=[]
+            )
+
+    async def test_empty_reply_fails(self) -> None:
+        with pytest.raises(ValueError, match="empty reply"):
+            await generate_prospect_reply(
+                client=_mock_client(" "), persona_prompt="p", transcript=[]
+            )
 
 
 class TestAgentResponder:
@@ -84,16 +90,22 @@ class TestAgentResponder:
         )
         assert reply == "Happy to explain the pricing!"
 
+    async def test_failure_never_fabricates_dialogue(self) -> None:
+        client = _mock_client("")
+        client.chat.completions.create.side_effect = RuntimeError("boom")
+        with pytest.raises(RuntimeError, match="boom"):
+            await generate_agent_reply(client=client, system_prompt="rep", transcript=[])
+
+    async def test_empty_reply_fails(self) -> None:
+        with pytest.raises(ValueError, match="empty reply"):
+            await generate_agent_reply(client=_mock_client(""), system_prompt="rep", transcript=[])
+
 
 class TestReportScorer:
-    async def test_parses_and_clamps_scores(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "app.services.ai.roleplay.report_scorer.analyze_transcript",
-            AsyncMock(return_value={"sentiment": "neutral", "summary": "ok"}),
-        )
+    async def test_parses_measured_scores_without_inventing_values(self) -> None:
         payload = {
-            "overall_score": 150,  # should clamp to 100
-            "objection_coverage_score": -5,  # should clamp to 0
+            "overall_score": 100,
+            "objection_coverage_score": 0,
             "tone_score": 72.5,
             "tone_label": "warm",
             "booking_attempted": True,
@@ -101,6 +113,7 @@ class TestReportScorer:
                 {"objection": "price", "addressed": True, "note": "handled well"}
             ],
             "summary": "Solid rapport.",
+            "sentiment": "neutral",
             "strengths": ["clear", "friendly"],
             "gaps": ["no urgency"],
             "suggestions": ["add pricing to knowledge base"],
@@ -126,14 +139,82 @@ class TestReportScorer:
         assert report.scores["objection_breakdown"][0]["objection"] == "price"
         assert report.scores["sentiment"] == "neutral"
 
-    async def test_invalid_json_yields_valid_zero_report(
-        self, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "not json at all",
+            "{}",
+            "[]",
+            "null",
+            "",
+            '{"overall_score": true}',
+        ],
+    )
+    async def test_invalid_json_never_yields_a_zero_report(self, content: str) -> None:
+        client = _mock_client(content)
+        with pytest.raises(ValueError):
+            await score_rehearsal(
+                client=client,
+                transcript=SAMPLE_TRANSCRIPT,
+                persona_name="Prospect",
+                objections=[],
+                goal=None,
+            )
+
+    @pytest.mark.parametrize("value", [None, True, "0", float("nan"), float("inf")])
+    async def test_non_numeric_scores_are_unscored(self, value: object) -> None:
+        payload = {
+            "overall_score": value,
+            "objection_coverage_score": 0,
+            "tone_score": 0,
+            "booking_attempted": False,
+            "summary": "No goals met.",
+        }
+        with pytest.raises(ValueError):
+            await score_rehearsal(
+                client=_mock_client(json.dumps(payload)),
+                transcript=SAMPLE_TRANSCRIPT,
+                persona_name="Prospect",
+                objections=[],
+                goal=None,
+            )
+
+    @pytest.mark.parametrize("field", ["overall_score", "objection_coverage_score", "tone_score"])
+    @pytest.mark.parametrize("value", [-5, 150])
+    async def test_out_of_range_scores_fail_instead_of_becoming_zero_or_100(
+        self,
+        field: str,
+        value: int,
     ) -> None:
-        monkeypatch.setattr(
-            "app.services.ai.roleplay.report_scorer.analyze_transcript",
-            AsyncMock(return_value={}),
+        payload = {
+            "overall_score": 80,
+            "objection_coverage_score": 80,
+            "tone_score": 80,
+            "booking_attempted": False,
+            "summary": "A measured result.",
+            field: value,
+        }
+        with pytest.raises(ValueError):
+            await score_rehearsal(
+                client=_mock_client(json.dumps(payload)),
+                transcript=SAMPLE_TRANSCRIPT,
+                persona_name="Prospect",
+                objections=[],
+                goal=None,
+            )
+
+    async def test_legitimate_zero_is_a_real_grade(self) -> None:
+        client = _mock_client(
+            json.dumps(
+                {
+                    "overall_score": 0,
+                    "objection_coverage_score": 0,
+                    "tone_score": 0,
+                    "booking_attempted": False,
+                    "summary": "No goals met.",
+                }
+            )
         )
-        client = _mock_client("not json at all")
         report = await score_rehearsal(
             client=client,
             transcript=SAMPLE_TRANSCRIPT,
@@ -143,7 +224,20 @@ class TestReportScorer:
         )
         assert report.overall_score == 0.0
         assert report.booking_attempted is False
-        assert report.strengths == []
+        assert report.summary == "No goals met."
+        client.chat.completions.create.assert_awaited_once()
+
+    async def test_provider_failure_propagates(self) -> None:
+        client = _mock_client("")
+        client.chat.completions.create.side_effect = RuntimeError("controlled outage")
+        with pytest.raises(RuntimeError, match="controlled outage"):
+            await score_rehearsal(
+                client=client,
+                transcript=SAMPLE_TRANSCRIPT,
+                persona_name="Prospect",
+                objections=[],
+                goal=None,
+            )
 
 
 class TestDefaultPersonas:
