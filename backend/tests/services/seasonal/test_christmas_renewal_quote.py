@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 
-from app.models.quote import Quote, QuoteLineItem
+from app.models.quote import QUOTE_STATUSES, Quote, QuoteLineItem
 from app.services.seasonal.christmas_renewal import ChristmasSeason
 from app.services.seasonal.christmas_renewal_quote import (
     RENEWABLE_STATUSES,
@@ -228,3 +228,18 @@ class TestOnlyRenewsRealChristmasWork:
         # Genuinely unknown: eligible for the fallback.
         assert _service_unknown(sold_quote(primary_service=None)) is True
         assert _service_unknown(sold_quote(primary_service="   ")) is True
+
+
+def test_renewable_statuses_are_real_quote_statuses() -> None:
+    """Every renewable status must exist in the `quote_status` Postgres enum.
+
+    `status` is a real enum column, so `IN (...)` with a value the type does not
+    define is not a query that matches nothing — Postgres rejects the whole
+    statement with InvalidTextRepresentation. This shipped as
+    ("approved", "accepted", "converted"), and since neither "accepted" nor
+    "converted" is a member, every renewal lookup raised before it could return
+    anything. The renewal endpoint 500'd on every call.
+    """
+    assert set(RENEWABLE_STATUSES) <= set(QUOTE_STATUSES), (
+        f"not real quote statuses: {sorted(set(RENEWABLE_STATUSES) - set(QUOTE_STATUSES))}"
+    )
