@@ -8180,7 +8180,7 @@
         "type": "object"
       },
       "CallCreate": {
-        "description": "Request to initiate a call.\n\n``mode`` decides who actually talks to the contact:\n\n- ``\"ai\"`` (default): a voice agent handles the call. ``agent_id`` selects\n  it; when omitted the conversation's assigned agent or the workspace\n  default voice agent is used. A call with no resolvable agent is rejected\n  rather than dialing the contact into silence.\n- ``\"user\"``: the operator's own phone rings first, then the contact is\n  dialed and the two legs are bridged. ``agent_id`` is ignored.\n  ``user_phone_number`` picks which allowlisted number to ring.\n- ``\"browser\"``: the operator's authenticated Tribunal browser rings first;\n  the server then dials and bridges the contact. Client-supplied SIP targets\n  are never accepted.",
+        "description": "Request to initiate a call.\n\n``mode`` decides who actually talks to the contact:\n\n- ``\"ai\"`` (default): a voice agent handles the call. ``agent_id`` selects\n  it; when omitted the conversation's assigned agent or the workspace\n  default voice agent is used. A call with no resolvable agent is rejected\n  rather than dialing the contact into silence.\n- ``\"user\"``: the operator's own phone rings first, then the contact is\n  dialed and the two legs are bridged. ``agent_id`` is ignored.\n  ``user_phone_number`` picks which allowlisted number to ring.\n- ``\"browser\"``: the operator's authenticated BEAM browser rings first;\n  the server then dials and bridges the contact. Client-supplied SIP targets\n  are never accepted.",
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -15482,6 +15482,10 @@
           "channel": {
             "anyOf": [
               {
+                "enum": [
+                  "sms",
+                  "voice"
+                ],
                 "type": "string"
               },
               {
@@ -15489,6 +15493,11 @@
               }
             ],
             "title": "Channel"
+          },
+          "idempotency_key": {
+            "format": "uuid",
+            "title": "Idempotency Key",
+            "type": "string"
           },
           "max_turns": {
             "default": 6,
@@ -15504,11 +15513,16 @@
           },
           "rehearsee": {
             "default": "ai",
+            "enum": [
+              "ai",
+              "human"
+            ],
             "title": "Rehearsee",
             "type": "string"
           }
         },
         "required": [
+          "idempotency_key",
           "agent_id",
           "persona_id"
         ],
@@ -20401,14 +20415,22 @@
       "HumanTurnRequest": {
         "description": "A human rep's reply during a live rehearsal.",
         "properties": {
+          "expected_turn_count": {
+            "maximum": 25.0,
+            "minimum": 1.0,
+            "title": "Expected Turn Count",
+            "type": "integer"
+          },
           "message": {
+            "maxLength": 4000,
             "minLength": 1,
             "title": "Message",
             "type": "string"
           }
         },
         "required": [
-          "message"
+          "message",
+          "expected_turn_count"
         ],
         "title": "HumanTurnRequest",
         "type": "object"
@@ -49962,6 +49984,11 @@
             ],
             "title": "Agent Name"
           },
+          "attempt_count": {
+            "default": 0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
           "booking_attempted": {
             "anyOf": [
               {
@@ -50043,6 +50070,17 @@
             ],
             "title": "Overall Score"
           },
+          "pending_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Action"
+          },
           "persona_id": {
             "anyOf": [
               {
@@ -50069,6 +50107,11 @@
           "rehearsee": {
             "title": "Rehearsee",
             "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
           },
           "scores": {
             "additionalProperties": true,
@@ -50188,6 +50231,11 @@
             ],
             "title": "Agent Name"
           },
+          "attempt_count": {
+            "default": 0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
           "booking_attempted": {
             "anyOf": [
               {
@@ -50247,6 +50295,17 @@
             ],
             "title": "Overall Score"
           },
+          "pending_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Action"
+          },
           "persona_id": {
             "anyOf": [
               {
@@ -50273,6 +50332,11 @@
           "rehearsee": {
             "title": "Rehearsee",
             "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -50751,6 +50815,21 @@
           }
         },
         "title": "ReputationSummary",
+        "type": "object"
+      },
+      "RetryRehearsalRequest": {
+        "description": "Retry only the failure the caller observed, not a later failed attempt.",
+        "properties": {
+          "expected_attempt_count": {
+            "minimum": 0.0,
+            "title": "Expected Attempt Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_attempt_count"
+        ],
+        "title": "RetryRehearsalRequest",
         "type": "object"
       },
       "RevealEmailResponse": {
@@ -77420,6 +77499,26 @@
               ],
               "title": "Search"
             }
+          },
+          {
+            "description": "Exact contact ID within this workspace",
+            "in": "query",
+            "name": "contact_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 9223372036854775807,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact contact ID within this workspace",
+              "title": "Contact Id"
+            }
           }
         ],
         "responses": {
@@ -100613,7 +100712,7 @@
         ]
       },
       "post": {
-        "description": "Start a rehearsal.\n\nFor ``rehearsee == \"ai\"`` the full conversation is simulated and scored\ninline before responding. For ``rehearsee == \"human\"`` the run is returned\nwith the prospect's opening line so a rep can reply via ``/runs/{id}/turn``.",
+        "description": "Durably accept a rehearsal. Poll GET /runs/{id}; retries reuse the request key.",
         "operationId": "create_run_api_v1_workspaces__workspace_id__roleplay_runs_post",
         "parameters": [
           {
@@ -100638,7 +100737,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -100779,9 +100878,78 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/retry": {
+      "post": {
+        "description": "Explicitly retry the observed failed step, not saved dialogue or a later attempt.",
+        "operationId": "retry_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryRehearsalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RehearsalRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Retry Run",
+        "tags": [
+          "Practice Arena"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/score": {
       "post": {
-        "description": "Score a rehearsal and finalize the report.",
+        "description": "Queue scoring once; poll the existing run for the result.",
         "operationId": "score_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__score_post",
         "parameters": [
           {
@@ -100806,7 +100974,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -100840,7 +101008,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/turn": {
       "post": {
-        "description": "Submit a human rep's reply and get the prospect's response.",
+        "description": "Save a human reply once and queue the prospect's response.",
         "operationId": "advance_human_turn_api_v1_workspaces__workspace_id__roleplay_runs__run_id__turn_post",
         "parameters": [
           {
@@ -100875,7 +101043,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {

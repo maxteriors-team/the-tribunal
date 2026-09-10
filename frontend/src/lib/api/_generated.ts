@@ -10090,11 +10090,7 @@ export interface paths {
         put?: never;
         /**
          * Create Run
-         * @description Start a rehearsal.
-         *
-         *     For ``rehearsee == "ai"`` the full conversation is simulated and scored
-         *     inline before responding. For ``rehearsee == "human"`` the run is returned
-         *     with the prospect's opening line so a rep can reply via ``/runs/{id}/turn``.
+         * @description Durably accept a rehearsal. Poll GET /runs/{id}; retries reuse the request key.
          */
         post: operations["create_run_api_v1_workspaces__workspace_id__roleplay_runs_post"];
         delete?: never;
@@ -10127,6 +10123,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Run
+         * @description Explicitly retry the observed failed step, not saved dialogue or a later attempt.
+         */
+        post: operations["retry_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/score": {
         parameters: {
             query?: never;
@@ -10138,7 +10154,7 @@ export interface paths {
         put?: never;
         /**
          * Score Run
-         * @description Score a rehearsal and finalize the report.
+         * @description Queue scoring once; poll the existing run for the result.
          */
         post: operations["score_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__score_post"];
         delete?: never;
@@ -10158,7 +10174,7 @@ export interface paths {
         put?: never;
         /**
          * Advance Human Turn
-         * @description Submit a human rep's reply and get the prospect's response.
+         * @description Save a human reply once and queue the prospect's response.
          */
         post: operations["advance_human_turn_api_v1_workspaces__workspace_id__roleplay_runs__run_id__turn_post"];
         delete?: never;
@@ -14936,7 +14952,7 @@ export interface components {
          *     - ``"user"``: the operator's own phone rings first, then the contact is
          *       dialed and the two legs are bridged. ``agent_id`` is ignored.
          *       ``user_phone_number`` picks which allowlisted number to ring.
-         *     - ``"browser"``: the operator's authenticated Tribunal browser rings first;
+         *     - ``"browser"``: the operator's authenticated BEAM browser rings first;
          *       the server then dials and bridges the contact. Client-supplied SIP targets
          *       are never accepted.
          */
@@ -17587,7 +17603,12 @@ export interface components {
              */
             agent_id: string;
             /** Channel */
-            channel?: string | null;
+            channel?: ("sms" | "voice") | null;
+            /**
+             * Idempotency Key
+             * Format: uuid
+             */
+            idempotency_key: string;
             /**
              * Max Turns
              * @default 6
@@ -17601,8 +17622,9 @@ export interface components {
             /**
              * Rehearsee
              * @default ai
+             * @enum {string}
              */
-            rehearsee: string;
+            rehearsee: "ai" | "human";
         };
         /**
          * CrewCreate
@@ -19628,6 +19650,8 @@ export interface components {
          * @description A human rep's reply during a live rehearsal.
          */
         HumanTurnRequest: {
+            /** Expected Turn Count */
+            expected_turn_count: number;
             /** Message */
             message: string;
         };
@@ -30670,6 +30694,11 @@ export interface components {
             agent_id: string | null;
             /** Agent Name */
             agent_name: string | null;
+            /**
+             * Attempt Count
+             * @default 0
+             */
+            attempt_count: number;
             /** Booking Attempted */
             booking_attempted: boolean | null;
             /** Channel */
@@ -30696,12 +30725,19 @@ export interface components {
             objection_coverage: number | null;
             /** Overall Score */
             overall_score: number | null;
+            /** Pending Action */
+            pending_action?: string | null;
             /** Persona Id */
             persona_id: string | null;
             /** Persona Name */
             persona_name: string | null;
             /** Rehearsee */
             rehearsee: string;
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
             /** Scores */
             scores: {
                 [key: string]: unknown;
@@ -30738,6 +30774,11 @@ export interface components {
             agent_id: string | null;
             /** Agent Name */
             agent_name: string | null;
+            /**
+             * Attempt Count
+             * @default 0
+             */
+            attempt_count: number;
             /** Booking Attempted */
             booking_attempted: boolean | null;
             /** Channel */
@@ -30758,12 +30799,19 @@ export interface components {
             objection_coverage: number | null;
             /** Overall Score */
             overall_score: number | null;
+            /** Pending Action */
+            pending_action?: string | null;
             /** Persona Id */
             persona_id: string | null;
             /** Persona Name */
             persona_name: string | null;
             /** Rehearsee */
             rehearsee: string;
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
             /** Status */
             status: string;
             /** Tone Score */
@@ -30983,6 +31031,14 @@ export interface components {
              * @default 0
              */
             total_reviews: number;
+        };
+        /**
+         * RetryRehearsalRequest
+         * @description Retry only the failure the caller observed, not a later failed attempt.
+         */
+        RetryRehearsalRequest: {
+            /** Expected Attempt Count */
+            expected_attempt_count: number;
         };
         /**
          * RevealEmailResponse
@@ -44164,6 +44220,8 @@ export interface operations {
                 channel_filter?: string | null;
                 unread_only?: boolean;
                 search?: string | null;
+                /** @description Exact contact ID within this workspace */
+                contact_id?: number | null;
             };
             header?: never;
             path: {
@@ -55996,7 +56054,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -56077,6 +56135,42 @@ export interface operations {
             };
         };
     };
+    retry_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryRehearsalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     score_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__score_post: {
         parameters: {
             query?: never;
@@ -56090,7 +56184,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -56126,7 +56220,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
