@@ -630,6 +630,10 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                     message_id=str(message.id),
                     prior_status=prior_status,
                 )
+                if message.error_code == "USER_CALL_REP_HUNG_UP":
+                    # Rep teardown already finalized a call that never bridged.
+                    # Neither this SIP event nor retries are customer outcomes.
+                    return
 
             # Reconcile booking outcome before classification
             reconciled = await _reconcile_booking_outcome(db, message, log)
