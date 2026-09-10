@@ -49778,6 +49778,79 @@
         "title": "RejectSuggestionRequest",
         "type": "object"
       },
+      "RenewalCandidateList": {
+        "description": "A page of renewal candidates plus the season the rep is selling.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RenewalCandidateResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "season_year": {
+            "title": "Season Year",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "season_year"
+        ],
+        "title": "RenewalCandidateList",
+        "type": "object"
+      },
+      "RenewalCandidateResponse": {
+        "description": "One house lit in an earlier season, as the renewal screen lists it.",
+        "properties": {
+          "contact_id": {
+            "title": "Contact Id",
+            "type": "integer"
+          },
+          "contact_name": {
+            "title": "Contact Name",
+            "type": "string"
+          },
+          "quote_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Number"
+          },
+          "quote_total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Total"
+          },
+          "signed_up_at": {
+            "format": "date-time",
+            "title": "Signed Up At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contact_id",
+          "contact_name",
+          "signed_up_at"
+        ],
+        "title": "RenewalCandidateResponse",
+        "type": "object"
+      },
       "ReorderReport": {
         "description": "Items needing a purchase, most urgent first.",
         "properties": {
@@ -94707,6 +94780,95 @@
           }
         ],
         "summary": "Share Comparison",
+        "tags": [
+          "Quotes"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/quotes/renewals": {
+      "get": {
+        "description": "Houses lit in an earlier season, newest signup first.",
+        "operationId": "list_renewal_candidates_route_api_v1_workspaces__workspace_id__quotes_renewals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenewalCandidateList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Renewal Candidates Route",
         "tags": [
           "Quotes"
         ]

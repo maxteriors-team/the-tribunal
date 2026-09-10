@@ -70,6 +70,7 @@ Offer creation uses `/offers/new`; offer detail uses `/offers/{offer_id}`. Refer
 | Permanent Lighting | `/permanent-lighting` | Save and reopen client-linked permanent-light designs |
 | Landscape Lighting | `/landscape-lighting` | Manage synced customer lighting projects and designs |
 | Christmas Light Estimator | `/christmas-lights` | Build a seasonal lighting estimate |
+| Renew Last Season's Homes | `/christmas-lights/renew` | Rebuild a past customer's holiday job as this season's draft quote |
 | Invoices | `/invoices` | Create, send, track, and manage invoices |
 
 A permanent-lighting project uses `/permanent-lighting/{project_id}`. A landscape-lighting project uses `/landscape-lighting/{project_id}`. Quotes and invoices are created and edited in controls on their list screens, not on separate new/edit routes.

@@ -456,3 +456,27 @@ class QuoteConvertResponse(BaseModel):
     invoice_id: uuid.UUID | None = None
     idempotent_replay: bool = False
     crew_notification: CrewNotificationResult = Field(default_factory=CrewNotificationResult)
+
+
+class RenewalCandidateResponse(BaseModel):
+    """One house lit in an earlier season, as the renewal screen lists it."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    contact_id: int
+    contact_name: str
+    #: Prior sale shown as the row subtitle. Null when the seasonal plan row
+    #: outlived the quote it came from — the customer is still renewable, we
+    #: just have no number to show.
+    quote_number: str | None = None
+    quote_total: float | None = None
+    #: When the seasonal plan was created: the season being renewed *from*.
+    signed_up_at: datetime
+
+
+class RenewalCandidateList(BaseModel):
+    """A page of renewal candidates plus the season the rep is selling."""
+
+    items: list[RenewalCandidateResponse] = Field(default_factory=list)
+    total: int = 0
+    season_year: int

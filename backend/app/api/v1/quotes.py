@@ -23,6 +23,7 @@ from app.api.deps import (
     CanWriteBilling,
     CanWriteQuotes,
     CurrentUser,
+    WorkspaceAccess,
 )
 from app.api.handoff_images import (
     count_handoff_images,
@@ -81,6 +82,8 @@ from app.schemas.quote import (
     QuoteLineItemUpdate,
     QuoteServiceCreate,
     QuoteUpdate,
+    RenewalCandidateList,
+    RenewalCandidateResponse,
 )
 from app.services.idempotency import (
     redis_idempotency_key_exists,
@@ -93,8 +96,10 @@ from app.services.payments.quote_deposit_service import record_manual_deposit
 from app.services.quotes import QuoteService
 from app.services.quotes.ownership import quote_owner_predicate
 from app.services.quotes.proposal_pricing import BistroPricingConfigurationError
+from app.services.seasonal.renewal_candidates import list_renewal_candidates
 
 logger = structlog.get_logger(__name__)
+
 router = APIRouter(route_class=ServiceErrorRoute)
 # No-auth, token-keyed client proposal surface. Uses ServiceErrorRoute so the
 # service's NotFoundError/ConflictError map to 404/409 at the boundary.
@@ -176,6 +181,30 @@ async def create_quote(
         quote_in,
         created_by_id=current_user.id,
         assigned_user_id=quote_owner_scope(membership.role, current_user.id),
+    )
+
+
+# The renewable list: which customers this screen can offer. Read-only and
+# keyed by contact, matching the renewal POST below that a row clicks through
+# to. Declared before "/{quote_id}" so "renewals" is never parsed as a UUID.
+@router.get("/renewals", response_model=RenewalCandidateList)
+async def list_renewal_candidates_route(
+    workspace: WorkspaceAccess,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanReadQuotes,
+    search: Annotated[str | None, Query(max_length=120)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> RenewalCandidateList:
+    """Houses lit in an earlier season, newest signup first."""
+    candidates, total, season_year = await list_renewal_candidates(
+        db, workspace, search=search, limit=limit, offset=offset
+    )
+    return RenewalCandidateList(
+        items=[RenewalCandidateResponse.model_validate(c) for c in candidates],
+        total=total,
+        season_year=season_year,
     )
 
 

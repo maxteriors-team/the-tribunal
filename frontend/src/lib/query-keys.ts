@@ -488,6 +488,10 @@ export const queryKeys = {
   },
   quotes: {
     ...quotes,
+    // Renewal candidates: workspace-level and list-only. Renewing writes a
+    // quote, so the created draft invalidates under the quotes list, not here.
+    renewalCandidates: (workspaceId: string, params?: QueryKeyParams | null) =>
+      [...quotes.all(workspaceId), "renewal-candidates", normalizeQueryKeyParams(params)] as const,
     byContact: (workspaceId: string, contactId: number | string | undefined) =>
       quotes.list(workspaceId, { contact_id: contactId }),
     handoffImages: (workspaceId: string, quoteId: string) =>
