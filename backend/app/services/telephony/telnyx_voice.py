@@ -467,7 +467,7 @@ class TelnyxVoiceService:
             call_control_id: Telnyx call control ID
 
         Returns:
-            True if successful, False otherwise
+            True if successful or already ended, False otherwise
         """
         self.logger.info("hanging_up_call", call_control_id=call_control_id)
 
@@ -475,6 +475,20 @@ class TelnyxVoiceService:
             response = await self.client.post(
                 f"/calls/{call_control_id}/actions/hangup",
             )
+            if response.status_code == 422:
+                data = response.json()
+                errors = data.get("errors") if isinstance(data, dict) else None
+                # Telnyx 90018 means the requested end state is already reached.
+                if (
+                    isinstance(errors, list)
+                    and errors
+                    and all(
+                        isinstance(error, dict) and str(error.get("code")) == "90018"
+                        for error in errors
+                    )
+                ):
+                    self.logger.info("call_already_ended", call_control_id=call_control_id)
+                    return True
             response.raise_for_status()
             self.logger.info("call_hung_up", call_control_id=call_control_id)
             return True
@@ -918,7 +932,7 @@ class TelnyxVoiceService:
 
         payload: dict[str, Any] = {
             "connection_id": connection_id,
-            "to": f"sip:{sip_username}@telnyx.com",
+            "to": f"sip:{sip_username}@sip.telnyx.com",
             "from": self._normalize_e164(from_number),
             "webhook_url": webhook_url,
             "webhook_url_method": "POST",

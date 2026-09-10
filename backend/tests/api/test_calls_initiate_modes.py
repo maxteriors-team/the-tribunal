@@ -27,7 +27,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 
 from app.api.deps import get_current_user, get_db, get_membership, get_workspace
 from app.api.v1 import calls as calls_module
@@ -230,6 +230,60 @@ async def test_call_limit_unavailable_fails_closed(
     assert response.status_code == 503
     limiter.assert_awaited_once_with(workspace_id=str(WS_ID), user_id=1)
     assert db.executed == 1
+
+
+@pytest.mark.parametrize(
+    ("provider_status", "provider_body", "expected_status"),
+    [
+        (200, {"data": {"result": "ok"}}, 200),
+        (422, {"errors": [{"code": "90018", "title": "Call has already ended"}]}, 200),
+        (422, {"errors": [{"code": 90018}]}, 200),
+        (422, {"errors": [{"code": "90015"}]}, 500),
+        (422, {"errors": [{"code": "90018"}, {"code": "90015"}]}, 500),
+        (404, {"errors": [{"code": "10005"}]}, 500),
+        (401, {"errors": [{"code": "90018"}]}, 500),
+        (500, {"errors": [{"code": "90018"}]}, 500),
+        (422, {"errors": []}, 500),
+        (422, {"errors": None}, 500),
+        (422, {"errors": [None]}, 500),
+        (422, {"errors": "90018"}, 500),
+        (422, [], 500),
+        (422, "not JSON", 500),
+    ],
+)
+async def test_hangup_treats_only_already_ended_as_success(
+    monkeypatch: pytest.MonkeyPatch,
+    provider_status: int,
+    provider_body: Any,
+    expected_status: int,
+) -> None:
+    """Exercise the real route and dialer against the provider's error contract."""
+    message = MagicMock(
+        id=uuid.uuid4(), conversation_id=uuid.uuid4(), provider_message_id="v3:browser-leg"
+    )
+    db = _FakeSession([_Result(scalar=message), _Result(scalar=MagicMock())])
+    requests: list[Request] = []
+
+    def handler(request: Request) -> Response:
+        requests.append(request)
+        if isinstance(provider_body, str):
+            return Response(provider_status, text=provider_body)
+        return Response(provider_status, json=provider_body)
+
+    async with AsyncClient(
+        base_url=TelnyxVoiceService.BASE_URL, transport=MockTransport(handler)
+    ) as provider_client:
+        monkeypatch.setattr(TelnyxVoiceService, "client", property(lambda _self: provider_client))
+        async with _client(db) as client:
+            response = await client.post(f"{BASE}/{message.id}/hangup")
+
+    assert response.status_code == expected_status
+    assert response.json() == (
+        {"success": True} if expected_status == 200 else {"detail": "Failed to hangup call"}
+    )
+    assert len(requests) == 1
+    assert requests[0].method == "POST"
+    assert requests[0].url.path == "/v2/calls/v3:browser-leg/actions/hangup"
 
 
 # --------------------------------------------------------------------------- #

@@ -1416,6 +1416,60 @@ async def test_user_call_rep_hangup_before_bridge_drops_contact_leg(
     assert user_call_redis["popped"] == [REP_CCID]
 
 
+@pytest.mark.parametrize("stage", ["dialing_rep", "dialing_contact"])
+async def test_user_call_rep_failure_survives_hangup_and_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    hangup_normal: dict[str, Any],
+    user_call_redis: dict[str, Any],
+    voice_service_calls: dict[str, AsyncMock],
+    _stub_hangup_side_effects: dict[str, MagicMock],
+    stage: str,
+) -> None:
+    """A failed operator leg must never become a completed customer call."""
+    message = _make_hangup_message(status=MessageStatus.RINGING)
+    contact_ccid = CONTACT_CCID if stage == "dialing_contact" else None
+    user_call_redis["pending"] = _pending_user_call(
+        message_id=str(message.id), contact_call_control_id=contact_ccid, stage=stage
+    )
+    db = _make_db(execute_returns=[])
+    db.execute = AsyncMock(return_value=_Result(scalar=message))
+    db.get = AsyncMock(return_value=message)
+    _patch_session_local(monkeypatch, db)
+    rep_payload = {
+        **hangup_normal,
+        "call_control_id": REP_CCID,
+        "hangup_cause": "unspecified",
+        "sip_hangup_cause": "408",
+        "duration_seconds": 0,
+    }
+
+    # Replay the actual first-leg failure, then the contact teardown (if dialed)
+    # and a provider retry after the pending Redis state has been removed.
+    payloads = [rep_payload]
+    if contact_ccid:
+        payloads.append({**rep_payload, "call_control_id": contact_ccid})
+    payloads.append(rep_payload)
+    for payload in payloads:
+        await handlers.handle_call_hangup(payload, _make_log())
+        assert message.status == MessageStatus.FAILED
+        assert message.error_code == "USER_CALL_REP_HUNG_UP"
+        assert message.duration_seconds == 0
+
+    assert user_call_redis["popped"] == [REP_CCID]
+    voice_service_calls["dial_transfer_leg"].assert_not_awaited()
+    if contact_ccid:
+        voice_service_calls["hangup_call"].assert_awaited_once_with(contact_ccid)
+    else:
+        voice_service_calls["hangup_call"].assert_not_awaited()
+    for name in (
+        "update_campaign_call_stats",
+        "record_engagement",
+        "create_outcome_from_hangup",
+        "trigger_sms_fallback_for_call",
+    ):
+        _stub_hangup_side_effects[name].assert_not_awaited()
+
+
 async def test_user_call_contact_hangup_drops_rep_leg(
     monkeypatch: pytest.MonkeyPatch,
     hangup_normal: dict[str, Any],
