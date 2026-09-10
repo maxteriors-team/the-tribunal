@@ -4086,7 +4086,7 @@ export interface paths {
         };
         /**
          * Get Contact Stats
-         * @description Return aggregate contact metrics for the Contacts page stat cards.
+         * @description Return workspace-wide creation cohorts (not conversion-time metrics).
          */
         get: operations["get_contact_stats_api_v1_workspaces__workspace_id__contacts_stats_get"];
         put?: never;
@@ -16916,7 +16916,7 @@ export interface components {
         };
         /**
          * ContactListResponse
-         * @description Schema for paginated contact list.
+         * @description Schema for paginated contact list with status facets over the whole scope.
          */
         ContactListResponse: {
             /** Items */
@@ -16927,6 +16927,7 @@ export interface components {
             page_size: number;
             /** Pages */
             pages: number;
+            status_counts: components["schemas"]["ContactStatusCounts"];
             /** Total */
             total: number;
         };
@@ -17070,23 +17071,76 @@ export interface components {
         };
         /**
          * ContactStatsResponse
-         * @description Aggregate contact metrics for the Contacts page stat cards.
+         * @description Workspace-wide creation cohorts, independent of list search/filters.
          *
-         *     Windows are workspace-scoped and computed in UTC. ``*_change`` values are
-         *     returned preformatted (e.g. ``"+24%"``, ``"-10%"``, ``"+0%"``) so the
-         *     frontend ``isTrendUp`` helper can render the trend badge without reparsing.
+         *     Conversion events are unavailable: ``new_clients_*`` are legacy field names
+         *     for contacts CREATED in the window and CURRENTLY converted, not clients
+         *     converted during the window. Reversions change these snapshots; reconversion
+         *     history cannot be inferred. Change is null whenever the prior cohort is zero.
          */
         ContactStatsResponse: {
-            /** New Clients 30D */
+            /**
+             * Client Metric Basis
+             * @constant
+             */
+            client_metric_basis: "creation_cohort_current_status";
+            /**
+             * New Clients 30D
+             * @description Currently converted contacts created in the trailing 30-day window.
+             */
             new_clients_30d: number;
-            /** New Clients Change */
-            new_clients_change: string;
+            /**
+             * New Clients Change
+             * @description Creation-cohort change, not conversion growth; null with a zero baseline.
+             */
+            new_clients_change: string | null;
             /** New Leads 30D */
             new_leads_30d: number;
             /** New Leads Change */
-            new_leads_change: string;
-            /** Total New Clients Ytd */
+            new_leads_change: string | null;
+            /**
+             * Period End
+             * Format: date-time
+             * @description Exclusive end (as-of instant) of all current windows.
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             * @description Inclusive start of the trailing 30 elapsed days.
+             */
+            period_start: string;
+            /** Timezone */
+            timezone: string;
+            /**
+             * Total New Clients Ytd
+             * @description Currently converted contacts created since workspace-local January 1.
+             */
             total_new_clients_ytd: number;
+            /**
+             * Year Start
+             * Format: date-time
+             * @description Workspace-local January 1, expressed in UTC.
+             */
+            year_start: string;
+        };
+        /**
+         * ContactStatusCounts
+         * @description Unpaginated search/advanced-filter scope, excluding the selected status tab.
+         */
+        ContactStatusCounts: {
+            /** All */
+            all: number;
+            /** Contacted */
+            contacted: number;
+            /** Converted */
+            converted: number;
+            /** Lost */
+            lost: number;
+            /** New */
+            new: number;
+            /** Qualified */
+            qualified: number;
         };
         /**
          * ContactSummary
@@ -21335,14 +21389,15 @@ export interface components {
          * JobPnLSummary
          * @description Aggregate job profitability over a period.
          *
-         *     Revenue is the sum of the distinct invoices linked to the jobs in range
-         *     (so two jobs sharing one invoice are not double-counted); cost is tracked
-         *     labor (hours x rate) plus logged expenses plus materials consumed.
+         *     Revenue includes linked sent/partial/paid/overdue invoice totals, counted
+         *     once per invoice. Draft/void invoices contribute zero. Billable count is
+         *     jobs with a same-workspace invoice of any status, not distinct invoices.
+         *     All jobs contribute tracked labor, logged expenses, and consumed materials.
          */
         JobPnLSummary: {
             /**
              * Billable Job Count
-             * @description Jobs with a linked invoice
+             * @description Jobs with a linked same-workspace invoice of any status, including draft/void; each job counts even when multiple jobs share an invoice
              */
             billable_job_count: number;
             /** Currency */
@@ -21372,7 +21427,10 @@ export interface components {
             material_cost: number;
             /** Profit */
             profit: number;
-            /** Revenue */
+            /**
+             * Revenue
+             * @description Total of linked sent/partial/paid/overdue invoices, counted once per invoice; draft and void invoices contribute zero, regardless of payments
+             */
             revenue: number;
             /** Total Cost */
             total_cost: number;
