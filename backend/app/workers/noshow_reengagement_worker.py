@@ -42,8 +42,8 @@ _DEFAULT_DAY3_TEMPLATE = (
     "Hey {first_name}, we'd still love to connect. Want to reschedule? {reschedule_link}"
 )
 _DEFAULT_DAY7_TEMPLATE = (
-    "Hi {first_name}, we're offering 300 free video ads to qualified businesses. "
-    "Still interested? Reply YES and we'll get you booked."
+    "Hi {first_name}, are you still interested in rescheduling? "
+    "Reply YES and we'll help find a new time."
 )
 
 
@@ -64,9 +64,12 @@ class NoshowReengagementWorker(RetryableWorker, BaseWorker):
     async def _process_items(self) -> None:
         """Process all pending no-show re-engagement messages."""
         async with system_session("noshow_reengagement_worker sweeps every workspace") as db:
-            # Fetch all agents with re-engagement enabled
+            # Inactive agents must never originate automated customer messages.
             agent_result = await db.execute(
-                select(Agent).where(Agent.noshow_reengagement_enabled.is_(True))
+                select(Agent).where(
+                    Agent.noshow_reengagement_enabled.is_(True),
+                    Agent.is_active.is_(True),
+                )
             )
             agents = agent_result.scalars().all()
 

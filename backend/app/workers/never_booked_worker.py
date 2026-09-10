@@ -39,8 +39,8 @@ from app.workers.retryable import RetryableWorker
 MAX_CONTACTS_PER_TICK = 20
 
 _DEFAULT_NEVER_BOOKED_TEMPLATE = (
-    "Hi {first_name}, just checking in — we're still offering our free video ads "
-    "strategy session. Book your spot: {booking_link}"
+    "Hi {first_name}, are you still interested in learning more? "
+    "Reply YES and we'll help with next steps."
 )
 
 
@@ -59,10 +59,14 @@ class NeverBookedWorker(RetryableWorker, BaseWorker):
         self.opt_out_manager = OptOutManager()
 
     async def _process_items(self) -> None:
-        """Process all agents with never-booked re-engagement enabled."""
+        """Process active agents with never-booked re-engagement enabled."""
         async with system_session("never_booked_worker sweeps every workspace") as db:
+            # Inactive agents must never originate automated customer messages.
             agent_result = await db.execute(
-                select(Agent).where(Agent.never_booked_reengagement_enabled.is_(True))
+                select(Agent).where(
+                    Agent.never_booked_reengagement_enabled.is_(True),
+                    Agent.is_active.is_(True),
+                )
             )
             agents = agent_result.scalars().all()
 

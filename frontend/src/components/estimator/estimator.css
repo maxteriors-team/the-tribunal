@@ -13,6 +13,8 @@
   --s1: #141414;
   --s2: #1a1a1a;
   --s3: #222222;
+  --brand-primary: #a08040;
+  --brand-accent: #d4af5a;
   --gold: #d4af5a;
   --gold-l: #edd080;
   --gold-d: #a08040;
@@ -54,6 +56,32 @@
   max-width: 960px;
   margin: 0 auto;
   padding: 48px 24px 96px;
+}
+
+.cmp-public-brand {
+  display: flex;
+  width: min(912px, calc(100% - 48px));
+  min-height: 88px;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  padding: 20px 0;
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, var(--brand-primary) 0 62%, var(--brand-accent) 62%) 1;
+}
+
+.cmp-public-brand img {
+  display: block;
+  width: auto;
+  max-width: min(220px, 80vw);
+  max-height: 64px;
+  object-fit: contain;
+}
+
+.cmp-public-brand strong {
+  color: var(--t1);
+  font-size: 16px;
+  letter-spacing: 0.08em;
 }
 
 .cmp-brand {

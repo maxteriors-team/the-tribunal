@@ -286,7 +286,7 @@ The full CI and release-subset browser/API commands above are the current releas
 - **Location:** `/campaigns/email/new`, root app metadata/manifest, estimator defaults, and `/p/landing`
 - **Affected element:** Wordmarks, placeholders, page title, manifest name, and public metadata
 - **Expected:** Multi-tenant UI uses the current workspace/business brand or a neutral product brand.
-- **Actual:** Email Campaign hardcodes “Maxteriors” and a Maxteriors sender placeholder; public landing metadata hardcodes PRESTYJ; app metadata/manifest hardcodes Maxteriors even in `CRM's Workspace`.
+- **Actual:** Email Campaign hardcodes “Maxteriors” and a Maxteriors sender placeholder; public landing metadata hardcodes a legacy tenant brand; app metadata/manifest hardcodes Maxteriors even in `CRM's Workspace`.
 - **Issue type:** Multi-tenant branding / confusing content
 - **Severity:** **Medium**
 - **Recommended developer fix:** Centralize product versus workspace brand roles, load customer-facing business copy from workspace proposal settings, and remove tenant-specific fallbacks from shared surfaces.

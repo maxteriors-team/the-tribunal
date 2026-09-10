@@ -32,7 +32,7 @@ paths = [
 ]
 
 [[allowlists]]
-description = "EZ Pixel publishable project key. The `pk_live_` prefix marks a browser-side publishable analytics key: it is shipped in the client bundle by design (see frontend/ez-pixel.client.tsx, read from EZCODER_PIXEL_KEY on the server in frontend/instrumentation.ts) and only authorizes anonymous event ingestion to the pixel worker — it grants no account, data, or API access. Not a credential; nothing to rotate."
+description = "Retired browser-side publishable telemetry key retained only in immutable Git history. It authorizes anonymous event ingestion, not account or API access, and is no longer present in shipped source."
 regexes = [
     '''pk_live_c300992585576c6cf817ab7d6ae29792''',
 ]

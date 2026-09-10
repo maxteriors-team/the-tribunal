@@ -4152,15 +4152,39 @@ export function LightDesigner({
     ? getApiErrorMessage(
         sendFailure,
         proposalSide === "permanent"
-          ? "Couldn’t send the proposal — try again."
-          : "Couldn’t send the estimate — try again.",
+          ? "Couldn’t send the client quote. Try again."
+          : "Couldn’t send the estimate. Try again.",
       )
     : null;
+  const permanentSharedBlocker =
+    proposalSide !== "permanent"
+      ? null
+      : !permanentProjectPreviewReady
+        ? "Save a design on the selected photo before saving or sending this quote."
+        : !hasHolidayProposal
+          ? "Draw the permanent design before saving or sending this quote."
+          : !permanentDepositValid
+            ? "Deposit must be between 0.01% and 100%, or left blank."
+            : !permanentPriceRangeValid
+              ? `Higher amount must exceed the lower quote amount of ${formatCurrency(permanentRangeLow)}.`
+              : null;
+  const permanentEmailBlocker =
+    proposalSide === "permanent" && !clientEmail.trim()
+      ? "Enter a customer email to email this quote."
+      : null;
+  const permanentSmsBlocker =
+    proposalSide === "permanent" && !clientPhone.trim()
+      ? "Enter a customer phone number to text this quote."
+      : null;
+  const permanentVisibleBlockers = permanentSharedBlocker
+    ? [permanentSharedBlocker]
+    : [permanentEmailBlocker, permanentSmsBlocker].filter((message): message is string =>
+        Boolean(message),
+      );
   const canSend = (channel: SendChannel) =>
     hasHolidayProposal &&
     (channel === "email" ? clientEmail : clientPhone).trim().length > 0 &&
-    (proposalSide !== "permanent" ||
-      (permanentDepositValid && permanentPriceRangeValid && permanentProjectPreviewReady));
+    (proposalSide !== "permanent" || !permanentSharedBlocker);
   const sendEstimate = async (channel: SendChannel) => {
     if (!canSend(channel) || sendPending) return;
     setSendingChannel(channel);
@@ -5183,7 +5207,7 @@ export function LightDesigner({
                               value={clientEmail}
                               onChange={(e) => editCustomer(setClientEmail)(e.target.value)}
                               aria-label="Customer email"
-                              disabled={customerProfileLocked}
+                              disabled={customerProfileLocked && proposalSide !== "permanent"}
                             />
                             <input
                               className="est-input"
@@ -5193,18 +5217,31 @@ export function LightDesigner({
                               value={clientPhone}
                               onChange={(e) => editCustomer(setClientPhone)(e.target.value)}
                               aria-label="Customer phone"
-                              disabled={customerProfileLocked}
+                              disabled={customerProfileLocked && proposalSide !== "permanent"}
                             />
                           </div>
                           <div className="est-customer-hint">
                             {customerProfileLocked && landscapeProject?.contactId ? (
-                              <>
-                                This proposal and future job stay attached to{" "}
-                                <Link href={`/contacts/${landscapeProject.contactId}`}>
-                                  {landscapeProject.contactName ?? "the linked customer"}
-                                </Link>
-                                . Update delivery details on their profile.
-                              </>
+                              proposalSide === "permanent" ? (
+                                <>
+                                  This quote stays attached to{" "}
+                                  <Link href={`/contacts/${landscapeProject.contactId}`}>
+                                    {landscapeProject.contactName ?? "the linked customer"}
+                                  </Link>
+                                  . Email and phone changes apply only to this quote. Update the
+                                  customer record for permanent changes.
+                                </>
+                              ) : (
+                                <>
+                                  This proposal and future job stay attached to{" "}
+                                  <Link href={`/contacts/${landscapeProject.contactId}`}>
+                                    {landscapeProject.contactName ?? "the linked customer"}
+                                  </Link>
+                                  . Update delivery details on their profile.
+                                </>
+                              )
+                            ) : proposalSide === "permanent" ? (
+                              <>Add an email or phone number to deliver this client quote.</>
                             ) : (
                               <>
                                 Add a phone number to save this estimate to a customer record.
@@ -5266,6 +5303,20 @@ export function LightDesigner({
                               </div>
                             </>
                           ) : null}
+                          {proposalSide === "permanent" && permanentVisibleBlockers.length ? (
+                            <div
+                              className="est-send-blockers"
+                              id="permanent-quote-blockers"
+                              role="status"
+                              aria-live="polite"
+                            >
+                              {permanentVisibleBlockers.map((message) => (
+                                <div className="est-send-error" key={message}>
+                                  {message}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                           <div className="est-send-actions">
                             <button
                               className="est-btn primary est-save-btn"
@@ -5275,10 +5326,17 @@ export function LightDesigner({
                                 sendPending ||
                                 (proposalSide === "permanent" && !permanentPriceRangeValid)
                               }
+                              aria-describedby={
+                                proposalSide === "permanent" && !canSend("email")
+                                  ? "permanent-quote-blockers"
+                                  : undefined
+                              }
                               title={
                                 canSend("email")
-                                  ? `${proposalSide === "permanent" ? "Email the proposal" : "Email the estimate"} to ${clientEmail.trim()}`
-                                  : "Draw the design and add a customer email to send"
+                                  ? `${proposalSide === "permanent" ? "Email the client quote" : "Email the estimate"} to ${clientEmail.trim()}`
+                                  : proposalSide === "permanent"
+                                    ? (permanentSharedBlocker ?? permanentEmailBlocker ?? undefined)
+                                    : "Draw the design and add a customer email to send"
                               }
                               onClick={() => void sendEstimate("email")}
                             >
@@ -5288,7 +5346,7 @@ export function LightDesigner({
                                 <>
                                   <Mail aria-hidden="true" />
                                   {proposalSide === "permanent"
-                                    ? "Email proposal"
+                                    ? "Save & email client quote"
                                     : "Email estimate"}
                                 </>
                               )}
@@ -5301,10 +5359,17 @@ export function LightDesigner({
                                 sendPending ||
                                 (proposalSide === "permanent" && !permanentPriceRangeValid)
                               }
+                              aria-describedby={
+                                proposalSide === "permanent" && !canSend("sms")
+                                  ? "permanent-quote-blockers"
+                                  : undefined
+                              }
                               title={
                                 canSend("sms")
-                                  ? `${proposalSide === "permanent" ? "Text the proposal" : "Text the estimate"} to ${clientPhone.trim()}`
-                                  : "Draw the design and add a customer phone to send"
+                                  ? `${proposalSide === "permanent" ? "Text the client quote" : "Text the estimate"} to ${clientPhone.trim()}`
+                                  : proposalSide === "permanent"
+                                    ? (permanentSharedBlocker ?? permanentSmsBlocker ?? undefined)
+                                    : "Draw the design and add a customer phone to send"
                               }
                               onClick={() => void sendEstimate("sms")}
                             >
@@ -5313,7 +5378,9 @@ export function LightDesigner({
                               ) : (
                                 <>
                                   <MessageSquareText aria-hidden="true" />
-                                  {proposalSide === "permanent" ? "Text proposal" : "Text estimate"}
+                                  {proposalSide === "permanent"
+                                    ? "Save & text client quote"
+                                    : "Text estimate"}
                                 </>
                               )}
                             </button>
@@ -5324,18 +5391,16 @@ export function LightDesigner({
                               accepts it there, then pays the deposit by card.
                             </div>
                           ) : null}
-                          <button
-                            className="est-btn est-save-btn"
-                            type="button"
-                            disabled={!hasHolidayProposal || shareMutation.isPending}
-                            onClick={() => shareMutation.mutate()}
-                          >
-                            {shareMutation.isPending
-                              ? "Saving…"
-                              : proposalSide === "permanent"
-                                ? "Save & share link only — preview, no approval or payment"
-                                : "Save & share link only"}
-                          </button>
+                          {proposalSide !== "permanent" ? (
+                            <button
+                              className="est-btn est-save-btn"
+                              type="button"
+                              disabled={!hasHolidayProposal || shareMutation.isPending}
+                              onClick={() => shareMutation.mutate()}
+                            >
+                              {shareMutation.isPending ? "Saving…" : "Save & share link only"}
+                            </button>
+                          ) : null}
                           {sendError ? (
                             <div className="est-send-row">
                               <span className="est-send-error">{sendError}</span>
@@ -5397,12 +5462,13 @@ export function LightDesigner({
                                         signature: permanentQuoteSignature,
                                       })
                                     }
+                                    aria-describedby={
+                                      permanentSharedBlocker
+                                        ? "permanent-quote-blockers"
+                                        : undefined
+                                    }
                                   >
-                                    {quotePending
-                                      ? "Creating…"
-                                      : sides.seasonal
-                                        ? "Create permanent quote"
-                                        : "Create quote"}
+                                    {quotePending ? "Saving…" : "Save draft quote"}
                                   </button>
                                 </>
                               ) : null}
@@ -5432,7 +5498,9 @@ export function LightDesigner({
                               </div>
                               {quoteResult ? (
                                 <div className="est-saved-note">
-                                  Quote {quoteResult.number} created
+                                  {quoteResult.side === "permanent"
+                                    ? `Draft quote ${quoteResult.number} saved`
+                                    : `Quote ${quoteResult.number} created`}
                                   {quoteResult.depositAmount != null
                                     ? ` · ${formatCurrency(quoteResult.depositAmount)} deposit`
                                     : ""}
@@ -5451,7 +5519,7 @@ export function LightDesigner({
                               {createQuoteMutation.isError ? (
                                 <div className="est-send-row">
                                   <span className="est-send-error">
-                                    Couldn’t create the quote — draw a design, then try again.
+                                    Couldn’t save the draft quote. Draw a design, then try again.
                                   </span>
                                 </div>
                               ) : null}
@@ -5459,7 +5527,7 @@ export function LightDesigner({
                           ) : null}
                         </div>
 
-                        {shareUrl ? (
+                        {proposalSide !== "permanent" && shareUrl ? (
                           <div className="est-share">
                             {savedToCustomer ? (
                               <div className="est-saved-note">
@@ -5478,7 +5546,9 @@ export function LightDesigner({
                         {sentTo ? (
                           <div className="est-send-row">
                             <span className="est-sent-note">
-                              {sentVia === "sms" ? "Texted to" : "Emailed to"} {sentTo}
+                              {proposalSide === "permanent"
+                                ? `Client quote ${sentVia === "sms" ? "texted" : "emailed"} to ${sentTo}`
+                                : `${sentVia === "sms" ? "Texted" : "Emailed"} to ${sentTo}`}
                             </span>
                           </div>
                         ) : null}

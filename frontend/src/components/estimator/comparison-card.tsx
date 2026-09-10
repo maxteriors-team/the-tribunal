@@ -100,7 +100,13 @@ function Perks({ perks }: { perks?: string[] }) {
   );
 }
 
-export function ComparisonCard({ view }: { view: ComparisonView }) {
+export function ComparisonCard({
+  view,
+  legacyPreview = false,
+}: {
+  view: ComparisonView;
+  legacyPreview?: boolean;
+}) {
   const currency = view.currency || "USD";
   const bothOffered = view.permanent.enabled && view.christmas.enabled;
   const permanentOnly = view.permanent.enabled && !view.christmas.enabled;
@@ -112,16 +118,20 @@ export function ComparisonCard({ view }: { view: ComparisonView }) {
   const packages = view.christmas.enabled ? (view.christmasPackages ?? []) : [];
   const roofline = bothOffered ? (view.roofline ?? null) : null;
   const customLines = view.customLines ?? [];
-  const heading = permanentOnly
-    ? "Permanent Lighting Proposal"
-    : seasonalOnly
-      ? "Seasonal Lighting Proposal"
-      : "Permanent vs. Seasonal Lighting";
-  const intro = permanentOnly
-    ? "A permanent lighting package designed for your home — installed once and ready year-round."
-    : seasonalOnly
-      ? "A seasonal lighting package designed for your home and this year’s display."
-      : "Two ways to light your home for the holidays — here’s what each costs and how they compare over time.";
+  const heading = legacyPreview
+    ? "Estimate preview"
+    : permanentOnly
+      ? "Permanent Lighting Proposal"
+      : seasonalOnly
+        ? "Seasonal Lighting Proposal"
+        : "Permanent vs. Seasonal Lighting";
+  const intro = legacyPreview
+    ? "This saved estimate shows pricing only. It is not an approval or payment request."
+    : permanentOnly
+      ? "A permanent lighting package designed for your home, installed once and ready year-round."
+      : seasonalOnly
+        ? "A seasonal lighting package designed for your home and this year’s display."
+        : "Two ways to light your home for the holidays, with pricing compared over time.";
   // Permanent wins the roofline-only comparison when paying every season costs
   // more over the horizon than installing once.
   const rooflineSavings = roofline && roofline.savings > 0 ? roofline.savings : 0;

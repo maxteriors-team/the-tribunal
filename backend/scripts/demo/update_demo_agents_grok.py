@@ -352,9 +352,7 @@ async def main() -> None:
 
     async with async_session() as session:
         for public_id, config in DEMO_AGENTS.items():
-            result = await session.execute(
-                select(Agent).where(Agent.public_id == public_id)
-            )
+            result = await session.execute(select(Agent).where(Agent.public_id == public_id))
             agent = result.scalar_one_or_none()
 
             if not agent:

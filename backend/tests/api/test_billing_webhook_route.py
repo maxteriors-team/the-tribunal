@@ -162,6 +162,45 @@ async def test_valid_signature_routes_in_call_payment_event(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "event_type", ["checkout.session.completed", "checkout.session.async_payment_succeeded"]
+)
+async def test_valid_signature_routes_permanent_proposal_payment(
+    monkeypatch: pytest.MonkeyPatch, event_type: str
+) -> None:
+    from app.services.payments import proposal_payment_service
+
+    monkeypatch.setattr(settings, "stripe_webhook_secret", TEST_WEBHOOK_SECRET)
+    handler = AsyncMock()
+    monkeypatch.setattr(
+        proposal_payment_service,
+        "handle_proposal_payment_checkout_session_completed",
+        handler,
+    )
+    session = {
+        "id": "cs_proposal_route",
+        "mode": "payment",
+        "payment_status": "paid",
+        "payment_intent": "pi_proposal_route",
+        "amount_total": 41700,
+        "currency": "usd",
+        "metadata": {
+            "kind": "permanent_proposal_payment",
+            "quote_id": str(uuid.uuid4()),
+            "workspace_id": str(uuid.uuid4()),
+            "proposal_payment_choice": "fifty_percent_down",
+        },
+    }
+    body = _event(event_type, session)
+
+    db = MagicMock()
+    response = await stripe_webhook(_make_request(body, _sign(body, TEST_WEBHOOK_SECRET)), db)
+
+    assert response == {"status": "ok"}
+    handler.assert_awaited_once_with(session, db)
+
+
+@pytest.mark.asyncio
 async def test_unhandled_event_type_is_acknowledged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

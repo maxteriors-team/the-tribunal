@@ -126,9 +126,7 @@ async def _run(
         total_chunks = 0
         for doc in documents:
             try:
-                result = await knowledge_ingestion_service.ingest_document(
-                    db, doc, force=force
-                )
+                result = await knowledge_ingestion_service.ingest_document(db, doc, force=force)
             except IngestionError as exc:
                 failed += 1
                 log_event(
@@ -167,9 +165,7 @@ def main() -> int:
     )
 
     workspace_id = uuid.UUID(args.workspace_id) if args.workspace_id else None
-    return asyncio.run(
-        _run(ctx, workspace_id=workspace_id, force=args.force, limit=args.limit)
-    )
+    return asyncio.run(_run(ctx, workspace_id=workspace_id, force=args.force, limit=args.limit))
 
 
 if __name__ == "__main__":

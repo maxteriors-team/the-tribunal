@@ -127,37 +127,37 @@ const workflowPayload = {
   type: "outbound_workflow",
   title: "Outbound growth workflow ready",
   summary:
-    "Drafted Batch Video Ads outreach, previewed contacts, launched after approval, and queued warm-lead handoff.",
+    "Drafted Spring Service Special outreach, previewed contacts, launched after approval, and queued warm-lead handoff.",
   offer: {
-    name: "Batch Video Ads",
-    headline: "Launch a month of scroll-stopping video ads in one batch",
+    name: "Spring Service Special",
+    headline: "Book your spring service before schedules fill",
   },
   segment: {
-    name: "Dormant ecommerce leads",
-    description: "Leads who asked about creative strategy but never booked",
+    name: "Dormant home-service leads",
+    description: "Leads who requested service details but never booked",
     contact_count: 2,
   },
   campaign: {
-    name: "Batch Video Ads → Dormant ecommerce leads",
+    name: "Spring Service Special → Dormant home-service leads",
     status: "running",
   },
   message_previews: [
     {
       channel: "sms",
       label: "Ava Rivera",
-      body: "Hi Ava, quick note — Launch a month of scroll-stopping video ads in one batch. Would you like me to help you claim your Batch Video Ads audit?",
+      body: "Hi Ava, quick note — Book your spring service before schedules fill. Would you like help scheduling?",
     },
     {
       channel: "sms",
       label: "Mia Rivera",
-      body: "Hi Mia, quick note — Launch a month of scroll-stopping video ads in one batch. Would you like me to help you claim your Batch Video Ads audit?",
+      body: "Hi Mia, quick note — Book your spring service before schedules fill. Would you like help scheduling?",
     },
   ],
   approval_label: "User approved start_campaign",
   approval_status: "approved",
   launch_status: "running",
   responder_agent: {
-    name: "Batch Video Ads Responder",
+    name: "Spring Service Special Responder",
     role: "Assigned to campaign conversations",
   },
   warm_lead_handoff: {
@@ -210,7 +210,7 @@ const growthConversation: AssistantConversationResponse = {
     {
       id: "msg_user",
       role: "user",
-      content: "Reach out to dormant ecommerce leads about Batch Video Ads.",
+      content: "Reach out to dormant home-service leads about Spring Service Special.",
       created_at: "2026-05-20T14:00:00Z",
     },
     {
@@ -267,7 +267,7 @@ describe("AssistantChat", () => {
     ).toBeInTheDocument();
   });
 
-  it("previews the Batch Video Ads happy path and streams the user's outreach request", async () => {
+  it("previews the Spring Service Special happy path and streams the user's outreach request", async () => {
     await emitStream([
       { type: "delta", text: "Queued" },
       {
@@ -280,14 +280,16 @@ describe("AssistantChat", () => {
     renderAssistant({ activeConversation: growthConversation });
 
     expect(screen.getByText("Outbound growth workflow ready")).toBeInTheDocument();
-    expect(screen.getByText("Batch Video Ads")).toBeInTheDocument();
-    expect(screen.getByText("Dormant ecommerce leads")).toBeInTheDocument();
+    expect(screen.getByText("Spring Service Special")).toBeInTheDocument();
+    expect(screen.getByText("Dormant home-service leads")).toBeInTheDocument();
     expect(screen.getByText("2 contacts matched")).toBeInTheDocument();
     expect(screen.getByText("Ava Rivera")).toBeInTheDocument();
     expect(screen.getByText(/Hi Ava, quick note/)).toBeInTheDocument();
     expect(screen.getByText("User approved start_campaign")).toBeInTheDocument();
-    expect(screen.getByText("Batch Video Ads → Dormant ecommerce leads")).toBeInTheDocument();
-    expect(screen.getByText("Batch Video Ads Responder")).toBeInTheDocument();
+    expect(
+      screen.getByText("Spring Service Special → Dormant home-service leads"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Spring Service Special Responder")).toBeInTheDocument();
     expect(screen.getByText("Warm-lead handoff created")).toBeInTheDocument();
     expect(screen.getByText(/opportunity was created for human follow-up/i)).toBeInTheDocument();
     expect(screen.getByText("Initial messages sent")).toBeInTheDocument();
@@ -296,7 +298,7 @@ describe("AssistantChat", () => {
 
     await userEvent.type(
       screen.getByPlaceholderText("Ask your CRM assistant…"),
-      "Please reach out to more Batch Video Ads leads",
+      "Please reach out to more Spring Service Special leads",
     );
     await userEvent.click(screen.getByRole("button", { name: "Send message" }));
 
@@ -305,7 +307,7 @@ describe("AssistantChat", () => {
         expect.objectContaining({
           workspaceId: "ws_growth",
           conversationId: "conv_growth",
-          message: "Please reach out to more Batch Video Ads leads",
+          message: "Please reach out to more Spring Service Special leads",
         }),
       );
     });

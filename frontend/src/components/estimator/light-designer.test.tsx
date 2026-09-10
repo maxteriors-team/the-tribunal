@@ -732,7 +732,7 @@ describe("LightDesigner", () => {
     const seasonalBtn = await screen.findByRole("button", {
       name: /Create seasonal quote/i,
     });
-    expect(screen.getByRole("button", { name: /Create permanent quote/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save draft quote" })).toBeInTheDocument();
 
     fireEvent.click(seasonalBtn);
 
@@ -788,7 +788,7 @@ describe("LightDesigner", () => {
     };
     renderEstimator("permanent", adapter);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Create permanent quote/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save draft quote" }));
 
     await waitFor(() => expect(flushBeforeProposal).toHaveBeenCalledOnce());
     expect(estimatorApi.createQuote).toHaveBeenCalledWith(
@@ -809,7 +809,7 @@ describe("LightDesigner", () => {
     );
   });
 
-  it("sends a permanent project to its linked customer profile", async () => {
+  it("lets a linked customer add a one-send email without changing their identity", async () => {
     const adapter: LandscapeProjectPersistenceAdapter = {
       initialDraft: {
         version: 2,
@@ -842,7 +842,6 @@ describe("LightDesigner", () => {
       projectName: "Pat permanent roofline",
       contactName: "Pat Lee",
       contactId: 42,
-      contactEmail: "pat@example.com",
       contactPhone: "+15551234567",
       flushBeforeProposal: vi.fn().mockResolvedValue(undefined),
       resetKey: 0,
@@ -850,23 +849,46 @@ describe("LightDesigner", () => {
     renderEstimator("permanent", adapter);
 
     const customerName = await screen.findByRole("combobox", { name: "Customer name" });
+    const customerEmail = screen.getByRole("textbox", { name: "Customer email" });
+    const customerPhone = screen.getByRole("textbox", { name: "Customer phone" });
     await waitFor(() => expect(customerName).toHaveValue("Pat Lee"));
-    expect(screen.getByRole("textbox", { name: "Customer email" })).toHaveValue("pat@example.com");
-    expect(screen.getByRole("textbox", { name: "Customer phone" })).toHaveValue("+15551234567");
     expect(customerName).toBeDisabled();
-    expect(screen.getByRole("textbox", { name: "Customer email" })).toBeDisabled();
-    expect(screen.getByRole("textbox", { name: "Customer phone" })).toBeDisabled();
+    expect(customerEmail).toBeEnabled();
+    expect(customerEmail).toHaveValue("");
+    expect(customerPhone).toBeEnabled();
+    expect(customerPhone).toHaveValue("+15551234567");
     expect(screen.getByRole("link", { name: "Pat Lee" })).toHaveAttribute("href", "/contacts/42");
+    expect(screen.getByText(/apply only to this quote/i)).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Email proposal" }));
+    const emailButton = screen.getByRole("button", { name: "Save & email client quote" });
+    expect(emailButton).toBeDisabled();
+    expect(screen.getByText(/enter a customer email to email this quote/i)).toBeVisible();
+
+    fireEvent.change(customerEmail, { target: { value: "delivery@example.com" } });
+    expect(emailButton).toBeEnabled();
+    expect(screen.queryByText(/enter a customer email to email this quote/i)).toBeNull();
+    fireEvent.click(emailButton);
 
     await waitFor(() =>
       expect(estimatorApi.createQuote).toHaveBeenCalledWith(
         "ws_1",
-        expect.objectContaining({ lighting_project_id: "permanent-project" }),
+        expect.objectContaining({
+          lighting_project_id: "permanent-project",
+          client_name: "Pat Lee",
+          client_email: "delivery@example.com",
+        }),
       ),
     );
-    expect(quotesApi.deliver).toHaveBeenCalledWith("ws_1", "quote-1", "email", "pat@example.com");
+    expect(quotesApi.deliver).toHaveBeenCalledWith(
+      "ws_1",
+      "quote-1",
+      "email",
+      "delivery@example.com",
+    );
+    expect(estimatorApi.share).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /save & share link only/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("sends the permanent proposal as a range when the rep switches it on", async () => {
@@ -908,15 +930,17 @@ describe("LightDesigner", () => {
     renderEstimator("permanent", adapter);
 
     fireEvent.click(await screen.findByRole("switch", { name: /Send as a price range/i }));
-    const createButton = await screen.findByRole("button", { name: /Create permanent quote/i });
+    const createButton = await screen.findByRole("button", { name: "Save draft quote" });
     expect(createButton).toBeDisabled();
     const highInput = screen.getByRole("spinbutton", { name: /Higher amount/i });
     expect(highInput).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText(/higher amount must exceed the lower quote amount/i)).toBeVisible();
 
     fireEvent.change(highInput, { target: { value: "3900" } });
     await waitFor(() => {
       expect(highInput).toHaveAttribute("aria-invalid", "false");
       expect(createButton).toBeEnabled();
+      expect(screen.queryByText(/higher amount must exceed the lower quote amount/i)).toBeNull();
     });
     fireEvent.click(createButton);
 
@@ -959,8 +983,9 @@ describe("LightDesigner", () => {
     };
     renderEstimator("permanent", adapter);
 
-    const createButton = await screen.findByRole("button", { name: /Create permanent quote/i });
+    const createButton = await screen.findByRole("button", { name: "Save draft quote" });
     await waitFor(() => expect(createButton).toBeDisabled());
+    expect(screen.getByText(/save a design on the selected photo/i)).toBeVisible();
     fireEvent.click(createButton);
     expect(flushBeforeProposal).not.toHaveBeenCalled();
     expect(estimatorApi.createQuote).not.toHaveBeenCalled();
@@ -1042,11 +1067,18 @@ describe("LightDesigner", () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
 
-    fireEvent.change(await screen.findByRole("spinbutton", { name: /Permanent quote deposit/i }), {
-      target: { value: "30" },
+    const depositInput = await screen.findByRole("spinbutton", {
+      name: /Permanent quote deposit/i,
     });
+    fireEvent.change(depositInput, { target: { value: "101" } });
+    expect(depositInput).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText(/enter a deposit from 0.01% to 100%/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save draft quote" })).toBeDisabled();
+
+    fireEvent.change(depositInput, { target: { value: "30" } });
+    expect(screen.queryByText(/enter a deposit from 0.01% to 100%/i)).toBeNull();
     expect(screen.getByText("$990.00 due when the customer approves.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Create permanent quote/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft quote" }));
 
     await waitFor(() =>
       expect(estimatorApi.createQuote).toHaveBeenCalledWith(
@@ -1073,17 +1105,19 @@ describe("LightDesigner", () => {
     await uploadPhoto(container);
     enableService(/^Permanent$/);
 
-    const emailBtn = screen.getByRole("button", { name: /Email proposal/i });
+    const emailBtn = screen.getByRole("button", { name: "Save & email client quote" });
     expect(emailBtn).toBeDisabled();
+    expect(screen.getByText(/enter a customer email to email this quote/i)).toBeVisible();
 
     fireEvent.change(screen.getByLabelText(/Customer email/i), {
       target: { value: "buyer@example.com" },
     });
     expect(emailBtn).toBeEnabled();
+    expect(screen.queryByText(/enter a customer email to email this quote/i)).toBeNull();
     expect(screen.getByText(/customer accepts it there/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Save & share link only/i })).toHaveTextContent(
-      /no approval or payment/i,
-    );
+    expect(
+      screen.queryByRole("button", { name: /save & share link only/i }),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(emailBtn);
 
@@ -1117,7 +1151,7 @@ describe("LightDesigner", () => {
     await uploadPhoto(container);
     enableService(/^Permanent$/);
 
-    const textBtn = screen.getByRole("button", { name: /Text proposal/i });
+    const textBtn = screen.getByRole("button", { name: "Save & text client quote" });
     expect(textBtn).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/Customer phone/i), {
@@ -1155,7 +1189,7 @@ describe("LightDesigner", () => {
     fireEvent.change(screen.getByLabelText(/Customer phone/i), {
       target: { value: "+15551234567" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Text proposal/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save & text client quote" }));
 
     expect(await screen.findByText(/add one under Settings/i)).toBeInTheDocument();
   });
@@ -1176,7 +1210,7 @@ describe("LightDesigner", () => {
       target: { value: "buyer@example.com" },
     });
 
-    const emailButton = screen.getByRole("button", { name: /Email proposal/i });
+    const emailButton = screen.getByRole("button", { name: "Save & email client quote" });
     fireEvent.click(emailButton);
     expect(await screen.findByText(/Provider unavailable/i)).toBeInTheDocument();
 
@@ -1296,7 +1330,7 @@ describe("LightDesigner", () => {
     fireEvent.change(screen.getByLabelText(/Customer email/i), {
       target: { value: "buyer@example.com" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Email proposal/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Save & email client quote" }));
     await waitFor(() =>
       expect(estimatorApi.createQuote).toHaveBeenCalledWith(
         "ws_1",
@@ -1394,15 +1428,17 @@ describe("LightDesigner", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Remove Bucket truck day/i }));
-    // The row is gone, so the next request (and the share) carries no add-on.
+    // The row is gone, so the permanent draft carries no add-on and creates no preview link.
     expect(screen.queryByDisplayValue("Bucket truck day")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Save & share link only/i }));
+    expect(screen.queryByRole("button", { name: /Save & share link only/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft quote" }));
     await waitFor(() =>
-      expect(estimatorApi.share).toHaveBeenCalledWith(
+      expect(estimatorApi.createQuote).toHaveBeenCalledWith(
         "ws_1",
-        expect.objectContaining({ custom_lines: [] }),
+        expect.objectContaining({ side: "permanent", custom_lines: [] }),
       ),
     );
+    expect(estimatorApi.share).not.toHaveBeenCalled();
   });
 
   it("adds line items on top of the selected package, not into it", async () => {
@@ -2390,8 +2426,8 @@ describe("LightDesigner", () => {
     expect(screen.queryByText(/Select and save an installation sheet/)).toBeNull();
   });
 
-  it("can share and quote a line item with nothing drawn on the photo", async () => {
-    // The standalone case: no roofline, no decor — just the rep's own line.
+  it("quotes a standalone permanent line and keeps sharing for comparisons", async () => {
+    // The standalone case: no roofline, no decor, just the rep's own line.
     vi.mocked(designToEstimateInputs).mockReturnValue({
       feet: 0,
       christmas_items: {},
@@ -2401,18 +2437,32 @@ describe("LightDesigner", () => {
     const { container } = renderEstimator();
     await uploadPhoto(container);
     enableService(/^Permanent$/);
-
-    const share = () => screen.getByRole("button", { name: /Save & share link only/i });
-    expect(share()).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Save & share link only/i })).toBeNull();
 
     await fillLineItem("Consultation", "75");
 
-    await waitFor(() => expect(share()).toBeEnabled());
-    fireEvent.click(share());
+    const saveDraft = await screen.findByRole("button", { name: "Save draft quote" });
+    await waitFor(() => expect(saveDraft).toBeEnabled());
+    fireEvent.click(saveDraft);
+    await waitFor(() =>
+      expect(estimatorApi.createQuote).toHaveBeenCalledWith(
+        "ws_1",
+        expect.objectContaining({
+          side: "permanent",
+          custom_lines: [expect.objectContaining({ label: "Consultation" })],
+        }),
+      ),
+    );
+
+    enableService(/^Christmas$/);
+    const share = await screen.findByRole("button", { name: /Save & share link only/i });
+    await waitFor(() => expect(share).toBeEnabled());
+    fireEvent.click(share);
     await waitFor(() =>
       expect(estimatorApi.share).toHaveBeenCalledWith(
         "ws_1",
         expect.objectContaining({
+          proposal_side: "comparison",
           custom_lines: [expect.objectContaining({ label: "Consultation" })],
         }),
       ),

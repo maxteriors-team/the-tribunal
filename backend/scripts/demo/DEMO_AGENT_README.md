@@ -127,23 +127,23 @@ asyncio.run(check())
 
 ## Configuration Reference
 
-Current demo agent config (from `.env`):
+Example demo configuration:
 ```
-DEMO_WORKSPACE_ID=ba0e0e99-c7c9-45ec-9625-567d54d6e9c2
-DEMO_AGENT_ID=5bba3103-f3e0-4eb8-bec0-5423bf4051d4
-DEMO_FROM_PHONE_NUMBER=+12485309314
+DEMO_WORKSPACE_ID='<workspace UUID>'
+DEMO_AGENT_ID='<active demo-agent UUID>'
+DEMO_FROM_PHONE_NUMBER='<dedicated demo number>'
 ```
 
 ## Environment Variables Setup
 
 Ensure Railway has these variables set:
 ```bash
-# Check variables
-railway variables
+# Check variable names without printing secret values
+railway variables --json | jq -r 'keys[]'
 
-# Set if missing (usually already configured)
-railway variables set DEMO_WORKSPACE_ID=ba0e0e99-c7c9-45ec-9625-567d54d6e9c2
-railway variables set DEMO_AGENT_ID=5bba3103-f3e0-4eb8-bec0-5423bf4051d4
+# Set explicit demo resources when enabling the demo
+railway variables set DEMO_WORKSPACE_ID='<workspace UUID>'
+railway variables set DEMO_AGENT_ID='<active demo-agent UUID>'
 ```
 
 ## Troubleshooting

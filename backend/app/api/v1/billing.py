@@ -376,7 +376,10 @@ async def stripe_webhook(request: Request, db: DB) -> dict[str, str]:
 
     logger.info("stripe_webhook_received", event_type=event_type)
 
-    if event_type == "checkout.session.completed":
+    if event_type in {
+        "checkout.session.completed",
+        "checkout.session.async_payment_succeeded",
+    }:
         await _handle_checkout_completed(event_data, db)
     elif event_type == "customer.subscription.deleted":
         await _handle_subscription_deleted(event_data, db)
@@ -398,6 +401,13 @@ async def _handle_checkout_completed(session: dict[str, Any], db: DB) -> None:
     subscription path so they mark a :class:`CallPayment` paid + notify operators.
     """
     metadata = session.get("metadata") or {}
+    if metadata.get("kind") == "permanent_proposal_payment":
+        from app.services.payments.proposal_payment_service import (
+            handle_proposal_payment_checkout_session_completed,
+        )
+
+        await handle_proposal_payment_checkout_session_completed(session, db)
+        return
     # Customer-invoice payments also run in ``payment`` mode, so route them by
     # their ``invoice_id`` metadata *before* the in-call-payment check below.
     if metadata.get("invoice_id"):
@@ -407,9 +417,10 @@ async def _handle_checkout_completed(session: dict[str, Any], db: DB) -> None:
 
         await handle_invoice_checkout_session_completed(session, db)
         return
-    # Public-proposal deposits also run in ``payment`` mode; route them by their
-    # ``quote_id`` metadata before the generic in-call-payment branch below.
-    if metadata.get("quote_id"):
+    # Public-proposal deposits retain their existing checkout path.
+    if metadata.get("kind") == "quote_deposit" or (
+        metadata.get("quote_id") and not metadata.get("kind")
+    ):
         from app.services.payments.quote_deposit_service import (
             handle_deposit_checkout_session_completed,
         )

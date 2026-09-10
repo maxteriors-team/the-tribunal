@@ -6,7 +6,7 @@ The app has two overlapping layout issues that explain “random pages” losing
 - `frontend/src/components/layout/app-sidebar.tsx:523` locks the shell content with `<SidebarInset className="h-svh overflow-hidden">`, and `frontend/src/components/layout/app-sidebar.tsx:572` locks the inner content with `<main className="flex-1 min-h-0 overflow-hidden">`. Any route that does not explicitly create its own `h-full overflow-y-auto` or `ScrollArea` becomes clipped with no page scrollbar. Examples found include `DashboardPage`, `AgentsList` through `ResourceListLayout`, `CampaignsList`, `ExperimentsList`, `CallsList`, `SettingsPage`, `OffersPage`, `LeadMagnetsPage`, `BillingContent`, `RealtorDashboardContent`, `SuggestionsPage`, and `AutomationsPage`.
 - Several authenticated app routes are not using the app shell at all, so the side nav/header disappears. Confirmed missing shell: `frontend/src/app/agents/[id]/page.tsx`, `frontend/src/app/pending-actions/page.tsx`, `frontend/src/app/voice-test/page.tsx`, and `frontend/src/app/lead-magnets/new/page.tsx`.
 
-The durable fix is to make the app shell provide the default themed scroll container, keep explicit full-height pages intact, centralize navigation so sidebar and command palette stop drifting, and theme every scrollbar path to match the PRESTYJ light/dark design.
+The durable fix is to make the app shell provide the default themed scroll container, keep explicit full-height pages intact, centralize navigation so sidebar and command palette stop drifting, and theme every scrollbar path to match the product's light/dark design.
 
 ## Audit findings
 

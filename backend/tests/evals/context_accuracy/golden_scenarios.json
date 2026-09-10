@@ -401,7 +401,7 @@
     "risk": "high",
     "redacted_turn": "End [CALL_A] and suppress follow-up.",
     "context_sources": [{"source_id": "src:consent:call-a", "freshness": "fresh", "fact_ids": ["fact:consent:call-a"], "claim_ids": []}],
-    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["record_opt_out:all", "end_call:opt-out"], "allowed_actions": [], "forbidden_actions": ["send_application_link:any"], "handoff": false}
+    "expected": {"fact_ids": [], "supported_claim_ids": [], "stale_source_ids": [], "required_actions": ["record_opt_out:all", "end_call:opt-out"], "allowed_actions": [], "forbidden_actions": ["send_sms:any"], "handoff": false}
   },
   {
     "scenario_id": "optout-crm-01",

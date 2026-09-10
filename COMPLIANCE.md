@@ -1046,3 +1046,35 @@ Scope: newly snapshotted exact Permanent Lighting proposals show one contracted 
 ### Verification boundary
 
 Focused source and automated tests cover server-owned pricing, approval payloads, data separation, role hiding, keyboard-operable native radio choices, fixed disclosure, and `$5,200` scenario math (`~$217/month`, `$793` merchant fee, `$364` commission). A fresh-database upgrade/downgrade/upgrade preserved an existing quote row, and local HTTP probes exercised public redaction, Permanent/non-Permanent behavior, authorization denial, required selection, idempotent retry, and immutable approval choice. Full local CI passed on 2026-09-03; assistive-technology review, provider documentation, production configuration, and a real GreenSky application remain unverified.
+
+## Focused addendum — Permanent Lighting hosted payment choices (2026-09-04)
+
+Snapshot: 4 September 2026 · Reviewed by: EZ Coder compliance-guard · **NOT LEGAL ADVICE**
+
+Scope: public Permanent Lighting proposals present financing as an informational estimate, while 50% down and pay in full are the only approval choices. Either accepted card schedule continues to hosted Stripe Checkout. Existing quote deposit terms, legacy deposit records, non-Permanent proposals, and private pricing economics remain separate and unchanged. This addendum supersedes the 3 September addendum only where it described financing or cash/check as the public customer’s approval choice.
+
+| ID | Severity | Trigger | Evidence | Obligation | Status | Guard |
+|---|---|---|---|---|---|---|
+| PPP-001 | BLOCKER | A public customer or stale client could choose financing or submit a payment amount | CODE + RUNTIME/tests: the request allowlist accepts only `fifty_percent_down` or `pay_in_full`; the locked server transaction calculates and persists the currency-rounded amount from the accepted proposal total | Keep pricing and approval truth server-owned; reject missing, unknown, financing, and changed choices | Fixed locally | Database checks, locked approval tests, generated request contract, and both browser approval flows |
+| PPP-002 | BLOCKER | A forged, stale, or mismatched Checkout Session could falsely mark the proposal paid | CODE + RUNTIME/tests: signed webhook and return reconciliation require the stored Session ID, quote/workspace metadata, payment mode/status, exact amount, currency, and successful PaymentIntent before the first paid transition | Treat provider-confirmed, matching evidence as the only online-payment authority and make retries idempotent | Fixed locally | Mismatch matrix, atomic conditional update, dedicated metadata kind, and separate legacy routing |
+| PPP-003 | HIGH | Payment copy could misstate whether the customer paid a deposit or the full proposal | CODE + tests: receipts and operator alerts name 50% down versus payment in full; pay-in-full is never labelled a deposit; paid 50% state retains the completion balance | State the selected schedule, amount due now, and remaining balance accurately | Fixed locally | Renderer, component, approval, retry, and paid-state regressions |
+| PPP-004 | MEDIUM | Financing display could imply approval or expose unreviewed provider claims | RUNTIME/tests: financing has no input or selected state and displays only the monthly estimate, term, and generic credit-approval disclosure; provider, plan, and APR copy are absent | Keep financing informational and outside proposal approval/payment records | Fixed locally | Native-radio count, payload assertions, no-provider-copy checks, and desktop/mobile axe runs |
+| PPP-005 | LAWYER | Public proposal acceptance and card payment may form a consumer contract | DEDUCED: hosted checkout, immutable amount evidence, and accurate engineering labels do not establish legally sufficient cancellation, refund, tax, contract, withdrawal, or credit-advertising terms | Review the deployed proposal, checkout, policies, and operating jurisdictions before legal reliance | Open | Counsel review of actual customer copy, policies, and jurisdictions served |
+
+### Implemented controls
+
+- The undecided proposal shows only the monthly estimate, exact 50%-down amount, and exact pay-in-full amount; it states that the remaining balance is due at completion while durable records and receipts retain the exact balance.
+- Card entry stays on Stripe-hosted Checkout; Tribunal stores only the accepted choice/amount plus Session, PaymentIntent, and paid timestamp evidence.
+- The browser never sends money. Package selection, proposal-version validation, amount calculation, choice persistence, and approval commit under the same quote lock.
+- A cancelled or delayed Checkout leaves the immutable accepted amount available for retry; return reconciliation applies the same checks as the signed webhook.
+- Comparison links remain read-only, and non-Permanent/legacy deposit flows retain their existing endpoints and records.
+
+### Needs counsel / residual review
+
+- Review cancellation, refund, tax, contract-capacity, and contract wording for every jurisdiction served.
+- If the informational financing estimate remains customer-facing, confirm its required credit-advertising wording and approval process with current provider materials and qualified counsel.
+- This engineering evidence does not certify legal compliance, provider approval, tax treatment, accessibility for every assistive technology, or a real Stripe settlement.
+
+### Verification boundary
+
+Local automated evidence covers both exact Checkout amounts, hostile mismatch rejection, idempotent approval choice, receipt wording, retry/paid states, desktop/mobile overflow, and WCAG-tagged axe scans. No real Stripe charge, refund, tax calculation, customer acceptance, provider-copy approval, screen-reader session, or legal review was performed.
