@@ -4086,7 +4086,7 @@ export interface paths {
         };
         /**
          * Get Contact Stats
-         * @description Return aggregate contact metrics for the Contacts page stat cards.
+         * @description Return workspace-wide creation cohorts (not conversion-time metrics).
          */
         get: operations["get_contact_stats_api_v1_workspaces__workspace_id__contacts_stats_get"];
         put?: never;
@@ -10067,11 +10067,7 @@ export interface paths {
         put?: never;
         /**
          * Create Run
-         * @description Start a rehearsal.
-         *
-         *     For ``rehearsee == "ai"`` the full conversation is simulated and scored
-         *     inline before responding. For ``rehearsee == "human"`` the run is returned
-         *     with the prospect's opening line so a rep can reply via ``/runs/{id}/turn``.
+         * @description Durably accept a rehearsal. Poll GET /runs/{id}; retries reuse the request key.
          */
         post: operations["create_run_api_v1_workspaces__workspace_id__roleplay_runs_post"];
         delete?: never;
@@ -10104,6 +10100,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Run
+         * @description Explicitly retry the observed failed step, not saved dialogue or a later attempt.
+         */
+        post: operations["retry_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/score": {
         parameters: {
             query?: never;
@@ -10115,7 +10131,7 @@ export interface paths {
         put?: never;
         /**
          * Score Run
-         * @description Score a rehearsal and finalize the report.
+         * @description Queue scoring once; poll the existing run for the result.
          */
         post: operations["score_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__score_post"];
         delete?: never;
@@ -10135,7 +10151,7 @@ export interface paths {
         put?: never;
         /**
          * Advance Human Turn
-         * @description Submit a human rep's reply and get the prospect's response.
+         * @description Save a human reply once and queue the prospect's response.
          */
         post: operations["advance_human_turn_api_v1_workspaces__workspace_id__roleplay_runs__run_id__turn_post"];
         delete?: never;
@@ -14913,7 +14929,7 @@ export interface components {
          *     - ``"user"``: the operator's own phone rings first, then the contact is
          *       dialed and the two legs are bridged. ``agent_id`` is ignored.
          *       ``user_phone_number`` picks which allowlisted number to ring.
-         *     - ``"browser"``: the operator's authenticated Tribunal browser rings first;
+         *     - ``"browser"``: the operator's authenticated BEAM browser rings first;
          *       the server then dials and bridges the contact. Client-supplied SIP targets
          *       are never accepted.
          */
@@ -16916,7 +16932,7 @@ export interface components {
         };
         /**
          * ContactListResponse
-         * @description Schema for paginated contact list.
+         * @description Schema for paginated contact list with status facets over the whole scope.
          */
         ContactListResponse: {
             /** Items */
@@ -16927,6 +16943,7 @@ export interface components {
             page_size: number;
             /** Pages */
             pages: number;
+            status_counts: components["schemas"]["ContactStatusCounts"];
             /** Total */
             total: number;
         };
@@ -17070,23 +17087,76 @@ export interface components {
         };
         /**
          * ContactStatsResponse
-         * @description Aggregate contact metrics for the Contacts page stat cards.
+         * @description Workspace-wide creation cohorts, independent of list search/filters.
          *
-         *     Windows are workspace-scoped and computed in UTC. ``*_change`` values are
-         *     returned preformatted (e.g. ``"+24%"``, ``"-10%"``, ``"+0%"``) so the
-         *     frontend ``isTrendUp`` helper can render the trend badge without reparsing.
+         *     Conversion events are unavailable: ``new_clients_*`` are legacy field names
+         *     for contacts CREATED in the window and CURRENTLY converted, not clients
+         *     converted during the window. Reversions change these snapshots; reconversion
+         *     history cannot be inferred. Change is null whenever the prior cohort is zero.
          */
         ContactStatsResponse: {
-            /** New Clients 30D */
+            /**
+             * Client Metric Basis
+             * @constant
+             */
+            client_metric_basis: "creation_cohort_current_status";
+            /**
+             * New Clients 30D
+             * @description Currently converted contacts created in the trailing 30-day window.
+             */
             new_clients_30d: number;
-            /** New Clients Change */
-            new_clients_change: string;
+            /**
+             * New Clients Change
+             * @description Creation-cohort change, not conversion growth; null with a zero baseline.
+             */
+            new_clients_change: string | null;
             /** New Leads 30D */
             new_leads_30d: number;
             /** New Leads Change */
-            new_leads_change: string;
-            /** Total New Clients Ytd */
+            new_leads_change: string | null;
+            /**
+             * Period End
+             * Format: date-time
+             * @description Exclusive end (as-of instant) of all current windows.
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             * @description Inclusive start of the trailing 30 elapsed days.
+             */
+            period_start: string;
+            /** Timezone */
+            timezone: string;
+            /**
+             * Total New Clients Ytd
+             * @description Currently converted contacts created since workspace-local January 1.
+             */
             total_new_clients_ytd: number;
+            /**
+             * Year Start
+             * Format: date-time
+             * @description Workspace-local January 1, expressed in UTC.
+             */
+            year_start: string;
+        };
+        /**
+         * ContactStatusCounts
+         * @description Unpaginated search/advanced-filter scope, excluding the selected status tab.
+         */
+        ContactStatusCounts: {
+            /** All */
+            all: number;
+            /** Contacted */
+            contacted: number;
+            /** Converted */
+            converted: number;
+            /** Lost */
+            lost: number;
+            /** New */
+            new: number;
+            /** Qualified */
+            qualified: number;
         };
         /**
          * ContactSummary
@@ -17510,7 +17580,12 @@ export interface components {
              */
             agent_id: string;
             /** Channel */
-            channel?: string | null;
+            channel?: ("sms" | "voice") | null;
+            /**
+             * Idempotency Key
+             * Format: uuid
+             */
+            idempotency_key: string;
             /**
              * Max Turns
              * @default 6
@@ -17524,8 +17599,9 @@ export interface components {
             /**
              * Rehearsee
              * @default ai
+             * @enum {string}
              */
-            rehearsee: string;
+            rehearsee: "ai" | "human";
         };
         /**
          * CrewCreate
@@ -19520,6 +19596,8 @@ export interface components {
          * @description A human rep's reply during a live rehearsal.
          */
         HumanTurnRequest: {
+            /** Expected Turn Count */
+            expected_turn_count: number;
             /** Message */
             message: string;
         };
@@ -21335,14 +21413,15 @@ export interface components {
          * JobPnLSummary
          * @description Aggregate job profitability over a period.
          *
-         *     Revenue is the sum of the distinct invoices linked to the jobs in range
-         *     (so two jobs sharing one invoice are not double-counted); cost is tracked
-         *     labor (hours x rate) plus logged expenses plus materials consumed.
+         *     Revenue includes linked sent/partial/paid/overdue invoice totals, counted
+         *     once per invoice. Draft/void invoices contribute zero. Billable count is
+         *     jobs with a same-workspace invoice of any status, not distinct invoices.
+         *     All jobs contribute tracked labor, logged expenses, and consumed materials.
          */
         JobPnLSummary: {
             /**
              * Billable Job Count
-             * @description Jobs with a linked invoice
+             * @description Jobs with a linked same-workspace invoice of any status, including draft/void; each job counts even when multiple jobs share an invoice
              */
             billable_job_count: number;
             /** Currency */
@@ -21372,7 +21451,10 @@ export interface components {
             material_cost: number;
             /** Profit */
             profit: number;
-            /** Revenue */
+            /**
+             * Revenue
+             * @description Total of linked sent/partial/paid/overdue invoices, counted once per invoice; draft and void invoices contribute zero, regardless of payments
+             */
             revenue: number;
             /** Total Cost */
             total_cost: number;
@@ -30452,6 +30534,11 @@ export interface components {
             agent_id: string | null;
             /** Agent Name */
             agent_name: string | null;
+            /**
+             * Attempt Count
+             * @default 0
+             */
+            attempt_count: number;
             /** Booking Attempted */
             booking_attempted: boolean | null;
             /** Channel */
@@ -30478,12 +30565,19 @@ export interface components {
             objection_coverage: number | null;
             /** Overall Score */
             overall_score: number | null;
+            /** Pending Action */
+            pending_action?: string | null;
             /** Persona Id */
             persona_id: string | null;
             /** Persona Name */
             persona_name: string | null;
             /** Rehearsee */
             rehearsee: string;
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
             /** Scores */
             scores: {
                 [key: string]: unknown;
@@ -30520,6 +30614,11 @@ export interface components {
             agent_id: string | null;
             /** Agent Name */
             agent_name: string | null;
+            /**
+             * Attempt Count
+             * @default 0
+             */
+            attempt_count: number;
             /** Booking Attempted */
             booking_attempted: boolean | null;
             /** Channel */
@@ -30540,12 +30639,19 @@ export interface components {
             objection_coverage: number | null;
             /** Overall Score */
             overall_score: number | null;
+            /** Pending Action */
+            pending_action?: string | null;
             /** Persona Id */
             persona_id: string | null;
             /** Persona Name */
             persona_name: string | null;
             /** Rehearsee */
             rehearsee: string;
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
             /** Status */
             status: string;
             /** Tone Score */
@@ -30765,6 +30871,14 @@ export interface components {
              * @default 0
              */
             total_reviews: number;
+        };
+        /**
+         * RetryRehearsalRequest
+         * @description Retry only the failure the caller observed, not a later failed attempt.
+         */
+        RetryRehearsalRequest: {
+            /** Expected Attempt Count */
+            expected_attempt_count: number;
         };
         /**
          * RevealEmailResponse
@@ -43823,6 +43937,8 @@ export interface operations {
                 channel_filter?: string | null;
                 unread_only?: boolean;
                 search?: string | null;
+                /** @description Exact contact ID within this workspace */
+                contact_id?: number | null;
             };
             header?: never;
             path: {
@@ -55655,7 +55771,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -55736,6 +55852,42 @@ export interface operations {
             };
         };
     };
+    retry_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryRehearsalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     score_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__score_post: {
         parameters: {
             query?: never;
@@ -55749,7 +55901,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -55785,7 +55937,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

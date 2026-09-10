@@ -8180,7 +8180,7 @@
         "type": "object"
       },
       "CallCreate": {
-        "description": "Request to initiate a call.\n\n``mode`` decides who actually talks to the contact:\n\n- ``\"ai\"`` (default): a voice agent handles the call. ``agent_id`` selects\n  it; when omitted the conversation's assigned agent or the workspace\n  default voice agent is used. A call with no resolvable agent is rejected\n  rather than dialing the contact into silence.\n- ``\"user\"``: the operator's own phone rings first, then the contact is\n  dialed and the two legs are bridged. ``agent_id`` is ignored.\n  ``user_phone_number`` picks which allowlisted number to ring.\n- ``\"browser\"``: the operator's authenticated Tribunal browser rings first;\n  the server then dials and bridges the contact. Client-supplied SIP targets\n  are never accepted.",
+        "description": "Request to initiate a call.\n\n``mode`` decides who actually talks to the contact:\n\n- ``\"ai\"`` (default): a voice agent handles the call. ``agent_id`` selects\n  it; when omitted the conversation's assigned agent or the workspace\n  default voice agent is used. A call with no resolvable agent is rejected\n  rather than dialing the contact into silence.\n- ``\"user\"``: the operator's own phone rings first, then the contact is\n  dialed and the two legs are bridged. ``agent_id`` is ignored.\n  ``user_phone_number`` picks which allowlisted number to ring.\n- ``\"browser\"``: the operator's authenticated BEAM browser rings first;\n  the server then dials and bridges the contact. Client-supplied SIP targets\n  are never accepted.",
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -13158,7 +13158,7 @@
         "type": "object"
       },
       "ContactListResponse": {
-        "description": "Schema for paginated contact list.",
+        "description": "Schema for paginated contact list with status facets over the whole scope.",
         "properties": {
           "items": {
             "items": {
@@ -13179,6 +13179,9 @@
             "title": "Pages",
             "type": "integer"
           },
+          "status_counts": {
+            "$ref": "#/components/schemas/ContactStatusCounts"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -13189,7 +13192,8 @@
           "total",
           "page",
           "page_size",
-          "pages"
+          "pages",
+          "status_counts"
         ],
         "title": "ContactListResponse",
         "type": "object"
@@ -13771,27 +13775,71 @@
         "type": "object"
       },
       "ContactStatsResponse": {
-        "description": "Aggregate contact metrics for the Contacts page stat cards.\n\nWindows are workspace-scoped and computed in UTC. ``*_change`` values are\nreturned preformatted (e.g. ``\"+24%\"``, ``\"-10%\"``, ``\"+0%\"``) so the\nfrontend ``isTrendUp`` helper can render the trend badge without reparsing.",
+        "description": "Workspace-wide creation cohorts, independent of list search/filters.\n\nConversion events are unavailable: ``new_clients_*`` are legacy field names\nfor contacts CREATED in the window and CURRENTLY converted, not clients\nconverted during the window. Reversions change these snapshots; reconversion\nhistory cannot be inferred. Change is null whenever the prior cohort is zero.",
         "properties": {
+          "client_metric_basis": {
+            "const": "creation_cohort_current_status",
+            "title": "Client Metric Basis",
+            "type": "string"
+          },
           "new_clients_30d": {
+            "description": "Currently converted contacts created in the trailing 30-day window.",
             "title": "New Clients 30D",
             "type": "integer"
           },
           "new_clients_change": {
-            "title": "New Clients Change",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Creation-cohort change, not conversion growth; null with a zero baseline.",
+            "title": "New Clients Change"
           },
           "new_leads_30d": {
             "title": "New Leads 30D",
             "type": "integer"
           },
           "new_leads_change": {
-            "title": "New Leads Change",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Leads Change"
+          },
+          "period_end": {
+            "description": "Exclusive end (as-of instant) of all current windows.",
+            "format": "date-time",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "description": "Inclusive start of the trailing 30 elapsed days.",
+            "format": "date-time",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
             "type": "string"
           },
           "total_new_clients_ytd": {
+            "description": "Currently converted contacts created since workspace-local January 1.",
             "title": "Total New Clients Ytd",
             "type": "integer"
+          },
+          "year_start": {
+            "description": "Workspace-local January 1, expressed in UTC.",
+            "format": "date-time",
+            "title": "Year Start",
+            "type": "string"
           }
         },
         "required": [
@@ -13799,9 +13847,53 @@
           "new_leads_change",
           "new_clients_30d",
           "new_clients_change",
-          "total_new_clients_ytd"
+          "total_new_clients_ytd",
+          "client_metric_basis",
+          "period_start",
+          "period_end",
+          "year_start",
+          "timezone"
         ],
         "title": "ContactStatsResponse",
+        "type": "object"
+      },
+      "ContactStatusCounts": {
+        "description": "Unpaginated search/advanced-filter scope, excluding the selected status tab.",
+        "properties": {
+          "all": {
+            "title": "All",
+            "type": "integer"
+          },
+          "contacted": {
+            "title": "Contacted",
+            "type": "integer"
+          },
+          "converted": {
+            "title": "Converted",
+            "type": "integer"
+          },
+          "lost": {
+            "title": "Lost",
+            "type": "integer"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          },
+          "qualified": {
+            "title": "Qualified",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "all",
+          "new",
+          "contacted",
+          "qualified",
+          "converted",
+          "lost"
+        ],
+        "title": "ContactStatusCounts",
         "type": "object"
       },
       "ContactSummary": {
@@ -15390,6 +15482,10 @@
           "channel": {
             "anyOf": [
               {
+                "enum": [
+                  "sms",
+                  "voice"
+                ],
                 "type": "string"
               },
               {
@@ -15397,6 +15493,11 @@
               }
             ],
             "title": "Channel"
+          },
+          "idempotency_key": {
+            "format": "uuid",
+            "title": "Idempotency Key",
+            "type": "string"
           },
           "max_turns": {
             "default": 6,
@@ -15412,11 +15513,16 @@
           },
           "rehearsee": {
             "default": "ai",
+            "enum": [
+              "ai",
+              "human"
+            ],
             "title": "Rehearsee",
             "type": "string"
           }
         },
         "required": [
+          "idempotency_key",
           "agent_id",
           "persona_id"
         ],
@@ -20165,14 +20271,22 @@
       "HumanTurnRequest": {
         "description": "A human rep's reply during a live rehearsal.",
         "properties": {
+          "expected_turn_count": {
+            "maximum": 25.0,
+            "minimum": 1.0,
+            "title": "Expected Turn Count",
+            "type": "integer"
+          },
           "message": {
+            "maxLength": 4000,
             "minLength": 1,
             "title": "Message",
             "type": "string"
           }
         },
         "required": [
-          "message"
+          "message",
+          "expected_turn_count"
         ],
         "title": "HumanTurnRequest",
         "type": "object"
@@ -24535,10 +24649,10 @@
         "type": "object"
       },
       "JobPnLSummary": {
-        "description": "Aggregate job profitability over a period.\n\nRevenue is the sum of the distinct invoices linked to the jobs in range\n(so two jobs sharing one invoice are not double-counted); cost is tracked\nlabor (hours x rate) plus logged expenses plus materials consumed.",
+        "description": "Aggregate job profitability over a period.\n\nRevenue includes linked sent/partial/paid/overdue invoice totals, counted\nonce per invoice. Draft/void invoices contribute zero. Billable count is\njobs with a same-workspace invoice of any status, not distinct invoices.\nAll jobs contribute tracked labor, logged expenses, and consumed materials.",
         "properties": {
           "billable_job_count": {
-            "description": "Jobs with a linked invoice",
+            "description": "Jobs with a linked same-workspace invoice of any status, including draft/void; each job counts even when multiple jobs share an invoice",
             "title": "Billable Job Count",
             "type": "integer"
           },
@@ -24605,6 +24719,7 @@
             "type": "number"
           },
           "revenue": {
+            "description": "Total of linked sent/partial/paid/overdue invoices, counted once per invoice; draft and void invoices contribute zero, regardless of payments",
             "title": "Revenue",
             "type": "number"
           },
@@ -49370,6 +49485,11 @@
             ],
             "title": "Agent Name"
           },
+          "attempt_count": {
+            "default": 0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
           "booking_attempted": {
             "anyOf": [
               {
@@ -49451,6 +49571,17 @@
             ],
             "title": "Overall Score"
           },
+          "pending_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Action"
+          },
           "persona_id": {
             "anyOf": [
               {
@@ -49477,6 +49608,11 @@
           "rehearsee": {
             "title": "Rehearsee",
             "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
           },
           "scores": {
             "additionalProperties": true,
@@ -49596,6 +49732,11 @@
             ],
             "title": "Agent Name"
           },
+          "attempt_count": {
+            "default": 0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
           "booking_attempted": {
             "anyOf": [
               {
@@ -49655,6 +49796,17 @@
             ],
             "title": "Overall Score"
           },
+          "pending_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Action"
+          },
           "persona_id": {
             "anyOf": [
               {
@@ -49681,6 +49833,11 @@
           "rehearsee": {
             "title": "Rehearsee",
             "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -50159,6 +50316,21 @@
           }
         },
         "title": "ReputationSummary",
+        "type": "object"
+      },
+      "RetryRehearsalRequest": {
+        "description": "Retry only the failure the caller observed, not a later failed attempt.",
+        "properties": {
+          "expected_attempt_count": {
+            "minimum": 0.0,
+            "title": "Expected Attempt Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_attempt_count"
+        ],
+        "title": "RetryRehearsalRequest",
         "type": "object"
       },
       "RevealEmailResponse": {
@@ -74828,7 +75000,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/contacts/stats": {
       "get": {
-        "description": "Return aggregate contact metrics for the Contacts page stat cards.",
+        "description": "Return workspace-wide creation cohorts (not conversion-time metrics).",
         "operationId": "get_contact_stats_api_v1_workspaces__workspace_id__contacts_stats_get",
         "parameters": [
           {
@@ -76385,6 +76557,26 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "description": "Exact contact ID within this workspace",
+            "in": "query",
+            "name": "contact_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 9223372036854775807,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact contact ID within this workspace",
+              "title": "Contact Id"
             }
           }
         ],
@@ -99578,7 +99770,7 @@
         ]
       },
       "post": {
-        "description": "Start a rehearsal.\n\nFor ``rehearsee == \"ai\"`` the full conversation is simulated and scored\ninline before responding. For ``rehearsee == \"human\"`` the run is returned\nwith the prospect's opening line so a rep can reply via ``/runs/{id}/turn``.",
+        "description": "Durably accept a rehearsal. Poll GET /runs/{id}; retries reuse the request key.",
         "operationId": "create_run_api_v1_workspaces__workspace_id__roleplay_runs_post",
         "parameters": [
           {
@@ -99603,7 +99795,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -99744,9 +99936,78 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/retry": {
+      "post": {
+        "description": "Explicitly retry the observed failed step, not saved dialogue or a later attempt.",
+        "operationId": "retry_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryRehearsalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RehearsalRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Retry Run",
+        "tags": [
+          "Practice Arena"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/score": {
       "post": {
-        "description": "Score a rehearsal and finalize the report.",
+        "description": "Queue scoring once; poll the existing run for the result.",
         "operationId": "score_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__score_post",
         "parameters": [
           {
@@ -99771,7 +100032,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -99805,7 +100066,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/turn": {
       "post": {
-        "description": "Submit a human rep's reply and get the prospect's response.",
+        "description": "Save a human reply once and queue the prospect's response.",
         "operationId": "advance_human_turn_api_v1_workspaces__workspace_id__roleplay_runs__run_id__turn_post",
         "parameters": [
           {
@@ -99840,7 +100101,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
