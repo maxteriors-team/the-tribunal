@@ -600,7 +600,7 @@ async def convert_quote(
             workspace_id=workspace_id,
             notification_type="job_assignment",
             title="Landscape installation assigned",
-            body="Your installation plan is available in Tribunal.",
+            body="Your installation plan is available in BEAM.",
             data={
                 "type": "job_assignment",
                 "jobId": str(result.job_id),
@@ -609,7 +609,7 @@ async def convert_quote(
             channel_id="jobs",
             email_subject="Landscape installation assigned",
             email_heading="Installation assignment",
-            email_intro="Your installation plan is available in Tribunal.",
+            email_intro="Your installation plan is available in BEAM.",
             email_details={
                 "Scheduled": payload.scheduled_start.astimezone(UTC).strftime(
                     "%b %d, %Y at %I:%M %p UTC"

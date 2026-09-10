@@ -214,7 +214,7 @@ describe("LightingProjectEditor", () => {
           contactEmail: "pat@example.com",
           contactPhone: "+15551234567",
           persistenceStatus: expect.objectContaining({
-            label: "Saved to Tribunal",
+            label: "Saved to BEAM",
           }),
         }),
       }),
@@ -295,7 +295,7 @@ describe("LightingProjectEditor", () => {
     });
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(apiMocks.update).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByText("Saved to Tribunal")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Saved to BEAM")).toBeInTheDocument());
     expect(apiMocks.update).toHaveBeenLastCalledWith(WORKSPACE_ID, PROJECT_ID, {
       expected_version: 1,
       document: firstEdit,
@@ -409,7 +409,7 @@ describe("LightingProjectEditor", () => {
     expect(screen.queryByTestId("light-designer")).not.toBeInTheDocument();
   });
 
-  it("opens an accessible conflict dialog for a stale device draft and loads Tribunal safely", async () => {
+  it("opens an accessible conflict dialog for a stale device draft and loads BEAM safely", async () => {
     const current = project({ version: 2 });
     apiMocks.get.mockResolvedValue(current);
     draftMocks.loadPending.mockResolvedValue({
@@ -429,10 +429,10 @@ describe("LightingProjectEditor", () => {
     expect(
       await screen.findByRole("dialog", { name: "Choose which lighting plan to keep" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Load Tribunal version" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Load BEAM version" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save my work as a copy" })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Load Tribunal version" }));
+    await userEvent.click(screen.getByRole("button", { name: "Load BEAM version" }));
     await waitFor(() => expect(draftMocks.deletePending).toHaveBeenCalledWith(PROJECT_ID));
     await waitFor(() =>
       expect(

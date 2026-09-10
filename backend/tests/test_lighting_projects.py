@@ -137,7 +137,7 @@ def _document(
                 "catalogItemId": "catalog-1",
                 "catalogSku": "UP-100",
                 "description": "Brass uplight",
-                "manufacturer": "Tribunal Lighting",
+                "manufacturer": "BEAM Lighting",
                 "supplier": "Local Supply",
                 "neededQuantity": 8,
                 "orderedQuantity": 6,

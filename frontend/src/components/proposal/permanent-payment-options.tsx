@@ -106,7 +106,7 @@ export function PermanentPaymentOptions({
           <ol className="permanent-payment-steps">
             <li>Open GreenSky&apos;s official application in a separate tab.</li>
             <li>Enter the merchant and plan numbers above when GreenSky asks.</li>
-            <li>Submit financial information directly to GreenSky, not Tribunal.</li>
+            <li>Submit financial information directly to GreenSky, not BEAM.</li>
           </ol>
 
           {canApply ? (

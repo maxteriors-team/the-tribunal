@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 
+import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,9 +26,9 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
+    <AuthShell>
+      <Card>
+        <CardHeader>
           <h1 className="text-2xl font-semibold leading-none">Reset your password</h1>
           <CardDescription>
             Enter your account email and we&apos;ll send a one-time reset link.
@@ -71,6 +72,6 @@ export default function ForgotPasswordPage() {
           )}
         </CardContent>
       </Card>
-    </main>
+    </AuthShell>
   );
 }

@@ -26,7 +26,7 @@ from datetime import UTC, datetime, timedelta
 # RFC 5545 §3.1: lines are folded so no line exceeds 75 octets, excluding CRLF.
 MAX_LINE_OCTETS = 75
 CRLF = "\r\n"
-PRODID = "-//The Tribunal//Appointment Booking//EN"
+PRODID = "-//BEAM//Appointment Booking//EN"
 # Domain used to namespace generated UIDs. Not resolved — RFC 5545 only requires
 # global uniqueness, and appointment IDs are unique per deployment.
 UID_DOMAIN = "the-tribunal.app"

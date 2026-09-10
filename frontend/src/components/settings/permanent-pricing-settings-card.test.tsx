@@ -251,7 +251,7 @@ describe("PermanentPricingSettingsCard GreenSky setup", () => {
     ).toBeVisible();
     expect(screen.getByText(/Never add that fee to the borrower's price/i)).toBeVisible();
     expect(screen.getByText(/submit financial information directly to GreenSky/i)).toBeVisible();
-    expect(screen.getByText(/Tribunal does not receive or infer/i)).toBeVisible();
+    expect(screen.getByText(/BEAM does not receive or infer/i)).toBeVisible();
     expect(screen.getByText(/Use only GreenSky-approved program language/i)).toBeVisible();
   });
 });

@@ -8,7 +8,7 @@ interface KnownElectricalSpec {
 }
 
 /**
- * Electrical values for the FX fixtures already carried in the Tribunal price book.
+ * Electrical values for the FX fixtures already carried in the BEAM price book.
  * Catalog attributes override these defaults, so operators can update a fixture
  * without waiting for a frontend release.
  */

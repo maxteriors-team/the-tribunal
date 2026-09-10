@@ -347,7 +347,7 @@ def _safe_error_page(title: str, message: str) -> bytes:
   <body style="font-family:system-ui,sans-serif;text-align:center;padding:80px 24px;">
     <h1>{escaped_title}</h1>
     <p>{escaped_message}</p>
-    <p>You can close this tab and return to The Tribunal.</p>
+    <p>You can close this tab and return to BEAM.</p>
   </body>
 </html>
 """.encode()
@@ -371,7 +371,7 @@ def _write_callback_response(
 class _OpenAICallbackHandler(BaseHTTPRequestHandler):
     """Small local callback server for Codex's localhost redirect URI."""
 
-    server_version = "TribunalOpenAIOAuth/1.0"
+    server_version = "BeamOpenAIOAuth/1.0"
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         logger.debug("openai_oauth_callback_http", message=format % args)
@@ -430,7 +430,7 @@ class _OpenAICallbackHandler(BaseHTTPRequestHandler):
         _write_callback_response(
             self,
             status_code=200,
-            title="Signed in to The Tribunal",
+            title="Signed in to BEAM",
             message="Your ChatGPT subscription is connected for OpenAI Realtime voice.",
         )
 

@@ -29,7 +29,7 @@ def fake_resend(monkeypatch: pytest.MonkeyPatch) -> _FakeResend:
     monkeypatch.setattr(email, "RESEND_AVAILABLE", True)
     monkeypatch.setattr(email, "resend", client)
     monkeypatch.setattr(email.settings, "resend_api_key", "resend-key")
-    monkeypatch.setattr(email.settings, "resend_from_name", "Tribunal")
+    monkeypatch.setattr(email.settings, "resend_from_name", "BEAM")
     monkeypatch.setattr(email.settings, "resend_from_email", "noreply@example.com")
     return client
 
@@ -38,7 +38,7 @@ def fake_resend(monkeypatch: pytest.MonkeyPatch) -> _FakeResend:
 async def test_send_uses_resend_async_client(fake_resend: _FakeResend) -> None:
     result = await email._send(
         {
-            "from": "Tribunal <noreply@example.com>",
+            "from": "BEAM <noreply@example.com>",
             "to": ["lead@example.com"],
             "subject": "Hello",
             "html": "<p>Hello</p>",
@@ -49,7 +49,7 @@ async def test_send_uses_resend_async_client(fake_resend: _FakeResend) -> None:
     assert fake_resend.api_key == "resend-key"
     fake_resend.Emails.send_async.assert_awaited_once_with(
         {
-            "from": "Tribunal <noreply@example.com>",
+            "from": "BEAM <noreply@example.com>",
             "to": ["lead@example.com"],
             "subject": "Hello",
             "html": "<p>Hello</p>",
@@ -90,7 +90,7 @@ async def test_invitation_email_uses_async_resend_path(fake_resend: _FakeResend)
     assert call is not None
     args: tuple[dict[str, Any], ...] = call.args
     params = args[0]
-    assert params["from"] == "Tribunal <noreply@example.com>"
+    assert params["from"] == "BEAM <noreply@example.com>"
     assert params["to"] == ["agent@example.com"]
     assert params["subject"] == "You've been invited to join Acme Home Services"
     assert "https://app.example/invitations/abc" in params["html"]
