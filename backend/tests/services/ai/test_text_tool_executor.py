@@ -15,6 +15,10 @@ from app.models.conversation_booking_draft import (
 )
 from app.services.ai.text_tool_executor import TextToolExecutor
 from app.services.ai.website_lead_qualification import WebsiteLeadQualificationPolicy
+from app.services.knowledge.retrieval_service import (
+    RetrievedPassage,
+    knowledge_retrieval_service,
+)
 
 
 def test_booking_success_tells_model_exactly_what_was_queued() -> None:
@@ -517,9 +521,32 @@ async def test_mark_qualified_rejects_low_score_or_incomplete_evidence(
 @pytest.mark.asyncio
 async def test_claim_tools_return_this_turn_evidence_metadata(
     qualification_executor: TextToolExecutor,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    qualification_executor._execute_search_knowledge = AsyncMock(  # type: ignore[method-assign]
-        return_value={"success": True, "results": [{"text": "House wash starts at $199"}]}
+    """A knowledge hit must prove the pricing claim, using the REAL payload shape.
+
+    This test used to stub ``_execute_search_knowledge`` with an invented
+    ``{"results": [...]}`` dict. The real search tool returns ``passages``, so the
+    executor's ``has_evidence`` check read a key that never existed and every
+    pricing answer was downgraded to ``absent`` — the customer got the canned
+    "I don't have verified pricing" line even when the price was in the knowledge
+    base. Driving the assertion through ``execute_knowledge_search`` keeps the two
+    sides of that contract from drifting apart again.
+    """
+    monkeypatch.setattr(
+        knowledge_retrieval_service,
+        "retrieve_passages",
+        AsyncMock(
+            return_value=[
+                RetrievedPassage(
+                    title="2026 Price Sheet",
+                    content="House wash starts at $199 for a single story.",
+                    score=0.91,
+                    document_id=uuid.uuid4(),
+                    ordinal=0,
+                )
+            ]
+        ),
     )
 
     result = await qualification_executor.execute(
@@ -527,10 +554,31 @@ async def test_claim_tools_return_this_turn_evidence_metadata(
         {"query": "house wash price"},
     )
 
+    assert result["passages"], "real search tool returns 'passages'"
     assert result["evidence_source"] == "live_tool"
     assert result["evidence_domains"] == ["pricing"]
     assert result["evidence_status"] == "found"
     assert result["observed_at"]
+
+
+@pytest.mark.asyncio
+async def test_empty_knowledge_search_still_reports_absent_pricing_evidence(
+    qualification_executor: TextToolExecutor,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No passages means no proof — the gate must still fail closed."""
+    monkeypatch.setattr(
+        knowledge_retrieval_service,
+        "retrieve_passages",
+        AsyncMock(return_value=[]),
+    )
+
+    result = await qualification_executor.execute(
+        "search_knowledge",
+        {"query": "house wash price"},
+    )
+
+    assert result["evidence_status"] == "absent"
 
 
 @pytest.mark.asyncio
