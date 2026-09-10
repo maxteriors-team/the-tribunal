@@ -196,9 +196,13 @@ export function ChatHeader({
 export function EmptyState({
   workspaceName,
   onPrompt,
+  /** Mirrors the chat's saved-chats rail, so the copy cannot point at a rail
+   *  that is not on screen. */
+  hasConversationList = true,
 }: {
   workspaceName: string | null;
   onPrompt: (message: string) => void;
+  hasConversationList?: boolean;
 }) {
   const welcomePrompts = buildWelcomePrompts(workspaceName);
   return (
@@ -207,7 +211,9 @@ export function EmptyState({
       <h3 className="text-lg font-semibold text-foreground">CRM Assistant</h3>
       <p className="mt-1 max-w-sm text-sm">
         I can manage contacts, calendar events, workflow automations, campaigns, messages, and more.
-        Start a fresh chat or pick a prior one from the sidebar.
+        {hasConversationList
+          ? " Start a fresh chat or pick a prior one from the sidebar."
+          : " Ask a question below, or start a fresh chat."}
       </p>
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         {welcomePrompts.map((prompt) => (
@@ -237,6 +243,7 @@ export function MessageList({
   onApproveAction,
   onRejectAction,
   onRetry,
+  hasConversationList = true,
 }: {
   messages: AssistantMessageResponse[];
   runtime: ConversationRuntime;
@@ -247,12 +254,18 @@ export function MessageList({
   onApproveAction: (actionId: string) => Promise<void>;
   onRejectAction: (actionId: string) => Promise<void>;
   onRetry: () => Promise<void>;
+  /** Passed through so the empty state cannot point at a rail that is hidden. */
+  hasConversationList?: boolean;
 }) {
   return (
     <ScrollArea className="min-h-0 flex-1">
       <div ref={scrollRef} className="space-y-4 p-4 lg:p-6">
         {messages.length === 0 && !runtime.isStreaming ? (
-          <EmptyState workspaceName={workspaceName} onPrompt={onPrompt} />
+          <EmptyState
+            workspaceName={workspaceName}
+            onPrompt={onPrompt}
+            hasConversationList={hasConversationList}
+          />
         ) : null}
 
         {messages.map((message) => (

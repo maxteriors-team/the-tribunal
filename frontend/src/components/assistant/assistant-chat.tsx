@@ -15,7 +15,22 @@ import { useWorkspace } from "@/providers/workspace-provider";
 
 const BRIEFING_PROMPT = "Give me my morning briefing";
 
-export function AssistantChat({ className }: { className?: string }) {
+export function AssistantChat({
+  className,
+  showConversationList = true,
+}: {
+  className?: string;
+  /**
+   * Show the saved-chats rail beside the conversation.
+   *
+   * The rail is a fixed `w-72` revealed at the `md:` *viewport* breakpoint, so
+   * it cannot tell it is inside a narrow side panel on a wide screen — it
+   * renders anyway and squeezes the composer down to one word per line.
+   * Callers mounting this in a panel turn it off; switching between saved chats
+   * stays on the full page.
+   */
+  showConversationList?: boolean;
+}) {
   const {
     workspaceId,
     conversations,
@@ -63,15 +78,17 @@ export function AssistantChat({ className }: { className?: string }) {
 
   return (
     <div className={cn("flex h-full min-h-0 overflow-hidden", className)}>
-      <ConversationSidebar
-        conversations={conversations}
-        activeConversationId={resolvedActiveConversationId}
-        runtimes={runtimes}
-        isLoading={conversationsLoading}
-        onNewConversation={handleNewConversation}
-        onSelectConversation={handleSelectConversation}
-        onDeleteConversation={handleDeleteConversation}
-      />
+      {showConversationList ? (
+        <ConversationSidebar
+          conversations={conversations}
+          activeConversationId={resolvedActiveConversationId}
+          runtimes={runtimes}
+          isLoading={conversationsLoading}
+          onNewConversation={handleNewConversation}
+          onSelectConversation={handleSelectConversation}
+          onDeleteConversation={handleDeleteConversation}
+        />
+      ) : null}
 
       <section className="flex min-w-0 flex-1 flex-col bg-background">
         <ChatHeader
@@ -90,6 +107,7 @@ export function AssistantChat({ className }: { className?: string }) {
           onApproveAction={handleApprovePendingAction}
           onRejectAction={handleRejectPendingAction}
           onRetry={handleRetry}
+          hasConversationList={showConversationList}
         />
 
         <MessageComposer
