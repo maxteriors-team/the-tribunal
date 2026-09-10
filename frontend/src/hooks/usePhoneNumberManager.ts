@@ -14,7 +14,6 @@ import { queryKeys } from "@/lib/query-keys";
 import {
   getApiErrorMessage,
   isProviderConfigurationError,
-  shouldThrowProviderError,
 } from "@/lib/utils/errors";
 import type { PhoneNumber } from "@/types";
 
@@ -87,7 +86,7 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
         limit: 10,
       });
     },
-    throwOnError: shouldThrowProviderError,
+    throwOnError: false,
     onMutate: () => setProviderNotConfigured(false),
     onSuccess: (data) => {
       setProviderNotConfigured(false);
@@ -115,7 +114,7 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
         phone_number: phoneNumber,
       });
     },
-    throwOnError: shouldThrowProviderError,
+    throwOnError: false,
     onMutate: () => setProviderNotConfigured(false),
     onSuccess: (data) => {
       setProviderNotConfigured(false);
@@ -157,7 +156,7 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return phoneNumbersApi.release(workspaceId, phoneNumberId);
     },
-    throwOnError: shouldThrowProviderError,
+    throwOnError: false,
     onMutate: () => setProviderNotConfigured(false),
     onSuccess: () => {
       setProviderNotConfigured(false);
@@ -178,7 +177,7 @@ export function usePhoneNumberManager(): UsePhoneNumberManagerResult {
       if (!workspaceId) throw new Error("Workspace not loaded");
       return phoneNumbersApi.sync(workspaceId);
     },
-    throwOnError: shouldThrowProviderError,
+    throwOnError: false,
     onMutate: () => setProviderNotConfigured(false),
     onSuccess: (data) => {
       setProviderNotConfigured(false);
