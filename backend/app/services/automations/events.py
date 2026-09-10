@@ -98,11 +98,14 @@ def event_matches_trigger_config(
     Most lifecycle triggers match every event. ``lead_created`` supports lead
     source selectors; ``job_completed`` supports ``lighting_project_only`` so a
     landscape-system owner's guide cannot go out after service calls, permanent
-    installs, repairs, or takedowns.
+    installs, repairs, or takedowns; ``opportunity_created`` fires only for a
+    contact entering the board unless the automation opts into every deal.
     """
     normalized_type = event_type.strip().lower()
     if normalized_type == EVENT_LEAD_CREATED:
         return lead_created_event_matches(trigger_config, payload)
+    if normalized_type == EVENT_OPPORTUNITY_CREATED:
+        return opportunity_created_event_matches(trigger_config, payload)
     if normalized_type == EVENT_JOB_COMPLETED:
         config = trigger_config or {}
         if bool(config.get("lighting_project_only")):
@@ -148,6 +151,34 @@ def lead_created_event_matches(
     if not selectors:
         return True
     return any(selectors)
+
+
+def opportunity_created_event_matches(
+    trigger_config: dict[str, Any] | None,
+    payload: dict[str, Any] | None,
+) -> bool:
+    """Return True if a deal was *created by a lead arriving*, not by filing.
+
+    Operators use the board as a filing cabinet: dropping an existing customer
+    into ``Unqualified``, ``Long term follow up`` or ``Quote Sent`` is how they
+    move someone, because a card can only be added, not transplanted. Every one
+    of those adds used to look identical to a fresh inbound lead, so a customer
+    three quotes deep got texted "thanks for your interest" (2026-09-10).
+
+    A deal therefore only counts as a new lead when both hold: it is the
+    contact's first card (``is_first_deal``) **and** it starts in the pipeline's
+    first stage (``is_entry_stage``). An automation that genuinely wants every
+    deal — an owner notification, say — sets ``trigger_config['any_deal']``.
+
+    Events queued before those flags existed carry neither and keep the old
+    fire-on-every-deal behaviour rather than being silently dropped.
+    """
+    if bool((trigger_config or {}).get("any_deal")):
+        return True
+    data = payload or {}
+    if "is_first_deal" not in data and "is_entry_stage" not in data:
+        return True
+    return bool(data.get("is_first_deal")) and bool(data.get("is_entry_stage"))
 
 
 async def _has_active_listener(

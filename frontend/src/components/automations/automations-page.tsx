@@ -177,10 +177,10 @@ const triggerTypeConfig: Record<
     description: "When a contact responds to a review request",
   },
   opportunity_created: {
-    label: "Opportunity Created",
+    label: "New Lead On The Board",
     icon: TrendingUp,
     color: "text-success",
-    description: "When a new deal is created",
+    description: "When a contact's first deal is added, in the first pipeline stage",
   },
   deal_stage_changed: {
     label: "Deal Stage Changed",

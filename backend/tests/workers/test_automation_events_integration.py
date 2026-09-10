@@ -193,6 +193,53 @@ async def test_opportunity_created_runs_automation() -> None:
         assert await _contact_has_tag(db, contact.id, "new-deal")
 
 
+async def test_filing_an_existing_customer_does_not_run_new_lead_automation() -> None:
+    """Adding a second card, or one in a later stage, is filing — not a new lead.
+
+    Regression for 2026-09-10: an already-quoted customer moved into
+    ``Unqualified`` was texted a welcome message meant for fresh inbound leads.
+    """
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        await _automation(db, ws.id, "opportunity_created", "welcomed")
+
+        pipeline = Pipeline(workspace_id=ws.id, name="Sales", is_active=True)
+        db.add(pipeline)
+        await db.flush()
+        entry = PipelineStage(pipeline_id=pipeline.id, name="New Lead", order=0, probability=10)
+        parked = PipelineStage(pipeline_id=pipeline.id, name="Unqualified", order=1, probability=0)
+        db.add_all([entry, parked])
+        await db.commit()
+
+        service = OpportunityService(db)
+        # Their real deal, already being worked.
+        await service.create_opportunity(
+            ws.id,
+            OpportunityCreate(
+                pipeline_id=pipeline.id,
+                stage_id=parked.id,
+                name="Quoted job",
+                primary_contact_id=contact.id,
+            ),
+        )
+        # The operator files them again, this time in the entry column.
+        await service.create_opportunity(
+            ws.id,
+            OpportunityCreate(
+                pipeline_id=pipeline.id,
+                stage_id=entry.id,
+                name="Second card",
+                primary_contact_id=contact.id,
+            ),
+        )
+
+        await _drain(db)
+        await db.commit()
+
+        assert await _contact_has_tag(db, contact.id, "welcomed") is False
+
+
 async def test_deal_stage_changed_runs_automation() -> None:
     """OpportunityService.update_opportunity fires deal_stage_changed on move."""
     async with AsyncSessionLocal() as db:
