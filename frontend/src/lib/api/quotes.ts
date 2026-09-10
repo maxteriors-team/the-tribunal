@@ -1,4 +1,5 @@
-import { apiPost, apiPut, apiDelete } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
+import type { components } from "@/lib/api/_generated";
 import type {
   CreateQuoteRequest,
   ManualDepositPaymentMethod,
@@ -12,6 +13,10 @@ import type {
 } from "@/types";
 
 import { createApiClient } from "./create-api-client";
+
+/** One house lit in an earlier season, as the renewal screen lists it. */
+export type RenewalCandidate = components["schemas"]["RenewalCandidateResponse"];
+export type RenewalCandidateList = components["schemas"]["RenewalCandidateList"];
 
 export interface QuotesListParams {
   page?: number;
@@ -31,6 +36,25 @@ const quotePath = (workspaceId: string, quoteId: string): string =>
 
 export const quotesApi = {
   list: baseQuotesApi.list,
+
+  /** Houses lit in an earlier season, for the renewal screen. */
+  listRenewalCandidates: async (
+    workspaceId: string,
+    params: { search?: string; limit?: number; offset?: number } = {},
+  ): Promise<RenewalCandidateList> => {
+    const query = new URLSearchParams();
+    if (params.search) query.set("search", params.search);
+    if (params.limit != null) query.set("limit", String(params.limit));
+    if (params.offset != null) query.set("offset", String(params.offset));
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return apiGet<RenewalCandidateList>(
+      `/api/v1/workspaces/${workspaceId}/quotes/renewals${suffix}`,
+    );
+  },
+
+  /** Rebuild a returning customer's last holiday sale as this season's draft. */
+  renewLastSeason: async (workspaceId: string, contactId: number): Promise<Quote> =>
+    apiPost<Quote>(`/api/v1/workspaces/${workspaceId}/quotes/renewals/${contactId}`, {}),
   get: baseQuotesApi.get!,
   create: baseQuotesApi.create!,
   update: baseQuotesApi.update!,

@@ -48,6 +48,10 @@ Route: `/landscape-lighting`. Sidebar label: **Landscape Lighting**. Select **Ne
 
 Route: `/christmas-lights`. Sidebar label: **Christmas Light Estimator**. Create a seasonal estimate using the configured Christmas pricing.
 
+## Renew last season's homes
+
+Route: `/christmas-lights/renew`. Select **Renew Last Season's Homes** on the Christmas Light Estimator. The screen lists customers who bought holiday lighting in an earlier season, newest first, searchable by name or quote number. Select **Create renewal quote** to open a draft carrying last season's line items and prices. Each customer appears once. A customer whose earlier quote was deleted still appears, without a quote number; renewing them reports that there is no holiday job on file to rebuild.
+
 ## Create an invoice
 
 Route: `/invoices`. Sidebar label: **Invoices**.

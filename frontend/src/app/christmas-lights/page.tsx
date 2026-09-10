@@ -24,7 +24,7 @@ const HUB_ACTIONS: HubAction[] = [
     title: "Renew Last Season's Homes",
     description:
       "Book the houses you already lit last year. The roof is measured, the crew knows it, and they have already said yes once.",
-    href: "/campaigns/pre-booking/new",
+    href: "/christmas-lights/renew",
     Icon: History,
   },
   {

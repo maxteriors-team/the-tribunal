@@ -8937,6 +8937,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/quotes/renewals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Renewal Candidates Route
+         * @description Houses lit in an earlier season, newest signup first.
+         */
+        get: operations["list_renewal_candidates_route_api_v1_workspaces__workspace_id__quotes_renewals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/quotes/renewals/{contact_id}": {
         parameters: {
             query?: never;
@@ -30561,6 +30581,40 @@ export interface components {
         RejectSuggestionRequest: {
             /** Reason */
             reason?: string | null;
+        };
+        /**
+         * RenewalCandidateList
+         * @description A page of renewal candidates plus the season the rep is selling.
+         */
+        RenewalCandidateList: {
+            /** Items */
+            items?: components["schemas"]["RenewalCandidateResponse"][];
+            /** Season Year */
+            season_year: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /**
+         * RenewalCandidateResponse
+         * @description One house lit in an earlier season, as the renewal screen lists it.
+         */
+        RenewalCandidateResponse: {
+            /** Contact Id */
+            contact_id: number;
+            /** Contact Name */
+            contact_name: string;
+            /** Quote Number */
+            quote_number?: string | null;
+            /** Quote Total */
+            quote_total?: number | null;
+            /**
+             * Signed Up At
+             * Format: date-time
+             */
+            signed_up_at: string;
         };
         /**
          * ReorderReport
@@ -53122,6 +53176,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComparisonShareResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_renewal_candidates_route_api_v1_workspaces__workspace_id__quotes_renewals_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenewalCandidateList"];
                 };
             };
             /** @description Validation Error */
