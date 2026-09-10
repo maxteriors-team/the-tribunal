@@ -1749,6 +1749,52 @@ CRM_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "create_quote",
+            "description": (
+                "Draft a quote for a contact from price-book items. Use when the operator "
+                "asks to quote or price a job for someone. You choose the items and "
+                "quantities; prices come from the workspace price book, so never state or "
+                "guess a price yourself. Call list_catalog_items first to get item ids. "
+                "The draft is NOT sent to the customer \u2014 the operator reviews and sends it. "
+                "Requires the operator's approval before it is created."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contact_id": {
+                        "type": "integer",
+                        "description": "Contact the quote is for (from search_contacts)",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Short title for the quote, e.g. 'Holiday lighting 2026'",
+                    },
+                    "line_items": {
+                        "type": "array",
+                        "description": "Work to quote, 1-20 lines, each priced from the price book",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "catalog_item_id": {
+                                    "type": "string",
+                                    "description": "Catalog item UUID from list_catalog_items",
+                                },
+                                "quantity": {
+                                    "type": "number",
+                                    "description": "How many/how much, greater than zero",
+                                },
+                            },
+                            "required": ["catalog_item_id", "quantity"],
+                        },
+                    },
+                },
+                "required": ["contact_id", "line_items"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_invoices",
             "description": (
                 "List invoices, newest first. Use for billing questions: what is outstanding, "
