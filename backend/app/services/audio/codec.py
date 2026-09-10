@@ -14,13 +14,22 @@ Conversion Pipelines:
     Grok -> Telnyx: PCM16 24kHz -> PCM16 8kHz -> mulaw 8kHz
 """
 
+import warnings
 from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
 try:
-    import audioop
-except ModuleNotFoundError:
+    # stdlib ``audioop`` is deprecated in 3.12 and removed in 3.13. We use it
+    # where present and fall back to the ``audioop-lts`` backport, which
+    # pyproject declares for 3.13+. The deprecation is known and already
+    # actioned, so it must not escape as a warning: the test suite runs with
+    # ``filterwarnings = ["error"]`` and would otherwise fail at import,
+    # taking every voice test down at collection time.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        import audioop
+except ModuleNotFoundError:  # pragma: no cover - exercised only on 3.13+
     import audioop_lts as audioop  # type: ignore[no-redef]
 
 import numpy as np
