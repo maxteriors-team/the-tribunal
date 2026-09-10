@@ -274,6 +274,50 @@ def normalize_realtime_audio_format(format_name: str | None = None) -> AudioForm
     return audio_format
 
 
+def realtime_output_bytes_per_second(audio_format: object) -> int:
+    """Return output audio bytes per second for a GA Realtime audio format.
+
+    Needed to convert streamed audio byte counts into milliseconds when
+    truncating an interrupted assistant turn (``conversation.item.truncate``
+    takes ``audio_end_ms``, not bytes).
+
+    The two families we negotiate differ by a factor of six, so assuming one
+    of them yields a wildly wrong ``audio_end_ms`` and OpenAI rejects the
+    truncation:
+
+    * ``audio/pcmu`` / ``audio/pcma`` (G.711) -- 8 kHz, 1 byte per sample.
+    * ``audio/pcm`` -- 24 kHz, 2 bytes per sample.
+
+    Args:
+        audio_format: Either the GA format object (``{"type": ..., "rate": ...}``),
+            a GA type string, or a legacy format name such as ``g711_ulaw``.
+
+    Returns:
+        Bytes of output audio per second of wall-clock playback.
+    """
+    audio_type: str | None = None
+    rate: int | None = None
+
+    if isinstance(audio_format, dict):
+        raw_type = audio_format.get("type")
+        if isinstance(raw_type, str):
+            audio_type = raw_type.strip().lower()
+        raw_rate = audio_format.get("rate")
+        if isinstance(raw_rate, int) and raw_rate > 0:
+            rate = raw_rate
+    elif isinstance(audio_format, str):
+        lowered = audio_format.strip().lower()
+        audio_type = GA_AUDIO_FORMAT_BY_LEGACY_NAME.get(lowered, lowered)
+
+    if audio_type not in {"audio/pcm", "audio/pcmu", "audio/pcma"}:
+        audio_type = GA_AUDIO_FORMAT_BY_LEGACY_NAME[DEFAULT_AUDIO_FORMAT]
+
+    if audio_type == "audio/pcm":
+        return (rate or 24000) * 2
+    # G.711 is always 8 kHz, single byte per sample.
+    return 8000
+
+
 def normalize_transcription_language(language: str | None) -> str | None:
     """Normalize app locale values to OpenAI Realtime transcription language codes."""
     if not language:

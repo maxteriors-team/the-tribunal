@@ -18,12 +18,14 @@ from app.core.config import settings
 from app.core.metrics import openai_realtime_latency_ms
 from app.models.agent import Agent
 from app.services.ai.openai_realtime_config import (
+    DEFAULT_AUDIO_FORMAT,
     RealtimeSessionConfig,
     build_client_secret_request,
     build_realtime_session_config,
     build_response_create_event,
     build_session_update_event,
     extract_realtime_client_secret_value,
+    realtime_output_bytes_per_second,
 )
 from app.services.ai.voice_agent_base import VoiceAgentBase
 from app.services.ai.voice_prompt_builder import voice_context_requires_live_lookup
@@ -98,6 +100,24 @@ class VoiceAgentSession(VoiceAgentBase):
         # sent. Cleared once response.created is observed so we measure
         # request → ack latency for each turn without double-counting.
         self._pending_response_create_at: float | None = None
+        # Current assistant audio item, tracked so a barge-in can truncate it.
+        # ``response.cancel`` stops generation but leaves the full generated
+        # turn in the server-side conversation, so without truncation the model
+        # believes it said audio the caller never heard.
+        self._current_audio_item_id: str | None = None
+        self._current_audio_content_index: int = 0
+        self._current_audio_bytes: int = 0
+        self._current_audio_started_at: float | None = None
+        # Bytes per second of negotiated output audio; refreshed from the
+        # session payload because G.711 and PCM16 differ by 6x.
+        self._output_bytes_per_second: int = realtime_output_bytes_per_second(DEFAULT_AUDIO_FORMAT)
+
+    def _reset_current_audio_item(self) -> None:
+        """Forget the tracked assistant audio item (turn finished or cancelled)."""
+        self._current_audio_item_id = None
+        self._current_audio_content_index = 0
+        self._current_audio_bytes = 0
+        self._current_audio_started_at = None
 
     async def connect(self) -> bool:
         """Connect to OpenAI Realtime API.
@@ -348,6 +368,11 @@ class VoiceAgentSession(VoiceAgentBase):
         audio = session.get("audio", {})
         audio_input = audio.get("input", {}) if isinstance(audio, dict) else {}
         audio_output = audio.get("output", {}) if isinstance(audio, dict) else {}
+        # Latch the negotiated output format so interruption truncation converts
+        # streamed bytes to milliseconds at the right rate.
+        negotiated_format = audio_output.get("format") or session.get("output_audio_format")
+        if negotiated_format:
+            self._output_bytes_per_second = realtime_output_bytes_per_second(negotiated_format)
         self.logger.info(
             event_name,
             session_id=session.get("id"),
@@ -667,6 +692,20 @@ class VoiceAgentSession(VoiceAgentBase):
                         audio_chunks_received += 1
                         total_audio_bytes += len(decoded)
 
+                        # Track this response's audio item so a barge-in can
+                        # truncate it to the point the caller actually heard.
+                        event_item_id = event.get("item_id")
+                        if isinstance(event_item_id, str) and event_item_id:
+                            if event_item_id != self._current_audio_item_id:
+                                self._current_audio_item_id = event_item_id
+                                self._current_audio_bytes = 0
+                                self._current_audio_started_at = time.monotonic()
+                                raw_index = event.get("content_index")
+                                self._current_audio_content_index = (
+                                    raw_index if isinstance(raw_index, int) else 0
+                                )
+                            self._current_audio_bytes += len(decoded)
+
                         # Log first chunk and periodically
                         if audio_chunks_received == 1:
                             self.logger.info(
@@ -687,6 +726,8 @@ class VoiceAgentSession(VoiceAgentBase):
                     "response.output_audio.done",
                     "response.audio.done",
                 }:
+                    # Turn finished cleanly; nothing left to truncate.
+                    self._reset_current_audio_item()
                     self.logger.debug("audio_output_done", event_type=event_type)
 
                 elif event_type in {
@@ -777,6 +818,10 @@ class VoiceAgentSession(VoiceAgentBase):
                     # Cancel response immediately - production pattern from VideoSDK/LiveKit
                     await self.cancel_response()
 
+                    # Then trim the half-spoken turn out of the model's history,
+                    # so it does not think it already said what got cut off.
+                    await self.truncate_current_audio()
+
                 elif event_type == "input_audio_buffer.speech_stopped":
                     self.logger.debug("user_speech_stopped")
 
@@ -801,6 +846,8 @@ class VoiceAgentSession(VoiceAgentBase):
                         self._pending_response_create_at = None
                     # Handle new response - resets interrupted flag using base class
                     self._handle_response_created()
+                    # New turn starting; drop any stale audio item tracking.
+                    self._reset_current_audio_item()
 
                     response = event.get("response", {})
                     self.logger.info(
@@ -966,6 +1013,60 @@ class VoiceAgentSession(VoiceAgentBase):
             self.logger.info("response_cancelled_on_interruption")
         except Exception as e:
             self.logger.exception("cancel_response_error", error=str(e))
+
+    async def truncate_current_audio(self) -> None:
+        """Trim the interrupted assistant turn to what the caller actually heard.
+
+        ``response.cancel`` stops OpenAI generating, but the conversation item
+        it already produced stays in the server-side history in full. If we do
+        not truncate it, the model believes it spoke the entire sentence --
+        including the part cut off mid-word by the barge-in -- and will not
+        repeat the price, address request, or warranty the caller never heard.
+
+        The cut is the lesser of wall-clock playback time and the duration of
+        audio we actually received. ``audio_end_ms`` past the real audio length
+        is an invalid request, and the wall clock alone can overrun it when
+        OpenAI streams faster than realtime.
+        """
+        if not self.ws:
+            return
+
+        item_id = self._current_audio_item_id
+        started_at = self._current_audio_started_at
+        if not item_id or started_at is None:
+            # Bot was not speaking, so there is nothing the caller half-heard.
+            return
+
+        content_index = self._current_audio_content_index
+        audio_bytes = self._current_audio_bytes
+        bytes_per_second = self._output_bytes_per_second or 8000
+
+        elapsed_ms = int((time.monotonic() - started_at) * 1000)
+        generated_ms = int(audio_bytes * 1000 / bytes_per_second)
+        audio_end_ms = max(0, min(elapsed_ms, generated_ms))
+
+        # Clear before awaiting so a second barge-in cannot truncate twice.
+        self._reset_current_audio_item()
+
+        try:
+            await self._send_event(
+                {
+                    "type": "conversation.item.truncate",
+                    "item_id": item_id,
+                    "content_index": content_index,
+                    "audio_end_ms": audio_end_ms,
+                }
+            )
+            self.logger.info(
+                "assistant_audio_truncated_on_interruption",
+                item_id=item_id,
+                audio_end_ms=audio_end_ms,
+                elapsed_ms=elapsed_ms,
+                generated_ms=generated_ms,
+                bytes_per_second=bytes_per_second,
+            )
+        except Exception as e:
+            self.logger.exception("truncate_current_audio_error", error=str(e))
 
     async def inject_operator_guidance(self, text: str) -> None:
         """Inject private supervisor guidance into the conversation.
