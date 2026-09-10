@@ -145,6 +145,9 @@ generic-component-*.html
 
 # Deploy / build tool caches
 .railway
+# Netlify CLI state (site id, linked config) from a repo-root `netlify` run;
+# frontend/.gitignore already covers the frontend copy.
+.netlify/
 .turbo/
 .parcel-cache/
 
