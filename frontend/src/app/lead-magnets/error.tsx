@@ -7,10 +7,10 @@ import { PageErrorState } from "@/components/ui/page-state";
 
 export default function LeadMagnetsError({
   error,
-  unstable_retry,
+  reset,
 }: {
   error: Error & { digest?: string };
-  unstable_retry: () => void;
+  reset: () => void;
 }) {
   useEffect(() => {
     Sentry.captureException(error);
@@ -19,7 +19,7 @@ export default function LeadMagnetsError({
   return (
     <PageErrorState
       message="We couldn't load lead magnets. Please try again."
-      onRetry={unstable_retry}
+      reset={reset}
     />
   );
 }

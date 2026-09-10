@@ -7,10 +7,10 @@ import { PageErrorState } from "@/components/ui/page-state";
 
 export default function LandingError({
   error,
-  unstable_retry,
+  reset,
 }: {
   error: Error & { digest?: string };
-  unstable_retry: () => void;
+  reset: () => void;
 }) {
   useEffect(() => {
     Sentry.captureException(error);
@@ -20,7 +20,7 @@ export default function LandingError({
     <div className="flex min-h-screen items-center justify-center">
       <PageErrorState
         message="This page couldn't load. Please try again."
-        onRetry={unstable_retry}
+        reset={reset}
       />
     </div>
   );

@@ -129,12 +129,3 @@ export function isProviderConfigurationError(err: unknown): boolean {
 
   return LEGACY_CONFIGURATION_MESSAGE.test(getApiErrorMessage(err, ""));
 }
-
-/**
- * Matches the app-wide React Query error-boundary policy while keeping expected
- * provider setup failures inside the feature that can explain how to fix them.
- */
-export function shouldThrowProviderError(err: unknown): boolean {
-  const status = getApiErrorStatus(err);
-  return status !== null && status >= 500 && !isProviderConfigurationError(err);
-}

@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { PageEmptyState, PageErrorState } from "@/components/ui/page-state";
+import { RouteErrorActions } from "@/components/ui/route-error-actions";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import {
   getApiErrorCode,
@@ -94,7 +95,8 @@ interface ProviderPageErrorStateProps {
   provider: ProviderSetupKind;
   transientTitle: string;
   transientMessage: string;
-  onRetry: () => void;
+  onRetry?: () => void;
+  reset?: () => void;
 }
 
 /** Full-page recovery state for provider-backed features. */
@@ -104,12 +106,20 @@ export function ProviderPageErrorState({
   transientTitle,
   transientMessage,
   onRetry,
+  reset,
 }: ProviderPageErrorStateProps) {
   const { can } = useCapabilities();
   const canConfigureIntegrations = can("workspace:manage");
 
   if (!isProviderConfigurationError(error)) {
-    return <PageErrorState title={transientTitle} message={transientMessage} onRetry={onRetry} />;
+    return (
+      <PageErrorState
+        title={transientTitle}
+        message={transientMessage}
+        onRetry={onRetry}
+        reset={reset}
+      />
+    );
   }
 
   const copy = PROVIDER_STATE_COPY[resolveProviderSetupKind(error, provider)];
@@ -123,11 +133,14 @@ export function ProviderPageErrorState({
       title={copy.setupTitle}
       description={description}
       action={
-        canConfigureIntegrations ? (
-          <Button asChild>
-            <Link href={INTEGRATIONS_SETTINGS_HREF}>{copy.setupAction}</Link>
-          </Button>
-        ) : undefined
+        <>
+          {canConfigureIntegrations ? (
+            <Button asChild>
+              <Link href={INTEGRATIONS_SETTINGS_HREF}>{copy.setupAction}</Link>
+            </Button>
+          ) : null}
+          {reset ? <RouteErrorActions reset={reset} /> : null}
+        </>
       }
     />
   );
