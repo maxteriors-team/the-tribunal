@@ -8,10 +8,10 @@ import { isProviderConfigurationError } from "@/lib/utils/errors";
 
 export default function FindLeadsAiError({
   error,
-  unstable_retry,
+  reset,
 }: {
   error: Error & { digest?: string };
-  unstable_retry: () => void;
+  reset: () => void;
 }) {
   useEffect(() => {
     if (!isProviderConfigurationError(error)) {
@@ -25,7 +25,7 @@ export default function FindLeadsAiError({
       provider="openai"
       transientTitle="AI lead discovery is temporarily unavailable"
       transientMessage="OpenAI or the lead-search provider didn't respond. Retry your request."
-      onRetry={unstable_retry}
+      reset={reset}
     />
   );
 }
