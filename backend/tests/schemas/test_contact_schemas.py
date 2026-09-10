@@ -20,6 +20,7 @@ from app.schemas.contact import (
     ContactCreate,
     ContactListResponse,
     ContactResponse,
+    ContactStatusCounts,
     ContactUpdate,
     ContactWithConversationResponse,
     QualificationSignalDetail,
@@ -303,9 +304,19 @@ class TestBulkSchemas:
 
     def test_contact_list_response(self) -> None:
         """ContactListResponse validates correctly."""
-        resp = ContactListResponse(items=[], total=0, page=1, page_size=50, pages=0)
+        resp = ContactListResponse(
+            items=[],
+            total=0,
+            page=1,
+            page_size=50,
+            pages=0,
+            status_counts=ContactStatusCounts(
+                all=0, new=0, contacted=0, qualified=0, converted=0, lost=0
+            ),
+        )
         assert resp.total == 0
         assert resp.items == []
+        assert resp.status_counts.all == 0
 
     def test_contact_with_conversation_response(self) -> None:
         """ContactWithConversationResponse has unread_count default."""

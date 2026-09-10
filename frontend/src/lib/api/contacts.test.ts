@@ -16,7 +16,8 @@ vi.mock("@/lib/api/create-api-client", () => ({
   createApiClient: () => ({}),
 }));
 
-import { contactsApi } from "@/lib/api/contacts";
+import api from "@/lib/api";
+import { contactsApi, type ContactsListParams } from "@/lib/api/contacts";
 
 const workspaceId = "6aee02cf-5ea9-49bd-88bb-d6cb720579a3";
 const contactId = 42;
@@ -108,4 +109,28 @@ describe("contact timeline API", () => {
       }),
     ]);
   });
+});
+
+it("preserves server status facets alongside the paginated contact list", async () => {
+  const response = {
+    items: [],
+    total: 1,
+    page: 2,
+    page_size: 100,
+    pages: 1,
+    status_counts: { all: 101, new: 100, qualified: 1, contacted: 0, converted: 0, lost: 0 },
+  };
+  const get = vi.spyOn(api, "get").mockResolvedValue({ data: response });
+  const params: ContactsListParams = {
+    page: 2,
+    page_size: 100,
+    status: "qualified",
+    search: "roof",
+  };
+  try {
+    await expect(contactsApi.list(workspaceId, params)).resolves.toEqual(response);
+    expect(get).toHaveBeenCalledWith(`/api/v1/workspaces/${workspaceId}/contacts`, { params });
+  } finally {
+    get.mockRestore();
+  }
 });

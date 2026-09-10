@@ -229,7 +229,8 @@ function JobPnLCard() {
       <CardHeader>
         <CardTitle>Job Profitability</CardTitle>
         <CardDescription>
-          Revenue from linked invoices minus tracked labor, expenses, and materials
+          Sent, partial, paid, and overdue invoices, counted once each, minus all tracked labor,
+          expenses, and materials
           {data ? ` · ${data.job_count} jobs` : ""}.
         </CardDescription>
       </CardHeader>
@@ -257,7 +258,7 @@ function JobPnLCard() {
             </div>
             <div className="divide-y">
               <StatRow
-                label="Revenue"
+                label="Invoice revenue"
                 value={formatCurrency(data?.revenue ?? 0, data?.currency)}
                 tone="positive"
               />
@@ -277,10 +278,14 @@ function JobPnLCard() {
                 tone="negative"
               />
               <StatRow
-                label="Billable jobs"
+                label="Jobs with invoices"
                 value={`${data?.billable_job_count ?? 0} of ${data?.job_count ?? 0}`}
               />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Jobs with invoices includes draft and void links; those invoices add no revenue.
+              Each job counts, even when jobs share an invoice.
+            </p>
           </div>
         )}
       </CardContent>

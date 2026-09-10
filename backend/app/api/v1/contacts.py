@@ -206,7 +206,7 @@ async def get_contact_stats(
     db: DB,
     membership: CanReadCRM,
 ) -> ContactStatsResponse:
-    """Return aggregate contact metrics for the Contacts page stat cards."""
+    """Return workspace-wide creation cohorts (not conversion-time metrics)."""
     service = ContactQueryService(db)
     result = await service.get_stats(workspace_id=workspace_id)
     return ContactStatsResponse(**result)

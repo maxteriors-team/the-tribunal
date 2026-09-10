@@ -185,29 +185,55 @@ class BulkStatusUpdateResponse(BaseModel):
     errors: list[str]
 
 
+class ContactStatusCounts(BaseModel):
+    """Unpaginated search/advanced-filter scope, excluding the selected status tab."""
+
+    all: int
+    new: int
+    contacted: int
+    qualified: int
+    converted: int
+    lost: int
+
+
 class ContactListResponse(BaseModel):
-    """Schema for paginated contact list."""
+    """Schema for paginated contact list with status facets over the whole scope."""
 
     items: list[ContactWithConversationResponse]
     total: int
     page: int
     page_size: int
     pages: int
+    status_counts: ContactStatusCounts
 
 
 class ContactStatsResponse(BaseModel):
-    """Aggregate contact metrics for the Contacts page stat cards.
+    """Workspace-wide creation cohorts, independent of list search/filters.
 
-    Windows are workspace-scoped and computed in UTC. ``*_change`` values are
-    returned preformatted (e.g. ``"+24%"``, ``"-10%"``, ``"+0%"``) so the
-    frontend ``isTrendUp`` helper can render the trend badge without reparsing.
+    Conversion events are unavailable: ``new_clients_*`` are legacy field names
+    for contacts CREATED in the window and CURRENTLY converted, not clients
+    converted during the window. Reversions change these snapshots; reconversion
+    history cannot be inferred. Change is null whenever the prior cohort is zero.
     """
 
     new_leads_30d: int
-    new_leads_change: str
-    new_clients_30d: int
-    new_clients_change: str
-    total_new_clients_ytd: int
+    new_leads_change: str | None
+    new_clients_30d: int = Field(
+        description="Currently converted contacts created in the trailing 30-day window."
+    )
+    new_clients_change: str | None = Field(
+        description="Creation-cohort change, not conversion growth; null with a zero baseline."
+    )
+    total_new_clients_ytd: int = Field(
+        description="Currently converted contacts created since workspace-local January 1."
+    )
+    client_metric_basis: Literal["creation_cohort_current_status"]
+    period_start: datetime = Field(description="Inclusive start of the trailing 30 elapsed days.")
+    period_end: datetime = Field(
+        description="Exclusive end (as-of instant) of all current windows."
+    )
+    year_start: datetime = Field(description="Workspace-local January 1, expressed in UTC.")
+    timezone: str
 
 
 class BulkDeleteRequest(BaseModel):
