@@ -11,8 +11,10 @@ formatting, and the ``name_asc`` / ``last_activity_desc`` orderings added to
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 
@@ -20,7 +22,9 @@ from app.core.encryption import hash_phone
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.conversation import Conversation
+from app.models.tag import ContactTag, Tag
 from app.models.workspace import Workspace
+from app.schemas.contact import ContactStatsResponse
 from app.services.contacts.contact_repository import list_contacts_paginated
 from app.services.contacts.query_service import ContactQueryService
 
@@ -125,13 +129,178 @@ async def test_get_stats_empty_workspace_is_zeroed() -> None:
         ws = await _workspace(db)
         stats = await ContactQueryService(db).get_stats(workspace_id=ws.id)
 
-    assert stats == {
-        "new_leads_30d": 0,
-        "new_leads_change": "+0%",
-        "new_clients_30d": 0,
-        "new_clients_change": "+0%",
-        "total_new_clients_ytd": 0,
-    }
+    parsed = ContactStatsResponse.model_validate(stats)
+    assert parsed.new_leads_30d == 0
+    assert parsed.new_clients_30d == 0
+    assert parsed.total_new_clients_ytd == 0
+    assert parsed.new_leads_change is None
+    assert parsed.new_clients_change is None
+    assert parsed.client_metric_basis == "creation_cohort_current_status"
+
+
+async def test_old_lead_converted_now_is_not_misreported_as_a_recent_creation() -> None:
+    now = datetime.now(UTC)
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        old = await _contact(db, ws.id, created_at=now - timedelta(days=75))
+        old.status = "converted"
+        await db.flush()
+
+        stats = await ContactQueryService(db).get_stats(workspace_id=ws.id)
+        assert stats["client_metric_basis"] == "creation_cohort_current_status"
+        # A conversion-time report would count this event. We cannot produce one;
+        # the explicitly labelled CREATION cohort must not silently substitute it.
+        assert stats["new_clients_30d"] == 0
+        assert stats["new_clients_change"] is None
+
+        recent = await _contact(db, ws.id, status="converted", created_at=now - timedelta(days=5))
+        for status, expected in [("converted", 1), ("lost", 0), ("converted", 1)]:
+            recent.status = status
+            await db.flush()
+            stats = await ContactQueryService(db).get_stats(workspace_id=ws.id)
+            assert stats["new_clients_30d"] == expected
+            assert stats["new_clients_change"] is None
+
+        # Drill-down uses the exact returned half-open creation bounds.
+        cohort = await ContactQueryService(db).list_contacts(
+            workspace_id=ws.id,
+            filters=json.dumps(
+                {
+                    "logic": "and",
+                    "rules": [
+                        {
+                            "field": "created_at",
+                            "operator": "gte",
+                            "value": stats["period_start"].isoformat(),
+                        },
+                        {
+                            "field": "created_at",
+                            "operator": "lt",
+                            "value": stats["period_end"].isoformat(),
+                        },
+                        {"field": "status", "operator": "equals", "value": "converted"},
+                    ],
+                }
+            ),
+        )
+        assert cohort["total"] == stats["new_clients_30d"] == 1
+        assert [item.id for item in cohort["items"]] == [recent.id]
+
+
+async def test_stats_half_open_windows_and_workspace_local_year() -> None:
+    now = datetime(2026, 9, 10, 12, tzinfo=UTC)
+    year_start = datetime(2025, 12, 31, 11, tzinfo=UTC)  # Auckland Jan 1
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        ws.settings = {"timezone": "Pacific/Auckland"}
+        for created in [
+            year_start - timedelta(microseconds=1),
+            year_start,
+            now - timedelta(days=60),
+            now - timedelta(days=30),
+            now - timedelta(microseconds=1),
+            now,
+            now + timedelta(days=1),
+        ]:
+            await _contact(db, ws.id, status="converted", created_at=created)
+        other = await _workspace(db)
+        await _contact(db, other.id, status="converted", created_at=now - timedelta(days=1))
+
+        with patch("app.services.contacts.query_service.datetime", wraps=datetime) as clock:
+            clock.now.return_value = now
+            stats = await ContactQueryService(db).get_stats(workspace_id=ws.id)
+
+        assert stats["period_start"] == now - timedelta(days=30)
+        assert stats["period_end"] == now
+        assert stats["year_start"] == year_start
+        assert stats["timezone"] == "Pacific/Auckland"
+        assert stats["new_leads_30d"] == stats["new_clients_30d"] == 2
+        assert stats["new_leads_change"] == stats["new_clients_change"] == "+100%"
+        assert stats["total_new_clients_ytd"] == 4
+
+
+async def test_status_facets_include_off_page_contact_and_ignore_selected_status() -> None:
+    now = datetime.now(UTC)
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        qualified = await _contact(
+            db, ws.id, status="qualified", created_at=now - timedelta(days=75)
+        )
+        for _ in range(100):
+            await _contact(db, ws.id, created_at=now - timedelta(days=1))
+        other = await _workspace(db)
+        await _contact(db, other.id, status="qualified")
+        service = ContactQueryService(db)
+        expected = {
+            "all": 101,
+            "new": 100,
+            "contacted": 0,
+            "qualified": 1,
+            "converted": 0,
+            "lost": 0,
+        }
+
+        first = await service.list_contacts(workspace_id=ws.id, page_size=100)
+        assert len(first["items"]) == 100
+        assert all(item.status == "new" for item in first["items"])
+        assert first["status_counts"] == expected
+        second = await service.list_contacts(workspace_id=ws.id, page=2, page_size=100)
+        assert [item.id for item in second["items"]] == [qualified.id]
+        assert second["status_counts"] == expected
+        selected = await service.list_contacts(workspace_id=ws.id, status_filter="qualified")
+        assert selected["total"] == 1
+        assert selected["status_counts"] == expected
+        empty_page = await service.list_contacts(workspace_id=ws.id, page=100, page_size=10)
+        assert empty_page["items"] == []
+        assert empty_page["status_counts"] == expected
+
+
+async def test_status_facets_share_search_tags_and_advanced_filter_scope() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        tags = [Tag(workspace_id=ws.id, name=name) for name in ("A", "B")]
+        db.add_all(tags)
+        await db.flush()
+        for name, status, source, company, tagged in [
+            ("Match", "new", "site", "Good", True),
+            ("Match", "qualified", "site", "Good", True),
+            ("Different", "qualified", "site", "Good", True),
+            ("Match", "qualified", "other", "Good", True),
+            ("Match", "qualified", "site", "Excluded", True),
+            ("Match", "qualified", "site", "Good", False),
+        ]:
+            contact = await _contact(db, ws.id, first_name=name, status=status)
+            contact.source = source
+            contact.company_name = company
+            if tagged:
+                db.add_all([ContactTag(contact_id=contact.id, tag_id=tag.id) for tag in tags])
+        await db.flush()
+        result = await ContactQueryService(db).list_contacts(
+            workspace_id=ws.id,
+            search="Match",
+            source="site",
+            tags=",".join(str(tag.id) for tag in tags),
+            filters=json.dumps(
+                {
+                    "logic": "and",
+                    "rules": [
+                        {"field": "company_name", "operator": "equals", "value": "Good"},
+                    ],
+                }
+            ),
+            status_filter="qualified",
+        )
+        assert result["total"] == 1
+        assert result["status_counts"] == {
+            "all": 2,
+            "new": 1,
+            "contacted": 0,
+            "qualified": 1,
+            "converted": 0,
+            "lost": 0,
+        }
+        empty = await ContactQueryService(db).list_contacts(workspace_id=ws.id, search="Absent")
+        assert empty["status_counts"] == dict.fromkeys(result["status_counts"], 0)
 
 
 async def test_list_contacts_name_asc_orders_alphabetically() -> None:

@@ -35,7 +35,6 @@ import {
 import {
   getApiErrorMessage,
   isProviderConfigurationError,
-  shouldThrowProviderError,
 } from "@/lib/utils/errors";
 
 // Re-export status badges for callers that historically imported them from this module.
@@ -71,7 +70,7 @@ export function FindLeadsAIPage() {
       if (!workspaceId) throw new Error("No workspace");
       return findLeadsAIApi.search(workspaceId, searchQuery || query, maxResults);
     },
-    throwOnError: shouldThrowProviderError,
+    throwOnError: false,
     onSuccess: (data) => {
       setConfigurationIssue((current) => (current === "scraping" ? null : current));
       setResults(data.results);
@@ -96,7 +95,7 @@ export function FindLeadsAIPage() {
 
   const importMutation = useLeadImport({
     importFn: findLeadsAIApi.importLeads,
-    throwOnError: shouldThrowProviderError,
+    throwOnError: false,
     onSuccess: (data) => {
       setConfigurationIssue((current) => (current === "openai" ? null : current));
       setImportResult(data);

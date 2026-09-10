@@ -43,19 +43,5 @@ export interface ARAgingReport {
   buckets: ARAgingBucket[];
 }
 
-export interface JobPnLSummary {
-  date_from?: string | null;
-  date_to?: string | null;
-  currency: string;
-  job_count: number;
-  billable_job_count: number;
-  revenue: number;
-  labor_cost: number;
-  expense_cost: number;
-  /** Stock consumed from inventory. Never overlaps `expense_cost`. */
-  material_cost: number;
-  total_cost: number;
-  profit: number;
-  margin?: number | null;
-  total_hours: number;
-}
+/** Job counts and issued invoice revenue follow the backend reporting contract. */
+export type JobPnLSummary = Schemas["JobPnLSummary"];

@@ -143,6 +143,7 @@ export function ContactsPage() {
     data: contactsData,
     isPending: isLoadingContacts,
     isError: isContactsError,
+    isPlaceholderData: isContactsPlaceholderData,
     refetch: refetchContacts,
   } = useContactsPaginated(
     workspaceId ?? "",
@@ -182,21 +183,19 @@ export function ContactsPage() {
   const selectedCount = effectiveSelectedIds.size;
   const selectedArray = useMemo(() => Array.from(effectiveSelectedIds), [effectiveSelectedIds]);
 
-  // Status counts from current page contacts (all count uses server total)
-  const statusCounts = useMemo<Record<ContactStatus | "all", number>>(() => {
-    const counts: Record<ContactStatus | "all", number> = {
-      all: contactsTotal,
-      new: 0,
-      contacted: 0,
-      qualified: 0,
-      converted: 0,
-      lost: 0,
-    };
-    contacts.forEach((contact: Contact) => {
-      counts[contact.status]++;
-    });
-    return counts;
-  }, [contacts, contactsTotal]);
+  // Server facets cover the full search/filter scope, excluding the status tab.
+  const statusCounts = isContactsError || isContactsPlaceholderData
+    ? undefined
+    : contactsData?.status_counts;
+
+  const handleViewStatsContacts = (cohortFilters: FilterDefinition) => {
+    selection.clear();
+    setSelectAllMatchingIds(null);
+    setInputValue("");
+    setSearchQuery("");
+    setStatusFilter(null);
+    setFilters(cohortFilters);
+  };
 
   const handleToggleSelectionMode = () => {
     if (isSelectionMode) {
@@ -373,7 +372,11 @@ export function ContactsPage() {
       {/* Scrollable content: stats + results heading + filter bar + table */}
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-6 space-y-6">
-          <ContactsStatsCards stats={statsData} isPending={isLoadingStats} />
+          <ContactsStatsCards
+            stats={statsData}
+            isPending={isLoadingStats}
+            onViewContacts={handleViewStatsContacts}
+          />
 
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">

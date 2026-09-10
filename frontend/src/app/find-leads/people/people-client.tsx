@@ -40,7 +40,6 @@ import { queryKeys } from "@/lib/query-keys";
 import {
   getApiErrorMessage,
   isProviderConfigurationError,
-  shouldThrowProviderError,
 } from "@/lib/utils/errors";
 
 const SIGNAL_CHIPS: { value: string; label: string }[] = [
@@ -116,6 +115,8 @@ export function PeopleSearchClient() {
   const searchQuery = useQuery({
     ...peopleQueryOptions.search(workspaceId ?? "", request ?? EMPTY_REQUEST),
     enabled: Boolean(workspaceId) && request !== null,
+    // Search errors already render below the filters; don't discard the draft.
+    throwOnError: false,
   });
   const people = searchQuery.data?.items ?? [];
 
@@ -139,7 +140,7 @@ export function PeopleSearchClient() {
         max_results: 25,
       });
     },
-    throwOnError: shouldThrowProviderError,
+    throwOnError: false,
     onSuccess: () => {
       setProviderNotConfigured(false);
       toast.success("People crawl started — results appear as enrichment runs.");
