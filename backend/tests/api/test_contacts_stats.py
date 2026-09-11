@@ -117,11 +117,12 @@ class TestPctChange:
     def test_no_change_is_signed_zero(self) -> None:
         assert _pct_change(50, 50) == "+0%"
 
-    def test_prev_zero_curr_positive_is_full_growth(self) -> None:
-        assert _pct_change(5, 0) == "+100%"
+    @pytest.mark.parametrize("current", [0, 1, 5, 100])
+    def test_zero_baseline_has_no_percentage(self, current: int) -> None:
+        assert _pct_change(current, 0) is None
 
-    def test_both_zero_is_signed_zero(self) -> None:
-        assert _pct_change(0, 0) == "+0%"
+    def test_drop_to_zero(self) -> None:
+        assert _pct_change(0, 5) == "-100%"
 
     def test_rounds_to_nearest_percent(self) -> None:
         # 400% growth mirrors the Jobber "new clients" example (1 -> 5).
@@ -142,6 +143,11 @@ class TestContactStatsEndpoint:
             "new_clients_30d": 5,
             "new_clients_change": "+400%",
             "total_new_clients_ytd": 1618,
+            "client_metric_basis": "creation_cohort_current_status",
+            "period_start": "2026-08-11T12:00:00Z",
+            "period_end": "2026-09-10T12:00:00Z",
+            "year_start": "2026-01-01T06:00:00Z",
+            "timezone": "America/Chicago",
         }
         with patch.object(
             contacts_module.ContactQueryService,
@@ -157,15 +163,23 @@ class TestContactStatsEndpoint:
         get_stats_mock = AsyncMock(
             return_value={
                 "new_leads_30d": 0,
-                "new_leads_change": "+0%",
+                "new_leads_change": None,
                 "new_clients_30d": 0,
-                "new_clients_change": "+0%",
+                "new_clients_change": None,
                 "total_new_clients_ytd": 0,
+                "client_metric_basis": "creation_cohort_current_status",
+                "period_start": "2026-08-11T12:00:00Z",
+                "period_end": "2026-09-10T12:00:00Z",
+                "year_start": "2026-01-01T06:00:00Z",
+                "timezone": "America/Chicago",
             }
         )
         with patch.object(contacts_module.ContactQueryService, "get_stats", new=get_stats_mock):
-            await client.get(f"/api/v1/workspaces/{WS_ID}/contacts/stats")
+            response = await client.get(f"/api/v1/workspaces/{WS_ID}/contacts/stats")
 
+        assert response.status_code == 200
+        assert response.json()["new_leads_change"] is None
+        assert response.json()["new_clients_change"] is None
         get_stats_mock.assert_awaited_once()
         assert get_stats_mock.call_args.kwargs["workspace_id"] == WS_ID
 
@@ -179,7 +193,16 @@ class TestListContactsNewSortKeys:
     )
     async def test_new_sort_key_returns_200(self, client: AsyncClient, sort_by: str) -> None:
         list_mock = AsyncMock(
-            return_value={"items": [], "total": 0, "page": 1, "page_size": 50, "pages": 1}
+            return_value={
+                "items": [],
+                "total": 0,
+                "page": 1,
+                "page_size": 50,
+                "pages": 1,
+                "status_counts": dict.fromkeys(
+                    ("all", "new", "contacted", "qualified", "converted", "lost"), 0
+                ),
+            }
         )
         with patch.object(contacts_module.ContactQueryService, "list_contacts", new=list_mock):
             response = await client.get(f"/api/v1/workspaces/{WS_ID}/contacts?sort_by={sort_by}")

@@ -10,9 +10,11 @@
  * preserved so existing hooks/components don't need to change.
  */
 
+import api from "@/lib/api";
 import { apiClient, type Schemas } from "@/lib/api/_client";
 import { createApiClient, type FullApiClient } from "@/lib/api/create-api-client";
 import type { Contact, ContactStatus, TimelineItem } from "@/types";
+import type { PaginatedResponse } from "@/types/api";
 
 export type ContactSortBy =
   | "created_at"
@@ -201,6 +203,17 @@ const baseApi = createApiClient<Contact, CreateContactRequest, UpdateContactRequ
 
 export const contactsApi = {
   ...baseApi,
+
+  // Keep the existing Contact domain shape while exposing generated list metadata.
+  list: async (
+    workspaceId: string,
+    params: ContactsListParams = {},
+  ): Promise<PaginatedResponse<Contact> & Pick<ContactListResponse, "status_counts">> => {
+    const response = await api.get<
+      PaginatedResponse<Contact> & Pick<ContactListResponse, "status_counts">
+    >(`/api/v1/workspaces/${workspaceId}/contacts`, { params });
+    return response.data;
+  },
 
   appendNote: async (
     workspaceId: string,

@@ -4,9 +4,8 @@ Hits the real database (marked ``integration``; deselected by default, run with
 ``-m integration``). Each test opens an ``AsyncSessionLocal`` and never commits,
 so the transaction rolls back on close and the dev database stays clean.
 
-Coverage: AR aging bucketing (current vs overdue ranges, paid/draft excluded,
-partial balances) and the job P&L summary (revenue from distinct linked invoices
-minus labor and expenses, with tenant isolation).
+Coverage: AR aging bucketing, issued invoice revenue counted once per invoice,
+independent linked-job counts, all job costs, and currency/workspace isolation.
 """
 
 from __future__ import annotations
@@ -21,10 +20,13 @@ from app.core.encryption import hash_value
 from app.db.session import AsyncSessionLocal, engine
 from app.models.contact import Contact
 from app.models.field_service import Job, JobStatus
-from app.models.invoice import Invoice
+from app.models.inventory import InventoryItem
+from app.models.invoice import INVOICE_STATUSES, Invoice
 from app.models.job_costing import JobExpense, TimeEntry
 from app.models.lead_source import LeadSource, LeadSourceType
 from app.models.workspace import Workspace
+from app.schemas.inventory import ReceiveStockRequest
+from app.services.inventory import StockService
 from app.services.reporting import ReportingService
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -32,6 +34,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 @pytest.fixture(autouse=True)
 async def _fresh_engine_pool():
+    assert engine.url.host in {"localhost", "127.0.0.1", "::1"}, "Use a local test database"
     await engine.dispose()
     yield
     await engine.dispose()
@@ -97,6 +100,174 @@ async def _job(db, workspace_id: uuid.UUID, contact_id: int, *, invoice_id=None,
     db.add(job)
     await db.flush()
     return job
+
+
+@pytest.mark.parametrize(
+    ("invoice_status", "amount_paid", "expected_revenue"),
+    [
+        ("draft", 0, 0),
+        ("void", 0, 0),
+        ("void", 1000, 0),
+        ("sent", 0, 1000),
+        ("partial", 250, 1000),
+        ("paid", 1000, 1000),
+        ("overdue", 250, 1000),
+    ],
+)
+@pytest.mark.parametrize("currency", ["USD", "EUR"])
+@pytest.mark.parametrize("linked", [False, True])
+async def test_job_pnl_summary_recognizes_only_issued_invoice_totals(
+    invoice_status: str, amount_paid: float, expected_revenue: float, currency: str, linked: bool
+) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        invoice = await _invoice(
+            db,
+            ws.id,
+            contact.id,
+            total=1000,
+            status=invoice_status,
+            due_date=None,
+            amount_paid=amount_paid,
+            currency=currency,
+        )
+        await _job(db, ws.id, contact.id, invoice_id=invoice.id if linked else None)
+        # An unlinked invoice affects neither revenue nor the currency guard.
+        await _invoice(
+            db, ws.id, contact.id, total=9999, status="paid", due_date=None, currency="CAD"
+        )
+
+        summary = await ReportingService(db).job_pnl_summary(ws.id)
+        recognized_revenue = expected_revenue if linked else 0.0
+        assert summary.job_count == 1
+        assert summary.billable_job_count == int(linked)
+        assert summary.revenue == recognized_revenue
+        assert summary.profit == recognized_revenue
+        assert summary.currency == (currency if linked else "USD")
+        assert summary.margin == (1.0 if recognized_revenue else None)
+
+
+@pytest.mark.parametrize("invoice_status", [None, "draft", "void"])
+async def test_job_pnl_summary_keeps_all_costs_without_invoice_revenue(
+    invoice_status: str | None,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        invoice_id = None
+        if invoice_status:
+            invoice = await _invoice(
+                db, ws.id, contact.id, total=1000, status=invoice_status, due_date=None
+            )
+            invoice_id = invoice.id
+        job = await _job(db, ws.id, contact.id, invoice_id=invoice_id)
+        start = datetime(2026, 6, 15, 9, 0, tzinfo=UTC)
+        db.add_all(
+            [
+                TimeEntry(
+                    workspace_id=ws.id,
+                    job_id=job.id,
+                    started_at=start,
+                    ended_at=start + timedelta(hours=2),
+                    rate=50,
+                ),
+                # Open timers have no cost/hours; unpriced closed time still counts hours.
+                TimeEntry(workspace_id=ws.id, job_id=job.id, started_at=start, rate=999),
+                TimeEntry(
+                    workspace_id=ws.id,
+                    job_id=job.id,
+                    started_at=start,
+                    ended_at=start + timedelta(hours=1),
+                ),
+                JobExpense(
+                    workspace_id=ws.id,
+                    job_id=job.id,
+                    description="Purchased materials",
+                    category="materials",
+                    amount=50,
+                ),
+            ]
+        )
+        item = InventoryItem(workspace_id=ws.id, name="Reporting materials")
+        db.add(item)
+        await db.flush()
+        stock = StockService(db)
+        await stock.receive(ws.id, item.id, ReceiveStockRequest(quantity=10, unit_cost=10))
+        consumed = await stock.consume(ws.id, item.id, 4, reference_type="job", reference_id=job.id)
+        await stock.return_to_stock(
+            ws.id,
+            item.id,
+            1,
+            unit_cost=float(consumed.unit_cost),
+            location_id=consumed.location_id,
+            reference_type="job",
+            reference_id=job.id,
+        )
+
+        summary = await ReportingService(db).job_pnl_summary(ws.id)
+        assert summary.job_count == 1
+        assert summary.billable_job_count == (1 if invoice_status else 0)
+        assert summary.revenue == 0.0
+        assert summary.total_hours == 3.0
+        assert summary.labor_cost == 100.0
+        assert summary.expense_cost == 50.0
+        assert summary.material_cost == 30.0
+        assert summary.total_cost == 180.0
+        assert summary.profit == -180.0
+        assert summary.margin is None
+
+
+async def test_job_pnl_summary_ignores_cross_workspace_invoice_and_cost_links() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db)
+        other = await _workspace(db)
+        contact = await _contact(db, ws.id)
+        other_contact = await _contact(db, other.id)
+        mine = await _invoice(db, ws.id, contact.id, total=1000, status="paid", due_date=None)
+        foreign = await _invoice(
+            db, other.id, other_contact.id, total=9999, status="paid", due_date=None, currency="EUR"
+        )
+        job = await _job(db, ws.id, contact.id, invoice_id=mine.id)
+        # Corrupt links must not reveal another workspace's counts or money.
+        await _job(db, ws.id, contact.id, invoice_id=foreign.id)
+        await _job(db, other.id, other_contact.id, invoice_id=foreign.id)
+        start = datetime(2026, 6, 15, 9, 0, tzinfo=UTC)
+        db.add_all(
+            [
+                TimeEntry(
+                    workspace_id=other.id,
+                    job_id=job.id,
+                    started_at=start,
+                    ended_at=start + timedelta(hours=1),
+                    rate=999,
+                ),
+                JobExpense(
+                    workspace_id=other.id,
+                    job_id=job.id,
+                    description="Other workspace's expense",
+                    category="materials",
+                    amount=999,
+                ),
+            ]
+        )
+        foreign_item = InventoryItem(workspace_id=other.id, name="Other workspace's stock")
+        db.add(foreign_item)
+        await db.flush()
+        stock = StockService(db)
+        await stock.receive(
+            other.id, foreign_item.id, ReceiveStockRequest(quantity=1, unit_cost=999)
+        )
+        await stock.consume(other.id, foreign_item.id, 1, reference_type="job", reference_id=job.id)
+
+        summary = await ReportingService(db).job_pnl_summary(ws.id)
+        assert summary.job_count == 2
+        assert summary.billable_job_count == 1
+        assert summary.revenue == 1000.0
+        assert summary.currency == "USD"
+        assert summary.total_hours == 0.0
+        assert summary.total_cost == 0.0
+        assert summary.profit == 1000.0
 
 
 # --------------------------------------------------------------------------- #
@@ -248,9 +419,7 @@ async def test_job_pnl_summary_aggregates_revenue_minus_costs() -> None:
         contact = await _contact(db, ws.id)
         start = datetime(2026, 6, 15, 9, 0, tzinfo=UTC)
 
-        invoice = await _invoice(
-            db, ws.id, contact.id, total=1000, status="sent", due_date=None
-        )
+        invoice = await _invoice(db, ws.id, contact.id, total=1000, status="sent", due_date=None)
         job = await _job(db, ws.id, contact.id, invoice_id=invoice.id, start=start)
         # 4h @ $90 = $360 labor.
         db.add(
@@ -262,9 +431,7 @@ async def test_job_pnl_summary_aggregates_revenue_minus_costs() -> None:
                 rate=90,
             )
         )
-        db.add(
-            JobExpense(workspace_id=ws.id, job_id=job.id, description="Parts", amount=200)
-        )
+        db.add(JobExpense(workspace_id=ws.id, job_id=job.id, description="Parts", amount=200))
         # A second, non-billable job (no invoice) in range.
         await _job(db, ws.id, contact.id, start=start + timedelta(days=1))
         await db.flush()
@@ -286,17 +453,22 @@ async def test_job_pnl_summary_does_not_double_count_shared_invoice() -> None:
         contact = await _contact(db, ws.id)
         start = datetime(2026, 6, 15, 9, 0, tzinfo=UTC)
 
-        invoice = await _invoice(
-            db, ws.id, contact.id, total=1000, status="sent", due_date=None
-        )
+        invoice = await _invoice(db, ws.id, contact.id, total=1000, status="sent", due_date=None)
         # Two jobs share one invoice → revenue counted once.
         await _job(db, ws.id, contact.id, invoice_id=invoice.id, start=start)
         await _job(db, ws.id, contact.id, invoice_id=invoice.id, start=start)
 
         summary = await ReportingService(db).job_pnl_summary(ws.id)
         assert summary.revenue == 1000.0
-        assert summary.billable_job_count == 1
+        assert summary.billable_job_count == 2
         assert summary.job_count == 2
+
+        invoice.status = "void"
+        await db.flush()
+        voided = await ReportingService(db).job_pnl_summary(ws.id)
+        assert voided.revenue == 0.0
+        assert voided.billable_job_count == 2
+        assert voided.job_count == 2
 
 
 async def test_job_pnl_summary_respects_date_window_and_tenancy() -> None:
@@ -327,7 +499,8 @@ async def test_job_pnl_summary_respects_date_window_and_tenancy() -> None:
         assert summary.revenue == 500.0
 
 
-async def test_job_pnl_summary_refuses_to_sum_across_currencies() -> None:
+@pytest.mark.parametrize("invoice_status", INVOICE_STATUSES)
+async def test_job_pnl_summary_refuses_to_sum_across_currencies(invoice_status: str) -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db)
         contact = await _contact(db, ws.id)
@@ -336,7 +509,7 @@ async def test_job_pnl_summary_refuses_to_sum_across_currencies() -> None:
             db, ws.id, contact.id, total=500, status="sent", due_date=None, currency="USD"
         )
         eur = await _invoice(
-            db, ws.id, contact.id, total=700, status="sent", due_date=None, currency="EUR"
+            db, ws.id, contact.id, total=700, status=invoice_status, due_date=None, currency="EUR"
         )
         await _job(db, ws.id, contact.id, invoice_id=usd.id, start=start)
         await _job(db, ws.id, contact.id, invoice_id=eur.id, start=start)
