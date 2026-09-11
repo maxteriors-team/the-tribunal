@@ -1,7 +1,7 @@
 """Add durable, deduplicated rehearsal execution (legacy reports untouched).
 
 Revision ID: 20260910_roleplay_execution
-Revises: 20260909_seasonal_handoff
+Revises: 6652913f227b
 """
 
 import sqlalchemy as sa
@@ -10,7 +10,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision = "20260910_roleplay_execution"
-down_revision = "20260909_seasonal_handoff"
+down_revision = "6652913f227b"
 branch_labels = None
 depends_on = None
 
