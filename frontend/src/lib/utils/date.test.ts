@@ -20,6 +20,7 @@ describe("date utils", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   describe("formatDate", () => {
@@ -44,6 +45,98 @@ describe("date utils", () => {
       expect(formatDate(date.toISOString())).toBe("Jun 1, 2026");
     });
   });
+
+  describe.each([
+    { timezone: "America/New_York", offset: 240, midnight: "Sep 29, 2026", late: "Sep 30, 2026" },
+    { timezone: "Pacific/Honolulu", offset: 600, midnight: "Sep 29, 2026", late: "Sep 30, 2026" },
+    { timezone: "UTC", offset: 0, midnight: "Sep 30, 2026", late: "Sep 30, 2026" },
+    { timezone: "Europe/Berlin", offset: -120, midnight: "Sep 30, 2026", late: "Oct 1, 2026" },
+    { timezone: "Asia/Kolkata", offset: -330, midnight: "Sep 30, 2026", late: "Oct 1, 2026" },
+    { timezone: "Pacific/Kiritimati", offset: -840, midnight: "Sep 30, 2026", late: "Oct 1, 2026" },
+  ])("calendar dates versus instants in $timezone", ({ timezone, offset, midnight, late }) => {
+    beforeEach(() => {
+      vi.stubEnv("TZ", timezone);
+    });
+
+    it("keeps September 30 in short, long, compact, and custom date formats", () => {
+      // Prove the runtime changed zones, not just the TZ environment string.
+      expect(new Date("2026-09-30T00:00:00Z").getTimezoneOffset()).toBe(offset);
+      expect(formatDate("2026-09-30")).toBe("Sep 30, 2026");
+      expect(formatLongDate("2026-09-30")).toBe("September 30, 2026");
+      expect(formatDayMonth("2026-09-30")).toBe("Sep 30");
+      expect(formatDate("2026-09-30", { pattern: "yyyy-MM-dd" })).toBe("2026-09-30");
+    });
+
+    it.each([
+      "2026-03-08",
+      "2026-11-01", // US DST boundaries
+      "2026-03-29",
+      "2026-10-25", // European DST boundaries
+      "2024-02-29",
+      "2000-02-29", // leap days
+      "2026-01-01",
+      "2026-12-31", // year boundaries
+    ])("preserves the calendar day %s", (date) => {
+      expect(formatDate(date, { pattern: "yyyy-MM-dd" })).toBe(date);
+    });
+
+    it("still converts timestamp strings, Date objects, and epoch numbers", () => {
+      for (const [timestamp, expected] of [
+        ["2026-09-30T00:00:00Z", midnight],
+        ["2026-09-30T23:30:00Z", late],
+      ]) {
+        const instant = new Date(timestamp);
+        expect(formatDate(timestamp)).toBe(expected);
+        expect(formatDate(instant)).toBe(expected);
+        expect(formatDate(instant.getTime())).toBe(expected);
+      }
+      expect(formatDate(0)).toBe(formatDate(new Date(0)));
+      expect(formatDate(0)).not.toBe("—");
+      expect(formatRelative("2026-05-15T10:00:00Z")).toBe("about 2 hours ago");
+    });
+
+    it.each([
+      null,
+      undefined,
+      "",
+      "not-a-date",
+      new Date(NaN),
+      NaN,
+      Infinity,
+      "2026-02-29",
+      "2026-02-30",
+      "1900-02-29",
+      "2026-04-31",
+      "2026-00-10",
+      "2026-13-01",
+      "2026-09-00",
+      "2026-09-31",
+    ])(
+      "uses a placeholder for missing/invalid input %s instead of rolling over or throwing",
+      (date) => {
+        expect(formatDate(date)).toBe("—");
+      },
+    );
+  });
+
+  it.each([
+    ["America/New_York", "2026-03-08T06:30:00Z", "Mar 8, 2026, 1:30 AM"],
+    ["America/New_York", "2026-03-08T07:30:00Z", "Mar 8, 2026, 3:30 AM"],
+    ["America/New_York", "2026-11-01T05:30:00Z", "Nov 1, 2026, 1:30 AM"],
+    ["America/New_York", "2026-11-01T06:30:00Z", "Nov 1, 2026, 1:30 AM"],
+    ["Europe/Berlin", "2026-03-29T00:30:00Z", "Mar 29, 2026, 1:30 AM"],
+    ["Europe/Berlin", "2026-03-29T01:30:00Z", "Mar 29, 2026, 3:30 AM"],
+    ["Europe/Berlin", "2026-10-25T00:30:00Z", "Oct 25, 2026, 2:30 AM"],
+    ["Europe/Berlin", "2026-10-25T01:30:00Z", "Oct 25, 2026, 2:30 AM"],
+    ["America/New_York", "2026-09-30T00:00:00+14:00", "Sep 29, 2026, 6:00 AM"],
+    ["Europe/Berlin", "2026-09-30T23:00:00-04:00", "Oct 1, 2026, 5:00 AM"],
+  ])(
+    "converts instants across DST and explicit offsets: %s / %s",
+    (timezone, instant, expected) => {
+      vi.stubEnv("TZ", timezone);
+      expect(formatDateTime(instant)).toBe(expected);
+    },
+  );
 
   describe("formatDateTime", () => {
     it("includes time of day", () => {
