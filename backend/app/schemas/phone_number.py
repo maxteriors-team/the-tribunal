@@ -47,6 +47,7 @@ class PhoneNumberResponse(BaseModel):
     mac_relay_service: str
     assigned_agent_id: uuid.UUID | None
     inbound_ai_enabled: bool = False
+    inbound_ring_operators: bool = False
     lead_source_id: uuid.UUID | None
     lead_source_campaign_id: uuid.UUID | None
     tracking_label: str | None
@@ -71,6 +72,7 @@ class InboundCallConfigRequest(BaseModel):
     assigned_agent_id: uuid.UUID | None = None
     fallback_number: str | None = Field(default=None, max_length=30)
     transfer_destination_number: str | None = Field(default=None, max_length=30)
+    ring_operators: bool | None = None
 
     @field_validator("fallback_number", "transfer_destination_number")
     @classmethod
@@ -105,6 +107,7 @@ class InboundCallReadinessResponse(BaseModel):
     phone_number_id: uuid.UUID
     ready: bool
     enabled: bool
+    ring_operators: bool = False
     assigned_agent_id: uuid.UUID | None = None
     fallback_configured: bool
     transfer_destination_configured: bool

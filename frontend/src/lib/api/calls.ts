@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "@/lib/api";
+import { api, apiGet, apiPost } from "@/lib/api";
 import type { CallRecord } from "@/types";
 
 export interface CallsListParams {
@@ -79,6 +79,10 @@ export interface CallStatsResponse {
   average_duration_seconds: number;
 }
 
+function presencePath(workspaceId: string): string {
+  return `/api/v1/workspaces/${workspaceId}/calls/presence`;
+}
+
 export const callsApi = {
   list: async (workspaceId: string, params: CallsListParams = {}): Promise<CallsListResponse> => {
     return apiGet<CallsListResponse>(`/api/v1/workspaces/${workspaceId}/calls`, { params });
@@ -107,5 +111,37 @@ export const callsApi = {
 
   listLive: async (workspaceId: string): Promise<LiveCallsResponse> => {
     return apiGet<LiveCallsResponse>(`/api/v1/workspaces/${workspaceId}/calls/live`);
+  },
+
+  /**
+   * Tell the backend whether this browser can take an inbound call right now.
+   *
+   * Presence expires server-side after 75s, so a registered dashboard
+   * re-publishes well inside that window. A failed beat is deliberately not
+   * fatal — dropping the operator out of the ring group on one flaky request
+   * would silently stop customer calls from reaching a human.
+   */
+  publishPresence: async (workspaceId: string, available: boolean): Promise<void> => {
+    await apiPost<void>(presencePath(workspaceId), { available });
+  },
+
+  /**
+   * Best-effort presence clear while the page is going away.
+   *
+   * An in-flight XHR is cancelled when the document unloads, which would leave
+   * the operator advertised as available until the TTL expires and ring a tab
+   * that no longer exists. `sendBeacon` is queued by the browser and survives
+   * teardown; where it is missing we still try a normal post.
+   */
+  publishPresenceBeacon: (workspaceId: string, available: boolean): void => {
+    const path = presencePath(workspaceId);
+    const body = JSON.stringify({ available });
+    if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      // Same-origin (requests are proxied through Next), so the auth cookies ride along.
+      const url = `${api.defaults.baseURL ?? ""}${path}`;
+      const queued = navigator.sendBeacon(url, new Blob([body], { type: "application/json" }));
+      if (queued) return;
+    }
+    void apiPost<void>(path, { available }).catch(() => undefined);
   },
 };

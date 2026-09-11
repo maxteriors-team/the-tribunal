@@ -20877,6 +20877,17 @@
             ],
             "title": "Fallback Number"
           },
+          "ring_operators": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ring Operators"
+          },
           "transfer_destination_number": {
             "anyOf": [
               {
@@ -20933,6 +20944,11 @@
           },
           "ready": {
             "title": "Ready",
+            "type": "boolean"
+          },
+          "ring_operators": {
+            "default": false,
+            "title": "Ring Operators",
             "type": "boolean"
           },
           "transfer_destination_configured": {
@@ -33652,6 +33668,20 @@
         "title": "OpenAIOAuthStatusResponse",
         "type": "object"
       },
+      "OperatorPresenceRequest": {
+        "description": "Heartbeat declaring whether *this* operator's browser can take calls.\n\nThe operator is always derived from the authenticated user, never from the\nbody, so a member cannot mark a colleague available (and start ringing their\nheadset) or unavailable (and silently remove them from the roster).",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "OperatorPresenceRequest",
+        "type": "object"
+      },
       "OpportunityActivityResponse": {
         "description": "Opportunity activity response schema.",
         "properties": {
@@ -38450,6 +38480,11 @@
           "inbound_ai_enabled": {
             "default": false,
             "title": "Inbound Ai Enabled",
+            "type": "boolean"
+          },
+          "inbound_ring_operators": {
+            "default": false,
+            "title": "Inbound Ring Operators",
             "type": "boolean"
           },
           "is_active": {
@@ -71992,6 +72027,58 @@
           }
         ],
         "summary": "List Live Calls",
+        "tags": [
+          "Voice Calls"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/calls/presence": {
+      "post": {
+        "description": "Heartbeat this operator's own availability for inbound browser ringing.\n\nThe user id comes from the authenticated session, so a workspace member can\nonly ever set their own presence.",
+        "operationId": "set_operator_presence_api_v1_workspaces__workspace_id__calls_presence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorPresenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Set Operator Presence",
         "tags": [
           "Voice Calls"
         ]

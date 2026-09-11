@@ -89,10 +89,27 @@ async def enforce_softphone_call_limits(*, workspace_id: str, user_id: int) -> N
         await _check(key=key, limit=limit, ttl_seconds=ttl_seconds)
 
 
-async def enforce_inbound_call_limits(*, workspace_id: str, caller_phone: str) -> None:
-    """Reserve anonymous inbound starts without storing caller PII in Redis."""
+async def enforce_inbound_call_limits(
+    *,
+    workspace_id: str,
+    caller_phone: str,
+    call_control_id: str | None = None,
+) -> None:
+    """Reserve anonymous inbound starts without storing caller PII in Redis.
+
+    ``call_control_id`` makes the reservation idempotent **per physical call**.
+    One inbound call can reach this twice — operator browser ringing enforces the
+    limits before dialing headsets, then falls through to the AI/fallback path,
+    which enforces them again — and a single caller must not burn two slots of
+    their own hourly allowance for one call. The marker is only written once
+    every check has passed, so a call that was *blocked* still re-checks (and
+    stays blocked) on the second pass.
+    """
     now = datetime.now(UTC)
     caller_hash = hash_phone(caller_phone)
+    counted_key = f"inbound-call:counted:{workspace_id}:{call_control_id}"
+    if call_control_id and await _already_counted(counted_key):
+        return
     try:
         await _check(
             key=f"inbound-call:caller-hour:{workspace_id}:{caller_hash}:{now:%Y%m%d%H}",
@@ -116,6 +133,28 @@ async def enforce_inbound_call_limits(*, workspace_id: str, caller_phone: str) -
     )
     for key, limit, ttl_seconds in checks:
         await _check(key=key, limit=limit, ttl_seconds=ttl_seconds)
+
+    if call_control_id:
+        await _mark_counted(counted_key)
+
+
+async def _already_counted(key: str) -> bool:
+    """Return True when this call already consumed its inbound allowance."""
+    try:
+        redis = await get_redis()
+        return bool(await redis.exists(key))
+    except Exception as exc:  # pragma: no cover - dedupe is best-effort
+        logger.warning("inbound_call_dedupe_unavailable", error_type=type(exc).__name__)
+        return False
+
+
+async def _mark_counted(key: str) -> None:
+    """Record that this call consumed its inbound allowance."""
+    try:
+        redis = await get_redis()
+        await redis.set(key, "1", ex=3600)
+    except Exception as exc:  # pragma: no cover - dedupe is best-effort
+        logger.warning("inbound_call_dedupe_write_failed", error_type=type(exc).__name__)
 
 
 async def reserve_inbound_call_capacity(*, workspace_id: str, call_control_id: str) -> None:
