@@ -10,6 +10,11 @@ import { queryKeys } from "@/lib/query-keys";
 import { server } from "@/test/msw/server";
 import type { Invoice, Quote } from "@/types";
 
+// These cases render whole pages of a hundred rows and click through them, so
+// the heaviest run ~2s locally. A CI runner is several times slower and blew
+// vitest's 5s default; the assertions are unchanged, only the time they get.
+vi.setConfig({ testTimeout: 30_000 });
+
 const { workspaceId } = vi.hoisted(() => ({ workspaceId: vi.fn(() => "ws-1") }));
 vi.mock("@/hooks/useWorkspaceId", () => ({ useWorkspaceId: workspaceId }));
 vi.mock("@/hooks/useCapabilities", () => ({
