@@ -55,6 +55,7 @@ from app.models.field_service import Job
 from app.models.invoice import Invoice
 from app.models.opportunity import Opportunity
 from app.models.quote import Quote
+from app.services.automations.step_runs import RUN_SCOPED_FIELDS, run_scoped_value
 from app.services.contacts.contact_filters import apply_contact_filters
 from app.services.invoices.invoice_filters import apply_invoice_filters
 from app.services.jobs.job_filters import apply_job_filters
@@ -66,6 +67,8 @@ __all__ = [
     "SUBJECT_TYPES",
     "contact_matches_rules",
     "parse_branch_condition",
+    "run_rules_match",
+    "split_run_scoped_rules",
     "subject_matches_rules",
 ]
 
@@ -92,6 +95,109 @@ _LOGIC_ALIASES: dict[str, str] = {
     "or": "or",
     "any": "or",
 }
+
+# Operators a run-scoped rule may use. Deliberately tiny: these fields are a
+# boolean and a counter, and anything richer belongs on a record where the
+# full filter vocabulary already applies.
+_RUN_OPERATORS = {
+    "eq": lambda actual, expected: actual == expected,
+    "equals": lambda actual, expected: actual == expected,
+    "ne": lambda actual, expected: actual != expected,
+    "not_equals": lambda actual, expected: actual != expected,
+    "gt": lambda actual, expected: actual > expected,
+    "gte": lambda actual, expected: actual >= expected,
+    "lt": lambda actual, expected: actual < expected,
+    "lte": lambda actual, expected: actual <= expected,
+}
+
+
+def _coerce_expected(actual: Any, expected: Any) -> Any:
+    """Make a JSONB-sourced expected value comparable with ``actual``.
+
+    A workflow stored in JSON may carry ``"false"`` where the engine computes
+    ``False``, because a UI wrote a string. Comparing those directly is how a
+    suppression rule silently inverts.
+    """
+    if isinstance(actual, bool):
+        if isinstance(expected, bool):
+            return expected
+        if isinstance(expected, str):
+            return expected.strip().lower() in {"true", "1", "yes"}
+        return bool(expected)
+    if isinstance(actual, int) and isinstance(expected, str):
+        try:
+            return int(expected.strip())
+        except ValueError:
+            return expected
+    return expected
+
+
+def split_run_scoped_rules(
+    rules: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Partition ``rules`` into ``(run_scoped, subject_scoped)``.
+
+    Most conditions ask about a record and are answered by that record's filter
+    module. A few ask about the *run* — has this person replied since we last
+    messaged them, how many touches have we sent — and no column anywhere holds
+    the answer. Those are peeled off here and resolved from the step ledger.
+    """
+    run_scoped: list[dict[str, Any]] = []
+    subject_scoped: list[dict[str, Any]] = []
+    for rule in rules:
+        field = str(rule.get("field", "")).strip().lower()
+        if field in RUN_SCOPED_FIELDS:
+            run_scoped.append(rule)
+        else:
+            subject_scoped.append(rule)
+    return run_scoped, subject_scoped
+
+
+async def run_rules_match(
+    db: AsyncSession,
+    rules: list[dict[str, Any]],
+    *,
+    logic: str,
+    workspace_id: uuid.UUID,
+    execution_id: uuid.UUID,
+    contact_id: int | None,
+    contact_phone: str | None = None,
+) -> bool:
+    """Evaluate run-scoped rules against the step ledger.
+
+    An empty list matches, mirroring :func:`subject_matches_rules`, so a
+    condition made entirely of record rules is unaffected by this path.
+    """
+    if not rules:
+        return True
+
+    results: list[bool] = []
+    for rule in rules:
+        field = str(rule.get("field", "")).strip().lower()
+        operator = str(rule.get("operator", "eq")).strip().lower()
+        compare = _RUN_OPERATORS.get(operator)
+        if compare is None:
+            # An unsupported operator is a misauthored rule, not a customer
+            # signal. Treating it as "matched" keeps the run on its main path
+            # rather than diverting everyone into the else-branch.
+            results.append(True)
+            continue
+
+        actual = await run_scoped_value(
+            db,
+            field,
+            workspace_id=workspace_id,
+            execution_id=execution_id,
+            contact_id=contact_id,
+            contact_phone=contact_phone,
+        )
+        expected = _coerce_expected(actual, rule.get("value"))
+        try:
+            results.append(bool(compare(actual, expected)))
+        except TypeError:
+            results.append(True)
+
+    return any(results) if logic == "or" else all(results)
 
 
 def parse_branch_condition(config: Any) -> tuple[list[dict[str, Any]], str]:

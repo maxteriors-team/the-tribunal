@@ -13,6 +13,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.automation import Automation
     from app.models.automation_event import AutomationEvent
+    from app.models.automation_step_run import AutomationStepRun
     from app.models.contact import Contact
 
 
@@ -147,6 +148,12 @@ class AutomationExecution(Base):
     automation: Mapped["Automation"] = relationship("Automation", back_populates="executions")
     contact: Mapped["Contact | None"] = relationship("Contact")
     event: Mapped["AutomationEvent | None"] = relationship("AutomationEvent")
+    step_runs: Mapped[list["AutomationStepRun"]] = relationship(
+        "AutomationStepRun",
+        back_populates="execution",
+        cascade="all, delete-orphan",
+        order_by="AutomationStepRun.created_at",
+    )
 
     def __repr__(self) -> str:
         return (
