@@ -11,6 +11,13 @@ const mocks = vi.hoisted(() => ({
   hangup: vi.fn(),
   publishPresence: vi.fn(),
   publishPresenceBeacon: vi.fn(),
+  can: vi.fn(() => true),
+}));
+
+// The headset is `comms:send`-gated, so every case here is a calling role. The
+// refusal path for field technicians is asserted separately below.
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => ({ can: mocks.can }),
 }));
 
 /** The most recent fake Telnyx client, so a test can push an inbound invite. */
@@ -105,6 +112,7 @@ describe("SoftphoneProvider", () => {
     mocks.getWebRTCToken.mockResolvedValue({ token: "short-lived-token", expires_at: 1 });
     mocks.hangup.mockResolvedValue(undefined);
     mocks.publishPresence.mockResolvedValue(undefined);
+    mocks.can.mockReturnValue(true);
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
       value: { getUserMedia: vi.fn() },
@@ -137,6 +145,18 @@ describe("SoftphoneProvider", () => {
 
     expect(mocks.hangup).toHaveBeenCalledWith("workspace-1", "call-record-1");
     expect(result.current.phase).toBe("ended");
+  });
+
+  it("never registers a headset for someone with no calling permission", async () => {
+    // A field technician has no calling surface: registering them would mint a
+    // Telnyx credential nobody can use and earn a 403 on every page.
+    mocks.can.mockReturnValue(false);
+
+    const { result } = renderHook(() => useSoftphone(), { wrapper });
+
+    await waitFor(() => expect(result.current.isRegistered).toBe(false));
+    expect(mocks.getWebRTCToken).not.toHaveBeenCalled();
+    expect(mocks.publishPresence).not.toHaveBeenCalled();
   });
 
   it("publishes presence once the headset is registered", async () => {
