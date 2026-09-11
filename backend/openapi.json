@@ -96687,7 +96687,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/deliver": {
       "post": {
-        "description": "Send the client proposal link by email or SMS.\n\nMarks the quote sent (allocating its share token) and delivers the link to\nthe wizard snapshot's client email/phone, the linked contact's, or an\nexplicit ``to`` override.",
+        "description": "Send the client proposal link by email or SMS.\n\nMarks the quote sent (allocating its share token) and delivers the link to\nthe wizard snapshot's client email/phone, the linked contact's, or an\nexplicit ``to`` override. Success means provider acceptance, not confirmed\ninbox delivery. On failure, the quote can remain sent and its link shareable;\nthe response reports the delivery error rather than success.",
         "operationId": "deliver_quote_api_v1_workspaces__workspace_id__quotes__quote_id__deliver_post",
         "parameters": [
           {
@@ -97423,7 +97423,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/send": {
       "post": {
-        "description": "Mark a quote as sent and email it to the quote-to contact.",
+        "description": "Mark a quote as sent and publish its client link without sending email or SMS.\n\nBookkeeping only. Use the deliver endpoint for checked email or SMS delivery.",
         "operationId": "send_quote_api_v1_workspaces__workspace_id__quotes__quote_id__send_post",
         "parameters": [
           {

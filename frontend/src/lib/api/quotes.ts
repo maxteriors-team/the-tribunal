@@ -70,19 +70,17 @@ export const quotesApi = {
     });
   },
 
-  // Lifecycle transitions
-  send: async (workspaceId: string, quoteId: string): Promise<Quote> => {
+  /** Bookkeeping only: publish the client link without sending email or SMS. */
+  markSent: async (workspaceId: string, quoteId: string): Promise<Quote> => {
     return apiPost<Quote>(`${quotePath(workspaceId, quoteId)}/send`);
   },
 
   /**
    * Email or text the client their proposal link.
    *
-   * Distinct from `send`, which marks the quote sent and emails **best-effort**
-   * — it swallows "there was no address" and reports success either way. This
-   * one names the channel and surfaces the server's reason when a rail isn't
-   * ready (no client phone, number opted out, Telnyx unconfigured), which is the
-   * difference between a rep knowing the customer got it and only hoping so.
+   * Unlike `markSent`, this checks provider acceptance and surfaces failures
+   * (missing destination, opt-out, unconfigured provider). Acceptance does not
+   * guarantee inbox delivery.
    *
    * `to` overrides the destination; omitted, the server falls back to the wizard
    * snapshot's client email/phone, then the linked contact's.
