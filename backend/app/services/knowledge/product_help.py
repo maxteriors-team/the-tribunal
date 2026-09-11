@@ -144,6 +144,7 @@ _SEARCH_STOP_WORDS = frozenset(
         "an",
         "and",
         "are",
+        "beam",
         "can",
         "could",
         "crm",
@@ -171,6 +172,8 @@ _SEARCH_STOP_WORDS = frozenset(
         "the",
         "this",
         "to",
+        # Former product name: keep it filtered so older phrasing in saved
+        # queries still resolves to the same articles.
         "tribunal",
         "view",
         "want",

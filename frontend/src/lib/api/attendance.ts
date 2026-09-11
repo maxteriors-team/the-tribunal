@@ -82,7 +82,7 @@ export const attendanceApi = {
       blob: response.data,
       filename: safeDownloadFilename(
         response.headers["content-disposition"],
-        `tribunal-hours-${body.date_from}-${body.date_to}.csv`,
+        `beam-hours-${body.date_from}-${body.date_to}.csv`,
       ),
     };
   },
