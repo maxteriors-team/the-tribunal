@@ -75,7 +75,7 @@ async def _invoice(
     invoice = Invoice(
         workspace_id=workspace_id,
         contact_id=contact_id,
-        number=f"INV-{uuid.uuid4().hex[:6]}",
+        number=f"INV-{uuid.uuid4().hex}",
         subtotal=total,
         total=total,
         amount_paid=amount_paid,
