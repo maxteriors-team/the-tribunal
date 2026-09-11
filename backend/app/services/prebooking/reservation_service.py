@@ -346,8 +346,8 @@ class PreBookingReservationService:
             ),
             created_by_id=created_by_id,
         )
-        # Sending allocates the public proposal token and emails the customer the
-        # link they pay the deposit through (best-effort, as everywhere else).
+        # Publish the deposit link for the caller to share; holding a slot must
+        # not send an undisclosed email. Explicit sends use QuoteService.deliver_quote.
         await service.mark_sent(workspace_id, detail.id)
 
         quote = (await self.db.execute(select(Quote).where(Quote.id == detail.id))).scalar_one()

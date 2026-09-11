@@ -1456,16 +1456,13 @@ class QuoteService:
         workspace_id: uuid.UUID,
         quote_id: uuid.UUID,
     ) -> QuoteDetailResponse:
-        """Mark a quote as sent (sets ``sent_at`` once) and email it to the
-        quote-to contact (best-effort)."""
+        """Record sent status without emailing or texting (idempotent).
+
+        Allocate the client link and default expiry for sharing by other means.
+        Actions promising delivery must use ``deliver_quote`` instead.
+        """
         quote = await self._load_for_send(workspace_id, quote_id)
         await self._ensure_sent_state(quote)
-
-        # Deliberately ignoring the result: "mark sent" is a status change an
-        # operator makes after sending by their own means, and the courtesy
-        # email riding along must not fail the transition. ``deliver`` is the
-        # path that promises delivery, and that one does check.
-        await self._email_quote(quote)
         return await self._detail_response(quote)
 
     async def prepare_for_in_person_approval(
@@ -1870,26 +1867,20 @@ class QuoteService:
         quote: Quote,
         *,
         override_email: str | None = None,
-        delivery_attempt_id: uuid.UUID | None = None,
+        delivery_attempt_id: uuid.UUID,
     ) -> bool:
-        """Email the quote's proposal link. Never raises; reports whether it sent.
+        """Email only for explicit delivery; report whether the provider accepted.
 
         Destination: explicit override → wizard snapshot's client email → the
         linked contact's email. Wizard proposals usually have no Contact row,
         so the snapshot fallback is what makes their sends actually deliver.
 
-        An explicit delivery gets a fresh ``delivery_attempt_id`` so clicking
-        "Re-send email" creates a new provider message. The best-effort courtesy
-        email attached to ``mark_sent`` omits it and remains revision-idempotent.
-
-        Returns ``True`` only when Resend accepted the message. The caller
-        decides what a ``False`` means: emailing a quote *on purpose* has to
-        surface the failure, while the email tacked onto ``mark_sent`` is a side
-        effect that must not undo the status change.
+        ``deliver_quote`` checks this flag and surfaces failures. Status-only
+        actions must not call this helper. The attempt key survives provider
+        retries; a deliberate re-send gets a new key from ``deliver_quote``.
         """
         from app.core.config import settings
         from app.services.email import send_quote_email
-        from app.services.idempotency import derive_document_send_key
 
         client = (quote.proposal_document or {}).get("client") or {}
         contact_email = (
@@ -1934,24 +1925,11 @@ class QuoteService:
                 logo_url=get_proposal_template(quote.workspace).logo_url
                 if quote.workspace
                 else None,
-                # Explicit deliveries are intentional attempts, including the
-                # "Re-send email" action, and must create a new provider message.
-                # The courtesy email on mark_sent stays revision-idempotent so a
-                # retried status transition cannot duplicate it.
-                idempotency_key=(
-                    derive_outbound_key(
-                        "quote_delivery",
-                        quote.id,
-                        delivery_attempt_id,
-                        contact_email,
-                    )
-                    if delivery_attempt_id is not None
-                    else derive_document_send_key(
-                        "quote_send", quote.id, quote.updated_at, contact_email
-                    )
+                idempotency_key=derive_outbound_key(
+                    "quote_delivery", quote.id, delivery_attempt_id, contact_email
                 ),
             )
-        except Exception as exc:  # pragma: no cover - best-effort email
+        except Exception as exc:  # pragma: no cover - defensive delivery failure
             self.log.warning("quote_email_failed", quote_id=str(quote.id), error=str(exc))
             return False
 
