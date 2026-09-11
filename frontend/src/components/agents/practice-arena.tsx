@@ -271,8 +271,8 @@ function WorkspacePracticeArena({
             ) : null}
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Who is practicing?</Label>
+              <div role="group" aria-labelledby="practice-mode-label" className="space-y-2">
+                <Label id="practice-mode-label">Who is practicing?</Label>
                 <div className="flex gap-2">
                   <Button
                     type="button"
