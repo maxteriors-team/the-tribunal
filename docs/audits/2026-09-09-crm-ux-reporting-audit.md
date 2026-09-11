@@ -4,6 +4,8 @@
 
 **Baseline:** current working tree on `main`, HEAD `b1755cb7`. Existing assistant, quote-tool, and navigation edits were included in the inventory and preserved. No application fixes, commits, deployments, production writes, real messages, calls, payment attempts, or paid AI requests were performed.
 
+> **September 10 continuation, still incomplete:** [evidence, numerical reconciliation and scoped tasks](2026-09-10-crm-audit-continuation.md) · [explicit 87-route coverage matrix](2026-09-10-crm-route-coverage.md). New initial-state screenshots are not full journey verification. The original findings and prior working-tree updates below are preserved.
+
 ## Decision summary
 
 **16 evidence-backed defects/usability gaps, plus explicitly unfinished capabilities and verification gaps.** Prioritize recovery, roleplay reliability, financial truth, and access to existing customer records before visual polish.
@@ -238,6 +240,8 @@ The reporting probe's failing assertion was not removed, skipped, or relaxed. It
 
 ### The two reporting integration failures are not two extra confirmed product bugs
 
+**2026-09-10 follow-up:** repaired locally without changing existing assertions. The original identifiers below do not match the archived log or this checkout; the corrected reproduction, fixes, and passing suite are recorded in [Reporting integration fixture repair](#reporting-integration-fixture-repair--2026-09-10).
+
 - `test_conversion_rate`: duplicate `(workspace_id, invoice number)` fixture violates the existing invoice uniqueness constraint. The local integration test setup needs distinct synthetic numbers.
 - `test_revenue_target_query_matches_accepted_quotes`: expects two June deals but sees one; the fixture accepts a quote at June 1 00:00 UTC, which belongs to May in the workspace's US time zone. Align the fixture's intended time basis before judging the product calculation. Do not weaken the assertion just to obtain green.
 
@@ -388,3 +392,39 @@ Tasks are queued for implementation, **not executed by this audit**:
 | Accessible selected states | `6c6f4e83` | F16; coordinate with contact/roleplay UI |
 | Reporting integration fixture repair | `3fa174c9` | Two failing integration tests |
 | Complete remaining workflow audit | `bb7d2748` | Every unverified cell in the coverage matrix |
+
+## Reporting integration fixture repair — 2026-09-10
+
+Task `3fa174c9` is verified locally. No production database access, application calculation changes, migrations, commits, or deployments were needed.
+
+### Corrected reproduction
+
+The two node IDs quoted in the original audit were absent at checkout `a1d04eac`; selecting them returned pytest's `not found` error. The archived `reporting-integration-tests.log` actually contains these failures:
+
+- `test_capacity_query.py::test_estimate_capacity_never_leaks_another_workspaces_appointments`: five appointments reused one contact's live slot, violating `uq_appointments_live_contact_slot`.
+- `test_revenue_target_query.py::test_pace_counts_the_month_actuals_from_the_live_crm`: a June 1 midnight UTC contact falls in May under the implicit US timezone, so the June lead count was one rather than two.
+
+A fresh local reproduction, protected by outer rollback transactions, returned **78 passed, 10 failed**: those two fixture failures plus eight success-only cleanup failures. The latter loaded an unrelated, locally unmigrated `phone_numbers.inbound_ring_operators` column through ORM workspace deletion. All 12,958 pre-existing workspace IDs were preserved. That unrelated work and its migration were left untouched.
+
+### Repair and calculation proof
+
+- Synthetic invoice numbers now use the full UUID rather than six hex characters. There is no `test_conversion_rate` in the current reporting-service test module; existing conversion coverage in the sales-performance tests remains enabled and passes.
+- The five other-workspace appointments occupy distinct hourly slots, still in July and still for the same contact. Tenant-isolation assertions are unchanged.
+- Revenue-target workspaces explicitly use UTC for their UTC-calendar fixtures. The existing approved estimate now has an explicit July acceptance date, preserving its June estimate count without accidentally contributing June booked revenue or depending on the wall clock.
+- Added `test_revenue_target_query_matches_accepted_quotes`, parameterized over UTC and America/Chicago. It calls the real `get_booked_revenue_totals` helper and `RevenueTargetService.get_pace`: the same $1,000 quote accepted at June 1 00:00 UTC appears once in June under UTC and once in May under Chicago, with zero in the opposite month. These paths show correct production calculations; no timezone or revenue query was relaxed.
+- Revenue-target sessions now join an outer transaction through savepoints. Service commits remain exercised, but `finally` rolls back every fixture row on success, setup failure, or assertion failure. Dedicated regression cases inject an assertion failure and a real uniqueness violation after a service commit, then verify the workspace and target are absent from a fresh session. The old success-only deletion helper is removed, and the tests enforce a loopback database host.
+
+### Verification
+
+**RUNTIME:** PostgreSQL 17.10 in the local `aicrm-postgres` container; `DATABASE_URL` explicitly pinned to `127.0.0.1:5432/aicrm`, `ENVIRONMENT=test`, background workers disabled. No production connection was used.
+
+```text
+cd backend
+.venv/bin/pytest tests/services/reporting -m integration -q --tb=short
+92 passed, 102 deselected in 5.99s
+```
+
+- Ruff lint and format checks passed for all three edited test files.
+- An AST comparison against HEAD confirmed every pre-existing test and its assertion expressions remain unchanged.
+- Exact pre/post row-ID sets matched for workspaces, contacts, invoices, quotes, revenue targets, opportunities, pipelines, appointments, and field-service jobs, including the injected-failure cases. No retained fixture rows were found in those nine tables; rollback does not rewind PostgreSQL sequences.
+- A SHA-256 fingerprint confirmed all pre-existing uncommitted files remained byte-for-byte unchanged. The passing result applies to this local reporting suite, not a production-wide financial audit.
