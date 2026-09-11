@@ -13,15 +13,16 @@ what needs Postgres is everything the ORM alone cannot prove:
 - the pace actuals join the right three tables over the right window, and stay
   inside one workspace.
 
-The service commits (it is the write path), so each test cleans up its own
-workspace; the cascading FK takes the targets, contacts, quotes and
-opportunities with it.
+The service commits (it is the write path), so sessions use savepoints inside
+an outer transaction. The outer rollback removes all fixture rows even when
+setup or assertions fail; no committed workspace cleanup is needed.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 
 import pytest
@@ -39,6 +40,7 @@ from app.models.workspace import Workspace
 from app.schemas.revenue_target import RevenueTargetBulkUpsert, RevenueTargetUpsert
 from app.services.exceptions import NotFoundError
 from app.services.reporting import RevenueTargetService
+from app.services.reporting.booked_revenue import get_booked_revenue_totals
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -50,23 +52,37 @@ IN_JUNE = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
 @pytest.fixture(autouse=True)
 async def _fresh_engine_pool() -> AsyncIterator[None]:
     """Dispose the shared asyncpg pool around each test (fresh event loop)."""
+    assert engine.url.host in {"localhost", "127.0.0.1", "::1"}, "Use a local test database"
     await engine.dispose()
     yield
     await engine.dispose()
 
 
-async def _workspace(db: AsyncSession) -> Workspace:
-    ws = Workspace(id=uuid.uuid4(), name="Targets", slug=f"tgt-{uuid.uuid4().hex[:8]}")
+@asynccontextmanager
+async def _session() -> AsyncIterator[AsyncSession]:
+    """Keep service commits inside a transaction that always rolls back."""
+    async with engine.connect() as connection:
+        transaction = await connection.begin()
+        try:
+            async with AsyncSessionLocal(
+                bind=connection, join_transaction_mode="create_savepoint"
+            ) as db:
+                yield db
+        finally:
+            await transaction.rollback()
+
+
+async def _workspace(db: AsyncSession, *, timezone_name: str = "UTC") -> Workspace:
+    ws = Workspace(
+        id=uuid.uuid4(),
+        name="Targets",
+        slug=f"tgt-{uuid.uuid4().hex[:8]}",
+        # The fixture's midnight UTC timestamps describe UTC calendar months.
+        settings={"timezone": timezone_name},
+    )
     db.add(ws)
     await db.flush()
     return ws
-
-
-async def _cleanup(db: AsyncSession, *workspaces: Workspace) -> None:
-    """Drop the test workspaces; every row under test cascades away with them."""
-    for ws in workspaces:
-        await db.delete(await db.merge(ws))
-    await db.commit()
 
 
 async def _contact(db: AsyncSession, workspace_id: uuid.UUID, *, created_at: datetime) -> Contact:
@@ -132,11 +148,34 @@ def _june_target(**overrides: object) -> RevenueTargetUpsert:
     return RevenueTargetUpsert(**values)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("failure", ["assertion", "integrity"])
+async def test_session_rolls_back_service_commits_on_failure(failure: str) -> None:
+    error = AssertionError if failure == "assertion" else IntegrityError
+    match = (
+        "synthetic assertion failure"
+        if failure == "assertion"
+        else "uq_revenue_targets_workspace_month"
+    )
+    with pytest.raises(error, match=match):
+        async with _session() as db:
+            ws = await _workspace(db)
+            workspace_id = ws.id
+            target = await RevenueTargetService(db).upsert_target(ws.id, _june_target())
+            if failure == "assertion":
+                raise AssertionError("synthetic assertion failure")
+            db.add(RevenueTarget(workspace_id=ws.id, period_month=JUNE, revenue_goal=1))
+            await db.flush()
+
+    async with AsyncSessionLocal() as db:
+        assert await db.get(Workspace, workspace_id) is None
+        assert await db.get(RevenueTarget, target.id) is None
+
+
 # --------------------------------------------------------------------------- #
 # Upsert
 # --------------------------------------------------------------------------- #
 async def test_upsert_replaces_the_month_instead_of_adding_a_second_row() -> None:
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         ws = await _workspace(db)
         service = RevenueTargetService(db)
 
@@ -158,11 +197,9 @@ async def test_upsert_replaces_the_month_instead_of_adding_a_second_row() -> Non
         listed = await service.list_targets(ws.id)
         assert listed.total == 1
 
-        await _cleanup(db, ws)
-
 
 async def test_bulk_upsert_writes_a_season_then_revises_it() -> None:
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         ws = await _workspace(db)
         service = RevenueTargetService(db)
 
@@ -197,11 +234,9 @@ async def test_bulk_upsert_writes_a_season_then_revises_it() -> None:
         ]
         assert [item.revenue_goal for item in listed.items] == [45_000.0, 150_000.0, 60_000.0]
 
-        await _cleanup(db, ws)
-
 
 async def test_list_can_narrow_to_one_calendar_year() -> None:
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         ws = await _workspace(db)
         service = RevenueTargetService(db)
 
@@ -221,11 +256,9 @@ async def test_list_can_narrow_to_one_calendar_year() -> None:
 
         assert [item.period_month for item in listed.items] == [JANUARY, date(2026, 12, 1)]
 
-        await _cleanup(db, ws)
-
 
 async def test_targets_are_workspace_isolated() -> None:
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         mine = await _workspace(db)
         theirs = await _workspace(db)
         service = RevenueTargetService(db)
@@ -238,11 +271,9 @@ async def test_targets_are_workspace_isolated() -> None:
         assert listed.total == 1
         assert listed.items[0].revenue_goal == 130_000.0
 
-        await _cleanup(db, mine, theirs)
-
 
 async def test_get_and_delete_report_a_month_that_was_never_set() -> None:
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         ws = await _workspace(db)
         service = RevenueTargetService(db)
 
@@ -258,15 +289,13 @@ async def test_get_and_delete_report_a_month_that_was_never_set() -> None:
         await service.delete_target(ws.id, date(2026, 6, 30))
         assert (await service.list_targets(ws.id)).total == 0
 
-        await _cleanup(db, ws)
-
 
 # --------------------------------------------------------------------------- #
 # Storage constraints
 # --------------------------------------------------------------------------- #
 async def test_database_refuses_two_targets_for_one_month() -> None:
     """The upsert keys on this constraint, so the DB must actually enforce it."""
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         ws = await _workspace(db)
         db.add(RevenueTarget(workspace_id=ws.id, period_month=JUNE, revenue_goal=130_000))
         await db.flush()
@@ -281,7 +310,7 @@ async def test_database_refuses_two_targets_for_one_month() -> None:
 
 async def test_database_refuses_a_period_month_that_is_not_the_first() -> None:
     """Service-side normalization cannot protect rows a script writes directly."""
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         ws = await _workspace(db)
         db.add(
             RevenueTarget(workspace_id=ws.id, period_month=date(2026, 6, 14), revenue_goal=130_000)
@@ -297,7 +326,7 @@ async def test_database_refuses_a_period_month_that_is_not_the_first() -> None:
 # Pace actuals
 # --------------------------------------------------------------------------- #
 async def test_pace_counts_the_month_actuals_from_the_live_crm() -> None:
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         ws = await _workspace(db)
         service = RevenueTargetService(db)
         await service.upsert_target(ws.id, _june_target())
@@ -309,10 +338,12 @@ async def test_pace_counts_the_month_actuals_from_the_live_crm() -> None:
 
         # Estimates: quotes that left draft. The draft never reached a customer.
         await _quote(db, ws.id, status="sent", created_at=IN_JUNE)
-        await _quote(db, ws.id, status="approved", created_at=IN_JUNE)
+        approved_later = await _quote(db, ws.id, status="approved", created_at=IN_JUNE)
+        # This estimate was accepted after June; only the legacy wins below count.
+        approved_later.approved_at = datetime(2026, 7, 1, tzinfo=UTC)
         await _quote(db, ws.id, status="draft", created_at=IN_JUNE)
 
-        # Sold: closed-won opportunities, the same source as the dashboard.
+        # Sold: legacy closed-won opportunities without linked approved quotes.
         await _won_opportunity(db, ws.id, amount=40_000, closed_date=date(2026, 6, 5))
         await _won_opportunity(db, ws.id, amount=25_000, closed_date=date(2026, 6, 12))
         await _won_opportunity(db, ws.id, amount=99_000, closed_date=date(2026, 7, 1))
@@ -330,12 +361,41 @@ async def test_pace_counts_the_month_actuals_from_the_live_crm() -> None:
         assert stages["estimates"].actual == 2
         assert stages["sold"].actual == 2
 
-        await _cleanup(db, ws)
+
+@pytest.mark.parametrize(
+    ("timezone_name", "june_sold", "may_sold"),
+    [("UTC", 1, 0), ("America/Chicago", 0, 1)],
+)
+async def test_revenue_target_query_matches_accepted_quotes(
+    timezone_name: str, june_sold: int, may_sold: int
+) -> None:
+    """June 1 midnight UTC belongs to June in UTC but May in Chicago."""
+    async with _session() as db:
+        ws = await _workspace(db, timezone_name=timezone_name)
+        quote = await _quote(
+            db, ws.id, status="approved", created_at=datetime(2026, 5, 15, tzinfo=UTC)
+        )
+        quote.approved_at = datetime(2026, 6, 1, tzinfo=UTC)
+        await db.flush()
+
+        for month, through, expected_sold in (
+            (JUNE, date(2026, 6, 30), june_sold),
+            (date(2026, 5, 1), date(2026, 5, 31), may_sold),
+        ):
+            booked = await get_booked_revenue_totals(
+                db, ws.id, month, through, timezone_name=timezone_name
+            )
+            pace = await RevenueTargetService(db).get_pace(ws.id, month, today=through)
+
+            assert booked.count == expected_sold
+            assert booked.revenue == 1_000 * expected_sold
+            assert pace.revenue_sold_to_date == 1_000 * expected_sold
+            assert {stage.stage: stage.actual for stage in pace.stages}["sold"] == expected_sold
 
 
 async def test_pace_ignores_work_dated_after_today() -> None:
     """ "To date" means to date: a deal closed later this month is not sold yet."""
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         ws = await _workspace(db)
         service = RevenueTargetService(db)
         await service.upsert_target(ws.id, _june_target())
@@ -349,11 +409,9 @@ async def test_pace_ignores_work_dated_after_today() -> None:
         assert pace.revenue_sold_to_date == 10_000.0
         assert {stage.stage: stage.actual for stage in pace.stages}["leads"] == 0
 
-        await _cleanup(db, ws)
-
 
 async def test_pace_reports_actuals_for_a_month_with_no_target() -> None:
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         ws = await _workspace(db)
         await _won_opportunity(db, ws.id, amount=12_000, closed_date=date(2026, 6, 4))
 
@@ -364,11 +422,9 @@ async def test_pace_reports_actuals_for_a_month_with_no_target() -> None:
         assert pace.revenue_sold_to_date == 12_000.0
         assert all(stage.required is None for stage in pace.stages)
 
-        await _cleanup(db, ws)
-
 
 async def test_pace_never_counts_another_workspaces_revenue() -> None:
-    async with AsyncSessionLocal() as db:
+    async with _session() as db:
         mine = await _workspace(db)
         theirs = await _workspace(db)
         await _won_opportunity(db, mine.id, amount=10_000, closed_date=date(2026, 6, 4))
@@ -379,5 +435,3 @@ async def test_pace_never_counts_another_workspaces_revenue() -> None:
 
         assert pace.revenue_sold_to_date == 10_000.0
         assert {stage.stage: stage.actual for stage in pace.stages}["leads"] == 0
-
-        await _cleanup(db, mine, theirs)
