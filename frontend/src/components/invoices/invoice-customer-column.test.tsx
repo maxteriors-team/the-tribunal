@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InvoicesList } from "@/components/invoices/invoices-list";
 import type { Invoice } from "@/types";
@@ -71,6 +71,43 @@ async function renderList(invoices: Invoice[]) {
 function rowFor(number: string) {
   return screen.getByRole("cell", { name: number }).closest("tr") as HTMLElement;
 }
+
+describe.each(["America/New_York", "Pacific/Kiritimati"])("invoice due dates in %s", (timezone) => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([
+    { date: "2026-09-30", expected: "Sep 30, 2026" },
+    { date: "2026-03-08", expected: "Mar 8, 2026" },
+    { date: "2026-11-01", expected: "Nov 1, 2026" },
+    { date: "2026-02-30", expected: "—" },
+    { date: null, expected: "—" },
+    { date: undefined, expected: "—" },
+  ])("renders due date $date without timezone drift or failure", async ({ date, expected }) => {
+    vi.stubEnv("TZ", timezone);
+    await renderList([invoice({ id: "inv-1", due_date: date })]);
+
+    expect(within(rowFor("INV-0001")).getByText(expected)).toBeVisible();
+  });
+
+  it("still converts receipt timestamps beside the unchanged due date", async () => {
+    vi.stubEnv("TZ", timezone);
+    await renderList([
+      invoice({
+        id: "inv-1",
+        due_date: "2026-09-30",
+        receipt_delivery: { status: "sent", timestamp: "2026-09-30T00:00:00Z" },
+      }),
+    ]);
+
+    const row = within(rowFor("INV-0001"));
+    expect(row.getByText("Sep 30, 2026")).toBeVisible();
+    expect(
+      row.getByText(
+        timezone === "America/New_York" ? "Sep 29, 2026, 8:00 PM" : "Sep 30, 2026, 2:00 PM",
+      ),
+    ).toBeVisible();
+  });
+});
 
 describe("invoice list customer column", () => {
   it("names the customer on the row, not just the invoice number", async () => {
