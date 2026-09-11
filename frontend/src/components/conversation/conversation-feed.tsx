@@ -26,7 +26,6 @@ import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { isSameDay } from "@/lib/utils/date";
 import { getApiErrorMessage } from "@/lib/utils/errors";
-import { normalizePhoneForComparison } from "@/lib/utils/phone";
 import type { Contact, Conversation, TimelineItem } from "@/types";
 import { CHANNEL_LABELS } from "@/types/conversation";
 
@@ -80,31 +79,13 @@ export function ConversationFeed({ className, contact }: ConversationFeedProps) 
   const { data: conversationsData, isPending: isConversationsPending } = useQuery({
     queryKey: queryKeys.conversations.byContact(workspaceId ?? "", selectedContact?.id),
     queryFn: () =>
-      workspaceId
-        ? conversationsApi.list(workspaceId, { page: 1, page_size: 100 })
-        : Promise.resolve({
-            items: [],
-            total: 0,
-            page: 1,
-            page_size: 100,
-            pages: 0,
-          }),
+      workspaceId && selectedContact
+        ? conversationsApi.list(workspaceId, { contact_id: selectedContact.id, page_size: 1 })
+        : Promise.resolve({ items: [], total: 0, page: 1, page_size: 1, pages: 0 }),
     enabled: !!workspaceId && !!selectedContact,
   });
 
-  const selectedContactPhone = normalizePhoneForComparison(selectedContact?.phone_number);
-  const contactConversations = useMemo(
-    () =>
-      conversationsData?.items?.filter((conversation) => {
-        if (conversation.contact_id === selectedContact?.id) return true;
-        return (
-          !!selectedContactPhone &&
-          normalizePhoneForComparison(conversation.contact_phone) === selectedContactPhone
-        );
-      }) ?? [],
-    [conversationsData?.items, selectedContact?.id, selectedContactPhone],
-  );
-  const contactConversation: Conversation | undefined = contactConversations[0];
+  const contactConversation: Conversation | undefined = conversationsData?.items[0];
   const isImportedConversation = contactConversation?.source_provider != null;
   // Meta only allows a reply for 24h after the person's last message, and the
   // 7-day human-agent tag does not cover bot replies. Past the deadline every
