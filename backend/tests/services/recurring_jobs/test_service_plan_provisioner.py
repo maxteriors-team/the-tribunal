@@ -252,6 +252,19 @@ async def test_christmas_signup_creates_install_and_takedown_plans() -> None:
         assert takedown.frequency == RecurrenceFrequency.YEARLY
 
 
+async def test_measured_seasonal_handoff_skips_automatic_christmas_plans() -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _workspace(db, christmas=SEASON)
+        contact = await _contact(db, ws.id)
+        quote = await _quote(db, ws.id, contact.id, _christmas_document())
+        quote.seasonal_installation_snapshot = {"snapshot_version": 1}
+        quote.seasonal_takedown_included = True
+        quote.seasonal_storage_included = False
+        await db.flush()
+
+        assert await ServicePlanProvisioner(db).provision_from_quote(quote, now=NOW) == []
+
+
 async def test_christmas_install_rolls_to_next_year_when_the_season_has_passed() -> None:
     async with AsyncSessionLocal() as db:
         ws = await _workspace(db, christmas=SEASON)
@@ -493,9 +506,7 @@ async def test_approving_a_quote_signs_the_client_up() -> None:
             approved = await QuoteService(db).approve_quote(workspace_id, quote_id)
             assert approved.status == "approved"
             plans = await _plans(db, quote_id)
-            assert [plan.plan_type for plan in plans].count(
-                ServicePlanType.CHRISTMAS_LIGHTS
-            ) == 2
+            assert [plan.plan_type for plan in plans].count(ServicePlanType.CHRISTMAS_LIGHTS) == 2
             assert any(plan.care_plan_tier == "gold" for plan in plans)
 
         # Re-approving is idempotent at the plan level too.

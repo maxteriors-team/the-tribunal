@@ -17,6 +17,7 @@ Two boundaries live here:
 
 import base64
 import binascii
+import math
 import uuid
 from typing import Literal, Self
 
@@ -77,6 +78,33 @@ class EstimateCustomLine(BaseModel):
     side: Literal["permanent", "seasonal"] = "seasonal"
     description: str | None = Field(default=None, max_length=300)
     package_key: str | None = Field(default=None, max_length=60)
+    worksheet_row_id: str | None = Field(default=None, min_length=1, max_length=100)
+    inventory_item_id: uuid.UUID | None = None
+    inventory_behavior: Literal["consumable", "reusable"] | None = None
+    fulfillment_quantity: float | None = Field(default=None, gt=0, le=1_000_000)
+
+    @field_validator("unit_price", "fulfillment_quantity")
+    @classmethod
+    def finite_numbers(cls, value: float | None) -> float | None:
+        if value is not None and not math.isfinite(value):
+            raise ValueError("custom-line prices and fulfillment quantities must be finite")
+        return value
+
+    @model_validator(mode="after")
+    def complete_fulfillment_reference(self) -> Self:
+        fulfillment = (
+            self.inventory_item_id,
+            self.inventory_behavior,
+            self.fulfillment_quantity,
+            self.worksheet_row_id,
+        )
+        if any(value is not None for value in fulfillment) and not all(
+            value is not None for value in fulfillment
+        ):
+            raise ValueError("inventory fulfillment fields must be provided together")
+        if self.inventory_item_id is not None and self.side != "seasonal":
+            raise ValueError("inventory fulfillment is only valid for seasonal lines")
+        return self
 
 
 class EstimateCustomLineCost(EstimateCustomLine):
@@ -317,7 +345,10 @@ class EstimateQuoteRequest(ComparisonShareRequest):
     """
 
     side: Literal["permanent", "seasonal"] = "seasonal"
+    seasonal_installation_source: Literal["photo", "tree_wrap_worksheet"] = "photo"
+    seasonal_phased_handoff: bool = False
     deposit_percentage: float | None = Field(default=None, ge=0.01, le=100)
+    contact_id: int | None = Field(default=None, gt=0)
     lighting_project_id: uuid.UUID | None = None
     proposal_preview: EstimateProposalPreview | None = None
     # Optional operator-entered top of a ballpark range. The exact server-priced
@@ -325,6 +356,22 @@ class EstimateQuoteRequest(ComparisonShareRequest):
     # exceed it. Keeping this as money rather than a client-selected percentage
     # makes the rep's intent explicit while preventing a customer from changing it.
     price_range_high: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def seasonal_handoff_is_consistent(self) -> Self:
+        if self.seasonal_installation_source == "tree_wrap_worksheet":
+            if self.side != "seasonal":
+                raise ValueError("A tree-wrap worksheet can only be used for a seasonal quote")
+            if self.lighting_project_id is None:
+                raise ValueError("A tree-wrap worksheet requires a saved lighting project")
+            if not self.seasonal_phased_handoff:
+                raise ValueError("A tree-wrap worksheet requires phased job handoff")
+        if self.seasonal_phased_handoff:
+            if self.side != "seasonal":
+                raise ValueError("Phased job handoff can only be used for a seasonal quote")
+            if self.lighting_project_id is None:
+                raise ValueError("Phased job handoff requires a saved lighting project")
+        return self
 
     @model_validator(mode="after")
     def permanent_quote_fields_are_consistent(self) -> Self:

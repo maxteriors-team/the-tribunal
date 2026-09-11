@@ -313,6 +313,33 @@ async def test_shortage_blocks_every_consumption_and_cross_workspace_reads() -> 
         assert excinfo.value.status_code == 404
 
 
+async def test_untracked_skus_skip_but_missing_frozen_items_fail_closed() -> None:
+    async with AsyncSessionLocal() as db:
+        workspace = await _workspace(db)
+        job = await _job(db, workspace.id)
+        service = JobAllocationService(db)
+
+        assert await service.reserve(
+            workspace.id,
+            job.id,
+            [FulfillmentPart(sku="OPTIONAL-UNTRACKED", qty=2)],
+        ) == []
+
+        with pytest.raises(ConflictError) as excinfo:
+            await service.reserve(
+                workspace.id,
+                job.id,
+                [
+                    FulfillmentPart(
+                        sku="FROZEN-MISSING",
+                        qty=2,
+                        inventory_item_id=uuid.uuid4(),
+                    )
+                ],
+            )
+        assert excinfo.value.code == "inventory_item_unavailable"
+
+
 async def test_cancellation_releases_reservations_and_consumed_history_blocks_delete() -> None:
     async with AsyncSessionLocal() as db:
         workspace = await _workspace(db)

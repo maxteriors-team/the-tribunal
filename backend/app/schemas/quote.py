@@ -244,6 +244,21 @@ class QuoteDeliverResult(BaseModel):
     to: str
 
 
+class QuoteJobSchedule(BaseModel):
+    """A validated schedule and team for one quote-created job phase."""
+
+    scheduled_start: datetime
+    scheduled_end: datetime
+    crew_id: uuid.UUID | None = None
+    technician_ids: list[uuid.UUID] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_window(self) -> "QuoteJobSchedule":
+        if self.scheduled_end <= self.scheduled_start:
+            raise ValueError("scheduled_end must be after scheduled_start")
+        return self
+
+
 class QuoteConvertRequest(BaseModel):
     """Choose what an approved quote converts into. Defaults to both.
 
@@ -256,6 +271,7 @@ class QuoteConvertRequest(BaseModel):
     scheduled_end: datetime | None = None
     crew_id: uuid.UUID | None = None
     technician_ids: list[uuid.UUID] = Field(default_factory=list)
+    takedown_schedule: QuoteJobSchedule | None = None
     confirm_unpaid_deposit: bool = False
 
     @model_validator(mode="after")
@@ -265,8 +281,18 @@ class QuoteConvertRequest(BaseModel):
             raise ValueError("scheduled_start and scheduled_end must be provided together")
         if start is not None and end is not None and end <= start:
             raise ValueError("scheduled_end must be after scheduled_start")
-        if not self.create_job and (start is not None or self.crew_id or self.technician_ids):
+        if not self.create_job and (
+            start is not None
+            or self.crew_id
+            or self.technician_ids
+            or self.takedown_schedule is not None
+        ):
             raise ValueError("schedule and installation team require create_job")
+        if self.takedown_schedule is not None:
+            if end is None:
+                raise ValueError("takedown_schedule requires an installation schedule")
+            if self.takedown_schedule.scheduled_start <= end:
+                raise ValueError("takedown must begin after installation ends")
         return self
 
 
@@ -294,6 +320,9 @@ class QuoteResponse(BaseModel):
     assignee: AssigneeSummary | None = None
     # Authenticated linkage only. PublicProposal has no corresponding fields.
     lighting_project_id: uuid.UUID | None = None
+    # Explicit booleans identify measured seasonal handoffs; NULL remains legacy.
+    seasonal_takedown_included: bool | None = None
+    seasonal_storage_included: bool | None = None
     revision_of_quote_id: uuid.UUID | None = None
     revision_root_quote_id: uuid.UUID | None = None
     revision_number: int = Field(default=1, ge=1)
@@ -453,9 +482,16 @@ class QuoteConvertResponse(BaseModel):
 
     quote: QuoteDetailResponse
     job_id: uuid.UUID | None = None
+    takedown_job_id: uuid.UUID | None = None
     invoice_id: uuid.UUID | None = None
     idempotent_replay: bool = False
     crew_notification: CrewNotificationResult = Field(default_factory=CrewNotificationResult)
+    installation_crew_notification: CrewNotificationResult = Field(
+        default_factory=CrewNotificationResult
+    )
+    takedown_crew_notification: CrewNotificationResult = Field(
+        default_factory=CrewNotificationResult
+    )
 
 
 class RenewalCandidateResponse(BaseModel):

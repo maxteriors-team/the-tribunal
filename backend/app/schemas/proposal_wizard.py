@@ -496,6 +496,7 @@ class FulfillmentPart(BaseModel):
     description: str | None = None
     qty: float
     inventory_behavior: Literal["consumable", "reusable"] = "consumable"
+    inventory_item_id: uuid.UUID | None = None
 
 
 class QuoteInventoryAvailabilityItem(BaseModel):
@@ -508,6 +509,9 @@ class QuoteInventoryAvailabilityItem(BaseModel):
     inventory_item_name: str | None = None
     unit_of_measure: str | None = None
     quantity_on_hand: float | None = None
+    quantity_reserved: float | None = None
+    quantity_deployed: float | None = None
+    available_to_promise: float | None = None
     shortfall: float | None = None
     status: Literal["in_stock", "shortage", "not_counted", "untracked"]
 

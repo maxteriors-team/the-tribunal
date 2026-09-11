@@ -1,10 +1,4 @@
-"""What carries into a renewal draft, and what must never carry.
-
-Pure copy rules, no DB. The dangerous half is the second one: a renewal is a new
-offer, so anything recording the *outcome* of last season — money taken,
-approval, the customer's share link, the job it became — would be a lie on a
-fresh draft, and in the payment cases a customer-visible one.
-"""
+"""Renewal drafts keep sold scope while dropping prior payment and conversion state."""
 
 from __future__ import annotations
 
@@ -136,6 +130,20 @@ class TestCarriesTheScope:
         assert copy.proposal_document is not source.proposal_document
         copy.proposal_document["selected_tier"] = "best"
         assert source.proposal_document["selected_tier"] == "better"
+
+    def test_carries_the_frozen_installation_handoff(self):
+        snapshot = {"snapshot_version": 1, "worksheet": {"rows": [{"id": "tree-1"}]}}
+        source = sold_quote(
+            seasonal_installation_snapshot=snapshot,
+            seasonal_takedown_included=True,
+            seasonal_storage_included=False,
+        )
+        copy = build_renewal_quote(source, number="Q-1", season=SEASON, created_by_id=None)
+
+        assert copy.seasonal_installation_snapshot == snapshot
+        assert copy.seasonal_installation_snapshot is not snapshot
+        assert copy.seasonal_takedown_included is True
+        assert copy.seasonal_storage_included is False
 
     def test_copies_lines_rather_than_moving_them(self):
         source = sold_quote()

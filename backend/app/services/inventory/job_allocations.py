@@ -16,7 +16,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import cast
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -210,8 +210,10 @@ class JobAllocationService:
     @staticmethod
     def _requirements(
         fulfillment: Sequence[FulfillmentPart | dict[str, object]],
-    ) -> dict[str, tuple[InventoryBehavior, Decimal, str | None]]:
-        requirements: dict[str, tuple[InventoryBehavior, Decimal, str | None]] = {}
+    ) -> dict[str, tuple[InventoryBehavior, Decimal, str | None, uuid.UUID | None]]:
+        requirements: dict[
+            str, tuple[InventoryBehavior, Decimal, str | None, uuid.UUID | None]
+        ] = {}
         for raw_part in fulfillment:
             part = (
                 raw_part
@@ -225,11 +227,25 @@ class JobAllocationService:
             behavior = part.inventory_behavior
             existing = requirements.get(sku)
             if existing is not None:
-                if existing[0] != behavior:
-                    raise ValidationError(f"Inventory SKU {sku} has conflicting behaviors")
-                requirements[sku] = (behavior, existing[1] + quantity, existing[2])
+                if existing[0] != behavior or (
+                    existing[3] is not None
+                    and part.inventory_item_id is not None
+                    and existing[3] != part.inventory_item_id
+                ):
+                    raise ValidationError(f"Inventory SKU {sku} has conflicting mappings")
+                requirements[sku] = (
+                    behavior,
+                    existing[1] + quantity,
+                    existing[2],
+                    existing[3] or part.inventory_item_id,
+                )
             else:
-                requirements[sku] = (behavior, quantity, part.description)
+                requirements[sku] = (
+                    behavior,
+                    quantity,
+                    part.description,
+                    part.inventory_item_id,
+                )
         return requirements
 
     async def reserve(
@@ -243,12 +259,19 @@ class JobAllocationService:
         requirements = self._requirements(fulfillment)
         existing = await self._allocations(job_id, workspace_id, lock=True)
 
+        frozen_item_ids = {
+            requirement[3] for requirement in requirements.values() if requirement[3] is not None
+        }
+        unfrozen_skus = {sku for sku, requirement in requirements.items() if requirement[3] is None}
         items = list(
             (
                 await self.db.execute(
                     select(InventoryItem).where(
                         InventoryItem.workspace_id == workspace_id,
-                        InventoryItem.sku.in_(requirements),
+                        or_(
+                            InventoryItem.id.in_(frozen_item_ids),
+                            InventoryItem.sku.in_(unfrozen_skus),
+                        ),
                         InventoryItem.is_active.is_(True),
                     )
                 )
@@ -256,11 +279,31 @@ class JobAllocationService:
             .scalars()
             .all()
         )
-        item_requirements = {
-            item.id: (item, requirements[item.sku])
-            for item in items
-            if item.sku is not None and item.sku in requirements
-        }
+        by_id = {item.id: item for item in items}
+        by_sku = {item.sku: item for item in items if item.sku is not None}
+        item_requirements: dict[
+            uuid.UUID, tuple[InventoryItem, tuple[InventoryBehavior, Decimal, str | None]]
+        ] = {}
+        for sku, (behavior, quantity, description, frozen_item_id) in requirements.items():
+            item = by_id.get(frozen_item_id) if frozen_item_id is not None else by_sku.get(sku)
+            if item is None:
+                if frozen_item_id is not None:
+                    raise ConflictError(
+                        "Quoted inventory is inactive or unavailable",
+                        code="inventory_item_unavailable",
+                    )
+                continue
+            item_sku = (item.sku or "").strip()
+            if (
+                not item_sku
+                or item.id in item_requirements
+                or (frozen_item_id is not None and item_sku != sku)
+            ):
+                raise ConflictError(
+                    "Quoted inventory has a conflicting frozen mapping",
+                    code="inventory_item_conflict",
+                )
+            item_requirements[item.id] = item, (behavior, quantity, description)
 
         if existing:
             matches = len(existing) == len(item_requirements) and all(

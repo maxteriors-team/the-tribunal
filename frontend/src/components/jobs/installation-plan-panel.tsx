@@ -94,7 +94,7 @@ export function InstallationPlanPanel({ workspaceId, jobId }: InstallationPlanPa
         const scale = designScale(design, photo.width);
         drawScene(context, image, design, productById, scale.pxPerFt, {
           viewScale: 1,
-          dusk: plan.dusk,
+          dusk: plan.dusk ?? undefined,
           showChrome: false,
         });
       })

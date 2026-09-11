@@ -4128,6 +4128,8 @@ export function LightDesigner({
       return estimatorApi.createQuote(workspaceId, {
         ...shareParams,
         side,
+        seasonal_installation_source: "photo",
+        seasonal_phased_handoff: false,
         lighting_project_id: lightingProjectId,
         proposal_preview: proposalPreview,
         ...(side === "permanent" && permanentDepositPercentage != null

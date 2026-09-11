@@ -742,7 +742,12 @@ describe("LightDesigner", () => {
     await waitFor(() =>
       expect(estimatorApi.createQuote).toHaveBeenCalledWith(
         "ws_1",
-        expect.objectContaining({ side: "seasonal", feet: 100 }),
+        expect.objectContaining({
+          side: "seasonal",
+          feet: 100,
+          seasonal_installation_source: "photo",
+          seasonal_phased_handoff: false,
+        }),
       ),
     );
 
