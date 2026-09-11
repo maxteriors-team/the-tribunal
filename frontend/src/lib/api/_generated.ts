@@ -9186,7 +9186,9 @@ export interface paths {
          *
          *     Marks the quote sent (allocating its share token) and delivers the link to
          *     the wizard snapshot's client email/phone, the linked contact's, or an
-         *     explicit ``to`` override.
+         *     explicit ``to`` override. Success means provider acceptance, not confirmed
+         *     inbox delivery. On failure, the quote can remain sent and its link shareable;
+         *     the response reports the delivery error rather than success.
          */
         post: operations["deliver_quote_api_v1_workspaces__workspace_id__quotes__quote_id__deliver_post"];
         delete?: never;
@@ -9374,7 +9376,9 @@ export interface paths {
         put?: never;
         /**
          * Send Quote
-         * @description Mark a quote as sent and email it to the quote-to contact.
+         * @description Mark a quote as sent and publish its client link without sending email or SMS.
+         *
+         *     Bookkeeping only. Use the deliver endpoint for checked email or SMS delivery.
          */
         post: operations["send_quote_api_v1_workspaces__workspace_id__quotes__quote_id__send_post"];
         delete?: never;

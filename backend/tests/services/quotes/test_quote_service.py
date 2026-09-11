@@ -14,6 +14,7 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -79,6 +80,18 @@ from app.services.quotes import QuoteService
 from app.services.quotes.attach_rules_config import SETTINGS_KEY as ATTACH_RULES_KEY
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
+
+
+@pytest.fixture(autouse=True)
+def quote_email_provider(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """Exercise real delivery/rendering code; never cross Resend's SDK boundary."""
+    from app.services import email as email_module
+
+    provider = AsyncMock(return_value={"id": "quote-email-test"})
+    monkeypatch.setattr(email_module.settings, "resend_api_key", "re_test_no_spend")
+    monkeypatch.setattr(email_module.resend, "api_key", "re_test_no_spend")
+    monkeypatch.setattr(email_module.resend.Emails, "send_async", provider)
+    return provider
 
 
 @pytest.fixture(autouse=True)
@@ -235,6 +248,154 @@ async def _make_catalog_item(
     db.add(item)
     await db.flush()
     return item
+
+
+async def test_email_delivery_rejects_missing_destination(quote_email_provider: AsyncMock) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        service = QuoteService(db)
+        quote = await service.create_quote(ws.id, QuoteCreate(line_items=[]), created_by_id=None)
+
+        with pytest.raises(ValidationError, match="No client email"):
+            await service.deliver_quote(ws.id, quote.id, channel="email")
+
+        quote_email_provider.assert_not_awaited()
+        saved = await service.get_quote(ws.id, quote.id)
+        assert saved.status == "sent"
+        assert saved.public_token  # The existing checked path still allows sharing/retrying.
+
+
+@pytest.mark.parametrize("failure", ["provider_rejected", "unconfigured"])
+async def test_email_delivery_reports_failure(
+    failure: str, quote_email_provider: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import email as email_module
+
+    if failure == "unconfigured":
+        monkeypatch.setattr(email_module.settings, "resend_api_key", "")
+    else:
+        quote_email_provider.side_effect = RuntimeError("Simulated provider rejection")
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="pat@example.com")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            ws.id, QuoteCreate(contact_id=contact.id, line_items=[]), created_by_id=None
+        )
+
+        with pytest.raises(ValidationError, match="Couldn't send that email"):
+            await service.deliver_quote(ws.id, quote.id, channel="email")
+
+        assert quote_email_provider.await_count == (0 if failure == "unconfigured" else 1)
+        saved = await service.get_quote(ws.id, quote.id)
+        assert saved.status == "sent"
+        assert saved.public_token
+
+
+async def test_email_delivery_requires_provider_acceptance_and_resends_intentionally(
+    quote_email_provider: AsyncMock,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="pat@example.com")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            ws.id, QuoteCreate(contact_id=contact.id, line_items=[]), created_by_id=None
+        )
+
+        delivered = await service.deliver_quote(ws.id, quote.id, channel="email")
+        assert delivered.model_dump() == {"ok": True, "channel": "email", "to": "pat@example.com"}
+        first = await service.get_quote(ws.id, quote.id)
+        resent = await service.deliver_quote(ws.id, quote.id, channel="email")
+        second = await service.get_quote(ws.id, quote.id)
+        assert resent == delivered
+        assert first.status == second.status == "sent"
+        assert first.sent_at == second.sent_at
+        assert first.public_token == second.public_token
+        assert quote_email_provider.await_count == 2
+        calls = quote_email_provider.await_args_list
+        for call in calls:
+            params, options = call.args
+            assert params["to"] == ["pat@example.com"]
+            assert f"/p/quotes/{first.public_token}" in params["html"]
+            assert uuid.UUID(options["idempotency_key"])
+        assert calls[0].args[1]["idempotency_key"] != calls[1].args[1]["idempotency_key"]
+
+
+@pytest.mark.parametrize("action", ["mark_sent", "prepare_for_in_person_approval"])
+async def test_quote_status_changes_never_send_email(
+    action: str,
+    quote_email_provider: AsyncMock,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="pat@example.com")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            ws.id, QuoteCreate(contact_id=contact.id, line_items=[]), created_by_id=None
+        )
+
+        transition = getattr(service, action)
+        first = await transition(ws.id, quote.id)
+        second = await transition(ws.id, quote.id)
+        assert first.status == second.status == "sent"
+        assert first.sent_at == second.sent_at
+        assert first.public_token == second.public_token
+        quote_email_provider.assert_not_awaited()
+
+
+async def test_status_and_delivery_reject_another_workspace(
+    quote_email_provider: AsyncMock,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        owner = await _make_workspace(db)
+        other = await _make_workspace(db)
+        contact = await _make_contact(db, owner.id, email="pat@example.com")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            owner.id, QuoteCreate(contact_id=contact.id, line_items=[]), created_by_id=None
+        )
+
+        with pytest.raises(HTTPException) as marked:
+            await service.mark_sent(other.id, quote.id)
+        with pytest.raises(HTTPException) as delivered:
+            await service.deliver_quote(other.id, quote.id, channel="email")
+        assert marked.value.status_code == delivered.value.status_code == 404
+        assert marked.value.detail == delivered.value.detail == "Quote not found"
+
+        saved = await service.get_quote(owner.id, quote.id)
+        assert saved.status == "draft"
+        assert saved.public_token is None
+        quote_email_provider.assert_not_awaited()
+
+
+async def test_quote_text_delivery_preserves_opt_out(
+    quote_email_provider: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.config import settings
+    from app.services.rate_limiting.opt_out_manager import OptOutManager
+    from app.services.telephony.telnyx import TelnyxSMSService
+
+    sms_provider = AsyncMock()
+    monkeypatch.setattr(settings, "telnyx_api_key", "test_no_spend")
+    monkeypatch.setattr(TelnyxSMSService, "send_message", sms_provider)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="pat@example.com")
+        await OptOutManager().add_opt_out(ws.id, contact.phone_number, db, keyword="STOP")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            ws.id, QuoteCreate(contact_id=contact.id, line_items=[]), created_by_id=None
+        )
+
+        with pytest.raises(ValidationError, match="opted out"):
+            await service.deliver_quote(ws.id, quote.id, channel="sms")
+
+        sms_provider.assert_not_awaited()
+        quote_email_provider.assert_not_awaited()
 
 
 async def test_create_computes_totals_and_allocates_number() -> None:
@@ -1436,7 +1597,9 @@ async def test_create_quote_from_estimate_can_send_a_price_range(monkeypatch) ->
         from app.services import email as email_module
 
         monkeypatch.setattr(email_module, "send_quote_email", capture_email)
-        sent = await svc.mark_sent(ws.id, quote.id)
+        delivered = await svc.deliver_quote(ws.id, quote.id, channel="email")
+        assert delivered.ok is True
+        sent = await svc.get_quote(ws.id, quote.id)
         assert delivered_prices == [("Estimated range", f"{float(quote.total):.2f}–4000.00 USD")]
         public = await svc.get_public_proposal(sent.public_token)
         assert public.price_range is not None
