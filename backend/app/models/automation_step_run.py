@@ -21,19 +21,14 @@ workflow is looping.
 
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 from app.db.tenancy import WorkspaceScoped
-
-if TYPE_CHECKING:
-    from app.models.automation import Automation
-    from app.models.automation_execution import AutomationExecution
-    from app.models.contact import Contact
 
 # A step that reached the customer. The one outcome that counts as a "touch",
 # and therefore the only one that moves the last-touch clock.
@@ -141,9 +136,11 @@ class AutomationStepRun(Base, WorkspaceScoped):
         nullable=False,
     )
 
-    execution: Mapped["AutomationExecution"] = relationship(back_populates="step_runs")
-    automation: Mapped["Automation"] = relationship()
-    contact: Mapped["Contact | None"] = relationship()
+    # Deliberately no ORM relationships. The ledger is written by id and read
+    # by query, never navigated from a row, and an unused lazy relationship on
+    # an async session is a latent MissingGreenlet waiting for the first caller
+    # who touches it outside an eager load. Referential integrity is the
+    # database's job here, via ON DELETE CASCADE on the foreign keys above.
 
     def __repr__(self) -> str:
         return (
