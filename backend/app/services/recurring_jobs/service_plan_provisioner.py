@@ -144,7 +144,10 @@ class ServicePlanProvisioner:
         care_plan = self._care_plan_spec(document, anchor)
         if care_plan is not None:
             specs.append(care_plan)
-        if self._has_christmas_section(document):
+        # Measured seasonal handoffs create operator-scheduled jobs at conversion;
+        # provisioning annual plans here would duplicate those accepted jobs.
+        measured_seasonal = quote.seasonal_takedown_included is not None
+        if self._has_christmas_section(document) and not measured_seasonal:
             christmas = await self._christmas_config(quote.workspace_id)
             specs.extend(self._christmas_specs(document, christmas, anchor))
         if not specs:

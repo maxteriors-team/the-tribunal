@@ -18677,6 +18677,12 @@ export interface components {
         EstimateCustomLine: {
             /** Description */
             description?: string | null;
+            /** Fulfillment Quantity */
+            fulfillment_quantity?: number | null;
+            /** Inventory Behavior */
+            inventory_behavior?: ("consumable" | "reusable") | null;
+            /** Inventory Item Id */
+            inventory_item_id?: string | null;
             /** Label */
             label: string;
             /** Package Key */
@@ -18694,6 +18700,8 @@ export interface components {
             side: "permanent" | "seasonal";
             /** Unit Price */
             unit_price: number;
+            /** Worksheet Row Id */
+            worksheet_row_id?: string | null;
         };
         /**
          * EstimateCustomLineCost
@@ -18704,6 +18712,12 @@ export interface components {
             amount: number;
             /** Description */
             description?: string | null;
+            /** Fulfillment Quantity */
+            fulfillment_quantity?: number | null;
+            /** Inventory Behavior */
+            inventory_behavior?: ("consumable" | "reusable") | null;
+            /** Inventory Item Id */
+            inventory_item_id?: string | null;
             /** Label */
             label: string;
             /** Package Key */
@@ -18721,6 +18735,8 @@ export interface components {
             side: "permanent" | "seasonal";
             /** Unit Price */
             unit_price: number;
+            /** Worksheet Row Id */
+            worksheet_row_id?: string | null;
         };
         /**
          * EstimateProposalPreview
@@ -18763,6 +18779,8 @@ export interface components {
             client_name?: string | null;
             /** Client Phone */
             client_phone?: string | null;
+            /** Contact Id */
+            contact_id?: number | null;
             /** Custom Lines */
             custom_lines?: components["schemas"]["EstimateCustomLine"][];
             /** Deposit Percentage */
@@ -18801,6 +18819,17 @@ export interface components {
              * @enum {string}
              */
             proposal_side: "permanent" | "seasonal" | "comparison";
+            /**
+             * Seasonal Installation Source
+             * @default photo
+             * @enum {string}
+             */
+            seasonal_installation_source: "photo" | "tree_wrap_worksheet";
+            /**
+             * Seasonal Phased Handoff
+             * @default false
+             */
+            seasonal_phased_handoff: boolean;
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -19057,6 +19086,8 @@ export interface components {
              * @enum {string}
              */
             inventory_behavior: "consumable" | "reusable";
+            /** Inventory Item Id */
+            inventory_item_id?: string | null;
             /** Qty */
             qty: number;
             /** Sku */
@@ -19798,6 +19829,40 @@ export interface components {
             product_id: string;
             /** Transformer Zone Id */
             transformer_zone_id?: string | null;
+        };
+        /**
+         * InstallationPlanWorksheetRow
+         * @description Price-free exact measurement row for a worksheet installation sheet.
+         */
+        InstallationPlanWorksheetRow: {
+            /** Color */
+            color?: string | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Light Type */
+            light_type?: ("mini" | "c7" | "c9" | "garland") | null;
+            /** Measurements */
+            measurements?: {
+                [key: string]: number;
+            };
+            /** Planned Feet */
+            planned_feet: number;
+            /** Quantity */
+            quantity: number;
+            /**
+             * Shape
+             * @enum {string}
+             */
+            shape: "evergreen" | "deciduous" | "trunk" | "branch" | "bush" | "roofline" | "decor";
+            /** Unit Count */
+            unit_count?: number | null;
+            /**
+             * Unit Kind
+             * @enum {string}
+             */
+            unit_kind: "strand" | "bulb" | "section" | "piece";
         };
         /**
          * IntegrationCreate
@@ -21188,15 +21253,21 @@ export interface components {
          * @description Assignment-scoped, price-free plan with the customer's proposal decision.
          */
         JobInstallationPlanResponse: {
-            design: components["schemas"]["DesignSchema"];
+            design?: components["schemas"]["DesignSchema"] | null;
             /** Drawing Number */
             drawing_number?: string | null;
             /** Drawing Title */
             drawing_title?: string | null;
             /** Dusk */
-            dusk: number;
+            dusk?: number | null;
             /** Fixture Schedule */
             fixture_schedule?: components["schemas"]["InstallationPlanFixture"][];
+            /**
+             * Installation Sheet Type
+             * @default photo
+             * @enum {string}
+             */
+            installation_sheet_type: "photo" | "tree_wrap_worksheet" | "combined";
             /**
              * Job Id
              * Format: uuid
@@ -21206,7 +21277,7 @@ export interface components {
             payment_received_at?: string | null;
             /** Payment Status */
             payment_status?: ("not_required" | "pending" | "paid") | null;
-            photo: components["schemas"]["PhotoSchema"];
+            photo?: components["schemas"]["PhotoSchema"] | null;
             /**
              * Precon Field Brief
              * @default
@@ -21235,11 +21306,13 @@ export interface components {
             /** Proposal Status */
             proposal_status?: ("draft" | "sent" | "approved" | "declined" | "expired") | null;
             /** Selected Shot Id */
-            selected_shot_id: string;
-            settings: components["schemas"]["DocumentSettingsSchema"];
+            selected_shot_id?: string | null;
+            settings?: components["schemas"]["DocumentSettingsSchema"] | null;
             sheet?: components["schemas"]["SheetMetadataSchema"] | null;
             /** Sheet Label */
             sheet_label?: string | null;
+            /** Worksheet Rows */
+            worksheet_rows?: components["schemas"]["InstallationPlanWorksheetRow"][];
         };
         /**
          * JobInventoryPlanResponse
@@ -21875,11 +21948,12 @@ export interface components {
              * @default landscape
              * @enum {string}
              */
-            projectType: "landscape" | "permanent";
+            projectType: "landscape" | "permanent" | "seasonal";
             proposal?: components["schemas"]["ProposalDraftSchema"];
             settings?: components["schemas"]["DocumentSettingsSchema"];
             /** Shots */
             shots?: components["schemas"]["LandscapeShotSchema"][];
+            treeWrapWorksheet?: components["schemas"]["TreeWrapWorksheetSchema"] | null;
             /**
              * Updatedat
              * Format: date-time
@@ -22683,7 +22757,7 @@ export interface components {
              * @default landscape
              * @enum {string}
              */
-            project_type: "landscape" | "permanent";
+            project_type: "landscape" | "permanent" | "seasonal";
             /** Service Location Id */
             service_location_id?: string | null;
         };
@@ -22722,7 +22796,7 @@ export interface components {
              * Project Type
              * @enum {string}
              */
-            project_type: "landscape" | "permanent";
+            project_type: "landscape" | "permanent" | "seasonal";
             /** Service Location Id */
             service_location_id: string | null;
             /**
@@ -22780,7 +22854,7 @@ export interface components {
              * Project Type
              * @enum {string}
              */
-            project_type: "landscape" | "permanent";
+            project_type: "landscape" | "permanent" | "seasonal";
             /** Service Location Id */
             service_location_id: string | null;
             /**
@@ -28954,6 +29028,7 @@ export interface components {
             scheduled_end?: string | null;
             /** Scheduled Start */
             scheduled_start?: string | null;
+            takedown_schedule?: components["schemas"]["QuoteJobSchedule"] | null;
             /** Technician Ids */
             technician_ids?: string[];
         };
@@ -28968,11 +29043,15 @@ export interface components {
              * @default false
              */
             idempotent_replay: boolean;
+            installation_crew_notification?: components["schemas"]["CrewNotificationResult"];
             /** Invoice Id */
             invoice_id?: string | null;
             /** Job Id */
             job_id?: string | null;
             quote: components["schemas"]["QuoteDetailResponse"];
+            takedown_crew_notification?: components["schemas"]["CrewNotificationResult"];
+            /** Takedown Job Id */
+            takedown_job_id?: string | null;
         };
         /**
          * QuoteCreate
@@ -29194,6 +29273,10 @@ export interface components {
             revision_of_quote_id?: string | null;
             /** Revision Root Quote Id */
             revision_root_quote_id?: string | null;
+            /** Seasonal Storage Included */
+            seasonal_storage_included?: boolean | null;
+            /** Seasonal Takedown Included */
+            seasonal_takedown_included?: boolean | null;
             /** Selected Permanent Kits */
             selected_permanent_kits?: components["schemas"]["PermanentKitSelection"][];
             /** Sent At */
@@ -29336,14 +29419,20 @@ export interface components {
          * @description One internal fulfillment requirement compared with current workspace stock.
          */
         QuoteInventoryAvailabilityItem: {
+            /** Available To Promise */
+            available_to_promise?: number | null;
             /** Description */
             description?: string | null;
             /** Inventory Item Id */
             inventory_item_id?: string | null;
             /** Inventory Item Name */
             inventory_item_name?: string | null;
+            /** Quantity Deployed */
+            quantity_deployed?: number | null;
             /** Quantity On Hand */
             quantity_on_hand?: number | null;
+            /** Quantity Reserved */
+            quantity_reserved?: number | null;
             /** Required Quantity */
             required_quantity: number;
             /** Shortfall */
@@ -29369,6 +29458,26 @@ export interface components {
             is_available: boolean;
             /** Items */
             items?: components["schemas"]["InventoryAvailabilityLine"][];
+        };
+        /**
+         * QuoteJobSchedule
+         * @description A validated schedule and team for one quote-created job phase.
+         */
+        QuoteJobSchedule: {
+            /** Crew Id */
+            crew_id?: string | null;
+            /**
+             * Scheduled End
+             * Format: date-time
+             */
+            scheduled_end: string;
+            /**
+             * Scheduled Start
+             * Format: date-time
+             */
+            scheduled_start: string;
+            /** Technician Ids */
+            technician_ids?: string[];
         };
         /**
          * QuoteLineItemCreate
@@ -29575,6 +29684,10 @@ export interface components {
             revision_of_quote_id?: string | null;
             /** Revision Root Quote Id */
             revision_root_quote_id?: string | null;
+            /** Seasonal Storage Included */
+            seasonal_storage_included?: boolean | null;
+            /** Seasonal Takedown Included */
+            seasonal_takedown_included?: boolean | null;
             /** Selected Permanent Kits */
             selected_permanent_kits?: components["schemas"]["PermanentKitSelection"][];
             /** Sent At */
@@ -33475,6 +33588,96 @@ export interface components {
              * Format: uuid
              */
             to_location_id: string;
+        };
+        /** TreeWrapResultSchema */
+        TreeWrapResultSchema: {
+            /** Billedquantity */
+            billedQuantity?: number | null;
+            /** Plannedfeet */
+            plannedFeet: number;
+            /** Price */
+            price?: number | null;
+            /** Rowcount */
+            rowCount: number;
+            /** Unitcount */
+            unitCount?: number | null;
+            /**
+             * Unitkind
+             * @enum {string}
+             */
+            unitKind: "strand" | "bulb" | "section" | "piece";
+        };
+        /** TreeWrapSpecSchema */
+        TreeWrapSpecSchema: {
+            /** Branchcount */
+            branchCount?: number | null;
+            /** Branchwidthin */
+            branchWidthIn?: number | null;
+            /** Bulbspacingin */
+            bulbSpacingIn?: number | null;
+            /** Depthft */
+            depthFt?: number | null;
+            /** Feetperunit */
+            feetPerUnit?: number | null;
+            /** Heightft */
+            heightFt?: number | null;
+            /** Lighttype */
+            lightType?: ("mini" | "c7" | "c9" | "garland") | null;
+            /** Piececount */
+            pieceCount?: number | null;
+            /**
+             * Pricingmode
+             * @enum {string}
+             */
+            pricingMode: "unit" | "foot";
+            /** Radiusft */
+            radiusFt?: number | null;
+            /** Rowspacingin */
+            rowSpacingIn?: number | null;
+            /** Runft */
+            runFt?: number | null;
+            /**
+             * Shape
+             * @enum {string}
+             */
+            shape: "evergreen" | "deciduous" | "trunk" | "branch" | "bush" | "roofline" | "decor";
+            /** Trunkwidthin */
+            trunkWidthIn?: number | null;
+            /** Unitprice */
+            unitPrice?: number | null;
+            /** Widthft */
+            widthFt?: number | null;
+        };
+        /** TreeWrapWorksheetRowSchema */
+        TreeWrapWorksheetRowSchema: {
+            /** Color */
+            color?: string | null;
+            /** Id */
+            id: string;
+            /** Inventorybehavior */
+            inventoryBehavior?: ("consumable" | "reusable") | null;
+            /** Inventoryitemid */
+            inventoryItemId?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            result: components["schemas"]["TreeWrapResultSchema"];
+            spec: components["schemas"]["TreeWrapSpecSchema"];
+        };
+        /** TreeWrapWorksheetSchema */
+        TreeWrapWorksheetSchema: {
+            /** Rows */
+            rows?: components["schemas"]["TreeWrapWorksheetRowSchema"][];
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
         };
         /**
          * UnattributedLeadResponse
@@ -49006,7 +49209,7 @@ export interface operations {
             query?: {
                 search?: string | null;
                 status?: ("active" | "archived") | null;
-                project_type?: ("landscape" | "permanent") | null;
+                project_type?: ("landscape" | "permanent" | "seasonal") | null;
                 contact_id?: number | null;
                 opportunity_id?: string | null;
                 assigned_user_id?: number | null;

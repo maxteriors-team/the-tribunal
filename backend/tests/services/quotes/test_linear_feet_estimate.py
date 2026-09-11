@@ -664,6 +664,41 @@ def test_estimate_quote_deposit_is_bounded_and_permanent_only() -> None:
         EstimateQuoteRequest(side="permanent", feet=100, deposit_percentage=101)
 
 
+def test_tree_wrap_installation_source_is_seasonal_only() -> None:
+    with pytest.raises(ValueError, match="requires phased job handoff"):
+        EstimateQuoteRequest(
+            side="seasonal",
+            feet=0,
+            lighting_project_id=uuid.uuid4(),
+            seasonal_installation_source="tree_wrap_worksheet",
+        )
+
+    request = EstimateQuoteRequest(
+        side="seasonal",
+        feet=0,
+        lighting_project_id=uuid.uuid4(),
+        seasonal_installation_source="tree_wrap_worksheet",
+        seasonal_phased_handoff=True,
+    )
+    assert request.seasonal_installation_source == "tree_wrap_worksheet"
+    assert request.seasonal_phased_handoff is True
+
+    with pytest.raises(ValueError, match="requires a saved lighting project"):
+        EstimateQuoteRequest(
+            side="seasonal",
+            feet=0,
+            seasonal_installation_source="tree_wrap_worksheet",
+        )
+
+    with pytest.raises(ValueError, match="only be used for a seasonal quote"):
+        EstimateQuoteRequest(
+            side="permanent",
+            feet=100,
+            lighting_project_id=uuid.uuid4(),
+            seasonal_installation_source="tree_wrap_worksheet",
+        )
+
+
 def test_estimate_quote_preview_requires_a_saved_permanent_project_and_raster() -> None:
     project_id = uuid.uuid4()
     request = EstimateQuoteRequest(

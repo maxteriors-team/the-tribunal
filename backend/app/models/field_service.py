@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -436,6 +437,17 @@ class JobStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class JobSourceQuotePhase(StrEnum):
+    """Which operational phase a quote-created job represents."""
+
+    PRIMARY = "primary"
+    INSTALLATION = "installation"
+    TAKEDOWN = "takedown"
+
+
+JOB_SOURCE_QUOTE_PHASES = tuple(phase.value for phase in JobSourceQuotePhase)
+
+
 # Backed by the Postgres ``field_service_job_status`` enum created in the jobs
 # migration. ``create_type=False`` so SQLAlchemy never tries to CREATE/DROP the
 # type — the migration owns its lifecycle (cf. ``failed_job_status``).
@@ -488,7 +500,15 @@ class Job(Base, WorkspaceScoped):
             unique=True,
             postgresql_where=text("recurring_template_id IS NOT NULL"),
         ),
-        UniqueConstraint("source_quote_id", name="uq_field_service_jobs_source_quote"),
+        CheckConstraint(
+            f"source_quote_phase IN {JOB_SOURCE_QUOTE_PHASES}",
+            name="ck_field_service_jobs_source_quote_phase",
+        ),
+        UniqueConstraint(
+            "source_quote_id",
+            "source_quote_phase",
+            name="uq_field_service_jobs_source_quote_phase",
+        ),
         Index(
             "ix_field_service_jobs_workspace_lighting_project",
             "workspace_id",
@@ -551,11 +571,18 @@ class Job(Base, WorkspaceScoped):
         nullable=True,
         index=True,
     )
-    # Accepted quote and editable landscape source copied atomically on conversion.
+    # Accepted quote provenance. Phase keeps a seasonal installation and takedown
+    # distinct while preserving the generic one-job conversion path.
     source_quote_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("quotes.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    source_quote_phase: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default=JobSourceQuotePhase.PRIMARY,
+        server_default=JobSourceQuotePhase.PRIMARY.value,
     )
     lighting_project_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

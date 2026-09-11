@@ -392,7 +392,7 @@ function ActiveProjectEditor({
           workspaceId={workspaceId}
           workspaceName={workspaceName}
           workspaceLogoUrl={workspaceLogoUrl}
-          focus={projectType}
+          focus={projectType === "seasonal" ? "all" : projectType}
           landscapeProject={{
             initialDraft: autosave.initialDraft,
             onLandscapeDraftChange: autosave.onDraftChange,

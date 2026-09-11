@@ -18125,6 +18125,46 @@
             ],
             "title": "Description"
           },
+          "fulfillment_quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fulfillment Quantity"
+          },
+          "inventory_behavior": {
+            "anyOf": [
+              {
+                "enum": [
+                  "consumable",
+                  "reusable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Behavior"
+          },
+          "inventory_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Item Id"
+          },
           "label": {
             "maxLength": 120,
             "minLength": 1,
@@ -18164,6 +18204,19 @@
             "minimum": 0.0,
             "title": "Unit Price",
             "type": "number"
+          },
+          "worksheet_row_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worksheet Row Id"
           }
         },
         "required": [
@@ -18192,6 +18245,46 @@
             ],
             "title": "Description"
           },
+          "fulfillment_quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fulfillment Quantity"
+          },
+          "inventory_behavior": {
+            "anyOf": [
+              {
+                "enum": [
+                  "consumable",
+                  "reusable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Behavior"
+          },
+          "inventory_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Item Id"
+          },
           "label": {
             "maxLength": 120,
             "minLength": 1,
@@ -18231,6 +18324,19 @@
             "minimum": 0.0,
             "title": "Unit Price",
             "type": "number"
+          },
+          "worksheet_row_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worksheet Row Id"
           }
         },
         "required": [
@@ -18330,6 +18436,18 @@
               }
             ],
             "title": "Client Phone"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
           },
           "custom_lines": {
             "items": {
@@ -18468,6 +18586,20 @@
             ],
             "title": "Proposal Side",
             "type": "string"
+          },
+          "seasonal_installation_source": {
+            "default": "photo",
+            "enum": [
+              "photo",
+              "tree_wrap_worksheet"
+            ],
+            "title": "Seasonal Installation Source",
+            "type": "string"
+          },
+          "seasonal_phased_handoff": {
+            "default": false,
+            "title": "Seasonal Phased Handoff",
+            "type": "boolean"
           },
           "selected_package": {
             "anyOf": [
@@ -19021,6 +19153,18 @@
             ],
             "title": "Inventory Behavior",
             "type": "string"
+          },
+          "inventory_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Item Id"
           },
           "qty": {
             "title": "Qty",
@@ -20831,6 +20975,119 @@
           "product_id"
         ],
         "title": "InstallationPlanFixture",
+        "type": "object"
+      },
+      "InstallationPlanWorksheetRow": {
+        "description": "Price-free exact measurement row for a worksheet installation sheet.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 250,
+            "title": "Label",
+            "type": "string"
+          },
+          "light_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "mini",
+                  "c7",
+                  "c9",
+                  "garland"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Light Type"
+          },
+          "measurements": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "propertyNames": {
+              "maxLength": 250
+            },
+            "title": "Measurements",
+            "type": "object"
+          },
+          "planned_feet": {
+            "title": "Planned Feet",
+            "type": "number"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "shape": {
+            "enum": [
+              "evergreen",
+              "deciduous",
+              "trunk",
+              "branch",
+              "bush",
+              "roofline",
+              "decor"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "unit_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Count"
+          },
+          "unit_kind": {
+            "enum": [
+              "strand",
+              "bulb",
+              "section",
+              "piece"
+            ],
+            "title": "Unit Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "quantity",
+          "shape",
+          "planned_feet",
+          "unit_kind"
+        ],
+        "title": "InstallationPlanWorksheetRow",
         "type": "object"
       },
       "IntegrationCreate": {
@@ -24169,7 +24426,14 @@
         "description": "Assignment-scoped, price-free plan with the customer's proposal decision.",
         "properties": {
           "design": {
-            "$ref": "#/components/schemas/DesignSchema"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DesignSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "drawing_number": {
             "anyOf": [
@@ -24196,8 +24460,15 @@
             "title": "Drawing Title"
           },
           "dusk": {
-            "title": "Dusk",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dusk"
           },
           "fixture_schedule": {
             "items": {
@@ -24205,6 +24476,16 @@
             },
             "title": "Fixture Schedule",
             "type": "array"
+          },
+          "installation_sheet_type": {
+            "default": "photo",
+            "enum": [
+              "photo",
+              "tree_wrap_worksheet",
+              "combined"
+            ],
+            "title": "Installation Sheet Type",
+            "type": "string"
           },
           "job_id": {
             "format": "uuid",
@@ -24240,7 +24521,14 @@
             "title": "Payment Status"
           },
           "photo": {
-            "$ref": "#/components/schemas/PhotoSchema"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhotoSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "precon_field_brief": {
             "default": "",
@@ -24319,12 +24607,26 @@
             "title": "Proposal Status"
           },
           "selected_shot_id": {
-            "maxLength": 250,
-            "title": "Selected Shot Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Shot Id"
           },
           "settings": {
-            "$ref": "#/components/schemas/DocumentSettingsSchema"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentSettingsSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sheet": {
             "anyOf": [
@@ -24347,6 +24649,13 @@
               }
             ],
             "title": "Sheet Label"
+          },
+          "worksheet_rows": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationPlanWorksheetRow"
+            },
+            "title": "Worksheet Rows",
+            "type": "array"
           }
         },
         "required": [
@@ -24354,12 +24663,7 @@
           "project_id",
           "project_name",
           "project_version",
-          "project_updated_at",
-          "selected_shot_id",
-          "photo",
-          "design",
-          "dusk",
-          "settings"
+          "project_updated_at"
         ],
         "title": "JobInstallationPlanResponse",
         "type": "object"
@@ -25909,7 +26213,8 @@
             "default": "landscape",
             "enum": [
               "landscape",
-              "permanent"
+              "permanent",
+              "seasonal"
             ],
             "title": "Projecttype",
             "type": "string"
@@ -25927,6 +26232,16 @@
             "maxItems": 6,
             "title": "Shots",
             "type": "array"
+          },
+          "treeWrapWorksheet": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TreeWrapWorksheetSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "updatedAt": {
             "format": "date-time",
@@ -27989,7 +28304,8 @@
             "default": "landscape",
             "enum": [
               "landscape",
-              "permanent"
+              "permanent",
+              "seasonal"
             ],
             "title": "Project Type",
             "type": "string"
@@ -28113,7 +28429,8 @@
           "project_type": {
             "enum": [
               "landscape",
-              "permanent"
+              "permanent",
+              "seasonal"
             ],
             "title": "Project Type",
             "type": "string"
@@ -28276,7 +28593,8 @@
           "project_type": {
             "enum": [
               "landscape",
-              "permanent"
+              "permanent",
+              "seasonal"
             ],
             "title": "Project Type",
             "type": "string"
@@ -45106,6 +45424,16 @@
             ],
             "title": "Scheduled Start"
           },
+          "takedown_schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuoteJobSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "technician_ids": {
             "items": {
               "format": "uuid",
@@ -45128,6 +45456,9 @@
             "default": false,
             "title": "Idempotent Replay",
             "type": "boolean"
+          },
+          "installation_crew_notification": {
+            "$ref": "#/components/schemas/CrewNotificationResult"
           },
           "invoice_id": {
             "anyOf": [
@@ -45155,6 +45486,21 @@
           },
           "quote": {
             "$ref": "#/components/schemas/QuoteDetailResponse"
+          },
+          "takedown_crew_notification": {
+            "$ref": "#/components/schemas/CrewNotificationResult"
+          },
+          "takedown_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Takedown Job Id"
           }
         },
         "required": [
@@ -45856,6 +46202,28 @@
             ],
             "title": "Revision Root Quote Id"
           },
+          "seasonal_storage_included": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seasonal Storage Included"
+          },
+          "seasonal_takedown_included": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seasonal Takedown Included"
+          },
           "selected_permanent_kits": {
             "items": {
               "$ref": "#/components/schemas/PermanentKitSelection"
@@ -46221,6 +46589,17 @@
       "QuoteInventoryAvailabilityItem": {
         "description": "One internal fulfillment requirement compared with current workspace stock.",
         "properties": {
+          "available_to_promise": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available To Promise"
+          },
           "description": {
             "anyOf": [
               {
@@ -46255,6 +46634,17 @@
             ],
             "title": "Inventory Item Name"
           },
+          "quantity_deployed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Deployed"
+          },
           "quantity_on_hand": {
             "anyOf": [
               {
@@ -46265,6 +46655,17 @@
               }
             ],
             "title": "Quantity On Hand"
+          },
+          "quantity_reserved": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Reserved"
           },
           "required_quantity": {
             "title": "Required Quantity",
@@ -46339,6 +46740,47 @@
           "is_available"
         ],
         "title": "QuoteInventoryAvailabilityResponse",
+        "type": "object"
+      },
+      "QuoteJobSchedule": {
+        "description": "A validated schedule and team for one quote-created job phase.",
+        "properties": {
+          "crew_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crew Id"
+          },
+          "scheduled_end": {
+            "format": "date-time",
+            "title": "Scheduled End",
+            "type": "string"
+          },
+          "scheduled_start": {
+            "format": "date-time",
+            "title": "Scheduled Start",
+            "type": "string"
+          },
+          "technician_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Technician Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scheduled_start",
+          "scheduled_end"
+        ],
+        "title": "QuoteJobSchedule",
         "type": "object"
       },
       "QuoteLineItemCreate": {
@@ -46919,6 +47361,28 @@
               }
             ],
             "title": "Revision Root Quote Id"
+          },
+          "seasonal_storage_included": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seasonal Storage Included"
+          },
+          "seasonal_takedown_included": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seasonal Takedown Included"
           },
           "selected_permanent_kits": {
             "items": {
@@ -56473,6 +56937,396 @@
           "quantity"
         ],
         "title": "TransferStockRequest",
+        "type": "object"
+      },
+      "TreeWrapResultSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "billedQuantity": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billedquantity"
+          },
+          "plannedFeet": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Plannedfeet",
+            "type": "number"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "rowCount": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Rowcount",
+            "type": "integer"
+          },
+          "unitCount": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unitcount"
+          },
+          "unitKind": {
+            "enum": [
+              "strand",
+              "bulb",
+              "section",
+              "piece"
+            ],
+            "title": "Unitkind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plannedFeet",
+          "rowCount",
+          "unitKind"
+        ],
+        "title": "TreeWrapResultSchema",
+        "type": "object"
+      },
+      "TreeWrapSpecSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "branchCount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 500.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchcount"
+          },
+          "branchWidthIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 120.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchwidthin"
+          },
+          "bulbSpacingIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 120.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bulbspacingin"
+          },
+          "depthFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 300.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depthft"
+          },
+          "feetPerUnit": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feetperunit"
+          },
+          "heightFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 300.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heightft"
+          },
+          "lightType": {
+            "anyOf": [
+              {
+                "enum": [
+                  "mini",
+                  "c7",
+                  "c9",
+                  "garland"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lighttype"
+          },
+          "pieceCount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 999.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Piececount"
+          },
+          "pricingMode": {
+            "enum": [
+              "unit",
+              "foot"
+            ],
+            "title": "Pricingmode",
+            "type": "string"
+          },
+          "radiusFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Radiusft"
+          },
+          "rowSpacingIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 120.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rowspacingin"
+          },
+          "runFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runft"
+          },
+          "shape": {
+            "enum": [
+              "evergreen",
+              "deciduous",
+              "trunk",
+              "branch",
+              "bush",
+              "roofline",
+              "decor"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "trunkWidthIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 600.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trunkwidthin"
+          },
+          "unitPrice": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unitprice"
+          },
+          "widthFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 300.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widthft"
+          }
+        },
+        "required": [
+          "shape",
+          "pricingMode"
+        ],
+        "title": "TreeWrapSpecSchema",
+        "type": "object"
+      },
+      "TreeWrapWorksheetRowSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "inventoryBehavior": {
+            "anyOf": [
+              {
+                "enum": [
+                  "consumable",
+                  "reusable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventorybehavior"
+          },
+          "inventoryItemId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventoryitemid"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "maximum": 999.0,
+            "minimum": 1.0,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "result": {
+            "$ref": "#/components/schemas/TreeWrapResultSchema"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/TreeWrapSpecSchema"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "spec",
+          "result"
+        ],
+        "title": "TreeWrapWorksheetRowSchema",
+        "type": "object"
+      },
+      "TreeWrapWorksheetSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TreeWrapWorksheetRowSchema"
+            },
+            "maxItems": 20,
+            "title": "Rows",
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "TreeWrapWorksheetSchema",
         "type": "object"
       },
       "UnattributedLeadResponse": {
@@ -86215,7 +87069,8 @@
                 {
                   "enum": [
                     "landscape",
-                    "permanent"
+                    "permanent",
+                    "seasonal"
                   ],
                   "type": "string"
                 },

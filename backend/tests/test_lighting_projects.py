@@ -6,6 +6,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,6 +27,7 @@ from app.models.pipeline import Pipeline
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas import lighting_project as lighting_schema
+from app.schemas.estimate import EstimateCustomLine
 from app.schemas.lighting_project import (
     LandscapeDraftDocument,
     LightingProjectCreate,
@@ -149,6 +151,48 @@ def _document(
     }
 
 
+def _worksheet_document() -> dict[str, object]:
+    row = {
+        "id": "front-evergreen",
+        "label": "Front evergreen",
+        "quantity": 2,
+        "color": "Warm white",
+        "spec": {
+            "shape": "evergreen",
+            "lightType": "mini",
+            "heightFt": 20,
+            "rowSpacingIn": 6,
+            "radiusFt": 6,
+            "feetPerUnit": 25,
+            "pricingMode": "unit",
+            "unitPrice": 12.5,
+        },
+        "result": {
+            "plannedFeet": 755,
+            "rowCount": 40,
+            "unitCount": 31,
+            "unitKind": "strand",
+            "billedQuantity": 31,
+            "price": 387.5,
+        },
+        "inventoryItemId": str(uuid.uuid4()),
+        "inventoryBehavior": "reusable",
+    }
+    return {
+        "version": 2,
+        "projectType": "seasonal",
+        "activeShotId": None,
+        "shots": [],
+        "updatedAt": NOW.isoformat(),
+        "treeWrapWorksheet": {"version": 1, "rows": [row]},
+    }
+
+
+def _worksheet_rows(document: dict[str, object]) -> list[dict[str, object]]:
+    worksheet = cast(dict[str, object], document["treeWrapWorksheet"])
+    return cast(list[dict[str, object]], worksheet["rows"])
+
+
 class TestLandscapeDraftSchema:
     def test_accepts_empty_and_populated_documents(self) -> None:
         empty = LandscapeDraftDocument.model_validate(
@@ -194,6 +238,57 @@ class TestLandscapeDraftSchema:
         assert run["scaleSlot"] == 2
         assert run["elevation"] == "side"
         assert run["roofPitch"] == "steep"
+
+    def test_accepts_priceable_worksheet_without_a_photo(self) -> None:
+        parsed = LandscapeDraftDocument.model_validate(_worksheet_document())
+
+        assert parsed.shots == []
+        assert parsed.tree_wrap_worksheet is not None
+        assert parsed.tree_wrap_worksheet.rows[0].result.unit_count == 31
+        assert parsed.model_dump(mode="json", by_alias=True)["treeWrapWorksheet"]["version"] == 1
+
+    def test_rejects_duplicate_unbounded_nonfinite_or_nonseasonal_worksheets(self) -> None:
+        duplicate = _worksheet_document()
+        duplicate_rows = _worksheet_rows(duplicate)
+        duplicate_rows.append({**duplicate_rows[0]})
+
+        nonfinite = _worksheet_document()
+        spec = cast(dict[str, object], _worksheet_rows(nonfinite)[0]["spec"])
+        spec["heightFt"] = float("nan")
+
+        too_many = _worksheet_document()
+        worksheet = cast(dict[str, object], too_many["treeWrapWorksheet"])
+        row = _worksheet_rows(too_many)[0]
+        worksheet["rows"] = [{**row, "id": f"row-{index}"} for index in range(21)]
+
+        nonseasonal = _worksheet_document()
+        nonseasonal["projectType"] = "landscape"
+        for document in (duplicate, nonfinite, too_many, nonseasonal):
+            with pytest.raises(PydanticValidationError):
+                LandscapeDraftDocument.model_validate(document)
+
+    def test_requires_a_complete_inventory_mapping_on_worksheet_quote_lines(self) -> None:
+        complete_mapping: dict[str, object] = {
+            "label": "Front evergreen",
+            "quantity": 2,
+            "unit_price": 387.5,
+            "side": "seasonal",
+            "worksheet_row_id": "front-evergreen",
+            "inventory_item_id": "11111111-1111-4111-8111-111111111111",
+            "inventory_behavior": "reusable",
+            "fulfillment_quantity": 62,
+        }
+
+        for missing_field in (
+            "worksheet_row_id",
+            "inventory_item_id",
+            "inventory_behavior",
+            "fulfillment_quantity",
+        ):
+            incomplete_mapping = complete_mapping.copy()
+            del incomplete_mapping[missing_field]
+            with pytest.raises(PydanticValidationError):
+                EstimateCustomLine.model_validate(incomplete_mapping)
 
     def test_normalizes_retired_aerial_complexity_without_losing_the_run(self) -> None:
         document = _document()
@@ -324,6 +419,26 @@ class TestLandscapeDraftSchema:
                 document=document,
                 installation_shot_id="missing",
             )
+
+    def test_seasonal_projects_require_a_customer_property(self) -> None:
+        document = LandscapeDraftDocument.model_validate(_document(project_type="seasonal"))
+        with pytest.raises(PydanticValidationError, match="service_location_id"):
+            LightingProjectCreate(
+                contact_id=42,
+                name="Christmas roofline",
+                project_type="seasonal",
+                document=document,
+            )
+
+        location_id = uuid.uuid4()
+        created = LightingProjectCreate(
+            contact_id=42,
+            service_location_id=location_id,
+            name="Christmas roofline",
+            project_type="seasonal",
+            document=document,
+        )
+        assert created.service_location_id == location_id
 
 
 @asynccontextmanager
@@ -665,6 +780,37 @@ async def test_permanent_project_persists_client_design_reopen_and_resave(
                 LightingProjectUpdate(
                     expected_version=3,
                     document=LandscapeDraftDocument.model_validate(_document()),
+                ),
+                user_id=creator.id,
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_seasonal_project_rejects_inactive_service_location(
+    fresh_engine_pool: None,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        workspace = await _make_workspace(db, "Seasonal Lighting Co")
+        creator = await _make_member(db, workspace.id, name="Morgan Manager")
+        contact = await _make_contact(db, workspace.id, name="Avery")
+        location = ServiceLocation(
+            workspace_id=workspace.id,
+            contact_id=contact.id,
+            name="Archived property",
+            is_active=False,
+        )
+        db.add(location)
+        await db.flush()
+
+        with pytest.raises(ValidationError, match="active service location"):
+            await LightingProjectService(db).create_project(
+                workspace.id,
+                LightingProjectCreate(
+                    contact_id=contact.id,
+                    service_location_id=location.id,
+                    name="Avery Christmas roofline",
+                    project_type="seasonal",
                 ),
                 user_id=creator.id,
             )
