@@ -44220,6 +44220,8 @@ export interface operations {
                 channel_filter?: string | null;
                 unread_only?: boolean;
                 search?: string | null;
+                /** @description Exact contact ID within this workspace */
+                contact_id?: number | null;
             };
             header?: never;
             path: {

@@ -51,6 +51,9 @@ async def list_conversations(
     channel_filter: str | None = None,
     unread_only: bool = False,
     search: str | None = Query(None, max_length=100),
+    contact_id: int | None = Query(
+        None, ge=1, le=9223372036854775807, description="Exact contact ID within this workspace"
+    ),
 ) -> PaginatedConversations:
     """List conversations in a workspace.
 
@@ -67,6 +70,7 @@ async def list_conversations(
         channel_filter=channel_filter,
         unread_only=unread_only,
         search=search,
+        contact_id=contact_id,
     )
 
 

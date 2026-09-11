@@ -25,6 +25,8 @@ export interface ConversationMessagesResponse {
 export interface ConversationsListParams {
   page?: number;
   page_size?: number;
+  /** Exact contact ID, scoped to the requested workspace. */
+  contact_id?: number;
   /** Matches the contact's name. Message bodies are encrypted and unsearchable. */
   search?: string;
   status?: "active" | "archived" | "blocked";
@@ -95,6 +97,9 @@ const baseConversationsApiWithGet = baseConversationsApi as {
 
 export const conversationsApi = {
   ...baseConversationsApiWithGet,
+
+  list: (workspaceId: string, params?: ConversationsListParams) =>
+    baseConversationsApiWithGet.list(workspaceId, params),
 
   /**
    * One page of a thread's history, oldest-to-newest within the page.
