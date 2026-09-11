@@ -1102,7 +1102,7 @@ class QuoteService:
                 (Quote.assigned_user_id == owner_user_id)
                 | (Quote.assigned_user_id.is_(None) & (Quote.created_by_id == owner_user_id))
             )
-        query = query.order_by(Quote.created_at.desc())
+        query = query.order_by(Quote.created_at.desc(), Quote.id.desc())
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
         workspace = await get_or_404(self.db, Workspace, workspace_id)

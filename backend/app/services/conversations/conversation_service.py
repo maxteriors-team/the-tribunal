@@ -141,7 +141,9 @@ class ConversationService:
                 (Contact.first_name.ilike(f"%{search}%")) | (Contact.last_name.ilike(f"%{search}%"))
             )
 
-        query = query.order_by(Conversation.last_message_at.desc().nullslast())
+        query = query.order_by(
+            Conversation.last_message_at.desc().nullslast(), Conversation.id.desc()
+        )
         result = await paginate(self.db, query, page=page, page_size=page_size)
         conversations = list(result.items)
 
