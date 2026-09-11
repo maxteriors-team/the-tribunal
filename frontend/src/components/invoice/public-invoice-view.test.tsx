@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PublicInvoiceView } from "@/components/invoice/public-invoice-view";
 import { publicInvoicesApi } from "@/lib/api/public-invoices";
@@ -69,6 +69,27 @@ function renderView(data: PublicInvoice) {
     </QueryClientProvider>,
   );
 }
+
+describe("public invoice calendar dates", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each(["America/New_York", "Pacific/Kiritimati"])(
+    "keeps issue and due days in %s",
+    (timezone) => {
+      vi.stubEnv("TZ", timezone);
+      renderView(invoice({ issue_date: "2026-03-08", due_date: "2026-09-30" }));
+
+      expect(screen.getByText("Issued Mar 8, 2026 · Due Sep 30, 2026")).toBeVisible();
+    },
+  );
+
+  it.each([null, undefined, "2026-02-30"])("handles missing/invalid document dates: %s", (date) => {
+    renderView(invoice({ issue_date: date, due_date: date }));
+
+    if (date) expect(screen.getByText("Issued — · Due —")).toBeVisible();
+    else expect(screen.queryByText(/^Issued /)).not.toBeInTheDocument();
+  });
+});
 
 describe("PublicInvoiceView", () => {
   beforeEach(() => {
