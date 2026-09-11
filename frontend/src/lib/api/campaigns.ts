@@ -1,13 +1,6 @@
-import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { createApiClient, type FullApiClient } from "@/lib/api/create-api-client";
-import type {
-  Campaign,
-  CampaignContact,
-  CampaignStatus,
-  CampaignType,
-  CampaignContactStatus,
-  GuaranteeProgress,
-} from "@/types";
+import type { Campaign, CampaignStatus, CampaignType, GuaranteeProgress } from "@/types";
 
 // Request/Response Types
 export interface CampaignsListParams {
@@ -43,25 +36,6 @@ export interface UpdateCampaignRequest {
   agent_id?: string;
   scheduled_start?: string;
   scheduled_end?: string;
-}
-
-export interface CampaignContactsListParams {
-  page?: number;
-  page_size?: number;
-  status?: CampaignContactStatus;
-}
-
-export interface CampaignContactsListResponse {
-  contacts: CampaignContact[];
-  total: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-}
-
-export interface AddContactsToCampaignRequest {
-  contact_ids: number[];
-  personalization_data?: Record<number, Record<string, unknown>>;
 }
 
 export interface CampaignAnalytics {
@@ -135,81 +109,6 @@ export const campaignsApi = {
   getGuaranteeProgress: async (workspaceId: string, campaignId: string): Promise<GuaranteeProgress> => {
     return apiGet<GuaranteeProgress>(
       `/api/v1/workspaces/${workspaceId}/campaigns/${campaignId}/guarantee`
-    );
-  },
-};
-
-// Campaign Contacts API
-export const campaignContactsApi = {
-  // List contacts in a campaign
-  list: async (
-    workspaceId: string,
-    campaignId: string,
-    params: CampaignContactsListParams = {}
-  ): Promise<CampaignContactsListResponse> => {
-    return apiGet<CampaignContactsListResponse>(
-      `/api/v1/workspaces/${workspaceId}/campaigns/${campaignId}/contacts`,
-      { params }
-    );
-  },
-
-  // Add contacts to a campaign
-  add: async (
-    workspaceId: string,
-    campaignId: string,
-    data: AddContactsToCampaignRequest
-  ): Promise<{ added: number; skipped: number }> => {
-    return apiPost<{ added: number; skipped: number }>(
-      `/api/v1/workspaces/${workspaceId}/campaigns/${campaignId}/contacts`,
-      data
-    );
-  },
-
-  // Remove a contact from a campaign
-  remove: async (workspaceId: string, campaignId: string, contactId: number): Promise<void> => {
-    await apiDelete(`/api/v1/workspaces/${workspaceId}/campaigns/${campaignId}/contacts/${contactId}`);
-  },
-
-  // Remove multiple contacts from a campaign
-  removeBulk: async (workspaceId: string, campaignId: string, contactIds: number[]): Promise<{ removed: number }> => {
-    return apiPost<{ removed: number }>(
-      `/api/v1/workspaces/${workspaceId}/campaigns/${campaignId}/contacts/remove`,
-      { contact_ids: contactIds }
-    );
-  },
-
-  // Get a specific campaign contact
-  get: async (workspaceId: string, campaignId: string, contactId: number): Promise<CampaignContact> => {
-    return apiGet<CampaignContact>(
-      `/api/v1/workspaces/${workspaceId}/campaigns/${campaignId}/contacts/${contactId}`
-    );
-  },
-
-  // Update personalization data for a campaign contact
-  updatePersonalization: async (
-    workspaceId: string,
-    campaignId: string,
-    contactId: number,
-    personalizationData: Record<string, unknown>
-  ): Promise<CampaignContact> => {
-    return apiPatch<CampaignContact>(
-      `/api/v1/workspaces/${workspaceId}/campaigns/${campaignId}/contacts/${contactId}`,
-      { personalization_data: personalizationData }
-    );
-  },
-
-  // Retry failed contacts
-  retryFailed: async (workspaceId: string, campaignId: string): Promise<{ queued: number }> => {
-    return apiPost<{ queued: number }>(
-      `/api/v1/workspaces/${workspaceId}/campaigns/${campaignId}/contacts/retry-failed`
-    );
-  },
-
-  // Skip specific contacts
-  skip: async (workspaceId: string, campaignId: string, contactIds: number[]): Promise<{ skipped: number }> => {
-    return apiPost<{ skipped: number }>(
-      `/api/v1/workspaces/${workspaceId}/campaigns/${campaignId}/contacts/skip`,
-      { contact_ids: contactIds }
     );
   },
 };
