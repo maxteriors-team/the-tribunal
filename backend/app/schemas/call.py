@@ -62,6 +62,17 @@ class WebRTCTokenResponse(BaseModel):
     token: str
 
 
+class OperatorPresenceRequest(BaseModel):
+    """Heartbeat declaring whether *this* operator's browser can take calls.
+
+    The operator is always derived from the authenticated user, never from the
+    body, so a member cannot mark a colleague available (and start ringing their
+    headset) or unavailable (and silently remove them from the roster).
+    """
+
+    available: bool
+
+
 class CallResponse(BaseModel):
     """Voice call response."""
 

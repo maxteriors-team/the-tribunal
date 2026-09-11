@@ -137,6 +137,14 @@ class PhoneNumber(Base, WorkspaceScoped):
     )
     inbound_fallback_number: Mapped[str | None] = mapped_column(EncryptedString(), nullable=True)
 
+    # Ring logged-in operators' browsers first on an inbound call. Opt-in per
+    # number: ringing every registered headset is only wanted on numbers a human
+    # is actually staffing. Nobody answering falls through to the existing
+    # AI-answer / fallback-number path, so this never strands a caller.
+    inbound_ring_operators: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+
     # Call-tracking attribution. Dedicated numbers provide direct evidence for
     # offline channels that cannot carry UTM parameters.
     lead_source_id: Mapped[uuid.UUID | None] = mapped_column(

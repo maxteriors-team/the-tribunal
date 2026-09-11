@@ -3233,6 +3233,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/calls/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Operator Presence
+         * @description Heartbeat this operator's own availability for inbound browser ringing.
+         *
+         *     The user id comes from the authenticated session, so a workspace member can
+         *     only ever set their own presence.
+         */
+        post: operations["set_operator_presence_api_v1_workspaces__workspace_id__calls_presence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/calls/webrtc/token": {
         parameters: {
             query?: never;
@@ -19822,6 +19845,8 @@ export interface components {
             enabled: boolean;
             /** Fallback Number */
             fallback_number?: string | null;
+            /** Ring Operators */
+            ring_operators?: boolean | null;
             /** Transfer Destination Number */
             transfer_destination_number?: string | null;
         };
@@ -19845,6 +19870,11 @@ export interface components {
             phone_number_id: string;
             /** Ready */
             ready: boolean;
+            /**
+             * Ring Operators
+             * @default false
+             */
+            ring_operators: boolean;
             /** Transfer Destination Configured */
             transfer_destination_configured: boolean;
         };
@@ -24599,6 +24629,18 @@ export interface components {
             saved_at?: string | null;
         };
         /**
+         * OperatorPresenceRequest
+         * @description Heartbeat declaring whether *this* operator's browser can take calls.
+         *
+         *     The operator is always derived from the authenticated user, never from the
+         *     body, so a member cannot mark a colleague available (and start ringing their
+         *     headset) or unavailable (and silently remove them from the roster).
+         */
+        OperatorPresenceRequest: {
+            /** Available */
+            available: boolean;
+        };
+        /**
          * OpportunityActivityResponse
          * @description Opportunity activity response schema.
          */
@@ -26432,6 +26474,11 @@ export interface components {
              * @default false
              */
             inbound_ai_enabled: boolean;
+            /**
+             * Inbound Ring Operators
+             * @default false
+             */
+            inbound_ring_operators: boolean;
             /** Is Active */
             is_active: boolean;
             lead_source: components["schemas"]["PhoneNumberLeadSourceResponse"] | null;
@@ -41529,6 +41576,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LiveCallsResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_operator_presence_api_v1_workspaces__workspace_id__calls_presence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperatorPresenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
