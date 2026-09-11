@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.models.roleplay import RehearsalStatus
 from app.services import notifications
 from app.services.notifications import notify_workspace_event
 
@@ -265,6 +266,9 @@ async def test_roleplay_fires_completion_notification(monkeypatch: pytest.Monkey
         agent_name="Closer Bot",
         persona_name="Skeptical CFO",
         overall_score=82,
+        # The notifier only fires for a completed run, so the fake has to carry
+        # a status; without it the attribute lookup raises instead of notifying.
+        status=RehearsalStatus.COMPLETED,
     )
 
     await svc._notify_roleplay_completed(run)
