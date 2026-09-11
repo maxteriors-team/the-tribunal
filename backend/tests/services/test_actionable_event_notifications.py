@@ -265,6 +265,7 @@ async def test_roleplay_fires_completion_notification(monkeypatch: pytest.Monkey
         agent_name="Closer Bot",
         persona_name="Skeptical CFO",
         overall_score=82,
+        status="completed",
     )
 
     await svc._notify_roleplay_completed(run)

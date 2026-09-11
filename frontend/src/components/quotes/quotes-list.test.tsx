@@ -6,7 +6,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuotesList } from "@/components/quotes/quotes-list";
 import type { Quote } from "@/types";
@@ -132,6 +132,31 @@ beforeEach(() => {
   vi.clearAllMocks();
   useWorkspaceIdMock.mockReturnValue("ws-1");
 });
+
+describe.each(["America/New_York", "Pacific/Kiritimati"])(
+  "quote expiry dates in %s",
+  (timezone) => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it.each([
+      { date: "2026-09-30", expected: "Sep 30, 2026" },
+      { date: "2026-03-08", expected: "Mar 8, 2026" },
+      { date: "2026-11-01", expected: "Nov 1, 2026" },
+      { date: "2026-02-30", expected: "—" },
+      { date: null, expected: "—" },
+      { date: undefined, expected: "—" },
+    ])(
+      "renders expiry date $date without timezone drift or failure",
+      async ({ date, expected }) => {
+        vi.stubEnv("TZ", timezone);
+        listMock.mockResolvedValue({ items: [quote({ expiry_date: date })], total: 1 });
+        renderList();
+
+        expect(await screen.findByRole("cell", { name: expected })).toBeVisible();
+      },
+    );
+  },
+);
 
 describe("QuotesList client-view signal", () => {
   it("shows when the client last opened the proposal", async () => {
@@ -552,7 +577,9 @@ describe("QuotesList reopening a lapsed quote", () => {
     // The date is the whole point: reopening without a fresh window would be
     // undone by the next expiry sweep, so the operator is told the new one.
     await waitFor(() =>
-      expect(toastMock.success).toHaveBeenCalledWith(expect.stringContaining("reopened until")),
+      expect(toastMock.success).toHaveBeenCalledWith(
+        "Quote QUO-000123 reopened until Sep 28, 2026",
+      ),
     );
   });
 
