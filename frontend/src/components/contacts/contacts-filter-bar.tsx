@@ -45,7 +45,7 @@ function StatusSegmentedControl({
             aria-label={`${status === "all" ? "All" : contactStatusLabels[status]} ${counts?.[status] ?? "count unavailable"}`}
             onClick={() => onStatusChange(status === "all" ? null : status)}
             className={cn(
-              "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              "rounded-md px-2.5 py-1 text-xs font-medium outline-none transition-colors focus-visible:ring-ring/50 focus-visible:ring-[3px]",
               isActive
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",

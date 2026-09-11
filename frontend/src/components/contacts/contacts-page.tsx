@@ -73,11 +73,14 @@ export function ContactsPage() {
   useEffect(() => {
     if (!importRequested) return undefined;
 
-    const timer = window.setTimeout(() => setIsImportDialogOpen(true), 0);
-    const urlParams = new URLSearchParams(searchParams.toString());
-    urlParams.delete("import");
-    const newUrl = urlParams.size > 0 ? `/?${urlParams.toString()}` : "/";
-    router.replace(newUrl, { scroll: false });
+    const timer = window.setTimeout(() => {
+      // Open before consuming the flag so URL cleanup cannot cancel the dialog opening.
+      setIsImportDialogOpen(true);
+      const urlParams = new URLSearchParams(searchParams.toString());
+      urlParams.delete("import");
+      const newUrl = urlParams.size > 0 ? `/contacts?${urlParams.toString()}` : "/contacts";
+      router.replace(`${newUrl}${window.location.hash}`, { scroll: false });
+    }, 0);
 
     return () => window.clearTimeout(timer);
   }, [importRequested, searchParams, router]);
