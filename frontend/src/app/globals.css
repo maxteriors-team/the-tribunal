@@ -210,22 +210,58 @@
 }
 
 /* ── Auth artwork: the beam and the leads it lights ──────────── */
-/* One reveal on load, then it rests — the light finding the leads is the
-   point, ambient looping is not. Resting state is the finished state, so
-   reduced motion and no-JS both get the whole picture. */
+/* Resting state is the finished state, so reduced motion and no-JS both get
+   the whole picture; motion is added only where it is allowed. */
 @media (prefers-reduced-motion: no-preference) {
   .beam-reveal {
     animation: beam-fade-in 900ms ease-out backwards;
   }
+
+  /* The group carries the reveal and the drift; the circle inside carries the
+     twinkle. Split across two elements so neither animation has to restate the
+     other's transform, and so opacity and transform stay independently
+     composited. */
   .beam-lead {
-    animation: beam-fade-in 600ms ease-out backwards;
+    transform-box: view-box;
+    transform-origin: center;
+    animation:
+      beam-fade-in 600ms ease-out backwards,
+      beam-drift var(--beam-drift-duration, 14s) ease-in-out var(--beam-phase, 0s) infinite alternate;
   }
-  /* The one loop that stays: the beam hunting across the field. Pivots at the
-     fixture, in viewBox units, so it swings rather than slides. */
+
+  .beam-star {
+    animation: beam-twinkle var(--beam-twinkle-duration, 4s) ease-in-out var(--beam-phase, 0s)
+      infinite alternate;
+  }
+
+  /* The beam hunting across the field. Pivots at the fixture, in viewBox
+     units, so it swings rather than slides. */
   .beam-sweep {
     transform-box: view-box;
-    transform-origin: 300px 84px;
+    transform-origin: 250px 90px;
     animation: beam-sweep 18s ease-in-out infinite alternate;
+  }
+}
+
+/* Small enough that no dot ever wanders into another's place — the field
+   should breathe, not rearrange itself. */
+@keyframes beam-drift {
+  from {
+    transform: translate(-5px, 3px);
+  }
+  to {
+    transform: translate(5px, -4px);
+  }
+}
+
+/* Multiplies the dot's own resting opacity, so a lead out in the dark stays
+   dim while one in the pool stays bright. */
+@keyframes beam-twinkle {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
   }
 }
 
