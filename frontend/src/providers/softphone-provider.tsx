@@ -15,6 +15,7 @@ import {
 
 import { IncomingCallBanner } from "@/components/calls/incoming-call-banner";
 import { SoftphoneBar } from "@/components/calls/softphone-bar";
+import { useCapabilities } from "@/hooks/useCapabilities";
 import { callsApi } from "@/lib/api/calls";
 import { queryKeys } from "@/lib/query-keys";
 import { formatPhoneNumber } from "@/lib/utils/phone";
@@ -94,6 +95,11 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { currentWorkspaceId } = useWorkspace();
+  // Minting a Telnyx credential is a `comms:send` action on the backend, and a
+  // field technician has no calling surface at all. Registering them would only
+  // earn 403s on every page and hand out voice credentials nobody can use.
+  const { can } = useCapabilities();
+  const canUseSoftphone = can("comms:send");
   const [state, setState] = useState<SoftphoneState>(INITIAL_STATE);
   const [incoming, setIncoming] = useState<IncomingCall | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
@@ -483,7 +489,7 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
    * token-minting hot loop against our own API.
    */
   useEffect(() => {
-    if (!isSignedIn || !currentWorkspaceId) {
+    if (!isSignedIn || !currentWorkspaceId || !canUseSoftphone) {
       // Signed out or between workspaces: tear the headset down on a later
       // tick, so this effect never sets state during the render that ran it.
       const teardown = window.setTimeout(() => void disconnectClient(), 0);
@@ -539,7 +545,14 @@ export function SoftphoneProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("beforeunload", clearPresenceOnUnload);
       disconnectClient();
     };
-  }, [currentWorkspaceId, disconnectClient, ensureConnected, isSignedIn, startPresence]);
+  }, [
+    canUseSoftphone,
+    currentWorkspaceId,
+    disconnectClient,
+    ensureConnected,
+    isSignedIn,
+    startPresence,
+  ]);
 
   useEffect(() => {
     if (!user && stateRef.current.phase !== "idle") void hangup();
