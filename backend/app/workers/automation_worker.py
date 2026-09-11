@@ -74,6 +74,15 @@ from app.models.automation_event import (
     AutomationEvent,
 )
 from app.models.automation_execution import AutomationExecution
+from app.models.automation_step_run import (
+    OUTCOME_BLOCKED,
+    OUTCOME_BRANCHED,
+    OUTCOME_FAILED,
+    OUTCOME_PENDING_APPROVAL,
+    OUTCOME_SENT,
+    OUTCOME_SKIPPED,
+    OUTCOME_WAITED,
+)
 from app.models.campaign import Campaign, CampaignContact, CampaignContactStatus, CampaignStatus
 from app.models.contact import Contact
 from app.models.conversation import Conversation
@@ -85,7 +94,12 @@ from app.models.pipeline import Pipeline, PipelineStage
 from app.models.tag import ContactTag, Tag
 from app.models.workspace import Workspace
 from app.services.approval.approval_gate_service import approval_gate_service
-from app.services.automations.branching import contact_matches_rules, parse_branch_condition
+from app.services.automations.branching import (
+    contact_matches_rules,
+    parse_branch_condition,
+    run_rules_match,
+    split_run_scoped_rules,
+)
 from app.services.automations.conditions import (
     AUTOMATION_CONDITION_TRIGGERS,
     CONDITION_BACKLOG_BELOW_THRESHOLD,
@@ -110,6 +124,7 @@ from app.services.automations.runner import (
     step_at,
     wait_duration,
 )
+from app.services.automations.step_runs import record_step_run
 from app.services.compliance.quiet_hours import parse_clock
 from app.services.email import send_automation_email, send_template_email
 from app.services.email_layout import EmailCategory
@@ -861,6 +876,15 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                     execution.step_index = cursor + 1
                     execution.status = "scheduled"
                     execution.scheduled_for = datetime.now(UTC) + delay
+                    await self._record_step(
+                        automation,
+                        contact,
+                        execution,
+                        step,
+                        db,
+                        outcome=OUTCOME_WAITED,
+                        detail={"delay_seconds": int(delay.total_seconds())},
+                    )
                     log.info(
                         "automation_step_waiting",
                         step_index=cursor,
@@ -870,12 +894,14 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                     return  # Do not mark completed — this run is unfinished.
 
                 if step.type == _BRANCH_STEP:
-                    cursor = await self._resolve_branch(automation, contact, steps, step, db, log)
+                    cursor = await self._resolve_branch(
+                        automation, contact, steps, step, db, log, execution
+                    )
                     continue
 
                 status_before_step = contact.status if contact is not None else None
                 delivery_result = await self._execute_step(
-                    automation, contact, step, context, db, log
+                    automation, contact, step, context, db, log, execution
                 )
                 if (
                     automation.trigger_type == "lead_created"
@@ -901,6 +927,44 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             execution.step_index = max(cursor, 0)
             log.exception("Automation execution failed", error=str(exc))
 
+    async def _record_step(
+        self,
+        automation: Automation,
+        contact: Contact | None,
+        execution: AutomationExecution,
+        step: WorkflowStep,
+        db: AsyncSession,
+        *,
+        outcome: str,
+        reason: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        """Append this step's outcome to the ledger.
+
+        Never raises. A ledger is evidence, and failing to write evidence must
+        not abort the customer-facing work it was describing.
+        """
+        try:
+            await record_step_run(
+                db,
+                workspace_id=automation.workspace_id,
+                execution_id=execution.id,
+                automation_id=automation.id,
+                contact_id=contact.id if contact else None,
+                step_index=step.index,
+                step_id=step.step_id,
+                step_type=step.type,
+                outcome=outcome,
+                reason=reason,
+                detail=detail,
+            )
+        except Exception:  # pragma: no cover - defensive
+            self.logger.warning(
+                "automation_step_run_not_recorded",
+                automation_id=str(automation.id),
+                step_index=step.index,
+            )
+
     async def _resolve_branch(
         self,
         automation: Automation,
@@ -909,25 +973,57 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         step: WorkflowStep,
         db: AsyncSession,
         log: Any,
+        execution: AutomationExecution,
     ) -> int:
         """Evaluate a ``branch`` step and return the cursor to continue at.
 
+        A condition may mix two kinds of question. Most ask about a *record* and
+        are answered by that record's filter module. A few ask about the *run* —
+        has this person replied since we last messaged them, how many touches
+        have we sent — and are answered from the step ledger. Both halves are
+        evaluated and combined under the same ``and``/``or`` the author chose.
+
         A contactless trigger (workspace conditions) has nobody to ask about, so
-        the condition cannot be true; such a run takes the else-path.
+        record-scoped conditions cannot be true; such a run takes the else-path.
         """
         when_true, when_false = branch_targets(steps, step)
         rules, logic = parse_branch_condition(step.config)
+        run_rules, subject_rules = split_run_scoped_rules(rules)
 
-        if contact is None:
+        if contact is None and subject_rules:
             matched = False
         else:
-            matched = await contact_matches_rules(
-                db,
-                workspace_id=automation.workspace_id,
-                contact_id=contact.id,
-                rules=rules,
-                logic=logic,
+            subject_matched = (
+                True
+                if contact is None
+                else await contact_matches_rules(
+                    db,
+                    workspace_id=automation.workspace_id,
+                    contact_id=contact.id,
+                    rules=subject_rules,
+                    logic=logic,
+                )
             )
+            run_matched = await run_rules_match(
+                db,
+                run_rules,
+                logic=logic,
+                workspace_id=automation.workspace_id,
+                execution_id=execution.id,
+                contact_id=contact.id if contact else None,
+                contact_phone=getattr(contact, "phone_number", None) if contact else None,
+            )
+            # With "or", a rule list split across both halves must not become
+            # two independent alls. Empty halves return True, so combining them
+            # under `or` would match everything; guard on which halves exist.
+            if logic == "or" and run_rules and subject_rules:
+                matched = subject_matched or run_matched
+            elif logic == "or" and run_rules:
+                matched = run_matched
+            elif logic == "or":
+                matched = subject_matched
+            else:
+                matched = subject_matched and run_matched
 
         target = when_true if matched else when_false
         if target.dangling:
@@ -938,17 +1034,71 @@ class AutomationWorker(RetryableWorker, BaseWorker):
                 detail="branch names a step id that does not exist — ending run",
             )
 
+        await self._record_step(
+            automation,
+            contact,
+            execution,
+            step,
+            db,
+            outcome=OUTCOME_BRANCHED,
+            detail={"matched": matched, "next_index": target.index},
+        )
+
         log.info(
             "automation_branch_evaluated",
             step_index=step.index,
             matched=matched,
             rule_count=len(rules),
+            run_rule_count=len(run_rules),
             next_index=target.index,
         )
         # END_OF_WORKFLOW is negative, which step_at() reads as "finished".
         return target.index if target.index != END_OF_WORKFLOW else END_OF_WORKFLOW
 
-    async def _execute_step(
+    async def _dispatch_action(  # noqa: PLR0911, PLR0912 - one branch per action type
+        self,
+        automation: Automation,
+        contact: Contact | None,
+        action_type: str,
+        action_config: dict[str, Any],
+        payload: dict[str, Any],
+        db: AsyncSession,
+    ) -> tuple[OutboundDeliveryResult | None, bool]:
+        """Run one action and report ``(delivery_result, recognised)``.
+
+        Split out from :meth:`_execute_step` so the gating, ledger and
+        error-handling around an action stay readable while the dispatch itself
+        keeps its one-branch-per-action shape.
+        """
+        if action_type == "send_sms" and contact is not None:
+            return await self._action_send_sms(
+                automation, contact, action_config, payload, db
+            ), True
+        if action_type == "send_email" and contact is not None:
+            await self._action_send_email(automation, contact, action_config, payload, db)
+            return None, True
+        if action_type == "make_call" and contact is not None:
+            await self._action_make_call(automation, contact, action_config, db)
+            return None, True
+        if action_type == "enroll_campaign" and contact is not None:
+            await self._action_enroll_campaign(automation, contact, action_config, db)
+            return None, True
+        if action_type == "start_drip_campaign":
+            # Not a _CONTACT_ACTION: starting a drip is a workspace-level act,
+            # so a contactless condition trigger can launch one.
+            await self._action_start_drip_campaign(automation, contact, action_config, db)
+            return None, True
+        if action_type == "move_to_stage":
+            # Not a _CONTACT_ACTION: the event path can carry an opportunity_id
+            # with no contact, so the handler does its own None-safe resolution.
+            await self._action_move_to_stage(automation, contact, action_config, payload, db)
+            return None, True
+        if action_type in ("apply_tag", "add_tag") and contact is not None:
+            await self._action_apply_tag(contact, action_config, db)
+            return None, True
+        return None, False
+
+    async def _execute_step(  # noqa: PLR0911 - each early return is a distinct ledger outcome
         self,
         automation: Automation,
         contact: Contact | None,
@@ -956,12 +1106,18 @@ class AutomationWorker(RetryableWorker, BaseWorker):
         payload: dict[str, Any],
         db: AsyncSession,
         log: Any,
+        execution: AutomationExecution,
     ) -> OutboundDeliveryResult | None:
         """Run one side-effecting step: approval gate, then dispatch.
 
         Control-flow steps (``wait``, ``branch``) never reach here — they move
         the cursor instead of acting on a customer, so gating them for approval
         would ask an operator to authorise a delay.
+
+        Every exit records a ledger row. The distinction that matters is
+        *skipped* versus *sent*: only a delivered message moves the last-touch
+        clock, so a step that declined to act must never suppress the next real
+        one.
         """
         if (
             step.type == "send_sms"
@@ -970,6 +1126,15 @@ class AutomationWorker(RetryableWorker, BaseWorker):
             and contact.last_appointment_status == "scheduled"
         ):
             log.info("automation_sms_skipped", reason="appointment_booked")
+            await self._record_step(
+                automation,
+                contact,
+                execution,
+                step,
+                db,
+                outcome=OUTCOME_SKIPPED,
+                reason="appointment_booked",
+            )
             return None
         action_type = step.type
         action_config = step.config
@@ -993,48 +1158,104 @@ class AutomationWorker(RetryableWorker, BaseWorker):
 
         if decision == "pending":
             log.info("automation_action_pending_approval", action_type=action_type)
+            await self._record_step(
+                automation,
+                contact,
+                execution,
+                step,
+                db,
+                outcome=OUTCOME_PENDING_APPROVAL,
+                reason="awaiting_operator_approval",
+            )
             return None
         elif decision == "blocked":
             log.warning("automation_action_blocked", action_type=action_type)
+            await self._record_step(
+                automation,
+                contact,
+                execution,
+                step,
+                db,
+                outcome=OUTCOME_BLOCKED,
+                reason="approval_gate_blocked",
+            )
             return None
 
         # Actions targeting a contact are skipped when the (event)
         # trigger has none. Checking here lets mypy narrow ``contact``.
         if action_type in _CONTACT_ACTIONS and contact is None:
             log.warning("automation_action_requires_contact", action_type=action_type)
+            await self._record_step(
+                automation,
+                contact,
+                execution,
+                step,
+                db,
+                outcome=OUTCOME_SKIPPED,
+                reason="no_contact_on_trigger",
+            )
             return None
 
-        if action_type == "send_sms" and contact is not None:
-            return await self._action_send_sms(automation, contact, action_config, payload, db)
-        elif action_type == "send_email" and contact is not None:
-            await self._action_send_email(automation, contact, action_config, payload, db)
-
-        elif action_type == "make_call" and contact is not None:
-            await self._action_make_call(automation, contact, action_config, db)
-
-        elif action_type == "enroll_campaign" and contact is not None:
-            await self._action_enroll_campaign(automation, contact, action_config, db)
-
-        elif action_type == "start_drip_campaign":
-            # Not a _CONTACT_ACTION: starting a drip is a workspace-level
-            # act, so a contactless condition trigger can launch one.
-            await self._action_start_drip_campaign(automation, contact, action_config, db)
-
-        elif action_type == "move_to_stage":
-            # Not a _CONTACT_ACTION: the event path can carry an
-            # opportunity_id with no contact, so the handler does its own
-            # None-safe resolution.
-            await self._action_move_to_stage(automation, contact, action_config, payload, db)
-
-        elif action_type in ("apply_tag", "add_tag") and contact is not None:
-            await self._action_apply_tag(contact, action_config, db)
-
-        else:
-            log.warning(
-                "Unknown action type — skipping",
-                action_type=action_type,
+        try:
+            result, dispatched = await self._dispatch_action(
+                automation, contact, action_type, action_config, payload, db
             )
-        return None
+            if not dispatched:
+                log.warning("Unknown action type — skipping", action_type=action_type)
+                await self._record_step(
+                    automation,
+                    contact,
+                    execution,
+                    step,
+                    db,
+                    outcome=OUTCOME_SKIPPED,
+                    reason=f"unknown_action_type:{action_type}",
+                )
+                return None
+        except Exception as exc:
+            await self._record_step(
+                automation,
+                contact,
+                execution,
+                step,
+                db,
+                outcome=OUTCOME_FAILED,
+                reason=str(exc)[:500],
+            )
+            raise
+
+        # An SMS that the compliance layer declined is not a touch. Recording it
+        # as one would let a suppressed message silence the next real send.
+        if result is not None and not result.delivered:
+            await self._record_step(
+                automation,
+                contact,
+                execution,
+                step,
+                db,
+                outcome=OUTCOME_SKIPPED,
+                reason=result.reason or str(result.status),
+                detail={"channel": str(result.channel), "status": str(result.status)},
+            )
+            return result
+
+        detail: dict[str, Any] = {}
+        if result is not None:
+            detail = {
+                "channel": str(result.channel),
+                "provider": result.provider,
+                "provider_message_id": result.provider_message_id,
+            }
+        await self._record_step(
+            automation,
+            contact,
+            execution,
+            step,
+            db,
+            outcome=OUTCOME_SENT,
+            detail=detail,
+        )
+        return result
 
     async def _notify_automation_triggered(
         self,
