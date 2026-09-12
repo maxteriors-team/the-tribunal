@@ -5,8 +5,8 @@
 The board has no "move" — only "add". Operators move someone by adding a second
 card, which is what texted an already-quoted customer a welcome message
 (fixed separately in `1e99743`, by teaching the trigger to ignore filed cards).
-The underlying gap is still open: `JIM TORTOMOSE` has two cards because moving
-him required making one.
+The underlying gap is still open: an affected customer has two cards because
+moving the deal required making another one.
 
 ## What the code actually supports today
 
@@ -89,4 +89,4 @@ card gets a move control that lists every pipeline's stages and calls
 ## Not in scope
 
 Bulk move, moving a card from the board itself, and merging the duplicate cards
-Jim already has. Each is a separate change; none is needed to close the gap.
+the affected customer already has. Each is a separate change; none is needed to close the gap.
