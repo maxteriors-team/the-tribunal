@@ -372,8 +372,10 @@ async def test_estimate_capacity_never_leaks_another_workspaces_appointments() -
         await _target(db, ws.id, period_month=JULY, estimates=60)
 
         await _appointment(db, ws.id, contact.id, scheduled_at=IN_JULY)
-        for _ in range(5):
-            await _appointment(db, other.id, other_contact.id, scheduled_at=IN_JULY)
+        for offset in range(5):
+            await _appointment(
+                db, other.id, other_contact.id, scheduled_at=IN_JULY + timedelta(hours=offset)
+            )
 
         report = await CapacityService(db).compute_estimate_capacity(ws.id, JULY)
 

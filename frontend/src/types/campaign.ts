@@ -1,8 +1,6 @@
 // Campaign Types
 
-import type { CallRecord } from "./call";
 import type { Contact } from "./contact";
-import type { MessageStatus } from "./conversation";
 import type { CampaignPreBookingSummary } from "./pre-booking";
 
 export type CampaignStatus = "draft" | "scheduled" | "running" | "paused" | "completed" | "cancelled";
@@ -54,43 +52,6 @@ export interface Campaign {
   // Timestamps
   started_at?: string;
   completed_at?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export type CampaignContactStatus =
-  | "pending"
-  | "queued"
-  | "sending"
-  | "sent"
-  | "delivered"
-  | "failed"
-  | "responded"
-  | "opted_out"
-  | "skipped";
-
-export interface CampaignContact {
-  id: string;
-  campaign_id: string;
-  contact_id: number;
-  contact?: Contact;
-  status: CampaignContactStatus;
-  // Channel-specific delivery
-  sms_status?: MessageStatus;
-  email_status?: MessageStatus;
-  call_status?: CallRecord["status"];
-  // Tracking
-  message_id?: string;
-  call_id?: string;
-  sent_at?: string;
-  delivered_at?: string;
-  responded_at?: string;
-  failed_at?: string;
-  failure_reason?: string;
-  retry_count: number;
-  next_retry_at?: string;
-  // Personalization data
-  personalization_data?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

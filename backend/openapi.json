@@ -61692,8 +61692,49 @@
     },
     "/api/v1/email/unsubscribe": {
       "get": {
-        "description": "Honor an email unsubscribe link. Always returns 200 with an HTML page.",
+        "description": "Honor an email unsubscribe link. Always returns 200 with an HTML page.\n\nPOST is accepted because marketing mail carries ``List-Unsubscribe-Post:\nList-Unsubscribe=One-Click`` (RFC 8058): Gmail and Yahoo POST this URL\ndirectly, with no human clicking through. A GET-only route answers that POST\nwith 405 and the opt-out is silently lost -- the provider shows the customer\na success toast either way, so the failure is invisible from both ends.",
         "operationId": "unsubscribe_api_v1_email_unsubscribe_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unsubscribe",
+        "tags": [
+          "Email Unsubscribe"
+        ]
+      },
+      "post": {
+        "description": "Honor an email unsubscribe link. Always returns 200 with an HTML page.\n\nPOST is accepted because marketing mail carries ``List-Unsubscribe-Post:\nList-Unsubscribe=One-Click`` (RFC 8058): Gmail and Yahoo POST this URL\ndirectly, with no human clicking through. A GET-only route answers that POST\nwith 405 and the opt-out is silently lost -- the provider shows the customer\na success toast either way, so the failure is invisible from both ends.",
+        "operationId": "unsubscribe_api_v1_email_unsubscribe_post",
         "parameters": [
           {
             "in": "query",
@@ -61735,8 +61776,49 @@
     },
     "/api/v1/email/unsubscribe-contact": {
       "get": {
-        "description": "Honor a contact-level email opt-out link (workflow/automation email).\n\nSuppresses commercial email to this person across every automation and\nworkflow, not just the one that prompted the click. Always returns 200.",
+        "description": "Honor a contact-level email opt-out link (workflow/automation email).\n\nSuppresses commercial email to this person across every automation and\nworkflow, not just the one that prompted the click. Always returns 200.\n\nAccepts POST for the same RFC 8058 one-click reason as :func:`unsubscribe`.",
         "operationId": "unsubscribe_contact_api_v1_email_unsubscribe_contact_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unsubscribe Contact",
+        "tags": [
+          "Email Unsubscribe"
+        ]
+      },
+      "post": {
+        "description": "Honor a contact-level email opt-out link (workflow/automation email).\n\nSuppresses commercial email to this person across every automation and\nworkflow, not just the one that prompted the click. Always returns 200.\n\nAccepts POST for the same RFC 8058 one-click reason as :func:`unsubscribe`.",
+        "operationId": "unsubscribe_contact_api_v1_email_unsubscribe_contact_post",
         "parameters": [
           {
             "in": "query",
@@ -96687,7 +96769,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/deliver": {
       "post": {
-        "description": "Send the client proposal link by email or SMS.\n\nMarks the quote sent (allocating its share token) and delivers the link to\nthe wizard snapshot's client email/phone, the linked contact's, or an\nexplicit ``to`` override.",
+        "description": "Send the client proposal link by email or SMS.\n\nMarks the quote sent (allocating its share token) and delivers the link to\nthe wizard snapshot's client email/phone, the linked contact's, or an\nexplicit ``to`` override. Success means provider acceptance, not confirmed\ninbox delivery. On failure, the quote can remain sent and its link shareable;\nthe response reports the delivery error rather than success.",
         "operationId": "deliver_quote_api_v1_workspaces__workspace_id__quotes__quote_id__deliver_post",
         "parameters": [
           {
@@ -97423,7 +97505,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/send": {
       "post": {
-        "description": "Mark a quote as sent and email it to the quote-to contact.",
+        "description": "Mark a quote as sent and publish its client link without sending email or SMS.\n\nBookkeeping only. Use the deliver endpoint for checked email or SMS delivery.",
         "operationId": "send_quote_api_v1_workspaces__workspace_id__quotes__quote_id__send_post",
         "parameters": [
           {

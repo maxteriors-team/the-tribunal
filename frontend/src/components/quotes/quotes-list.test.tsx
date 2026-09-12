@@ -15,7 +15,7 @@ const {
   listMock,
   deliverMock,
   recordDepositMock,
-  sendMock,
+  markSentMock,
   getMock,
   deleteMock,
   assignMock,
@@ -28,7 +28,7 @@ const {
   listMock: vi.fn(),
   deliverMock: vi.fn(),
   recordDepositMock: vi.fn(),
-  sendMock: vi.fn(),
+  markSentMock: vi.fn(),
   getMock: vi.fn(),
   deleteMock: vi.fn(),
   assignMock: vi.fn(),
@@ -54,7 +54,7 @@ vi.mock("@/lib/api/quotes", () => ({
     update: vi.fn(),
     delete: deleteMock,
     assign: assignMock,
-    send: sendMock,
+    markSent: markSentMock,
     deliver: deliverMock,
     recordDeposit: recordDepositMock,
     approve: vi.fn(),
@@ -363,7 +363,7 @@ describe("QuotesList proposal delivery", () => {
 
     await waitFor(() => expect(deliverMock).toHaveBeenCalledWith("ws-1", "quote-1", "email"));
     // The address the server actually resolved, not the one the rep assumed.
-    expect(toastMock.success).toHaveBeenCalledWith("Proposal emailed to jo@example.com");
+    expect(toastMock.success).toHaveBeenCalledWith("Quote email to jo@example.com accepted for delivery");
   });
 
   it("texts the proposal and confirms the number", async () => {
@@ -412,14 +412,56 @@ describe("QuotesList proposal delivery", () => {
   });
 
   it("keeps the bookkeeping-only action distinct from actually sending", async () => {
-    // `send` marks sent and emails best-effort — it reports success even when
-    // nobody was emailed — so it must not be labelled as if it delivers.
+    // Recording an external send must neither promise nor trigger email delivery.
     listOne({ status: "draft", public_token: null });
 
     await openMenu();
 
-    expect(await screen.findByText("Mark as sent")).toBeInTheDocument();
+    expect(await screen.findByText("Mark as sent (no email)")).toBeInTheDocument();
     expect(screen.queryByText("Send quote")).not.toBeInTheDocument();
+  });
+
+  it("re-sends email through checked delivery, never the status-only action", async () => {
+    listOne();
+    deliverMock.mockResolvedValue({ ok: true, channel: "email", to: "jo@example.com" });
+    markSentMock.mockResolvedValue(quote());
+
+    await openMenu();
+    await userEvent.click(await screen.findByText("Re-send email"));
+
+    await waitFor(() => expect(deliverMock).toHaveBeenCalledWith("ws-1", "quote-1", "email"));
+    expect(markSentMock).not.toHaveBeenCalled();
+    expect(toastMock.success).toHaveBeenCalledWith("Quote email to jo@example.com accepted for delivery");
+  });
+
+  it("marks sent without claiming an email was sent", async () => {
+    listOne({ status: "draft", public_token: null });
+    markSentMock.mockResolvedValue(quote());
+
+    await openMenu();
+    await userEvent.click(await screen.findByText(/^Mark as sent/));
+
+    await waitFor(() => expect(markSentMock).toHaveBeenCalledWith("ws-1", "quote-1"));
+    expect(deliverMock).not.toHaveBeenCalled();
+    expect(toastMock.success).toHaveBeenCalledWith("Quote marked as sent", {
+      description: "No email or text was sent.",
+    });
+  });
+
+  it.each([
+    "No client email on this proposal — add one or pass a destination.",
+    "Couldn't send that email — the quote is saved and still marked sent, so you can retry or copy the client link instead.",
+  ])("reports email failure and refreshes saved status: %s", async (message) => {
+    listOne({ status: "draft", public_token: null });
+    deliverMock.mockRejectedValueOnce({ response: { status: 400, data: { detail: message } } });
+
+    await openMenu();
+    await userEvent.click(await screen.findByText("Email proposal to client"));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(message));
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(markSentMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2));
   });
 
   it("hides delivery once a quote is settled", async () => {

@@ -520,6 +520,12 @@ async def send_campaign_email(
         "subject": subject,
         "html": _campaign_html(body, unsubscribe_url),
     }
+    if unsubscribe_url:
+        # One-click unsubscribe, matching ``send_automation_email``. Gmail and
+        # Yahoo require these headers from bulk senders; campaign mail is the
+        # highest-volume path here, so omitting them is what actually lands the
+        # domain in spam. The visible footer alone does not satisfy RFC 8058.
+        params["headers"] = list_unsubscribe_headers(unsubscribe_url)
 
     response = await _send(params, idempotency_key=idempotency_key)
     if response is None:

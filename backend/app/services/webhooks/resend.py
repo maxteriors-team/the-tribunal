@@ -20,6 +20,7 @@ from app.models.conversation import (
     advances_message_status,
 )
 from app.models.email_event import EmailEvent, EmailEventType
+from app.services.email_opt_out import record_email_opt_out
 from app.services.webhooks.pipeline import (
     WebhookDispatchResult,
     WebhookIdempotencyDecision,
@@ -53,6 +54,12 @@ _MESSAGE_STATUS_UPDATES: dict[EmailEventType, MessageStatus] = {
     EmailEventType.DELIVERED: MessageStatus.DELIVERED,
     EmailEventType.BOUNCED: MessageStatus.FAILED,
 }
+
+# Resend mirrors SES bounce semantics: ``Permanent`` means the address is dead,
+# ``Transient``/``Undetermined`` mean try again later. Only the permanent case
+# suppresses -- opting someone out over a temporarily full mailbox would silently
+# lose a real customer, so ambiguous types deliberately fall through.
+_HARD_BOUNCE_TYPE = "Permanent"
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +189,8 @@ async def dispatch_resend_event(
             .values({counter_field: getattr(Campaign, counter_field) + 1})
         )
 
+    await _apply_suppression(db, mapped, event, message, log)
+
     try:
         await db.commit()
     except IntegrityError:
@@ -200,6 +209,45 @@ async def dispatch_resend_event(
     return WebhookDispatchResult.processed()
 
 
+async def _apply_suppression(
+    db: AsyncSession,
+    mapped: EmailEventType,
+    event: ResendWebhookEvent,
+    message: Message | None,
+    log: Any,
+) -> None:
+    """Stop emailing an address the provider told us to stop emailing.
+
+    Recording the event and bumping ``emails_bounced`` leaves the contact fully
+    eligible for the next send, so a dead address is retried forever and a spam
+    complaint costs nothing -- and complaint rate is the number mailbox providers
+    actually police. Suppression is contact-level (not campaign-level) because a
+    bounce or complaint is a fact about the address, not about one campaign.
+    """
+    if mapped is EmailEventType.BOUNCED:
+        bounce = event.data.get("bounce")
+        bounce_type = bounce.get("type") if isinstance(bounce, dict) else None
+        if bounce_type != _HARD_BOUNCE_TYPE:
+            return
+        source = "hard_bounce"
+    elif mapped is EmailEventType.COMPLAINED:
+        source = "spam_complaint"
+    elif mapped is EmailEventType.UNSUBSCRIBED:
+        # Provider-side one-click unsubscribe: the customer never reached our
+        # endpoint, so this webhook is the only record that they asked to stop.
+        source = "provider_unsubscribe"
+    else:
+        return
+
+    contact_id = message.conversation.contact_id if message is not None else None
+    if contact_id is None:
+        log.warning("resend_suppression_no_contact", event_type=mapped.value)
+        return
+
+    await record_email_opt_out(db, contact_id, source=source)
+    log.info("resend_email_suppressed", contact_id=contact_id, reason=source)
+
+
 async def _find_message(db: AsyncSession, provider_message_id: str | None) -> Message | None:
     """Locate the Message (with eager-loaded conversation) for a Resend event."""
     if provider_message_id is None:
@@ -207,7 +255,11 @@ async def _find_message(db: AsyncSession, provider_message_id: str | None) -> Me
 
     result = await db.execute(
         select(Message)
-        .options(selectinload(Message.conversation).load_only(Conversation.workspace_id))
+        .options(
+            selectinload(Message.conversation).load_only(
+                Conversation.workspace_id, Conversation.contact_id
+            )
+        )
         .where(Message.provider_message_id == provider_message_id)
     )
     return result.scalar_one_or_none()

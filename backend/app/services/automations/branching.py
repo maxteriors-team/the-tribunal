@@ -1,17 +1,30 @@
-"""Branch conditions for workflows — "did this contact match?" as one query.
+"""Branch conditions for workflows — "did this record match?" as one query.
 
-A ``branch`` step asks a yes/no question about the contact standing in front of
+A ``branch`` step asks a yes/no question about the record standing in front of
 it, then :mod:`app.services.automations.runner` decides where that answer sends
 the run.
 
-Why this reuses ``contact_filters``
+Why the subject is not always a contact
+---------------------------------------
+The original implementation could only ask about contacts. That is the right
+subject for a welcome drip and the wrong one for most sequences that matter: a
+quote revival ladder parked in a 30-day wait has to ask *"is **this** quote
+still unsold?"*, and a contact-shaped branch physically cannot — a customer with
+three open quotes has one contact row and three different answers.
+
+So a branch resolves against a **subject**: the entity the run is about, carried
+on the execution as ``(subject_type, subject_id)``. ``contact`` remains the
+default and the overwhelmingly common case, which is why every existing
+automation keeps working untouched.
+
+Why this reuses the resource filter engines
 -----------------------------------
 The obvious implementation is a fresh in-memory predicate evaluator over the
-loaded ``Contact``. This module deliberately does not do that. The product
-already has one rule language — the JSON ``filter_rules`` that power the
-contacts list, saved segments and campaign targeting — and
-:func:`app.services.contacts.contact_filters.apply_contact_filters` is its
-single source of truth. Reusing it buys three things a second evaluator would
+loaded record. This module deliberately does not do that. The product already
+has one rule language — the JSON ``filter_rules`` that power the contacts list,
+saved segments and campaign targeting — and the per-resource filter modules
+(``contact_filters``, ``quote_filters``, ``opportunity_filters``, …) are its
+single source of truth. Reusing them buys three things a second evaluator would
 each have to re-earn:
 
 - **One semantics.** "Lead score over 50" means precisely the same thing in a
@@ -25,7 +38,7 @@ each have to re-earn:
   no second UI.
 
 The cost is one query per branch step. It is scoped to a single primary key
-(``WHERE contacts.id = :id``), so Postgres answers from the PK index and the
+(``WHERE <table>.id = :id``), so Postgres answers from the PK index and the
 rules only ever narrow that one row.
 """
 
@@ -38,9 +51,42 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact
+from app.models.field_service import Job
+from app.models.invoice import Invoice
+from app.models.opportunity import Opportunity
+from app.models.quote import Quote
+from app.services.automations.step_runs import RUN_SCOPED_FIELDS, run_scoped_value
 from app.services.contacts.contact_filters import apply_contact_filters
+from app.services.invoices.invoice_filters import apply_invoice_filters
+from app.services.jobs.job_filters import apply_job_filters
+from app.services.opportunities.opportunity_filters import apply_opportunity_filters
+from app.services.quotes.quote_filters import apply_quote_filters
 
-__all__ = ["contact_matches_rules", "parse_branch_condition"]
+__all__ = [
+    "SUBJECT_CONTACT",
+    "SUBJECT_TYPES",
+    "contact_matches_rules",
+    "parse_branch_condition",
+    "run_rules_match",
+    "split_run_scoped_rules",
+    "subject_matches_rules",
+]
+
+SUBJECT_CONTACT = "contact"
+
+# Subject type -> (model, filter applier). Every applier already has the same
+# shape: ``(query, workspace_id, filter_rules=..., filter_logic=...)`` returning
+# the narrowed query, which is why adding a subject is a dict entry rather than
+# a new evaluator.
+_SUBJECT_FILTERS: dict[str, tuple[Any, Any]] = {
+    SUBJECT_CONTACT: (Contact, apply_contact_filters),
+    "quote": (Quote, apply_quote_filters),
+    "opportunity": (Opportunity, apply_opportunity_filters),
+    "job": (Job, apply_job_filters),
+    "invoice": (Invoice, apply_invoice_filters),
+}
+
+SUBJECT_TYPES: tuple[str, ...] = tuple(_SUBJECT_FILTERS)
 
 # Accepted top-level combinators, normalized to what apply_contact_filters wants.
 _LOGIC_ALIASES: dict[str, str] = {
@@ -49,6 +95,109 @@ _LOGIC_ALIASES: dict[str, str] = {
     "or": "or",
     "any": "or",
 }
+
+# Operators a run-scoped rule may use. Deliberately tiny: these fields are a
+# boolean and a counter, and anything richer belongs on a record where the
+# full filter vocabulary already applies.
+_RUN_OPERATORS = {
+    "eq": lambda actual, expected: actual == expected,
+    "equals": lambda actual, expected: actual == expected,
+    "ne": lambda actual, expected: actual != expected,
+    "not_equals": lambda actual, expected: actual != expected,
+    "gt": lambda actual, expected: actual > expected,
+    "gte": lambda actual, expected: actual >= expected,
+    "lt": lambda actual, expected: actual < expected,
+    "lte": lambda actual, expected: actual <= expected,
+}
+
+
+def _coerce_expected(actual: Any, expected: Any) -> Any:
+    """Make a JSONB-sourced expected value comparable with ``actual``.
+
+    A workflow stored in JSON may carry ``"false"`` where the engine computes
+    ``False``, because a UI wrote a string. Comparing those directly is how a
+    suppression rule silently inverts.
+    """
+    if isinstance(actual, bool):
+        if isinstance(expected, bool):
+            return expected
+        if isinstance(expected, str):
+            return expected.strip().lower() in {"true", "1", "yes"}
+        return bool(expected)
+    if isinstance(actual, int) and isinstance(expected, str):
+        try:
+            return int(expected.strip())
+        except ValueError:
+            return expected
+    return expected
+
+
+def split_run_scoped_rules(
+    rules: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Partition ``rules`` into ``(run_scoped, subject_scoped)``.
+
+    Most conditions ask about a record and are answered by that record's filter
+    module. A few ask about the *run* — has this person replied since we last
+    messaged them, how many touches have we sent — and no column anywhere holds
+    the answer. Those are peeled off here and resolved from the step ledger.
+    """
+    run_scoped: list[dict[str, Any]] = []
+    subject_scoped: list[dict[str, Any]] = []
+    for rule in rules:
+        field = str(rule.get("field", "")).strip().lower()
+        if field in RUN_SCOPED_FIELDS:
+            run_scoped.append(rule)
+        else:
+            subject_scoped.append(rule)
+    return run_scoped, subject_scoped
+
+
+async def run_rules_match(
+    db: AsyncSession,
+    rules: list[dict[str, Any]],
+    *,
+    logic: str,
+    workspace_id: uuid.UUID,
+    execution_id: uuid.UUID,
+    contact_id: int | None,
+    contact_phone: str | None = None,
+) -> bool:
+    """Evaluate run-scoped rules against the step ledger.
+
+    An empty list matches, mirroring :func:`subject_matches_rules`, so a
+    condition made entirely of record rules is unaffected by this path.
+    """
+    if not rules:
+        return True
+
+    results: list[bool] = []
+    for rule in rules:
+        field = str(rule.get("field", "")).strip().lower()
+        operator = str(rule.get("operator", "eq")).strip().lower()
+        compare = _RUN_OPERATORS.get(operator)
+        if compare is None:
+            # An unsupported operator is a misauthored rule, not a customer
+            # signal. Treating it as "matched" keeps the run on its main path
+            # rather than diverting everyone into the else-branch.
+            results.append(True)
+            continue
+
+        actual = await run_scoped_value(
+            db,
+            field,
+            workspace_id=workspace_id,
+            execution_id=execution_id,
+            contact_id=contact_id,
+            contact_phone=contact_phone,
+        )
+        expected = _coerce_expected(actual, rule.get("value"))
+        try:
+            results.append(bool(compare(actual, expected)))
+        except TypeError:
+            results.append(True)
+
+    return any(results) if logic == "or" else all(results)
 
 
 def parse_branch_condition(config: Any) -> tuple[list[dict[str, Any]], str]:
@@ -76,33 +225,52 @@ def parse_branch_condition(config: Any) -> tuple[list[dict[str, Any]], str]:
     return rules, logic
 
 
-async def contact_matches_rules(
+async def subject_matches_rules(
     db: AsyncSession,
     *,
     workspace_id: uuid.UUID,
-    contact_id: int,
+    subject_id: Any,
     rules: list[dict[str, Any]],
     logic: str = "and",
+    subject_type: str = SUBJECT_CONTACT,
 ) -> bool:
-    """Whether ``contact_id`` satisfies ``rules``.
+    """Whether the record identified by ``(subject_type, subject_id)`` matches.
 
     An **empty rule list matches**. A branch with no condition configured is a
     half-built step, and the readable behaviour is "carry on down the main path"
     rather than silently diverting every customer to the else-branch — which,
     in a workflow, usually means falling out of the sequence entirely.
 
-    The contact is re-read through the filter query rather than inspected in
+    An **unknown subject type also matches**, for the same reason: a workflow
+    naming a subject this build does not know about is a configuration error,
+    and stalling the run mid-sequence is a worse answer than carrying on down
+    the path the author drew.
+
+    A **missing subject does not match**. Unlike the two cases above this is not
+    ambiguity but an answered question: the quote was deleted, so it is not
+    still unsold.
+
+    The record is re-read through the filter query rather than inspected in
     memory on purpose: a workflow resumed after a three-day wait must branch on
-    the customer's state *now*, not on the attributes loaded before the wait.
+    the record's state *now*, not on the attributes loaded before the wait.
     """
     if not rules:
         return True
 
-    query = select(Contact.id).where(
-        Contact.id == contact_id,
-        Contact.workspace_id == workspace_id,
+    if subject_id is None:
+        return False
+
+    entry = _SUBJECT_FILTERS.get((subject_type or SUBJECT_CONTACT).strip().lower())
+    if entry is None:
+        return True
+
+    model, apply_filters = entry
+
+    query = select(model.id).where(
+        model.id == subject_id,
+        model.workspace_id == workspace_id,
     )
-    query = apply_contact_filters(
+    query = apply_filters(
         query,
         workspace_id,
         filter_rules=rules,
@@ -111,3 +279,26 @@ async def contact_matches_rules(
 
     result = await db.execute(query.limit(1))
     return result.scalar_one_or_none() is not None
+
+
+async def contact_matches_rules(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    contact_id: int,
+    rules: list[dict[str, Any]],
+    logic: str = "and",
+) -> bool:
+    """Contact-subject shorthand for :func:`subject_matches_rules`.
+
+    Retained because contacts are the default subject, and most call sites and
+    tests read better naming the entity they actually mean.
+    """
+    return await subject_matches_rules(
+        db,
+        workspace_id=workspace_id,
+        subject_id=contact_id,
+        rules=rules,
+        logic=logic,
+        subject_type=SUBJECT_CONTACT,
+    )

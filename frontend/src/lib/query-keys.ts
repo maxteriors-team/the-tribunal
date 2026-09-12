@@ -410,6 +410,15 @@ export const queryKeys = {
     ...servicePlans,
   },
   reports: {
+    all: (workspaceId: string) => ["reports", workspaceId] as const,
+    arInvoices: (workspaceId: string, asOf: string, params?: QueryKeyParams) =>
+      ["reports", workspaceId, "ar-aging", asOf, "invoices", normalizeQueryKeyParams(params)] as const,
+    jobPnlJobs: (workspaceId: string, params?: QueryKeyParams) =>
+      ["reports", workspaceId, "job-pnl", "jobs", normalizeQueryKeyParams(params)] as const,
+    jobPnlDetails: (workspaceId: string, params?: QueryKeyParams) =>
+      ["reports", workspaceId, "job-pnl", "details", normalizeQueryKeyParams(params)] as const,
+    cogsLedger: (workspaceId: string, itemId: string, params?: QueryKeyParams) =>
+      ["reports", workspaceId, "cogs", "ledger", itemId, normalizeQueryKeyParams(params)] as const,
     arAging: (workspaceId: string, asOf?: string) =>
       ["reports", workspaceId, "ar-aging", asOf ?? null] as const,
     jobPnl: (workspaceId: string, params?: QueryKeyParams | null) =>

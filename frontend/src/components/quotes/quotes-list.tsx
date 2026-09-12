@@ -139,20 +139,16 @@ function WorkspaceQuotesList({ workspaceId }: { workspaceId: string | null }) {
     }
   };
 
-  const sendMutation = useMutation({
-    mutationFn: (id: string) => quotesApi.send(workspaceId ?? "", id),
-    onSuccess: (q) => {
-      toast.success(`Quote ${q.number} sent`);
+  const markSentMutation = useMutation({
+    mutationFn: (id: string) => quotesApi.markSent(workspaceId ?? "", id),
+    onSuccess: () => {
+      toast.success("Quote marked as sent", { description: "No email or text was sent." });
       invalidate();
     },
-    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to send quote")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to mark quote as sent")),
   });
 
-  // Deliberately separate from `sendMutation`: that one marks the quote sent and
-  // emails best-effort, so it reports success even when nobody was emailed. This
-  // one names the channel, confirms the destination, and shows the server's own
-  // reason on failure — "add a mobile number", "this number opted out" — which
-  // is a thing the rep can act on while still standing in the driveway.
+  // Only checked delivery can claim a send; status changes send nothing.
   const deliverMutation = useMutation({
     mutationFn: ({ id, channel }: { id: string; channel: QuoteDeliverChannel }) =>
       quotesApi.deliver(workspaceId ?? "", id, channel),
@@ -160,11 +156,12 @@ function WorkspaceQuotesList({ workspaceId }: { workspaceId: string | null }) {
       toast.success(
         result.channel === "sms"
           ? `Proposal texted to ${result.to}`
-          : `Proposal emailed to ${result.to}`,
+          : `Quote email to ${result.to} accepted for delivery`,
       );
-      invalidate();
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Couldn't send the proposal")),
+    // A failed delivery can still publish the quote; refresh its status and link.
+    onSettled: invalidate,
   });
 
   const approveMutation = useMutation({
@@ -247,7 +244,7 @@ function WorkspaceQuotesList({ workspaceId }: { workspaceId: string | null }) {
   };
 
   const busy =
-    sendMutation.isPending ||
+    markSentMutation.isPending ||
     deliverMutation.isPending ||
     approveMutation.isPending ||
     declineMutation.isPending ||
@@ -393,7 +390,7 @@ function WorkspaceQuotesList({ workspaceId }: { workspaceId: string | null }) {
                     busy={busy}
                     onAssign={() => openAssignment(quote)}
                     onEdit={() => setEditing(quote)}
-                    onSend={() => sendMutation.mutate(quote.id)}
+                    onMarkSent={() => markSentMutation.mutate(quote.id)}
                     onDeliver={(channel) => deliverMutation.mutate({ id: quote.id, channel })}
                     onApprove={() => approveMutation.mutate(quote.id)}
                     onDecline={() => declineMutation.mutate(quote.id)}
@@ -591,7 +588,7 @@ interface RowActionsProps {
   busy: boolean;
   onAssign: () => void;
   onEdit: () => void;
-  onSend: () => void;
+  onMarkSent: () => void;
   onDeliver: (channel: QuoteDeliverChannel) => void;
   onApprove: () => void;
   onDecline: () => void;
@@ -615,7 +612,7 @@ function RowActions({
   busy,
   onAssign,
   onEdit,
-  onSend,
+  onMarkSent,
   onDeliver,
   onApprove,
   onDecline,
@@ -689,9 +686,15 @@ function RowActions({
               Text proposal to client
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onSend}>
-              {quote.status === "draft" ? "Mark as sent" : "Re-send email"}
-            </DropdownMenuItem>
+            {quote.status === "draft" ? (
+              <DropdownMenuItem onClick={onMarkSent}>
+                Mark as sent (no email)
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={() => onDeliver("email")}>
+                Re-send email
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={onApprove}>
               <Check className="mr-2 h-4 w-4" />
               Approve

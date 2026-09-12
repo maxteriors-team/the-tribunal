@@ -437,7 +437,10 @@ async def send_quote(
     db: DB,
     membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
-    """Mark a quote as sent and email it to the quote-to contact."""
+    """Mark a quote as sent and publish its client link without sending email or SMS.
+
+    Bookkeeping only. Use the deliver endpoint for checked email or SMS delivery.
+    """
     service = QuoteService(db)
     return await service.mark_sent(workspace_id, quote_id)
 
@@ -456,7 +459,9 @@ async def deliver_quote(
 
     Marks the quote sent (allocating its share token) and delivers the link to
     the wizard snapshot's client email/phone, the linked contact's, or an
-    explicit ``to`` override.
+    explicit ``to`` override. Success means provider acceptance, not confirmed
+    inbox delivery. On failure, the quote can remain sent and its link shareable;
+    the response reports the delivery error rather than success.
     """
     service = QuoteService(db)
     return await service.deliver_quote(

@@ -40,10 +40,11 @@ def test_declared_action_types_match_what_the_worker_dispatches() -> None:
     assistant would offer the model an action that silently does nothing, or
     hide one that works. This keeps the single source of truth honest.
     """
-    # Side-effecting actions are dispatched in ``_execute_step``. Control-flow
-    # steps never reach it — they move the cursor in ``_run_actions`` and are
-    # matched against module-level constants, so they are checked separately.
-    source = inspect.getsource(AutomationWorker._execute_step)
+    # Side-effecting actions are dispatched in ``_dispatch_action``, which
+    # ``_execute_step`` calls once the approval gate and ledger wrapping are
+    # done. Control-flow steps never reach either — they move the cursor in
+    # ``_run_actions`` against module-level constants, checked separately.
+    source = inspect.getsource(AutomationWorker._dispatch_action)
 
     for action_type in AUTOMATION_ACTION_TYPES:
         if action_type in AUTOMATION_CONTROL_FLOW_ACTIONS:

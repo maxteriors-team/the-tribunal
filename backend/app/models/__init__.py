@@ -17,6 +17,7 @@ from app.models.auth_rate_limit import AuthRateLimit
 from app.models.automation import Automation
 from app.models.automation_event import AutomationEvent
 from app.models.automation_execution import AutomationExecution
+from app.models.automation_step_run import AutomationStepRun
 from app.models.bandit_decision import BanditDecision, DecisionType
 from app.models.bookable_staff import BookableStaff
 from app.models.call_feedback import CallFeedback
@@ -274,6 +275,7 @@ __all__ = [
     "Automation",
     "AutomationEvent",
     "AutomationExecution",
+    "AutomationStepRun",
     "Pipeline",
     "PipelineStage",
     "Opportunity",
