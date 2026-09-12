@@ -21,6 +21,7 @@ from app.schemas.roleplay import (
     ProspectPersonaUpdate,
     RehearsalRunResponse,
     RehearsalRunSummary,
+    RetryRehearsalRequest,
 )
 from app.services.ai.roleplay import RoleplayService
 from app.services.exceptions import NotFoundError, ValidationError
@@ -136,7 +137,7 @@ async def list_runs(
     return [RehearsalRunSummary.model_validate(r) for r in runs]
 
 
-@router.post("/runs", response_model=RehearsalRunResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/runs", response_model=RehearsalRunResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_run(
     workspace_id: uuid.UUID,
     run_in: CreateRehearsalRequest,
@@ -144,15 +145,11 @@ async def create_run(
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> RehearsalRunResponse:
-    """Start a rehearsal.
-
-    For ``rehearsee == "ai"`` the full conversation is simulated and scored
-    inline before responding. For ``rehearsee == "human"`` the run is returned
-    with the prospect's opening line so a rep can reply via ``/runs/{id}/turn``.
-    """
+    """Durably accept a rehearsal. Poll GET /runs/{id}; retries reuse the request key."""
     try:
         run = await RoleplayService(db).create_run(
             workspace_id,
+            idempotency_key=run_in.idempotency_key,
             agent_id=run_in.agent_id,
             persona_id=run_in.persona_id,
             rehearsee=run_in.rehearsee,
@@ -182,7 +179,9 @@ async def get_run(
     return RehearsalRunResponse.model_validate(run)
 
 
-@router.post("/runs/{run_id}/turn", response_model=RehearsalRunResponse)
+@router.post(
+    "/runs/{run_id}/turn", response_model=RehearsalRunResponse, status_code=status.HTTP_202_ACCEPTED
+)
 async def advance_human_turn(
     workspace_id: uuid.UUID,
     run_id: uuid.UUID,
@@ -191,9 +190,11 @@ async def advance_human_turn(
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> RehearsalRunResponse:
-    """Submit a human rep's reply and get the prospect's response."""
+    """Save a human reply once and queue the prospect's response."""
     try:
-        run = await RoleplayService(db).advance_human_turn(run_id, workspace_id, turn_in.message)
+        run = await RoleplayService(db).advance_human_turn(
+            run_id, workspace_id, turn_in.message, turn_in.expected_turn_count
+        )
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValidationError as e:
@@ -201,7 +202,11 @@ async def advance_human_turn(
     return RehearsalRunResponse.model_validate(run)
 
 
-@router.post("/runs/{run_id}/score", response_model=RehearsalRunResponse)
+@router.post(
+    "/runs/{run_id}/score",
+    response_model=RehearsalRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def score_run(
     workspace_id: uuid.UUID,
     run_id: uuid.UUID,
@@ -209,9 +214,34 @@ async def score_run(
     db: DB,
     workspace: Annotated[Workspace, Depends(get_workspace)],
 ) -> RehearsalRunResponse:
-    """Score a rehearsal and finalize the report."""
+    """Queue scoring once; poll the existing run for the result."""
     try:
         run = await RoleplayService(db).score_run(run_id, workspace_id)
+    except NotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return RehearsalRunResponse.model_validate(run)
+
+
+@router.post(
+    "/runs/{run_id}/retry",
+    response_model=RehearsalRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def retry_run(
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+    retry_in: RetryRehearsalRequest,
+    current_user: CurrentUser,
+    db: DB,
+    workspace: Annotated[Workspace, Depends(get_workspace)],
+) -> RehearsalRunResponse:
+    """Explicitly retry the observed failed step, not saved dialogue or a later attempt."""
+    try:
+        run = await RoleplayService(db).retry_run(
+            run_id, workspace_id, retry_in.expected_attempt_count
+        )
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except ValidationError as e:
@@ -232,3 +262,5 @@ async def delete_run(
         await RoleplayService(db).delete_run(run_id, workspace_id)
     except NotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

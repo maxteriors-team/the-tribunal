@@ -116,7 +116,7 @@ async def test_browser_leg_uses_fixed_internal_sip_domain() -> None:
     assert call_id == "v3:browser-leg"
     assert rejected is None
     assert len(captured) == 1
-    assert captured[0]["to"] == "sip:provider-user-42@telnyx.com"
+    assert captured[0]["to"] == "sip:provider-user-42@sip.telnyx.com"
     assert captured[0]["connection_id"] == CONNECTION_ID
 
 

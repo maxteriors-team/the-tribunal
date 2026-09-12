@@ -36,6 +36,18 @@ def _auto_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _db() -> AsyncMock:
+    """A session mock that matches SQLAlchemy's actual API.
+
+    ``AsyncSession.add()`` is synchronous. A bare ``AsyncMock`` makes it return
+    a coroutine nobody awaits, which surfaces as an unraisable warning from
+    whichever test happens to run next rather than from the code that caused it.
+    """
+    db = AsyncMock()
+    db.add = MagicMock()
+    return db
+
+
 def _automation(actions: list[dict]) -> MagicMock:
     automation = MagicMock()
     automation.id = uuid.uuid4()
@@ -104,7 +116,7 @@ class TestWaitParksTheRun:
         )
         execution = _execution()
 
-        await worker._run_actions(automation, _contact(), {}, execution, AsyncMock())
+        await worker._run_actions(automation, _contact(), {}, execution, _db())
 
         assert sms.await_count == 1
         assert execution.status == "scheduled"
@@ -123,7 +135,7 @@ class TestWaitParksTheRun:
             _contact(),
             {},
             execution,
-            AsyncMock(),
+            _db(),
         )
 
         assert execution.status == "scheduled"
@@ -141,7 +153,7 @@ class TestWaitParksTheRun:
             _contact(),
             {},
             execution,
-            AsyncMock(),
+            _db(),
         )
 
         delay = execution.scheduled_for - before
@@ -160,7 +172,7 @@ class TestWaitParksTheRun:
             _contact(),
             {},
             execution,
-            AsyncMock(),
+            _db(),
         )
 
         assert execution.status == "completed"
@@ -186,7 +198,7 @@ class TestResumingFromTheCursor:
         # Re-entering where the wait left off.
         execution = _execution(step_index=2, status="pending")
 
-        await worker._run_actions(automation, _contact(), {}, execution, AsyncMock())
+        await worker._run_actions(automation, _contact(), {}, execution, _db())
 
         assert sms.await_count == 1
         assert sms.await_args.args[2] == {"message": "second"}
@@ -204,7 +216,7 @@ class TestResumingFromTheCursor:
             _contact(),
             {"rating": 5},
             execution,
-            AsyncMock(),
+            _db(),
         )
         assert execution.context == {"rating": 5}
 
@@ -214,7 +226,7 @@ class TestResumingFromTheCursor:
             _contact(),
             execution.context,
             execution,
-            AsyncMock(),
+            _db(),
         )
         assert sms.await_args.args[3] == {"rating": 5}
 
@@ -344,7 +356,7 @@ class TestLoopBounds:
         )
         execution = _execution()
 
-        await worker._run_actions(automation, _contact(), {}, execution, AsyncMock())
+        await worker._run_actions(automation, _contact(), {}, execution, _db())
 
         assert execution.status == "failed"
         assert str(MAX_STEPS_PER_RUN) in (execution.error or "")

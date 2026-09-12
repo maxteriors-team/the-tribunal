@@ -5,22 +5,9 @@ season" into a queryable audience). What did not exist is reusing *what was
 actually sold*: a rep re-quoting a returning customer had to re-measure the roof
 and retype every line, for a house the crew already knows.
 
-This copies the sold quote into a fresh draft for the current season. The
-customer's design — photo, traced roofline, measured trees — is not duplicated:
-a :class:`~app.models.lighting_project.LightingProject` already has many quotes,
-so the renewal points at the same project and inherits every measurement.
-
-**What is deliberately left behind.** A renewal is a new offer, not a copy of a
-settled sale, so nothing that records the *outcome* of last season carries over:
-payment intents and deposits, approval and decline stamps, the public share
-token, the job and invoice it converted into, and the view counters. Copying any
-of those would show a brand-new draft as already paid, already accepted, or
-reachable on last year's customer link.
-
-**Prices carry forward unchanged.** Last season's numbers are what the customer
-already agreed to, so they are the honest starting point and the rep adjusts from
-there. Repricing automatically against the current price book would silently
-change what a returning customer is asked to pay.
+This copies the sold quote into a fresh draft for the current season while leaving
+payment, approval, conversion, delivery, and public-link outcomes behind. Prices
+carry forward unchanged so the rep can adjust the new draft before sending it.
 """
 
 from __future__ import annotations
@@ -161,6 +148,9 @@ def build_renewal_quote(
         # Same design: the house, the traced roofline and the measured trees are
         # the customer's, not last year's quote's.
         lighting_project_id=source.lighting_project_id,
+        seasonal_installation_snapshot=deepcopy(source.seasonal_installation_snapshot),
+        seasonal_takedown_included=source.seasonal_takedown_included,
+        seasonal_storage_included=source.seasonal_storage_included,
         number=number,
         title=_renewal_title(source, season),
         status="draft",

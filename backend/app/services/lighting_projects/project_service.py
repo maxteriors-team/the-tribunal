@@ -65,8 +65,10 @@ class LightingProjectService:
 
     @classmethod
     def _summary(cls, project: LightingProject) -> LightingProjectSummary:
-        project_type: LightingProjectType = (
-            "permanent" if project.document.get("projectType") == "permanent" else "landscape"
+        stored_type = project.document.get("projectType")
+        project_type = cast(
+            LightingProjectType,
+            stored_type if stored_type in {"landscape", "permanent", "seasonal"} else "landscape",
         )
         return LightingProjectSummary(
             id=project.id,
@@ -155,6 +157,8 @@ class LightingProjectService:
             )
             if location.contact_id != payload.contact_id:
                 raise ValidationError("Service location does not belong to the selected contact")
+            if payload.project_type == "seasonal" and not location.is_active:
+                raise ValidationError("Seasonal projects require an active service location")
 
         if payload.opportunity_id is not None:
             opportunity = await assert_workspace_owned(

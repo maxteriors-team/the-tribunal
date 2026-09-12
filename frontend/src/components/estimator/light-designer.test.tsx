@@ -742,7 +742,12 @@ describe("LightDesigner", () => {
     await waitFor(() =>
       expect(estimatorApi.createQuote).toHaveBeenCalledWith(
         "ws_1",
-        expect.objectContaining({ side: "seasonal", feet: 100 }),
+        expect.objectContaining({
+          side: "seasonal",
+          feet: 100,
+          seasonal_installation_source: "photo",
+          seasonal_phased_handoff: false,
+        }),
       ),
     );
 
@@ -779,7 +784,7 @@ describe("LightDesigner", () => {
         updatedAt: "2026-08-26T12:00:00.000Z",
       },
       onLandscapeDraftChange: vi.fn(),
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       projectId: "permanent-project",
       projectName: "Pat permanent roofline",
       contactName: "Pat Lee",
@@ -838,7 +843,7 @@ describe("LightDesigner", () => {
         updatedAt: "2026-08-26T12:00:00.000Z",
       },
       onLandscapeDraftChange: vi.fn(),
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       projectId: "permanent-project",
       projectName: "Pat permanent roofline",
       contactName: "Pat Lee",
@@ -920,7 +925,7 @@ describe("LightDesigner", () => {
         updatedAt: "2026-08-26T12:00:00.000Z",
       },
       onLandscapeDraftChange: vi.fn(),
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       projectId: "permanent-project",
       projectName: "Pat permanent roofline",
       contactName: "Pat Lee",
@@ -974,7 +979,7 @@ describe("LightDesigner", () => {
         updatedAt: "2026-08-26T12:00:00.000Z",
       },
       onLandscapeDraftChange: vi.fn(),
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       projectId: "permanent-project",
       projectName: "Pat permanent roofline",
       contactName: "Pat Lee",
@@ -1748,7 +1753,7 @@ describe("LightDesigner", () => {
         },
       },
       onLandscapeDraftChange,
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       resetKey: 0,
     };
 
@@ -1827,7 +1832,7 @@ describe("LightDesigner", () => {
         updatedAt: "2026-08-11T09:00:00.000Z",
       },
       onLandscapeDraftChange,
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       projectId: "permanent-project",
       projectName: "Pat permanent roofline",
       contactName: "Pat Lee",
@@ -1874,7 +1879,7 @@ describe("LightDesigner", () => {
         updatedAt: "2026-08-14T12:00:00.000Z",
       },
       onLandscapeDraftChange,
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       resetKey: 0,
     };
     renderEstimator("landscape", adapter);
@@ -1925,7 +1930,7 @@ describe("LightDesigner", () => {
         updatedAt: "2026-08-14T12:00:00.000Z",
       },
       onLandscapeDraftChange,
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       resetKey: 0,
     };
     renderEstimator("landscape", adapter);
@@ -2130,7 +2135,7 @@ describe("LightDesigner", () => {
         updatedAt: "2026-08-11T09:00:00.000Z",
       },
       onLandscapeDraftChange: vi.fn(),
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       projectId: "project-1",
       projectName: "Patio lighting",
       contactName: "Pat Lee",
@@ -2412,7 +2417,7 @@ describe("LightDesigner", () => {
         updatedAt: "2026-08-25T12:00:00.000Z",
       },
       onLandscapeDraftChange: vi.fn(),
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       projectId: "project-bistro",
       projectName: "Permanent Bistro estimate",
       contactName: "Pat Lee",
@@ -2497,7 +2502,7 @@ describe("LightDesigner", () => {
         updatedAt: "2026-08-11T09:00:00.000Z",
       },
       onLandscapeDraftChange: vi.fn(),
-      persistenceStatus: { state: "saved", label: "Saved to Tribunal" },
+      persistenceStatus: { state: "saved", label: "Saved to BEAM" },
       projectId: "project-1",
       projectName: "Patio lighting",
       contactId: 42,

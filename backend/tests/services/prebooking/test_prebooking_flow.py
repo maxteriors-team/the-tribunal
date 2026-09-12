@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select
@@ -182,7 +183,16 @@ async def test_slot_cap_refuses_the_customer_after_the_last_slot() -> None:
         assert len(rows) == 1
 
 
-async def test_the_same_contact_clicking_twice_does_not_eat_two_slots() -> None:
+async def test_the_same_contact_clicking_twice_does_not_eat_two_slots_or_send_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import email as email_module
+
+    provider = AsyncMock(return_value={"id": "prebooking-status-test"})
+    monkeypatch.setattr(email_module.settings, "resend_api_key", "re_test_no_spend")
+    monkeypatch.setattr(email_module.resend, "api_key", "re_test_no_spend")
+    monkeypatch.setattr(email_module.resend.Emails, "send_async", provider)
+
     async with AsyncSessionLocal() as db:
         ws, _campaign, config = await _campaign_with_offer(db, slot_cap=2)
         contact = await _make_contact(db, ws.id)
@@ -194,6 +204,10 @@ async def test_the_same_contact_clicking_twice_does_not_eat_two_slots() -> None:
         assert again.reservation.id == first.reservation.id
         assert again.quote.id == first.quote.id
         assert (await service.slot_usage(config)).occupied == 1
+        assert first.quote.status == "sent"
+        assert first.quote.public_token
+        assert first.proposal_url.endswith(f"/p/quotes/{first.quote.public_token}")
+        provider.assert_not_awaited()
 
 
 async def test_two_customers_paying_at_once_cannot_both_take_the_last_slot() -> None:

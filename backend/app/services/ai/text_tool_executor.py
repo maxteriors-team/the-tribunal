@@ -320,7 +320,11 @@ class TextToolExecutor(BaseToolExecutor):
             return self._attach_fresh_evidence(
                 result,
                 domains={"pricing"},
-                has_evidence=bool(result.get("results")),
+                # `execute_knowledge_search` returns `passages`; reading `results`
+                # here made every pricing answer look unproven, so the gate
+                # replaced a correct, KB-grounded reply with the canned
+                # "I don't have verified pricing" line on every single turn.
+                has_evidence=bool(result.get("passages")),
             )
 
         self.log.warning("unknown_text_tool", function_name=function_name)

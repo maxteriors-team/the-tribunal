@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 
 import { ContactFilterBuilder } from "@/components/filters/contact-filter-builder";
 import { Input } from "@/components/ui/input";
+import type { ContactListResponse } from "@/lib/api/contacts";
 import { contactStatusLabels } from "@/lib/status-colors";
 import { cn } from "@/lib/utils";
 import type { ContactStatus, FilterDefinition } from "@/types";
@@ -20,7 +21,7 @@ const STATUS_ORDER: (ContactStatus | "all")[] = [
 interface StatusSegmentedControlProps {
   selectedStatus: ContactStatus | null;
   onStatusChange: (status: ContactStatus | null) => void;
-  counts: Record<ContactStatus | "all", number>;
+  counts: ContactListResponse["status_counts"] | undefined;
 }
 
 function StatusSegmentedControl({
@@ -29,23 +30,29 @@ function StatusSegmentedControl({
   counts,
 }: StatusSegmentedControlProps) {
   return (
-    <div className="bg-muted/40 inline-flex flex-wrap items-center gap-1 rounded-lg border p-1">
+    <div
+      role="group"
+      aria-label="Contact status: counts across all matching contacts, before selecting a status"
+      className="bg-muted/40 inline-flex flex-wrap items-center gap-1 rounded-lg border p-1"
+    >
       {STATUS_ORDER.map((status) => {
         const isActive = status === "all" ? !selectedStatus : selectedStatus === status;
         return (
           <button
             key={status}
             type="button"
+            aria-pressed={isActive}
+            aria-label={`${status === "all" ? "All" : contactStatusLabels[status]} ${counts?.[status] ?? "count unavailable"}`}
             onClick={() => onStatusChange(status === "all" ? null : status)}
             className={cn(
-              "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              "rounded-md px-2.5 py-1 text-xs font-medium outline-none transition-colors focus-visible:ring-ring/50 focus-visible:ring-[3px]",
               isActive
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
             {status === "all" ? "All" : contactStatusLabels[status]}
-            <span className="ml-1 tabular-nums opacity-60">{counts[status]}</span>
+            <span className="ml-1 tabular-nums opacity-60">{counts?.[status] ?? "—"}</span>
           </button>
         );
       })}
@@ -58,7 +65,7 @@ export interface ContactsFilterBarProps {
   onInputChange: (value: string) => void;
   statusFilter: string | null;
   onStatusChange: (status: ContactStatus | null) => void;
-  statusCounts: Record<ContactStatus | "all", number>;
+  statusCounts: ContactListResponse["status_counts"] | undefined;
   workspaceId: string | null;
   filters: FilterDefinition | null;
   onFiltersChange: (filters: FilterDefinition | null) => void;

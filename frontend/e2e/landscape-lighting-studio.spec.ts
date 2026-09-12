@@ -592,14 +592,14 @@ test.describe("landscape lighting studio", () => {
     await drawPermanentRun(0.35);
     await expect.poll(permanentRunCount).toBe(1);
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByText("Saved to Tribunal")).toBeVisible();
+    await expect(page.getByText("Saved to BEAM")).toBeVisible();
 
     await page.reload();
     await expect(page.getByLabel("Project name")).toHaveValue("Hawthorne Residence");
     await drawPermanentRun(0.55);
     await expect.poll(permanentRunCount).toBe(2);
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByText("Saved to Tribunal")).toBeVisible();
+    await expect(page.getByText("Saved to BEAM")).toBeVisible();
     expect(updates.at(-1)).toMatchObject({
       document: { projectType: "permanent" },
     });
@@ -724,7 +724,7 @@ test.describe("landscape lighting studio", () => {
         .map((run) => (run as { elevation?: string }).elevation ?? null);
 
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByText("Saved to Tribunal")).toBeVisible();
+    await expect(page.getByText("Saved to BEAM")).toBeVisible();
     await expect.poll(savedElevations).toEqual(["side"]);
 
     // Measured footage moves with the tag instead of staying on the front.
@@ -969,7 +969,7 @@ test.describe("landscape lighting studio", () => {
     };
     expect(latestDraft.document?.shots?.[0]?.design?.highlights).toHaveLength(1);
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByText("Saved to Tribunal")).toBeVisible();
+    await expect(page.getByText("Saved to BEAM")).toBeVisible();
 
     await page.reload();
     await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
@@ -1003,7 +1003,7 @@ test.describe("landscape lighting studio", () => {
       )
       .toBe(true);
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(page.getByText("Saved to Tribunal")).toBeVisible();
+    await expect(page.getByText("Saved to BEAM")).toBeVisible();
 
     await page.getByRole("button", { name: "Wiring: Off" }).click();
     await canvas.click({ position: { x: canvasBox.width * 0.35, y: canvasBox.height * 0.62 } });

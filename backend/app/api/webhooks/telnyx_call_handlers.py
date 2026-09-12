@@ -40,6 +40,11 @@ from app.services.telephony.inbound_call_readiness import (
 )
 from app.services.telephony.inbound_routing import classify_inbound_reason
 from app.services.telephony.inbound_screening import InboundCallScreener
+from app.services.telephony.recording_notice import (
+    RECORDING_NOTICE_TEXT,
+    decode_recording_notice_state,
+    encode_recording_notice_state,
+)
 from app.services.telephony.voice_agent_resolver import VoiceAgentResolver
 
 _call_classifier = CallOutcomeClassifier()
@@ -251,6 +256,18 @@ async def handle_call_initiated(payload: dict[Any, Any], log: Any) -> None:  # n
             await _route_challenged_inbound_call(phone_record, call_control_id, log)
             return
 
+        # Give logged-in humans first refusal when the workspace opted in. Any
+        # outcome other than "the headsets are ringing" falls straight through
+        # to the AI/fallback path below, so the caller is never left in silence.
+        if phone_record.inbound_ring_operators and await _ring_operators_for_inbound_call(
+            db=db,
+            phone_record=phone_record,
+            message=message,
+            call_control_id=call_control_id,
+            log=log,
+        ):
+            return
+
         # Auto-answer calls if phone number has an assigned active agent. The
         # classified routing reason picks a department-specific agent when the
         # workspace defines a route for it.
@@ -399,7 +416,29 @@ async def _speak_inbound_disclosure(
     )
 
 
-async def handle_call_answered(payload: dict[Any, Any], log: Any) -> None:  # noqa: PLR0912, PLR0915
+async def _claimed_by_specialised_leg_handler(payload: dict[Any, Any], log: Any) -> bool:
+    """True when this answered leg belongs to a flow that owns its own audio.
+
+    Warm-transfer closers, operator-ring headsets and user-mode outbound legs
+    are all legs *we* originated for a specific purpose. None of them get AI
+    streaming, so each short-circuits the normal answered path.
+    """
+    call_control_id = payload.get("call_control_id", "")
+
+    if await _handle_transfer_leg_answered(call_control_id, log):
+        return True
+    if await _handle_operator_ring_leg_answered(call_control_id, log):
+        return True
+    return await _handle_user_call_leg_answered(
+        call_control_id,
+        log,
+        client_state=payload.get("client_state"),
+    )
+
+
+async def handle_call_answered(  # noqa: PLR0912, PLR0915
+    payload: dict[Any, Any], log: Any
+) -> None:
     """Handle call answered event."""
     from app.models.agent import Agent
     from app.models.conversation import Conversation, Message, MessageStatus
@@ -412,21 +451,7 @@ async def handle_call_answered(payload: dict[Any, Any], log: Any) -> None:  # no
     log = log.bind(call_control_id=call_control_id, call_state=call_state, direction=direction)
     log.info("========== CALL ANSWERED ==========")
 
-    # Warm-transfer closer leg: this answered leg is the human closer we dialed
-    # for a warm handoff (not a normal AI call). Speak the briefing here; the
-    # bridge into the caller leg happens on call.speak.ended. Short-circuit so
-    # we don't start AI audio streaming on the closer leg.
-    if await _handle_transfer_leg_answered(call_control_id, log):
-        return
-
-    # User-mode outbound call: one of the two legs we originated just answered.
-    # The rep leg triggers the contact dial; the contact leg triggers the
-    # bridge. Either way there is no AI to stream, so short-circuit.
-    if await _handle_user_call_leg_answered(
-        call_control_id,
-        log,
-        client_state=payload.get("client_state"),
-    ):
+    if await _claimed_by_specialised_leg_handler(payload, log):
         return
 
     async with AsyncSessionLocal() as db:
@@ -522,13 +547,26 @@ async def handle_call_answered(payload: dict[Any, Any], log: Any) -> None:  # no
                 else:
                     log.error("failed_to_start_audio_streaming", call_control_id=call_control_id)
 
-                # Start recording if agent has it enabled
+                # Recording is disclosed before it starts, never after: a dozen
+                # US states require every party to consent, and a caller cannot
+                # consent to something nobody told them. The recorder is armed
+                # on call.speak.ended, once the words actually reached them.
                 if agent.enable_recording:
-                    recorded = await voice_service.start_recording(call_control_id)
-                    if recorded:
-                        log.info("call_recording_started", call_control_id=call_control_id)
+                    spoken = await voice_service.speak_text(
+                        call_control_id,
+                        RECORDING_NOTICE_TEXT,
+                        client_state=encode_recording_notice_state(message.id),
+                        command_id=f"recording-notice-{message.id}",
+                    )
+                    if spoken:
+                        log.info("recording_notice_speaking", call_control_id=call_control_id)
                     else:
-                        log.warning("call_recording_failed", call_control_id=call_control_id)
+                        # No notice means no recording. A missing recording is
+                        # recoverable; an undisclosed one is not.
+                        log.warning(
+                            "recording_notice_failed_recording_skipped",
+                            call_control_id=call_control_id,
+                        )
             finally:
                 await voice_service.close()
 
@@ -599,6 +637,12 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
     )
     log.info("call_hangup")
 
+    # Inbound operator ring: a headset stopped ringing, or the caller gave up.
+    # When the last headset goes unanswered the caller is still holding, so the
+    # call falls through to AI/fallback answering instead of dying in silence.
+    if await _handle_operator_ring_leg_hangup(call_control_id, log):
+        return
+
     # User-mode call: tear down the peer leg before the normal classification
     # path runs, so a half-connected call never leaves a live leg billing.
     await _teardown_user_call_peer_leg(call_control_id, log)
@@ -630,6 +674,10 @@ async def handle_call_hangup(payload: dict[Any, Any], log: Any) -> None:  # noqa
                     message_id=str(message.id),
                     prior_status=prior_status,
                 )
+                if message.error_code == "USER_CALL_REP_HUNG_UP":
+                    # Rep teardown already finalized a call that never bridged.
+                    # Neither this SIP event nor retries are customer outcomes.
+                    return
 
             # Reconcile booking outcome before classification
             reconciled = await _reconcile_booking_outcome(db, message, log)
@@ -896,6 +944,90 @@ async def _teardown_user_call_peer_leg(call_control_id: str, log: Any) -> None:
                 message.error_code = "USER_CALL_REP_HUNG_UP"
                 message.error_message = "Caller hung up before the contact answered."
                 await db.commit()
+
+
+async def _handle_operator_ring_leg_answered(call_control_id: str, log: Any) -> bool:
+    """Bridge the winning headset to the caller; drop the losing headsets."""
+    from app.services.telephony.inbound_operator_ring import handle_operator_leg_answered
+    from app.services.telephony.telnyx_voice import TelnyxVoiceService
+
+    if not settings.telnyx_api_key:
+        return False
+
+    voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+    try:
+        return await handle_operator_leg_answered(call_control_id, voice_service, log)
+    finally:
+        await voice_service.close()
+
+
+async def _handle_operator_ring_leg_hangup(call_control_id: str, log: Any) -> bool:
+    """Clean up a finished ring leg; re-route the caller if nobody answered.
+
+    Returns True when the generic hangup bookkeeping must not also run for this
+    leg: an operator headset is not a customer call outcome.
+    """
+    from app.services.telephony.inbound_operator_ring import (
+        handle_operator_leg_hangup,
+        peek_pending_ring,
+    )
+    from app.services.telephony.telnyx_voice import TelnyxVoiceService
+
+    if not settings.telnyx_api_key:
+        return False
+
+    pending = await peek_pending_ring(call_control_id)
+    if pending is None:
+        return False
+
+    voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+    try:
+        outcome = await handle_operator_leg_hangup(call_control_id, voice_service, log)
+    finally:
+        await voice_service.close()
+
+    if outcome == "not_ours":
+        return False
+    if outcome == "exhausted":
+        await _answer_after_unanswered_ring(pending, log)
+    # The caller's own hangup still needs the normal call-outcome bookkeeping.
+    return call_control_id != pending.caller_call_control_id
+
+
+async def _answer_after_unanswered_ring(pending: Any, log: Any) -> None:
+    """Hand a caller nobody picked up back to the existing AI/fallback path."""
+    from app.models.conversation import Message
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Message)
+            .options(selectinload(Message.conversation))
+            .where(Message.id == uuid.UUID(pending.message_id))
+        )
+        message = result.scalar_one_or_none()
+        conversation = message.conversation if message is not None else None
+        if message is None or conversation is None:
+            log.error("operator_ring_fallthrough_message_missing")
+            return
+
+        phone_result = await db.execute(
+            select(PhoneNumber).where(
+                PhoneNumber.workspace_id == conversation.workspace_id,
+                PhoneNumber.phone_number == conversation.workspace_phone,
+            )
+        )
+        phone_record = phone_result.scalar_one_or_none()
+        if phone_record is None:
+            log.error("operator_ring_fallthrough_routing_missing")
+            return
+
+        await auto_answer_call_if_agent_assigned(
+            call_control_id=pending.caller_call_control_id,
+            phone_record=phone_record,
+            conversation=conversation,
+            log=log,
+            reason=message.routing_reason,
+        )
 
 
 async def _handle_user_call_leg_answered(
@@ -1198,6 +1330,11 @@ async def handle_speak_ended(payload: dict[Any, Any], log: Any) -> None:
                     await voice_service.close()
             return
 
+        recording_message_id = decode_recording_notice_state(payload.get("client_state"))
+        if recording_message_id is not None:
+            await _start_disclosed_recording(call_control_id, recording_message_id, log)
+            return
+
         message_id = decode_inbound_disclosure_state(payload.get("client_state"))
         if message_id is not None:
             await _complete_inbound_disclosure(call_control_id, message_id, log)
@@ -1462,6 +1599,7 @@ async def _resolve_ready_inbound_agent(
         await enforce_inbound_call_limits(
             workspace_id=str(phone_record.workspace_id),
             caller_phone=caller_phone,
+            call_control_id=call_control_id,
         )
         await reserve_inbound_call_capacity(
             workspace_id=str(phone_record.workspace_id),
@@ -1544,6 +1682,82 @@ async def _mark_inbound_disclosure_failed(message_id: uuid.UUID, workspace_id: u
         )
         await db.commit()
     observe_inbound_disclosure(workspace_id, "failed")
+
+
+async def _start_disclosed_recording(
+    call_control_id: str,
+    message_id: uuid.UUID,
+    log: Any,
+) -> None:
+    """Arm the recorder now that the caller has actually heard the notice.
+
+    Bound to one message id, so a replayed or forged ``client_state`` cannot
+    start recording a call that was never disclosed.
+    """
+    from app.models.conversation import Message
+    from app.services.telephony.telnyx_voice import TelnyxVoiceService
+
+    if not settings.telnyx_api_key:
+        return
+
+    async with AsyncSessionLocal() as db:
+        message = await db.get(Message, message_id)
+        if message is None or message.provider_message_id != call_control_id:
+            log.warning("recording_notice_unbound_leg")
+            return
+
+    voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+    try:
+        recorded = await voice_service.start_recording(call_control_id)
+    finally:
+        await voice_service.close()
+
+    if recorded:
+        log.info("call_recording_started", call_control_id=call_control_id)
+    else:
+        log.warning("call_recording_failed", call_control_id=call_control_id)
+
+
+async def _ring_operators_for_inbound_call(
+    *,
+    db: Any,
+    phone_record: PhoneNumber,
+    message: Any,
+    call_control_id: str,
+    log: Any,
+) -> bool:
+    """Ring available browser headsets. True only if they are actually ringing.
+
+    Every failure here is deliberately non-fatal: a provider outage, an
+    unconfigured connection, or nobody being logged in must all degrade to the
+    existing AI/fallback answering rather than drop a customer's call.
+    """
+    from app.services.telephony.inbound_operator_ring import ring_operators
+    from app.services.telephony.telnyx_voice import TelnyxVoiceService
+
+    if not settings.telnyx_api_key:
+        return False
+
+    voice_service = TelnyxVoiceService(settings.telnyx_api_key)
+    try:
+        webhook_url = f"{settings.api_base_url}/webhooks/telnyx/voice"
+        connection_id = await voice_service.get_call_control_application_id(webhook_url)
+        return await ring_operators(
+            db=db,
+            voice_service=voice_service,
+            workspace_id=phone_record.workspace_id,
+            message_id=message.id,
+            caller_call_control_id=call_control_id,
+            from_number=phone_record.phone_number,
+            connection_id=connection_id,
+            webhook_url=webhook_url,
+            log=log,
+        )
+    except Exception as exc:
+        log.error("operator_ring_setup_failed", error_type=type(exc).__name__)
+        return False
+    finally:
+        await voice_service.close()
 
 
 async def auto_answer_call_if_agent_assigned(

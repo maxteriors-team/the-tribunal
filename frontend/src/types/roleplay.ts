@@ -57,6 +57,9 @@ export interface RehearsalRunSummary {
   rehearsee: string;
   channel: string;
   status: string;
+  pending_action?: string | null;
+  attempt_count?: number;
+  retryable?: boolean;
   overall_score: number | null;
   objection_coverage: number | null;
   booking_attempted: boolean | null;
@@ -78,6 +81,7 @@ export interface RehearsalRun extends RehearsalRunSummary {
 }
 
 export interface CreateRehearsalRequest {
+  idempotency_key?: string;
   agent_id: string;
   persona_id: string;
   rehearsee?: RehearseeType;

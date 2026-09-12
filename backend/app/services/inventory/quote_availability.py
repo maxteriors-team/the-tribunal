@@ -52,6 +52,15 @@ class QuoteInventoryAvailabilityService:
                         f"Inventory SKU {sku} has conflicting fulfillment behaviors",
                         code="inventory_behavior_conflict",
                     )
+                if (
+                    existing.inventory_item_id is not None
+                    and part.inventory_item_id is not None
+                    and existing.inventory_item_id != part.inventory_item_id
+                ):
+                    raise ConflictError(
+                        f"Inventory SKU {sku} references conflicting inventory items",
+                        code="inventory_item_conflict",
+                    )
                 requirements[sku] = existing.model_copy(
                     update={"qty": float(Decimal(str(existing.qty)) + quantity)}
                 )
@@ -186,6 +195,9 @@ class QuoteInventoryAvailabilityService:
                     inventory_item_name=line.item_name,
                     unit_of_measure=line.unit_of_measure,
                     quantity_on_hand=line.quantity_on_hand if line.is_counted else None,
+                    quantity_reserved=line.quantity_reserved if line.is_counted else None,
+                    quantity_deployed=line.quantity_deployed if line.is_counted else None,
+                    available_to_promise=(line.available_to_promise if line.is_counted else None),
                     shortfall=line.shortage_quantity if line.is_counted else None,
                     status=status,
                 )

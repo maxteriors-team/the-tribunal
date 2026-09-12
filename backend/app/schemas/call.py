@@ -33,7 +33,7 @@ class CallCreate(BaseModel):
     - ``"user"``: the operator's own phone rings first, then the contact is
       dialed and the two legs are bridged. ``agent_id`` is ignored.
       ``user_phone_number`` picks which allowlisted number to ring.
-    - ``"browser"``: the operator's authenticated Tribunal browser rings first;
+    - ``"browser"``: the operator's authenticated BEAM browser rings first;
       the server then dials and bridges the contact. Client-supplied SIP targets
       are never accepted.
     """
@@ -60,6 +60,17 @@ class WebRTCTokenResponse(BaseModel):
     """Short-lived browser credential; callers must keep it in memory only."""
 
     token: str
+
+
+class OperatorPresenceRequest(BaseModel):
+    """Heartbeat declaring whether *this* operator's browser can take calls.
+
+    The operator is always derived from the authenticated user, never from the
+    body, so a member cannot mark a colleague available (and start ringing their
+    headset) or unavailable (and silently remove them from the roster).
+    """
+
+    available: bool
 
 
 class CallResponse(BaseModel):

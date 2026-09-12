@@ -9,7 +9,8 @@ offline deposits and schedule jobs only from their own quotes.
 """
 
 import uuid
-from datetime import UTC
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 import structlog
@@ -436,7 +437,10 @@ async def send_quote(
     db: DB,
     membership: CanWriteQuotes,
 ) -> QuoteDetailResponse:
-    """Mark a quote as sent and email it to the quote-to contact."""
+    """Mark a quote as sent and publish its client link without sending email or SMS.
+
+    Bookkeeping only. Use the deliver endpoint for checked email or SMS delivery.
+    """
     service = QuoteService(db)
     return await service.mark_sent(workspace_id, quote_id)
 
@@ -455,7 +459,9 @@ async def deliver_quote(
 
     Marks the quote sent (allocating its share token) and delivers the link to
     the wizard snapshot's client email/phone, the linked contact's, or an
-    explicit ``to`` override.
+    explicit ``to`` override. Success means provider acceptance, not confirmed
+    inbox delivery. On failure, the quote can remain sent and its link shareable;
+    the response reports the delivery error rather than success.
     """
     service = QuoteService(db)
     return await service.deliver_quote(
@@ -529,6 +535,121 @@ async def record_quote_deposit(
     return await QuoteService(db).get_quote(workspace_id, quote_id)
 
 
+async def _notify_job_assignment(
+    db: DB,
+    *,
+    workspace_id: uuid.UUID,
+    job_id: uuid.UUID,
+    scheduled_start: datetime,
+    scheduled_end: datetime,
+    crew_id: uuid.UUID | None,
+    technician_ids: Sequence[uuid.UUID],
+    phase: Literal["installation", "takedown"],
+) -> CrewNotificationResult:
+    recipients = await JobService(db).assignment_recipient_user_ids(job_id, workspace_id)
+    if not recipients:
+        return CrewNotificationResult(status="not_applicable")
+
+    schedule_version = (
+        f"{scheduled_start.isoformat()}:{scheduled_end.isoformat()}:"
+        f"{crew_id}:{','.join(sorted(map(str, technician_ids)))}"
+    )
+    dedupe_key = f"job_assignment:{job_id}:{schedule_version}"
+    recipient_keys = {user_id: f"{dedupe_key}:recipient:{user_id}" for user_id in recipients}
+    pending_recipient_list: list[int] = []
+    for user_id in recipients:
+        already_delivered = await redis_idempotency_key_exists(
+            recipient_keys[user_id],
+            log=logger,
+            failure_event="job_assignment_dedupe_unavailable",
+        )
+        if not already_delivered:
+            pending_recipient_list.append(user_id)
+    pending_recipients = tuple(pending_recipient_list)
+    if not pending_recipients:
+        return CrewNotificationResult(
+            status="sent",
+            recipient_count=len(recipients),
+            sent_count=len(recipients),
+        )
+
+    title = (
+        "Christmas lighting takedown assigned"
+        if phase == "takedown"
+        else "Landscape installation assigned"
+    )
+    heading = "Takedown assignment" if phase == "takedown" else "Installation assignment"
+    plan_label = "takedown" if phase == "takedown" else "installation"
+    try:
+        delivery = await notify_workspace_event(
+            db,
+            workspace_id=workspace_id,
+            notification_type="job_assignment",
+            title=title,
+            body=f"Your {plan_label} plan is available in BEAM.",
+            data={
+                "type": "job_assignment",
+                "phase": phase,
+                "jobId": str(job_id),
+                "screen": f"/(tabs)/jobs/{job_id}",
+            },
+            channel_id="jobs",
+            email_subject=title,
+            email_heading=heading,
+            email_intro=f"Your {plan_label} plan is available in BEAM.",
+            email_details={
+                "Scheduled": scheduled_start.astimezone(UTC).strftime("%b %d, %Y at %I:%M %p UTC"),
+                "Job": str(job_id),
+            },
+            dedupe_key=dedupe_key,
+            recipient_user_ids=pending_recipients,
+        )
+        for user_id in delivery.delivered_recipient_ids:
+            await set_redis_idempotency_key(
+                recipient_keys[user_id],
+                ttl_seconds=60 * 60 * 24 * 30,
+                log=logger,
+                failure_event="job_assignment_dedupe_unavailable",
+            )
+        already_sent = len(recipients) - len(pending_recipients)
+        sent = already_sent + delivery.delivered_recipient_count
+        status_value: Literal["sent", "partial", "failed"] = (
+            "sent" if sent == len(recipients) else "partial" if sent > 0 else "failed"
+        )
+        return CrewNotificationResult(
+            status=status_value,
+            recipient_count=len(recipients),
+            sent_count=sent,
+            failed_count=delivery.failed_recipient_count,
+        )
+    except Exception:  # Delivery is post-commit and cannot undo conversion.
+        return CrewNotificationResult(
+            status="failed",
+            recipient_count=len(recipients),
+            failed_count=len(pending_recipients),
+        )
+
+
+def _aggregate_crew_notifications(
+    *results: CrewNotificationResult,
+) -> CrewNotificationResult:
+    applicable = [result for result in results if result.status != "not_applicable"]
+    if not applicable:
+        return CrewNotificationResult(status="not_applicable")
+    recipients = sum(result.recipient_count for result in applicable)
+    sent = sum(result.sent_count for result in applicable)
+    failed = sum(result.failed_count for result in applicable)
+    status_value: Literal["sent", "partial", "failed"] = (
+        "sent" if sent == recipients and failed == 0 else "partial" if sent else "failed"
+    )
+    return CrewNotificationResult(
+        status=status_value,
+        recipient_count=recipients,
+        sent_count=sent,
+        failed_count=failed,
+    )
+
+
 @router.post("/{quote_id}/convert", response_model=QuoteConvertResponse)
 async def convert_quote(
     workspace_id: uuid.UUID,
@@ -557,93 +678,44 @@ async def convert_quote(
         scheduled_end=payload.scheduled_end,
         crew_id=payload.crew_id,
         technician_ids=payload.technician_ids,
+        takedown_schedule=payload.takedown_schedule,
         confirm_unpaid_deposit=payload.confirm_unpaid_deposit,
         allow_invoice_creation=can_create_invoice,
         owner_user_id=quote_owner_scope(membership.role, current_user.id),
     )
-    if result.job_id is None or payload.scheduled_start is None:
-        return result
 
-    recipients = await JobService(db).assignment_recipient_user_ids(result.job_id, workspace_id)
-    if not recipients:
-        result.crew_notification = CrewNotificationResult(status="not_applicable")
-        return result
-
-    assert payload.scheduled_start is not None
-    assert payload.scheduled_end is not None
-    schedule_version = (
-        f"{payload.scheduled_start.isoformat()}:{payload.scheduled_end.isoformat()}:"
-        f"{payload.crew_id}:{','.join(sorted(map(str, payload.technician_ids)))}"
-    )
-    dedupe_key = f"job_assignment:{result.job_id}:{schedule_version}"
-    recipient_keys = {user_id: f"{dedupe_key}:recipient:{user_id}" for user_id in recipients}
-    pending_recipient_list: list[int] = []
-    for user_id in recipients:
-        already_delivered = await redis_idempotency_key_exists(
-            recipient_keys[user_id],
-            log=logger,
-            failure_event="job_assignment_dedupe_unavailable",
-        )
-        if not already_delivered:
-            pending_recipient_list.append(user_id)
-    pending_recipients = tuple(pending_recipient_list)
-    if not pending_recipients:
-        result.crew_notification = CrewNotificationResult(
-            status="sent",
-            recipient_count=len(recipients),
-            sent_count=len(recipients),
-        )
-        return result
-    try:
-        delivery = await notify_workspace_event(
+    installation_notification = CrewNotificationResult(status="not_applicable")
+    if result.job_id is not None and payload.scheduled_start is not None:
+        assert payload.scheduled_end is not None
+        installation_notification = await _notify_job_assignment(
             db,
             workspace_id=workspace_id,
-            notification_type="job_assignment",
-            title="Landscape installation assigned",
-            body="Your installation plan is available in Tribunal.",
-            data={
-                "type": "job_assignment",
-                "jobId": str(result.job_id),
-                "screen": f"/(tabs)/jobs/{result.job_id}",
-            },
-            channel_id="jobs",
-            email_subject="Landscape installation assigned",
-            email_heading="Installation assignment",
-            email_intro="Your installation plan is available in Tribunal.",
-            email_details={
-                "Scheduled": payload.scheduled_start.astimezone(UTC).strftime(
-                    "%b %d, %Y at %I:%M %p UTC"
-                ),
-                "Job": str(result.job_id),
-            },
-            dedupe_key=dedupe_key,
-            recipient_user_ids=pending_recipients,
+            job_id=result.job_id,
+            scheduled_start=payload.scheduled_start,
+            scheduled_end=payload.scheduled_end,
+            crew_id=payload.crew_id,
+            technician_ids=payload.technician_ids,
+            phase="installation",
         )
-        for user_id in delivery.delivered_recipient_ids:
-            await set_redis_idempotency_key(
-                recipient_keys[user_id],
-                ttl_seconds=60 * 60 * 24 * 30,
-                log=logger,
-                failure_event="job_assignment_dedupe_unavailable",
-            )
-        already_sent = len(recipients) - len(pending_recipients)
-        sent = already_sent + delivery.delivered_recipient_count
-        failed = delivery.failed_recipient_count
-        notification_status: Literal["sent", "partial", "failed"] = (
-            "sent" if sent == len(recipients) else "partial" if sent > 0 else "failed"
+
+    takedown_notification = CrewNotificationResult(status="not_applicable")
+    if result.takedown_job_id is not None and payload.takedown_schedule is not None:
+        takedown_notification = await _notify_job_assignment(
+            db,
+            workspace_id=workspace_id,
+            job_id=result.takedown_job_id,
+            scheduled_start=payload.takedown_schedule.scheduled_start,
+            scheduled_end=payload.takedown_schedule.scheduled_end,
+            crew_id=payload.takedown_schedule.crew_id,
+            technician_ids=payload.takedown_schedule.technician_ids,
+            phase="takedown",
         )
-        result.crew_notification = CrewNotificationResult(
-            status=notification_status,
-            recipient_count=len(recipients),
-            sent_count=sent,
-            failed_count=failed,
-        )
-    except Exception:  # Delivery is post-commit and must not lie about conversion.
-        result.crew_notification = CrewNotificationResult(
-            status="failed",
-            recipient_count=len(recipients),
-            failed_count=len(pending_recipients),
-        )
+
+    result.installation_crew_notification = installation_notification
+    result.takedown_crew_notification = takedown_notification
+    result.crew_notification = _aggregate_crew_notifications(
+        installation_notification, takedown_notification
+    )
     return result
 
 

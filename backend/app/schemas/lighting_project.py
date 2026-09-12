@@ -595,9 +595,125 @@ class PreconStateSchema(DocumentSchema):
         return self
 
 
+TreeWrapRowId = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
+]
+TreeWrapLabel = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=120),
+]
+TreeWrapColor = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=40),
+]
+
+
+class TreeWrapSpecSchema(DocumentSchema):
+    shape: Literal["evergreen", "deciduous", "trunk", "branch", "bush", "roofline", "decor"]
+    light_type: Literal["mini", "c7", "c9", "garland"] | None = None
+    height_ft: Annotated[float, Field(gt=0, le=300)] | None = None
+    row_spacing_in: Annotated[float, Field(gt=0, le=120)] | None = None
+    radius_ft: Annotated[float, Field(gt=0, le=100)] | None = None
+    trunk_width_in: Annotated[float, Field(gt=0, le=600)] | None = None
+    branch_width_in: Annotated[float, Field(gt=0, le=120)] | None = None
+    branch_count: Annotated[int, Field(gt=0, le=500)] | None = None
+    width_ft: Annotated[float, Field(gt=0, le=300)] | None = None
+    depth_ft: Annotated[float, Field(gt=0, le=300)] | None = None
+    run_ft: Annotated[float, Field(gt=0, le=10_000)] | None = None
+    piece_count: Annotated[int, Field(gt=0, le=999)] | None = None
+    feet_per_unit: Annotated[float, Field(gt=0, le=1000)] | None = None
+    bulb_spacing_in: Annotated[float, Field(gt=0, le=120)] | None = None
+    pricing_mode: Literal["unit", "foot"]
+    unit_price: Annotated[float, Field(gt=0, le=1_000_000)] | None = None
+
+    @field_validator(
+        "height_ft",
+        "row_spacing_in",
+        "radius_ft",
+        "trunk_width_in",
+        "branch_width_in",
+        "width_ft",
+        "depth_ft",
+        "run_ft",
+        "feet_per_unit",
+        "bulb_spacing_in",
+        "unit_price",
+    )
+    @classmethod
+    def finite_numbers(cls, value: float | None) -> float | None:
+        if value is not None and not math.isfinite(value):
+            raise ValueError("tree-wrap measurements and prices must be finite")
+        return value
+
+    @model_validator(mode="after")
+    def required_shape_fields(self) -> TreeWrapSpecSchema:
+        required: dict[str, tuple[str, ...]] = {
+            "evergreen": ("height_ft", "row_spacing_in", "radius_ft"),
+            "deciduous": ("height_ft", "row_spacing_in", "radius_ft"),
+            "trunk": ("height_ft", "row_spacing_in", "trunk_width_in"),
+            "branch": ("height_ft", "row_spacing_in", "branch_width_in", "branch_count"),
+            "bush": ("height_ft", "row_spacing_in", "width_ft", "depth_ft"),
+            "roofline": ("run_ft",),
+            "decor": ("piece_count",),
+        }
+        if any(getattr(self, field) is None for field in required[self.shape]):
+            raise ValueError(f"{self.shape} worksheet row is missing a required measurement")
+        if self.shape != "decor" and self.light_type is None:
+            raise ValueError("a measured worksheet row requires a light type")
+        return self
+
+
+class TreeWrapResultSchema(DocumentSchema):
+    planned_feet: Annotated[float, Field(ge=0, le=1_000_000)]
+    row_count: Annotated[int, Field(ge=0, le=10_000)]
+    unit_count: Annotated[int, Field(ge=0, le=1_000_000)] | None = None
+    unit_kind: Literal["strand", "bulb", "section", "piece"]
+    billed_quantity: Annotated[float, Field(ge=0, le=1_000_000)] | None = None
+    price: Annotated[float, Field(ge=0, le=1_000_000)] | None = None
+
+    @field_validator("planned_feet", "billed_quantity", "price")
+    @classmethod
+    def finite_result_numbers(cls, value: float | None) -> float | None:
+        if value is not None and not math.isfinite(value):
+            raise ValueError("tree-wrap results must be finite")
+        return value
+
+
+class TreeWrapWorksheetRowSchema(DocumentSchema):
+    id: TreeWrapRowId
+    label: TreeWrapLabel
+    quantity: Annotated[int, Field(ge=1, le=999)] = 1
+    color: TreeWrapColor | None = None
+    spec: TreeWrapSpecSchema
+    result: TreeWrapResultSchema
+    inventory_item_id: UUID | None = None
+    inventory_behavior: Literal["consumable", "reusable"] | None = None
+
+    @model_validator(mode="after")
+    def complete_inventory_mapping(self) -> TreeWrapWorksheetRowSchema:
+        if (self.inventory_item_id is None) != (self.inventory_behavior is None):
+            raise ValueError("inventory item and fulfillment behavior must be provided together")
+        return self
+
+
+class TreeWrapWorksheetSchema(DocumentSchema):
+    version: Literal[1] = 1
+    rows: Annotated[list[TreeWrapWorksheetRowSchema], Field(max_length=20)] = Field(
+        default_factory=list
+    )
+
+    @model_validator(mode="after")
+    def unique_rows(self) -> TreeWrapWorksheetSchema:
+        row_ids = [row.id for row in self.rows]
+        if len(row_ids) != len(set(row_ids)):
+            raise ValueError("tree-wrap worksheet rows must use unique IDs")
+        return self
+
+
 class LandscapeDraftDocument(DocumentSchema):
     version: Literal[2] = 2
-    project_type: Literal["landscape", "permanent"] = Field(
+    project_type: Literal["landscape", "permanent", "seasonal"] = Field(
         default="landscape",
         validation_alias=AliasChoices("projectType", "project_type"),
     )
@@ -624,6 +740,7 @@ class LandscapeDraftDocument(DocumentSchema):
     )
     procurement: dict[ShortText, ProcurementStateSchema] = Field(default_factory=dict)
     precon: PreconStateSchema = Field(default_factory=PreconStateSchema)
+    tree_wrap_worksheet: TreeWrapWorksheetSchema | None = None
 
     @model_validator(mode="after")
     def validate_document(self) -> LandscapeDraftDocument:
@@ -638,6 +755,8 @@ class LandscapeDraftDocument(DocumentSchema):
         for zone in self.proposal.zones:
             if any(shot_id not in set(shot_ids) for shot_id in zone.shot_ids):
                 raise ValueError("proposal zone shotIds must reference saved shots")
+        if self.tree_wrap_worksheet is not None and self.project_type != "seasonal":
+            raise ValueError("treeWrapWorksheet is only valid for seasonal projects")
         serialized = json.dumps(self.model_dump(mode="json", by_alias=True), separators=(",", ":"))
         if len(serialized.encode("utf-8")) > MAX_LANDSCAPE_DOCUMENT_BYTES:
             raise ValueError("landscape project document exceeds the allowed size")
@@ -648,13 +767,14 @@ class LandscapeDraftDocument(DocumentSchema):
 
 
 def empty_landscape_document(
-    now: datetime, project_type: Literal["landscape", "permanent"] = "landscape"
+    now: datetime,
+    project_type: Literal["landscape", "permanent", "seasonal"] = "landscape",
 ) -> LandscapeDraftDocument:
     return LandscapeDraftDocument(updated_at=now, project_type=project_type)
 
 
 LightingProjectStatus = Literal["active", "archived"]
-LightingProjectType = Literal["landscape", "permanent"]
+LightingProjectType = Literal["landscape", "permanent", "seasonal"]
 
 
 class LightingProjectSummary(ApiSchema):
@@ -707,6 +827,8 @@ class LightingProjectCreate(ApiSchema):
 
     @model_validator(mode="after")
     def validate_document_links(self) -> LightingProjectCreate:
+        if self.project_type == "seasonal" and self.service_location_id is None:
+            raise ValueError("seasonal projects require a service_location_id")
         if self.document is not None and self.document.project_type != self.project_type:
             raise ValueError("document projectType must match project_type")
         if self.installation_shot_id is not None:

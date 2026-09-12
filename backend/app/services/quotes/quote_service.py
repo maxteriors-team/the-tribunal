@@ -18,7 +18,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from math import isfinite
-from typing import cast
+from typing import Literal, cast
 
 import structlog
 from sqlalchemy import select, update
@@ -33,8 +33,9 @@ from app.db.pagination import paginate
 from app.db.scope import assert_workspace_owned
 from app.models.catalog import CatalogItem
 from app.models.contact import Contact
-from app.models.field_service import Job, ServiceLocation
+from app.models.field_service import Job, JobSourceQuotePhase, ServiceLocation
 from app.models.human_nudge import HumanNudge
+from app.models.inventory import InventoryItem
 from app.models.lighting_project import LightingProject
 from app.models.opportunity import Opportunity
 from app.models.quote import Quote, QuoteLineItem, generate_quote_token
@@ -65,6 +66,11 @@ from app.schemas.estimate import (
     PublicRooflineComparison,
 )
 from app.schemas.invoice import InvoiceCreate, InvoiceLineItemCreate
+from app.schemas.lighting_project import (
+    LandscapeDraftDocument,
+    LandscapeShotSchema,
+    TreeWrapWorksheetRowSchema,
+)
 from app.schemas.pricing import (
     CategoryLine,
     ChristmasPackagePricing,
@@ -87,6 +93,7 @@ from app.schemas.proposal import (
 )
 from app.schemas.proposal_wizard import (
     MAX_PROPOSAL_MOCKUP_IMAGE_CHARS,
+    FulfillmentPart,
     ProposalDocument,
     ProposalMockup,
     ProposalWizardPayload,
@@ -100,6 +107,7 @@ from app.schemas.quote import (
     QuoteCreate,
     QuoteDeliverResult,
     QuoteDetailResponse,
+    QuoteJobSchedule,
     QuoteLineItemCreate,
     QuoteLineItemUpdate,
     QuoteResponse,
@@ -123,6 +131,7 @@ from app.services.exceptions import (
 )
 from app.services.idempotency import derive_outbound_key
 from app.services.inventory.quote_availability import QuoteInventoryAvailabilityService
+from app.services.lighting_projects.images import document_for_storage
 from app.services.notifications import notify_workspace_event
 from app.services.nudges.strategies.base import dedup_exists
 from app.services.opportunities.quote_opportunity import (
@@ -158,6 +167,7 @@ from app.services.quotes.proposal_template import get_proposal_template
 from app.services.quotes.quote_expiry import EXPIRED_STATUS, overdue_sent_predicate
 from app.services.recurring_jobs.service_plan_provisioner import ServicePlanProvisioner
 from app.services.technician_scoreboard import TechnicianScoreboardService
+from app.services.workspaces.features import TREE_LIGHT_QUOTER, workspace_feature_enabled
 from app.services.workspaces.membership import assert_active_workspace_member
 
 logger = structlog.get_logger()
@@ -406,6 +416,8 @@ class QuoteService:
         from app.schemas.lighting_project import LandscapeDraftDocument
 
         document = LandscapeDraftDocument.model_validate(project.document)
+        if document.project_type == "seasonal" and project.installation_shot_id is None:
+            raise ValidationError("Choose an installation sheet before creating the quote")
         if project.installation_shot_id is None:
             # The installation sheet is the drawing the crew builds from, and it
             # also supplies the render on the client proposal. It used to be a
@@ -462,27 +474,44 @@ class QuoteService:
         return payload.model_copy(update=updates) if updates else payload
 
     @staticmethod
+    def _validated_installation_shot(
+        document: LandscapeDraftDocument,
+        shot_id: str | None,
+        *,
+        missing_message: str = "Selected installation sheet is missing from the project",
+        empty_message: str = "Selected installation sheet has no saved lighting design",
+    ) -> LandscapeShotSchema:
+        if shot_id is None:
+            raise ValidationError("Choose an installation sheet before creating a quote")
+        selected_shot = next((shot for shot in document.shots if shot.id == shot_id), None)
+        if selected_shot is None:
+            raise ValidationError(missing_message)
+        if not (
+            selected_shot.design.runs
+            or selected_shot.design.items
+            or selected_shot.design.plan_images
+        ):
+            raise ValidationError(empty_message)
+        return selected_shot
+
+    @classmethod
     def _permanent_estimate_preview_document(
+        cls,
         project: LightingProject,
         preview: EstimateProposalPreview,
         *,
         price_range_high: float | None = None,
     ) -> ProposalDocument:
         """Bind the customer-visible render to the saved shot technicians install."""
-        from app.schemas.lighting_project import LandscapeDraftDocument
-
         document = LandscapeDraftDocument.model_validate(project.document)
         if document.project_type != "permanent":
             raise ValidationError("Proposal previews require a permanent-lighting project")
-        selected_shot = next((shot for shot in document.shots if shot.id == preview.shot_id), None)
-        if selected_shot is None:
-            raise ValidationError("Proposal preview shot is missing from the lighting project")
-        if not (
-            selected_shot.design.runs
-            or selected_shot.design.items
-            or selected_shot.design.plan_images
-        ):
-            raise ValidationError("Proposal preview shot has no saved lighting design")
+        selected_shot = cls._validated_installation_shot(
+            document,
+            preview.shot_id,
+            missing_message="Proposal preview shot is missing from the lighting project",
+            empty_message="Proposal preview shot has no saved lighting design",
+        )
 
         project.installation_shot_id = selected_shot.id
         return ProposalDocument(
@@ -495,6 +524,59 @@ class QuoteService:
                 )
             ],
         )
+
+    @classmethod
+    def _seasonal_installation_snapshot(
+        cls,
+        project: LightingProject,
+        source: Literal["photo", "tree_wrap_worksheet"],
+    ) -> dict[str, object]:
+        """Freeze only the installation sources explicitly quoted by the operator."""
+        document = LandscapeDraftDocument.model_validate(project.document)
+        if document.project_type != "seasonal":
+            raise ValidationError("Seasonal estimates require a seasonal lighting project")
+
+        snapshot: dict[str, object] = {
+            "snapshot_version": 1,
+            "project_id": str(project.id),
+            "project_name": project.name,
+            "project_version": project.version,
+            "project_updated_at": project.updated_at.isoformat(),
+        }
+        if source == "tree_wrap_worksheet":
+            worksheet = document.tree_wrap_worksheet
+            if worksheet is None or not worksheet.rows:
+                raise ValidationError("Worksheet quotes require a saved tree-wrap worksheet")
+            worksheet_snapshot = worksheet.model_dump(mode="json", by_alias=True)
+            if project.installation_shot_id is None:
+                return {
+                    **snapshot,
+                    "installation_sheet_type": "tree_wrap_worksheet",
+                    "worksheet": worksheet_snapshot,
+                }
+            installation_sheet_type = "combined"
+        else:
+            worksheet_snapshot = None
+            installation_sheet_type = "photo"
+
+        selected_shot = cls._validated_installation_shot(document, project.installation_shot_id)
+        frozen_document = document.model_copy(
+            update={
+                "shots": [selected_shot.model_copy(deep=True)],
+                "active_shot_id": selected_shot.id,
+                "tree_wrap_worksheet": None,
+            },
+            deep=True,
+        )
+        photo_document = document_for_storage(frozen_document)
+        photo_document.pop("treeWrapWorksheet", None)
+        return {
+            **snapshot,
+            "installation_sheet_type": installation_sheet_type,
+            "installation_shot_id": selected_shot.id,
+            "document": photo_document,
+            **({"worksheet": worksheet_snapshot} if worksheet_snapshot is not None else {}),
+        }
 
     # ------------------------------------------------------------------
     # Derivation helpers (pure; no I/O)
@@ -1102,7 +1184,7 @@ class QuoteService:
                 (Quote.assigned_user_id == owner_user_id)
                 | (Quote.assigned_user_id.is_(None) & (Quote.created_by_id == owner_user_id))
             )
-        query = query.order_by(Quote.created_at.desc())
+        query = query.order_by(Quote.created_at.desc(), Quote.id.desc())
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
         workspace = await get_or_404(self.db, Workspace, workspace_id)
@@ -1119,19 +1201,39 @@ class QuoteService:
         assigned_user_id: int | None = None,
         selected_permanent_kits: Sequence[PermanentKitSelection] | None = None,
         proposal_document: ProposalDocument | None = None,
+        seasonal_installation_snapshot: Mapping[str, object] | None = None,
+        seasonal_takedown_included: bool | None = None,
+        seasonal_storage_included: bool | None = None,
         is_onsite_upsell: bool = False,
     ) -> QuoteDetailResponse:
         """Create a draft quote with its initial line items and computed totals."""
         contact_id = quote_in.contact_id
+        service_location_id = quote_in.service_location_id
         if quote_in.lighting_project_id is not None:
             lighting_project = await self._validated_lighting_project_reference(
                 workspace_id, quote_in.lighting_project_id, contact_id=contact_id
             )
             contact_id = lighting_project.contact_id
+            if lighting_project.document.get("projectType") == "seasonal":
+                if lighting_project.service_location_id is None:
+                    raise ValidationError(
+                        "Seasonal projects require an active service location for their contact"
+                    )
+                if service_location_id not in {None, lighting_project.service_location_id}:
+                    raise ValidationError(
+                        "Lighting project does not belong to the selected service location"
+                    )
+                service_location_id = lighting_project.service_location_id
+                if seasonal_installation_snapshot is None or (
+                    (seasonal_takedown_included is None) != (seasonal_storage_included is None)
+                ):
+                    raise ValidationError(
+                        "Seasonal project quotes must be created from a measured estimate"
+                    )
         await self._validate_refs(
             workspace_id,
             contact_id=contact_id,
-            service_location_id=quote_in.service_location_id,
+            service_location_id=service_location_id,
             opportunity_id=quote_in.opportunity_id,
         )
         if assigned_user_id is None:
@@ -1143,9 +1245,16 @@ class QuoteService:
         quote = Quote(
             workspace_id=workspace_id,
             contact_id=contact_id,
-            service_location_id=quote_in.service_location_id,
+            service_location_id=service_location_id,
             opportunity_id=quote_in.opportunity_id,
             lighting_project_id=quote_in.lighting_project_id,
+            seasonal_installation_snapshot=(
+                dict(seasonal_installation_snapshot)
+                if seasonal_installation_snapshot is not None
+                else None
+            ),
+            seasonal_takedown_included=seasonal_takedown_included,
+            seasonal_storage_included=seasonal_storage_included,
             assigned_user_id=assigned_user_id,
             number=await self._next_quote_number(workspace_id),
             title=quote_in.title,
@@ -1347,16 +1456,13 @@ class QuoteService:
         workspace_id: uuid.UUID,
         quote_id: uuid.UUID,
     ) -> QuoteDetailResponse:
-        """Mark a quote as sent (sets ``sent_at`` once) and email it to the
-        quote-to contact (best-effort)."""
+        """Record sent status without emailing or texting (idempotent).
+
+        Allocate the client link and default expiry for sharing by other means.
+        Actions promising delivery must use ``deliver_quote`` instead.
+        """
         quote = await self._load_for_send(workspace_id, quote_id)
         await self._ensure_sent_state(quote)
-
-        # Deliberately ignoring the result: "mark sent" is a status change an
-        # operator makes after sending by their own means, and the courtesy
-        # email riding along must not fail the transition. ``deliver`` is the
-        # path that promises delivery, and that one does check.
-        await self._email_quote(quote)
         return await self._detail_response(quote)
 
     async def prepare_for_in_person_approval(
@@ -1761,26 +1867,20 @@ class QuoteService:
         quote: Quote,
         *,
         override_email: str | None = None,
-        delivery_attempt_id: uuid.UUID | None = None,
+        delivery_attempt_id: uuid.UUID,
     ) -> bool:
-        """Email the quote's proposal link. Never raises; reports whether it sent.
+        """Email only for explicit delivery; report whether the provider accepted.
 
         Destination: explicit override → wizard snapshot's client email → the
         linked contact's email. Wizard proposals usually have no Contact row,
         so the snapshot fallback is what makes their sends actually deliver.
 
-        An explicit delivery gets a fresh ``delivery_attempt_id`` so clicking
-        "Re-send email" creates a new provider message. The best-effort courtesy
-        email attached to ``mark_sent`` omits it and remains revision-idempotent.
-
-        Returns ``True`` only when Resend accepted the message. The caller
-        decides what a ``False`` means: emailing a quote *on purpose* has to
-        surface the failure, while the email tacked onto ``mark_sent`` is a side
-        effect that must not undo the status change.
+        ``deliver_quote`` checks this flag and surfaces failures. Status-only
+        actions must not call this helper. The attempt key survives provider
+        retries; a deliberate re-send gets a new key from ``deliver_quote``.
         """
         from app.core.config import settings
         from app.services.email import send_quote_email
-        from app.services.idempotency import derive_document_send_key
 
         client = (quote.proposal_document or {}).get("client") or {}
         contact_email = (
@@ -1825,24 +1925,11 @@ class QuoteService:
                 logo_url=get_proposal_template(quote.workspace).logo_url
                 if quote.workspace
                 else None,
-                # Explicit deliveries are intentional attempts, including the
-                # "Re-send email" action, and must create a new provider message.
-                # The courtesy email on mark_sent stays revision-idempotent so a
-                # retried status transition cannot duplicate it.
-                idempotency_key=(
-                    derive_outbound_key(
-                        "quote_delivery",
-                        quote.id,
-                        delivery_attempt_id,
-                        contact_email,
-                    )
-                    if delivery_attempt_id is not None
-                    else derive_document_send_key(
-                        "quote_send", quote.id, quote.updated_at, contact_email
-                    )
+                idempotency_key=derive_outbound_key(
+                    "quote_delivery", quote.id, delivery_attempt_id, contact_email
                 ),
             )
-        except Exception as exc:  # pragma: no cover - best-effort email
+        except Exception as exc:  # pragma: no cover - defensive delivery failure
             self.log.warning("quote_email_failed", quote_id=str(quote.id), error=str(exc))
             return False
 
@@ -3552,6 +3639,137 @@ class QuoteService:
         return config.christmas.label, pricing
 
     @staticmethod
+    def _tree_wrap_requirement(
+        row: TreeWrapWorksheetRowSchema,
+        line: EstimateCustomLine,
+    ) -> tuple[uuid.UUID, Literal["consumable", "reusable"], Decimal, str]:
+        """Validate one submitted line against its saved worksheet row."""
+        if row.inventory_item_id is None or row.inventory_behavior is None:
+            raise ValidationError("Every worksheet row requires an active inventory SKU")
+        if (
+            line.inventory_item_id != row.inventory_item_id
+            or line.inventory_behavior != row.inventory_behavior
+        ):
+            raise ValidationError("Worksheet inventory mapping changed before quote creation")
+        if line.side != "seasonal" or line.package_key is not None:
+            raise ValidationError("Worksheet rows must be unscoped seasonal quote lines")
+        if line.label != row.label or Decimal(str(line.quantity)) != Decimal(row.quantity):
+            raise ValidationError("Worksheet line details changed before quote creation")
+        line_price = Decimal(str(line.unit_price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        row_price = (
+            Decimal(str(row.result.price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if row.result.price is not None
+            else None
+        )
+        if line_price != row_price:
+            raise ValidationError("Worksheet pricing changed before quote creation")
+        if row.result.unit_count is None or row.result.unit_count <= 0:
+            raise ValidationError("Worksheet rows require a positive material quantity")
+        required = Decimal(row.quantity * row.result.unit_count)
+        if line.fulfillment_quantity is None or Decimal(str(line.fulfillment_quantity)) != required:
+            raise ValidationError("Worksheet fulfillment quantity changed before quote creation")
+        return row.inventory_item_id, row.inventory_behavior, required, row.label
+
+    @staticmethod
+    def _require_tree_wrap_feature(
+        workspace_settings: object,
+        source: Literal["photo", "tree_wrap_worksheet"],
+    ) -> None:
+        if source == "tree_wrap_worksheet" and not workspace_feature_enabled(
+            workspace_settings, TREE_LIGHT_QUOTER
+        ):
+            raise ValidationError("Tree Light Quoter is not enabled for this workspace")
+
+    async def _tree_wrap_fulfillment(
+        self,
+        workspace_id: uuid.UUID,
+        document: LandscapeDraftDocument,
+        req: EstimateQuoteRequest,
+    ) -> list[FulfillmentPart]:
+        """Validate and aggregate staff-only worksheet material requirements."""
+        worksheet = document.tree_wrap_worksheet
+        submitted = [line for line in req.custom_lines if line.worksheet_row_id is not None]
+        if req.seasonal_installation_source != "tree_wrap_worksheet":
+            if submitted:
+                raise ValidationError(
+                    "Worksheet quote lines require the tree-wrap installation source"
+                )
+            return []
+        if worksheet is None or not worksheet.rows:
+            if submitted:
+                raise ValidationError("Worksheet fulfillment requires a saved tree-wrap worksheet")
+            return []
+
+        by_row_id: dict[str, EstimateCustomLine] = {}
+        for line in submitted:
+            assert line.worksheet_row_id is not None
+            if line.worksheet_row_id in by_row_id:
+                raise ValidationError("Each worksheet row may be quoted only once")
+            by_row_id[line.worksheet_row_id] = line
+
+        if set(by_row_id) != {row.id for row in worksheet.rows}:
+            raise ValidationError("Every saved worksheet row must be included in the quote")
+
+        requirements: dict[
+            uuid.UUID, tuple[Literal["consumable", "reusable"], Decimal, list[str]]
+        ] = {}
+        for row in worksheet.rows:
+            item_id, behavior, required, label = self._tree_wrap_requirement(row, by_row_id[row.id])
+            existing = requirements.get(item_id)
+            if existing is not None and existing[0] != behavior:
+                raise ValidationError("One inventory SKU cannot use conflicting behaviors")
+            _, quantity, labels = existing or (behavior, Decimal(0), [])
+            requirements[item_id] = behavior, quantity + required, [*labels, label]
+
+        item_ids = list(requirements)
+        items = list(
+            (
+                await self.db.execute(
+                    select(InventoryItem).where(
+                        InventoryItem.workspace_id == workspace_id,
+                        InventoryItem.id.in_(item_ids),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        by_id = {item.id: item for item in items}
+        if len(by_id) != len(item_ids) or any(
+            not by_id[item_id].is_active or not (by_id[item_id].sku or "").strip()
+            for item_id in item_ids
+        ):
+            raise ValidationError("Every worksheet row requires an active workspace inventory SKU")
+
+        return [
+            FulfillmentPart(
+                sku=by_id[item_id].sku or "",
+                description=", ".join(labels)[:300],
+                qty=float(quantity),
+                inventory_behavior=behavior,
+                inventory_item_id=item_id,
+            )
+            for item_id, (behavior, quantity, labels) in sorted(
+                requirements.items(), key=lambda requirement: by_id[requirement[0]].sku or ""
+            )
+        ]
+
+    async def _proposal_with_inventory_snapshot(
+        self,
+        workspace_id: uuid.UUID,
+        proposal_document: ProposalDocument | None,
+        fulfillment: Sequence[FulfillmentPart],
+    ) -> ProposalDocument | None:
+        if not fulfillment:
+            return proposal_document
+        proposal_document = proposal_document or ProposalDocument(service="christmas")
+        proposal_document.fulfillment = list(fulfillment)
+        proposal_document.inventory_availability = await QuoteInventoryAvailabilityService(
+            self.db
+        ).snapshot(workspace_id, fulfillment)
+        return proposal_document
+
+    @staticmethod
     def _estimate_line_items(
         pricing: PermanentPricing | ChristmasPricing,
     ) -> list[QuoteLineItemCreate]:
@@ -3584,6 +3802,24 @@ class QuoteService:
                 )
             )
         return items
+
+    async def _estimate_contact_id(
+        self, workspace_id: uuid.UUID, req: EstimateQuoteRequest
+    ) -> int | None:
+        if req.contact_id is not None:
+            await assert_workspace_owned(
+                self.db, Contact, req.contact_id, workspace_id, detail="Contact not found"
+            )
+            return req.contact_id
+        first_name, last_name = _split_name(req.client_name)
+        return await self._resolve_or_create_contact(
+            workspace_id,
+            first_name=first_name,
+            last_name=last_name,
+            email=req.client_email,
+            phone=req.client_phone,
+            source="roofline_estimator",
+        )
 
     async def create_quote_from_estimate(
         self,
@@ -3624,24 +3860,72 @@ class QuoteService:
         if not line_items:
             raise ValidationError("This estimate has nothing to quote yet — draw the design first.")
 
-        first_name, last_name = _split_name(req.client_name)
-        contact_id = await self._resolve_or_create_contact(
-            workspace_id,
-            first_name=first_name,
-            last_name=last_name,
-            email=req.client_email,
-            phone=req.client_phone,
-            source="roofline_estimator",
-        )
+        project: LightingProject | None = None
+        contact_id: int | None
+        service_location_id: uuid.UUID | None = None
+        seasonal_snapshot: dict[str, object] | None = None
+        seasonal_fulfillment: list[FulfillmentPart] = []
+        seasonal_takedown_included: bool | None = None
+        seasonal_storage_included: bool | None = None
+
+        if req.lighting_project_id is not None:
+            project = await self._validated_lighting_project_reference(
+                workspace_id, req.lighting_project_id, contact_id=req.contact_id
+            )
+            contact_id = project.contact_id
+            document = LandscapeDraftDocument.model_validate(project.document)
+            if document.project_type != req.side:
+                project_labels = {
+                    "permanent": "permanent-lighting",
+                    "seasonal": "seasonal lighting",
+                }
+                raise ValidationError(
+                    f"{req.side.title()} estimates require a {project_labels[req.side]} project"
+                )
+            if req.side == "seasonal":
+                if project.service_location_id is None:
+                    raise ValidationError(
+                        "Seasonal projects require an active customer service location"
+                    )
+                await assert_workspace_owned(
+                    self.db, Contact, contact_id, workspace_id, detail="Contact not found"
+                )
+                location = await assert_workspace_owned(
+                    self.db,
+                    ServiceLocation,
+                    project.service_location_id,
+                    workspace_id,
+                    detail="Service location not found",
+                )
+                if location.contact_id != contact_id or not location.is_active:
+                    raise ValidationError(
+                        "Seasonal projects require an active service location for their contact"
+                    )
+                service_location_id = location.id
+                self._require_tree_wrap_feature(
+                    workspace.settings, req.seasonal_installation_source
+                )
+                seasonal_fulfillment = await self._tree_wrap_fulfillment(
+                    workspace_id, document, req
+                )
+                seasonal_snapshot = self._seasonal_installation_snapshot(
+                    project, req.seasonal_installation_source
+                )
+                seasonal_takedown_included = (
+                    bool(req.takedown and config.christmas.takedown_enabled)
+                    if req.seasonal_phased_handoff
+                    else None
+                )
+                seasonal_storage_included = (
+                    bool(req.storage) if req.seasonal_phased_handoff else None
+                )
+        else:
+            contact_id = await self._estimate_contact_id(workspace_id, req)
 
         proposal_document: ProposalDocument | None = None
         if req.proposal_preview is not None:
-            project_id = req.lighting_project_id
-            if project_id is None:
+            if project is None:
                 raise ValidationError("A proposal preview requires a saved lighting project")
-            project = await self._validated_lighting_project_reference(
-                workspace_id, project_id, contact_id=contact_id
-            )
             proposal_document = self._permanent_estimate_preview_document(
                 project,
                 req.proposal_preview,
@@ -3650,10 +3934,14 @@ class QuoteService:
                 ),
             )
 
+        proposal_document = await self._proposal_with_inventory_snapshot(
+            workspace_id, proposal_document, seasonal_fulfillment
+        )
         quote = await self.create_quote(
             workspace_id,
             QuoteCreate(
                 contact_id=contact_id,
+                service_location_id=service_location_id,
                 lighting_project_id=req.lighting_project_id,
                 title=req.label or title,
                 currency="USD",
@@ -3667,6 +3955,9 @@ class QuoteService:
                 pricing.selected_kits if isinstance(pricing, PermanentPricing) else None
             ),
             proposal_document=proposal_document,
+            seasonal_installation_snapshot=seasonal_snapshot,
+            seasonal_takedown_included=seasonal_takedown_included,
+            seasonal_storage_included=seasonal_storage_included,
         )
         self.log.info(
             "quote_created_from_estimate",
@@ -4031,6 +4322,22 @@ class QuoteService:
     # Conversion
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _job_matches_handoff(
+        job: Job,
+        *,
+        scheduled_start: datetime,
+        scheduled_end: datetime,
+        crew_id: uuid.UUID | None,
+        technician_ids: Sequence[uuid.UUID],
+    ) -> bool:
+        return (
+            job.scheduled_start == scheduled_start
+            and job.scheduled_end == scheduled_end
+            and job.crew_id == crew_id
+            and {technician.id for technician in job.technicians} == set(technician_ids)
+        )
+
     async def convert_quote(  # noqa: PLR0912, PLR0915
         self,
         workspace_id: uuid.UUID,
@@ -4042,11 +4349,12 @@ class QuoteService:
         scheduled_end: datetime | None = None,
         crew_id: uuid.UUID | None = None,
         technician_ids: Sequence[uuid.UUID] = (),
+        takedown_schedule: QuoteJobSchedule | None = None,
         confirm_unpaid_deposit: bool = False,
         allow_invoice_creation: bool = True,
         owner_user_id: int | None = None,
     ) -> QuoteConvertResponse:
-        """Atomically convert one approved quote, with exact-retry semantics."""
+        """Atomically create one invoice and the requested operational job phases."""
         from app.services.inventory import JobAllocationService
         from app.services.invoices import InvoiceService
         from app.services.jobs import JobService
@@ -4060,8 +4368,18 @@ class QuoteService:
             and scheduled_end <= scheduled_start
         ):
             raise ValidationError("scheduled_end must be after scheduled_start")
-        if not create_job and (crew_id is not None or technician_ids):
-            raise ValidationError("An installation team requires job creation")
+        if not create_job and (
+            scheduled_start is not None
+            or crew_id is not None
+            or technician_ids
+            or takedown_schedule is not None
+        ):
+            raise ValidationError("Schedules and installation teams require job creation")
+        if takedown_schedule is not None:
+            if takedown_schedule.scheduled_end <= takedown_schedule.scheduled_start:
+                raise ValidationError("Takedown scheduled_end must be after scheduled_start")
+            if scheduled_end is None or takedown_schedule.scheduled_start <= scheduled_end:
+                raise ValidationError("Takedown must begin after installation ends")
 
         quote_result = await self.db.execute(
             select(Quote)
@@ -4081,7 +4399,25 @@ class QuoteService:
         if create_job and (scheduled_start is None or scheduled_end is None):
             raise ValidationError("A complete schedule window is required to create a job")
 
-        if quote.lighting_project_id is not None:
+        measured_seasonal = quote.seasonal_takedown_included is not None
+        takedown_included = bool(quote.seasonal_takedown_included)
+        if measured_seasonal:
+            if (
+                quote.seasonal_installation_snapshot is None
+                or quote.seasonal_storage_included is None
+                or quote.contact_id is None
+                or quote.service_location_id is None
+                or quote.lighting_project_id is None
+            ):
+                raise ConflictError("Measured seasonal quote handoff data is incomplete")
+            if create_job and takedown_included and takedown_schedule is None:
+                raise ValidationError("A takedown schedule is required for this quote")
+            if not takedown_included and takedown_schedule is not None:
+                raise ValidationError("This quote does not include takedown")
+        elif takedown_schedule is not None:
+            raise ValidationError("This quote does not include a measured seasonal takedown")
+
+        if not measured_seasonal and quote.lighting_project_id is not None:
             project = await self._validated_lighting_project(
                 workspace_id,
                 quote.lighting_project_id,
@@ -4106,54 +4442,105 @@ class QuoteService:
             )
 
         requested_technicians = tuple(dict.fromkeys(technician_ids))
-        existing_job = None
-        if quote.converted_job_id is not None:
-            existing_job = await self.db.scalar(
-                select(Job)
-                .where(
-                    Job.id == quote.converted_job_id,
-                    Job.workspace_id == workspace_id,
-                )
-                .options(selectinload(Job.technicians))
-            )
-        if existing_job is None:
-            existing_job = await self.db.scalar(
-                select(Job)
-                .where(
-                    Job.source_quote_id == quote.id,
-                    Job.workspace_id == workspace_id,
-                )
-                .options(selectinload(Job.technicians))
-            )
-
-        requested_flags_conflict = (not create_job and existing_job is not None) or (
-            not create_invoice and quote.converted_invoice_id is not None
+        requested_takedown_technicians = (
+            tuple(dict.fromkeys(takedown_schedule.technician_ids))
+            if takedown_schedule is not None
+            else ()
         )
-        if existing_job is not None:
-            existing_technicians = {technician.id for technician in existing_job.technicians}
-            exact_job_retry = (
-                create_job
-                and existing_job.scheduled_start == scheduled_start
-                and existing_job.scheduled_end == scheduled_end
-                and existing_job.crew_id == crew_id
-                and existing_technicians == set(requested_technicians)
+        existing_jobs = list(
+            (
+                await self.db.execute(
+                    select(Job)
+                    .where(
+                        Job.source_quote_id == quote.id,
+                        Job.workspace_id == workspace_id,
+                    )
+                    .options(selectinload(Job.technicians))
+                )
             )
-            if not exact_job_retry or requested_flags_conflict:
-                raise ConflictError("Quote was already converted with different handoff details")
-        elif quote.converted_job_id is not None or requested_flags_conflict:
-            raise ConflictError("Quote conversion links no longer match the requested handoff")
+            .scalars()
+            .all()
+        )
+        jobs_by_phase: dict[str, Job] = {}
+        for existing_job in existing_jobs:
+            phase = existing_job.source_quote_phase
+            if phase in jobs_by_phase:
+                raise ConflictError("Quote conversion has duplicate job phases")
+            jobs_by_phase[phase] = existing_job
 
-        if quote.converted_invoice_id is not None and not create_invoice:
-            raise ConflictError("Quote was already converted with different create flags")
+        installation_phase = (
+            JobSourceQuotePhase.INSTALLATION.value
+            if measured_seasonal
+            else JobSourceQuotePhase.PRIMARY.value
+        )
+        allowed_phases = {installation_phase}
+        if takedown_included:
+            allowed_phases.add(JobSourceQuotePhase.TAKEDOWN.value)
+        if set(jobs_by_phase) - allowed_phases:
+            raise ConflictError("Quote conversion contains an unexpected job phase")
 
-        idempotent_replay = existing_job is not None or quote.converted_invoice_id is not None
-        job_id = existing_job.id if existing_job is not None else quote.converted_job_id
+        existing_installation = jobs_by_phase.get(installation_phase)
+        existing_takedown = jobs_by_phase.get(JobSourceQuotePhase.TAKEDOWN.value)
+        if quote.converted_job_id is not None and (
+            existing_installation is None or existing_installation.id != quote.converted_job_id
+        ):
+            raise ConflictError("Quote conversion links no longer match the installation job")
+        if quote.converted_job_id is None and existing_installation is not None:
+            raise ConflictError("Quote conversion is missing its installation job link")
+
         invoice_id = quote.converted_invoice_id
-        if create_invoice and invoice_id is None and not allow_invoice_creation:
+        conversion_exists = bool(existing_jobs or quote.converted_job_id or invoice_id)
+        if conversion_exists:
+            expected_takedown = create_job and takedown_included
+            if (
+                (existing_installation is not None) != create_job
+                or (existing_takedown is not None) != expected_takedown
+                or (invoice_id is not None) != create_invoice
+            ):
+                raise ConflictError("Quote was already converted with different create flags")
+            if create_job:
+                assert scheduled_start is not None
+                assert scheduled_end is not None
+                if not self._job_matches_handoff(
+                    cast(Job, existing_installation),
+                    scheduled_start=scheduled_start,
+                    scheduled_end=scheduled_end,
+                    crew_id=crew_id,
+                    technician_ids=requested_technicians,
+                ):
+                    raise ConflictError(
+                        "Quote was already converted with different handoff details"
+                    )
+                if takedown_included:
+                    assert takedown_schedule is not None
+                    if not self._job_matches_handoff(
+                        cast(Job, existing_takedown),
+                        scheduled_start=takedown_schedule.scheduled_start,
+                        scheduled_end=takedown_schedule.scheduled_end,
+                        crew_id=takedown_schedule.crew_id,
+                        technician_ids=requested_takedown_technicians,
+                    ):
+                        raise ConflictError(
+                            "Quote was already converted with different takedown details"
+                        )
+            await self.db.commit()
+            await self.db.refresh(quote, ["line_items"])
+            return QuoteConvertResponse(
+                quote=await self._detail_response(quote),
+                job_id=cast(Job, existing_installation).id if create_job else None,
+                takedown_job_id=existing_takedown.id if existing_takedown else None,
+                invoice_id=invoice_id,
+                idempotent_replay=True,
+            )
+
+        if create_invoice and not allow_invoice_creation:
             raise PermissionDeniedError("Billing access is required to create an invoice.")
+
+        installation_job_id: uuid.UUID | None = None
+        takedown_job_id: uuid.UUID | None = None
         created_something = False
         try:
-            if create_invoice and invoice_id is None:
+            if create_invoice:
                 paid_deposit = (
                     float(deposit_due or 0.0) if quote.deposit_paid_at is not None else 0.0
                 )
@@ -4180,41 +4567,77 @@ class QuoteService:
                     ),
                     created_by_id=quote.created_by_id,
                     amount_paid=paid_deposit,
-                    payment_intent_id=(quote.deposit_payment_intent_id if paid_deposit else None),
-                    opening_payment_method=(quote.deposit_payment_method if paid_deposit else None),
+                    payment_intent_id=quote.deposit_payment_intent_id if paid_deposit else None,
+                    opening_payment_method=quote.deposit_payment_method if paid_deposit else None,
                     commit=False,
                 )
                 invoice_id = invoice.id
                 quote.converted_invoice_id = invoice_id
                 created_something = True
 
-            if create_job and existing_job is None:
+            if create_job:
                 if quote.contact_id is None:
                     raise ConflictError("Cannot create a job from a quote with no contact")
-                job = await JobService(self.db).create(
+                assert scheduled_start is not None
+                assert scheduled_end is not None
+                installation_job = await JobService(self.db).create(
                     workspace_id,
                     {
                         "contact_id": quote.contact_id,
                         "service_location_id": quote.service_location_id,
                         "crew_id": crew_id,
-                        "title": quote.title or f"Quote {quote.number}",
+                        "title": (
+                            "Christmas Lighting — Installation"
+                            if measured_seasonal
+                            else quote.title or f"Quote {quote.number}"
+                        ),
                         "description": quote.notes,
                         "invoice_id": invoice_id,
                         "source_quote_id": quote.id,
+                        "source_quote_phase": installation_phase,
                         "lighting_project_id": quote.lighting_project_id,
                         "technician_ids": list(requested_technicians),
                         "scheduled_start": scheduled_start,
                         "scheduled_end": scheduled_end,
                     },
                 )
+                installation_job_id = installation_job.id
+                quote.converted_job_id = installation_job_id
+                created_something = True
                 if self._is_wizard_quote(quote):
                     document = self._parse_document(quote)
                     await JobAllocationService(self.db).reserve(
-                        workspace_id, job.id, document.fulfillment
+                        workspace_id, installation_job.id, document.fulfillment
                     )
-                job_id = job.id
-                quote.converted_job_id = job_id
-                created_something = True
+
+                if takedown_included:
+                    assert takedown_schedule is not None
+                    takedown_description = quote.notes
+                    if quote.seasonal_storage_included:
+                        storage_note = "Storage included: label, pack, and store removed lighting."
+                        takedown_description = (
+                            f"{takedown_description}\n\n{storage_note}"
+                            if takedown_description
+                            else storage_note
+                        )
+                    takedown_job = await JobService(self.db).create(
+                        workspace_id,
+                        {
+                            "contact_id": quote.contact_id,
+                            "service_location_id": quote.service_location_id,
+                            "crew_id": takedown_schedule.crew_id,
+                            "title": "Christmas Lighting — Takedown",
+                            "description": takedown_description,
+                            "invoice_id": None,
+                            "source_quote_id": quote.id,
+                            "source_quote_phase": JobSourceQuotePhase.TAKEDOWN.value,
+                            "lighting_project_id": quote.lighting_project_id,
+                            "technician_ids": list(requested_takedown_technicians),
+                            "scheduled_start": takedown_schedule.scheduled_start,
+                            "scheduled_end": takedown_schedule.scheduled_end,
+                        },
+                    )
+                    takedown_job_id = takedown_job.id
 
             if created_something:
                 await emit_automation_event(
@@ -4225,7 +4648,11 @@ class QuoteService:
                     payload={
                         "quote_id": str(quote.id),
                         "number": quote.number,
-                        "job_id": str(job_id) if job_id else None,
+                        "job_id": str(installation_job_id) if installation_job_id else None,
+                        "installation_job_id": (
+                            str(installation_job_id) if installation_job_id else None
+                        ),
+                        "takedown_job_id": str(takedown_job_id) if takedown_job_id else None,
                         "invoice_id": str(invoice_id) if invoice_id else None,
                     },
                 )
@@ -4235,21 +4662,26 @@ class QuoteService:
             if "uq_field_service_jobs_source_quote" in str(error):
                 raise ConflictError("Quote conversion raced; retry the exact handoff") from error
             raise
+        except Exception:
+            await self.db.rollback()
+            raise
 
         await self.db.refresh(quote, ["line_items"])
         self.log.info(
             "quote_converted",
             quote_id=str(quote.id),
             workspace_id=str(workspace_id),
-            job_id=str(job_id) if job_id else None,
+            job_id=str(installation_job_id) if installation_job_id else None,
+            takedown_job_id=str(takedown_job_id) if takedown_job_id else None,
             invoice_id=str(invoice_id) if invoice_id else None,
-            idempotent_replay=idempotent_replay and not created_something,
+            idempotent_replay=False,
         )
         return QuoteConvertResponse(
             quote=await self._detail_response(quote),
-            job_id=job_id,
+            job_id=installation_job_id,
+            takedown_job_id=takedown_job_id,
             invoice_id=invoice_id,
-            idempotent_replay=idempotent_replay and not created_something,
+            idempotent_replay=False,
         )
 
     # ------------------------------------------------------------------

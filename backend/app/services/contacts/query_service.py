@@ -5,6 +5,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import structlog
 from sqlalchemy import func, select
@@ -15,6 +16,7 @@ from app.db.scope import apply_workspace_scope
 from app.models.contact import Contact
 from app.schemas.contact import ContactWithConversationResponse
 from app.schemas.tag import TagResponse
+from app.services.contacts.contact_filters import apply_contact_filters, apply_contact_list_filters
 from app.services.contacts.contact_repository import (
     list_contact_ids as repo_list_contact_ids,
 )
@@ -22,23 +24,17 @@ from app.services.contacts.contact_repository import (
     list_contacts_paginated,
 )
 from app.services.contacts.exceptions import ContactValidationError
+from app.services.reporting.time_windows import get_workspace_reporting_timezone
 
 logger = structlog.get_logger()
 
 
-def _pct_change(curr: int, prev: int) -> str:
-    """Format a period-over-period percentage change for the stat cards.
-
-    Returns a preformatted string (``"+N%"`` / ``"-N%"`` / ``"+0%"``) so the
-    frontend ``isTrendUp`` helper renders the trend badge without reparsing.
-    When the prior window is empty but the current one isn't, treat it as full
-    growth (``"+100%"``); when both windows are empty there is no change
-    (``"+0%"``).
-    """
+def _pct_change(curr: int, prev: int) -> str | None:
+    """Signed growth, or no percentage when the previous window is zero."""
     if prev == 0:
-        return "+100%" if curr > 0 else "+0%"
-    pct = int(round((curr - prev) / prev * 100))
-    return f"{'+' if pct >= 0 else '-'}{abs(pct)}%"
+        return None
+    pct = round((curr - prev) / prev * 100)
+    return f"{pct:+d}%"
 
 
 @dataclass(slots=True, frozen=True)
@@ -168,6 +164,23 @@ class ContactQueryService:
             filters=filters,
         )
 
+        # Facets share every search/advanced filter, but not the selected status
+        # tab or pagination. Never mix a page count with a workspace total.
+        counts_query = apply_workspace_scope(
+            select(Contact.status, func.count()), Contact, workspace_id
+        )
+        counts_query = apply_contact_list_filters(counts_query, search=search)
+        counts_query = apply_contact_filters(
+            counts_query, workspace_id, **parsed_filters.as_kwargs()
+        )
+        counts_result = await self.db.execute(counts_query.group_by(Contact.status))
+        status_counts = dict.fromkeys(
+            ("all", "new", "contacted", "qualified", "converted", "lost"), 0
+        )
+        for contact_status, count in counts_result:
+            status_counts[contact_status] = count
+            status_counts["all"] += count
+
         rows, total = await list_contacts_paginated(
             workspace_id=workspace_id,
             db=self.db,
@@ -194,26 +207,35 @@ class ContactQueryService:
                 ]
             items.append(contact_data)
 
-        return PaginationResult(
+        result = PaginationResult(
             items=items,
             total=total,
             page=page,
             page_size=page_size,
             pages=(total + page_size - 1) // page_size if total > 0 else 1,
         ).to_dict()
+        result["status_counts"] = status_counts
+        return result
 
     async def get_stats(self, *, workspace_id: uuid.UUID) -> dict[str, Any]:
-        """Compute workspace-scoped contact metrics for the stat cards.
+        """Creation cohorts, NOT conversions during a period.
 
-        Mirrors the Jobber Clients dashboard: "new leads" and "new clients"
-        over the trailing 30 days (with a period-over-period change vs the
-        prior 30-day window) plus year-to-date new clients. "Client" maps to
-        our ``converted`` status. All windows are UTC and workspace-scoped.
+        A new-client conversion means the first transition into ``converted``.
+        Contacts have no conversion timestamp or complete status history; neither
+        created_at nor updated_at can stand in for that event. The legacy
+        ``new_clients_*`` fields describe contacts CREATED in each window that
+        are CURRENTLY converted, explicitly labelled in the UI and response
+        metadata. Reconversions cannot be recovered or counted here.
+
+        Trailing windows are 30 elapsed days; YTD starts at workspace-local Jan 1.
+        Bounds are half-open UTC instants, also returned for exact drill-downs.
         """
+        timezone_name = await get_workspace_reporting_timezone(self.db, workspace_id)
         now = datetime.now(UTC)
         window_30d = now - timedelta(days=30)
         window_60d = now - timedelta(days=60)
-        year_start = datetime(now.year, 1, 1, tzinfo=UTC)
+        zone = ZoneInfo(timezone_name)
+        year_start = datetime(now.astimezone(zone).year, 1, 1, tzinfo=zone).astimezone(UTC)
 
         async def _count(*criteria: Any) -> int:
             query = apply_workspace_scope(
@@ -224,7 +246,7 @@ class ContactQueryService:
             result = await self.db.execute(query)
             return result.scalar_one() or 0
 
-        new_leads_30d = await _count(Contact.created_at >= window_30d)
+        new_leads_30d = await _count(Contact.created_at >= window_30d, Contact.created_at < now)
         new_leads_prev = await _count(
             Contact.created_at >= window_60d,
             Contact.created_at < window_30d,
@@ -232,6 +254,7 @@ class ContactQueryService:
         new_clients_30d = await _count(
             Contact.status == "converted",
             Contact.created_at >= window_30d,
+            Contact.created_at < now,
         )
         new_clients_prev = await _count(
             Contact.status == "converted",
@@ -241,6 +264,7 @@ class ContactQueryService:
         total_new_clients_ytd = await _count(
             Contact.status == "converted",
             Contact.created_at >= year_start,
+            Contact.created_at < now,
         )
 
         return {
@@ -249,6 +273,11 @@ class ContactQueryService:
             "new_clients_30d": new_clients_30d,
             "new_clients_change": _pct_change(new_clients_30d, new_clients_prev),
             "total_new_clients_ytd": total_new_clients_ytd,
+            "client_metric_basis": "creation_cohort_current_status",
+            "period_start": window_30d,
+            "period_end": now,
+            "year_start": year_start,
+            "timezone": timezone_name,
         }
 
     async def list_contact_ids(

@@ -1,7 +1,12 @@
 export const PRODUCT_BRAND = {
-  name: "The Tribunal",
-  shortName: "Tribunal",
-  description: "AI-powered CRM for lead capture, follow-up, booking, and customer communications.",
+  name: "BEAM",
+  shortName: "BEAM",
+  tagline: "Every lead, lit up.",
+  // Outdoor lighting specifically: landscape, holiday and permanent installers.
+  // Naming the trade beats "home services" here, because the buyer should read
+  // one line and recognise their own business rather than a category.
+  description:
+    "The AI CRM built for outdoor lighting pros. Catch every lead, follow up by voice and text, and book the install.",
 } as const;
 
 export const DEFAULT_WORKSPACE_BRAND_NAME = "Your business";

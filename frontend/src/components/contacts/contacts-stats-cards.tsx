@@ -4,34 +4,30 @@ import { ArrowRight, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 
 import { isTrendUp } from "@/components/dashboard/animations";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ContactStatsResponse } from "@/lib/api/contacts";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/utils/number";
+import type { FilterDefinition } from "@/types";
 
 interface MetricCardProps {
   title: string;
   timeframe: string;
   value: number;
-  /** Preformatted change string (e.g. "+24%"); omit for cards with no trend. */
-  change?: string;
+  /** Null means an undefined zero baseline; omit for cards without comparisons. */
+  change?: string | null;
+  onView: () => void;
 }
 
-function MetricCard({ title, timeframe, value, change }: MetricCardProps) {
+function MetricCard({ title, timeframe, value, change, onView }: MetricCardProps) {
   const trendUp = change ? isTrendUp(change) : false;
 
   return (
     <Card>
       <CardHeader className="gap-1 pb-2">
-        <CardDescription className="text-foreground text-sm font-semibold">
-          {title}
-        </CardDescription>
+        <CardDescription className="text-foreground text-sm font-semibold">{title}</CardDescription>
         <span className="text-muted-foreground text-xs">{timeframe}</span>
       </CardHeader>
       <CardContent>
@@ -44,15 +40,22 @@ function MetricCard({ title, timeframe, value, change }: MetricCardProps) {
                 trendUp ? "text-success" : "text-destructive",
               )}
             >
-              {trendUp ? (
-                <TrendingUp className="size-4" />
-              ) : (
-                <TrendingDown className="size-4" />
-              )}
+              {trendUp ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
               {change}
             </span>
+          ) : change === null ? (
+            <span className="text-muted-foreground text-sm">No baseline</span>
           ) : null}
         </div>
+        <Button
+          variant="link"
+          size="sm"
+          className="h-auto px-0 pt-3"
+          aria-label={`View ${title.toLowerCase()}, ${timeframe.toLowerCase()}`}
+          onClick={onView}
+        >
+          View contacts
+        </Button>
       </CardContent>
     </Card>
   );
@@ -99,9 +102,10 @@ function StatCardSkeleton() {
 interface ContactsStatsCardsProps {
   stats: ContactStatsResponse | undefined;
   isPending: boolean;
+  onViewContacts: (filters: FilterDefinition) => void;
 }
 
-export function ContactsStatsCards({ stats, isPending }: ContactsStatsCardsProps) {
+export function ContactsStatsCards({ stats, isPending, onViewContacts }: ContactsStatsCardsProps) {
   if (isPending) {
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -115,26 +119,48 @@ export function ContactsStatsCards({ stats, isPending }: ContactsStatsCardsProps
 
   if (!stats) return null;
 
+  const viewContacts = (start: string, convertedOnly = false) => {
+    onViewContacts({
+      logic: "and",
+      rules: [
+        { field: "created_at", operator: "gte", value: start },
+        { field: "created_at", operator: "lt", value: stats.period_end },
+        ...(convertedOnly ? [{ field: "status", operator: "equals", value: "converted" }] : []),
+      ],
+    });
+  };
+
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      <MetricCard
-        title="New leads"
-        timeframe="Past 30 days"
-        value={stats.new_leads_30d}
-        change={stats.new_leads_change}
-      />
-      <MetricCard
-        title="New clients"
-        timeframe="Past 30 days"
-        value={stats.new_clients_30d}
-        change={stats.new_clients_change}
-      />
-      <MetricCard
-        title="Total new clients"
-        timeframe="Year to date"
-        value={stats.total_new_clients_ytd}
-      />
-      <PromoCard />
+    <div className="space-y-2">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <MetricCard
+          title="Contacts created"
+          timeframe="Past 30 days"
+          value={stats.new_leads_30d}
+          change={stats.new_leads_change}
+          onView={() => viewContacts(stats.period_start)}
+        />
+        <MetricCard
+          title="Converted contacts"
+          timeframe="Created in past 30 days"
+          value={stats.new_clients_30d}
+          change={stats.new_clients_change}
+          onView={() => viewContacts(stats.period_start, true)}
+        />
+        <MetricCard
+          title="Converted contacts"
+          timeframe="Created year to date"
+          value={stats.total_new_clients_ytd}
+          onView={() => viewContacts(stats.year_start, true)}
+        />
+        <PromoCard />
+      </div>
+      <p className="text-muted-foreground text-xs">
+        Workspace-wide, independent of list filters. Converted contacts are currently converted,
+        grouped by creation date—not conversion date. Conversion dates and reconversions are not
+        recorded. Changes compare the prior 30-day creation cohort. Year to date uses{" "}
+        {stats.timezone}.
+      </p>
     </div>
   );
 }

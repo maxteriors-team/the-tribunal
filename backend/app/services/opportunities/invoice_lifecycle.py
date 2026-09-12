@@ -1,4 +1,4 @@
-"""Move configured deals when their linked Tribunal invoice advances."""
+"""Move configured deals when their linked BEAM invoice advances."""
 
 from __future__ import annotations
 

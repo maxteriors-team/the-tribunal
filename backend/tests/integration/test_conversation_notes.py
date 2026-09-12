@@ -23,7 +23,6 @@ from app.models.conversation_note import MAX_NOTE_BODY_CHARS, ConversationNote
 from app.models.human_nudge import HumanNudge
 from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
-from app.services.conversations.note_service import ConversationNoteService
 
 pytestmark = pytest.mark.integration
 

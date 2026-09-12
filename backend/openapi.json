@@ -8180,7 +8180,7 @@
         "type": "object"
       },
       "CallCreate": {
-        "description": "Request to initiate a call.\n\n``mode`` decides who actually talks to the contact:\n\n- ``\"ai\"`` (default): a voice agent handles the call. ``agent_id`` selects\n  it; when omitted the conversation's assigned agent or the workspace\n  default voice agent is used. A call with no resolvable agent is rejected\n  rather than dialing the contact into silence.\n- ``\"user\"``: the operator's own phone rings first, then the contact is\n  dialed and the two legs are bridged. ``agent_id`` is ignored.\n  ``user_phone_number`` picks which allowlisted number to ring.\n- ``\"browser\"``: the operator's authenticated Tribunal browser rings first;\n  the server then dials and bridges the contact. Client-supplied SIP targets\n  are never accepted.",
+        "description": "Request to initiate a call.\n\n``mode`` decides who actually talks to the contact:\n\n- ``\"ai\"`` (default): a voice agent handles the call. ``agent_id`` selects\n  it; when omitted the conversation's assigned agent or the workspace\n  default voice agent is used. A call with no resolvable agent is rejected\n  rather than dialing the contact into silence.\n- ``\"user\"``: the operator's own phone rings first, then the contact is\n  dialed and the two legs are bridged. ``agent_id`` is ignored.\n  ``user_phone_number`` picks which allowlisted number to ring.\n- ``\"browser\"``: the operator's authenticated BEAM browser rings first;\n  the server then dials and bridges the contact. Client-supplied SIP targets\n  are never accepted.",
         "properties": {
           "agent_id": {
             "anyOf": [
@@ -13158,7 +13158,7 @@
         "type": "object"
       },
       "ContactListResponse": {
-        "description": "Schema for paginated contact list.",
+        "description": "Schema for paginated contact list with status facets over the whole scope.",
         "properties": {
           "items": {
             "items": {
@@ -13179,6 +13179,9 @@
             "title": "Pages",
             "type": "integer"
           },
+          "status_counts": {
+            "$ref": "#/components/schemas/ContactStatusCounts"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -13189,7 +13192,8 @@
           "total",
           "page",
           "page_size",
-          "pages"
+          "pages",
+          "status_counts"
         ],
         "title": "ContactListResponse",
         "type": "object"
@@ -13771,27 +13775,71 @@
         "type": "object"
       },
       "ContactStatsResponse": {
-        "description": "Aggregate contact metrics for the Contacts page stat cards.\n\nWindows are workspace-scoped and computed in UTC. ``*_change`` values are\nreturned preformatted (e.g. ``\"+24%\"``, ``\"-10%\"``, ``\"+0%\"``) so the\nfrontend ``isTrendUp`` helper can render the trend badge without reparsing.",
+        "description": "Workspace-wide creation cohorts, independent of list search/filters.\n\nConversion events are unavailable: ``new_clients_*`` are legacy field names\nfor contacts CREATED in the window and CURRENTLY converted, not clients\nconverted during the window. Reversions change these snapshots; reconversion\nhistory cannot be inferred. Change is null whenever the prior cohort is zero.",
         "properties": {
+          "client_metric_basis": {
+            "const": "creation_cohort_current_status",
+            "title": "Client Metric Basis",
+            "type": "string"
+          },
           "new_clients_30d": {
+            "description": "Currently converted contacts created in the trailing 30-day window.",
             "title": "New Clients 30D",
             "type": "integer"
           },
           "new_clients_change": {
-            "title": "New Clients Change",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Creation-cohort change, not conversion growth; null with a zero baseline.",
+            "title": "New Clients Change"
           },
           "new_leads_30d": {
             "title": "New Leads 30D",
             "type": "integer"
           },
           "new_leads_change": {
-            "title": "New Leads Change",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Leads Change"
+          },
+          "period_end": {
+            "description": "Exclusive end (as-of instant) of all current windows.",
+            "format": "date-time",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "description": "Inclusive start of the trailing 30 elapsed days.",
+            "format": "date-time",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
             "type": "string"
           },
           "total_new_clients_ytd": {
+            "description": "Currently converted contacts created since workspace-local January 1.",
             "title": "Total New Clients Ytd",
             "type": "integer"
+          },
+          "year_start": {
+            "description": "Workspace-local January 1, expressed in UTC.",
+            "format": "date-time",
+            "title": "Year Start",
+            "type": "string"
           }
         },
         "required": [
@@ -13799,9 +13847,53 @@
           "new_leads_change",
           "new_clients_30d",
           "new_clients_change",
-          "total_new_clients_ytd"
+          "total_new_clients_ytd",
+          "client_metric_basis",
+          "period_start",
+          "period_end",
+          "year_start",
+          "timezone"
         ],
         "title": "ContactStatsResponse",
+        "type": "object"
+      },
+      "ContactStatusCounts": {
+        "description": "Unpaginated search/advanced-filter scope, excluding the selected status tab.",
+        "properties": {
+          "all": {
+            "title": "All",
+            "type": "integer"
+          },
+          "contacted": {
+            "title": "Contacted",
+            "type": "integer"
+          },
+          "converted": {
+            "title": "Converted",
+            "type": "integer"
+          },
+          "lost": {
+            "title": "Lost",
+            "type": "integer"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          },
+          "qualified": {
+            "title": "Qualified",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "all",
+          "new",
+          "contacted",
+          "qualified",
+          "converted",
+          "lost"
+        ],
+        "title": "ContactStatusCounts",
         "type": "object"
       },
       "ContactSummary": {
@@ -15390,6 +15482,10 @@
           "channel": {
             "anyOf": [
               {
+                "enum": [
+                  "sms",
+                  "voice"
+                ],
                 "type": "string"
               },
               {
@@ -15397,6 +15493,11 @@
               }
             ],
             "title": "Channel"
+          },
+          "idempotency_key": {
+            "format": "uuid",
+            "title": "Idempotency Key",
+            "type": "string"
           },
           "max_turns": {
             "default": 6,
@@ -15412,11 +15513,16 @@
           },
           "rehearsee": {
             "default": "ai",
+            "enum": [
+              "ai",
+              "human"
+            ],
             "title": "Rehearsee",
             "type": "string"
           }
         },
         "required": [
+          "idempotency_key",
           "agent_id",
           "persona_id"
         ],
@@ -18125,6 +18231,46 @@
             ],
             "title": "Description"
           },
+          "fulfillment_quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fulfillment Quantity"
+          },
+          "inventory_behavior": {
+            "anyOf": [
+              {
+                "enum": [
+                  "consumable",
+                  "reusable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Behavior"
+          },
+          "inventory_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Item Id"
+          },
           "label": {
             "maxLength": 120,
             "minLength": 1,
@@ -18164,6 +18310,19 @@
             "minimum": 0.0,
             "title": "Unit Price",
             "type": "number"
+          },
+          "worksheet_row_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worksheet Row Id"
           }
         },
         "required": [
@@ -18192,6 +18351,46 @@
             ],
             "title": "Description"
           },
+          "fulfillment_quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fulfillment Quantity"
+          },
+          "inventory_behavior": {
+            "anyOf": [
+              {
+                "enum": [
+                  "consumable",
+                  "reusable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Behavior"
+          },
+          "inventory_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Item Id"
+          },
           "label": {
             "maxLength": 120,
             "minLength": 1,
@@ -18231,6 +18430,19 @@
             "minimum": 0.0,
             "title": "Unit Price",
             "type": "number"
+          },
+          "worksheet_row_id": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worksheet Row Id"
           }
         },
         "required": [
@@ -18330,6 +18542,18 @@
               }
             ],
             "title": "Client Phone"
+          },
+          "contact_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Id"
           },
           "custom_lines": {
             "items": {
@@ -18468,6 +18692,20 @@
             ],
             "title": "Proposal Side",
             "type": "string"
+          },
+          "seasonal_installation_source": {
+            "default": "photo",
+            "enum": [
+              "photo",
+              "tree_wrap_worksheet"
+            ],
+            "title": "Seasonal Installation Source",
+            "type": "string"
+          },
+          "seasonal_phased_handoff": {
+            "default": false,
+            "title": "Seasonal Phased Handoff",
+            "type": "boolean"
           },
           "selected_package": {
             "anyOf": [
@@ -19021,6 +19259,18 @@
             ],
             "title": "Inventory Behavior",
             "type": "string"
+          },
+          "inventory_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventory Item Id"
           },
           "qty": {
             "title": "Qty",
@@ -20165,14 +20415,22 @@
       "HumanTurnRequest": {
         "description": "A human rep's reply during a live rehearsal.",
         "properties": {
+          "expected_turn_count": {
+            "maximum": 25.0,
+            "minimum": 1.0,
+            "title": "Expected Turn Count",
+            "type": "integer"
+          },
           "message": {
+            "maxLength": 4000,
             "minLength": 1,
             "title": "Message",
             "type": "string"
           }
         },
         "required": [
-          "message"
+          "message",
+          "expected_turn_count"
         ],
         "title": "HumanTurnRequest",
         "type": "object"
@@ -20641,6 +20899,17 @@
             ],
             "title": "Fallback Number"
           },
+          "ring_operators": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ring Operators"
+          },
           "transfer_destination_number": {
             "anyOf": [
               {
@@ -20697,6 +20966,11 @@
           },
           "ready": {
             "title": "Ready",
+            "type": "boolean"
+          },
+          "ring_operators": {
+            "default": false,
+            "title": "Ring Operators",
             "type": "boolean"
           },
           "transfer_destination_configured": {
@@ -20831,6 +21105,119 @@
           "product_id"
         ],
         "title": "InstallationPlanFixture",
+        "type": "object"
+      },
+      "InstallationPlanWorksheetRow": {
+        "description": "Price-free exact measurement row for a worksheet installation sheet.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "id": {
+            "maxLength": 250,
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 250,
+            "title": "Label",
+            "type": "string"
+          },
+          "light_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "mini",
+                  "c7",
+                  "c9",
+                  "garland"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Light Type"
+          },
+          "measurements": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "propertyNames": {
+              "maxLength": 250
+            },
+            "title": "Measurements",
+            "type": "object"
+          },
+          "planned_feet": {
+            "title": "Planned Feet",
+            "type": "number"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "shape": {
+            "enum": [
+              "evergreen",
+              "deciduous",
+              "trunk",
+              "branch",
+              "bush",
+              "roofline",
+              "decor"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "unit_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit Count"
+          },
+          "unit_kind": {
+            "enum": [
+              "strand",
+              "bulb",
+              "section",
+              "piece"
+            ],
+            "title": "Unit Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "quantity",
+          "shape",
+          "planned_feet",
+          "unit_kind"
+        ],
+        "title": "InstallationPlanWorksheetRow",
         "type": "object"
       },
       "IntegrationCreate": {
@@ -24205,7 +24592,14 @@
         "description": "Assignment-scoped, price-free plan with the customer's proposal decision.",
         "properties": {
           "design": {
-            "$ref": "#/components/schemas/DesignSchema"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DesignSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "drawing_number": {
             "anyOf": [
@@ -24232,8 +24626,15 @@
             "title": "Drawing Title"
           },
           "dusk": {
-            "title": "Dusk",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dusk"
           },
           "fixture_schedule": {
             "items": {
@@ -24241,6 +24642,16 @@
             },
             "title": "Fixture Schedule",
             "type": "array"
+          },
+          "installation_sheet_type": {
+            "default": "photo",
+            "enum": [
+              "photo",
+              "tree_wrap_worksheet",
+              "combined"
+            ],
+            "title": "Installation Sheet Type",
+            "type": "string"
           },
           "job_id": {
             "format": "uuid",
@@ -24276,7 +24687,14 @@
             "title": "Payment Status"
           },
           "photo": {
-            "$ref": "#/components/schemas/PhotoSchema"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhotoSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "precon_field_brief": {
             "default": "",
@@ -24355,12 +24773,26 @@
             "title": "Proposal Status"
           },
           "selected_shot_id": {
-            "maxLength": 250,
-            "title": "Selected Shot Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 250,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Shot Id"
           },
           "settings": {
-            "$ref": "#/components/schemas/DocumentSettingsSchema"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentSettingsSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sheet": {
             "anyOf": [
@@ -24383,6 +24815,13 @@
               }
             ],
             "title": "Sheet Label"
+          },
+          "worksheet_rows": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationPlanWorksheetRow"
+            },
+            "title": "Worksheet Rows",
+            "type": "array"
           }
         },
         "required": [
@@ -24390,12 +24829,7 @@
           "project_id",
           "project_name",
           "project_version",
-          "project_updated_at",
-          "selected_shot_id",
-          "photo",
-          "design",
-          "dusk",
-          "settings"
+          "project_updated_at"
         ],
         "title": "JobInstallationPlanResponse",
         "type": "object"
@@ -24571,10 +25005,10 @@
         "type": "object"
       },
       "JobPnLSummary": {
-        "description": "Aggregate job profitability over a period.\n\nRevenue is the sum of the distinct invoices linked to the jobs in range\n(so two jobs sharing one invoice are not double-counted); cost is tracked\nlabor (hours x rate) plus logged expenses plus materials consumed.",
+        "description": "Aggregate job profitability over a period.\n\nRevenue includes linked sent/partial/paid/overdue invoice totals, counted\nonce per invoice. Draft/void invoices contribute zero. Billable count is\njobs with a same-workspace invoice of any status, not distinct invoices.\nAll jobs contribute tracked labor, logged expenses, and consumed materials.",
         "properties": {
           "billable_job_count": {
-            "description": "Jobs with a linked invoice",
+            "description": "Jobs with a linked same-workspace invoice of any status, including draft/void; each job counts even when multiple jobs share an invoice",
             "title": "Billable Job Count",
             "type": "integer"
           },
@@ -24641,6 +25075,7 @@
             "type": "number"
           },
           "revenue": {
+            "description": "Total of linked sent/partial/paid/overdue invoices, counted once per invoice; draft and void invoices contribute zero, regardless of payments",
             "title": "Revenue",
             "type": "number"
           },
@@ -25945,7 +26380,8 @@
             "default": "landscape",
             "enum": [
               "landscape",
-              "permanent"
+              "permanent",
+              "seasonal"
             ],
             "title": "Projecttype",
             "type": "string"
@@ -25963,6 +26399,16 @@
             "maxItems": 6,
             "title": "Shots",
             "type": "array"
+          },
+          "treeWrapWorksheet": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TreeWrapWorksheetSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "updatedAt": {
             "format": "date-time",
@@ -28025,7 +28471,8 @@
             "default": "landscape",
             "enum": [
               "landscape",
-              "permanent"
+              "permanent",
+              "seasonal"
             ],
             "title": "Project Type",
             "type": "string"
@@ -28149,7 +28596,8 @@
           "project_type": {
             "enum": [
               "landscape",
-              "permanent"
+              "permanent",
+              "seasonal"
             ],
             "title": "Project Type",
             "type": "string"
@@ -28312,7 +28760,8 @@
           "project_type": {
             "enum": [
               "landscape",
-              "permanent"
+              "permanent",
+              "seasonal"
             ],
             "title": "Project Type",
             "type": "string"
@@ -33277,6 +33726,20 @@
         "title": "OpenAIOAuthStatusResponse",
         "type": "object"
       },
+      "OperatorPresenceRequest": {
+        "description": "Heartbeat declaring whether *this* operator's browser can take calls.\n\nThe operator is always derived from the authenticated user, never from the\nbody, so a member cannot mark a colleague available (and start ringing their\nheadset) or unavailable (and silently remove them from the roster).",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "OperatorPresenceRequest",
+        "type": "object"
+      },
       "OpportunityActivityResponse": {
         "description": "Opportunity activity response schema.",
         "properties": {
@@ -38075,6 +38538,11 @@
           "inbound_ai_enabled": {
             "default": false,
             "title": "Inbound Ai Enabled",
+            "type": "boolean"
+          },
+          "inbound_ring_operators": {
+            "default": false,
+            "title": "Inbound Ring Operators",
             "type": "boolean"
           },
           "is_active": {
@@ -45142,6 +45610,16 @@
             ],
             "title": "Scheduled Start"
           },
+          "takedown_schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuoteJobSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "technician_ids": {
             "items": {
               "format": "uuid",
@@ -45164,6 +45642,9 @@
             "default": false,
             "title": "Idempotent Replay",
             "type": "boolean"
+          },
+          "installation_crew_notification": {
+            "$ref": "#/components/schemas/CrewNotificationResult"
           },
           "invoice_id": {
             "anyOf": [
@@ -45191,6 +45672,21 @@
           },
           "quote": {
             "$ref": "#/components/schemas/QuoteDetailResponse"
+          },
+          "takedown_crew_notification": {
+            "$ref": "#/components/schemas/CrewNotificationResult"
+          },
+          "takedown_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Takedown Job Id"
           }
         },
         "required": [
@@ -45892,6 +46388,28 @@
             ],
             "title": "Revision Root Quote Id"
           },
+          "seasonal_storage_included": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seasonal Storage Included"
+          },
+          "seasonal_takedown_included": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seasonal Takedown Included"
+          },
           "selected_permanent_kits": {
             "items": {
               "$ref": "#/components/schemas/PermanentKitSelection"
@@ -46257,6 +46775,17 @@
       "QuoteInventoryAvailabilityItem": {
         "description": "One internal fulfillment requirement compared with current workspace stock.",
         "properties": {
+          "available_to_promise": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available To Promise"
+          },
           "description": {
             "anyOf": [
               {
@@ -46291,6 +46820,17 @@
             ],
             "title": "Inventory Item Name"
           },
+          "quantity_deployed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Deployed"
+          },
           "quantity_on_hand": {
             "anyOf": [
               {
@@ -46301,6 +46841,17 @@
               }
             ],
             "title": "Quantity On Hand"
+          },
+          "quantity_reserved": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity Reserved"
           },
           "required_quantity": {
             "title": "Required Quantity",
@@ -46375,6 +46926,47 @@
           "is_available"
         ],
         "title": "QuoteInventoryAvailabilityResponse",
+        "type": "object"
+      },
+      "QuoteJobSchedule": {
+        "description": "A validated schedule and team for one quote-created job phase.",
+        "properties": {
+          "crew_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crew Id"
+          },
+          "scheduled_end": {
+            "format": "date-time",
+            "title": "Scheduled End",
+            "type": "string"
+          },
+          "scheduled_start": {
+            "format": "date-time",
+            "title": "Scheduled Start",
+            "type": "string"
+          },
+          "technician_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Technician Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scheduled_start",
+          "scheduled_end"
+        ],
+        "title": "QuoteJobSchedule",
         "type": "object"
       },
       "QuoteLineItemCreate": {
@@ -46955,6 +47547,28 @@
               }
             ],
             "title": "Revision Root Quote Id"
+          },
+          "seasonal_storage_included": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seasonal Storage Included"
+          },
+          "seasonal_takedown_included": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seasonal Takedown Included"
           },
           "selected_permanent_kits": {
             "items": {
@@ -49406,6 +50020,11 @@
             ],
             "title": "Agent Name"
           },
+          "attempt_count": {
+            "default": 0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
           "booking_attempted": {
             "anyOf": [
               {
@@ -49487,6 +50106,17 @@
             ],
             "title": "Overall Score"
           },
+          "pending_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Action"
+          },
           "persona_id": {
             "anyOf": [
               {
@@ -49513,6 +50143,11 @@
           "rehearsee": {
             "title": "Rehearsee",
             "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
           },
           "scores": {
             "additionalProperties": true,
@@ -49632,6 +50267,11 @@
             ],
             "title": "Agent Name"
           },
+          "attempt_count": {
+            "default": 0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
           "booking_attempted": {
             "anyOf": [
               {
@@ -49691,6 +50331,17 @@
             ],
             "title": "Overall Score"
           },
+          "pending_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Action"
+          },
           "persona_id": {
             "anyOf": [
               {
@@ -49717,6 +50368,11 @@
           "rehearsee": {
             "title": "Rehearsee",
             "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -50195,6 +50851,21 @@
           }
         },
         "title": "ReputationSummary",
+        "type": "object"
+      },
+      "RetryRehearsalRequest": {
+        "description": "Retry only the failure the caller observed, not a later failed attempt.",
+        "properties": {
+          "expected_attempt_count": {
+            "minimum": 0.0,
+            "title": "Expected Attempt Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_attempt_count"
+        ],
+        "title": "RetryRehearsalRequest",
         "type": "object"
       },
       "RevealEmailResponse": {
@@ -56532,6 +57203,396 @@
         "title": "TransferStockRequest",
         "type": "object"
       },
+      "TreeWrapResultSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "billedQuantity": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billedquantity"
+          },
+          "plannedFeet": {
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Plannedfeet",
+            "type": "number"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "rowCount": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Rowcount",
+            "type": "integer"
+          },
+          "unitCount": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unitcount"
+          },
+          "unitKind": {
+            "enum": [
+              "strand",
+              "bulb",
+              "section",
+              "piece"
+            ],
+            "title": "Unitkind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plannedFeet",
+          "rowCount",
+          "unitKind"
+        ],
+        "title": "TreeWrapResultSchema",
+        "type": "object"
+      },
+      "TreeWrapSpecSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "branchCount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 500.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchcount"
+          },
+          "branchWidthIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 120.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branchwidthin"
+          },
+          "bulbSpacingIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 120.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bulbspacingin"
+          },
+          "depthFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 300.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depthft"
+          },
+          "feetPerUnit": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feetperunit"
+          },
+          "heightFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 300.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heightft"
+          },
+          "lightType": {
+            "anyOf": [
+              {
+                "enum": [
+                  "mini",
+                  "c7",
+                  "c9",
+                  "garland"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lighttype"
+          },
+          "pieceCount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 999.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Piececount"
+          },
+          "pricingMode": {
+            "enum": [
+              "unit",
+              "foot"
+            ],
+            "title": "Pricingmode",
+            "type": "string"
+          },
+          "radiusFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Radiusft"
+          },
+          "rowSpacingIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 120.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rowspacingin"
+          },
+          "runFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runft"
+          },
+          "shape": {
+            "enum": [
+              "evergreen",
+              "deciduous",
+              "trunk",
+              "branch",
+              "bush",
+              "roofline",
+              "decor"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "trunkWidthIn": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 600.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trunkwidthin"
+          },
+          "unitPrice": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unitprice"
+          },
+          "widthFt": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 300.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Widthft"
+          }
+        },
+        "required": [
+          "shape",
+          "pricingMode"
+        ],
+        "title": "TreeWrapSpecSchema",
+        "type": "object"
+      },
+      "TreeWrapWorksheetRowSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "inventoryBehavior": {
+            "anyOf": [
+              {
+                "enum": [
+                  "consumable",
+                  "reusable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventorybehavior"
+          },
+          "inventoryItemId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inventoryitemid"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "maximum": 999.0,
+            "minimum": 1.0,
+            "title": "Quantity",
+            "type": "integer"
+          },
+          "result": {
+            "$ref": "#/components/schemas/TreeWrapResultSchema"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/TreeWrapSpecSchema"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "spec",
+          "result"
+        ],
+        "title": "TreeWrapWorksheetRowSchema",
+        "type": "object"
+      },
+      "TreeWrapWorksheetSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TreeWrapWorksheetRowSchema"
+            },
+            "maxItems": 20,
+            "title": "Rows",
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "TreeWrapWorksheetSchema",
+        "type": "object"
+      },
       "UnattributedLeadResponse": {
         "description": "A captured lead that has no known first-touch lead source yet.",
         "properties": {
@@ -60688,8 +61749,49 @@
     },
     "/api/v1/email/unsubscribe": {
       "get": {
-        "description": "Honor an email unsubscribe link. Always returns 200 with an HTML page.",
+        "description": "Honor an email unsubscribe link. Always returns 200 with an HTML page.\n\nPOST is accepted because marketing mail carries ``List-Unsubscribe-Post:\nList-Unsubscribe=One-Click`` (RFC 8058): Gmail and Yahoo POST this URL\ndirectly, with no human clicking through. A GET-only route answers that POST\nwith 405 and the opt-out is silently lost -- the provider shows the customer\na success toast either way, so the failure is invisible from both ends.",
         "operationId": "unsubscribe_api_v1_email_unsubscribe_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unsubscribe",
+        "tags": [
+          "Email Unsubscribe"
+        ]
+      },
+      "post": {
+        "description": "Honor an email unsubscribe link. Always returns 200 with an HTML page.\n\nPOST is accepted because marketing mail carries ``List-Unsubscribe-Post:\nList-Unsubscribe=One-Click`` (RFC 8058): Gmail and Yahoo POST this URL\ndirectly, with no human clicking through. A GET-only route answers that POST\nwith 405 and the opt-out is silently lost -- the provider shows the customer\na success toast either way, so the failure is invisible from both ends.",
+        "operationId": "unsubscribe_api_v1_email_unsubscribe_post",
         "parameters": [
           {
             "in": "query",
@@ -60731,8 +61833,49 @@
     },
     "/api/v1/email/unsubscribe-contact": {
       "get": {
-        "description": "Honor a contact-level email opt-out link (workflow/automation email).\n\nSuppresses commercial email to this person across every automation and\nworkflow, not just the one that prompted the click. Always returns 200.",
+        "description": "Honor a contact-level email opt-out link (workflow/automation email).\n\nSuppresses commercial email to this person across every automation and\nworkflow, not just the one that prompted the click. Always returns 200.\n\nAccepts POST for the same RFC 8058 one-click reason as :func:`unsubscribe`.",
         "operationId": "unsubscribe_contact_api_v1_email_unsubscribe_contact_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unsubscribe Contact",
+        "tags": [
+          "Email Unsubscribe"
+        ]
+      },
+      "post": {
+        "description": "Honor a contact-level email opt-out link (workflow/automation email).\n\nSuppresses commercial email to this person across every automation and\nworkflow, not just the one that prompted the click. Always returns 200.\n\nAccepts POST for the same RFC 8058 one-click reason as :func:`unsubscribe`.",
+        "operationId": "unsubscribe_contact_api_v1_email_unsubscribe_contact_post",
         "parameters": [
           {
             "in": "query",
@@ -71107,6 +72250,58 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/calls/presence": {
+      "post": {
+        "description": "Heartbeat this operator's own availability for inbound browser ringing.\n\nThe user id comes from the authenticated session, so a workspace member can\nonly ever set their own presence.",
+        "operationId": "set_operator_presence_api_v1_workspaces__workspace_id__calls_presence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperatorPresenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Set Operator Presence",
+        "tags": [
+          "Voice Calls"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/calls/webrtc/token": {
       "post": {
         "description": "Mint a memory-only Telnyx JWT for the authenticated operator's browser.",
@@ -74885,7 +76080,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/contacts/stats": {
       "get": {
-        "description": "Return aggregate contact metrics for the Contacts page stat cards.",
+        "description": "Return workspace-wide creation cohorts (not conversion-time metrics).",
         "operationId": "get_contact_stats_api_v1_workspaces__workspace_id__contacts_stats_get",
         "parameters": [
           {
@@ -76442,6 +77637,26 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "description": "Exact contact ID within this workspace",
+            "in": "query",
+            "name": "contact_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 9223372036854775807,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact contact ID within this workspace",
+              "title": "Contact Id"
             }
           }
         ],
@@ -86272,7 +87487,8 @@
                 {
                   "enum": [
                     "landscape",
-                    "permanent"
+                    "permanent",
+                    "seasonal"
                   ],
                   "type": "string"
                 },
@@ -95610,7 +96826,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/deliver": {
       "post": {
-        "description": "Send the client proposal link by email or SMS.\n\nMarks the quote sent (allocating its share token) and delivers the link to\nthe wizard snapshot's client email/phone, the linked contact's, or an\nexplicit ``to`` override.",
+        "description": "Send the client proposal link by email or SMS.\n\nMarks the quote sent (allocating its share token) and delivers the link to\nthe wizard snapshot's client email/phone, the linked contact's, or an\nexplicit ``to`` override. Success means provider acceptance, not confirmed\ninbox delivery. On failure, the quote can remain sent and its link shareable;\nthe response reports the delivery error rather than success.",
         "operationId": "deliver_quote_api_v1_workspaces__workspace_id__quotes__quote_id__deliver_post",
         "parameters": [
           {
@@ -96346,7 +97562,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/quotes/{quote_id}/send": {
       "post": {
-        "description": "Mark a quote as sent and email it to the quote-to contact.",
+        "description": "Mark a quote as sent and publish its client link without sending email or SMS.\n\nBookkeeping only. Use the deliver endpoint for checked email or SMS delivery.",
         "operationId": "send_quote_api_v1_workspaces__workspace_id__quotes__quote_id__send_post",
         "parameters": [
           {
@@ -99635,7 +100851,7 @@
         ]
       },
       "post": {
-        "description": "Start a rehearsal.\n\nFor ``rehearsee == \"ai\"`` the full conversation is simulated and scored\ninline before responding. For ``rehearsee == \"human\"`` the run is returned\nwith the prospect's opening line so a rep can reply via ``/runs/{id}/turn``.",
+        "description": "Durably accept a rehearsal. Poll GET /runs/{id}; retries reuse the request key.",
         "operationId": "create_run_api_v1_workspaces__workspace_id__roleplay_runs_post",
         "parameters": [
           {
@@ -99660,7 +100876,7 @@
           "required": true
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -99801,9 +101017,78 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/retry": {
+      "post": {
+        "description": "Explicitly retry the observed failed step, not saved dialogue or a later attempt.",
+        "operationId": "retry_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryRehearsalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RehearsalRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Retry Run",
+        "tags": [
+          "Practice Arena"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/score": {
       "post": {
-        "description": "Score a rehearsal and finalize the report.",
+        "description": "Queue scoring once; poll the existing run for the result.",
         "operationId": "score_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__score_post",
         "parameters": [
           {
@@ -99828,7 +101113,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -99862,7 +101147,7 @@
     },
     "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/turn": {
       "post": {
-        "description": "Submit a human rep's reply and get the prospect's response.",
+        "description": "Save a human reply once and queue the prospect's response.",
         "operationId": "advance_human_turn_api_v1_workspaces__workspace_id__roleplay_runs__run_id__turn_post",
         "parameters": [
           {
@@ -99897,7 +101182,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {

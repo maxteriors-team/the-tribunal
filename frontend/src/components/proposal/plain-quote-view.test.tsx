@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicProposal } from "@/types/proposal";
 
@@ -79,6 +79,29 @@ function renderQuote(overrides: Partial<PublicProposal> = {}) {
   );
   return { onApprove, onDecline };
 }
+
+describe("plain quote calendar dates", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each(["America/New_York", "Pacific/Kiritimati"])(
+    "keeps issue and expiry days in %s",
+    (timezone) => {
+      vi.stubEnv("TZ", timezone);
+      renderQuote({ issue_date: "2026-03-08", expiry_date: "2026-09-30" });
+
+      expect(screen.getByText("Issued Mar 8, 2026 · Valid until Sep 30, 2026")).toBeVisible();
+    },
+  );
+
+  it.each([null, undefined, "2026-02-30"])("handles missing/invalid document dates: %s", (date) => {
+    renderQuote({ issue_date: date, expiry_date: date });
+
+    if (date) expect(screen.getByText("Issued — · Valid until —")).toBeVisible();
+    // Anchor both branches: /^Issued |Valid until / would anchor only the
+    // first, letting "Valid until" match mid-string and pass for the wrong reason.
+    else expect(screen.queryByText(/^(Issued|Valid until) /)).not.toBeInTheDocument();
+  });
+});
 
 describe("plain quote financing", () => {
   it("keeps financing display-only beside two exact payment choices", () => {

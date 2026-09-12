@@ -276,7 +276,7 @@ export function ImportContactsDialog({ open, onOpenChange }: ImportContactsDialo
             <div className="flex items-start gap-2 p-3 bg-warning/10 border border-warning/20 rounded-lg text-sm text-warning">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
-                Every contact needs a <strong>phone number</strong>. The Tribunal follows up by AI
+                Every contact needs a <strong>phone number</strong>. BEAM follows up by AI
                 voice and SMS, so email-only lists can&apos;t be imported yet — add a phone column
                 before uploading.
               </span>

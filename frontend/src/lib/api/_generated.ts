@@ -270,10 +270,26 @@ export interface paths {
         /**
          * Unsubscribe
          * @description Honor an email unsubscribe link. Always returns 200 with an HTML page.
+         *
+         *     POST is accepted because marketing mail carries ``List-Unsubscribe-Post:
+         *     List-Unsubscribe=One-Click`` (RFC 8058): Gmail and Yahoo POST this URL
+         *     directly, with no human clicking through. A GET-only route answers that POST
+         *     with 405 and the opt-out is silently lost -- the provider shows the customer
+         *     a success toast either way, so the failure is invisible from both ends.
          */
         get: operations["unsubscribe_api_v1_email_unsubscribe_get"];
         put?: never;
-        post?: never;
+        /**
+         * Unsubscribe
+         * @description Honor an email unsubscribe link. Always returns 200 with an HTML page.
+         *
+         *     POST is accepted because marketing mail carries ``List-Unsubscribe-Post:
+         *     List-Unsubscribe=One-Click`` (RFC 8058): Gmail and Yahoo POST this URL
+         *     directly, with no human clicking through. A GET-only route answers that POST
+         *     with 405 and the opt-out is silently lost -- the provider shows the customer
+         *     a success toast either way, so the failure is invisible from both ends.
+         */
+        post: operations["unsubscribe_api_v1_email_unsubscribe_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -293,10 +309,21 @@ export interface paths {
          *
          *     Suppresses commercial email to this person across every automation and
          *     workflow, not just the one that prompted the click. Always returns 200.
+         *
+         *     Accepts POST for the same RFC 8058 one-click reason as :func:`unsubscribe`.
          */
         get: operations["unsubscribe_contact_api_v1_email_unsubscribe_contact_get"];
         put?: never;
-        post?: never;
+        /**
+         * Unsubscribe Contact
+         * @description Honor a contact-level email opt-out link (workflow/automation email).
+         *
+         *     Suppresses commercial email to this person across every automation and
+         *     workflow, not just the one that prompted the click. Always returns 200.
+         *
+         *     Accepts POST for the same RFC 8058 one-click reason as :func:`unsubscribe`.
+         */
+        post: operations["unsubscribe_contact_api_v1_email_unsubscribe_contact_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3233,6 +3260,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/calls/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Operator Presence
+         * @description Heartbeat this operator's own availability for inbound browser ringing.
+         *
+         *     The user id comes from the authenticated session, so a workspace member can
+         *     only ever set their own presence.
+         */
+        post: operations["set_operator_presence_api_v1_workspaces__workspace_id__calls_presence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/calls/webrtc/token": {
         parameters: {
             query?: never;
@@ -4086,7 +4136,7 @@ export interface paths {
         };
         /**
          * Get Contact Stats
-         * @description Return aggregate contact metrics for the Contacts page stat cards.
+         * @description Return workspace-wide creation cohorts (not conversion-time metrics).
          */
         get: operations["get_contact_stats_api_v1_workspaces__workspace_id__contacts_stats_get"];
         put?: never;
@@ -9163,7 +9213,9 @@ export interface paths {
          *
          *     Marks the quote sent (allocating its share token) and delivers the link to
          *     the wizard snapshot's client email/phone, the linked contact's, or an
-         *     explicit ``to`` override.
+         *     explicit ``to`` override. Success means provider acceptance, not confirmed
+         *     inbox delivery. On failure, the quote can remain sent and its link shareable;
+         *     the response reports the delivery error rather than success.
          */
         post: operations["deliver_quote_api_v1_workspaces__workspace_id__quotes__quote_id__deliver_post"];
         delete?: never;
@@ -9351,7 +9403,9 @@ export interface paths {
         put?: never;
         /**
          * Send Quote
-         * @description Mark a quote as sent and email it to the quote-to contact.
+         * @description Mark a quote as sent and publish its client link without sending email or SMS.
+         *
+         *     Bookkeeping only. Use the deliver endpoint for checked email or SMS delivery.
          */
         post: operations["send_quote_api_v1_workspaces__workspace_id__quotes__quote_id__send_post"];
         delete?: never;
@@ -10067,11 +10121,7 @@ export interface paths {
         put?: never;
         /**
          * Create Run
-         * @description Start a rehearsal.
-         *
-         *     For ``rehearsee == "ai"`` the full conversation is simulated and scored
-         *     inline before responding. For ``rehearsee == "human"`` the run is returned
-         *     with the prospect's opening line so a rep can reply via ``/runs/{id}/turn``.
+         * @description Durably accept a rehearsal. Poll GET /runs/{id}; retries reuse the request key.
          */
         post: operations["create_run_api_v1_workspaces__workspace_id__roleplay_runs_post"];
         delete?: never;
@@ -10104,6 +10154,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Run
+         * @description Explicitly retry the observed failed step, not saved dialogue or a later attempt.
+         */
+        post: operations["retry_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/roleplay/runs/{run_id}/score": {
         parameters: {
             query?: never;
@@ -10115,7 +10185,7 @@ export interface paths {
         put?: never;
         /**
          * Score Run
-         * @description Score a rehearsal and finalize the report.
+         * @description Queue scoring once; poll the existing run for the result.
          */
         post: operations["score_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__score_post"];
         delete?: never;
@@ -10135,7 +10205,7 @@ export interface paths {
         put?: never;
         /**
          * Advance Human Turn
-         * @description Submit a human rep's reply and get the prospect's response.
+         * @description Save a human reply once and queue the prospect's response.
          */
         post: operations["advance_human_turn_api_v1_workspaces__workspace_id__roleplay_runs__run_id__turn_post"];
         delete?: never;
@@ -14913,7 +14983,7 @@ export interface components {
          *     - ``"user"``: the operator's own phone rings first, then the contact is
          *       dialed and the two legs are bridged. ``agent_id`` is ignored.
          *       ``user_phone_number`` picks which allowlisted number to ring.
-         *     - ``"browser"``: the operator's authenticated Tribunal browser rings first;
+         *     - ``"browser"``: the operator's authenticated BEAM browser rings first;
          *       the server then dials and bridges the contact. Client-supplied SIP targets
          *       are never accepted.
          */
@@ -16916,7 +16986,7 @@ export interface components {
         };
         /**
          * ContactListResponse
-         * @description Schema for paginated contact list.
+         * @description Schema for paginated contact list with status facets over the whole scope.
          */
         ContactListResponse: {
             /** Items */
@@ -16927,6 +16997,7 @@ export interface components {
             page_size: number;
             /** Pages */
             pages: number;
+            status_counts: components["schemas"]["ContactStatusCounts"];
             /** Total */
             total: number;
         };
@@ -17070,23 +17141,76 @@ export interface components {
         };
         /**
          * ContactStatsResponse
-         * @description Aggregate contact metrics for the Contacts page stat cards.
+         * @description Workspace-wide creation cohorts, independent of list search/filters.
          *
-         *     Windows are workspace-scoped and computed in UTC. ``*_change`` values are
-         *     returned preformatted (e.g. ``"+24%"``, ``"-10%"``, ``"+0%"``) so the
-         *     frontend ``isTrendUp`` helper can render the trend badge without reparsing.
+         *     Conversion events are unavailable: ``new_clients_*`` are legacy field names
+         *     for contacts CREATED in the window and CURRENTLY converted, not clients
+         *     converted during the window. Reversions change these snapshots; reconversion
+         *     history cannot be inferred. Change is null whenever the prior cohort is zero.
          */
         ContactStatsResponse: {
-            /** New Clients 30D */
+            /**
+             * Client Metric Basis
+             * @constant
+             */
+            client_metric_basis: "creation_cohort_current_status";
+            /**
+             * New Clients 30D
+             * @description Currently converted contacts created in the trailing 30-day window.
+             */
             new_clients_30d: number;
-            /** New Clients Change */
-            new_clients_change: string;
+            /**
+             * New Clients Change
+             * @description Creation-cohort change, not conversion growth; null with a zero baseline.
+             */
+            new_clients_change: string | null;
             /** New Leads 30D */
             new_leads_30d: number;
             /** New Leads Change */
-            new_leads_change: string;
-            /** Total New Clients Ytd */
+            new_leads_change: string | null;
+            /**
+             * Period End
+             * Format: date-time
+             * @description Exclusive end (as-of instant) of all current windows.
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date-time
+             * @description Inclusive start of the trailing 30 elapsed days.
+             */
+            period_start: string;
+            /** Timezone */
+            timezone: string;
+            /**
+             * Total New Clients Ytd
+             * @description Currently converted contacts created since workspace-local January 1.
+             */
             total_new_clients_ytd: number;
+            /**
+             * Year Start
+             * Format: date-time
+             * @description Workspace-local January 1, expressed in UTC.
+             */
+            year_start: string;
+        };
+        /**
+         * ContactStatusCounts
+         * @description Unpaginated search/advanced-filter scope, excluding the selected status tab.
+         */
+        ContactStatusCounts: {
+            /** All */
+            all: number;
+            /** Contacted */
+            contacted: number;
+            /** Converted */
+            converted: number;
+            /** Lost */
+            lost: number;
+            /** New */
+            new: number;
+            /** Qualified */
+            qualified: number;
         };
         /**
          * ContactSummary
@@ -17510,7 +17634,12 @@ export interface components {
              */
             agent_id: string;
             /** Channel */
-            channel?: string | null;
+            channel?: ("sms" | "voice") | null;
+            /**
+             * Idempotency Key
+             * Format: uuid
+             */
+            idempotency_key: string;
             /**
              * Max Turns
              * @default 6
@@ -17524,8 +17653,9 @@ export interface components {
             /**
              * Rehearsee
              * @default ai
+             * @enum {string}
              */
-            rehearsee: string;
+            rehearsee: "ai" | "human";
         };
         /**
          * CrewCreate
@@ -18677,6 +18807,12 @@ export interface components {
         EstimateCustomLine: {
             /** Description */
             description?: string | null;
+            /** Fulfillment Quantity */
+            fulfillment_quantity?: number | null;
+            /** Inventory Behavior */
+            inventory_behavior?: ("consumable" | "reusable") | null;
+            /** Inventory Item Id */
+            inventory_item_id?: string | null;
             /** Label */
             label: string;
             /** Package Key */
@@ -18694,6 +18830,8 @@ export interface components {
             side: "permanent" | "seasonal";
             /** Unit Price */
             unit_price: number;
+            /** Worksheet Row Id */
+            worksheet_row_id?: string | null;
         };
         /**
          * EstimateCustomLineCost
@@ -18704,6 +18842,12 @@ export interface components {
             amount: number;
             /** Description */
             description?: string | null;
+            /** Fulfillment Quantity */
+            fulfillment_quantity?: number | null;
+            /** Inventory Behavior */
+            inventory_behavior?: ("consumable" | "reusable") | null;
+            /** Inventory Item Id */
+            inventory_item_id?: string | null;
             /** Label */
             label: string;
             /** Package Key */
@@ -18721,6 +18865,8 @@ export interface components {
             side: "permanent" | "seasonal";
             /** Unit Price */
             unit_price: number;
+            /** Worksheet Row Id */
+            worksheet_row_id?: string | null;
         };
         /**
          * EstimateProposalPreview
@@ -18763,6 +18909,8 @@ export interface components {
             client_name?: string | null;
             /** Client Phone */
             client_phone?: string | null;
+            /** Contact Id */
+            contact_id?: number | null;
             /** Custom Lines */
             custom_lines?: components["schemas"]["EstimateCustomLine"][];
             /** Deposit Percentage */
@@ -18801,6 +18949,17 @@ export interface components {
              * @enum {string}
              */
             proposal_side: "permanent" | "seasonal" | "comparison";
+            /**
+             * Seasonal Installation Source
+             * @default photo
+             * @enum {string}
+             */
+            seasonal_installation_source: "photo" | "tree_wrap_worksheet";
+            /**
+             * Seasonal Phased Handoff
+             * @default false
+             */
+            seasonal_phased_handoff: boolean;
             /** Selected Package */
             selected_package?: string | null;
             /**
@@ -19057,6 +19216,8 @@ export interface components {
              * @enum {string}
              */
             inventory_behavior: "consumable" | "reusable";
+            /** Inventory Item Id */
+            inventory_item_id?: string | null;
             /** Qty */
             qty: number;
             /** Sku */
@@ -19520,6 +19681,8 @@ export interface components {
          * @description A human rep's reply during a live rehearsal.
          */
         HumanTurnRequest: {
+            /** Expected Turn Count */
+            expected_turn_count: number;
             /** Message */
             message: string;
         };
@@ -19737,6 +19900,8 @@ export interface components {
             enabled: boolean;
             /** Fallback Number */
             fallback_number?: string | null;
+            /** Ring Operators */
+            ring_operators?: boolean | null;
             /** Transfer Destination Number */
             transfer_destination_number?: string | null;
         };
@@ -19760,6 +19925,11 @@ export interface components {
             phone_number_id: string;
             /** Ready */
             ready: boolean;
+            /**
+             * Ring Operators
+             * @default false
+             */
+            ring_operators: boolean;
             /** Transfer Destination Configured */
             transfer_destination_configured: boolean;
         };
@@ -19798,6 +19968,40 @@ export interface components {
             product_id: string;
             /** Transformer Zone Id */
             transformer_zone_id?: string | null;
+        };
+        /**
+         * InstallationPlanWorksheetRow
+         * @description Price-free exact measurement row for a worksheet installation sheet.
+         */
+        InstallationPlanWorksheetRow: {
+            /** Color */
+            color?: string | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Light Type */
+            light_type?: ("mini" | "c7" | "c9" | "garland") | null;
+            /** Measurements */
+            measurements?: {
+                [key: string]: number;
+            };
+            /** Planned Feet */
+            planned_feet: number;
+            /** Quantity */
+            quantity: number;
+            /**
+             * Shape
+             * @enum {string}
+             */
+            shape: "evergreen" | "deciduous" | "trunk" | "branch" | "bush" | "roofline" | "decor";
+            /** Unit Count */
+            unit_count?: number | null;
+            /**
+             * Unit Kind
+             * @enum {string}
+             */
+            unit_kind: "strand" | "bulb" | "section" | "piece";
         };
         /**
          * IntegrationCreate
@@ -21194,15 +21398,21 @@ export interface components {
          * @description Assignment-scoped, price-free plan with the customer's proposal decision.
          */
         JobInstallationPlanResponse: {
-            design: components["schemas"]["DesignSchema"];
+            design?: components["schemas"]["DesignSchema"] | null;
             /** Drawing Number */
             drawing_number?: string | null;
             /** Drawing Title */
             drawing_title?: string | null;
             /** Dusk */
-            dusk: number;
+            dusk?: number | null;
             /** Fixture Schedule */
             fixture_schedule?: components["schemas"]["InstallationPlanFixture"][];
+            /**
+             * Installation Sheet Type
+             * @default photo
+             * @enum {string}
+             */
+            installation_sheet_type: "photo" | "tree_wrap_worksheet" | "combined";
             /**
              * Job Id
              * Format: uuid
@@ -21212,7 +21422,7 @@ export interface components {
             payment_received_at?: string | null;
             /** Payment Status */
             payment_status?: ("not_required" | "pending" | "paid") | null;
-            photo: components["schemas"]["PhotoSchema"];
+            photo?: components["schemas"]["PhotoSchema"] | null;
             /**
              * Precon Field Brief
              * @default
@@ -21241,11 +21451,13 @@ export interface components {
             /** Proposal Status */
             proposal_status?: ("draft" | "sent" | "approved" | "declined" | "expired") | null;
             /** Selected Shot Id */
-            selected_shot_id: string;
-            settings: components["schemas"]["DocumentSettingsSchema"];
+            selected_shot_id?: string | null;
+            settings?: components["schemas"]["DocumentSettingsSchema"] | null;
             sheet?: components["schemas"]["SheetMetadataSchema"] | null;
             /** Sheet Label */
             sheet_label?: string | null;
+            /** Worksheet Rows */
+            worksheet_rows?: components["schemas"]["InstallationPlanWorksheetRow"][];
         };
         /**
          * JobInventoryPlanResponse
@@ -21341,14 +21553,15 @@ export interface components {
          * JobPnLSummary
          * @description Aggregate job profitability over a period.
          *
-         *     Revenue is the sum of the distinct invoices linked to the jobs in range
-         *     (so two jobs sharing one invoice are not double-counted); cost is tracked
-         *     labor (hours x rate) plus logged expenses plus materials consumed.
+         *     Revenue includes linked sent/partial/paid/overdue invoice totals, counted
+         *     once per invoice. Draft/void invoices contribute zero. Billable count is
+         *     jobs with a same-workspace invoice of any status, not distinct invoices.
+         *     All jobs contribute tracked labor, logged expenses, and consumed materials.
          */
         JobPnLSummary: {
             /**
              * Billable Job Count
-             * @description Jobs with a linked invoice
+             * @description Jobs with a linked same-workspace invoice of any status, including draft/void; each job counts even when multiple jobs share an invoice
              */
             billable_job_count: number;
             /** Currency */
@@ -21378,7 +21591,10 @@ export interface components {
             material_cost: number;
             /** Profit */
             profit: number;
-            /** Revenue */
+            /**
+             * Revenue
+             * @description Total of linked sent/partial/paid/overdue invoices, counted once per invoice; draft and void invoices contribute zero, regardless of payments
+             */
             revenue: number;
             /** Total Cost */
             total_cost: number;
@@ -21881,11 +22097,12 @@ export interface components {
              * @default landscape
              * @enum {string}
              */
-            projectType: "landscape" | "permanent";
+            projectType: "landscape" | "permanent" | "seasonal";
             proposal?: components["schemas"]["ProposalDraftSchema"];
             settings?: components["schemas"]["DocumentSettingsSchema"];
             /** Shots */
             shots?: components["schemas"]["LandscapeShotSchema"][];
+            treeWrapWorksheet?: components["schemas"]["TreeWrapWorksheetSchema"] | null;
             /**
              * Updatedat
              * Format: date-time
@@ -22689,7 +22906,7 @@ export interface components {
              * @default landscape
              * @enum {string}
              */
-            project_type: "landscape" | "permanent";
+            project_type: "landscape" | "permanent" | "seasonal";
             /** Service Location Id */
             service_location_id?: string | null;
         };
@@ -22728,7 +22945,7 @@ export interface components {
              * Project Type
              * @enum {string}
              */
-            project_type: "landscape" | "permanent";
+            project_type: "landscape" | "permanent" | "seasonal";
             /** Service Location Id */
             service_location_id: string | null;
             /**
@@ -22786,7 +23003,7 @@ export interface components {
              * Project Type
              * @enum {string}
              */
-            project_type: "landscape" | "permanent";
+            project_type: "landscape" | "permanent" | "seasonal";
             /** Service Location Id */
             service_location_id: string | null;
             /**
@@ -24471,6 +24688,18 @@ export interface components {
             realtime_model: string;
             /** Saved At */
             saved_at?: string | null;
+        };
+        /**
+         * OperatorPresenceRequest
+         * @description Heartbeat declaring whether *this* operator's browser can take calls.
+         *
+         *     The operator is always derived from the authenticated user, never from the
+         *     body, so a member cannot mark a colleague available (and start ringing their
+         *     headset) or unavailable (and silently remove them from the roster).
+         */
+        OperatorPresenceRequest: {
+            /** Available */
+            available: boolean;
         };
         /**
          * OpportunityActivityResponse
@@ -26306,6 +26535,11 @@ export interface components {
              * @default false
              */
             inbound_ai_enabled: boolean;
+            /**
+             * Inbound Ring Operators
+             * @default false
+             */
+            inbound_ring_operators: boolean;
             /** Is Active */
             is_active: boolean;
             lead_source: components["schemas"]["PhoneNumberLeadSourceResponse"] | null;
@@ -28960,6 +29194,7 @@ export interface components {
             scheduled_end?: string | null;
             /** Scheduled Start */
             scheduled_start?: string | null;
+            takedown_schedule?: components["schemas"]["QuoteJobSchedule"] | null;
             /** Technician Ids */
             technician_ids?: string[];
         };
@@ -28974,11 +29209,15 @@ export interface components {
              * @default false
              */
             idempotent_replay: boolean;
+            installation_crew_notification?: components["schemas"]["CrewNotificationResult"];
             /** Invoice Id */
             invoice_id?: string | null;
             /** Job Id */
             job_id?: string | null;
             quote: components["schemas"]["QuoteDetailResponse"];
+            takedown_crew_notification?: components["schemas"]["CrewNotificationResult"];
+            /** Takedown Job Id */
+            takedown_job_id?: string | null;
         };
         /**
          * QuoteCreate
@@ -29200,6 +29439,10 @@ export interface components {
             revision_of_quote_id?: string | null;
             /** Revision Root Quote Id */
             revision_root_quote_id?: string | null;
+            /** Seasonal Storage Included */
+            seasonal_storage_included?: boolean | null;
+            /** Seasonal Takedown Included */
+            seasonal_takedown_included?: boolean | null;
             /** Selected Permanent Kits */
             selected_permanent_kits?: components["schemas"]["PermanentKitSelection"][];
             /** Sent At */
@@ -29342,14 +29585,20 @@ export interface components {
          * @description One internal fulfillment requirement compared with current workspace stock.
          */
         QuoteInventoryAvailabilityItem: {
+            /** Available To Promise */
+            available_to_promise?: number | null;
             /** Description */
             description?: string | null;
             /** Inventory Item Id */
             inventory_item_id?: string | null;
             /** Inventory Item Name */
             inventory_item_name?: string | null;
+            /** Quantity Deployed */
+            quantity_deployed?: number | null;
             /** Quantity On Hand */
             quantity_on_hand?: number | null;
+            /** Quantity Reserved */
+            quantity_reserved?: number | null;
             /** Required Quantity */
             required_quantity: number;
             /** Shortfall */
@@ -29375,6 +29624,26 @@ export interface components {
             is_available: boolean;
             /** Items */
             items?: components["schemas"]["InventoryAvailabilityLine"][];
+        };
+        /**
+         * QuoteJobSchedule
+         * @description A validated schedule and team for one quote-created job phase.
+         */
+        QuoteJobSchedule: {
+            /** Crew Id */
+            crew_id?: string | null;
+            /**
+             * Scheduled End
+             * Format: date-time
+             */
+            scheduled_end: string;
+            /**
+             * Scheduled Start
+             * Format: date-time
+             */
+            scheduled_start: string;
+            /** Technician Ids */
+            technician_ids?: string[];
         };
         /**
          * QuoteLineItemCreate
@@ -29581,6 +29850,10 @@ export interface components {
             revision_of_quote_id?: string | null;
             /** Revision Root Quote Id */
             revision_root_quote_id?: string | null;
+            /** Seasonal Storage Included */
+            seasonal_storage_included?: boolean | null;
+            /** Seasonal Takedown Included */
+            seasonal_takedown_included?: boolean | null;
             /** Selected Permanent Kits */
             selected_permanent_kits?: components["schemas"]["PermanentKitSelection"][];
             /** Sent At */
@@ -30458,6 +30731,11 @@ export interface components {
             agent_id: string | null;
             /** Agent Name */
             agent_name: string | null;
+            /**
+             * Attempt Count
+             * @default 0
+             */
+            attempt_count: number;
             /** Booking Attempted */
             booking_attempted: boolean | null;
             /** Channel */
@@ -30484,12 +30762,19 @@ export interface components {
             objection_coverage: number | null;
             /** Overall Score */
             overall_score: number | null;
+            /** Pending Action */
+            pending_action?: string | null;
             /** Persona Id */
             persona_id: string | null;
             /** Persona Name */
             persona_name: string | null;
             /** Rehearsee */
             rehearsee: string;
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
             /** Scores */
             scores: {
                 [key: string]: unknown;
@@ -30526,6 +30811,11 @@ export interface components {
             agent_id: string | null;
             /** Agent Name */
             agent_name: string | null;
+            /**
+             * Attempt Count
+             * @default 0
+             */
+            attempt_count: number;
             /** Booking Attempted */
             booking_attempted: boolean | null;
             /** Channel */
@@ -30546,12 +30836,19 @@ export interface components {
             objection_coverage: number | null;
             /** Overall Score */
             overall_score: number | null;
+            /** Pending Action */
+            pending_action?: string | null;
             /** Persona Id */
             persona_id: string | null;
             /** Persona Name */
             persona_name: string | null;
             /** Rehearsee */
             rehearsee: string;
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
             /** Status */
             status: string;
             /** Tone Score */
@@ -30771,6 +31068,14 @@ export interface components {
              * @default 0
              */
             total_reviews: number;
+        };
+        /**
+         * RetryRehearsalRequest
+         * @description Retry only the failure the caller observed, not a later failed attempt.
+         */
+        RetryRehearsalRequest: {
+            /** Expected Attempt Count */
+            expected_attempt_count: number;
         };
         /**
          * RevealEmailResponse
@@ -33491,6 +33796,96 @@ export interface components {
              */
             to_location_id: string;
         };
+        /** TreeWrapResultSchema */
+        TreeWrapResultSchema: {
+            /** Billedquantity */
+            billedQuantity?: number | null;
+            /** Plannedfeet */
+            plannedFeet: number;
+            /** Price */
+            price?: number | null;
+            /** Rowcount */
+            rowCount: number;
+            /** Unitcount */
+            unitCount?: number | null;
+            /**
+             * Unitkind
+             * @enum {string}
+             */
+            unitKind: "strand" | "bulb" | "section" | "piece";
+        };
+        /** TreeWrapSpecSchema */
+        TreeWrapSpecSchema: {
+            /** Branchcount */
+            branchCount?: number | null;
+            /** Branchwidthin */
+            branchWidthIn?: number | null;
+            /** Bulbspacingin */
+            bulbSpacingIn?: number | null;
+            /** Depthft */
+            depthFt?: number | null;
+            /** Feetperunit */
+            feetPerUnit?: number | null;
+            /** Heightft */
+            heightFt?: number | null;
+            /** Lighttype */
+            lightType?: ("mini" | "c7" | "c9" | "garland") | null;
+            /** Piececount */
+            pieceCount?: number | null;
+            /**
+             * Pricingmode
+             * @enum {string}
+             */
+            pricingMode: "unit" | "foot";
+            /** Radiusft */
+            radiusFt?: number | null;
+            /** Rowspacingin */
+            rowSpacingIn?: number | null;
+            /** Runft */
+            runFt?: number | null;
+            /**
+             * Shape
+             * @enum {string}
+             */
+            shape: "evergreen" | "deciduous" | "trunk" | "branch" | "bush" | "roofline" | "decor";
+            /** Trunkwidthin */
+            trunkWidthIn?: number | null;
+            /** Unitprice */
+            unitPrice?: number | null;
+            /** Widthft */
+            widthFt?: number | null;
+        };
+        /** TreeWrapWorksheetRowSchema */
+        TreeWrapWorksheetRowSchema: {
+            /** Color */
+            color?: string | null;
+            /** Id */
+            id: string;
+            /** Inventorybehavior */
+            inventoryBehavior?: ("consumable" | "reusable") | null;
+            /** Inventoryitemid */
+            inventoryItemId?: string | null;
+            /** Label */
+            label: string;
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            result: components["schemas"]["TreeWrapResultSchema"];
+            spec: components["schemas"]["TreeWrapSpecSchema"];
+        };
+        /** TreeWrapWorksheetSchema */
+        TreeWrapWorksheetSchema: {
+            /** Rows */
+            rows?: components["schemas"]["TreeWrapWorksheetRowSchema"][];
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version: 1;
+        };
         /**
          * UnattributedLeadResponse
          * @description A captured lead that has no known first-touch lead source yet.
@@ -35289,7 +35684,69 @@ export interface operations {
             };
         };
     };
+    unsubscribe_api_v1_email_unsubscribe_post: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     unsubscribe_contact_api_v1_email_unsubscribe_contact_get: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_contact_api_v1_email_unsubscribe_contact_post: {
         parameters: {
             query: {
                 token: string;
@@ -41295,6 +41752,39 @@ export interface operations {
             };
         };
     };
+    set_operator_presence_api_v1_workspaces__workspace_id__calls_presence_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperatorPresenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     issue_webrtc_token_api_v1_workspaces__workspace_id__calls_webrtc_token_post: {
         parameters: {
             query?: never;
@@ -43838,6 +44328,8 @@ export interface operations {
                 channel_filter?: string | null;
                 unread_only?: boolean;
                 search?: string | null;
+                /** @description Exact contact ID within this workspace */
+                contact_id?: number | null;
             };
             header?: never;
             path: {
@@ -49021,7 +49513,7 @@ export interface operations {
             query?: {
                 search?: string | null;
                 status?: ("active" | "archived") | null;
-                project_type?: ("landscape" | "permanent") | null;
+                project_type?: ("landscape" | "permanent" | "seasonal") | null;
                 contact_id?: number | null;
                 opportunity_id?: string | null;
                 assigned_user_id?: number | null;
@@ -55670,7 +56162,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            201: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -55751,6 +56243,42 @@ export interface operations {
             };
         };
     };
+    retry_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetryRehearsalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehearsalRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     score_run_api_v1_workspaces__workspace_id__roleplay_runs__run_id__score_post: {
         parameters: {
             query?: never;
@@ -55764,7 +56292,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -55800,7 +56328,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

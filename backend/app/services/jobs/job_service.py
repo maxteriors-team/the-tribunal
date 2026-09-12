@@ -56,6 +56,7 @@ from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMembership
 from app.schemas.job import (
     InstallationPlanFixture,
+    InstallationPlanWorksheetRow,
     JobCustomerSummary,
     JobInstallationPlanResponse,
     JobLineItemSummary,
@@ -66,7 +67,7 @@ from app.schemas.job import (
     JobVisitResponse,
     TechnicianSummary,
 )
-from app.schemas.lighting_project import LandscapeDraftDocument
+from app.schemas.lighting_project import LandscapeDraftDocument, TreeWrapWorksheetSchema
 from app.schemas.proposal_wizard import ProposalDocument
 from app.schemas.quote import QuoteStatus
 from app.services.automations.events import (
@@ -410,6 +411,137 @@ class JobService:
             source_quote.deposit_paid_at,
         )
 
+    @staticmethod
+    def _worksheet_rows(
+        worksheet: TreeWrapWorksheetSchema,
+    ) -> list[InstallationPlanWorksheetRow]:
+        return [
+            InstallationPlanWorksheetRow(
+                id=row.id,
+                label=row.label,
+                quantity=row.quantity,
+                color=row.color,
+                shape=row.spec.shape,
+                light_type=row.spec.light_type,
+                measurements={
+                    key: round(float(value), 4)
+                    for key, value in row.spec.model_dump(
+                        exclude={"shape", "light_type", "pricing_mode", "unit_price"},
+                        exclude_none=True,
+                    ).items()
+                    if isinstance(value, (int, float)) and not isinstance(value, bool)
+                },
+                planned_feet=row.result.planned_feet,
+                unit_count=row.result.unit_count,
+                unit_kind=row.result.unit_kind,
+            )
+            for row in worksheet.rows
+        ]
+
+    def _worksheet_installation_plan(
+        self,
+        job: Job,
+        *,
+        project_id: uuid.UUID,
+        project_name: str,
+        project_version: int,
+        project_updated_at: datetime,
+        worksheet: TreeWrapWorksheetSchema,
+    ) -> JobInstallationPlanResponse:
+        (
+            preview_image,
+            preview_caption,
+            proposal_status,
+            proposal_accepted_at,
+            payment_status,
+            payment_received_at,
+        ) = self._proposal_context(job)
+        rows = self._worksheet_rows(worksheet)
+        return JobInstallationPlanResponse(
+            job_id=job.id,
+            project_id=project_id,
+            project_name=project_name,
+            project_version=project_version,
+            project_updated_at=project_updated_at,
+            installation_sheet_type="tree_wrap_worksheet",
+            proposal_preview_image=preview_image,
+            proposal_preview_caption=preview_caption,
+            proposal_status=proposal_status,
+            proposal_accepted_at=proposal_accepted_at,
+            payment_status=payment_status,
+            payment_received_at=payment_received_at,
+            worksheet_rows=rows,
+        )
+
+    def _snapshot_installation_source(
+        self,
+        job: Job,
+        snapshot: object,
+        workspace_id: uuid.UUID,
+    ) -> (
+        JobInstallationPlanResponse
+        | tuple[
+            uuid.UUID,
+            str,
+            int,
+            datetime,
+            str,
+            LandscapeDraftDocument,
+            TreeWrapWorksheetSchema | None,
+        ]
+    ):
+        try:
+            if not isinstance(snapshot, dict) or snapshot.get("snapshot_version") != 1:
+                raise ValueError("unsupported seasonal snapshot")
+            project_id = uuid.UUID(str(snapshot["project_id"]))
+            project_name = str(snapshot["project_name"]).strip()
+            project_version = int(snapshot["project_version"])
+            project_updated_at = datetime.fromisoformat(str(snapshot["project_updated_at"]))
+            if (
+                not project_name
+                or project_version < 1
+                or (job.lighting_project_id is not None and project_id != job.lighting_project_id)
+            ):
+                raise ValueError("inconsistent seasonal snapshot")
+
+            installation_sheet_type = snapshot.get("installation_sheet_type")
+            worksheet: TreeWrapWorksheetSchema | None = None
+            if installation_sheet_type in {"tree_wrap_worksheet", "combined"}:
+                worksheet = TreeWrapWorksheetSchema.model_validate(snapshot["worksheet"])
+                if not worksheet.rows:
+                    raise ValueError("empty seasonal worksheet")
+                if installation_sheet_type == "tree_wrap_worksheet":
+                    return self._worksheet_installation_plan(
+                        job,
+                        project_id=project_id,
+                        project_name=project_name,
+                        project_version=project_version,
+                        project_updated_at=project_updated_at,
+                        worksheet=worksheet,
+                    )
+            elif installation_sheet_type not in {None, "photo"}:
+                raise ValueError("unsupported seasonal installation sheet")
+
+            selected_shot_id = str(snapshot["installation_shot_id"])
+            document = LandscapeDraftDocument.model_validate(snapshot["document"])
+            if document.project_type != "seasonal":
+                raise ValueError("inconsistent seasonal snapshot")
+            document = resolve_document_images(document, workspace_id=workspace_id)
+            return (
+                project_id,
+                project_name,
+                project_version,
+                project_updated_at,
+                selected_shot_id,
+                document,
+                worksheet,
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Installation plan not found",
+            ) from error
+
     async def get_installation_plan(
         self,
         job_id: uuid.UUID,
@@ -434,31 +566,57 @@ class JobService:
             # same 404 path so job/project existence is not disclosed.
             statement = statement.where(assignment_predicate)
         job = await self.db.scalar(statement)
-        if job is None or job.lighting_project is None:
+        if job is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
 
-        project = job.lighting_project
-        if project.status != "active" or project.contact_id != job.contact_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Installation plan not found"
-            )
-        if project.installation_shot_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Installation plan not found"
-            )
-        try:
-            document = resolve_document_images(
-                LandscapeDraftDocument.model_validate(project.document),
-                workspace_id=workspace_id,
-            )
-        except ValueError as error:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Installation plan not found"
-            ) from error
-        shot = next(
-            (entry for entry in document.shots if entry.id == project.installation_shot_id),
-            None,
+        snapshot = (
+            job.source_quote.seasonal_installation_snapshot
+            if job.source_quote is not None and job.source_quote.workspace_id == workspace_id
+            else None
         )
+        worksheet: TreeWrapWorksheetSchema | None = None
+        if snapshot is not None:
+            source = self._snapshot_installation_source(job, snapshot, workspace_id)
+            if isinstance(source, JobInstallationPlanResponse):
+                return source
+            (
+                project_id,
+                project_name,
+                project_version,
+                project_updated_at,
+                selected_shot_id,
+                document,
+                worksheet,
+            ) = source
+        else:
+            project = job.lighting_project
+            if (
+                project is None
+                or project.status != "active"
+                or project.contact_id != job.contact_id
+                or project.installation_shot_id is None
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Installation plan not found",
+                )
+            project_id = project.id
+            project_name = project.name
+            project_version = project.version
+            project_updated_at = project.updated_at
+            selected_shot_id = project.installation_shot_id
+            try:
+                document = resolve_document_images(
+                    LandscapeDraftDocument.model_validate(project.document),
+                    workspace_id=workspace_id,
+                )
+            except ValueError as error:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Installation plan not found",
+                ) from error
+
+        shot = next((entry for entry in document.shots if entry.id == selected_shot_id), None)
         if shot is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Installation plan not found"
@@ -490,10 +648,11 @@ class JobService:
 
         return JobInstallationPlanResponse(
             job_id=job.id,
-            project_id=project.id,
-            project_name=project.name,
-            project_version=project.version,
-            project_updated_at=project.updated_at,
+            project_id=project_id,
+            project_name=project_name,
+            project_version=project_version,
+            project_updated_at=project_updated_at,
+            installation_sheet_type="combined" if worksheet is not None else "photo",
             selected_shot_id=shot.id,
             proposal_preview_image=preview_image,
             proposal_preview_caption=preview_caption,
@@ -510,6 +669,7 @@ class JobService:
             dusk=shot.dusk,
             settings=document.settings,
             fixture_schedule=fixture_schedule,
+            worksheet_rows=self._worksheet_rows(worksheet) if worksheet is not None else [],
             # Procurement and checklist answers remain internal; only the field
             # brief text required by installers crosses this boundary.
             precon_field_brief=document.precon.notes,

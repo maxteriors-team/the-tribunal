@@ -8,10 +8,10 @@ import { isProviderConfigurationError } from "@/lib/utils/errors";
 
 export default function PeopleSearchError({
   error,
-  unstable_retry,
+  reset,
 }: {
   error: Error & { digest?: string };
-  unstable_retry: () => void;
+  reset: () => void;
 }) {
   useEffect(() => {
     if (!isProviderConfigurationError(error)) {
@@ -25,7 +25,7 @@ export default function PeopleSearchError({
       provider="people-search"
       transientTitle="People search is temporarily unavailable"
       transientMessage="The people-search provider didn't respond. Retry your search."
-      onRetry={unstable_retry}
+      reset={reset}
     />
   );
 }

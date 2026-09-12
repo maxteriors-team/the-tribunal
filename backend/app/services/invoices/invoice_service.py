@@ -495,7 +495,7 @@ class InvoiceService:
             query = query.where(Invoice.status == status)
         if contact_id is not None:
             query = query.where(Invoice.contact_id == contact_id)
-        query = query.order_by(Invoice.created_at.desc())
+        query = query.order_by(Invoice.created_at.desc(), Invoice.id.desc())
 
         result = await paginate(self.db, query, page=page, page_size=page_size)
         jobs = await self._latest_receipt_jobs(

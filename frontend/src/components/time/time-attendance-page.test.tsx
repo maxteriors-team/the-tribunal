@@ -201,7 +201,7 @@ describe("TimeAttendancePage", () => {
     );
     vi.mocked(attendanceApi.exportCsv).mockResolvedValue({
       blob: new Blob(["employee_id,total_hours\r\n10,8.00\r\n"], { type: "text/csv" }),
-      filename: "tribunal-hours.csv",
+      filename: "beam-hours.csv",
     });
 
     renderPage();

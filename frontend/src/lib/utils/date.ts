@@ -5,6 +5,7 @@
 import {
   format,
   formatDistanceToNow,
+  parseISO,
   addDays as dfAddDays,
   addMonths as dfAddMonths,
   startOfWeek as dfStartOfWeek,
@@ -20,6 +21,9 @@ import {
 export type DateInput = Date | string | number;
 
 function toDate(value: DateInput): Date {
+  // Calendar dates are local days, not midnight UTC instants. Match only the
+  // full date-only form so timestamps retain their timezone conversion.
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return parseISO(value);
   return value instanceof Date ? value : new Date(value);
 }
 
@@ -28,9 +32,18 @@ export interface FormatDateOptions {
   pattern?: string;
 }
 
-/** Short date, e.g. "Jan 5, 2026". Pass `pattern` to override. */
-export function formatDate(date: DateInput, options: FormatDateOptions = {}): string {
-  return format(toDate(date), options.pattern ?? "MMM d, yyyy");
+/**
+ * Short date, e.g. "Jan 5, 2026". Pass `pattern` to override.
+ * YYYY-MM-DD keeps its written day; instants use the local timezone.
+ * Missing or invalid dates display "—".
+ */
+export function formatDate(
+  date: DateInput | null | undefined,
+  options: FormatDateOptions = {},
+): string {
+  if (date == null) return "—";
+  const parsed = toDate(date);
+  return Number.isNaN(parsed.getTime()) ? "—" : format(parsed, options.pattern ?? "MMM d, yyyy");
 }
 
 /** Full timestamp, e.g. "Jan 5, 2026, 3:04 PM". */

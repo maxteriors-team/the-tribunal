@@ -23,6 +23,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FinancingEstimate } from "@/components/proposal/financing-estimate";
+import { ResourceListPagination } from "@/components/resource-list/resource-list-pagination";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ContactPicker } from "@/components/ui/contact-combobox";
 import {
   Dialog,
   DialogContent,
@@ -50,7 +52,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
 import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -60,9 +64,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TeamMemberPicker } from "@/components/workspaces/team-member-picker";
+import { usePagination } from "@/hooks/usePagination";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
 import { lightingProjectsApi } from "@/lib/api/lighting-projects";
-import { quotesApi } from "@/lib/api/quotes";
+import { quotesApi, type QuotesListParams } from "@/lib/api/quotes";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
 import { formatDate, formatRelative } from "@/lib/utils/date";
@@ -92,7 +97,15 @@ const canOpenQuote = (quote: Quote) => Boolean(quote.lighting_project_id) || can
 
 export function QuotesList() {
   const workspaceId = useWorkspaceId();
+  return <WorkspaceQuotesList key={workspaceId} workspaceId={workspaceId} />;
+}
+
+function WorkspaceQuotesList({ workspaceId }: { workspaceId: string | null }) {
   const queryClient = useQueryClient();
+  const { page, pageSize, setPage, reset } = usePagination({ initialPageSize: 100 });
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [contactId, setContactId] = useState("");
+  const hasFilters = statusFilter !== "all" || contactId !== "";
   const router = useRouter();
   const [convertQuote, setConvertQuote] = useState<Quote | null>(null);
   const [recordDepositQuote, setRecordDepositQuote] = useState<Quote | null>(null);
@@ -102,12 +115,21 @@ export function QuotesList() {
   const [assignmentUserId, setAssignmentUserId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Quote | null>(null);
 
+  const params = {
+    page,
+    page_size: pageSize,
+    status: statusFilter === "all" ? undefined : statusFilter,
+    contact_id: contactId ? Number(contactId) : undefined,
+  } satisfies QuotesListParams;
   const query = useQuery({
-    queryKey: queryKeys.quotes.list(workspaceId ?? ""),
-    queryFn: () => quotesApi.list(workspaceId ?? "", { page_size: 100 }),
+    queryKey: queryKeys.quotes.list(workspaceId ?? "", params),
+    queryFn: () => quotesApi.list(workspaceId ?? "", params),
     enabled: Boolean(workspaceId),
     ...POLL_60S,
   });
+  const totalPages = Math.max(1, query.data?.pages ?? 1);
+  // A deletion or status change can remove the last page; don't reset otherwise.
+  if (query.isSuccess && page > totalPages) setPage(totalPages);
 
   const invalidate = () => {
     if (workspaceId) {
@@ -117,20 +139,16 @@ export function QuotesList() {
     }
   };
 
-  const sendMutation = useMutation({
-    mutationFn: (id: string) => quotesApi.send(workspaceId ?? "", id),
-    onSuccess: (q) => {
-      toast.success(`Quote ${q.number} sent`);
+  const markSentMutation = useMutation({
+    mutationFn: (id: string) => quotesApi.markSent(workspaceId ?? "", id),
+    onSuccess: () => {
+      toast.success("Quote marked as sent", { description: "No email or text was sent." });
       invalidate();
     },
-    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to send quote")),
+    onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Failed to mark quote as sent")),
   });
 
-  // Deliberately separate from `sendMutation`: that one marks the quote sent and
-  // emails best-effort, so it reports success even when nobody was emailed. This
-  // one names the channel, confirms the destination, and shows the server's own
-  // reason on failure — "add a mobile number", "this number opted out" — which
-  // is a thing the rep can act on while still standing in the driveway.
+  // Only checked delivery can claim a send; status changes send nothing.
   const deliverMutation = useMutation({
     mutationFn: ({ id, channel }: { id: string; channel: QuoteDeliverChannel }) =>
       quotesApi.deliver(workspaceId ?? "", id, channel),
@@ -138,11 +156,12 @@ export function QuotesList() {
       toast.success(
         result.channel === "sms"
           ? `Proposal texted to ${result.to}`
-          : `Proposal emailed to ${result.to}`,
+          : `Quote email to ${result.to} accepted for delivery`,
       );
-      invalidate();
     },
     onError: (err: unknown) => toast.error(getApiErrorMessage(err, "Couldn't send the proposal")),
+    // A failed delivery can still publish the quote; refresh its status and link.
+    onSettled: invalidate,
   });
 
   const approveMutation = useMutation({
@@ -225,7 +244,7 @@ export function QuotesList() {
   };
 
   const busy =
-    sendMutation.isPending ||
+    markSentMutation.isPending ||
     deliverMutation.isPending ||
     approveMutation.isPending ||
     declineMutation.isPending ||
@@ -269,8 +288,10 @@ export function QuotesList() {
       body = (
         <PageEmptyState
           icon={<FileText className="size-8" />}
-          title="No quotes yet"
-          description="Quotes created from Light Designer and saved lighting projects appear here."
+          title={hasFilters ? "No matching quotes" : "No quotes yet"}
+          description={hasFilters
+            ? "Try another customer or status, or clear the filters."
+            : "Quotes created from Light Designer and saved lighting projects appear here."}
         />
       );
     } else {
@@ -369,7 +390,7 @@ export function QuotesList() {
                     busy={busy}
                     onAssign={() => openAssignment(quote)}
                     onEdit={() => setEditing(quote)}
-                    onSend={() => sendMutation.mutate(quote.id)}
+                    onMarkSent={() => markSentMutation.mutate(quote.id)}
                     onDeliver={(channel) => deliverMutation.mutate({ id: quote.id, channel })}
                     onApprove={() => approveMutation.mutate(quote.id)}
                     onDecline={() => declineMutation.mutate(quote.id)}
@@ -392,7 +413,50 @@ export function QuotesList() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-full space-y-2 sm:w-72">
+          <Label htmlFor="quote-customer-filter">Customer</Label>
+          <ContactPicker
+            id="quote-customer-filter"
+            workspaceId={workspaceId}
+            value={contactId}
+            onChange={(value) => { setContactId(value); reset(); }}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="quote-status-filter">Status</Label>
+          <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); reset(); }}>
+            <SelectTrigger id="quote-status-filter" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {Object.keys(STATUS_VARIANT).map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {hasFilters && (
+          <Button variant="ghost" onClick={() => { setStatusFilter("all"); setContactId(""); reset(); }}>
+            Clear filters
+          </Button>
+        )}
+      </div>
+      <p className="text-sm text-muted-foreground">Newest first. Filters apply across all quotes.</p>
       {body}
+      {query.isSuccess && (
+        <ResourceListPagination
+          filteredCount={query.data.items.length}
+          totalCount={query.data.total}
+          resourceName="quotes"
+          page={page}
+          totalPages={totalPages}
+          onPageChange={query.isFetching ? undefined : setPage}
+        />
+      )}
       <ConvertQuoteDialog
         workspaceId={workspaceId ?? ""}
         quote={convertQuote}
@@ -524,7 +588,7 @@ interface RowActionsProps {
   busy: boolean;
   onAssign: () => void;
   onEdit: () => void;
-  onSend: () => void;
+  onMarkSent: () => void;
   onDeliver: (channel: QuoteDeliverChannel) => void;
   onApprove: () => void;
   onDecline: () => void;
@@ -548,7 +612,7 @@ function RowActions({
   busy,
   onAssign,
   onEdit,
-  onSend,
+  onMarkSent,
   onDeliver,
   onApprove,
   onDecline,
@@ -622,9 +686,15 @@ function RowActions({
               Text proposal to client
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onSend}>
-              {quote.status === "draft" ? "Mark as sent" : "Re-send email"}
-            </DropdownMenuItem>
+            {quote.status === "draft" ? (
+              <DropdownMenuItem onClick={onMarkSent}>
+                Mark as sent (no email)
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={() => onDeliver("email")}>
+                Re-send email
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={onApprove}>
               <Check className="mr-2 h-4 w-4" />
               Approve

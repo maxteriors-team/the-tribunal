@@ -9,7 +9,33 @@ const mocks = vi.hoisted(() => ({
   getWebRTCToken: vi.fn(),
   initiate: vi.fn(),
   hangup: vi.fn(),
+  publishPresence: vi.fn(),
+  publishPresenceBeacon: vi.fn(),
+  can: vi.fn(() => true),
 }));
+
+// The headset is `comms:send`-gated, so every case here is a calling role. The
+// refusal path for field technicians is asserted separately below.
+vi.mock("@/hooks/useCapabilities", () => ({
+  useCapabilities: () => ({ can: mocks.can }),
+}));
+
+/** The most recent fake Telnyx client, so a test can push an inbound invite. */
+const clients = vi.hoisted(() => ({ current: null as FakeTelnyxClient | null }));
+
+interface FakeCall {
+  id: string;
+  direction: string;
+  state: string;
+  options: { remoteCallerNumber?: string };
+  answer: ReturnType<typeof vi.fn>;
+  hangup: ReturnType<typeof vi.fn>;
+}
+
+interface FakeTelnyxClient {
+  handlers: Map<string, (payload: unknown) => void>;
+  notify: (call: FakeCall) => void;
+}
 
 vi.mock("@/lib/api/calls", () => ({ callsApi: mocks }));
 vi.mock("@/providers/auth-provider", () => ({ useAuth: () => ({ user: { id: 1 } }) }));
@@ -18,24 +44,50 @@ vi.mock("@/providers/workspace-provider", () => ({
 }));
 vi.mock("@telnyx/webrtc", () => ({
   TelnyxRTC: class {
-    handlers = new Map<string, () => void>();
+    handlers = new Map<string, (payload: unknown) => void>();
     remoteElement: HTMLAudioElement | null = null;
 
-    on(event: string, handler: () => void) {
+    constructor() {
+      clients.current = this as unknown as FakeTelnyxClient;
+    }
+
+    on(event: string, handler: (payload: unknown) => void) {
       this.handlers.set(event, handler);
+      return this;
     }
 
     off(event: string) {
       this.handlers.delete(event);
+      return this;
     }
 
     async connect() {
-      this.handlers.get("telnyx.ready")?.();
+      this.handlers.get("telnyx.ready")?.(undefined);
     }
 
     async disconnect() {}
+
+    /** Deliver a callUpdate exactly as the SDK does. */
+    notify(call: FakeCall) {
+      this.handlers.get("telnyx.notification")?.({ type: "callUpdate", call });
+    }
   },
 }));
+
+let inviteCounter = 0;
+
+function inboundCall(overrides: Partial<FakeCall> = {}): FakeCall {
+  return {
+    id: `invite-${++inviteCounter}`,
+    direction: "inbound",
+    state: "ringing",
+    options: { remoteCallerNumber: "+15551234567" },
+    // The SDK's call methods are async; the provider chains .catch() on them.
+    answer: vi.fn(async () => undefined),
+    hangup: vi.fn(async () => undefined),
+    ...overrides,
+  };
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -59,6 +111,8 @@ describe("SoftphoneProvider", () => {
     vi.clearAllMocks();
     mocks.getWebRTCToken.mockResolvedValue({ token: "short-lived-token", expires_at: 1 });
     mocks.hangup.mockResolvedValue(undefined);
+    mocks.publishPresence.mockResolvedValue(undefined);
+    mocks.can.mockReturnValue(true);
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
       value: { getUserMedia: vi.fn() },
@@ -91,5 +145,90 @@ describe("SoftphoneProvider", () => {
 
     expect(mocks.hangup).toHaveBeenCalledWith("workspace-1", "call-record-1");
     expect(result.current.phase).toBe("ended");
+  });
+
+  it("never registers a headset for someone with no calling permission", async () => {
+    // A field technician has no calling surface: registering them would mint a
+    // Telnyx credential nobody can use and earn a 403 on every page.
+    mocks.can.mockReturnValue(false);
+
+    const { result } = renderHook(() => useSoftphone(), { wrapper });
+
+    await waitFor(() => expect(result.current.isRegistered).toBe(false));
+    expect(mocks.getWebRTCToken).not.toHaveBeenCalled();
+    expect(mocks.publishPresence).not.toHaveBeenCalled();
+  });
+
+  it("publishes presence once the headset is registered", async () => {
+    renderHook(() => useSoftphone(), { wrapper });
+
+    await waitFor(() => expect(mocks.publishPresence).toHaveBeenCalledWith("workspace-1", true));
+  });
+
+  it("stops advertising availability when the dashboard unmounts", async () => {
+    const { unmount } = renderHook(() => useSoftphone(), { wrapper });
+    await waitFor(() => expect(mocks.publishPresence).toHaveBeenCalledWith("workspace-1", true));
+
+    unmount();
+
+    await waitFor(() => expect(mocks.publishPresence).toHaveBeenCalledWith("workspace-1", false));
+  });
+
+  it("surfaces an incoming customer call to the operator", async () => {
+    const { result } = renderHook(() => useSoftphone(), { wrapper });
+    await waitFor(() => expect(result.current.isRegistered).toBe(true));
+
+    act(() => clients.current?.notify(inboundCall()));
+
+    await waitFor(() => expect(result.current.incoming?.callerNumber).toBe("+15551234567"));
+  });
+
+  it("answers the call when the operator accepts", async () => {
+    const call = inboundCall();
+    const { result } = renderHook(() => useSoftphone(), { wrapper });
+    await waitFor(() => expect(result.current.isRegistered).toBe(true));
+    act(() => clients.current?.notify(call));
+    await waitFor(() => expect(result.current.incoming).not.toBeNull());
+
+    await act(async () => {
+      await result.current.acceptIncoming();
+    });
+
+    expect(call.answer).toHaveBeenCalledOnce();
+    expect(call.hangup).not.toHaveBeenCalled();
+  });
+
+  it("keeps the headset registered after declining, so the next call still rings", async () => {
+    const call = inboundCall();
+    const { result } = renderHook(() => useSoftphone(), { wrapper });
+    await waitFor(() => expect(result.current.isRegistered).toBe(true));
+    act(() => clients.current?.notify(call));
+    await waitFor(() => expect(result.current.incoming).not.toBeNull());
+
+    await act(async () => {
+      await result.current.declineIncoming();
+    });
+
+    expect(call.hangup).toHaveBeenCalledOnce();
+    expect(call.answer).not.toHaveBeenCalled();
+    expect(result.current.incoming).toBeNull();
+    // The whole point of declining rather than disconnecting.
+    expect(result.current.isRegistered).toBe(true);
+    expect(mocks.publishPresence).not.toHaveBeenCalledWith("workspace-1", false);
+  });
+
+  it("refuses a second invite instead of dropping the call in progress", async () => {
+    const first = inboundCall();
+    const second = inboundCall();
+    const { result } = renderHook(() => useSoftphone(), { wrapper });
+    await waitFor(() => expect(result.current.isRegistered).toBe(true));
+    act(() => clients.current?.notify(first));
+    await waitFor(() => expect(result.current.incoming).not.toBeNull());
+
+    act(() => clients.current?.notify(second));
+
+    expect(second.hangup).toHaveBeenCalledOnce();
+    expect(first.hangup).not.toHaveBeenCalled();
+    expect(result.current.incoming?.callerNumber).toBe("+15551234567");
   });
 });

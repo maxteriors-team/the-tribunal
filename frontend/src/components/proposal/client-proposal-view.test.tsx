@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicProposal, PublicProposalPackage } from "@/types/proposal";
 
@@ -161,6 +161,29 @@ const acceptButton = () => {
     name: /accept|approve proposal|choose payment method/i,
   });
 };
+
+describe("public proposal calendar dates", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each(["America/New_York", "Pacific/Kiritimati"])(
+    "keeps issue and expiry days in %s",
+    (timezone) => {
+      vi.stubEnv("TZ", timezone);
+      renderView({ issue_date: "2026-03-08", expiry_date: "2026-09-30" });
+
+      expect(
+        screen.getByText("Proposal Q-1001 · Issued Mar 8, 2026 · Valid until Sep 30, 2026"),
+      ).toBeVisible();
+    },
+  );
+
+  it.each([null, undefined, "2026-02-30"])("handles missing/invalid document dates: %s", (date) => {
+    renderView({ issue_date: date, expiry_date: date });
+
+    if (date) expect(screen.getByText("Proposal Q-1001 · Issued — · Valid until —")).toBeVisible();
+    else expect(screen.queryByText(/Issued |Valid until /)).not.toBeInTheDocument();
+  });
+});
 
 describe("customer-facing tenant branding", () => {
   it("renders a second workspace without leaking the first tenant's brand", () => {

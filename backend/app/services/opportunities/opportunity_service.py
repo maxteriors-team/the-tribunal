@@ -5,7 +5,7 @@ from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 
 import structlog
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -359,6 +359,12 @@ class OpportunityService:
                 "amount": float(opportunity.amount) if opportunity.amount is not None else None,
                 "stage": stage.name if stage else None,
                 "source": opportunity.source,
+                # Whether this card is a lead *entering* the pipeline, or an
+                # operator filing someone who is already being worked. Welcome-
+                # style automations key off these; see
+                # ``app.services.automations.events.opportunity_created_event_matches``.
+                "is_first_deal": await self._is_first_deal(workspace_id, opportunity),
+                "is_entry_stage": await self._is_entry_stage(pipeline.id, stage),
             },
         )
         await self.db.commit()
@@ -366,6 +372,40 @@ class OpportunityService:
         await self.db.refresh(opportunity, ["line_items", "primary_contact", "assigned_user"])
 
         return OpportunityResponse.model_validate(opportunity)
+
+    async def _is_first_deal(self, workspace_id: uuid.UUID, opportunity: Opportunity) -> bool:
+        """Whether this is the contact's only card — i.e. they are new to the board.
+
+        A second card for someone already in the pipeline means an operator is
+        filing an existing customer, not catching a new lead. Deals with no
+        contact can never be a new lead, so they answer False.
+        """
+        if opportunity.primary_contact_id is None:
+            return False
+        earlier = await self.db.scalar(
+            select(Opportunity.id)
+            .where(
+                Opportunity.workspace_id == workspace_id,
+                Opportunity.primary_contact_id == opportunity.primary_contact_id,
+                Opportunity.id != opportunity.id,
+            )
+            .limit(1)
+        )
+        return earlier is None
+
+    async def _is_entry_stage(self, pipeline_id: uuid.UUID, stage: PipelineStage | None) -> bool:
+        """Whether ``stage`` is the pipeline's first column.
+
+        A card dropped straight into a later or parked column (``Quote Sent``,
+        ``Unqualified``, ``Long term follow up``) describes work that already
+        happened. A card with no stage at all is not an entry either.
+        """
+        if stage is None:
+            return False
+        first_order = await self.db.scalar(
+            select(func.min(PipelineStage.order)).where(PipelineStage.pipeline_id == pipeline_id)
+        )
+        return first_order is not None and stage.order == first_order
 
     async def get_opportunity(
         self,

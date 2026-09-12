@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select
@@ -615,20 +616,14 @@ async def test_explicit_quote_resend_uses_a_fresh_provider_key(monkeypatch) -> N
         assert keys[0] != keys[1], "an explicit re-send must create a new email"
 
 
-async def test_mark_sent_survives_a_failed_courtesy_email(monkeypatch) -> None:
-    """``mark_sent`` is a status change, not a delivery promise.
-
-    An operator using it has usually sent the quote by their own means and is
-    recording that fact; the courtesy email riding along must never undo the
-    transition. This is the deliberate asymmetry with ``deliver_quote`` above.
-    """
-
-    async def failing_send(**kwargs):  # noqa: ANN003
-        return False
-
+async def test_mark_sent_never_emails_snapshot_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Publishing a wizard proposal must not send an undisclosed email."""
     from app.services import email as email_module
 
-    monkeypatch.setattr(email_module, "send_quote_email", failing_send)
+    provider = AsyncMock(return_value={"id": "wizard-status-test"})
+    monkeypatch.setattr(email_module.settings, "resend_api_key", "re_test_no_spend")
+    monkeypatch.setattr(email_module.resend, "api_key", "re_test_no_spend")
+    monkeypatch.setattr(email_module.resend.Emails, "send_async", provider)
 
     async with AsyncSessionLocal() as db:
         ws = await _make_lighting_workspace(db)
@@ -641,6 +636,7 @@ async def test_mark_sent_survives_a_failed_courtesy_email(monkeypatch) -> None:
 
         assert result.status == "sent"
         assert result.public_token
+        provider.assert_not_awaited()
 
 
 async def test_combined_multi_category_quote_prices_and_saves_all_lines() -> None:

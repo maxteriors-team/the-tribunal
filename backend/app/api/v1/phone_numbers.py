@@ -138,6 +138,7 @@ def _readiness_response(
         phone_number_id=phone_number.id,
         ready=readiness.ready,
         enabled=phone_number.inbound_ai_enabled,
+        ring_operators=phone_number.inbound_ring_operators,
         assigned_agent_id=phone_number.assigned_agent_id,
         fallback_configured=bool(phone_number.inbound_fallback_number),
         transfer_destination_configured=bool(
@@ -174,6 +175,8 @@ async def _deactivate_inbound_calling(
 
     if "fallback_number" in request_data.model_fields_set:
         phone_number.inbound_fallback_number = request_data.fallback_number
+    if "ring_operators" in request_data.model_fields_set:
+        phone_number.inbound_ring_operators = bool(request_data.ring_operators)
     if "transfer_destination_number" in request_data.model_fields_set:
         if agent is None:
             raise HTTPException(
@@ -453,6 +456,8 @@ async def configure_inbound_calling(
     phone_number.assigned_agent_id = readiness.agent.id
     if "fallback_number" in request_data.model_fields_set:
         phone_number.inbound_fallback_number = request_data.fallback_number
+    if "ring_operators" in request_data.model_fields_set:
+        phone_number.inbound_ring_operators = bool(request_data.ring_operators)
     if "transfer_destination_number" in request_data.model_fields_set:
         readiness.agent.transfer_destination_number = request_data.transfer_destination_number
     phone_number.inbound_ai_enabled = True

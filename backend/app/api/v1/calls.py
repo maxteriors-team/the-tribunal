@@ -21,6 +21,7 @@ from app.schemas.call import (
     CapturedMessageResponse,
     LiveCallResponse,
     LiveCallsResponse,
+    OperatorPresenceRequest,
     PaginatedCalls,
     WebRTCTokenResponse,
 )
@@ -31,6 +32,7 @@ from app.services.rate_limiting.softphone_limiter import (
     enforce_softphone_call_limits,
     enforce_softphone_token_limit,
 )
+from app.services.telephony.operator_presence import mark_available, mark_unavailable
 from app.services.telephony.telnyx_voice import TelnyxVoiceService
 from app.services.telephony.telnyx_webrtc import TelnyxWebRTCError, TelnyxWebRTCService
 from app.services.telephony.user_call import (
@@ -147,6 +149,28 @@ async def issue_webrtc_token(
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     return WebRTCTokenResponse(token=token)
+
+
+@router.post("/presence", status_code=status.HTTP_204_NO_CONTENT)
+async def set_operator_presence(
+    workspace_id: uuid.UUID,
+    request_data: OperatorPresenceRequest,
+    current_user: CurrentUser,
+    db: DB,
+    membership: CanSendComms,
+    workspace: WorkspaceAccess,
+) -> Response:
+    """Heartbeat this operator's own availability for inbound browser ringing.
+
+    The user id comes from the authenticated session, so a workspace member can
+    only ever set their own presence.
+    """
+    del db, membership, workspace
+    if request_data.available:
+        await mark_available(str(workspace_id), current_user.id)
+    else:
+        await mark_unavailable(str(workspace_id), current_user.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 async def _enforce_paid_call_limits(workspace_id: uuid.UUID, user_id: int) -> None:

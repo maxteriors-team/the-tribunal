@@ -157,13 +157,20 @@ class Quote(Base, WorkspaceScoped):
         nullable=True,
         index=True,
     )
-    # Editable landscape design that produced this quote. Private plan data is
+    # Editable lighting design that produced this quote. Private plan data is
     # exposed only through authenticated job routes, never public proposals.
     lighting_project_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("lighting_projects.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # Immutable, server-validated seasonal installation plan accepted with the quote.
+    seasonal_installation_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    # NULL identifies legacy/non-estimator quotes; booleans are explicit sold scope.
+    seasonal_takedown_included: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    seasonal_storage_included: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     # Human-facing quote number, unique per workspace (e.g. "QUO-000123").
     number: Mapped[str] = mapped_column(String(50), nullable=False)

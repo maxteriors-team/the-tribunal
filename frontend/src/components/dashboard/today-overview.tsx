@@ -142,7 +142,7 @@ export const QuickActionsCard = memo(function QuickActionsCard() {
           </Link>
         </Button>
         <Button variant="outline" className="justify-start" asChild>
-          <Link href="/?import=true">
+          <Link href="/contacts?import=true">
             <Users className="mr-2 size-4" />
             Import Contacts
           </Link>

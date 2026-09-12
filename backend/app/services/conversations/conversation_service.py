@@ -114,6 +114,7 @@ class ConversationService:
         channel_filter: str | None = None,
         unread_only: bool = False,
         search: str | None = None,
+        contact_id: int | None = None,
     ) -> PaginatedConversations:
         """List conversations in a workspace with batch campaign sync.
 
@@ -128,6 +129,8 @@ class ConversationService:
             .where(Conversation.workspace_id == workspace_id)
         )
 
+        if contact_id is not None:
+            query = query.where(Conversation.contact_id == contact_id)
         if status_filter:
             query = query.where(Conversation.status == status_filter)
         if channel_filter:
@@ -141,7 +144,9 @@ class ConversationService:
                 (Contact.first_name.ilike(f"%{search}%")) | (Contact.last_name.ilike(f"%{search}%"))
             )
 
-        query = query.order_by(Conversation.last_message_at.desc().nullslast())
+        query = query.order_by(
+            Conversation.last_message_at.desc().nullslast(), Conversation.id.desc()
+        )
         result = await paginate(self.db, query, page=page, page_size=page_size)
         conversations = list(result.items)
 

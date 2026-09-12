@@ -12,12 +12,15 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.encryption import hash_phone, hash_value
@@ -31,6 +34,7 @@ from app.models.field_service import (
     ServiceLocation,
     Technician,
 )
+from app.models.inventory import InventoryItem, InventoryJobAllocation
 from app.models.invoice import Invoice
 from app.models.lighting_project import LightingProject
 from app.models.opportunity import Opportunity
@@ -43,7 +47,12 @@ from app.schemas.attach_rules import (
     AttachRule,
     AttachRulesSettings,
 )
-from app.schemas.estimate import EstimateQuoteRequest
+from app.schemas.estimate import EstimateCustomLine, EstimateQuoteRequest
+from app.schemas.inventory import (
+    CompleteJobInventoryRequest,
+    InventoryAllocationActual,
+    ReceiveStockRequest,
+)
 from app.schemas.pricing import (
     ChristmasConfig,
     FinancingConfig,
@@ -52,6 +61,8 @@ from app.schemas.pricing import (
 )
 from app.schemas.quote import (
     QuoteCreate,
+    QuoteDetailResponse,
+    QuoteJobSchedule,
     QuoteLineItemCreate,
     QuoteLineItemUpdate,
     QuoteUpdate,
@@ -62,11 +73,25 @@ from app.services.exceptions import (
     PermissionDeniedError,
     ValidationError,
 )
+from app.services.inventory.job_allocations import JobAllocationService
+from app.services.inventory.stock_service import StockService
 from app.services.jobs import JobService
 from app.services.quotes import QuoteService
 from app.services.quotes.attach_rules_config import SETTINGS_KEY as ATTACH_RULES_KEY
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
+
+
+@pytest.fixture(autouse=True)
+def quote_email_provider(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """Exercise real delivery/rendering code; never cross Resend's SDK boundary."""
+    from app.services import email as email_module
+
+    provider = AsyncMock(return_value={"id": "quote-email-test"})
+    monkeypatch.setattr(email_module.settings, "resend_api_key", "re_test_no_spend")
+    monkeypatch.setattr(email_module.resend, "api_key", "re_test_no_spend")
+    monkeypatch.setattr(email_module.resend.Emails, "send_async", provider)
+    return provider
 
 
 @pytest.fixture(autouse=True)
@@ -128,7 +153,7 @@ async def _make_location(
     return loc
 
 
-def _permanent_project_document() -> dict[str, object]:
+def _permanent_project_document(product_id: str = "product-1") -> dict[str, object]:
     return {
         "version": 2,
         "projectType": "permanent",
@@ -146,7 +171,7 @@ def _permanent_project_document() -> dict[str, object]:
                     "items": [
                         {
                             "id": "fixture-1",
-                            "productId": "product-1",
+                            "productId": product_id,
                             "at": {"x": 100, "y": 120},
                             "sizePx": 24,
                         }
@@ -157,6 +182,53 @@ def _permanent_project_document() -> dict[str, object]:
             }
         ],
         "updatedAt": "2026-08-27T12:00:00.000Z",
+    }
+
+
+def _seasonal_project_document(product_id: str = "product-1") -> dict[str, object]:
+    document = _permanent_project_document(product_id)
+    document["projectType"] = "seasonal"
+    return document
+
+
+def _tree_wrap_project_document(item_id: uuid.UUID) -> dict[str, object]:
+    return {
+        "version": 2,
+        "projectType": "seasonal",
+        "activeShotId": None,
+        "shots": [],
+        "updatedAt": "2026-09-10T12:00:00.000Z",
+        "treeWrapWorksheet": {
+            "version": 1,
+            "rows": [
+                {
+                    "id": "front-evergreen",
+                    "label": "Front evergreen",
+                    "quantity": 2,
+                    "color": "Warm white",
+                    "spec": {
+                        "shape": "evergreen",
+                        "lightType": "mini",
+                        "heightFt": 20,
+                        "rowSpacingIn": 6,
+                        "radiusFt": 6,
+                        "feetPerUnit": 25,
+                        "pricingMode": "unit",
+                        "unitPrice": 12.5,
+                    },
+                    "result": {
+                        "plannedFeet": 755,
+                        "rowCount": 40,
+                        "unitCount": 31,
+                        "unitKind": "strand",
+                        "billedQuantity": 31,
+                        "price": 387.5,
+                    },
+                    "inventoryItemId": str(item_id),
+                    "inventoryBehavior": "reusable",
+                }
+            ],
+        },
     }
 
 
@@ -176,6 +248,154 @@ async def _make_catalog_item(
     db.add(item)
     await db.flush()
     return item
+
+
+async def test_email_delivery_rejects_missing_destination(quote_email_provider: AsyncMock) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        service = QuoteService(db)
+        quote = await service.create_quote(ws.id, QuoteCreate(line_items=[]), created_by_id=None)
+
+        with pytest.raises(ValidationError, match="No client email"):
+            await service.deliver_quote(ws.id, quote.id, channel="email")
+
+        quote_email_provider.assert_not_awaited()
+        saved = await service.get_quote(ws.id, quote.id)
+        assert saved.status == "sent"
+        assert saved.public_token  # The existing checked path still allows sharing/retrying.
+
+
+@pytest.mark.parametrize("failure", ["provider_rejected", "unconfigured"])
+async def test_email_delivery_reports_failure(
+    failure: str, quote_email_provider: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services import email as email_module
+
+    if failure == "unconfigured":
+        monkeypatch.setattr(email_module.settings, "resend_api_key", "")
+    else:
+        quote_email_provider.side_effect = RuntimeError("Simulated provider rejection")
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="pat@example.com")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            ws.id, QuoteCreate(contact_id=contact.id, line_items=[]), created_by_id=None
+        )
+
+        with pytest.raises(ValidationError, match="Couldn't send that email"):
+            await service.deliver_quote(ws.id, quote.id, channel="email")
+
+        assert quote_email_provider.await_count == (0 if failure == "unconfigured" else 1)
+        saved = await service.get_quote(ws.id, quote.id)
+        assert saved.status == "sent"
+        assert saved.public_token
+
+
+async def test_email_delivery_requires_provider_acceptance_and_resends_intentionally(
+    quote_email_provider: AsyncMock,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="pat@example.com")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            ws.id, QuoteCreate(contact_id=contact.id, line_items=[]), created_by_id=None
+        )
+
+        delivered = await service.deliver_quote(ws.id, quote.id, channel="email")
+        assert delivered.model_dump() == {"ok": True, "channel": "email", "to": "pat@example.com"}
+        first = await service.get_quote(ws.id, quote.id)
+        resent = await service.deliver_quote(ws.id, quote.id, channel="email")
+        second = await service.get_quote(ws.id, quote.id)
+        assert resent == delivered
+        assert first.status == second.status == "sent"
+        assert first.sent_at == second.sent_at
+        assert first.public_token == second.public_token
+        assert quote_email_provider.await_count == 2
+        calls = quote_email_provider.await_args_list
+        for call in calls:
+            params, options = call.args
+            assert params["to"] == ["pat@example.com"]
+            assert f"/p/quotes/{first.public_token}" in params["html"]
+            assert uuid.UUID(options["idempotency_key"])
+        assert calls[0].args[1]["idempotency_key"] != calls[1].args[1]["idempotency_key"]
+
+
+@pytest.mark.parametrize("action", ["mark_sent", "prepare_for_in_person_approval"])
+async def test_quote_status_changes_never_send_email(
+    action: str,
+    quote_email_provider: AsyncMock,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="pat@example.com")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            ws.id, QuoteCreate(contact_id=contact.id, line_items=[]), created_by_id=None
+        )
+
+        transition = getattr(service, action)
+        first = await transition(ws.id, quote.id)
+        second = await transition(ws.id, quote.id)
+        assert first.status == second.status == "sent"
+        assert first.sent_at == second.sent_at
+        assert first.public_token == second.public_token
+        quote_email_provider.assert_not_awaited()
+
+
+async def test_status_and_delivery_reject_another_workspace(
+    quote_email_provider: AsyncMock,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        owner = await _make_workspace(db)
+        other = await _make_workspace(db)
+        contact = await _make_contact(db, owner.id, email="pat@example.com")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            owner.id, QuoteCreate(contact_id=contact.id, line_items=[]), created_by_id=None
+        )
+
+        with pytest.raises(HTTPException) as marked:
+            await service.mark_sent(other.id, quote.id)
+        with pytest.raises(HTTPException) as delivered:
+            await service.deliver_quote(other.id, quote.id, channel="email")
+        assert marked.value.status_code == delivered.value.status_code == 404
+        assert marked.value.detail == delivered.value.detail == "Quote not found"
+
+        saved = await service.get_quote(owner.id, quote.id)
+        assert saved.status == "draft"
+        assert saved.public_token is None
+        quote_email_provider.assert_not_awaited()
+
+
+async def test_quote_text_delivery_preserves_opt_out(
+    quote_email_provider: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.config import settings
+    from app.services.rate_limiting.opt_out_manager import OptOutManager
+    from app.services.telephony.telnyx import TelnyxSMSService
+
+    sms_provider = AsyncMock()
+    monkeypatch.setattr(settings, "telnyx_api_key", "test_no_spend")
+    monkeypatch.setattr(TelnyxSMSService, "send_message", sms_provider)
+
+    async with AsyncSessionLocal() as db:
+        ws = await _make_workspace(db)
+        contact = await _make_contact(db, ws.id, email="pat@example.com")
+        await OptOutManager().add_opt_out(ws.id, contact.phone_number, db, keyword="STOP")
+        service = QuoteService(db)
+        quote = await service.create_quote(
+            ws.id, QuoteCreate(contact_id=contact.id, line_items=[]), created_by_id=None
+        )
+
+        with pytest.raises(ValidationError, match="opted out"):
+            await service.deliver_quote(ws.id, quote.id, channel="sms")
+
+        sms_provider.assert_not_awaited()
+        quote_email_provider.assert_not_awaited()
 
 
 async def test_create_computes_totals_and_allocates_number() -> None:
@@ -842,6 +1062,8 @@ async def test_convert_creates_job_and_invoice_idempotently() -> None:
         assert job.service_location_id == location.id
         assert job.crew_id == crew.id
         assert job.source_quote_id == quote.id
+        assert job.source_quote_phase == "primary"
+        assert result.takedown_job_id is None
         assignments = (
             (await db.execute(select(JobAssignment).where(JobAssignment.job_id == job.id)))
             .scalars()
@@ -1375,7 +1597,9 @@ async def test_create_quote_from_estimate_can_send_a_price_range(monkeypatch) ->
         from app.services import email as email_module
 
         monkeypatch.setattr(email_module, "send_quote_email", capture_email)
-        sent = await svc.mark_sent(ws.id, quote.id)
+        delivered = await svc.deliver_quote(ws.id, quote.id, channel="email")
+        assert delivered.ok is True
+        sent = await svc.get_quote(ws.id, quote.id)
         assert delivered_prices == [("Estimated range", f"{float(quote.total):.2f}–4000.00 USD")]
         public = await svc.get_public_proposal(sent.public_token)
         assert public.price_range is not None
@@ -1771,3 +1995,757 @@ async def test_reopen_cannot_reach_another_workspaces_quote() -> None:
 
         await db.refresh(quote)
         assert quote.status == "expired"
+
+
+async def _create_measured_seasonal_quote(
+    db: AsyncSession,
+    *,
+    takedown: bool,
+    storage: bool = False,
+    deposit_percentage: float | None = None,
+    phased_handoff: bool = True,
+) -> tuple[Workspace, Contact, ServiceLocation, LightingProject, QuoteService, QuoteDetailResponse]:
+    workspace = await _make_workspace(db)
+    await _enable_lighting_pricing(db, workspace)
+    contact = await _make_contact(db, workspace.id)
+    location = await _make_location(db, workspace.id, contact.id)
+    project = LightingProject(
+        workspace_id=workspace.id,
+        contact_id=contact.id,
+        service_location_id=location.id,
+        name="Pat Christmas lights",
+        installation_shot_id="front",
+        document=_seasonal_project_document(),
+    )
+    db.add(project)
+    await db.flush()
+    service = QuoteService(db)
+    quote = await service.create_quote_from_estimate(
+        workspace.id,
+        EstimateQuoteRequest(
+            side="seasonal",
+            feet=100,
+            takedown=takedown,
+            storage=storage,
+            seasonal_phased_handoff=phased_handoff,
+            contact_id=contact.id,
+            lighting_project_id=project.id,
+        ),
+    )
+    if deposit_percentage is not None:
+        quote = await service.update_quote(
+            workspace.id, quote.id, QuoteUpdate(deposit_percentage=deposit_percentage)
+        )
+    return workspace, contact, location, project, service, quote
+
+
+def _assert_seasonal_jobs(
+    jobs: list[Job],
+    *,
+    contact_id: int,
+    location_id: uuid.UUID,
+    project_id: uuid.UUID,
+    invoice_id: uuid.UUID,
+) -> None:
+    assert {job.source_quote_phase for job in jobs} == {"installation", "takedown"}
+    assert {job.contact_id for job in jobs} == {contact_id}
+    assert {job.service_location_id for job in jobs} == {location_id}
+    assert {job.lighting_project_id for job in jobs} == {project_id}
+    installation = next(job for job in jobs if job.source_quote_phase == "installation")
+    removal = next(job for job in jobs if job.source_quote_phase == "takedown")
+    assert installation.title == "Christmas Lighting — Installation"
+    assert removal.title == "Christmas Lighting — Takedown"
+    assert installation.invoice_id == invoice_id
+    assert removal.invoice_id is None
+    assert "Storage included" in (removal.description or "")
+
+
+@dataclass
+class TreeWrapQuoteContext:
+    workspace: Workspace
+    manager: User
+    membership: WorkspaceMembership
+    item: InventoryItem
+    project: LightingProject
+    service: QuoteService
+    quote: QuoteDetailResponse
+
+
+async def _create_tree_wrap_quote(
+    db: AsyncSession,
+    *,
+    feature_enabled: bool = True,
+    include_photo: bool = False,
+) -> TreeWrapQuoteContext:
+    workspace = await _make_workspace(db)
+    await _enable_lighting_pricing(db, workspace)
+    if feature_enabled:
+        workspace.settings = {
+            **(workspace.settings or {}),
+            "features": {"tree_light_quoter": True},
+        }
+    contact = await _make_contact(db, workspace.id)
+    location = await _make_location(db, workspace.id, contact.id)
+    manager = await _make_member(db, workspace.id, name="Worksheet Manager")
+    membership = await db.scalar(
+        select(WorkspaceMembership).where(
+            WorkspaceMembership.workspace_id == workspace.id,
+            WorkspaceMembership.user_id == manager.id,
+        )
+    )
+    assert membership is not None
+    membership.role = "manager"
+    item = InventoryItem(
+        workspace_id=workspace.id,
+        sku="MINI-25-WW",
+        name="25-foot warm-white mini strand",
+        unit_of_measure="strand",
+    )
+    db.add(item)
+    await db.flush()
+    await StockService(db).receive(
+        workspace.id, item.id, ReceiveStockRequest(quantity=100, unit_cost=8)
+    )
+    worksheet_document = _tree_wrap_project_document(item.id)
+    project_document = worksheet_document
+    installation_shot_id = None
+    if include_photo:
+        project_document = _seasonal_project_document()
+        project_document["treeWrapWorksheet"] = worksheet_document["treeWrapWorksheet"]
+        installation_shot_id = "front"
+    project = LightingProject(
+        workspace_id=workspace.id,
+        contact_id=contact.id,
+        service_location_id=location.id,
+        name="Exact tree worksheet",
+        installation_shot_id=installation_shot_id,
+        document=project_document,
+    )
+    db.add(project)
+    await db.flush()
+    service = QuoteService(db)
+    quote = await service.create_quote_from_estimate(
+        workspace.id,
+        EstimateQuoteRequest(
+            side="seasonal",
+            seasonal_installation_source="tree_wrap_worksheet",
+            seasonal_phased_handoff=True,
+            feet=0,
+            takedown=True,
+            contact_id=contact.id,
+            lighting_project_id=project.id,
+            custom_lines=[
+                EstimateCustomLine(
+                    label="Front evergreen",
+                    description="31 strands · Warm white",
+                    quantity=2,
+                    unit_price=387.5,
+                    side="seasonal",
+                    worksheet_row_id="front-evergreen",
+                    inventory_item_id=item.id,
+                    inventory_behavior="reusable",
+                    fulfillment_quantity=62,
+                )
+            ],
+        ),
+    )
+    return TreeWrapQuoteContext(
+        workspace=workspace,
+        manager=manager,
+        membership=membership,
+        item=item,
+        project=project,
+        service=service,
+        quote=quote,
+    )
+
+
+async def test_tree_wrap_quote_fails_closed_when_workspace_feature_is_off() -> None:
+    async with AsyncSessionLocal() as db:
+        with pytest.raises(ValidationError, match="Tree Light Quoter is not enabled"):
+            await _create_tree_wrap_quote(db, feature_enabled=False)
+
+
+async def test_tree_wrap_quote_freezes_selected_photo_and_worksheet_together() -> None:
+    async with AsyncSessionLocal() as db:
+        context = await _create_tree_wrap_quote(db, include_photo=True)
+        stored = await db.get(Quote, context.quote.id)
+
+        assert stored is not None
+        snapshot = stored.seasonal_installation_snapshot
+        assert snapshot is not None
+        assert snapshot["installation_sheet_type"] == "combined"
+        assert snapshot["installation_shot_id"] == "front"
+        assert snapshot["worksheet"]["rows"][0]["id"] == "front-evergreen"
+        assert snapshot["document"]["shots"][0]["id"] == "front"
+        assert "treeWrapWorksheet" not in snapshot["document"]
+
+
+async def test_combined_quote_drives_a_redacted_photo_and_worksheet_plan() -> None:
+    async with AsyncSessionLocal() as db:
+        context = await _create_tree_wrap_quote(db, include_photo=True)
+        await context.service.approve_quote(context.workspace.id, context.quote.id)
+        install_start = datetime(2026, 11, 15, 14, tzinfo=UTC)
+        converted = await context.service.convert_quote(
+            context.workspace.id,
+            context.quote.id,
+            create_invoice=False,
+            scheduled_start=install_start,
+            scheduled_end=install_start + timedelta(hours=3),
+            takedown_schedule=QuoteJobSchedule(
+                scheduled_start=datetime(2027, 1, 8, 14, tzinfo=UTC),
+                scheduled_end=datetime(2027, 1, 8, 17, tzinfo=UTC),
+            ),
+        )
+        assert converted.job_id is not None
+
+        plan = await JobService(db).get_installation_plan(
+            converted.job_id,
+            context.workspace.id,
+            membership=context.membership,
+            user_id=context.manager.id,
+        )
+
+        assert plan.installation_sheet_type == "combined"
+        assert plan.selected_shot_id == "front"
+        assert plan.photo is not None
+        assert plan.worksheet_rows[0].label == "Front evergreen"
+        encoded_plan = plan.model_dump_json()
+        assert "unitPrice" not in encoded_plan
+        assert "inventoryItemId" not in encoded_plan
+        assert str(context.item.id) not in encoded_plan
+
+
+async def test_photo_quote_ignores_saved_worksheet_fulfillment() -> None:
+    async with AsyncSessionLocal() as db:
+        context = await _create_tree_wrap_quote(db, include_photo=True)
+        photo_quote = await context.service.create_quote_from_estimate(
+            context.workspace.id,
+            EstimateQuoteRequest(
+                side="seasonal",
+                feet=100,
+                contact_id=context.project.contact_id,
+                lighting_project_id=context.project.id,
+            ),
+        )
+        stored = await db.get(Quote, photo_quote.id)
+
+        assert stored is not None
+        assert stored.seasonal_installation_snapshot is not None
+        assert "worksheet" not in stored.seasonal_installation_snapshot
+        assert "treeWrapWorksheet" not in stored.seasonal_installation_snapshot["document"]
+        assert stored.seasonal_installation_snapshot["installation_shot_id"] == "front"
+        assert not (stored.proposal_document or {}).get("fulfillment")
+
+
+async def test_photo_source_rejects_worksheet_fulfillment_lines() -> None:
+    async with AsyncSessionLocal() as db:
+        context = await _create_tree_wrap_quote(db, include_photo=True)
+
+        with pytest.raises(ValidationError, match="require the tree-wrap installation source"):
+            await context.service.create_quote_from_estimate(
+                context.workspace.id,
+                EstimateQuoteRequest(
+                    side="seasonal",
+                    feet=100,
+                    contact_id=context.project.contact_id,
+                    lighting_project_id=context.project.id,
+                    custom_lines=[
+                        EstimateCustomLine(
+                            label="Front evergreen",
+                            quantity=2,
+                            unit_price=387.5,
+                            worksheet_row_id="front-evergreen",
+                            inventory_item_id=context.item.id,
+                            inventory_behavior="reusable",
+                            fulfillment_quantity=62,
+                        )
+                    ],
+                ),
+            )
+
+
+async def test_tree_wrap_worksheet_quote_freezes_stock_and_drives_two_jobs() -> None:
+    async with AsyncSessionLocal() as db:
+        context = await _create_tree_wrap_quote(db)
+        workspace = context.workspace
+        membership = context.membership
+        item = context.item
+        project = context.project
+        service = context.service
+        quote = context.quote
+        stored = await db.get(Quote, quote.id)
+        assert stored is not None and isinstance(stored.proposal_document, dict)
+        assert stored.proposal_document["fulfillment"][0]["qty"] == 62
+        availability = stored.proposal_document["inventory_availability"]["items"][0]
+        assert availability["quantity_on_hand"] == 100
+        assert availability["quantity_reserved"] == 0
+        assert availability["quantity_deployed"] == 0
+        assert availability["available_to_promise"] == 100
+        assert stored.seasonal_installation_snapshot is not None
+        assert stored.seasonal_installation_snapshot["installation_sheet_type"] == (
+            "tree_wrap_worksheet"
+        )
+        assert "document" not in stored.seasonal_installation_snapshot
+        assert (
+            await db.scalar(
+                select(InventoryJobAllocation).where(
+                    InventoryJobAllocation.workspace_id == workspace.id
+                )
+            )
+            is None
+        )
+
+        await service.approve_quote(workspace.id, quote.id)
+        install_start = datetime(2026, 11, 15, 14, tzinfo=UTC)
+        converted = await service.convert_quote(
+            workspace.id,
+            quote.id,
+            create_invoice=False,
+            scheduled_start=install_start,
+            scheduled_end=install_start + timedelta(hours=3),
+            takedown_schedule=QuoteJobSchedule(
+                scheduled_start=datetime(2027, 1, 8, 14, tzinfo=UTC),
+                scheduled_end=datetime(2027, 1, 8, 17, tzinfo=UTC),
+            ),
+        )
+        assert converted.job_id is not None
+        assert converted.takedown_job_id is not None
+        allocation = await db.scalar(
+            select(InventoryJobAllocation).where(InventoryJobAllocation.job_id == converted.job_id)
+        )
+        assert allocation is not None
+        assert allocation.item_id == item.id
+        assert float(allocation.planned_quantity) == 62
+        assert allocation.status == "reserved"
+
+        project.document = _seasonal_project_document("later-photo-item")
+        project.version += 1
+        await db.flush()
+        plan = await JobService(db).get_installation_plan(
+            converted.job_id,
+            workspace.id,
+            membership=membership,
+            user_id=context.manager.id,
+        )
+        assert plan.installation_sheet_type == "tree_wrap_worksheet"
+        assert plan.selected_shot_id is None
+        assert plan.photo is None
+        assert plan.worksheet_rows[0].label == "Front evergreen"
+        encoded_plan = plan.model_dump_json()
+        assert "unitPrice" not in encoded_plan
+        assert "inventoryItemId" not in encoded_plan
+        assert str(item.id) not in encoded_plan
+
+        installation = await db.get(Job, converted.job_id)
+        assert installation is not None
+        installation.status = "in_progress"
+        await db.flush()
+        deployed = await JobAllocationService(db).complete(
+            workspace.id,
+            installation.id,
+            CompleteJobInventoryRequest(
+                allocations=[
+                    InventoryAllocationActual(
+                        allocation_id=allocation.id,
+                        actual_quantity=62,
+                    )
+                ]
+            ),
+        )
+        assert deployed.allocations[0].status == "deployed"
+        returned = await JobAllocationService(db).return_reusable(
+            workspace.id, installation.id, allocation.id
+        )
+        assert returned.status == "returned"
+
+
+async def test_tree_wrap_quote_rejects_foreign_and_archived_inventory() -> None:
+    async with AsyncSessionLocal() as db:
+        workspace = await _make_workspace(db)
+        foreign_workspace = await _make_workspace(db)
+        await _enable_lighting_pricing(db, workspace)
+        workspace.settings = {
+            **(workspace.settings or {}),
+            "features": {"tree_light_quoter": True},
+        }
+        contact = await _make_contact(db, workspace.id)
+        location = await _make_location(db, workspace.id, contact.id)
+        foreign_item = InventoryItem(
+            workspace_id=foreign_workspace.id,
+            sku="FOREIGN-MINI",
+            name="Foreign mini strand",
+            unit_of_measure="strand",
+        )
+        archived_item = InventoryItem(
+            workspace_id=workspace.id,
+            sku="ARCHIVED-MINI",
+            name="Archived mini strand",
+            unit_of_measure="strand",
+            is_active=False,
+        )
+        db.add_all([foreign_item, archived_item])
+        await db.flush()
+        project = LightingProject(
+            workspace_id=workspace.id,
+            contact_id=contact.id,
+            service_location_id=location.id,
+            name="Untrusted worksheet",
+            document=_tree_wrap_project_document(foreign_item.id),
+        )
+        db.add(project)
+        await db.flush()
+
+        def request(item_id: uuid.UUID) -> EstimateQuoteRequest:
+            return EstimateQuoteRequest(
+                side="seasonal",
+                seasonal_installation_source="tree_wrap_worksheet",
+                seasonal_phased_handoff=True,
+                feet=0,
+                contact_id=contact.id,
+                lighting_project_id=project.id,
+                custom_lines=[
+                    EstimateCustomLine(
+                        label="Front evergreen",
+                        quantity=2,
+                        unit_price=387.5,
+                        worksheet_row_id="front-evergreen",
+                        inventory_item_id=item_id,
+                        inventory_behavior="reusable",
+                        fulfillment_quantity=62,
+                    )
+                ],
+            )
+
+        service = QuoteService(db)
+        with pytest.raises(ValidationError, match="active workspace inventory SKU"):
+            await service.create_quote_from_estimate(workspace.id, request(foreign_item.id))
+
+        project.document = _tree_wrap_project_document(archived_item.id)
+        await db.flush()
+        with pytest.raises(ValidationError, match="active workspace inventory SKU"):
+            await service.create_quote_from_estimate(workspace.id, request(archived_item.id))
+
+
+async def test_legacy_photo_quote_keeps_single_job_conversion_without_takedown_schedule() -> None:
+    async with AsyncSessionLocal() as db:
+        workspace, _, _, _, service, quote = await _create_measured_seasonal_quote(
+            db, takedown=True, phased_handoff=False
+        )
+        stored = await db.get(Quote, quote.id)
+        assert stored is not None
+        assert stored.seasonal_installation_snapshot is not None
+        assert stored.seasonal_takedown_included is None
+        assert stored.seasonal_storage_included is None
+
+        await service.approve_quote(workspace.id, quote.id)
+        install_start = datetime(2026, 11, 15, 14, tzinfo=UTC)
+        converted = await service.convert_quote(
+            workspace.id,
+            quote.id,
+            create_invoice=False,
+            scheduled_start=install_start,
+            scheduled_end=install_start + timedelta(hours=3),
+        )
+
+        assert converted.job_id is not None
+        assert converted.takedown_job_id is None
+        jobs = list(
+            (await db.execute(select(Job).where(Job.source_quote_id == quote.id))).scalars()
+        )
+        assert len(jobs) == 1
+        assert jobs[0].source_quote_phase == "primary"
+
+
+async def test_measured_seasonal_quote_creates_two_jobs_and_credits_one_invoice() -> None:
+    from app.services.payments.quote_deposit_service import mark_deposit_paid
+
+    async with AsyncSessionLocal() as db:
+        (
+            workspace,
+            contact,
+            location,
+            project,
+            service,
+            quote,
+        ) = await _create_measured_seasonal_quote(
+            db, takedown=True, storage=True, deposit_percentage=25
+        )
+        stored_quote = await db.get(Quote, quote.id)
+        assert stored_quote is not None
+        assert stored_quote.seasonal_takedown_included is True
+        assert stored_quote.seasonal_storage_included is True
+        assert stored_quote.seasonal_installation_snapshot is not None
+        snapshot = stored_quote.seasonal_installation_snapshot
+        assert snapshot["installation_shot_id"] == "front"
+        assert len(snapshot["document"]["shots"]) == 1
+        assert "seasonal_installation_snapshot" not in quote.model_dump()
+
+        await service.approve_quote(workspace.id, quote.id)
+        await mark_deposit_paid(
+            db, stored_quote, payment_intent_id=f"pi_seasonal_{uuid.uuid4().hex}"
+        )
+        install_crew = Crew(workspace_id=workspace.id, name="Install Crew")
+        takedown_crew = Crew(workspace_id=workspace.id, name="Takedown Crew")
+        installer = Technician(workspace_id=workspace.id, name="Ivy Installer")
+        remover = Technician(workspace_id=workspace.id, name="Terry Takedown")
+        db.add_all([install_crew, takedown_crew, installer, remover])
+        await db.flush()
+
+        install_start = datetime(2026, 11, 15, 14, tzinfo=UTC)
+        install_end = install_start + timedelta(hours=4)
+        takedown = QuoteJobSchedule(
+            scheduled_start=datetime(2027, 1, 8, 14, tzinfo=UTC),
+            scheduled_end=datetime(2027, 1, 8, 18, tzinfo=UTC),
+            crew_id=takedown_crew.id,
+            technician_ids=[remover.id],
+        )
+        converted = await service.convert_quote(
+            workspace.id,
+            quote.id,
+            scheduled_start=install_start,
+            scheduled_end=install_end,
+            crew_id=install_crew.id,
+            technician_ids=[installer.id],
+            takedown_schedule=takedown,
+        )
+        assert converted.job_id is not None
+        assert converted.takedown_job_id is not None
+        assert converted.invoice_id is not None
+        assert converted.quote.converted_job_id == converted.job_id
+
+        jobs = list(
+            (
+                await db.execute(
+                    select(Job).where(Job.source_quote_id == quote.id).order_by(Job.title)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        _assert_seasonal_jobs(
+            jobs,
+            contact_id=contact.id,
+            location_id=location.id,
+            project_id=project.id,
+            invoice_id=converted.invoice_id,
+        )
+
+        with pytest.raises(IntegrityError, match="uq_field_service_jobs_source_quote_phase"):
+            async with db.begin_nested():
+                db.add(
+                    Job(
+                        workspace_id=workspace.id,
+                        contact_id=contact.id,
+                        service_location_id=location.id,
+                        lighting_project_id=project.id,
+                        title="Duplicate Christmas installation",
+                        source_quote_id=quote.id,
+                        source_quote_phase="installation",
+                    )
+                )
+                await db.flush()
+
+        invoice = await db.get(Invoice, converted.invoice_id)
+        assert invoice is not None
+        assert float(invoice.amount_paid) == quote.deposit_amount
+        invoices = await db.execute(select(Invoice).where(Invoice.workspace_id == workspace.id))
+        assert len(invoices.scalars().all()) == 1
+
+        replay = await service.convert_quote(
+            workspace.id,
+            quote.id,
+            scheduled_start=install_start,
+            scheduled_end=install_end,
+            crew_id=install_crew.id,
+            technician_ids=[installer.id],
+            takedown_schedule=takedown,
+        )
+        assert replay.idempotent_replay is True
+        assert replay.job_id == converted.job_id
+        assert replay.takedown_job_id == converted.takedown_job_id
+        assert replay.invoice_id == converted.invoice_id
+
+        changed_takedown = takedown.model_copy(
+            update={
+                "scheduled_start": takedown.scheduled_start + timedelta(days=1),
+                "scheduled_end": takedown.scheduled_end + timedelta(days=1),
+            }
+        )
+        with pytest.raises(ConflictError, match="different takedown details"):
+            await service.convert_quote(
+                workspace.id,
+                quote.id,
+                scheduled_start=install_start,
+                scheduled_end=install_end,
+                crew_id=install_crew.id,
+                technician_ids=[installer.id],
+                takedown_schedule=changed_takedown,
+            )
+
+
+async def test_seasonal_handoff_rejects_unsold_takedown_and_rolls_back_both_jobs() -> None:
+    async with AsyncSessionLocal() as db:
+        workspace, _, _, _, service, quote = await _create_measured_seasonal_quote(
+            db, takedown=False
+        )
+        await service.approve_quote(workspace.id, quote.id)
+        install_start = datetime(2026, 11, 20, 14, tzinfo=UTC)
+        takedown = QuoteJobSchedule(
+            scheduled_start=datetime(2027, 1, 9, 14, tzinfo=UTC),
+            scheduled_end=datetime(2027, 1, 9, 16, tzinfo=UTC),
+        )
+        with pytest.raises(ValidationError, match="does not include takedown"):
+            await service.convert_quote(
+                workspace.id,
+                quote.id,
+                scheduled_start=install_start,
+                scheduled_end=install_start + timedelta(hours=2),
+                takedown_schedule=takedown,
+            )
+
+        converted = await service.convert_quote(
+            workspace.id,
+            quote.id,
+            scheduled_start=install_start,
+            scheduled_end=install_start + timedelta(hours=2),
+        )
+        assert converted.job_id is not None
+        assert converted.takedown_job_id is None
+        job = await db.get(Job, converted.job_id)
+        assert job is not None and job.source_quote_phase == "installation"
+
+        other_workspace, _, _, _, second_service, handoff = await _create_measured_seasonal_quote(
+            db, takedown=True
+        )
+        await second_service.approve_quote(other_workspace.id, handoff.id)
+        foreign_workspace = await _make_workspace(db)
+        foreign_crew = Crew(workspace_id=foreign_workspace.id, name="Foreign Crew")
+        db.add(foreign_crew)
+        await db.flush()
+        invalid_takedown = takedown.model_copy(update={"crew_id": foreign_crew.id})
+        with pytest.raises(HTTPException):
+            await second_service.convert_quote(
+                other_workspace.id,
+                handoff.id,
+                scheduled_start=install_start,
+                scheduled_end=install_start + timedelta(hours=2),
+                takedown_schedule=invalid_takedown,
+            )
+        assert (
+            await db.scalar(select(Job).where(Job.source_quote_id == handoff.id).limit(1)) is None
+        )
+        refreshed = await db.get(Quote, handoff.id)
+        assert refreshed is not None
+        assert refreshed.converted_job_id is None
+        assert refreshed.converted_invoice_id is None
+
+
+async def test_measured_seasonal_jobs_read_the_frozen_plan_after_project_edits() -> None:
+    async with AsyncSessionLocal() as db:
+        workspace, _, _, project, service, quote = await _create_measured_seasonal_quote(
+            db, takedown=True
+        )
+        manager = await _make_member(db, workspace.id, name="Plan Manager")
+        membership = await db.scalar(
+            select(WorkspaceMembership).where(
+                WorkspaceMembership.workspace_id == workspace.id,
+                WorkspaceMembership.user_id == manager.id,
+            )
+        )
+        assert membership is not None
+        membership.role = "manager"
+        await service.approve_quote(workspace.id, quote.id)
+
+        project.document = _seasonal_project_document("later-project-product")
+        project.installation_shot_id = None
+        project.status = "archived"
+        project.version += 1
+        await db.flush()
+
+        install_start = datetime(2026, 11, 22, 14, tzinfo=UTC)
+        converted = await service.convert_quote(
+            workspace.id,
+            quote.id,
+            create_invoice=False,
+            scheduled_start=install_start,
+            scheduled_end=install_start + timedelta(hours=2),
+            takedown_schedule=QuoteJobSchedule(
+                scheduled_start=datetime(2027, 1, 10, 14, tzinfo=UTC),
+                scheduled_end=datetime(2027, 1, 10, 16, tzinfo=UTC),
+            ),
+        )
+        assert converted.job_id is not None
+        assert converted.takedown_job_id is not None
+
+        for job_id in (converted.job_id, converted.takedown_job_id):
+            plan = await JobService(db).get_installation_plan(
+                job_id, workspace.id, membership=membership, user_id=manager.id
+            )
+            assert plan.project_version == 1
+            assert plan.design.items[0].product_id == "product-1"
+
+
+async def test_seasonal_estimate_enforces_project_customer_property_and_workspace() -> None:
+    async with AsyncSessionLocal() as db:
+        workspace, contact, location, project, service, _ = await _create_measured_seasonal_quote(
+            db, takedown=False
+        )
+        valid_request = EstimateQuoteRequest(
+            side="seasonal",
+            feet=100,
+            contact_id=contact.id,
+            lighting_project_id=project.id,
+        )
+        project.document = {**_seasonal_project_document(), "projectType": "permanent"}
+        await db.flush()
+        with pytest.raises(ValidationError, match="require a seasonal lighting project"):
+            await service.create_quote_from_estimate(workspace.id, valid_request)
+
+        project.document = _seasonal_project_document()
+        project.installation_shot_id = None
+        await db.flush()
+        with pytest.raises(ValidationError, match="Choose an installation sheet"):
+            await service.create_quote_from_estimate(workspace.id, valid_request)
+        project.installation_shot_id = "front"
+
+        with pytest.raises(ValidationError, match="must be created from a measured estimate"):
+            await service.create_quote(
+                workspace.id,
+                QuoteCreate(
+                    contact_id=contact.id,
+                    service_location_id=location.id,
+                    lighting_project_id=project.id,
+                    title="Bypass measured Christmas handoff",
+                    line_items=[
+                        QuoteLineItemCreate(name="Christmas lights", quantity=1, unit_price=100)
+                    ],
+                ),
+            )
+
+        other_contact = await _make_contact(db, workspace.id)
+        await db.commit()
+        request = EstimateQuoteRequest(
+            side="seasonal",
+            feet=100,
+            contact_id=other_contact.id,
+            lighting_project_id=project.id,
+        )
+        with pytest.raises(ValidationError, match="does not belong to the selected contact"):
+            await service.create_quote_from_estimate(workspace.id, request)
+
+        other_workspace = await _make_workspace(db)
+        await _enable_lighting_pricing(db, other_workspace)
+        with pytest.raises(HTTPException) as cross_workspace:
+            await service.create_quote_from_estimate(
+                other_workspace.id,
+                request.model_copy(update={"contact_id": contact.id}),
+            )
+        assert cross_workspace.value.status_code == 404
+
+        location.contact_id = other_contact.id
+        await db.flush()
+        with pytest.raises(ValidationError, match="active service location for their contact"):
+            await service.create_quote_from_estimate(
+                workspace.id, request.model_copy(update={"contact_id": contact.id})
+            )

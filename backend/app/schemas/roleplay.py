@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -79,6 +79,9 @@ class RehearsalRunSummary(BaseModel):
     rehearsee: str
     channel: str
     status: str
+    pending_action: str | None = None
+    attempt_count: int = 0
+    retryable: bool = False
     overall_score: float | None
     objection_coverage: float | None
     booking_attempted: bool | None
@@ -108,14 +111,22 @@ class RehearsalRunResponse(RehearsalRunSummary):
 class CreateRehearsalRequest(BaseModel):
     """Start a rehearsal of an agent (or human rep) against a persona."""
 
+    idempotency_key: uuid.UUID
     agent_id: uuid.UUID
     persona_id: uuid.UUID
-    rehearsee: str = "ai"
-    channel: str | None = None
+    rehearsee: Literal["ai", "human"] = "ai"
+    channel: Literal["sms", "voice"] | None = None
     max_turns: int = Field(default=6, ge=1, le=12)
 
 
 class HumanTurnRequest(BaseModel):
     """A human rep's reply during a live rehearsal."""
 
-    message: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=4000)
+    expected_turn_count: int = Field(ge=1, le=25)
+
+
+class RetryRehearsalRequest(BaseModel):
+    """Retry only the failure the caller observed, not a later failed attempt."""
+
+    expected_attempt_count: int = Field(ge=0)

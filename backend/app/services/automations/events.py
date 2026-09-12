@@ -20,6 +20,7 @@ touching anyone else's.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -96,18 +97,83 @@ def event_matches_trigger_config(
     """Return whether an event satisfies selectors supported by its trigger.
 
     Most lifecycle triggers match every event. ``lead_created`` supports lead
-    source selectors; ``job_completed`` supports ``lighting_project_only`` so a
-    landscape-system owner's guide cannot go out after service calls, permanent
-    installs, repairs, or takedowns.
+    source selectors; ``job_completed`` supports ``lighting_project_only`` plus
+    an always-on staleness window (see :func:`job_completed_event_matches`);
+    ``opportunity_created`` fires only for a contact entering the board unless
+    the automation opts into every deal.
     """
     normalized_type = event_type.strip().lower()
     if normalized_type == EVENT_LEAD_CREATED:
         return lead_created_event_matches(trigger_config, payload)
+    if normalized_type == EVENT_OPPORTUNITY_CREATED:
+        return opportunity_created_event_matches(trigger_config, payload)
     if normalized_type == EVENT_JOB_COMPLETED:
-        config = trigger_config or {}
-        if bool(config.get("lighting_project_only")):
-            return bool((payload or {}).get("lighting_project_id"))
+        return job_completed_event_matches(trigger_config, payload)
     return True
+
+
+# A job whose scheduled date is older than this, only now being marked complete,
+# is bookkeeping catching up rather than work that just finished. Asking that
+# customer "how did we do?" reads as a mistake, and a bulk backfill would send
+# hundreds at once. Genuinely delayed work carries a moved ``scheduled_start``,
+# so it stays inside the window.
+DEFAULT_JOB_COMPLETED_MAX_AGE_DAYS = 30
+
+
+def job_completed_event_matches(
+    trigger_config: dict[str, Any] | None,
+    payload: dict[str, Any] | None,
+) -> bool:
+    """Return whether a completed job should drive its automation.
+
+    ``lighting_project_only`` keeps a landscape-system owner's guide from going
+    out after service calls, permanent installs, repairs, or takedowns.
+
+    Age is the second, always-on guard. Completion events fire on the status
+    transition, so a job scheduled long ago and flipped to ``completed`` today is
+    almost always an import or a cleanup pass, not finished work — and the
+    workspace's 1,034 imported Jobber rows make that a bulk hazard, not a
+    one-off. Such events are dropped unless ``max_job_age_days`` widens the
+    window (``0``/``None`` disables the check for a workspace that really does
+    backfill deliberately).
+
+    A job with no ``scheduled_start`` cannot be proven stale, so it fires: an
+    unknown date must not silently mute a real workflow.
+    """
+    config = trigger_config or {}
+    data = payload or {}
+
+    if bool(config.get("lighting_project_only")) and not data.get("lighting_project_id"):
+        return False
+
+    return not _job_is_stale(config, data.get("scheduled_start"))
+
+
+def _job_is_stale(config: dict[str, Any], scheduled_start: Any) -> bool:
+    """Return whether ``scheduled_start`` predates the configured age window."""
+    raw_max_age = config.get("max_job_age_days", DEFAULT_JOB_COMPLETED_MAX_AGE_DAYS)
+    if raw_max_age is None:
+        return False
+    try:
+        max_age_days = int(raw_max_age)
+    except (TypeError, ValueError):
+        max_age_days = DEFAULT_JOB_COMPLETED_MAX_AGE_DAYS
+    if max_age_days <= 0:
+        return False
+
+    if not isinstance(scheduled_start, str) or not scheduled_start.strip():
+        return False
+    try:
+        scheduled = datetime.fromisoformat(scheduled_start)
+    except ValueError:
+        # An unparseable date is not evidence of staleness; fire and let the
+        # send path's own guards (opt-out, consent, quiet hours) apply.
+        logger.warning("job_completed_unparseable_scheduled_start", value=scheduled_start)
+        return False
+
+    if scheduled.tzinfo is None:
+        scheduled = scheduled.replace(tzinfo=UTC)
+    return scheduled < datetime.now(UTC) - timedelta(days=max_age_days)
 
 
 def lead_created_event_matches(
@@ -148,6 +214,34 @@ def lead_created_event_matches(
     if not selectors:
         return True
     return any(selectors)
+
+
+def opportunity_created_event_matches(
+    trigger_config: dict[str, Any] | None,
+    payload: dict[str, Any] | None,
+) -> bool:
+    """Return True if a deal was *created by a lead arriving*, not by filing.
+
+    Operators use the board as a filing cabinet: dropping an existing customer
+    into ``Unqualified``, ``Long term follow up`` or ``Quote Sent`` is how they
+    move someone, because a card can only be added, not transplanted. Every one
+    of those adds used to look identical to a fresh inbound lead, so a customer
+    three quotes deep got texted "thanks for your interest" (2026-09-10).
+
+    A deal therefore only counts as a new lead when both hold: it is the
+    contact's first card (``is_first_deal``) **and** it starts in the pipeline's
+    first stage (``is_entry_stage``). An automation that genuinely wants every
+    deal — an owner notification, say — sets ``trigger_config['any_deal']``.
+
+    Events queued before those flags existed carry neither and keep the old
+    fire-on-every-deal behaviour rather than being silently dropped.
+    """
+    if bool((trigger_config or {}).get("any_deal")):
+        return True
+    data = payload or {}
+    if "is_first_deal" not in data and "is_entry_stage" not in data:
+        return True
+    return bool(data.get("is_first_deal")) and bool(data.get("is_entry_stage"))
 
 
 async def _has_active_listener(

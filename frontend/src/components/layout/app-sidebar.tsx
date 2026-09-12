@@ -16,6 +16,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { SalesRepOnboardingGate } from "@/components/onboarding/sales-rep-onboarding-gate";
 import { SetupGate } from "@/components/onboarding/setup-gate";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -562,6 +563,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
           <SetupGate />
           <NoWorkspaceGate>{children}</NoWorkspaceGate>
         </main>
+        {/* Hidden on /assistant itself, where the full page is already the
+            assistant and a floating button would just cover it. */}
+        {!pathname.startsWith("/assistant") && <AssistantLauncher />}
       </SidebarInset>
     </SidebarProvider>
   );

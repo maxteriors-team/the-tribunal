@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+import { AuthShell } from "@/components/auth/auth-shell";
 import { RegisterForm } from "@/components/auth/register-form";
 import {
   Card,
@@ -38,9 +39,9 @@ export function RegisterClient() {
   const invitedEmail = invitation?.is_valid ? invitation.email : undefined;
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
+    <AuthShell>
+      <Card>
+        <CardHeader>
           <CardTitle className="text-2xl">
             {invitedEmail ? `Join ${invitation?.workspace_name}` : "Create your account"}
           </CardTitle>
@@ -65,6 +66,6 @@ export function RegisterClient() {
           </p>
         </CardFooter>
       </Card>
-    </div>
+    </AuthShell>
   );
 }

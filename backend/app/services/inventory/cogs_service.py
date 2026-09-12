@@ -35,7 +35,7 @@ COGS_REASONS = ("job_usage", "sale")
 SHRINKAGE_REASON = "shrinkage"
 
 # Invoices that represent recognized revenue in a window.
-_REVENUE_STATUSES = ("sent", "partial", "paid", "overdue")
+INVOICE_REVENUE_STATUSES = ("sent", "partial", "paid", "overdue")
 
 UNCATEGORIZED_LABEL = "Uncategorized"
 
@@ -150,7 +150,7 @@ class COGSService:
             await self.db.execute(
                 select(Invoice.total, Invoice.currency).where(
                     Invoice.workspace_id == workspace_id,
-                    Invoice.status.in_(_REVENUE_STATUSES),
+                    Invoice.status.in_(INVOICE_REVENUE_STATUSES),
                     Invoice.issue_date.isnot(None),
                     Invoice.issue_date >= date_from,
                     Invoice.issue_date <= date_to,

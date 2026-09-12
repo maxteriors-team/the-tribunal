@@ -8,7 +8,7 @@ Jobber's customer-facing records into the CRM so the workspace can retire Jobber
 - Jobber **jobs -> field_service_jobs** (resolving the customer/site FKs and
   tagging technicians previously synced by ``Technician.external_id``),
 - Jobber **open invoices -> invoices** (historical / AR visibility only -- these
-  are *never* sent or re-billed; Tribunal is the sole biller after cutover).
+  are *never* sent or re-billed; BEAM is the sole biller after cutover).
 
 Design mirrors :class:`app.services.jobber.sync.JobberTechnicianSync`:
 

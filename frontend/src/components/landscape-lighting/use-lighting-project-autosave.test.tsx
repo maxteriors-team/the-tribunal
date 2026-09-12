@@ -275,14 +275,14 @@ describe("useLightingProjectAutosave", () => {
     const { result } = await renderAutosave();
     apiMocks.update.mockRejectedValue({
       isAxiosError: true,
-      response: { status: 422, data: { message: "Drawing rejected by Tribunal." } },
+      response: { status: 422, data: { message: "Drawing rejected by BEAM." } },
     });
 
     act(() => result.current.onDraftChange(makeDraft("rejected-sync"), { immediate: true }));
     await waitFor(() => expect(result.current.status).toBe("error"));
 
     await act(async () => {
-      await expect(result.current.saveNow()).rejects.toThrow("Drawing rejected by Tribunal.");
+      await expect(result.current.saveNow()).rejects.toThrow("Drawing rejected by BEAM.");
     });
     expect(apiMocks.update).toHaveBeenCalledTimes(2);
   });
@@ -392,7 +392,7 @@ describe("useLightingProjectAutosave", () => {
     });
   });
 
-  it("detects a stale device draft before retrying and can load the Tribunal version", async () => {
+  it("detects a stale device draft before retrying and can load the BEAM version", async () => {
     const staleDraft = makeDraft("stale-local");
     const pending: PendingLandscapeProjectDraft = {
       projectId: PROJECT_ID,
@@ -414,7 +414,7 @@ describe("useLightingProjectAutosave", () => {
     });
     expect(apiMocks.update).not.toHaveBeenCalled();
 
-    await act(async () => result.current.loadTribunalVersion());
+    await act(async () => result.current.loadBeamVersion());
     expect(apiMocks.get).toHaveBeenCalledWith(WORKSPACE_ID, PROJECT_ID);
     expect(draftStorageMocks.deletePending).toHaveBeenCalledWith(PROJECT_ID);
     expect(result.current.conflict).toBeNull();

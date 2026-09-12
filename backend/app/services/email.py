@@ -60,7 +60,7 @@ class _ResendModule(Protocol):
 
 
 def _from_address() -> str:
-    name = settings.resend_from_name or "Maxteriors"
+    name = settings.resend_from_name or "BEAM"
     email = settings.resend_from_email or "noreply@example.com"
     return f"{name} <{email}>"
 
@@ -85,12 +85,12 @@ def _brand(business_name: str | None = None, logo_url: str | None = None) -> Bra
     """Brand identity for outbound mail.
 
     Branding is supplied by the caller because this backend is multi-tenant: a
-    process-global Maxteriors logo would leak one workspace's identity into every
+    process-global product logo would leak one workspace's identity into every
     other workspace's customer email. Without a logo the renderer uses a readable
     text wordmark.
     """
     return Brand(
-        business_name=business_name or settings.resend_from_name or "Maxteriors",
+        business_name=business_name or settings.resend_from_name or "BEAM",
         logo_url=_safe_logo_url(logo_url),
     )
 
@@ -520,6 +520,12 @@ async def send_campaign_email(
         "subject": subject,
         "html": _campaign_html(body, unsubscribe_url),
     }
+    if unsubscribe_url:
+        # One-click unsubscribe, matching ``send_automation_email``. Gmail and
+        # Yahoo require these headers from bulk senders; campaign mail is the
+        # highest-volume path here, so omitting them is what actually lands the
+        # domain in spam. The visible footer alone does not satisfy RFC 8058.
+        params["headers"] = list_unsubscribe_headers(unsubscribe_url)
 
     response = await _send(params, idempotency_key=idempotency_key)
     if response is None:
@@ -588,7 +594,7 @@ async def send_invitation_email(
     </p>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent from Maxteriors
+        Sent from BEAM
     </p>
 </body>
 </html>"""
@@ -923,7 +929,7 @@ async def send_invoice_email(
     {notes_block}
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent by {html_escape(workspace_name)} via Maxteriors
+        Sent by {html_escape(workspace_name)} via BEAM
     </p>
 </body>
 </html>"""
@@ -1157,7 +1163,7 @@ async def send_estimate_email(
     </div>
     <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
     <p style="color: #999; font-size: 12px; text-align: center;">
-        Sent by {html_escape(workspace_name)} via Maxteriors
+        Sent by {html_escape(workspace_name)} via BEAM
     </p>
 </body>
 </html>"""

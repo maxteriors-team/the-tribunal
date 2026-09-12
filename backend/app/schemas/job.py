@@ -299,6 +299,21 @@ class InstallationPlanFixture(BaseModel):
     transformer_zone_id: ShortText | None = None
 
 
+class InstallationPlanWorksheetRow(BaseModel):
+    """Price-free exact measurement row for a worksheet installation sheet."""
+
+    id: ShortText
+    label: ShortText
+    quantity: int
+    color: ShortText | None = None
+    shape: Literal["evergreen", "deciduous", "trunk", "branch", "bush", "roofline", "decor"]
+    light_type: Literal["mini", "c7", "c9", "garland"] | None = None
+    measurements: dict[ShortText, float | int] = Field(default_factory=dict)
+    planned_feet: float
+    unit_count: int | None = None
+    unit_kind: Literal["strand", "bulb", "section", "piece"]
+
+
 JobPaymentStatus = Literal["not_required", "pending", "paid"]
 
 
@@ -310,7 +325,8 @@ class JobInstallationPlanResponse(BaseModel):
     project_name: str
     project_version: int
     project_updated_at: datetime
-    selected_shot_id: ShortText
+    installation_sheet_type: Literal["photo", "tree_wrap_worksheet", "combined"] = "photo"
+    selected_shot_id: ShortText | None = None
     proposal_preview_image: str | None = None
     proposal_preview_caption: str | None = None
     proposal_status: QuoteStatus | None = None
@@ -321,9 +337,10 @@ class JobInstallationPlanResponse(BaseModel):
     drawing_title: ShortText | None = None
     drawing_number: ShortText | None = None
     sheet: SheetMetadataSchema | None = None
-    photo: PhotoSchema
-    design: DesignSchema
-    dusk: float
-    settings: DocumentSettingsSchema
+    photo: PhotoSchema | None = None
+    design: DesignSchema | None = None
+    dusk: float | None = None
+    settings: DocumentSettingsSchema | None = None
     fixture_schedule: list[InstallationPlanFixture] = Field(default_factory=list)
+    worksheet_rows: list[InstallationPlanWorksheetRow] = Field(default_factory=list)
     precon_field_brief: DocumentText = ""

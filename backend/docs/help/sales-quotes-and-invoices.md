@@ -38,6 +38,8 @@ The row menu can also offer **Assign owner**, **Edit quote**, **Manage services*
 
 After approval, the **Copy to Job** tab shows every selected permanent-light kit and quantity so the operator can order and track the installation package before scheduling.
 
+For a measured Christmas quote, **Convert to job & invoice** asks for separate installation and takedown windows and teams when takedown was sold. Conversion creates one invoice, an installation job, and the optional takedown job; the deposit is credited on the invoice once.
+
 ## Use lighting estimators
 
 Route: `/quotes?tab=designer`. Open the **Light Designer** tab to trace permanent or seasonal rooflines on a customer photo, price the design from workspace settings, and save or deliver the estimate. For a selected permanent run, **Aerial Pics · 1.5×** is available alongside Easy, Standard, and Complex and prices that run's measured feet at the fixed 1.5× multiplier.

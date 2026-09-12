@@ -6,8 +6,10 @@ Two read-only roll-ups, both tenant-scoped through :mod:`app.db.scope`:
   (``total - amount_paid``) bucketed by how overdue they are relative to an
   ``as_of`` date. Draft/void/paid invoices are excluded (nothing to collect).
 - :meth:`job_pnl_summary` — aggregate job profitability over a period: revenue
-  from the distinct invoices linked to the period's jobs, minus tracked labor
+  from distinct linked sent/partial/paid/overdue invoices, minus tracked labor
   (hours × rate), logged expenses, and materials consumed from inventory.
+  Draft/void invoices contribute no revenue. Billable jobs count each job with
+  a same-workspace invoice of any status, including jobs sharing an invoice.
 
 Money math uses ``float`` rounded to two decimals, matching the invoice/quote
 and job-costing services.
@@ -33,7 +35,7 @@ from app.schemas.reporting import (
     AttributionGapReport,
     JobPnLSummary,
 )
-from app.services.inventory.cogs_service import COGSService
+from app.services.inventory.cogs_service import INVOICE_REVENUE_STATUSES, COGSService
 
 # Invoice statuses with a collectable balance (issued but not settled/cancelled).
 _OUTSTANDING_STATUSES = ("sent", "partial", "overdue")
@@ -194,9 +196,11 @@ class ReportingService:
         date_from: datetime | None = None,
         date_to: datetime | None = None,
     ) -> JobPnLSummary:
-        """Aggregate revenue minus labor and expense cost over a period.
+        """Aggregate issued invoice revenue minus all job costs over a period.
 
         Jobs are scoped by ``scheduled_start`` within the (optional) window.
+        Shared invoices contribute revenue once, but each linked job counts as
+        billable. Draft/void links still count as billable jobs, with zero revenue.
         """
         criteria = []
         if date_from is not None:
@@ -215,6 +219,7 @@ class ReportingService:
         # Revenue: distinct linked invoices (avoid double-counting shared invoices).
         revenue = 0.0
         currencies: set[str] = set()
+        linked_invoice_ids: set[uuid.UUID] = set()
         if invoice_ids:
             invoices = (
                 (
@@ -229,7 +234,11 @@ class ReportingService:
                 .all()
             )
             for invoice in invoices:
-                revenue += float(invoice.total or 0)
+                linked_invoice_ids.add(invoice.id)
+                if invoice.status in INVOICE_REVENUE_STATUSES:
+                    revenue += float(invoice.total or 0)
+                # Draft/void jobs still contribute costs, so keep their currency
+                # in the guard even when their invoices add no revenue.
                 if invoice.currency:
                     currencies.add(invoice.currency)
         currency = _require_single_currency(currencies, "Job P&L")
@@ -289,7 +298,7 @@ class ReportingService:
             date_to=date_to.date() if date_to else None,
             currency=currency,
             job_count=len(jobs),
-            billable_job_count=len(invoice_ids),
+            billable_job_count=sum(job.invoice_id in linked_invoice_ids for job in jobs),
             revenue=revenue,
             labor_cost=labor_cost,
             expense_cost=expense_cost,

@@ -178,7 +178,7 @@ function CalendarStep() {
           Connect the calendar that owns your appointments
         </h1>
         <p className="mt-2 text-muted-foreground">
-          A shared or booking link is not enough for sync. Connect your Google account so Tribunal
+          A shared or booking link is not enough for sync. Connect your Google account so BEAM
           can check conflicts and create confirmed appointments on your calendar.
         </p>
       </div>

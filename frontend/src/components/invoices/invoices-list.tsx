@@ -5,6 +5,7 @@ import { Banknote, MoreHorizontal, Plus, Receipt, RotateCcw } from "lucide-react
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { ResourceListPagination } from "@/components/resource-list/resource-list-pagination";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,13 +18,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ContactPicker } from "@/components/ui/contact-combobox";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
 import { PageEmptyState, PageErrorState, PageLoadingState } from "@/components/ui/page-state";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -32,8 +36,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePagination } from "@/hooks/usePagination";
 import { useWorkspaceId } from "@/hooks/useWorkspaceId";
-import { invoicesApi } from "@/lib/api/invoices";
+import { invoicesApi, type InvoicesListParams } from "@/lib/api/invoices";
 import { describeInvoiceDelivery } from "@/lib/invoice-delivery";
 import { queryKeys } from "@/lib/query-keys";
 import { POLL_60S } from "@/lib/query-options";
@@ -90,18 +95,35 @@ function ReceiptDeliveryCell({ invoice }: { invoice: Invoice }) {
 
 export function InvoicesList() {
   const workspaceId = useWorkspaceId();
+  return <WorkspaceInvoicesList key={workspaceId} workspaceId={workspaceId} />;
+}
+
+function WorkspaceInvoicesList({ workspaceId }: { workspaceId: string | null }) {
   const queryClient = useQueryClient();
+  const { page, pageSize, setPage, reset } = usePagination({ initialPageSize: 100 });
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [contactId, setContactId] = useState("");
+  const hasFilters = statusFilter !== "all" || contactId !== "";
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
   const [recordingPayment, setRecordingPayment] = useState<Invoice | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Invoice | null>(null);
 
+  const params = {
+    page,
+    page_size: pageSize,
+    status: statusFilter === "all" ? undefined : statusFilter,
+    contact_id: contactId ? Number(contactId) : undefined,
+  } satisfies InvoicesListParams;
   const query = useQuery({
-    queryKey: queryKeys.invoices.list(workspaceId ?? ""),
-    queryFn: () => invoicesApi.list(workspaceId ?? "", { page_size: 100 }),
+    queryKey: queryKeys.invoices.list(workspaceId ?? "", params),
+    queryFn: () => invoicesApi.list(workspaceId ?? "", params),
     enabled: Boolean(workspaceId),
     ...POLL_60S,
   });
+  const totalPages = Math.max(1, query.data?.pages ?? 1);
+  // A deletion or status change can remove the last page; don't reset otherwise.
+  if (query.isSuccess && page > totalPages) setPage(totalPages);
 
   const invalidate = () => {
     if (workspaceId) {
@@ -193,9 +215,11 @@ export function InvoicesList() {
       body = (
         <PageEmptyState
           icon={<Receipt className="size-8" />}
-          title="No invoices yet"
-          description="Create your first invoice to bill a customer."
-          action={newInvoiceButton}
+          title={hasFilters ? "No matching invoices" : "No invoices yet"}
+          description={hasFilters
+            ? "Try another customer or status, or clear the filters."
+            : "Create your first invoice to bill a customer."}
+          action={hasFilters ? undefined : newInvoiceButton}
         />
       );
     } else {
@@ -266,7 +290,50 @@ export function InvoicesList() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end">{newInvoiceButton}</div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-full space-y-2 sm:w-72">
+          <Label htmlFor="invoice-customer-filter">Customer</Label>
+          <ContactPicker
+            id="invoice-customer-filter"
+            workspaceId={workspaceId}
+            value={contactId}
+            onChange={(value) => { setContactId(value); reset(); }}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="invoice-status-filter">Status</Label>
+          <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); reset(); }}>
+            <SelectTrigger id="invoice-status-filter" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {Object.keys(STATUS_VARIANT).map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {hasFilters && (
+          <Button variant="ghost" onClick={() => { setStatusFilter("all"); setContactId(""); reset(); }}>
+            Clear filters
+          </Button>
+        )}
+      </div>
+      <p className="text-sm text-muted-foreground">Newest first. Filters apply across all invoices.</p>
       {body}
+      {query.isSuccess && (
+        <ResourceListPagination
+          filteredCount={query.data.items.length}
+          totalCount={query.data.total}
+          resourceName="invoices"
+          page={page}
+          totalPages={totalPages}
+          onPageChange={query.isFetching ? undefined : setPage}
+        />
+      )}
       <InvoiceCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
       <InvoiceEditDialog
         invoice={editing}

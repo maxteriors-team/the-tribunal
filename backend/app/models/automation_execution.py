@@ -58,6 +58,18 @@ class AutomationExecution(Base):
             "status",
             "scheduled_for",
         ),
+        # Subject-scoped dedupe for polling triggers. Runs alongside the older
+        # contact index rather than replacing it: the contact index still holds
+        # for contact-subject rows, and this one extends the same guarantee to
+        # quote/job/invoice subjects.
+        Index(
+            "uq_automation_execution_subject",
+            "automation_id",
+            "subject_type",
+            "subject_id",
+            unique=True,
+            postgresql_where=text("event_id IS NULL AND subject_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -73,6 +85,20 @@ class AutomationExecution(Base):
         nullable=True,
         index=True,
     )
+    # The entity this run is *about*. Contacts remain the default, so every
+    # pre-existing row backfills to ('contact', contact_id) and behaves exactly
+    # as before. A quote revival ladder sets ('quote', <quote id>) instead, which
+    # is what lets a branch step ask "is *this* quote still unsold?" — a question
+    # a contact-shaped run cannot answer when one customer holds three quotes.
+    subject_type: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        server_default="contact",
+    )
+    # Deliberately Text, not BigInteger: subject ids are int for contacts and
+    # UUID for quotes, jobs and invoices. Storing the canonical string keeps one
+    # column honest for both rather than adding a nullable column per id type.
+    subject_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Set for event-triggered executions; NULL for polling-trigger executions.
     event_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

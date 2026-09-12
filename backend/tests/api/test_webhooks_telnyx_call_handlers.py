@@ -32,6 +32,7 @@ from app.services.telephony.inbound_call_policy import (
     encode_inbound_disclosure_state,
     encode_inbound_terminal_state,
 )
+from app.services.telephony.recording_notice import RECORDING_NOTICE_TEXT
 from tests.fixtures.webhooks import load_telnyx_payload
 
 # --------------------------------------------------------------------------- #
@@ -605,6 +606,7 @@ async def test_call_answered_outbound_with_agent_starts_streaming(
     voice_service = MagicMock()
     voice_service.start_audio_streaming = AsyncMock(return_value=True)
     voice_service.start_recording = AsyncMock(return_value=True)
+    voice_service.speak_text = AsyncMock(return_value=True)
     voice_service.close = AsyncMock(return_value=None)
 
     # The handler imports TelnyxVoiceService inside the function; patch it on
@@ -620,7 +622,11 @@ async def test_call_answered_outbound_with_agent_starts_streaming(
     await handlers.handle_call_answered(call_answered, _make_log())
 
     voice_service.start_audio_streaming.assert_awaited_once()
-    voice_service.start_recording.assert_awaited_once()
+    # Recording is announced first and armed on call.speak.ended, so answering
+    # alone must not start recording a caller who has not heard the notice.
+    voice_service.speak_text.assert_awaited_once()
+    assert voice_service.speak_text.await_args.args[1] == RECORDING_NOTICE_TEXT
+    voice_service.start_recording.assert_not_awaited()
     voice_service.close.assert_awaited()
 
 
@@ -1416,6 +1422,60 @@ async def test_user_call_rep_hangup_before_bridge_drops_contact_leg(
     assert user_call_redis["popped"] == [REP_CCID]
 
 
+@pytest.mark.parametrize("stage", ["dialing_rep", "dialing_contact"])
+async def test_user_call_rep_failure_survives_hangup_and_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    hangup_normal: dict[str, Any],
+    user_call_redis: dict[str, Any],
+    voice_service_calls: dict[str, AsyncMock],
+    _stub_hangup_side_effects: dict[str, MagicMock],
+    stage: str,
+) -> None:
+    """A failed operator leg must never become a completed customer call."""
+    message = _make_hangup_message(status=MessageStatus.RINGING)
+    contact_ccid = CONTACT_CCID if stage == "dialing_contact" else None
+    user_call_redis["pending"] = _pending_user_call(
+        message_id=str(message.id), contact_call_control_id=contact_ccid, stage=stage
+    )
+    db = _make_db(execute_returns=[])
+    db.execute = AsyncMock(return_value=_Result(scalar=message))
+    db.get = AsyncMock(return_value=message)
+    _patch_session_local(monkeypatch, db)
+    rep_payload = {
+        **hangup_normal,
+        "call_control_id": REP_CCID,
+        "hangup_cause": "unspecified",
+        "sip_hangup_cause": "408",
+        "duration_seconds": 0,
+    }
+
+    # Replay the actual first-leg failure, then the contact teardown (if dialed)
+    # and a provider retry after the pending Redis state has been removed.
+    payloads = [rep_payload]
+    if contact_ccid:
+        payloads.append({**rep_payload, "call_control_id": contact_ccid})
+    payloads.append(rep_payload)
+    for payload in payloads:
+        await handlers.handle_call_hangup(payload, _make_log())
+        assert message.status == MessageStatus.FAILED
+        assert message.error_code == "USER_CALL_REP_HUNG_UP"
+        assert message.duration_seconds == 0
+
+    assert user_call_redis["popped"] == [REP_CCID]
+    voice_service_calls["dial_transfer_leg"].assert_not_awaited()
+    if contact_ccid:
+        voice_service_calls["hangup_call"].assert_awaited_once_with(contact_ccid)
+    else:
+        voice_service_calls["hangup_call"].assert_not_awaited()
+    for name in (
+        "update_campaign_call_stats",
+        "record_engagement",
+        "create_outcome_from_hangup",
+        "trigger_sms_fallback_for_call",
+    ):
+        _stub_hangup_side_effects[name].assert_not_awaited()
+
+
 async def test_user_call_contact_hangup_drops_rep_leg(
     monkeypatch: pytest.MonkeyPatch,
     hangup_normal: dict[str, Any],
@@ -1491,3 +1551,69 @@ async def test_user_call_records_when_workspace_opts_in(
     await handlers.handle_call_answered(payload, _make_log())
 
     voice_service_calls["start_recording"].assert_awaited_once_with(CONTACT_CCID)
+
+
+# --------------------------------------------------------------------------- #
+# Recording is disclosed before it starts
+# --------------------------------------------------------------------------- #
+
+
+async def test_recording_starts_only_after_the_caller_hears_the_notice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``call.speak.ended`` for our own notice is what arms the recorder."""
+    from app.services.telephony.recording_notice import encode_recording_notice_state
+
+    message = MagicMock(id=uuid.uuid4(), provider_message_id="v3:disclosed-leg")
+    db = _make_db(execute_returns=[])
+    db.get = AsyncMock(return_value=message)
+    _patch_session_local(monkeypatch, db)
+    voice = MagicMock()
+    voice.start_recording = AsyncMock(return_value=True)
+    voice.hangup_call = AsyncMock()
+    voice.close = AsyncMock()
+    monkeypatch.setattr(app_settings, "telnyx_api_key", "test-key")
+    monkeypatch.setattr(
+        "app.services.telephony.telnyx_voice.TelnyxVoiceService",
+        MagicMock(return_value=voice),
+    )
+
+    await handlers.handle_speak_ended(
+        {
+            "call_control_id": "v3:disclosed-leg",
+            "client_state": encode_recording_notice_state(message.id),
+        },
+        _make_log(),
+    )
+
+    voice.start_recording.assert_awaited_once_with("v3:disclosed-leg")
+
+
+async def test_recording_notice_state_bound_to_another_leg_records_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A replayed notice must not start recording a different call."""
+    from app.services.telephony.recording_notice import encode_recording_notice_state
+
+    message = MagicMock(id=uuid.uuid4(), provider_message_id="v3:some-other-leg")
+    db = _make_db(execute_returns=[])
+    db.get = AsyncMock(return_value=message)
+    _patch_session_local(monkeypatch, db)
+    voice = MagicMock()
+    voice.start_recording = AsyncMock(return_value=True)
+    voice.close = AsyncMock()
+    monkeypatch.setattr(app_settings, "telnyx_api_key", "test-key")
+    monkeypatch.setattr(
+        "app.services.telephony.telnyx_voice.TelnyxVoiceService",
+        MagicMock(return_value=voice),
+    )
+
+    await handlers.handle_speak_ended(
+        {
+            "call_control_id": "v3:attacker-leg",
+            "client_state": encode_recording_notice_state(message.id),
+        },
+        _make_log(),
+    )
+
+    voice.start_recording.assert_not_awaited()
