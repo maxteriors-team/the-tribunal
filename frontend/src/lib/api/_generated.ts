@@ -270,10 +270,26 @@ export interface paths {
         /**
          * Unsubscribe
          * @description Honor an email unsubscribe link. Always returns 200 with an HTML page.
+         *
+         *     POST is accepted because marketing mail carries ``List-Unsubscribe-Post:
+         *     List-Unsubscribe=One-Click`` (RFC 8058): Gmail and Yahoo POST this URL
+         *     directly, with no human clicking through. A GET-only route answers that POST
+         *     with 405 and the opt-out is silently lost -- the provider shows the customer
+         *     a success toast either way, so the failure is invisible from both ends.
          */
         get: operations["unsubscribe_api_v1_email_unsubscribe_get"];
         put?: never;
-        post?: never;
+        /**
+         * Unsubscribe
+         * @description Honor an email unsubscribe link. Always returns 200 with an HTML page.
+         *
+         *     POST is accepted because marketing mail carries ``List-Unsubscribe-Post:
+         *     List-Unsubscribe=One-Click`` (RFC 8058): Gmail and Yahoo POST this URL
+         *     directly, with no human clicking through. A GET-only route answers that POST
+         *     with 405 and the opt-out is silently lost -- the provider shows the customer
+         *     a success toast either way, so the failure is invisible from both ends.
+         */
+        post: operations["unsubscribe_api_v1_email_unsubscribe_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -293,10 +309,21 @@ export interface paths {
          *
          *     Suppresses commercial email to this person across every automation and
          *     workflow, not just the one that prompted the click. Always returns 200.
+         *
+         *     Accepts POST for the same RFC 8058 one-click reason as :func:`unsubscribe`.
          */
         get: operations["unsubscribe_contact_api_v1_email_unsubscribe_contact_get"];
         put?: never;
-        post?: never;
+        /**
+         * Unsubscribe Contact
+         * @description Honor a contact-level email opt-out link (workflow/automation email).
+         *
+         *     Suppresses commercial email to this person across every automation and
+         *     workflow, not just the one that prompted the click. Always returns 200.
+         *
+         *     Accepts POST for the same RFC 8058 one-click reason as :func:`unsubscribe`.
+         */
+        post: operations["unsubscribe_contact_api_v1_email_unsubscribe_contact_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -35642,7 +35669,69 @@ export interface operations {
             };
         };
     };
+    unsubscribe_api_v1_email_unsubscribe_post: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     unsubscribe_contact_api_v1_email_unsubscribe_contact_get: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_contact_api_v1_email_unsubscribe_contact_post: {
         parameters: {
             query: {
                 token: string;

@@ -8,6 +8,7 @@ in-memory factory builds with a mocked DB session, matching the SMS worker tests
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.models.campaign import CampaignContactStatus, CampaignType
@@ -164,3 +165,57 @@ def test_unsubscribe_token_roundtrip_and_tamper() -> None:
     assert verify_unsubscribe_token(token + "x") is None
     assert verify_unsubscribe_token("garbage") is None
     assert verify_unsubscribe_token("") is None
+
+
+async def test_email_campaign_suppresses_contact_opted_out_after_enrollment() -> None:
+    """A contact who unsubscribes while enrolled must not receive the queued mail.
+
+    Enrollment filters opt-outs once, so without a send-time check the rows sitting
+    PENDING when someone unsubscribes still go out -- a CAN-SPAM violation minutes
+    after the customer asked us to stop.
+    """
+    workspace_id = uuid.uuid4()
+    campaign = CampaignFactory.build(
+        workspace_id=workspace_id,
+        campaign_type=CampaignType.EMAIL,
+        from_phone_number=None,
+        email_subject="Subject",
+        initial_message="Body",
+        emails_sent=0,
+        messages_failed=0,
+        contacts_opted_out=0,
+    )
+    contact = ContactFactory.build(
+        id=503,
+        workspace_id=workspace_id,
+        first_name="Gone",
+        email="gone@example.com",
+        email_opted_out_at=datetime.now(UTC),
+    )
+    campaign_contact = CampaignContactFactory.build(
+        campaign=campaign,
+        campaign_id=campaign.id,
+        contact=contact,
+        contact_id=contact.id,
+        status=CampaignContactStatus.PENDING,
+    )
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_PendingResult([campaign_contact]))
+    db.commit = AsyncMock()
+
+    worker = _make_worker()
+    with patch(
+        "app.workers.email_campaign_worker.send_campaign_email",
+        AsyncMock(return_value="resend-msg-x"),
+    ) as send_email:
+        await worker._process_campaign_contacts(campaign, db, MagicMock())
+
+    send_email.assert_not_awaited()
+    assert campaign_contact.status == CampaignContactStatus.OPTED_OUT
+    assert campaign_contact.opted_out is True
+    assert campaign_contact.suppressed_reason == "email_opted_out"
+    assert campaign.contacts_opted_out == 1
+    assert campaign.emails_sent == 0
+    # Terminal status, so the row is not re-claimed and skipped forever.
+    assert campaign_contact.status != CampaignContactStatus.PENDING
